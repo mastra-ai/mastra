@@ -19,12 +19,12 @@
     "@types/tinycolor2": "^1.4.6",
     "chalk": "^5.4.1",
     "gradient-string": "^3.0.0",
-    "ora": "^8.2.0",
+    "ora": "^9.0.0",
     "tinycolor2": "^1.6.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "^20.17.57",
+    "@types/node": "22.13.17",
     "dotenv": "^17.0.0",
     "mastra": "latest",
     "tsx": "^4.19.3",

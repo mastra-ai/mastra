@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 
 import { weatherAgent, weatherReporterAgent } from './agents';
@@ -7,6 +7,7 @@ import { weatherWorkflow, weatherWorkflow2 } from './workflows/new-workflow';
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
+    id: 'weather-agent-storage',
     url: 'file:./mastra.db',
   }),
   agents: { weatherAgent, weatherReporterAgent },

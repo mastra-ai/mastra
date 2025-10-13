@@ -1,289 +1,348 @@
 import { z } from 'zod';
-import { mastra } from './mastra';
+import { mastra } from './mastra/index';
 
-const agent = mastra.getAgent('chefAgent');
-const responsesAgent = mastra.getAgent('chefAgentResponses');
-const agentThatHarassesYou = mastra.getAgent('agentThatHarassesYou');
+/**
+ * Comprehensive validation tests for all Mastra primitives
+ * Testing get(key), getById(id), and list() for each primitive
+ */
 
-const stream = await agentThatHarassesYou.stream('I want to fight you');
-
-for await (const chunk of stream.textStream) {
-  console.log(`frontend received chunk: ${chunk}`);
+// Helper function to log test results
+function logTestResult(testName: string, success: boolean, details?: any) {
+  const emoji = success ? '✅' : '❌';
+  console.log(`\n${emoji} ${testName}:`, details || '');
 }
 
-console.log('done');
+// Helper function to safely test a method
+async function testMethod(methodName: string, fn: () => any, shouldSucceed = true) {
+  try {
+    const result = await fn();
+    logTestResult(
+      methodName,
+      shouldSucceed,
+      result
+        ? `Found: ${JSON.stringify(result.id || result.name || 'object', null, 2).substring(0, 100)}...`
+        : 'Result obtained',
+    );
+    return { success: shouldSucceed, result };
+  } catch (error: any) {
+    logTestResult(methodName, !shouldSucceed, `Error: ${error.message}`);
+    return { success: !shouldSucceed, error };
+  }
+}
 
-// async function text() {
-//   // Query 1: Basic pantry ingredients
-//   const query1 =
-//     'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?';
-//   console.log(`Query 1: ${query1}`);
+async function validateAllPrimitives() {
+  console.log('🚀 Starting Mastra Primitives Validation Tests\n');
+  console.log('='.repeat(80));
 
-//   const pastaResponse = await agent.generate(query1);
-//   console.log('\n👨‍🍳 Chef Michel:', pastaResponse.text);
-//   console.log('\n-------------------\n');
-// }
+  // ============================
+  // 1. AGENTS
+  // ============================
+  console.log('\n📋 TESTING AGENTS');
+  console.log('-'.repeat(40));
 
-// async function generateText() {
-//   // Query 1: Basic pantry ingredients
+  // Test getAgent (by key)
+  await testMethod('Agent: getAgent("chefAgent")', () => {
+    const agent = mastra.getAgent('chefAgent');
+    return { id: agent.id, name: agent.name };
+  });
 
-//   const query1 =
-//     'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?';
-//   console.log(`Query 1: ${query1}`);
+  await testMethod(
+    'Agent: getAgent("nonExistentAgent")',
+    () => {
+      return mastra.getAgent('nonExistentAgent' as any);
+    },
+    false,
+  );
 
-//   const pastaResponse = await agent.generate(query1);
+  // Test getAgentById
+  await testMethod('Agent: getAgentById() with valid ID', () => {
+    const agent = mastra.getAgent('chefAgent');
+    const agentById = mastra.getAgentById(agent.id);
+    return { id: agentById.id, name: agentById.name };
+  });
 
-//   console.log('\n👨‍🍳 Chef Michel:', pastaResponse.text);
-//   console.log('\n-------------------\n');
-// }
+  await testMethod(
+    'Agent: getAgentById("nonExistentId")',
+    () => {
+      return mastra.getAgentById('nonExistentId');
+    },
+    false,
+  );
 
-// async function textStream() {
-//   // Query 2: More ingredients
-//   const query2 =
-//     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
-//   console.log(`Query 2: ${query2}`);
+  // Test listAgents
+  await testMethod('Agent: listAgents()', () => {
+    const agents = mastra.listAgents();
+    const agentNames = Object.keys(agents);
+    return { count: agentNames.length, names: agentNames };
+  });
 
-//   const curryResponse = await agent.stream(query2);
+  // ============================
+  // 2. WORKFLOWS
+  // ============================
+  console.log('\n📋 TESTING WORKFLOWS');
+  console.log('-'.repeat(40));
 
-//   console.log('\n👨‍🍳 Chef Michel: ');
+  // Test getWorkflow (by key)
+  await testMethod('Workflow: getWorkflow("myWorkflow")', () => {
+    const workflow = mastra.getWorkflow('myWorkflow');
+    return { id: workflow.id, name: workflow.name };
+  });
 
-//   // Handle the stream
-//   for await (const chunk of curryResponse.textStream) {
-//     // Write each chunk without a newline to create a continuous stream
-//     process.stdout.write(chunk);
-//   }
+  await testMethod(
+    'Workflow: getWorkflow("nonExistentWorkflow")',
+    () => {
+      return mastra.getWorkflow('nonExistentWorkflow' as any);
+    },
+    false,
+  );
 
-//   console.log('\n\n✅ Recipe complete!');
-// }
+  // Test getWorkflowById
+  await testMethod('Workflow: getWorkflowById() with valid ID', () => {
+    const workflow = mastra.getWorkflow('myWorkflow');
+    const workflowById = mastra.getWorkflowById(workflow.id);
+    return { id: workflowById.id, name: workflowById.name };
+  });
 
-// async function generateStream() {
-//   // Query 2: More ingredients
-//   const query2 =
-//     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
-//   console.log(`Query 2: ${query2}`);
+  await testMethod(
+    'Workflow: getWorkflowById("nonExistentId")',
+    () => {
+      return mastra.getWorkflowById('nonExistentId');
+    },
+    false,
+  );
 
-//   const curryResponse = await agent.stream([query2]);
+  // Test listWorkflows
+  await testMethod('Workflow: listWorkflows()', () => {
+    const workflows = mastra.listWorkflows();
+    const workflowNames = Object.keys(workflows);
+    return { count: workflowNames.length, names: workflowNames };
+  });
 
-//   console.log('\n👨‍🍳 Chef Michel: ');
+  // ============================
+  // 3. SCORERS
+  // ============================
+  console.log('\n📋 TESTING SCORERS');
+  console.log('-'.repeat(40));
 
-//   // Handle the stream
-//   for await (const chunk of curryResponse.textStream) {
-//     // Write each chunk without a newline to create a continuous stream
-//     process.stdout.write(chunk);
-//   }
+  // Test getScorer (by key)
+  await testMethod('Scorer: getScorer("testScorer")', () => {
+    const scorer = mastra.getScorer('testScorer');
+    return { id: scorer.id, name: scorer.name };
+  });
 
-//   console.log('\n\n✅ Recipe complete!');
-// }
+  await testMethod(
+    'Scorer: getScorer("nonExistentScorer")',
+    () => {
+      return mastra.getScorer('nonExistentScorer' as any);
+    },
+    false,
+  );
 
-// async function textObject() {
-//   // Query 3: Generate a lasagna recipe
-//   const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-//   console.log(`Query 3: ${query3}`);
+  // Test getScorerById
+  await testMethod('Scorer: getScorerById() with valid ID', () => {
+    const scorer = mastra.getScorer('testScorer');
+    const scorerById = mastra.getScorerById(scorer.id);
+    return { id: scorerById.id, name: scorerById.name };
+  });
 
-//   const lasagnaResponse = await agent.generate(query3, {
-//     output: z.object({
-//       ingredients: z.array(
-//         z.object({
-//           name: z.string(),
-//           amount: z.number(),
-//         }),
-//       ),
-//       steps: z.array(z.string()),
-//     }),
-//   });
-//   console.log('\n👨‍🍳 Chef Michel:', lasagnaResponse.object);
-//   console.log('\n-------------------\n');
-// }
+  await testMethod(
+    'Scorer: getScorerById("nonExistentId")',
+    () => {
+      return mastra.getScorerById('nonExistentId');
+    },
+    false,
+  );
 
-// async function experimentalTextObject() {
-//   // Query 3: Generate a lasagna recipe
-//   const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-//   console.log(`Query 3: ${query3}`);
+  // Test listScorers
+  await testMethod('Scorer: listScorers()', () => {
+    const scorers = mastra.listScorers();
+    const scorerNames = Object.keys(scorers);
+    return { count: scorerNames.length, names: scorerNames };
+  });
 
-//   const lasagnaResponse = await agent.generate(query3, {
-//     experimental_output: z.object({
-//       ingredients: z.array(
-//         z.object({
-//           name: z.string(),
-//           amount: z.number(),
-//         }),
-//       ),
-//       steps: z.array(z.string()),
-//     }),
-//   });
-//   console.log('\n👨‍🍳 Chef Michel:', lasagnaResponse.object);
-//   console.log('\n-------------------\n');
-// }
+  // ============================
+  // 4. MCP SERVERS
+  // ============================
+  console.log('\n📋 TESTING MCP SERVERS');
+  console.log('-'.repeat(40));
 
-// async function textObjectJsonSchema() {
-//   // Query 3: Generate a lasagna recipe
-//   const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-//   console.log(`Query 3: ${query3}`);
+  // Test getMCPServer (by key)
+  await testMethod('MCPServer: getMCPServer("myMcpServer")', () => {
+    const server = mastra.getMCPServer('myMcpServer');
+    return { id: server.id };
+  });
 
-//   const lasagnaResponse = await agent.generate(query3, {
-//     output: {
-//       type: 'object',
-//       additionalProperties: false,
-//       required: ['ingredients', 'steps'],
-//       properties: {
-//         ingredients: {
-//           type: 'array',
-//           items: {
-//             type: 'object',
-//             additionalProperties: false,
-//             properties: {
-//               name: { type: 'string' },
-//               amount: { type: 'number' },
-//             },
-//             required: ['name', 'amount'],
-//           },
-//         },
-//         steps: {
-//           type: 'array',
-//           items: { type: 'string' },
-//         },
-//       },
-//     },
-//   });
+  await testMethod(
+    'MCPServer: getMCPServer("nonExistentServer")',
+    () => {
+      return mastra.getMCPServer('nonExistentServer' as any);
+    },
+    false,
+  );
 
-//   console.log('\n👨‍🍳 Chef Michel:', lasagnaResponse.object);
-//   console.log('\n-------------------\n');
-// }
+  // Test getMCPServerById
+  await testMethod('MCPServer: getMCPServerById() with valid ID', () => {
+    const server = mastra.getMCPServer('myMcpServer');
+    const serverById = mastra.getMCPServerById(server.id);
+    return { found: serverById !== undefined, id: serverById?.id };
+  });
 
-// async function generateObject() {
-//   // Query 3: Generate a lasagna recipe
-//   const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-//   console.log(`Query 3: ${query3}`);
+  await testMethod('MCPServer: getMCPServerById("nonExistentId")', () => {
+    const serverById = mastra.getMCPServerById('nonExistentId');
+    return { found: serverById !== undefined };
+  });
 
-//   const lasagnaResponse = await agent.generate([query3], {
-//     output: z.object({
-//       ingredients: z.array(
-//         z.object({
-//           name: z.string(),
-//           amount: z.number(),
-//         }),
-//       ),
-//       steps: z.array(z.string()),
-//     }),
-//   });
-//   console.log('\n👨‍🍳 Chef Michel:', lasagnaResponse.object);
-//   console.log('\n-------------------\n');
-// }
+  // Test listMCPServers
+  await testMethod('MCPServer: listMCPServers()', () => {
+    const servers = mastra.listMCPServers();
+    const serverNames = servers ? Object.keys(servers) : [];
+    return { count: serverNames.length, names: serverNames };
+  });
 
-// async function streamObject() {
-//   // Query 8: Generate a lasagna recipe
-//   const query8 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-//   console.log(`Query 8: ${query8}`);
+  // ============================
+  // 5. VECTORS
+  // ============================
+  console.log('\n📋 TESTING VECTORS');
+  console.log('-'.repeat(40));
 
-//   const lasagnaStreamResponse = await agent.stream(query8, {
-//     output: z.object({
-//       ingredients: z.array(
-//         z.object({
-//           name: z.string(),
-//           amount: z.number(),
-//         }),
-//       ),
-//       steps: z.array(z.string()),
-//     }),
-//   });
+  // Test getVector (by key) - Note: No vectors configured in this example
+  await testMethod(
+    'Vector: getVector("anyVector")',
+    () => {
+      return mastra.getVector('anyVector' as any);
+    },
+    false,
+  );
 
-//   console.log('\n👨‍🍳 Chef Michel: ');
+  // Test getVectorById - Note: No vectors configured in this example
+  await testMethod(
+    'Vector: getVectorById("vector-id")',
+    () => {
+      return mastra.getVectorById('vector-id');
+    },
+    false,
+  );
 
-//   // Handle the stream
-//   for await (const chunk of lasagnaStreamResponse.textStream) {
-//     // Write each chunk without a newline to create a continuous stream
-//     process.stdout.write(chunk);
-//   }
+  // Test listVectors
+  await testMethod('Vector: listVectors()', () => {
+    const vectors = mastra.listVectors();
+    const vectorNames = vectors ? Object.keys(vectors) : [];
+    return { count: vectorNames.length, names: vectorNames };
+  });
 
-//   console.log('\n\n✅ Recipe complete!');
-// }
+  // ============================
+  // 6. TOOLS
+  // ============================
+  console.log('\n📋 TESTING TOOLS');
+  console.log('-'.repeat(40));
 
-// async function generateStreamObject() {
-//   // Query 9: Generate a lasagna recipe
-//   const query9 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-//   console.log(`Query 9: ${query9}`);
+  // Test getTool (by key) - Note: No tools configured in this example
+  await testMethod(
+    'Tool: getTool("anyTool")',
+    () => {
+      return mastra.getTool('anyTool' as any);
+    },
+    false,
+  );
 
-//   const lasagnaStreamResponse = await agent.stream([query9], {
-//     output: z.object({
-//       ingredients: z.array(
-//         z.object({
-//           name: z.string(),
-//           amount: z.number(),
-//         }),
-//       ),
-//       steps: z.array(z.string()),
-//     }),
-//   });
+  // Test getToolById - Note: No tools configured in this example
+  await testMethod(
+    'Tool: getToolById("tool-id")',
+    () => {
+      return mastra.getToolById('tool-id');
+    },
+    false,
+  );
 
-//   console.log('\n👨‍🍳 Chef Michel: ');
+  // Test listTools
+  await testMethod('Tool: listTools()', () => {
+    const tools = mastra.listTools();
+    const toolNames = tools ? Object.keys(tools) : [];
+    return { count: toolNames.length, names: toolNames };
+  });
 
-//   // Handle the stream
-//   for await (const chunk of lasagnaStreamResponse.textStream) {
-//     // Write each chunk without a newline to create a continuous stream
-//     process.stdout.write(chunk);
-//   }
+  // ============================
+  // 7. PROCESSORS
+  // ============================
+  console.log('\n📋 TESTING PROCESSORS');
+  console.log('-'.repeat(40));
 
-//   console.log('\n\n✅ Recipe complete!');
-// }
+  // Test getProcessor (by key) - Note: No processors configured in this example
+  await testMethod(
+    'Processor: getProcessor("anyProcessor")',
+    () => {
+      return mastra.getProcessor('anyProcessor' as any);
+    },
+    false,
+  );
 
-// async function generateExperimentalStreamObject() {
-//   // Query 9: Generate a lasagna recipe
-//   const query9 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-//   console.log(`Query 9: ${query9}`);
+  // Test getProcessorById - Note: No processors configured in this example
+  await testMethod(
+    'Processor: getProcessorById("processor-id")',
+    () => {
+      return mastra.getProcessorById('processor-id');
+    },
+    false,
+  );
 
-//   const lasagnaStreamResponse = await agent.stream([query9], {
-//     experimental_output: z.object({
-//       ingredients: z.array(
-//         z.object({
-//           name: z.string(),
-//           amount: z.number(),
-//         }),
-//       ),
-//       steps: z.array(z.string()),
-//     }),
-//   });
+  // Test listProcessors
+  await testMethod('Processor: listProcessors()', () => {
+    const processors = mastra.listProcessors();
+    const processorNames = processors ? Object.keys(processors) : [];
+    return { count: processorNames.length, names: processorNames };
+  });
 
-//   console.log('\n👨‍🍳 Chef Michel: ');
+  // ============================
+  // SUMMARY
+  // ============================
+  console.log('\n' + '='.repeat(80));
+  console.log('🎉 VALIDATION COMPLETE!');
+  console.log('='.repeat(80));
 
-//   // Handle the stream
-//   for await (const chunk of lasagnaStreamResponse.textStream) {
-//     // Write each chunk without a newline to create a continuous stream
-//     process.stdout.write(chunk);
-//   }
+  console.log('\n📊 Summary of Primitives:');
 
-//   console.log('\n\n✅ Recipe complete!');
-// }
+  const agents = mastra.listAgents();
+  console.log(`  • Agents (${Object.keys(agents).length}):`, Object.keys(agents).join(', '));
 
-// async function main() {
-//   // await text();
+  const workflows = mastra.listWorkflows();
+  console.log(`  • Workflows (${Object.keys(workflows).length}):`, Object.keys(workflows).join(', '));
 
-//   // await experimentalTextObject();
+  const scorers = mastra.listScorers();
+  console.log(`  • Scorers (${Object.keys(scorers!).length}):`, Object.keys(scorers!).join(', '));
 
-//   // await generateExperimentalStreamObject();
+  const mcpServers = mastra.listMCPServers();
+  if (mcpServers) {
+    console.log(`  • MCP Servers (${Object.keys(mcpServers).length}):`, Object.keys(mcpServers).join(', '));
+  } else {
+    console.log(`  • MCP Servers (0): none configured`);
+  }
 
-//   // await generateText();
+  const vectors = mastra.listVectors();
+  if (vectors) {
+    console.log(`  • Vectors (${Object.keys(vectors).length}):`, Object.keys(vectors).join(', '));
+  } else {
+    console.log(`  • Vectors (0): none configured`);
+  }
 
-//   // await textStream();
+  const tools = mastra.listTools();
+  if (tools) {
+    console.log(`  • Tools (${Object.keys(tools).length}):`, Object.keys(tools).join(', '));
+  } else {
+    console.log(`  • Tools (0): none configured`);
+  }
 
-//   // await generateStream();
+  const processors = mastra.listProcessors();
+  if (processors) {
+    console.log(`  • Processors (${Object.keys(processors).length}):`, Object.keys(processors).join(', '));
+  } else {
+    console.log(`  • Processors (0): none configured`);
+  }
 
-//   // await textObject();
+  console.log('\n✨ All primitive methods validated: get(key), getById(id), list()');
+}
 
-//   // await textObjectJsonSchema();
-
-//   // await generateObject();
-
-//   // await streamObject();
-
-//   // await generateStreamObject();
-
-//   const query1 = 'What happened in San Francisco last week?';
-
-//   const pastaResponse = await responsesAgent.generate(query1, {
-//     instructions: 'You take every recipe you get an exaggerate it and use weird ingredients.',
-//   });
-
-//   console.log(pastaResponse.text);
-// }
-
-// main();
+// Run the validation
+validateAllPrimitives().catch(error => {
+  console.error('❌ Fatal error during validation:', error);
+  process.exit(1);
+});

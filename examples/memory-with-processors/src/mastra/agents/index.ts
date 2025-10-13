@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
-import { createTool } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 import { Agent } from '@mastra/core/agent';
-import type { CoreMessage } from '@mastra/core';
+import type { CoreMessage } from '@mastra/core/llm';
 import { MemoryProcessor, MemoryProcessorOpts } from '@mastra/core/memory';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter, ToolCallFilter } from '@mastra/memory/processors';
@@ -58,9 +58,9 @@ const searchTool = createTool({
   inputSchema: z.object({
     query: z.string().describe('The search query'),
   }),
-  execute: async ({ context: { query } }) => {
+  execute: async input => {
     // Simulate web search results
-    return `Search results for "${query}": 
+    return `Search results for "${inputData.query}":
     1. Top result with important information
     2. Secondary information related to the query
     3. Additional context that might be helpful`;
@@ -69,6 +69,7 @@ const searchTool = createTool({
 
 // Technical support agent with token limiting
 export const supportAgent = new Agent({
+  id: 'technical-support',
   name: 'Technical Support',
   instructions:
     'You are a technical support agent who helps users solve software problems. You provide clear, step-by-step instructions and ask clarifying questions when needed. You remember details from earlier in the conversation. Your goal is to efficiently resolve user issues.',
@@ -93,6 +94,7 @@ const interviewMemory = new Memory({
 
 // Interviewer agent that filters out tool calls and sensitive content
 export const interviewerAgent = new Agent({
+  id: 'forgetful-job-interviewer',
   name: 'Forgetful Job Interviewer',
   instructions:
     "You are a professional job interviewer for a technology company. Conduct insightful interviews by asking relevant questions about skills, experience, and problem-solving abilities. Respond to candidate answers and ask follow-up questions. Keep the interview professional and engaging. Remember details the candidate shares earlier in the conversation. Sometimes you forget things by accident. The system will show you if you forgot. Don't be embarrassed, you can admit when you forget something, you'll know when you do because there will be a message wrapped in <forgetten> tags. Don't refer to the user by their name, it comes across as too eager",

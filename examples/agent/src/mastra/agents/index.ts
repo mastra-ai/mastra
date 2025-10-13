@@ -3,11 +3,11 @@ import { google } from '@ai-sdk/google';
 import { jsonSchema, tool } from 'ai';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
-import { Agent, InputProcessor } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
-import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
 
 const memory = new Memory();
 
@@ -39,6 +39,7 @@ export const weatherInfo = tool({
 });
 
 export const chefAgent = new Agent({
+  id: 'chef-agent',
   name: 'Chef Agent',
   description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
   instructions: `
@@ -60,48 +61,32 @@ export const chefAgent = new Agent({
 });
 
 export const dynamicAgent = new Agent({
+  id: 'dynamic-agent',
   name: 'Dynamic Agent',
-  instructions: ({ runtimeContext }) => {
-    if (runtimeContext.get('foo')) {
+  instructions: ({ requestContext }) => {
+    if (requestContext.get('foo')) {
       return 'You are a dynamic agent';
     }
     return 'You are a static agent';
   },
-  model: ({ runtimeContext }) => {
-    if (runtimeContext.get('foo')) {
+  model: ({ requestContext }) => {
+    if (requestContext.get('foo')) {
       return openai('gpt-4o');
     }
     return openai('gpt-4o-mini');
   },
-  tools: ({ runtimeContext }) => {
+  tools: ({ requestContext }) => {
     const tools = {
       cookingTool,
     };
 
-    if (runtimeContext.get('foo')) {
+    if (requestContext.get('foo')) {
       tools['web_search_preview'] = openai.tools.webSearchPreview();
     }
 
     return tools;
   },
 });
-
-const vegetarianProcessor: InputProcessor = {
-  name: 'eat-more-tofu',
-  process: async ({ messages }) => {
-    messages.push({
-      id: crypto.randomUUID(),
-      createdAt: new Date(),
-      role: 'user',
-      content: {
-        format: 2,
-        parts: [{ type: 'text', text: 'Make the suggested recipe, but remove any meat and add tofu instead' }],
-      },
-    });
-
-    return messages;
-  },
-};
 
 const piiDetector = new PIIDetector({
   // model: google('gemini-2.0-flash-001'),
@@ -129,6 +114,7 @@ const moderationDetector = new ModerationProcessor({
 });
 
 export const chefAgentResponses = new Agent({
+  id: 'chef-agent-responses',
   name: 'Chef Agent Responses',
   instructions: `
     You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
@@ -189,6 +175,7 @@ export const chefAgentResponses = new Agent({
 });
 
 export const agentThatHarassesYou = new Agent({
+  id: 'agent-that-harasses-you',
   name: 'Agent That Harasses You',
   instructions: `
     You are a agent that harasses you. You are a jerk. You are a meanie. You are a bully. You are a asshole.
@@ -204,6 +191,7 @@ const answerRelevance = createAnswerRelevancyScorer({
 console.log(`answerRelevance`, answerRelevance);
 
 export const evalAgent = new Agent({
+  id: 'eval-agent',
   name: 'Eval Agent',
   instructions: `
     You are a helpful assistant with a weather tool.

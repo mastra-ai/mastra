@@ -5,7 +5,7 @@ export const searchCryptoCoins = createTool({
   id: 'Search crypto coins',
   inputSchema: z.object({ keyword: z.string() }),
   description: 'Search all available crypto coins by a keyword',
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     const coinListUrl = `https://api.coingecko.com/api/v3/coins/list`;
 
     const options = {
@@ -21,7 +21,7 @@ export const searchCryptoCoins = createTool({
 
     // First try to find an exact match.
     const exactMatch = data.find(
-      (coin: any) => coin.name.toLowerCase() === context.keyword.toLowerCase()
+      (coin: any) => coin.name.toLowerCase() === inputData.keyword.toLowerCase()
     );
 
     if (exactMatch) {
@@ -31,7 +31,7 @@ export const searchCryptoCoins = createTool({
 
     // If no exact match is found, return first coin that contains the keyword.
     const coin = data.filter((coin: any) =>
-      coin.name.toLowerCase().includes(context.keyword.toLowerCase())
+      coin.name.toLowerCase().includes(inputData.keyword.toLowerCase())
     );
 
     if (coin.length >= 0) {
@@ -47,7 +47,8 @@ export const getCryptoPrice = createTool({
   id: 'Get crypto price by id',
   inputSchema: z.object({ id: z.string() }),
   description: 'Get crypto price by id',
-  execute: async ({ context: { id } }) => {
+  execute: async (inputData) => {
+    const { id } = inputData;
     console.log('getCryptoPrice for', id);
     const coinListUrl = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${id}`;
 
@@ -74,7 +75,8 @@ export const getHistoricalCryptoPrices = createTool({
   id: 'Get historical crypto prices for use in a chart',
   inputSchema: z.object({ id: z.string(), days: z.number() }),
   description: 'Get historical crypto prices for use in a chart',
-  execute: async ({ context: { id, days } }) => {
+  execute: async (inputData) => {
+    const { id, days } = inputData;
     console.log('getHistoricalCryptoPrices for', id);
     const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}`;
 

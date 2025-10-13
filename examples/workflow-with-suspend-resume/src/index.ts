@@ -4,7 +4,7 @@ async function main() {
   console.log('🚀 Starting workflow with suspend/resume example...\n');
 
   const myWorkflow = mastra.getWorkflow('myWorkflow');
-  const run = await myWorkflow.createRunAsync();
+  const run = await myWorkflow.createRun();
 
   try {
     // Start the workflow - it will suspend at stepTwo

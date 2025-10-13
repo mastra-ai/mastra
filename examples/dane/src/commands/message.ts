@@ -6,7 +6,7 @@ export async function message() {
   console.log(chalk.green("Hi! I'm Dane!"));
   console.log(chalk.green('What would you like to do today?\n'));
 
-  const run = await mastra.getWorkflow('message').createRunAsync();
+  const run = await mastra.getWorkflow('message').createRun();
   const { runId, start } = run;
 
   console.log(runId);

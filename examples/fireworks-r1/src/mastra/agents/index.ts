@@ -7,9 +7,9 @@ if (!process.env.FIREWORKS_API_KEY) {
 }
 
 export const agent = new Agent({
+  id: 'example-agent',
+  name: 'Example Agent',
   model: fireworks(`accounts/fireworks/models/deepseek-r1`),
-
-  name: 'Example agent',
   instructions: `You are a helpful and intelligent AI agent.`,
   memory: new Memory(),
 });

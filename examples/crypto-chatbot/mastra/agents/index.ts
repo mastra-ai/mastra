@@ -31,7 +31,8 @@ export const createCryptoAgent = (modelProvider: any, modelName: any) => {
   }
 
   return new Agent({
-    name: 'cryptoAgent',
+    id: 'crypto-agent',
+    name: 'Crypto Agent',
     instructions: systemPrompt,
     model,
     memory,

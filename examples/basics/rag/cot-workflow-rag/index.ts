@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core/agent';
 import { Step, Workflow } from '@mastra/core/workflows';
 import { PgVector } from '@mastra/pg';
@@ -21,6 +21,7 @@ const vectorQueryTool = createVectorQueryTool({
 });
 
 export const ragAgent = new Agent({
+  id: 'rag-agent',
   name: 'RAG Agent',
   instructions: `You are a helpful assistant that answers questions based on the provided context.`,
   model: openai('gpt-4o-mini'),
@@ -183,7 +184,7 @@ The agricultural sector must continue to innovate and adapt to ensure food secur
 
 const chunks = await doc.chunk({
   strategy: 'recursive',
-  size: 512,
+  maxSize: 512,
   overlap: 50,
   separator: '\n',
 });
@@ -214,7 +215,7 @@ const prompt = `
     Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `;
 
-const run = await ragWorkflow.createRunAsync();
+const run = await ragWorkflow.createRun();
 const { runId, start } = run;
 
 console.log('Run:', runId);

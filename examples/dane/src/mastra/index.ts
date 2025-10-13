@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 
 import { dane, daneChangeLog, daneCommitMessage, daneIssueLabeler, daneLinkChecker } from './agents/index.js';
@@ -23,6 +23,7 @@ export const mastra: Mastra = new Mastra({
     daneNewContributor,
   },
   storage: new LibSQLStore({
+    id: 'dane-storage',
     url: ':memory:',
   }),
   workflows: {

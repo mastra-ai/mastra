@@ -13,7 +13,7 @@ export async function newContributorMessage() {
       process.exit(1);
     }
 
-    const run = await workflow.createRunAsync();
+    const run = await workflow.createRun();
     const { start } = run;
 
     const result = await start({

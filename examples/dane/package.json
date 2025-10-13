@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dane",
-  "version": "0.1.10",
+  "version": "1.0.0-beta.19",
   "main": "dist/index.js",
   "type": "module",
   "files": [
@@ -23,7 +23,7 @@
   "license": "Apache-2.0",
   "description": "",
   "devDependencies": {
-    "@types/node": "^20.17.57",
+    "@types/node": "22.13.17",
     "@types/pdf-parse": "^1.1.4",
     "mastra": "workspace:*",
     "tsx": "^4.19.3"
@@ -62,5 +62,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

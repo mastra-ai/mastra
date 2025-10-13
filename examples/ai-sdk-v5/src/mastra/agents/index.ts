@@ -7,6 +7,7 @@ import { LibSQLStore } from "@mastra/libsql";
 
 export const memory = new Memory({
   storage: new LibSQLStore({
+    id: "ai-sdk-v5-storage",
     url: `file:./mastra.db`,
   }),
   options: {
@@ -19,6 +20,7 @@ export const memory = new Memory({
 });
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   name: "Weather Agent",
   instructions: `
       You are a helpful weather assistant that provides accurate weather information.

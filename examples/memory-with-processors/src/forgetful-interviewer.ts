@@ -4,7 +4,7 @@ import Readline from 'readline';
 
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import type { CoreMessage } from '@mastra/core';
+import type { CoreMessage } from '@mastra/core/llm';
 import { MemoryProcessor, MemoryProcessorOpts } from '@mastra/core/memory';
 import { Memory } from '@mastra/memory';
 
@@ -44,9 +44,10 @@ class ForgetfulProcessor extends MemoryProcessor {
 
 // Interviewer agent that accidentally forgets your name all the time
 const agent = new Agent({
+  id: 'forgetful-job-interviewer',
   name: 'Forgetful Job Interviewer',
   instructions:
-    "You are a professional job interviewer for a technology company. Conduct insightful interviews by asking relevant questions about skills, experience, and problem-solving abilities. Respond to candidate answers and ask follow-up questions. Keep the interview professional and engaging. Remember details the candidate shares earlier in the conversation. Sometimes you forget things by accident. The system will show you if you forgot. Don't be embarassed, you can admit when you forget something, you'll know when you do because there will be a message wrapped in <forgetten> tags. Don't refer to the user by their name, it comes across as too eager",
+    "You are a professional job interviewer for a technology company. Conduct insightful interviews by asking relevant questions about skills, experience, and problem-solving abilities. Respond to candidate answers and ask follow-up questions. Keep the interview professional and engaging. Remember details the candidate shares earlier in the conversation. Sometimes you forget things by accident. The system will show you if you forgot. Don't be embarrassed, you can admit when you forget something, you'll know when you do because there will be a message wrapped in <forgetten> tags. Don't refer to the user by their name, it comes across as too eager",
   model: openai('gpt-4o'),
   memory: new Memory({
     processors: [

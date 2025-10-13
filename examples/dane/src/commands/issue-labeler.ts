@@ -6,7 +6,7 @@ export async function issueLabelerCommand() {
   console.log(chalk.green("Hi! I'm Dane!"));
   console.log(chalk.green('Let me label this for you..\n'));
 
-  const run = await mastra.getWorkflow('githubIssueLabeler').createRunAsync();
+  const run = await mastra.getWorkflow('githubIssueLabeler').createRun();
   const { start } = run;
 
   const issueNumber = parseInt(process.env.ISSUE_NUMBER!, 10);

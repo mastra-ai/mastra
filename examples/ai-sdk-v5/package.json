@@ -19,7 +19,8 @@
     "@mastra/pg": "latest",
     "@mastra/rag": "latest",
     "@mastra/server": "latest",
-    "next": "15.4.7",
+    "hono": "^4.11.3",
+    "next": "^15.5.7",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "swr": "^2.3.3",
@@ -27,7 +28,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
-    "@types/node": "^20",
+    "@types/node": "22.13.17",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
     "eslint": "^9.37.0",

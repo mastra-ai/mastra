@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import { createToxicityScorer } from '@mastra/evals/scorers/llm';
+import { createToxicityScorer } from '@mastra/evals/scorers/prebuilt';
 
 // Configure the metric
 const metric = createToxicityScorer({

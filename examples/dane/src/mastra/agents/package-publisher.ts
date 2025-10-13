@@ -136,6 +136,7 @@ export const PUBLISH_PACKAGES_PROMPT = `
 `;
 
 export const danePackagePublisher = new Agent({
+  id: 'dane-package-publisher',
   name: 'DanePackagePublisher',
   instructions: `
       I am Dane, a specialized agent for managing pnpm package publications in monorepos. My core responsibilities are:

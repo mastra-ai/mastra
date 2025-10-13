@@ -1,4 +1,4 @@
-import { createTextualDifferenceScorer } from '@mastra/evals/scorers/code';
+import { createTextualDifferenceScorer } from '@mastra/evals/scorers/prebuilt';
 
 // Configure the metric
 const metric = createTextualDifferenceScorer();

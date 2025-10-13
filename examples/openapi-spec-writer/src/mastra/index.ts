@@ -1,5 +1,5 @@
 import { PinoLogger } from "@mastra/loggers";
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { UpstashTransport } from "@mastra/loggers/upstash";
 import { agentOne } from "./agents";
 import { makePRToMastraWorkflow, openApiSpecGenWorkflow } from "./workflows";
@@ -16,16 +16,6 @@ export const mastra = new Mastra({
     },
   }),
   agents: { "openapi-spec-gen-agent": agentOne },
-  telemetry: {
-    serviceName: "mastra-vnext",
-    sampling: {
-      type: "always_on",
-    },
-    enabled: true,
-    export: {
-      type: "otlp",
-    },
-  },
   workflows: {
     openApiSpecGenWorkflow,
     makePRToMastraWorkflow,
