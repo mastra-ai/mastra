@@ -6,4 +6,5 @@ export type { WorkflowDataPart } from './transformers';
 export { networkRoute } from './network-route';
 export type { NetworkRouteOptions } from './network-route';
 export type { NetworkDataPart } from './transformers';
+export type { AgentDataPart } from './transformers';
 export { toAISdkFormat } from './to-ai-sdk-format';
