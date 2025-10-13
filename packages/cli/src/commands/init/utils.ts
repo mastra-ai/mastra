@@ -392,8 +392,7 @@ export const checkAndInstallCoreDeps = async (addExample: boolean) => {
   }
 
   if (needsZod) {
-    // TODO: Once the switch to AI SDK v5 is complete, this needs to be updated
-    await installCoreDeps('zod', '^3');
+    await installCoreDeps('zod', '^4');
   }
 
   if (addExample) {
