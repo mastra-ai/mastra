@@ -3847,8 +3847,8 @@ importers:
         specifier: ^9.36.0
         version: 9.37.0(jiti@2.6.1)
       pnpm:
-        specifier: 10.12.4
-        version: 10.12.4
+        specifier: 10.18.2
+        version: 10.18.2
       tsup:
         specifier: ^8.4.0
         version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@20.19.19))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
@@ -14430,8 +14430,8 @@ packages:
     resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
     engines: {node: '>=4'}
 
-  pnpm@10.12.4:
-    resolution: {integrity: sha512-Xqiw3u2U7WhpHJutTJVUknBcXuuKh++GvGLHSiawN7CP+VcPEIsuTb0d0akYb+qSXlJ/FBxkjoWvRWMQdGgBhA==}
+  pnpm@10.18.2:
+    resolution: {integrity: sha512-n7lp+nSbOt5gNeDxCfC4pgtdCKGof99y4zfakNzJMzbiKAyk5E8jWKZJuDwXlZ6Zk+d3wggIefOAHm8NmZrT3Q==}
     engines: {node: '>=18.12'}
     hasBin: true
 
@@ -28980,7 +28980,7 @@ snapshots:
 
   pluralize@8.0.0: {}
 
-  pnpm@10.12.4: {}
+  pnpm@10.18.2: {}
 
   possible-typed-array-names@1.1.0: {}
 
