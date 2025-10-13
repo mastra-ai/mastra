@@ -25,5 +25,5 @@ test('clicking on the agent row redirects', async ({ page }) => {
   const el = await page.locator('tr:has-text("Weather Agent")');
   await el.click();
 
-  await expect(page).toHaveURL('http://localhost:4111/agents/weatherAgent/chat');
+  await expect(page).toHaveURL(/http:\/\/localhost:4111\/agents\/weatherAgent\/chat.*/);
 });

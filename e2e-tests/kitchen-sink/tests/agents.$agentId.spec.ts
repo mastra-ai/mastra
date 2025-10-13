@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 test('overall layout information', async ({ page }) => {
+  await page.goto('http://localhost:4111/agents/weatherAgent/chat/1234');
+
   // Header
   await expect(page).toHaveTitle(/Mastra Playground/);
   await expect(page.locator('text=Agents documentation')).toHaveAttribute(
@@ -8,21 +10,29 @@ test('overall layout information', async ({ page }) => {
     'https://mastra.ai/en/docs/agents/overview',
   );
   const breadcrumb = page.locator('header>nav');
-  const agentsCrumb = breadcrumb.locator('li:nth-child(1)');
-  const agentCrumb = breadcrumb.locator('li:nth-child(2)');
+  const agentsCrumb = breadcrumb.locator('li:nth-child(1)>a');
+  const separatorCrumb = breadcrumb.locator('li:nth-child(2)');
+  const agentCrumb = breadcrumb.locator('li:nth-child(3)>a');
 
   await expect(agentsCrumb).toHaveText('Agents');
   await expect(agentsCrumb).toHaveAttribute('href', '/agents');
+  await expect(separatorCrumb).toHaveRole('separator');
   await expect(agentCrumb).toHaveText('Weather Agent');
   await expect(agentCrumb).toHaveAttribute('href', '/agents/weatherAgent');
 
   // Thread history (with memory)
-  await expect(page.locator('text=New history')).toBeVisible();
+  await expect(page.locator('text=New Chat')).toBeVisible();
   await expect(page.locator('text=Your conversations will appear here once you start chatting!')).toBeVisible();
 
   // Information side panel
   await expect(page.locator('h2:has-text("Weather Agent")')).toBeVisible();
   await expect(page.locator('button:has-text("weatherAgent")')).toBeVisible();
+  const overviewPane = await page.locator('button:has-text("Overview")');
+  await expect(overviewPane).toHaveAttribute('aria-selected', 'true');
+  const modelSettingsPane = await page.locator('button:has-text("Model Settings")');
+  await expect(modelSettingsPane).toHaveAttribute('aria-selected', 'false');
+  const memoryPane = await page.locator('button:has-text("Memory")');
+  await expect(memoryPane).toHaveAttribute('aria-selected', 'false');
 });
 
 test.describe('model settings', () => {
