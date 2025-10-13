@@ -79,6 +79,7 @@
     "yocto-spinner": "^0.2.3"
   },
   "devDependencies": {
+    "@commander-js/extra-typings": "^14.0.0",
     "@internal/lint": "workspace:*",
     "@internal/playground": "workspace:*",
     "@internal/types-builder": "workspace:*",
