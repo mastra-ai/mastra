@@ -486,7 +486,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
         parts: [
           {
             type: 'text',
-            text: chunk.payload.error as string,
+            text: typeof chunk.payload.error === 'string' ? chunk.payload.error : JSON.stringify(chunk.payload.error),
           },
         ],
         metadata: {

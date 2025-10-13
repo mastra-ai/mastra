@@ -20,7 +20,7 @@ Use processors for content moderation, prompt injection prevention, response san
 
 ## Adding processors to an agent
 
-Import and instantiate the relevant processor class, and pass it to your agent’s configuration using either the `inputProcessors` or `outputProcessors` parameter:
+Import and instantiate the relevant processor class, and pass it to your agent’s configuration using either the `inputProcessors` or `outputProcessors` option:
 
 ```typescript {3,9-17} filename="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";

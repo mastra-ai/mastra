@@ -1,5 +1,15 @@
 # create-mastra
 
+## 0.15.2-alpha.0
+
+### Patch Changes
+
+- Use model-router in create-mastra starter template ([#8631](https://github.com/mastra-ai/mastra/pull/8631))
+
+- Adds reset button to model picker to reset to original model set on the agent. ([#8633](https://github.com/mastra-ai/mastra/pull/8633))
+
+- Refactor EntryList component and Scorer and Observability pages ([#8652](https://github.com/mastra-ai/mastra/pull/8652))
+
 ## 0.15.1
 
 ### Patch Changes

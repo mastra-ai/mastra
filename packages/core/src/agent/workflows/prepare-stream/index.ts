@@ -70,7 +70,6 @@ export function createPrepareStreamWorkflow<
     runtimeContext,
     agentAISpan,
     methodType,
-    format,
     memory,
   });
 

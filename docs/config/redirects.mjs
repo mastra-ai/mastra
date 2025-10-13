@@ -1066,8 +1066,18 @@ export const redirectList = [
     permanent: true,
   },
   {
+    source: "/:locale/docs/agents/using-tools-and-mcp",
+    destination: "/:locale/docs/agents/using-tools",
+    permanent: true,
+  },
+  {
     source: "/:locale/reference/agents/migration-guide",
     destination: "/:locale/guides/migrations/vnext-to-standard-apis",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/agents/runtime-context",
+    destination: "/:locale/docs/server-db/runtime-context",
     permanent: true,
   },
 ];

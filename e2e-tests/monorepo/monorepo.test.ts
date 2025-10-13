@@ -8,6 +8,28 @@ import { execa, execaNode } from 'execa';
 
 const timeout = 5 * 60 * 1000;
 
+const activeProcesses: Array<{ controller: AbortController; proc: ReturnType<typeof execa | typeof execaNode> }> = [];
+
+async function cleanupAllProcesses() {
+  for (const { controller, proc } of activeProcesses) {
+    try {
+      controller.abort();
+      await proc.catch(() => {});
+    } catch {}
+  }
+  activeProcesses.length = 0;
+}
+
+process.once('SIGINT', async () => {
+  await cleanupAllProcesses();
+  process.exit(130);
+});
+
+process.once('SIGTERM', async () => {
+  await cleanupAllProcesses();
+  process.exit(143);
+});
+
 describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
   let fixturePath: string;
 
@@ -89,6 +111,8 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         },
       });
 
+      activeProcesses.push({ controller, proc });
+
       await new Promise<void>(resolve => {
         proc!.stdout?.on('data', data => {
           process.stdout.write(data?.toString());
@@ -131,6 +155,8 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           MASTRA_PORT: port.toString(),
         },
       });
+
+      activeProcesses.push({ controller, proc });
 
       await new Promise<void>(resolve => {
         proc!.stdout?.on('data', data => {
@@ -178,6 +204,8 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           MASTRA_PORT: port.toString(),
         },
       });
+
+      activeProcesses.push({ controller, proc });
 
       await new Promise<void>(resolve => {
         proc!.stdout?.on('data', data => {

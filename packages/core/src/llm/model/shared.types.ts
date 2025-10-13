@@ -1,10 +1,10 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV1 } from 'ai';
+import type { LanguageModelV2 } from '@ai-sdk/provider';
+import type { LanguageModelV1 } from 'ai-v4';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 import type { TracingPolicy } from '../../ai-tracing';
 import type { ScoringData } from './base.types';
-import type { ModelRouterModelId } from './provider-registry.generated';
+import type { ModelRouterModelId } from './provider-registry.js';
 
 export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Output extends ZodSchema
   ? z.infer<Output>
