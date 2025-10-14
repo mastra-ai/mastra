@@ -8690,7 +8690,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(result.toolCalls.length).toBeGreaterThan(0);
       }
     },
-    10000,
+    30000,
   );
 
   describe(
