@@ -84,6 +84,66 @@ const config = {
           src: 'logo.svg',
         },
       },
+      footer: {
+        links: [
+          {
+            title: 'Documentation',
+            items: [
+              {
+                label: 'Introduction',
+                to: '/docs/intro',
+              },
+              {
+                label: 'Getting Started',
+                to: '/docs/getting-started/installation',
+              },
+              {
+                label: 'Examples',
+                to: '/docs/examples',
+              },
+              {
+                label: 'Guides',
+                to: '/docs/guides',
+              },
+            ],
+          },
+          {
+            title: 'Resources',
+            items: [
+              {
+                label: 'Reference',
+                to: '/docs/reference',
+              },
+              {
+                label: 'Models',
+                to: '/docs/models',
+              },
+              {
+                label: 'Showcase',
+                to: '/showcase',
+              },
+            ],
+          },
+          {
+            title: 'Community',
+            items: [
+              {
+                label: 'Discord',
+                href: 'https://discord.gg/mastra',
+              },
+              {
+                label: 'GitHub',
+                href: 'https://github.com/mastra-ai/mastra',
+              },
+              {
+                label: 'Twitter',
+                href: 'https://twitter.com/mastra_ai',
+              },
+            ],
+          },
+        ],
+        copyright: `Copyright © ${new Date().getFullYear()} Mastra.`,
+      },
       prism: {
         theme: prismMastraLight,
         darkTheme: prismMastraDark,
