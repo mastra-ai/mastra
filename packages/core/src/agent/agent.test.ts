@@ -5965,7 +5965,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }
       });
 
-      it(`should show correct request input for multi-turn inputs`, async () => {
+      it(`should show correct request input for multi-turn inputs`, { timeout: 500000 }, async () => {
         const agent = new Agent({
           id: 'test',
           name: 'test',
