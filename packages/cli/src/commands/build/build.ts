@@ -6,15 +6,7 @@ import { BuildBundler } from './BuildBundler';
 import { getDeployer } from '@mastra/deployer';
 import { logger } from '../../utils/logger';
 
-export async function build({
-  dir,
-  tools,
-  root,
-}: {
-  dir?: string;
-  tools?: string[];
-  root?: string;
-}) {
+export async function build({ dir, tools, root }: { dir?: string; tools?: string[]; root?: string }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
   const outputDirectory = join(rootDir, '.mastra');
