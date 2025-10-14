@@ -716,16 +716,15 @@ export class MessageList {
       return { role: 'system', content: message };
     }
 
-    if (MessageList.isAIV4CoreMessage(message)) {
-      return message;
+    if (MessageList.isAIV5CoreMessage(message)) {
+      return this.aiV5ModelMessagesToAIV4CoreMessages([message as AIV5Type.ModelMessage], `system`)[0]!;
     }
 
     if (MessageList.isMastraMessageV2(message)) {
       return MessageList.mastraMessageV2SystemToV4Core(message);
     }
 
-    // Must be AIV5 ModelMessage - convert using existing utility
-    return this.aiV5ModelMessagesToAIV4CoreMessages([message as AIV5Type.ModelMessage], `system`)[0]!;
+    return message;
   }
 
   private addOneSystem(message: AIV4Type.CoreMessage | AIV5Type.ModelMessage | MastraMessageV2 | string, tag?: string) {
