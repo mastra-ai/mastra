@@ -71,7 +71,7 @@ This approach makes tool usage more reliable and model-agnostic for both custom 
 
 ## Using `RuntimeContext`
 
-Use `RuntimeContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RuntimeContext](../server-db/runtime-context.mdx) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers
 export type UserTier = {
