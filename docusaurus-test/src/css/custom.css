@@ -133,7 +133,7 @@
 
 
   /* Fonts */
-  --ifm-font-family-base: 'Newsreader', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  --ifm-font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   --ifm-font-family-monospace: 'Berkeley Mono', 'Geist Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
   --ifm-h1-font-size: 2.25rem;
   --ifm-h2-font-size: 1.8rem;
@@ -269,37 +269,38 @@
 }
 
 /* ==================== NAVBAR ==================== */
-.theme-layout-navbar{
+.theme-layout-navbar {
   display: flex;
   flex-direction: column;
   width: 100%;
   height: auto;
   padding-inline: 0;
-  border-bottom:transparent;
-  box-shadow: none; 
+  border-bottom: transparent;
+  box-shadow: none;
   background-color: var(--ifm-navbar-background-color);
 }
 
-.theme-layout-navbar a{
-  &:hover{
+.theme-layout-navbar a {
+  &:hover {
     color: var(--mastra-text-primary);
     text-decoration: none;
   }
 }
-.theme-layout-navbar .tab a{
+
+.theme-layout-navbar .tab a {
   color: var(--mastra-text-tertiary);
 
-  &[data-active="true"]{
+  &[data-active="true"] {
     color: var(--mastra-text-primary);
   }
 
-  &:hover{
-   text-decoration: none;
-   color: var(--mastra-text-primary);
+  &:hover {
+    text-decoration: none;
+    color: var(--mastra-text-primary);
   }
 }
 
-.dialog-panel  ul{
+.dialog-panel ul {
   padding-left: 0;
   margin-bottom: 0;
 }
@@ -316,9 +317,64 @@
   color: var(--ifm-navbar-link-hover-color);
 }
 
+/* ====================  Sidebar ==================== */
+@media (min-width: 997px) {
+  .menu {
+    padding-inline: 0 !important;
+  }
+}
+
+span[class*="categoryLinkLabel"] {
+  color: var(--mastra-text-primary);
+}
+
+.menu__link {
+  font-size: 14px;
+  color: oklch(44.6% 0.03 256.802);
+  font-weight: 400;
+  padding-block: 0.25rem;
+  padding-inline-start: 0.5rem;
+
+
+  &:after {
+    background: var(--ifm-menu-link-sublist-icon) center;
+    transform-origin: center;
+  }
+}
+
+.menu__link--active:not(.menu__link--sublist){
+  &after{
+    background: var(--ifm-menu-link-sublist-icon) center;
+    transform-origin: center;
+  }
+  background: transparent;
+}
+
+.menu__link:hover {
+  background: transparent;
+  color: var(--ifm-menu-color-active);
+}
+
+.menu__link--active {
+  background: transparent;
+  color: var(--ifm-menu-color-active);
+  font-weight: 500;
+  position: relative;
+}
+
+.menu__link--active:not(.menu__link--sublist)::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: var(--mastra-text-primary);
+}
+
 
 /* ======= Markdown headings ==================== */
-.markdown h1:first-child{
+.markdown h1:first-child {
   --ifm-h1-font-size: 2.25rem;
   letter-spacing: -0.028em;
 }
@@ -390,7 +446,7 @@ div[class*="codeBlockTitle"] {
 }
 
 /* Pre with title above - remove top border radius */
-div[class*="codeBlockTitle"] + div[class*="codeBlockContent"] pre {
+div[class*="codeBlockTitle"]+div[class*="codeBlockContent"] pre {
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }
@@ -423,8 +479,8 @@ button[class*="copyButton"]:hover {
 }
 
 /* Preserve whitespace in code blocks */
-pre code > span,
-.prism-code > span {
+pre code>span,
+.prism-code>span {
   white-space: pre;
 }
 
@@ -468,38 +524,6 @@ div[class*="codeBlockLines"] {
 
 [data-theme='dark'] .theme-doc-sidebar-container {
   border-right-color: var(--mastra-border);
-}
-
-.menu__link {
-  font-weight: 400;
-  padding-block: 0.25rem;
-}
-
-.menu__link:hover {
-  background: transparent;
-  color: var(--ifm-menu-color-active);
-}
-
-.menu__link--active {
-  background: transparent;
-  color: var(--ifm-menu-color-active);
-  font-weight: 500;
-  position: relative;
-}
-
-.menu__link--active::before {
-  content: "";
-  position: absolute;
-  left: -12px;
-  top: 0;
-  bottom: 0;
-  width: 1.5px;
-  background: var(--mastra-text-primary);
-}
-
-.menu__list-item--collapsed .menu__link--sublist:after,
-.menu__list-item--collapsed .menu__caret:before {
-  background: var(--ifm-menu-link-sublist-icon);
 }
 
 /* ==================== FOOTER ==================== */
@@ -721,7 +745,7 @@ table code {
   padding-left: 3rem;
 }
 
-kbd{
+kbd {
   all: unset;
   background: var(--ifm-background-color);
   border-radius: 4px;
@@ -729,9 +753,11 @@ kbd{
 }
 
 /* Hide in Safari */
-input, button {
+input,
+button {
   font-family: var(--ifm-font-family-base);
 }
+
 input[type="search"]::-webkit-search-cancel-button {
   -webkit-appearance: none;
   appearance: none;
