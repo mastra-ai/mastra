@@ -362,6 +362,7 @@ span[class*="categoryLinkLabel"] {
   position: relative;
 }
 
+
 .menu__link--active:not(.menu__link--sublist)::before {
   content: "";
   position: absolute;
