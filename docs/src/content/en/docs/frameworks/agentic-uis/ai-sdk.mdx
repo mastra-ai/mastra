@@ -165,11 +165,12 @@ format.
   - `data-tool-agent`: Nested agent emitted from within an tool stream.
 
 ### Manual Stream Transformations
-To manaully transform Mastra streams to AI SDK compatible format, leverage the `toAISdkFormat` util
+To manually transform Mastra streams to AI SDK compatible format, leverage the `toAISdkFormat` util
 
 ```typescript filename="app/api/chat/route.ts" showLineNumbers copy
   import { mastra } from "../../mastra";
   import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
+  import {toAISdkFormat} from '@mastra/ai-sdk'
 
   export async function POST(req: Request) {
     const { messages } = await req.json();
@@ -254,6 +255,8 @@ The `useChat` hook handles real-time chat interactions between your frontend and
 "use client";
 
 import { useChat } from "@ai-sdk/react";
+import { useState } from "react";
+
 
 export function Chat() {
   const [inputValue, setInputValue] = useState('')
@@ -269,8 +272,8 @@ export function Chat() {
   return (
     <div>
       <pre>{JSON.stringify(messages, null, 2)}</pre>
-      <form onSubmit={handleSubmit}>
-        <input value={input} onChange={e=>setInputValue(e.target.value)} placeholder="Name of city" />
+      <form onSubmit={handleFormSubmit}>
+        <input value={inputValue} onChange={e=>setInputValue(e.target.value)} placeholder="Name of city" />
       </form>
     </div>
   );
@@ -341,10 +344,11 @@ The useChat `sendMessage` allows you to pass additional data from the frontend t
 "use client";
 
 import { useChat } from "@ai-sdk/react";
+import { useState } from "react";
 
 export function ChatExtra() {
   const [inputValue, setInputValue] = useState('')
-  const { messages sendMessage } = useChat({
+  const { messages, sendMessage } = useChat({
     api: "/api/chat-extra",
   });
 
@@ -367,7 +371,7 @@ export function ChatExtra() {
     <div>
       <pre>{JSON.stringify(messages, null, 2)}</pre>
       <form onSubmit={handleFormSubmit}>
-        <input value={inputValue} onChange={e->setInputValue(e.target.value)} placeholder="Name of city" />
+        <input value={inputValue} onChange={e=>setInputValue(e.target.value)} placeholder="Name of city" />
       </form>
     </div>
   );
