@@ -3757,15 +3757,15 @@ export class Agent<
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
-        throw new MastraError({
-          id: 'AGENT_STREAM_FAILED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: result.error.message,
-          details: {
-            error: result.error.message,
+        throw new MastraError(
+          {
+            id: 'AGENT_STREAM_FAILED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
           },
-        });
+          // pass original error to preserve stack trace
+          result.error,
+        );
       }
       throw new MastraError({
         id: 'AGENT_STREAM_UNKNOWN_ERROR',
@@ -3830,15 +3830,15 @@ export class Agent<
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
-        throw new MastraError({
-          id: 'AGENT_STREAM_VNEXT_FAILED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: result.error.message,
-          details: {
-            error: result.error.message,
+        throw new MastraError(
+          {
+            id: 'AGENT_STREAM_VNEXT_FAILED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
           },
-        });
+          // pass original error to preserve stack trace
+          result.error,
+        );
       }
       throw new MastraError({
         id: 'AGENT_STREAM_VNEXT_UNKNOWN_ERROR',

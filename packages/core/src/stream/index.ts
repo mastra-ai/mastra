@@ -6,3 +6,4 @@ export { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './aisdk/v5/f
 export { convertMastraChunkToAISDKv5 } from './aisdk/v5/transform';
 export { convertFullStreamChunkToUIMessageStream } from './aisdk/v5/compat';
 export type { OutputSchema, PartialSchemaOutput } from './base/schema';
+export { MastraAgentNetworkStream } from './MastraAgentNetworkStream';

@@ -1699,7 +1699,7 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  stream({
+  streamLegacy({
     inputData,
     runtimeContext,
     onChunk,
@@ -1782,10 +1782,30 @@ export class Run<
   }
 
   /**
+   * Starts the workflow execution with the provided input as a stream
+   * @param input The input data for the workflow
+   * @returns A promise that resolves to the workflow output
+   */
+  stream(
+    args: {
+      inputData?: z.input<TInput>;
+      runtimeContext?: RuntimeContext;
+      tracingContext?: TracingContext;
+      onChunk?: (chunk: StreamEvent) => Promise<unknown>;
+      tracingOptions?: TracingOptions;
+    } = {},
+  ): ReturnType<typeof this.streamLegacy> {
+    console.warn(
+      "Deprecation NOTICE: stream method will switch to use streamVNext implementation October 21st, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+    );
+    return this.streamLegacy(args);
+  }
+
+  /**
    * Observe the workflow stream
    * @returns A readable stream of the workflow events
    */
-  observeStream(): {
+  observeStreamLegacy(): {
     stream: ReadableStream<StreamEvent>;
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
@@ -1816,6 +1836,19 @@ export class Run<
     return {
       stream: readable,
     };
+  }
+
+  /**
+   * Observe the workflow stream
+   * @returns A readable stream of the workflow events
+   */
+  observeStream(): {
+    stream: ReadableStream<StreamEvent>;
+  } {
+    console.warn(
+      "Deprecation NOTICE: observeStream method will switch to use observeStreamVNext implementation October 21st, 2025. Please use observeStreamLegacy if you don't want to upgrade just yet.",
+    );
+    return this.observeStreamLegacy();
   }
 
   /**

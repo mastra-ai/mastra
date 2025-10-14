@@ -3,6 +3,7 @@
  */
 
 import type { AnyExportedAISpan } from '@mastra/core/ai-tracing';
+import type { DetectedResourceAttributes } from '@opentelemetry/resources';
 
 export type ExportProtocol = 'http/json' | 'http/protobuf' | 'grpc' | 'zipkin';
 
@@ -64,6 +65,9 @@ export interface OtelExporterConfig {
 
   // Debug
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
+
+  // Override or provide additional resource attributes
+  resourceAttributes?: DetectedResourceAttributes;
 }
 
 export interface SpanData {

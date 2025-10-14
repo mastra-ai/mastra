@@ -69,6 +69,37 @@ Some providers that we include this layer for:
 This approach makes tool usage more reliable and model-agnostic for both custom and MCP tools.
 
 
+## Using `RuntimeContext`
+
+Use `RuntimeContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+
+```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const advancedTools = () => {
+  // ...
+};
+
+const baseTools =  () => {
+  // ...
+};
+
+export const testTool = createTool({
+  // ...
+  execute: async ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+
+    return userTier === "enterprise"
+      ? advancedTools
+      : baseTools;
+  }
+});
+```
+
+> See [Runtime Context](../server-db/runtime-context.mdx) for more information.
+
 ## Testing tools locally
 There are two ways to run and test tools.
 
