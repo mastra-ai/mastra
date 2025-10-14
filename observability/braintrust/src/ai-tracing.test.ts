@@ -139,8 +139,13 @@ describe('BraintrustExporter', () => {
 
       // Should create Braintrust span with correct type and payload
       expect(mockLogger.startSpan).toHaveBeenCalledWith({
+        spanId: 'root-span-id',
         name: 'root-agent',
         type: 'task', // Default span type mapping for AGENT_RUN
+        parentSpanIds: {
+          spanId: 'root-span-id',
+          rootSpanId: 'root-span-id',
+        },
         input: undefined,
         metadata: {
           spanType: 'agent_run',
@@ -190,8 +195,13 @@ describe('BraintrustExporter', () => {
 
       // Should create child span on parent span
       expect(mockSpan.startSpan).toHaveBeenCalledWith({
+        spanId: 'child-span-id',
         name: 'child-tool',
         type: 'tool', // TOOL_CALL maps to 'tool'
+        parentSpanIds: {
+          spanId: 'root-span-id',
+          rootSpanId: 'root-span-id',
+        },
         input: undefined,
         metadata: {
           spanType: 'tool_call',
@@ -403,8 +413,13 @@ describe('BraintrustExporter', () => {
       });
 
       expect(mockLogger.startSpan).toHaveBeenCalledWith({
+        spanId: 'llm-span',
         name: 'gpt-4-call',
         type: 'llm',
+        parentSpanIds: {
+          spanId: 'llm-span',
+          rootSpanId: 'llm-span',
+        },
         input: { messages: [{ role: 'user', content: 'Hello' }] },
         output: { content: 'Hi there!' },
         metrics: {
@@ -443,8 +458,13 @@ describe('BraintrustExporter', () => {
       });
 
       expect(mockLogger.startSpan).toHaveBeenCalledWith({
+        spanId: 'minimal-llm',
         name: 'simple-llm',
         type: 'llm',
+        parentSpanIds: {
+          spanId: 'minimal-llm',
+          rootSpanId: 'minimal-llm',
+        },
         metadata: {
           spanType: 'llm_generation',
           model: 'gpt-3.5-turbo',
@@ -662,8 +682,13 @@ describe('BraintrustExporter', () => {
 
       // Should create span with zero duration (matching start/end times)
       expect(mockLogger.startSpan).toHaveBeenCalledWith({
+        spanId: 'event-span',
         name: 'user-feedback',
         type: 'task',
+        parentSpanIds: {
+          spanId: 'event-span',
+          rootSpanId: 'event-span',
+        },
         startTime: eventSpan.startTime.getTime() / 1000,
         output: { message: 'Great response!' },
         metadata: {
@@ -715,8 +740,13 @@ describe('BraintrustExporter', () => {
 
       // Should create child span on parent
       expect(mockSpan.startSpan).toHaveBeenCalledWith({
+        spanId: 'child-event',
         name: 'tool-result',
         type: 'task',
+        parentSpanIds: {
+          spanId: 'root-span',
+          rootSpanId: 'root-span',
+        },
         startTime: childEventSpan.startTime.getTime() / 1000,
         output: { result: 42 },
         metadata: {
