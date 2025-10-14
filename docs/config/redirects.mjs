@@ -1216,4 +1216,29 @@ export const redirectList = [
     destination: "/:locale/en/docs/server-db/runtime-context",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/evals",
+    destination: "/:locale/docs/scorers/evals-old-api",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/evals/overview",
+    destination: "/:locale/docs/scorers/evals-old-api/overview",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/evals/custom-eval",
+    destination: "/:locale/docs/scorers/evals-old-api/custom-eval",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/evals/running-in-ci",
+    destination: "/:locale/docs/scorers/evals-old-api/running-in-ci",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/evals/textual-evals",
+    destination: "/:locale/docs/scorers/evals-old-api/textual-evals",
+    permanent: true,
+  },
 ];
