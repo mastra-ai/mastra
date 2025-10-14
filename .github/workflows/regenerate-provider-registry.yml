@@ -4,9 +4,9 @@ permissions:
   contents: write
 
 on:
-  # Run daily to keep provider registry up-to-date
+  # Run every 6 hours to keep provider registry up-to-date
   schedule:
-    - cron: '0 0 * * *' # Daily at midnight UTC
+    - cron: '0 */6 * * *' # Every 6 hours
   # Allow manual triggering for testing
   workflow_dispatch:
 
