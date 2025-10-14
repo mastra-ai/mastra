@@ -12,6 +12,8 @@ import {
   TABLE_DATASETS,
   TABLE_DATASET_VERSIONS,
   TABLE_DATASET_ROWS,
+  TABLE_EXPERIMENT_ROW_RESULTS,
+  TABLE_EXPERIMENTS,
 } from '@mastra/core/storage';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
@@ -27,6 +29,8 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_DATASETS]: `ReplacingMergeTree()`,
   [TABLE_DATASET_VERSIONS]: `MergeTree()`,
   [TABLE_DATASET_ROWS]: `ReplacingMergeTree()`,
+  [TABLE_EXPERIMENTS]: `ReplacingMergeTree()`,
+  [TABLE_EXPERIMENT_ROW_RESULTS]: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

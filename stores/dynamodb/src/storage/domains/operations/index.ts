@@ -8,6 +8,8 @@ import {
   TABLE_DATASET_VERSIONS,
   TABLE_DATASETS,
   TABLE_EVALS,
+  TABLE_EXPERIMENT_ROW_RESULTS,
+  TABLE_EXPERIMENTS,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_SCORERS,
@@ -57,6 +59,8 @@ export class StoreOperationsDynamoDB extends StoreOperations {
       [TABLE_DATASETS]: 'dataset',
       [TABLE_DATASET_VERSIONS]: 'dataset_version',
       [TABLE_DATASET_ROWS]: 'dataset_row',
+      [TABLE_EXPERIMENTS]: 'experiment',
+      [TABLE_EXPERIMENT_ROW_RESULTS]: 'experiment_row_result',
     };
     return mapping[tableName] || null;
   }
