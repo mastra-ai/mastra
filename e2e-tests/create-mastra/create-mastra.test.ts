@@ -48,8 +48,11 @@ describe('create mastra', () => {
     beforeAll(
       async () => {
         port = await getPort();
-        proc = execa('pnpm', ['dev', '--port', port.toString()], {
+        proc = execa('pnpm', ['dev'], {
           cwd: projectPath,
+          env: {
+            PORT: port.toString(),
+          },
         });
         proc!.stderr?.on('data', data => {
           console.error(data?.toString());
