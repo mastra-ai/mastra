@@ -164,6 +164,63 @@ format.
   - `data-tool-network`: Nested network emitted from within an tool stream.
   - `data-tool-agent`: Nested agent emitted from within an tool stream.
 
+ E.g with a [nested agent stream within a tool](/docs/streaming/tool-streaming#tool-using-an-agent), `data-tool-agent` UI message parts will be emitted
+ and can be leveraged on the client as documented below:
+
+  ```typescript filename="app/page.tsx" copy
+  "use client";
+  
+  import { useChat } from "@ai-sdk/react";
+  import { AgentTool } from '../ui/agent-tool';
+  import type { AgentDataPart } from "@mastra/ai-sdk";
+
+  export default function Page() {
+    const { messages } = useChat({
+      transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat',
+      }),
+    });
+
+    return (
+      <div>
+        {messages.map((message) => (
+          <div key={message.id}>
+            {message.parts.map((part, i) => {
+              switch (part.type) {
+                case 'data-tool-agent':
+                  return (
+                    <AgentTool {...part.data as AgentDataPart} key={`${message.id}-${i}`} />
+                  );
+                default:
+                  return null;
+              }
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  }
+  ```
+
+  ```typescript filename="ui/agent-tool.ts" copy
+  import { Tool, ToolContent, ToolHeader, ToolOutput } from "../ai-elements/tool";
+  import type { AgentDataPart } from "@mastra/ai-sdk";
+
+  export const AgentTool = ({ id, text, status }: AgentDataPart) => {
+    return (
+      <Tool>
+        <ToolHeader 
+          type={`${id}`} 
+          state={status === 'finished' ? 'output-available' : 'input-available'} 
+        />
+        <ToolContent>
+          <ToolOutput output={text} />
+        </ToolContent>
+      </Tool>
+    );
+  };
+  ```
+
 ### Stream Transformations
 
 To manually transform Mastra's streams to AI SDK-compatible format, use the `toAISdkFormat()` utility.
@@ -238,7 +295,9 @@ import { useState } from "react";
 export function Chat() {
   const [inputValue, setInputValue] = useState('')
   const { messages, sendMessage} = useChat({
-    api: "/api/chat"
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat',
+    }),
   });
 
     const handleFormSubmit = (e: React.FormEvent) => {
@@ -326,7 +385,9 @@ import { useState } from "react";
 export function ChatExtra() {
   const [inputValue, setInputValue] = useState('')
   const { messages, sendMessage } = useChat({
-    api: "/api/chat-extra",
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat',
+    }),
   });
 
   const handleFormSubmit = (e: React.FormEvent) => {
