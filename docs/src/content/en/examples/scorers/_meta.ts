@@ -1,20 +1,71 @@
 const meta = {
-  "custom-scorer": "Custom Scorer",
-  "answer-relevancy": "Answer Relevancy",
-  "answer-similarity": "Answer Similarity",
-  bias: "Bias",
-  completeness: "Completeness",
-  "content-similarity": "Content Similarity",
-  "context-relevance": "Context Relevance",
-  "context-precision": "Context Precision",
-  faithfulness: "Faithfulness",
-  hallucination: "Hallucination",
-  "keyword-coverage": "Keyword Coverage",
-  "textual-difference": "Textual Difference",
-  "tone-consistency": "Tone Consistency",
-  "tool-call-accuracy": "Tool Call Accuracy",
-  "prompt-alignment": "Prompt Alignment",
-  "noise-sensitivity": "Noise Sensitivity",
-  toxicity: "Toxicity",
+  "custom-scorer": {
+    title: "Custom Scorer",
+    theme: { collapsed: true },
+  },
+  "answer-relevancy": {
+    title: "Answer Relevancy",
+    theme: { collapsed: true },
+  },
+  "answer-similarity": {
+    title: "Answer Similarity",
+    theme: { collapsed: true },
+  },
+  bias: {
+    title: "Bias",
+    theme: { collapsed: true },
+  },
+  completeness: {
+    title: "Completeness",
+    theme: { collapsed: true },
+  },
+  "content-similarity": {
+    title: "Content Similarity",
+    theme: { collapsed: true },
+  },
+  "context-relevance": {
+    title: "Context Relevance",
+    theme: { collapsed: true },
+  },
+  "context-precision": {
+    title: "Context Precision",
+    theme: { collapsed: true },
+  },
+  faithfulness: {
+    title: "Faithfulness",
+    theme: { collapsed: true },
+  },
+  hallucination: {
+    title: "Hallucination",
+    theme: { collapsed: true },
+  },
+  "keyword-coverage": {
+    title: "Keyword Coverage",
+    theme: { collapsed: true },
+  },
+  "textual-difference": {
+    title: "Textual Difference",
+    theme: { collapsed: true },
+  },
+  "tone-consistency": {
+    title: "Tone Consistency",
+    theme: { collapsed: true },
+  },
+  "tool-call-accuracy": {
+    title: "Tool Call Accuracy",
+    theme: { collapsed: true },
+  },
+  "prompt-alignment": {
+    title: "Prompt Alignment",
+    theme: { collapsed: true },
+  },
+  "noise-sensitivity": {
+    title: "Noise Sensitivity",
+    theme: { collapsed: true },
+  },
+  toxicity: {
+    title: "Toxicity",
+    theme: { collapsed: true },
+  },
 };
 export default meta;
