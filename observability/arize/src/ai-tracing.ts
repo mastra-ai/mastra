@@ -1,5 +1,5 @@
 import { OtelExporter, type OtelExporterConfig } from '@mastra/otel-exporter';
-import { ArizeSpanConverter } from './span-converter';
+import { ArizeSpanConverter } from './span-converter.js';
 import { SEMRESATTRS_PROJECT_NAME } from '@arizeai/openinference-semantic-conventions';
 
 export type ArizeExporterConfig = Omit<OtelExporterConfig, 'provider'> & {

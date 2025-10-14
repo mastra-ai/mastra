@@ -1,5 +1,5 @@
 import { convertGenAISpanAttributesToOpenInferenceSpanAttributes } from '@arizeai/openinference-genai';
-import { ReadableSpanConverterInterface } from '@mastra/otel-exporter/span-converter';
+import { ReadableSpanConverterInterface } from '@mastra/otel-exporter';
 import type { Resource } from '@opentelemetry/resources';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 
