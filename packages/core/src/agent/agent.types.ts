@@ -97,7 +97,6 @@ export type AgentExecutionOptions<
   activeTools?: LoopConfig['activeTools'];
   /**
    * Signal to abort the streaming operation
-   * @deprecated Use `modelSettings.abortSignal` instead. This top-level option will be removed in a future version.
    */
   abortSignal?: LoopConfig['abortSignal'];
 
