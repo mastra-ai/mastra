@@ -54,7 +54,7 @@ The recommended way of using Mastra and AI SDK together is by installing the `@m
   </Tabs.Tab>
 </Tabs>
 
-### AI SDK chat route
+### `chatRoute`
 This is a route handler for agent streaming in AI SDK compatible format automatically
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
@@ -82,7 +82,7 @@ const { error, status, sendMessage, messages, regenerate, stop } =
     }),
   });
 ```
-### AI SDK workflow route
+### `workflowRoute`
 This is a route handler for workflow streaming in AI SDK compatible format automatically
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
@@ -120,7 +120,7 @@ const { error, status, sendMessage, messages, regenerate, stop } =
   });
 ```
 
-### AI SDK network route
+### `networkRoute`
 This is a route handler for agent network streaming in AI SDK compatible format automatically
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
