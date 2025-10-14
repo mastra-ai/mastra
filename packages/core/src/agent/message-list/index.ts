@@ -1396,6 +1396,10 @@ export class MessageList {
       parts.push({
         type: 'text',
         text: coreMessage.content,
+        // Preserve providerOptions from CoreMessage (e.g., for system messages with cacheControl)
+        ...('providerOptions' in coreMessage && coreMessage.providerOptions
+          ? { providerMetadata: coreMessage.providerOptions }
+          : {}),
       });
     } else if (Array.isArray(coreMessage.content)) {
       for (const part of coreMessage.content) {
@@ -1409,6 +1413,8 @@ export class MessageList {
             parts.push({
               type: 'text',
               text: part.text,
+              // Preserve providerOptions from content parts (e.g., for cacheControl on specific parts)
+              ...('providerOptions' in part && part.providerOptions ? { providerMetadata: part.providerOptions } : {}),
             });
             break;
 
@@ -2608,6 +2614,10 @@ export class MessageList {
       parts.push({
         type: 'text',
         text: coreMessage.content,
+        // Preserve providerOptions from ModelMessage level (e.g., system messages with cacheControl)
+        ...('providerOptions' in coreMessage && coreMessage.providerOptions
+          ? { providerMetadata: coreMessage.providerOptions }
+          : {}),
       });
     } else if (Array.isArray(coreMessage.content)) {
       for (const part of coreMessage.content) {
