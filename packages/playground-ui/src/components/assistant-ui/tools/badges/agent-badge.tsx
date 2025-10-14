@@ -36,6 +36,7 @@ export const AgentBadge = ({ agentId, messages = [], metadata }: AgentBadgeProps
 
   return (
     <BadgeWrapper
+      data-testid="agent-badge"
       icon={<AgentIcon className="text-accent1" />}
       title={agentId}
       initialCollapsed={false}
