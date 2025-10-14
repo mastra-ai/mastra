@@ -1,4 +1,4 @@
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils/test';
+import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { dynamicTool, jsonSchema, stepCountIs } from 'ai-v5';
 import {
   convertArrayToReadableStream,
