@@ -712,7 +712,6 @@ export class MessageList {
     if (MessageList.isAIV4CoreMessage(message)) {
       coreMessage = message;
     } else if (MessageList.isMastraMessageV2(message)) {
-      // Convert MastraMessageV2 to CoreMessage format by reusing existing conversion utilities
       const uiMessage = MessageList.mastraMessageV2ToAIV4UIMessage(message);
       const coreMessages = AIV4.convertToCoreMessages([uiMessage]);
       coreMessage = coreMessages[0]!;
