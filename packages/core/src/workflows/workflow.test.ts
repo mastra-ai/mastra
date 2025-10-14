@@ -223,14 +223,13 @@ describe('Workflow', () => {
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({}),
         steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
-      });
-
-      promptEvalWorkflow
+      })
         .then(getUserInput)
         .then(promptAgent)
         .then(evaluateTone)
         .then(improveResponse)
         .then(evaluateImproved)
+        .map({})
         .commit();
 
       new Mastra({
@@ -363,14 +362,13 @@ describe('Workflow', () => {
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({}),
         steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
-      });
-
-      promptEvalWorkflow
+      })
         .then(getUserInput)
         .then(promptAgent)
         .then(evaluateTone)
         .then(improveResponse)
         .then(evaluateImproved)
+        .map({})
         .commit();
 
       new Mastra({
@@ -463,15 +461,6 @@ describe('Workflow', () => {
     });
 
     it('should be able to use an agent as a step', async () => {
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({
-          prompt1: z.string(),
-          prompt2: z.string(),
-        }),
-        outputSchema: z.object({}),
-      });
-
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions"',
@@ -538,7 +527,14 @@ describe('Workflow', () => {
       const agentStep1 = createStep(agent);
       const agentStep2 = createStep(agent2);
 
-      workflow
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: z.object({ text: z.string() }),
+      })
         .then(startStep)
         .map({
           prompt: {
@@ -1518,14 +1514,13 @@ describe('Workflow', () => {
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({}),
         steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
-      });
-
-      promptEvalWorkflow
+      })
         .then(getUserInput)
         .then(promptAgent)
         .then(evaluateTone)
         .then(improveResponse)
         .then(evaluateImproved)
+        .map({})
         .commit();
 
       new Mastra({
@@ -1662,14 +1657,13 @@ describe('Workflow', () => {
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({}),
         steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
-      });
-
-      promptEvalWorkflow
+      })
         .then(getUserInput)
         .then(promptAgent)
         .then(evaluateTone)
         .then(improveResponse)
         .then(evaluateImproved)
+        .map({})
         .commit();
 
       new Mastra({
@@ -1746,15 +1740,6 @@ describe('Workflow', () => {
     });
 
     it('should be able to use an agent as a step', async () => {
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({
-          prompt1: z.string(),
-          prompt2: z.string(),
-        }),
-        outputSchema: z.object({}),
-      });
-
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions"',
@@ -1828,7 +1813,14 @@ describe('Workflow', () => {
       const agentStep1 = createStep(agent);
       const agentStep2 = createStep(agent2);
 
-      workflow
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: agentStep2.outputSchema,
+      })
         .then(startStep)
         .map({
           prompt: {
@@ -2053,15 +2045,6 @@ describe('Workflow', () => {
     });
 
     it('should be able to use an agent with v1 model as a step', async () => {
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({
-          prompt1: z.string(),
-          prompt2: z.string(),
-        }),
-        outputSchema: z.object({}),
-      });
-
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions"',
@@ -2130,7 +2113,14 @@ describe('Workflow', () => {
       const agentStep1 = createStep(agent);
       const agentStep2 = createStep(agent2);
 
-      workflow
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: agentStep2.outputSchema,
+      })
         .then(startStep)
         .map({
           prompt: {
@@ -3310,11 +3300,14 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
-        outputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({
+          step1: z.object({ value: z.string() }),
+          step2: z.object({ value: z.string() }),
+        }),
         steps: [step1, step2],
-      });
-
-      workflow.parallel([step1, step2]).commit();
+      })
+        .parallel([step1, step2])
+        .commit();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -3368,12 +3361,15 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
-        outputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({
+          step1: z.object({ value: z.string() }),
+          step2: z.object({ value: z.string() }),
+        }),
         stateSchema: z.object({ value: z.string() }),
         steps: [step1, step2],
-      });
-
-      workflow.parallel([step1, step2]).commit();
+      })
+        .parallel([step1, step2])
+        .commit();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {}, initialState: { value: 'test-state' } });
@@ -3458,10 +3454,11 @@ describe('Workflow', () => {
         const workflow = createWorkflow({
           id: 'test-workflow',
           inputSchema: z.object({ inputData: z.string() }),
-          outputSchema: z.object({}),
-        });
-
-        workflow.then(step1).then(step2).commit();
+          outputSchema: z.object({ result: z.string() }),
+        })
+          .then(step1)
+          .then(step2)
+          .commit();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { inputData: 'test-input' } });
@@ -3619,11 +3616,12 @@ describe('Workflow', () => {
         const workflow = createWorkflow({
           id: 'test-workflow',
           inputSchema: triggerSchema,
-          outputSchema: z.object({ result: z.string() }),
+          outputSchema: z.object({ result: z.object({ cool: z.string() }) }),
           steps: [step1, step2],
-        });
-
-        workflow.then(step1).then(step2).commit();
+        })
+          .then(step1)
+          .then(step2)
+          .commit();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -3672,10 +3670,11 @@ describe('Workflow', () => {
         const workflow = createWorkflow({
           id: 'test-workflow',
           inputSchema: triggerSchema,
-          outputSchema: z.object({ result: z.string() }),
-        });
-
-        workflow.then(step1).then(step2).commit();
+          outputSchema: z.object({ result: z.object({ cool: z.string() }) }),
+        })
+          .then(step1)
+          .then(step2)
+          .commit();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -4013,10 +4012,11 @@ describe('Workflow', () => {
         const workflow = createWorkflow({
           id: 'test-workflow',
           inputSchema: z.object({}),
-          outputSchema: z.object({ result: z.string() }),
-        });
-
-        workflow.then(step1).then(step2).commit();
+          outputSchema: step2.outputSchema,
+        })
+          .then(step1)
+          .then(step2)
+          .commit();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -4063,10 +4063,11 @@ describe('Workflow', () => {
         const workflow = createWorkflow({
           id: 'test-workflow',
           inputSchema: z.object({}),
-          outputSchema: z.object({ result: z.string() }),
-        });
-
-        workflow.then(step1).then(step2).commit();
+          outputSchema: step2.outputSchema,
+        })
+          .then(step1)
+          .then(step2)
+          .commit();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -4113,10 +4114,8 @@ describe('Workflow', () => {
         const workflow = createWorkflow({
           id: 'test-workflow',
           inputSchema: z.object({}),
-          outputSchema: z.object({ result: z.string() }),
-        });
-
-        workflow
+          outputSchema: step2.outputSchema,
+        })
           .then(step1)
           .map({
             ary: mapVariable({
@@ -4527,8 +4526,7 @@ describe('Workflow', () => {
           inputSchema: z.object({}),
           outputSchema: z.object({}),
           steps: [step1, step2, step3],
-        });
-        workflow
+        })
           .then(step1)
           .branch([
             [
@@ -4552,6 +4550,7 @@ describe('Workflow', () => {
               step3,
             ],
           ])
+          .map({})
           .commit();
 
         const run = await workflow.createRunAsync();
@@ -4602,10 +4601,10 @@ describe('Workflow', () => {
         const workflow = createWorkflow({
           id: 'test-workflow',
           inputSchema: z.object({}),
-          outputSchema: z.object({}),
-        });
-
-        workflow
+          outputSchema: z.object({
+            step2: step2.outputSchema,
+          }),
+        })
           .then(step1)
           .branch([
             [
@@ -4716,13 +4715,9 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
-        outputSchema: z.object({
-          result: z.string(),
-        }),
+        outputSchema: step2.outputSchema,
         steps: [step1, step2],
-      });
-
-      workflow
+      })
         .then(step1)
         .sleep(async ({ inputData }) => {
           return inputData.value;
@@ -4832,13 +4827,9 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
-        outputSchema: z.object({
-          result: z.string(),
-        }),
+        outputSchema: step2.outputSchema,
         steps: [step1, step2],
-      });
-
-      workflow
+      })
         .then(step1)
         .sleepUntil(async ({ inputData }) => {
           return new Date(Date.now() + inputData.value);
@@ -6061,17 +6052,6 @@ describe('Workflow', () => {
         execute: final,
       });
 
-      const counterWorkflow = createWorkflow({
-        id: 'counter-workflow',
-        inputSchema: z.object({
-          startValue: z.number(),
-        }),
-        outputSchema: z.object({
-          finalValue: z.number(),
-        }),
-        steps: [startStep, finalIf],
-      });
-
       const elseBranch = createWorkflow({
         id: 'else-branch',
         inputSchema: z.object({ newValue: z.number() }),
@@ -6084,7 +6064,21 @@ describe('Workflow', () => {
         .then(finalElse)
         .commit();
 
-      counterWorkflow
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          startValue: z.number(),
+        }),
+        outputSchema: z.object({
+          finalIf: z.object({
+            finalValue: z.number(),
+          }),
+          'else-branch': z.object({
+            finalValue: z.number(),
+          }),
+        }),
+        steps: [startStep, finalIf],
+      })
         .then(startStep)
         .branch([
           [
@@ -6175,17 +6169,6 @@ describe('Workflow', () => {
         execute: final,
       });
 
-      const counterWorkflow = createWorkflow({
-        id: 'counter-workflow',
-        inputSchema: z.object({
-          startValue: z.number(),
-        }),
-        outputSchema: z.object({
-          finalValue: z.number(),
-        }),
-        steps: [startStep, finalIf],
-      });
-
       const elseBranch = createWorkflow({
         id: 'else-branch',
         inputSchema: z.object({ newValue: z.number() }),
@@ -6198,7 +6181,21 @@ describe('Workflow', () => {
         .then(finalElse)
         .commit();
 
-      counterWorkflow
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          startValue: z.number(),
+        }),
+        outputSchema: z.object({
+          finalIf: z.object({
+            finalValue: z.number(),
+          }),
+          'else-branch': z.object({
+            finalValue: z.number(),
+          }),
+        }),
+        steps: [startStep, finalIf],
+      })
         .then(startStep)
         .branch([
           [
@@ -6301,13 +6298,21 @@ describe('Workflow', () => {
           }),
         }),
         outputSchema: z.object({
-          result: z.string(),
+          step1: z.object({
+            result: z.string(),
+          }),
+          step2: z.object({
+            result: z.string(),
+          }),
+          step3: z.object({
+            result: z.string(),
+          }),
         }),
         steps: [step1, step2, step3],
         options: { validateInputs: true },
-      });
-
-      parallelWorkflow.parallel([step1, step2, step3]).commit();
+      })
+        .parallel([step1, step2, step3])
+        .commit();
 
       workflow.then(step1).commit();
 
