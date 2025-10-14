@@ -53,7 +53,6 @@ describe('watcher', () => {
         expect.objectContaining({
           dependencies: expect.any(Map),
           externalDependencies: expect.any(Set),
-          invalidChunks: expect.any(Set),
           workspaceMap: expect.any(Map),
         }),
         'node',
@@ -79,7 +78,6 @@ describe('watcher', () => {
         expect.objectContaining({
           dependencies: expect.any(Map),
           externalDependencies: expect.any(Set),
-          invalidChunks: expect.any(Set),
           workspaceMap: expect.any(Map),
         }),
         'node',
