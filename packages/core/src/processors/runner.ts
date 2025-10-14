@@ -1,4 +1,3 @@
-import { convertMessages } from '../agent/message-list';
 import type { MastraMessageV2, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import { AISpanType } from '../ai-tracing';
