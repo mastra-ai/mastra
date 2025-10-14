@@ -1,14 +1,23 @@
-import type { CoreMessage } from 'ai-v4';
 import type { Agent, AiMessageType, UIMessageWithMetadata } from '../../agent';
 import type { TracingContext } from '../../ai-tracing';
 import { MastraError } from '../../error';
+import type { CoreMessage } from '../../llm';
 import type { RuntimeContext } from '../../runtime-context';
 import { Workflow } from '../../workflows';
 import type { WorkflowResult, StepResult } from '../../workflows';
 import type { MastraScorer } from '../base';
 import { ScoreAccumulator } from './scorerAccumulator';
+import type { Dataset } from '../../datasets/dataset';
+import type { DatasetRow, MastraStorage } from '../../storage';
 
-type RunExperimentDataItem<TTarget = unknown> = {
+export { Dataset } from '../../datasets/dataset';
+
+export type ExperimentTrackingConfig = {
+  experimentId: string;
+  storage: MastraStorage;
+};
+
+export type RunExperimentDataItem<TTarget = unknown> = {
   input: TTarget extends Workflow<any, any>
     ? any
     : TTarget extends Agent
@@ -17,6 +26,7 @@ type RunExperimentDataItem<TTarget = unknown> = {
   groundTruth?: any;
   runtimeContext?: RuntimeContext;
   tracingContext?: TracingContext;
+  datasetRowId?: string; // ID of the dataset row (if from Dataset)
 };
 
 type WorkflowScorerConfig = {
@@ -31,10 +41,12 @@ type RunExperimentResult = {
   };
 };
 
+type RunExperimentDataSource<TTarget = unknown> = RunExperimentDataItem<TTarget>[] | Dataset;
+
 // Agent with scorers array
 export function runExperiment<TAgent extends Agent>(config: {
-  data: RunExperimentDataItem<TAgent>[];
-  scorers: MastraScorer<any, any, any, any>[];
+  data: RunExperimentDataSource<TAgent>;
+  scorers?: MastraScorer<any, any, any, any>[];
   target: TAgent;
   onItemComplete?: (params: {
     item: RunExperimentDataItem<TAgent>;
@@ -42,12 +54,13 @@ export function runExperiment<TAgent extends Agent>(config: {
     scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
   }) => void | Promise<void>;
   concurrency?: number;
+  experimentTracking?: ExperimentTrackingConfig;
 }): Promise<RunExperimentResult>;
 
 // Workflow with scorers array
 export function runExperiment<TWorkflow extends Workflow>(config: {
-  data: RunExperimentDataItem<TWorkflow>[];
-  scorers: MastraScorer<any, any, any, any>[];
+  data: RunExperimentDataSource<TWorkflow>;
+  scorers?: MastraScorer<any, any, any, any>[];
   target: TWorkflow;
   onItemComplete?: (params: {
     item: RunExperimentDataItem<TWorkflow>;
@@ -55,12 +68,13 @@ export function runExperiment<TWorkflow extends Workflow>(config: {
     scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
   }) => void | Promise<void>;
   concurrency?: number;
+  experimentTracking?: ExperimentTrackingConfig;
 }): Promise<RunExperimentResult>;
 
 // Workflow with workflow configuration
 export function runExperiment<TWorkflow extends Workflow>(config: {
-  data: RunExperimentDataItem<TWorkflow>[];
-  scorers: WorkflowScorerConfig;
+  data: RunExperimentDataSource<TWorkflow>;
+  scorers?: WorkflowScorerConfig;
   target: TWorkflow;
   onItemComplete?: (params: {
     item: RunExperimentDataItem<TWorkflow>;
@@ -71,10 +85,11 @@ export function runExperiment<TWorkflow extends Workflow>(config: {
     };
   }) => void | Promise<void>;
   concurrency?: number;
+  experimentTracking?: ExperimentTrackingConfig;
 }): Promise<RunExperimentResult>;
 export async function runExperiment(config: {
-  data: RunExperimentDataItem<any>[];
-  scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig;
+  data: RunExperimentDataSource<any>;
+  scorers?: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig;
   target: Agent | Workflow;
   onItemComplete?: (params: {
     item: RunExperimentDataItem<any>;
@@ -82,21 +97,51 @@ export async function runExperiment(config: {
     scorerResults: any;
   }) => void | Promise<void>;
   concurrency?: number;
+  experimentTracking?: ExperimentTrackingConfig;
 }): Promise<RunExperimentResult> {
-  const { data, scorers, target, onItemComplete, concurrency = 1 } = config;
+  const { data: dataSource, scorers, target, onItemComplete, concurrency = 1, experimentTracking } = config;
 
-  validateExperimentInputs(data, scorers, target);
+  // Convert data source to async iterable (works for both arrays and Dataset)
+  const dataIterable = createDataIterable(dataSource);
+
+  // Validate scorers (if provided)
+  if (scorers) {
+    validateScorers(scorers, target);
+  }
 
   let totalItems = 0;
   const scoreAccumulator = new ScoreAccumulator();
 
   const pMap = (await import('p-map')).default;
+
+  // p-map supports async iterables natively - no need to load into memory!
   await pMap(
-    data,
+    dataIterable,
     async (item: RunExperimentDataItem<any>) => {
-      const targetResult = await executeTarget(target, item);
-      const scorerResults = await runScorers(scorers, targetResult, item);
-      scoreAccumulator.addScores(scorerResults);
+      let targetResult: any;
+      let scorerResults: any = {};
+      let error: any;
+      let status: 'success' | 'error' = 'success';
+
+      try {
+        targetResult = await executeTarget(target, item);
+        scorerResults = scorers ? await runScorers(scorers, targetResult, item) : {};
+        scoreAccumulator.addScores(scorerResults);
+      } catch (err) {
+        error = err;
+        status = 'error';
+      }
+
+      // Save experiment row result if tracking is enabled
+      if (experimentTracking && item.datasetRowId) {
+        await saveExperimentRowResult({
+          experimentTracking,
+          item,
+          targetResult,
+          status,
+          error,
+        });
+      }
 
       if (onItemComplete) {
         await onItemComplete({
@@ -127,32 +172,97 @@ function isWorkflowScorerConfig(scorers: any): scorers is WorkflowScorerConfig {
   return typeof scorers === 'object' && !Array.isArray(scorers) && ('workflow' in scorers || 'steps' in scorers);
 }
 
-function validateExperimentInputs(
-  data: RunExperimentDataItem<any>[],
+function isDataset(data: any): data is Dataset {
+  return typeof data === 'object' && data !== null && 'rows' in data && typeof data.rows === 'function';
+}
+
+/**
+ * Creates an async iterable from either an array or Dataset
+ * This allows streaming processing without loading everything into memory
+ */
+async function* createDataIterable(
+  dataSource: RunExperimentDataSource<any>,
+): AsyncIterableIterator<RunExperimentDataItem<any>> {
+  if (Array.isArray(dataSource)) {
+    // For arrays, yield each item directly
+    for (const item of dataSource) {
+      yield item;
+    }
+  } else if (isDataset(dataSource)) {
+    // For Dataset, stream rows and transform them
+    for await (const row of dataSource.rows()) {
+      console.log('Row', row);
+      yield datasetRowToExperimentItem(row);
+    }
+  } else {
+    throw new MastraError({
+      domain: 'SCORER',
+      id: 'INVALID_DATA_SOURCE',
+      category: 'USER',
+      text: 'Data source must be either an array of items or a Dataset instance',
+    });
+  }
+}
+
+function datasetRowToExperimentItem(row: DatasetRow): RunExperimentDataItem<any> {
+  return {
+    input: row.input,
+    groundTruth: row.groundTruth,
+    runtimeContext: row.runtimeContext,
+    datasetRowId: row.rowId, // Map rowId to datasetRowId
+    // Note: tracingContext is not stored in DatasetRow, so it will be undefined
+  };
+}
+
+async function saveExperimentRowResult({
+  experimentTracking,
+  item,
+  targetResult,
+  status,
+  error,
+}: {
+  experimentTracking: ExperimentTrackingConfig;
+  item: RunExperimentDataItem<any>;
+  targetResult: any;
+  status: 'success' | 'error';
+  error?: any;
+}): Promise<void> {
+  const { experimentId, storage } = experimentTracking;
+
+  // Extract output from targetResult
+  const output = targetResult?.scoringData?.output;
+
+  // Prepare the experiment row result
+  const rowResult = {
+    experimentId,
+    datasetRowId: item.datasetRowId!,
+    input: item.input,
+    output,
+    groundTruth: item.groundTruth,
+    runtimeContext: item.runtimeContext,
+    status,
+    error: error
+      ? {
+          message: error.message || String(error),
+          stack: error.stack,
+          name: error.name,
+        }
+      : undefined,
+    // TODO: Add traceId and spanId when tracing is available
+  };
+
+  try {
+    await storage.addExperimentRowResults([rowResult]);
+  } catch (err) {
+    // Log error but don't fail the experiment
+    console.error('Failed to save experiment row result:', err);
+  }
+}
+
+function validateScorers(
   scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig,
   target: Agent | Workflow,
 ): void {
-  if (data.length === 0) {
-    throw new MastraError({
-      domain: 'SCORER',
-      id: 'RUN_EXPERIMENT_FAILED_NO_DATA_PROVIDED',
-      category: 'USER',
-      text: 'Failed to run experiment: Data array is empty',
-    });
-  }
-
-  for (let i = 0; i < data.length; i++) {
-    const item = data[i];
-    if (!item || typeof item !== 'object' || !('input' in item)) {
-      throw new MastraError({
-        domain: 'SCORER',
-        id: 'INVALID_DATA_ITEM',
-        category: 'USER',
-        text: `Invalid data item at index ${i}: must have 'input' properties`,
-      });
-    }
-  }
-
   // Validate scorers
   if (Array.isArray(scorers)) {
     if (scorers.length === 0) {
@@ -225,6 +335,7 @@ async function executeWorkflow(target: Workflow, item: RunExperimentDataItem<any
 }
 
 async function executeAgent(agent: Agent, item: RunExperimentDataItem<any>) {
+  console.log('Execute agent', item);
   const model = await agent.getModel();
   if (model.specificationVersion === 'v2') {
     return await agent.generate(item.input as any, {
