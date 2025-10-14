@@ -1085,11 +1085,44 @@ export const redirectList = [
     destination: "/:locale/docs/server-db/runtime-context",
     permanent: true,
   },
-
-
   {
     source: "/:locale/examples/agents/adding-voice-capabilities",
     destination: "/:locale/docs/agents/adding-voice",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/deployment",
+    destination: "/:locale/docs/deployment/overview",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/deployment/index",
+    destination: "/:locale/docs/deployment/overview",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/deployment/deploying-mastra-server",
+    destination: "/:locale/docs/deployment/overview",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/deployment/auth-middleware",
+    destination: "/:locale/docs/server-db/middleware",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/deployment/cors-middleware",
+    destination: "/:locale/docs/server-db/middleware",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/deployment/custom-api-route",
+    destination: "/:locale/docs/server-db/middleware",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/deployment/logging-middleware",
+    destination: "/:locale/docs/server-db/middleware",
     permanent: true,
   },
 ];

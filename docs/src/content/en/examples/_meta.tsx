@@ -48,10 +48,6 @@ const meta = {
     title: "Observability",
     theme: { collapsed: true },
   },
-  deployment: {
-    title: "Deployment",
-    theme: { collapsed: true },
-  },
 };
 
 export default meta;
