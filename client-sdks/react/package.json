@@ -47,10 +47,12 @@
     "@radix-ui/react-tooltip": "^1.2.7",
     "hast-util-to-jsx-runtime": "^2.3.6",
     "lucide-react": "^0.522.0",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
     "shiki": "^1.29.2",
     "tailwind-merge": "^3.3.1"
+  },
+  "peerDependencies": {
+    "react": ">=19.0.0",
+    "react-dom": ">=19.0.0"
   },
   "devDependencies": {
     "@ai-sdk/react": "^2.0.57",
@@ -60,7 +62,7 @@
     "@tailwindcss/vite": "^4.1.13",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
-    "@vitejs/plugin-react": "^5.0.3",
+    "@vitejs/plugin-react": "^5.0.4",
     "@vitest/ui": "^3.2.4",
     "eslint": "^9.36.0",
     "eslint-plugin-storybook": "^9.1.10",
@@ -70,7 +72,9 @@
     "typescript": "^5.8.3",
     "vite": "^7.1.7",
     "vite-plugin-dts": "^4.5.4",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "react": ">=19.0.0",
+    "react-dom": ">=19.0.0"
   },
   "eslintConfig": {
     "extends": [
