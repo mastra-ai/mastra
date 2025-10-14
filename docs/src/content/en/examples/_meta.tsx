@@ -1,5 +1,3 @@
-import { Tag } from "@/components/tag";
-
 const meta = {
   index: {
     title: "Overview",
