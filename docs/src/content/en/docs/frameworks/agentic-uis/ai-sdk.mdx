@@ -338,7 +338,7 @@ export async function POST(req: Request) {
 
 ### Passing additional data
 
-The useChat `sendMessage` allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as `RuntimeContext`.
+`sendMessage` allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as `RuntimeContext`.
 
 ```typescript {8,14-20} filename="app/test/chat-extra.tsx" showLineNumbers copy
 "use client";
