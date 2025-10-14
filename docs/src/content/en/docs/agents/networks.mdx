@@ -5,7 +5,7 @@ description: "Networks in Mastra help you execute individual or multiple Mastra 
 
 # Networks
 
-Agent networks coordinate multiple agents, tools, and workflows to handle complex tasks that aren't clearly defined upfront. They allow decisions to be made at runtime about which primitives to call, in what order, and with what data, based on the user message or context.
+Agent networks coordinate multiple agents, tools, and workflows to handle complex tasks that aren't clearly defined upfront. They allow decisions to be made at runtime about which primitives to call, in what order, and with what data, based on the user's message or context.
 
 ## When to use networks
 
@@ -13,7 +13,7 @@ Use agent networks when a single agent isn’t enough. They’re designed for ta
 
 ## Core principles
 
-- Memory is required when using `.network()`. It stores task history and is used to decide which primitives to call.
+- Memory is required when using `.network()` and is used to store task history and determine when a task is complete.
 - Primitives are selected based on their descriptions. Clear, specific descriptions improve routing. For workflows, the input schema helps determine the right inputs at runtime.
 - If multiple primitives have overlapping functionality, the agent favors the more specific one, using a combination of schema and descriptions to decide which to run.
 
