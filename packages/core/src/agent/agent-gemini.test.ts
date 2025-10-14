@@ -276,6 +276,21 @@ describe('Gemini Model Compatibility Tests', () => {
   });
 
   describe('Edge cases for Gemini message ordering', () => {
+    it('should handle system-only context with empty user message', async () => {
+      const systemOnlyAgent = new Agent({
+        id: 'system-only-gemini',
+        name: 'System Only Gemini',
+        instructions: 'You are an expert on marine biology. You always respond with scientific facts.',
+        model: google('gemini-2.5-flash-lite'),
+      });
+
+      const result = await systemOnlyAgent.generate('', {
+        system: 'Always be scientific and accurate',
+      });
+
+      expect(result).toBeDefined();
+    });
+
     it('should handle empty input gracefully', async () => {
       const agent = new Agent({
         id: 'empty-input-agent',

@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "6.5.0-alpha.0",
+  "version": "6.5.0-alpha.2",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -32,6 +32,7 @@
   "scripts": {
     "build": "tsc && vite build",
     "dev": "vite build --watch",
+    "test": "vitest",
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",
@@ -45,7 +46,6 @@
   "author": "Mastra",
   "license": "Apache-2.0",
   "dependencies": {
-    "@mastra/react": "workspace:*",
     "@ai-sdk/ui-utils": "^1.2.11",
     "@assistant-ui/react": "^0.10.45",
     "@assistant-ui/react-markdown": "^0.10.9",
@@ -61,6 +61,7 @@
     "@lezer/highlight": "^1.2.1",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/client-js": "workspace:^",
+    "@mastra/react": "workspace:*",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-checkbox": "^1.3.2",
@@ -137,7 +138,8 @@
     "typescript": "^5.8.3",
     "vite": "^7.1.9",
     "vite-plugin-dts": "^4.5.4",
-    "vite-plugin-lib-inject-css": "^2.2.2"
+    "vite-plugin-lib-inject-css": "^2.2.2",
+    "vitest": "^3.2.4"
   },
   "homepage": "https://mastra.ai",
   "repository": {

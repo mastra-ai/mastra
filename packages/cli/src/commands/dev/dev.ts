@@ -9,7 +9,7 @@ import { execa } from 'execa';
 import getPort from 'get-port';
 
 import { devLogger } from '../../utils/dev-logger.js';
-import { logger } from '../../utils/logger.js';
+import { createLogger } from '../../utils/logger.js';
 
 import { DevBundler } from './DevBundler';
 
@@ -296,6 +296,7 @@ export async function dev({
   inspectBrk,
   customArgs,
   https,
+  debug,
 }: {
   dir?: string;
   root?: string;
@@ -306,6 +307,7 @@ export async function dev({
   inspectBrk?: boolean;
   customArgs?: string[];
   https?: boolean;
+  debug?: boolean;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
@@ -326,7 +328,7 @@ export async function dev({
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
   const bundler = new DevBundler(env);
-  bundler.__setLogger(logger); // Keep Pino logger for internal bundler operations
+  bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
 
   const loadedEnv = await bundler.loadEnvVars();
 
