@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "braintrust": "^0.3.8"
+    "braintrust": "^0.4.3"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
