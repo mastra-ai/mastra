@@ -40,7 +40,7 @@ describe('Agent - network with Gemini', () => {
       text: z.string(),
     }),
     execute: async ({ inputData }) => {
-      const resp = await agent1.generateVNext(inputData.city, {
+      const resp = await agent1.generate(inputData.city, {
         output: z.object({
           text: z.string(),
         }),
@@ -60,7 +60,7 @@ describe('Agent - network with Gemini', () => {
       text: z.string(),
     }),
     execute: async ({ inputData }) => {
-      const resp = await agent2.generateVNext(inputData.text, {
+      const resp = await agent2.generate(inputData.text, {
         output: z.object({
           text: z.string(),
         }),
@@ -123,7 +123,7 @@ describe('Agent - network with Gemini', () => {
     tools: {
       tool,
     },
-    memory: memory as any,
+    memory,
   });
 
   const runtimeContext = new RuntimeContext();
@@ -201,6 +201,7 @@ describe('Agent - network with Gemini', () => {
         name: 'Empty Network Gemini',
         instructions: 'You are a helpful assistant',
         model: google('gemini-2.5-flash-lite'),
+        memory,
       });
 
       const stream = await emptyNetwork.network('Hello', {
@@ -225,8 +226,8 @@ describe('Agent - network with Gemini', () => {
       });
 
       // Add only system context, no user messages initially
-      const stream = await systemOnlyAgent.generateVNext('', {
-        systemPrompt: 'Always be scientific and accurate',
+      const stream = await systemOnlyAgent.generate('', {
+        system: 'Always be scientific and accurate',
       });
 
       expect(stream).toBeDefined();
@@ -255,6 +256,7 @@ describe('Agent - network with Gemini', () => {
         instructions: 'You can check the weather',
         model: google('gemini-2.5-flash-lite'),
         tools: { weatherTool },
+        memory,
       });
 
       const stream = await agentWithTool.network('What is the weather in San Francisco?', {
