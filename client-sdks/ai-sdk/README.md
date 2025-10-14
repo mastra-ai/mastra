@@ -1,11 +1,28 @@
 # @mastra/ai-sdk
 
-`@mastra/ai-sdk` helps you setup custom API routes to more easily support [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat).
+`@mastra/ai-sdk` provides custom API routed and utilities to stream Mastra agents in AI SDK v5 compatible formats. It includes chat, workflow, and network route handlers, plus utilities and exported types for UI integrations.
 
 ## Installation
 
 ```bash
 npm install @mastra/ai-sdk
+```
+
+## Exports
+
+```ts
+import {
+  chatRoute,
+  workflowRoute,
+  networkRoute,
+  toAISdkFormat,
+  type chatRouteOptions,
+  type WorkflowRouteOptions,
+  type NetworkRouteOptions,
+  type WorkflowDataPart,
+  type NetworkDataPart,
+  type AgentDataPart,
+} from '@mastra/ai-sdk';
 ```
 
 ## Usage
@@ -53,3 +70,73 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat<MyMes
   }),
 });
 ```
+
+## Workflow route
+
+Stream a workflow in AI SDK compatible format.
+
+```typescript
+import { workflowRoute } from '@mastra/ai-sdk';
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      workflowRoute({
+        path: '/workflow',
+        agent: 'weatherAgent',
+      }),
+    ],
+  },
+});
+```
+
+## Network route
+
+Stream agent networks (routing + nested agent/workflow/tool executions) in AI SDK compatible format.
+
+```typescript
+import { networkRoute } from '@mastra/ai-sdk';
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      networkRoute({
+        path: '/network',
+        agent: 'weatherAgent',
+      }),
+    ],
+  },
+});
+```
+
+## Manual transformation
+
+If you have a raw Mastra `stream`, you can manually transform it to AI SDK UI message parts:
+
+```typescript
+import { toAISdkFormat } from '@mastra/ai-sdk';
+import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const agent = mastra.getAgent('weatherAgent');
+  const stream = await agent.stream(messages);
+
+  const uiMessageStream = createUIMessageStream({
+    execute: async ({ writer }) => {
+      for await (const part of toAISdkFormat(stream, { from: 'agent' })!) {
+        writer.write(part);
+      }
+    },
+  });
+
+  return createUIMessageStreamResponse({ stream: uiMessageStream });
+}
+```
+
+## Types
+
+- `WorkflowDataPart`: Emitted for workflow runs and nested tool-workflows.
+- `NetworkDataPart`: Emitted for network runs and nested tool-networks.
+- `AgentDataPart`: Aggregated agent step data for nested agent progress.
+- `chatRouteOptions`, `WorkflowRouteOptions`, `NetworkRouteOptions`: Route configuration types.
