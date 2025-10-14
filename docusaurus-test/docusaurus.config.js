@@ -37,6 +37,12 @@ const config = {
     locales: ['en'],
   },
 
+  // Custom fields for Algolia search
+  customFields: {
+    algoliaAppId: process.env.ALGOLIA_APP_ID,
+    algoliaSearchApiKey: process.env.ALGOLIA_SEARCH_API_KEY,
+  },
+
   // Preconnect to Google Fonts
   headTags: [
     {
