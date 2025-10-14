@@ -134,7 +134,7 @@
 
   /* Fonts */
   --ifm-font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-  --ifm-font-family-monospace: 'Berkeley Mono', 'Geist Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+  --ifm-font-family-monospace: 'Geist Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
   --ifm-h1-font-size: 2.25rem;
   --ifm-h2-font-size: 1.8rem;
   --ifm-h3-font-size: 1.25rem;
@@ -277,6 +277,7 @@
   width: 100%;
   height: auto;
   padding-inline: 0;
+  padding-block: 0;
   border-bottom: transparent;
   box-shadow: none;
   background-color: var(--ifm-navbar-background-color);
@@ -302,6 +303,11 @@
   }
 }
 
+.dialog-panel__content{
+  box-shadow:0 0 0 1px #00000014,0px 1px 1px #00000005,0px 8px 16px -4px #0000000a,0px 24px 32px -8px #0000000f, 0 0 0 1px hsla(0,0%,98%,1)
+;
+}
+
 .dialog-panel ul {
   padding-left: 0;
   margin-bottom: 0;
@@ -323,6 +329,14 @@
 @media (min-width: 997px) {
   .menu {
     padding-inline: 0 !important;
+  }
+
+  .theme-doc-sidebar-container {
+    --ifm-navbar-height: calc(60px + 50px);
+  }
+
+  .theme-doc-toc-desktop.theme-doc-toc-desktop{
+   top: calc(calc(var(--ifm-navbar-height) + 50px) + 1rem);
   }
 }
 
@@ -385,7 +399,7 @@ span[class*="categoryLinkLabel"] {
 
 /* ======= BreadCrumbs ==================== */
 
-.breadcrumbs{
+.breadcrumbs {
   margin-bottom: 0;
   display: flex;
   gap: 0.5rem;
@@ -397,9 +411,9 @@ span[class*="categoryLinkLabel"] {
   padding: 0;
 }
 
-.breadcrumbs__item:not(:last-child):after{
-    margin: 0;
-    margin-inline-start: var(--ifm-breadcrumb-spacing);
+.breadcrumbs__item:not(:last-child):after {
+  margin: 0;
+  margin-inline-start: var(--ifm-breadcrumb-spacing);
 }
 
 .breadcrumbs__item--active .breadcrumbs__link {
@@ -419,31 +433,32 @@ span[class*="categoryLinkLabel"] {
 
 
 /* ==================== CODE BLOCKS ==================== */
-/* Inline code */
+.theme-code-block.theme-code-block{
+  box-shadow: none;
+  background:none
+}
+
+pre {
+  unset: all;
+  --prism-background-color: var(--mastra-surface-2);
+  border: 0.5px solid var(--border);
+}
+
 code {
+  --bg-color: : var(--mastra-surface-5);
   font-family: var(--ifm-font-family-monospace);
-  border-radius: 0.5rem;
+  border-radius: 0.375rem;
   font-size: 0.875rem;
-  border: 1px solid var(--mastra-border-secondary);
-  background: transparent;
-  padding: 0.31rem 0.62rem 0.44rem;
+  border: 1px solid color-mix(in oklab,#000 4%,transparent);
+  background: color-mix(in oklab,#000 3%,transparent);
+  padding: .12em .25em;
 }
 
 [data-theme='dark'] code {
   border-color: var(--mastra-border-code);
 }
 
-/* Code blocks (pre) */
-pre {
-  unset: all;
-  background: none !important;
-  border: none;
-  box-shadow: none;
-  /* border: 0.5px solid var(--mastra-border);
-  background: var(--mastra-surface-2);
-  border-radius: 0.5rem;
-  box-shadow: none; */
-}
+
 
 [data-theme='dark'] pre {
   border-color: var(--mastra-border);
@@ -527,11 +542,11 @@ article p code,
 article li code,
 article td code {
   font-size: 0.875rem;
-  border: 1px solid var(--mastra-border-secondary);
-  background: transparent;
-  padding: 0.15rem 0.4rem;
-  border-radius: 0.25rem;
+  padding: .12em .25em;
+  border-radius: 0.375rem;
   white-space: nowrap;
+  background: color-mix(in oklab,#000 3%,transparent);
+  border: 1px solid color-mix(in oklab,#000 4%,transparent);
 }
 
 [data-theme='dark'] article p code,
@@ -706,12 +721,14 @@ table code {
 
 /* ==================== TABS ==================== */
 .tabs {
-  border-bottom: 1px solid var(--mastra-border);
+  border-bottom: 0.5px solid var(--border);
 }
 
 .tabs__item {
   color: var(--mastra-text-tertiary);
   font-weight: 500;
+  padding: 0.5rem;
+  padding-inline: 0.75rem;
 }
 
 .tabs__item:hover {
@@ -720,7 +737,7 @@ table code {
 }
 
 .tabs__item--active {
-  border-bottom-color: var(--mastra-green-accent-2);
+  border-bottom: 1.5px solid var(--mastra-green-accent-2);
   color: var(--mastra-text-primary);
 }
 
@@ -779,8 +796,8 @@ table code {
 
 
 /* ==================== DOC MAIN CONTAINER ==================== */
-[class*='docMainContainer'] {
-  padding-left: 3rem;
+[class*='docItemContainer'] {
+  padding-inline: 3rem;
 }
 
 kbd {
@@ -806,10 +823,10 @@ input[type="search"]::-ms-clear {
   display: none;
 }
 
-iframe {
+iframe, img {
   border-radius: 12px;
 }
 
-ul{
+ul {
   list-style: disc;
 }

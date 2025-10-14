@@ -1,18 +1,8 @@
-import React from 'react';
-import {
-  Dialog,
-  DialogPortal,
-  DialogClose,
-  DialogOverlay,
-  DialogTrigger,
-  DialogContent,
-  DialogTitle,
-} from '@radix-ui/react-dialog';
-import { useEffect, useState } from 'react';
-import { Button } from '@site/src/components/ui/button';
+import { Dialog, DialogContent, DialogOverlay, DialogPortal, DialogTitle, DialogTrigger } from '@radix-ui/react-dialog';
 import { CustomSearchWithoutAI } from '@site/src/components/custom-search';
-
-const INPUTS = new Set(['INPUT', 'SELECT', 'BUTTON', 'TEXTAREA']);
+import { Button } from '@site/src/components/ui/button';
+import { useEffect, useState } from 'react';
+import { useHotkeys } from 'react-hotkeys-hook';
 
 export function Shortcut() {
   const [isMac, setIsMac] = useState(false);
@@ -36,30 +26,10 @@ export function Shortcut() {
 }
 
 export default function SearchContainer({ locale }: { locale: string }) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
   const [isAgentMode, setIsAgentMode] = useState(false);
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      const el = document.activeElement;
-      if (!el || INPUTS.has(el.tagName) || (el as HTMLElement).isContentEditable) {
-        return;
-      }
-      if (
-        event.key === '/' ||
-        (event.key === 'k' && !event.shiftKey && (navigator.userAgent.includes('Mac') ? event.metaKey : event.ctrlKey))
-      ) {
-        event.preventDefault();
-        // prevent to scroll to top
-        setIsOpen(true);
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
+  useHotkeys('meta+k', () => setIsOpen(open => !open));
 
   function open() {
     setIsOpen(true);
@@ -81,7 +51,7 @@ export default function SearchContainer({ locale }: { locale: string }) {
   };
 
   return (
-    <Dialog>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button
           onClick={open}
@@ -94,10 +64,10 @@ export default function SearchContainer({ locale }: { locale: string }) {
         </Button>
       </DialogTrigger>
       <DialogPortal>
-        <DialogOverlay className="fixed inset-0 transition-opacity z-[250]  bg-black/70" />
+        <DialogOverlay className="fixed inset-0 transition-opacity z-[250]  bg-[hsla(0,0%,100%,1)] opacity-80" />
         <DialogContent className="dialog-panel z-[260] fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2  w-full">
           <div className="flex items-start relative top-1/2 justify-center min-h-full p-4">
-            <div className="border-[0.5px] w-[32rem] border-[var(--light-border-code)] duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0 dark:border-pink-200 h-fit max-w-[660px] mx-auto rounded-xl bg-(--ifm-background-color) dark:bg-surface-4 transition-all">
+            <div className="dialog-panel__content w-[32rem] shadow duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0 dark:border-pink-200 h-fit max-w-[660px] mx-auto rounded-xl bg-(--ifm-background-color) dark:bg-surface-4 transition-all">
               <DialogTitle className="sr-only">Search</DialogTitle>
               <div className="w-full">
                 {isAgentMode ? null : <CustomSearchWithoutAI searchOptions={searchOptions} closeModal={close} />}
