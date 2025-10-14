@@ -1,6 +1,6 @@
 # @mastra/ai-sdk
 
-`@mastra/ai-sdk` provides custom API routed and utilities to stream Mastra agents in AI SDK v5 compatible formats. It includes chat, workflow, and network route handlers, plus utilities and exported types for UI integrations.
+`@mastra/ai-sdk` provides custom API routes and utilities for streaming Mastra agents in AI SDK-compatible formats. Including chat, workflow, and network route handlers, along with utilities and exported types for UI integrations.
 
 ## Installation
 
