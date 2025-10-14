@@ -22,7 +22,9 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
-      process: {},
+      process: {
+        env: {},
+      },
     },
   };
 

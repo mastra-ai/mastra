@@ -375,6 +375,7 @@ interface WorkflowExecutionStartPayload {
 }
 
 interface WorkflowExecutionEndPayload {
+  name: string;
   task: string;
   primitiveId: string;
   primitiveType: string;
