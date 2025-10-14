@@ -3785,14 +3785,3 @@ describe('MessageList', () => {
     });
   });
 });
-
-// export type MessageInput =
-// | AIV5Type.UIMessage
-// | AIV5Type.ModelMessage
-// | UIMessageWithMetadata
-// | AIV4Type.Message
-// | AIV4Type.CoreMessage // v4 CoreMessage support
-// // db messages in various formats
-// | MastraMessageV1
-// | MastraMessageV2 // <- this is how we currently store in the DB
-// | MastraMessageV3; // <- this could be stored in the db but is not currently. we do accept this as an input though, and we use it to transform from aiv4->v5 types as an intermediary type
