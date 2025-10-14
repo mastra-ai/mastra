@@ -1,4 +1,4 @@
-import { google } from '@ai-sdk/google';
+import { google } from '@ai-sdk/google-v5';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { RuntimeContext } from '../runtime-context';
@@ -69,11 +69,44 @@ describe('Gemini Model Compatibility Tests', () => {
 
   describe('Agent network() method - Testing Issues #8053 and #8732', () => {
     it('should handle simple network call', async () => {
+      const calculatorTool = createTool({
+        id: 'calculator',
+        description: 'Performs basic arithmetic operations',
+        inputSchema: z.object({
+          operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
+          a: z.number(),
+          b: z.number(),
+        }),
+        outputSchema: z.object({
+          result: z.number(),
+        }),
+        execute: async ({ context }) => {
+          const { operation, a, b } = context;
+          let result = 0;
+          switch (operation) {
+            case 'add':
+              result = a + b;
+              break;
+            case 'subtract':
+              result = a - b;
+              break;
+            case 'multiply':
+              result = a * b;
+              break;
+            case 'divide':
+              result = b !== 0 ? a / b : 0;
+              break;
+          }
+          return { result };
+        },
+      });
+
       const agent = new Agent({
         id: 'simple-network',
         name: 'Simple Network Agent',
-        instructions: 'You are a helpful assistant',
+        instructions: 'You are a helpful assistant.',
         model: google('gemini-2.5-flash-lite'),
+        tools: { calculatorTool },
         memory,
       });
 
@@ -91,11 +124,18 @@ describe('Gemini Model Compatibility Tests', () => {
     });
 
     it('should handle network with continuing conversation', async () => {
+      const memoryAgent = new Agent({
+        name: 'memory-agent',
+        instructions: 'You answer questions based on conversation history',
+        model: google('gemini-2.5-flash-lite'),
+      });
+
       const agent = new Agent({
         id: 'conversation-agent',
         name: 'Conversation Agent',
-        instructions: 'You maintain context across conversations',
+        instructions: 'You coordinate with the memory agent to answer questions about past conversations',
         model: google('gemini-2.5-flash-lite'),
+        agents: { memoryAgent },
         memory,
       });
 
@@ -313,11 +353,18 @@ describe('Gemini Model Compatibility Tests', () => {
     });
 
     it('should handle multiple consecutive network calls', async () => {
+      const contextAgent = new Agent({
+        name: 'context-agent',
+        instructions: 'You answer questions based on conversation context and history',
+        model: google('gemini-2.5-flash-lite'),
+      });
+
       const agent = new Agent({
         id: 'multi-call-agent',
         name: 'Multi Call Agent',
-        instructions: 'You handle multiple interactions',
+        instructions: 'You coordinate with the context agent to handle conversations',
         model: google('gemini-2.5-flash-lite'),
+        agents: { contextAgent },
         memory,
       });
 
