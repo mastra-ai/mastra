@@ -1,4 +1,4 @@
-# MastraAI Code of Conduct
+# Mastra Code of Conduct
 
 tl;dr: Be excellent to each other!
 
