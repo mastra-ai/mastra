@@ -1,4 +1,4 @@
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils/test';
+import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import type {
   LanguageModelV2CallOptions,
   LanguageModelV2FunctionTool,
