@@ -16,7 +16,7 @@ import * as resolve from 'resolve.exports';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import { readFile } from 'node:fs/promises';
 import { getPackageInfo } from 'local-pkg';
-import { ErrorCategory, ErrorDomain, MastraBaseError } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 type VirtualDependency = {
   name: string;
@@ -217,7 +217,7 @@ async function getInputPlugins(
 
           const pkgInfo = await getPackageInfo(importer);
           const packageName = pkgInfo?.packageJson?.name || id;
-          throw new MastraBaseError({
+          throw new MastraError({
             id: 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD',
             domain: ErrorDomain.DEPLOYER,
             category: ErrorCategory.USER,
@@ -225,16 +225,13 @@ async function getInputPlugins(
               importFile: importer,
               packageName,
             },
-            text: `We've found a binary dependency in your bundle. Please add \`${packageName}\` to your externals.
+            text: `We found a binary dependency in your bundle. Please add \`${packageName}\` to your externals.
   
-  \`\`\`
-  export const new Mastra({
-    // other config
-    server: {
-      externals: ["${packageName}"],
-    }
-  })
-  \`\`\`
+export const mastra = new Mastra({
+  bundler: {
+    externals: ["${packageName}"],
+  }
+})
               `,
           });
         },
