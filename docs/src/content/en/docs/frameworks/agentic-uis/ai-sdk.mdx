@@ -177,6 +177,7 @@ To manually transform Mastra streams to AI SDK compatible format, leverage the `
     const myAgent = mastra.getAgent("weatherAgent");
     const stream = await myAgent.stream(messages);
 
+      // Transform stream into AI SDK format and create UI messages stream
       const uiMessageStream = createUIMessageStream({
         execute: async ({ writer }) => {
           for await (const part of toAISdkFormat(stream, { from: 'agent' })!) {
@@ -185,36 +186,11 @@ To manually transform Mastra streams to AI SDK compatible format, leverage the `
         },
       });
 
+      // Create a Response that streams the UI message stream to the client
       return createUIMessageStreamResponse({
         stream: uiMessageStream,
       });
 }
-```
-
-### createUIMessageStream
-This is a helpful util from the `ai` package for creating a readable stream and can be used alongside the `mastra/ai-sdk` package
-`toAISdkFormat` util for stream transformations.
-
-```typescript filename="app/api/chat/route.ts" showLineNumbers copy
-   import { createUIMessageStream } from 'ai';
-
-      const uiMessageStream = createUIMessageStream({
-        execute: async ({ writer }) => {
-          for await (const part of toAISdkFormat(stream, { from: 'workflow' })!) {
-            writer.write(part);
-          }
-        },
-      });
-```
-
-### createUIMessageStreamResponse
-createUIMessageStreamResponse creates a Response object that streams messages to the client
-
-```typescript filename="app/api/chat/route.ts" showLineNumbers copy
-    import { createUIMessageStreamResponse} from 'ai';
-       return createUIMessageStreamResponse({
-        stream: uiMessageStream,
-      });
 ```
 
 ## UI Hooks
