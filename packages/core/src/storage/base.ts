@@ -20,6 +20,8 @@ import {
   TABLE_DATASETS,
   TABLE_DATASET_VERSIONS,
   TABLE_DATASET_ROWS,
+  TABLE_EXPERIMENTS,
+  TABLE_EXPERIMENT_ROW_RESULTS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
 import type {
@@ -34,10 +36,18 @@ import type {
 } from './domains';
 import type {
   AddDatasetRowsPayload,
+  AddExperimentRowResultsPayload,
+  AddCommentToRowResultPayload,
+  CreateExperimentPayload,
   DatasetRow,
   DatasetVersion,
   DeleteDatasetRowsPayload,
+  DeleteExperimentRowResultsPayload,
+  ExperimentRecord,
+  ExperimentRowResult,
   UpdateDatasetRowsPayload,
+  UpdateExperimentPayload,
+  UpdateExperimentRowResultsPayload,
 } from './domains/datasets/base';
 import type {
   EvalRow,
@@ -403,6 +413,18 @@ export abstract class MastraStorage extends MastraBase {
         this.createTable({
           tableName: TABLE_DATASET_ROWS,
           schema: TABLE_SCHEMAS[TABLE_DATASET_ROWS],
+        }),
+      );
+      tableCreationTasks.push(
+        this.createTable({
+          tableName: TABLE_EXPERIMENTS,
+          schema: TABLE_SCHEMAS[TABLE_EXPERIMENTS],
+        }),
+      );
+      tableCreationTasks.push(
+        this.createTable({
+          tableName: TABLE_EXPERIMENT_ROW_RESULTS,
+          schema: TABLE_SCHEMAS[TABLE_EXPERIMENT_ROW_RESULTS],
         }),
       );
     }
@@ -1011,6 +1033,200 @@ export abstract class MastraStorage extends MastraBase {
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
       text: `Datasets are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * EXPERIMENTS
+   * These methods delegate to the datasets store for experiment management.
+   */
+
+  /**
+   * Creates a new experiment
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async createExperiment(args: CreateExperimentPayload): Promise<ExperimentRecord> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.createExperiment(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_CREATE_EXPERIMENT_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Experiments are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Updates an existing experiment
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async updateExperiment(args: { id: string; updates: UpdateExperimentPayload }): Promise<ExperimentRecord> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.updateExperiment(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_UPDATE_EXPERIMENT_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Experiments are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Retrieves a single experiment by ID
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async getExperiment(args: { id: string }): Promise<ExperimentRecord> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.getExperiment(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_GET_EXPERIMENT_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Experiments are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Retrieves experiments with pagination and filtering
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async getExperiments(args?: {
+    filter?: {
+      datasetId?: string;
+    };
+    pagination?: StoragePagination;
+  }): Promise<{ experiments: ExperimentRecord[]; pagination: PaginationInfo }> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.getExperiments(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_GET_EXPERIMENTS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Experiments are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Deletes an experiment and all its results
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async deleteExperiment(args: { id: string }): Promise<void> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.deleteExperiment(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_DELETE_EXPERIMENT_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Experiments are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * EXPERIMENT ROW RESULTS
+   * These methods delegate to the datasets store for experiment row result management.
+   */
+
+  /**
+   * Adds experiment row results in batch
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async addExperimentRowResults(args: AddExperimentRowResultsPayload): Promise<void> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.addExperimentRowResults(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_ADD_EXPERIMENT_ROW_RESULTS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Experiment row results are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Retrieves experiment row results with pagination
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async getExperimentRowResults(args: {
+    experimentId: string;
+    pagination?: StoragePagination;
+  }): Promise<{ results: ExperimentRowResult[]; pagination: PaginationInfo }> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.getExperimentRowResults(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_GET_EXPERIMENT_ROW_RESULTS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Experiment row results are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Retrieves a single experiment row result by ID
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async getExperimentRowResult(args: { id: string }): Promise<ExperimentRowResult> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.getExperimentRowResult(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_GET_EXPERIMENT_ROW_RESULT_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Experiment row results are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Updates experiment row results in batch
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async updateExperimentRowResults(args: UpdateExperimentRowResultsPayload): Promise<void> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.updateExperimentRowResults(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_UPDATE_EXPERIMENT_ROW_RESULTS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Experiment row results are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Adds a comment to an experiment row result
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async addCommentToRowResult(args: AddCommentToRowResultPayload): Promise<ExperimentRowResult> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.addCommentToRowResult(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_ADD_COMMENT_TO_ROW_RESULT_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Experiment row result comments are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Deletes experiment row results in batch
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async deleteExperimentRowResults(args: DeleteExperimentRowResultsPayload): Promise<void> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.deleteExperimentRowResults(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_DELETE_EXPERIMENT_ROW_RESULTS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Experiment row results are not supported by this storage adapter (${this.constructor.name})`,
     });
   }
 }

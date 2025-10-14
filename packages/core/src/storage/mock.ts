@@ -7,7 +7,14 @@ import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
 import type { TABLE_NAMES } from './constants';
-import { MemoryDatasetsStorage, type DatasetRecord, type DatasetRow, type DatasetVersion } from './domains';
+import {
+  MemoryDatasetsStorage,
+  type DatasetRecord,
+  type DatasetRow,
+  type DatasetVersion,
+  type ExperimentRecord,
+  type ExperimentRowResult,
+} from './domains';
 import { InMemoryLegacyEvals } from './domains/legacy-evals/inmemory';
 import type { InMemoryEvals } from './domains/legacy-evals/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
@@ -87,6 +94,8 @@ export class InMemoryStore extends MastraStorage {
         datasets: database.mastra_datasets as Map<string, Omit<DatasetRecord, 'currentVersion'>>,
         datasetVersions: database.mastra_dataset_versions as Map<string, DatasetVersion>,
         datasetRows: database.mastra_dataset_rows as Map<string, DatasetRow>,
+        experiments: database.mastra_experiments as Map<string, ExperimentRecord>,
+        experimentRowResults: database.mastra_experiment_row_results as Map<string, ExperimentRowResult>,
       },
       operations: operationsStorage,
     });

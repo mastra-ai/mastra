@@ -11,6 +11,8 @@ export const TABLE_AI_SPANS = 'mastra_ai_spans';
 export const TABLE_DATASETS = 'mastra_datasets';
 export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
 export const TABLE_DATASET_ROWS = 'mastra_dataset_rows';
+export const TABLE_EXPERIMENTS = 'mastra_experiments';
+export const TABLE_EXPERIMENT_ROW_RESULTS = 'mastra_experiment_row_results';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -23,7 +25,9 @@ export type TABLE_NAMES =
   | typeof TABLE_AI_SPANS
   | typeof TABLE_DATASETS
   | typeof TABLE_DATASET_VERSIONS
-  | typeof TABLE_DATASET_ROWS;
+  | typeof TABLE_DATASET_ROWS
+  | typeof TABLE_EXPERIMENTS
+  | typeof TABLE_EXPERIMENT_ROW_RESULTS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -33,19 +37,18 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   runId: { type: 'text' },
   scorer: { type: 'jsonb' },
   preprocessStepResult: { type: 'jsonb', nullable: true },
-  extractStepResult: { type: 'jsonb', nullable: true },
+  extractStepResult: { type: 'jsonb', nullable: true }, // Deprecated
   analyzeStepResult: { type: 'jsonb', nullable: true },
   score: { type: 'float' },
   reason: { type: 'text', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   preprocessPrompt: { type: 'text', nullable: true },
-  extractPrompt: { type: 'text', nullable: true },
+  extractPrompt: { type: 'text', nullable: true }, // Deprecated
   generateScorePrompt: { type: 'text', nullable: true },
   generateReasonPrompt: { type: 'text', nullable: true },
   analyzePrompt: { type: 'text', nullable: true },
 
-  // Deprecated
-  reasonPrompt: { type: 'text', nullable: true },
+  reasonPrompt: { type: 'text', nullable: true }, // Deprecated
   input: { type: 'jsonb' },
   output: { type: 'jsonb' }, // MESSAGE OUTPUT
   additionalContext: { type: 'jsonb', nullable: true }, // DATA FROM THE CONTEXT PARAM ON AN AGENT
@@ -57,6 +60,7 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   entity: { type: 'jsonb', nullable: true }, // MINIMAL JSON DATA ABOUT WORKFLOW, AGENT, TOOL, STEP, NETWORK
   entityId: { type: 'text', nullable: true },
   source: { type: 'text' },
+  experimentResultId: { type: 'text', nullable: true },
   resourceId: { type: 'text', nullable: true },
   threadId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp' },
@@ -119,6 +123,77 @@ export const DATASET_ROW_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp', nullable: true },
 };
 
+export const EXPERIMENT_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+
+  // Dataset linkage
+  datasetId: { type: 'text', nullable: false },
+  datasetVersionId: { type: 'text', nullable: false }, // Immutable snapshot
+
+  // Target configuration
+  targetType: { type: 'text', nullable: false }, // 'agent' | 'workflow'
+  targetId: { type: 'text', nullable: false }, // ID of the agent/workflow
+  // targetConfig: { type: 'jsonb', nullable: true }, // Serialized config used
+
+  // Execution configuration
+  concurrency: { type: 'integer', nullable: true },
+  scorers: { type: 'jsonb', nullable: true }, // Array of scorers
+
+  // Status tracking
+  status: { type: 'text', nullable: false }, // 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+
+  // Summary statistics (computed and cached)
+  totalItems: { type: 'integer', nullable: true },
+  // successfulItems: { type: 'integer', nullable: true },
+  // failedItems: { type: 'integer', nullable: true },
+  averageScores: { type: 'jsonb', nullable: true }, // { scorerName: avgScore }
+
+  // Arbitrary metadata
+  // metadata: { type: 'jsonb', nullable: true },
+
+  // Timestamps
+  createdAt: { type: 'timestamp', nullable: false },
+  startedAt: { type: 'timestamp', nullable: true },
+  completedAt: { type: 'timestamp', nullable: true },
+  updatedAt: { type: 'timestamp', nullable: true },
+};
+
+export const EXPERIMENT_ROW_RESULT_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+
+  // Foreign keys
+  experimentId: { type: 'text', nullable: false },
+  datasetRowId: { type: 'text', nullable: false }, // Links to specific dataset row
+
+  // Snapshot of dataset row data (preserves data even if row is deleted)
+  input: { type: 'jsonb', nullable: false },
+  groundTruth: { type: 'jsonb', nullable: true },
+  runtimeContext: { type: 'jsonb', nullable: true },
+
+  // Execution result
+  output: { type: 'jsonb', nullable: true }, // Null if execution failed
+
+  // Status
+  // status: { type: 'text', nullable: false }, // 'pending' | 'success' | 'error'
+  error: { type: 'jsonb', nullable: true }, // Error details if failed
+
+  // Tracing linkage
+  traceId: { type: 'text', nullable: true },
+  spanId: { type: 'text', nullable: true },
+
+  // Performance metrics
+  // duration: { type: 'integer', nullable: true }, // Milliseconds
+  // tokensUsed: { type: 'integer', nullable: true },
+  // cost: { type: 'float', nullable: true },
+
+  // Comments (integrated into result)
+  comments: { type: 'jsonb', nullable: true }, // Array of comment objects
+
+  // Timestamps
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: true },
+};
+
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -142,6 +217,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_DATASETS]: DATASET_SCHEMA,
   [TABLE_DATASET_ROWS]: DATASET_ROW_SCHEMA,
   [TABLE_DATASET_VERSIONS]: DATASET_VERSION_SCHEMA,
+  [TABLE_EXPERIMENTS]: EXPERIMENT_SCHEMA,
+  [TABLE_EXPERIMENT_ROW_RESULTS]: EXPERIMENT_ROW_RESULT_SCHEMA,
   [TABLE_EVALS]: {
     input: {
       type: 'text',
