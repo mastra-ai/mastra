@@ -630,7 +630,12 @@ describe('output-format-handlers', () => {
         age: z.number().positive(),
       });
 
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const mockLogger = {
+        warn: vi.fn(),
+        debug: vi.fn(),
+        info: vi.fn(),
+        error: vi.fn(),
+      };
 
       const transformer = createObjectStreamTransformer({
         isLLMExecutionStep: true,
@@ -638,6 +643,7 @@ describe('output-format-handlers', () => {
           schema,
           errorStrategy: 'warn',
         },
+        logger: mockLogger as any,
       });
 
       const streamParts: ChunkType<typeof schema>[] = [
@@ -672,10 +678,8 @@ describe('output-format-handlers', () => {
       const objectResultChunk = chunks.find(c => c?.type === 'object-result');
       expect(objectResultChunk).toBeUndefined();
 
-      // Should have called console.warn
-      expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Structured output validation failed'));
-
-      consoleWarnSpy.mockRestore();
+      // Should have called logger.warn
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Structured output validation failed'));
     });
 
     it('should use fallbackValue when errorStrategy is "fallback"', async () => {

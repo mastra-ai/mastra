@@ -289,6 +289,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         createObjectStreamTransformer({
           isLLMExecutionStep: self.#options.isLLMExecutionStep,
           structuredOutput: self.#options.structuredOutput,
+          logger: self.logger,
         }),
       );
     }

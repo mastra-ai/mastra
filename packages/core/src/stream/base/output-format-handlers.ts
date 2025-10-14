@@ -5,6 +5,7 @@ import type z3 from 'zod/v3';
 import z4 from 'zod/v4';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import type { IMastraLogger } from '../../logger';
 import { safeValidateTypes } from '../aisdk/v5/compat';
 import type { ValidationResult } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
@@ -495,9 +496,11 @@ function createOutputHandler<OUTPUT extends OutputSchema = undefined>({ schema }
 export function createObjectStreamTransformer<OUTPUT extends OutputSchema = undefined>({
   isLLMExecutionStep,
   structuredOutput,
+  logger,
 }: {
   isLLMExecutionStep?: boolean;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  logger?: IMastraLogger;
 }) {
   const handler = createOutputHandler({ schema: structuredOutput?.schema });
 
@@ -575,7 +578,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
 
       if (!finalResult.success) {
         if (structuredOutput?.errorStrategy === 'warn') {
-          console.warn(finalResult.error.message);
+          logger?.warn(finalResult.error.message);
           return;
         }
         if (structuredOutput?.errorStrategy === 'fallback') {
