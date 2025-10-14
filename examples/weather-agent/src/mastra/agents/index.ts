@@ -7,6 +7,7 @@ import { LibSQLStore } from '@mastra/libsql';
 // import { OpenAIVoice } from '@mastra/voice-openai';
 
 import { weatherTool } from '../tools';
+import { toolCallAccuracyScorer, promptAlignmentScorer, completenessScorer } from '../scorers';
 
 // const voice = new OpenAIVoice();
 
@@ -29,12 +30,23 @@ Your primary function is to help users get weather details for specific location
 
 Use the weatherTool to fetch current weather data.`,
   model: [
-    { model: anthropic('claude-3-5-sonnet-20241022') },
-    { model: openai('gpt-4o') },
+    // { model: anthropic('claude-3-5-sonnet-20241022') },
+    // { model: openai('gpt-4o') },
     { model: openai('gpt-4o-mini') },
   ],
   maxRetries: 3,
   tools: { weatherTool },
+  scorers: {
+    promptAlignment: {
+      scorer: promptAlignmentScorer,
+    },
+    completeness: {
+      scorer: completenessScorer,
+    },
+    toolUseAppropriateness: {
+      scorer: toolCallAccuracyScorer,
+    },
+  },
   // memory,
   // voice,
 });

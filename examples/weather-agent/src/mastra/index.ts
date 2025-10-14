@@ -4,6 +4,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { weatherAgent, weatherReporterAgent } from './agents';
 import { weatherWorkflow as legacyWeatherWorkflow } from './workflows';
 import { weatherWorkflow, weatherWorkflow2 } from './workflows/new-workflow';
+import { scorers } from './scorers';
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
@@ -12,4 +13,5 @@ export const mastra = new Mastra({
   agents: { weatherAgent, weatherReporterAgent },
   legacy_workflows: { legacyWeatherWorkflow },
   workflows: { weatherWorkflow, weatherWorkflow2 },
+  scorers,
 });
