@@ -1,5 +1,10 @@
 export const redirectList = [
   {
+    source: "/:locale/docs/getting-started/model-providers",
+    destination: "/:locale/models",
+    permanent: true,
+  },
+  {
     source: "/:locale/docs/getting-started/model-capability",
     destination: "/:locale/models",
     permanent: true,
