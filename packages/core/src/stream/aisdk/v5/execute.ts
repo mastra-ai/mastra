@@ -107,15 +107,16 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
     onResult,
     createStream: async () => {
       try {
-        const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers']);
+        const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers', 'abortSignal']);
+        const abortSignal = modelSettings?.abortSignal || options?.abortSignal;
 
-        return pRetry(
+        return await pRetry(
           async () => {
             const streamResult = await model.doStream({
               ...toolsAndToolChoice,
               prompt,
               providerOptions,
-              abortSignal: modelSettings?.abortSignal || options?.abortSignal,
+              abortSignal,
               includeRawChunks,
               responseFormat:
                 structuredOutputMode === 'direct' && !structuredOutput?.jsonPromptInjection
@@ -128,7 +129,10 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
             // We have to cast this because doStream is missing the warnings property in its return type even though it exists
             return streamResult as unknown as LanguageModelV2StreamResult;
           },
-          { retries: modelSettings?.maxRetries ?? 2, signal: modelSettings?.abortSignal || options?.abortSignal },
+          {
+            retries: modelSettings?.maxRetries ?? 2,
+            signal: abortSignal,
+          },
         );
       } catch (error) {
         console.error('Error creating stream', error);
