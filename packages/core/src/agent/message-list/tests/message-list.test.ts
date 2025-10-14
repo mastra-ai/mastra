@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { appendClientMessage, appendResponseMessages } from 'ai-v4';
 import type { UIMessage, CoreMessage, Message } from 'ai-v4';
 import { describe, expect, it } from 'vitest';
-import type { MastraMessageV2, MessageListInput, UIMessageWithMetadata } from '../';
+import type { MastraMessageV2, UIMessageWithMetadata } from '../';
 import type { MastraMessageV1 } from '../../../memory';
 import { MessageList } from '../index';
 import type { AIV4Type, AIV5Type } from '../types';
@@ -3643,9 +3643,6 @@ describe('MessageList', () => {
         };
 
         messageList.add(userMessage, 'input');
-
-        // Debug: check UIMessage before AI SDK conversion
-        const uiMessages = messageList.get.all.aiV5.ui();
 
         const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
         const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
