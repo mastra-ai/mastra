@@ -111,7 +111,6 @@ export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   messageId: string;
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
   writer: WritableStream<ChunkType<OUTPUT>>;
-  requireToolApproval?: boolean;
 } & LoopRun<Tools, OUTPUT>;
 
 export const PRIMITIVE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool']);

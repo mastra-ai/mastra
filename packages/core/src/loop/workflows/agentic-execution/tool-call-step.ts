@@ -15,7 +15,6 @@ export function createToolCallStep<
   options,
   telemetry_settings,
   writer,
-  requireToolApproval,
   controller,
   runId,
   streamState,
@@ -24,7 +23,7 @@ export function createToolCallStep<
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
-    execute: async ({ inputData, suspend, resumeData }) => {
+    execute: async ({ inputData, suspend, resumeData, runtimeContext }) => {
       // If the tool was already executed by the provider, skip execution
       if (inputData.providerExecuted) {
         // Still emit telemetry for provider-executed tools
@@ -100,6 +99,7 @@ export function createToolCallStep<
       });
 
       try {
+        const requireToolApproval = runtimeContext.get('__mastra_requireToolApproval');
         if (requireToolApproval || (tool as any).requireApproval) {
           if (!resumeData) {
             controller.enqueue({

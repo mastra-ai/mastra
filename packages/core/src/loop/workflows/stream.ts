@@ -5,6 +5,7 @@ import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { LoopRun } from '../types';
 import { createAgenticLoopWorkflow } from './agentic-loop';
+import { RuntimeContext } from '../../runtime-context';
 
 /**
  * Check if a ReadableStreamDefaultController is open and can accept data.
@@ -61,7 +62,6 @@ export function workflowLoopStream<
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
-        requireToolApproval,
         messageId: messageId!,
         models,
         telemetry_settings,
@@ -143,6 +143,12 @@ export function workflowLoopStream<
         runId,
       });
 
+      const runtimeContext = new RuntimeContext();
+
+      if (requireToolApproval) {
+        runtimeContext.set('__mastra_requireToolApproval', true);
+      }
+
       const executionResult = resumeContext
         ? await run.resume({
             resumeData: resumeContext,
@@ -151,6 +157,7 @@ export function workflowLoopStream<
         : await run.start({
             inputData: initialData,
             tracingContext: { currentSpan: llmAISpan },
+            runtimeContext,
           });
 
       if (executionResult.status !== 'success') {
