@@ -62,7 +62,7 @@ jobs:
           # Generate a unique changeset filename with timestamp
           CHANGESET_ID="automated-provider-registry-$(date +%Y%m%d-%H%M%S)"
           CHANGESET_FILE=".changeset/${CHANGESET_ID}.md"
-          
+
           # Create changeset for @mastra/core with patch bump
           cat > "${CHANGESET_FILE}" << 'EOF'
           ---
@@ -71,7 +71,7 @@ jobs:
 
           Update provider registry with latest models and providers
           EOF
-          
+
           echo "Created changeset: ${CHANGESET_FILE}"
           echo "CHANGESET_FILE=${CHANGESET_FILE}" >> $GITHUB_ENV
 
