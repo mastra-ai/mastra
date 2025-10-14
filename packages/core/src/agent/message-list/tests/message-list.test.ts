@@ -3493,7 +3493,7 @@ describe('MessageList', () => {
     });
   });
 
-  describe.only('providerOptions preservation', () => {
+  describe('providerOptions preservation', () => {
     // Tests organized by MessageInput type:
     // - AIV5Type.ModelMessage (system, user, assistant)
     // - AIV4Type.CoreMessage
