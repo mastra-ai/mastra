@@ -125,6 +125,14 @@ After installing Claude Code run:
 claude mcp add mastra-docs -- npx -y @mastra/mcp-docs-server
 ```
 
+### In OpenAI Codex
+
+Add the server with:
+
+```sh
+codex mcp add mastra-docs -- npx -y @mastra/mcp-docs-server@latest
+```
+
 ## Contributing
 
 Looking to contribute? All types of help are appreciated, from coding to testing and feature specification.
