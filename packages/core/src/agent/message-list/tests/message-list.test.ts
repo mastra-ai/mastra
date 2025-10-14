@@ -3494,11 +3494,6 @@ describe('MessageList', () => {
   });
 
   describe('providerOptions preservation', () => {
-    // Tests organized by MessageInput type:
-    // - AIV5Type.ModelMessage (system, user, assistant)
-    // - AIV4Type.CoreMessage
-    // - Mixed conversation scenarios
-
     describe('AIV5 ModelMessage - System messages', () => {
       it('should preserve providerOptions on system message with string content', async () => {
         // This test verifies the fix for issue #8810

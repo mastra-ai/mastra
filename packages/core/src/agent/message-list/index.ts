@@ -2641,7 +2641,7 @@ export class MessageList {
                 type: 'step-start',
               });
             }
-            // Merge part-level and message-level providerOptions for AIV5 ModelMessage
+            // Merge part-level and message-level providerOptions
             // Part-level takes precedence over message-level
             const mergedProviderMetadataV3 = {
               ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
