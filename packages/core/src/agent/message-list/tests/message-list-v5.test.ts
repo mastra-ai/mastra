@@ -541,18 +541,26 @@ describe('MessageList V5 Support', () => {
         });
       });
 
-      it('prompt() should prepend user message when first message is assistant', () => {
+      it('prompt() should ensure proper message ordering for Gemini compatibility', () => {
         const list = new MessageList({ threadId, resourceId });
         list.add({ role: 'assistant', content: 'I am ready to help' }, 'response');
 
         const prompt = list.get.all.aiV5.prompt();
 
-        expect(prompt).toHaveLength(2);
+        // Should have 3 messages: injected user at start, assistant, injected user at end
+        expect(prompt).toHaveLength(3);
+        expect(prompt[0]).toMatchObject({
+          role: 'user',
+          content: '.',
+        });
         expect(prompt[1]).toMatchObject({
           role: 'assistant',
           content: [{ type: 'text', text: 'I am ready to help' }],
         });
-        expect(prompt[1].role).toBe('assistant');
+        expect(prompt[2]).toMatchObject({
+          role: 'user',
+          content: '.',
+        });
       });
 
       it('llmPrompt() should return proper LanguageModelV2Prompt format', async () => {
@@ -565,10 +573,12 @@ describe('MessageList V5 Support', () => {
 
         // llmPrompt returns messages array directly based on the implementation
         expect(Array.isArray(llmPrompt)).toBe(true);
-        expect(llmPrompt).toHaveLength(3);
+        // Should have 4 messages: system, user, assistant, injected user at end
+        expect(llmPrompt).toHaveLength(4);
         expect(llmPrompt[0].role).toBe('system');
         expect(llmPrompt[1].role).toBe('user');
         expect(llmPrompt[2].role).toBe('assistant');
+        expect(llmPrompt[3].role).toBe('user'); // Injected user at end for Gemini compatibility
       });
     });
   });
@@ -1151,14 +1161,17 @@ describe('MessageList V5 Support', () => {
       const v4Prompt = list.get.all.aiV4.prompt();
       const v5Prompt = list.get.all.aiV5.prompt();
 
-      // Should prepend user message
+      // Should add user messages for Gemini compatibility
+      // V4 still uses old behavior (prepend only)
       expect(v4Prompt).toHaveLength(2);
       expect(v4Prompt[0].role).toBe('user');
       expect(v4Prompt[1].role).toBe('assistant');
 
-      expect(v5Prompt).toHaveLength(2);
+      // V5 uses new behavior (prepend AND append for Gemini)
+      expect(v5Prompt).toHaveLength(3);
       expect(v5Prompt[0].role).toBe('user');
       expect(v5Prompt[1].role).toBe('assistant');
+      expect(v5Prompt[2].role).toBe('user');
     });
 
     it('should handle tool invocations with missing fields gracefully', () => {

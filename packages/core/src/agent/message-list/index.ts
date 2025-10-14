@@ -218,21 +218,36 @@ export class MessageList {
 
       // Used when calling AI SDK streamText/generateText
       prompt: (): AIV5Type.ModelMessage[] => {
-        const messages = [
-          ...this.aiV4CoreMessagesToAIV5ModelMessages(
-            [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
-            `system`,
-          ),
-          ...this.all.aiV5.model(),
-        ];
+        const systemMessages = this.aiV4CoreMessagesToAIV5ModelMessages(
+          [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
+          `system`,
+        );
+        const modelMessages = this.all.aiV5.model();
 
-        const needsDefaultUserMessage = !messages.length || messages[0]?.role === 'assistant';
-        if (needsDefaultUserMessage) {
-          const defaultMessage: AIV5Type.ModelMessage = {
+        let messages = [...systemMessages, ...modelMessages];
+
+        // Check 1: Ensure first non-system message is user
+        const firstNonSystemIndex = messages.findIndex(m => m.role !== 'system');
+        if (firstNonSystemIndex === -1) {
+          // Only system messages or empty, add user message at end
+          messages.push({
             role: 'user',
             content: '.',
-          };
-          messages.unshift(defaultMessage);
+          });
+        } else if (messages[firstNonSystemIndex]?.role === 'assistant') {
+          // First non-system is assistant, insert user message before it
+          messages.splice(firstNonSystemIndex, 0, {
+            role: 'user',
+            content: '.',
+          });
+        }
+
+        // Check 2: Ensure last message is user
+        if (messages.length > 0 && messages[messages.length - 1]?.role !== 'user') {
+          messages.push({
+            role: 'user',
+            content: '.',
+          });
         }
 
         return messages;
@@ -295,14 +310,28 @@ export class MessageList {
           });
         }
 
-        // Ensure we have at least one user message
-        const needsDefaultUserMessage = !messages.length || messages[messages.length - 1]?.role !== 'user';
-        if (needsDefaultUserMessage) {
-          const defaultMessage: AIV5Type.ModelMessage = {
+        // Check 1: Ensure first non-system message is user
+        const firstNonSystemIndex = messages.findIndex(m => m.role !== 'system');
+        if (firstNonSystemIndex === -1) {
+          // Only system messages or empty, add user message at end
+          messages.push({
             role: 'user',
             content: '.',
-          };
-          messages.push(defaultMessage);
+          });
+        } else if (messages[firstNonSystemIndex]?.role === 'assistant') {
+          // First non-system is assistant, insert user message before it
+          messages.splice(firstNonSystemIndex, 0, {
+            role: 'user',
+            content: '.',
+          });
+        }
+
+        // Check 2: Ensure last message is user
+        if (messages.length > 0 && messages[messages.length - 1]?.role !== 'user') {
+          messages.push({
+            role: 'user',
+            content: '.',
+          });
         }
 
         return messages.map(MessageList.aiV5ModelMessageToV2PromptMessage);
