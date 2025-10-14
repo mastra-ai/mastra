@@ -1085,4 +1085,11 @@ export const redirectList = [
     destination: "/:locale/docs/server-db/runtime-context",
     permanent: true,
   },
+
+
+  {
+    source: "/:locale/examples/agents/adding-voice-capabilities",
+    destination: "/:locale/docs/agents/adding-voice",
+    permanent: true,
+  },
 ];
