@@ -1431,7 +1431,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       try {
         if (isResume) {
           runId = stepResults[resume?.steps?.[0] ?? '']?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
-
           const snapshot: any = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
             workflowName: step.id,
             runId: runId,
