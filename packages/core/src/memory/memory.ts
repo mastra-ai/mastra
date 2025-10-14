@@ -42,7 +42,7 @@ export const memoryDefaultOptions = {
   lastMessages: 10,
   semanticRecall: false,
   threads: {
-    generateTitle: false,
+    generateTitle: true,
   },
   workingMemory: {
     enabled: false,
@@ -212,12 +212,6 @@ export abstract class MastraMemory extends MastraBase {
         mergedConfig.workingMemory.schema = config.workingMemory.schema;
       }
     }
-
-    if (!mergedConfig?.threads) {
-      mergedConfig.threads = {};
-    }
-
-    mergedConfig.threads.generateTitle = config?.threads?.generateTitle !== false;
 
     return mergedConfig;
   }
