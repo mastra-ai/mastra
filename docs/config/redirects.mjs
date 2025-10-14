@@ -1238,7 +1238,12 @@ export const redirectList = [
   },
   {
     source: "/:locale/examples/agents/using-a-tool",
-    destination: "/:locale/agents/using-tools-and-mcp#adding-tools-to-an-agent",
+    destination: "/:locale/docs/agents/using-tools-and-mcp#adding-tools-to-an-agent",
     permanent: true,
-  }
+  },
+  {
+    source: "/:locale/examples/agents/using-a-workflow",
+    destination: "/:locale/docs/workflows/using-with-agents-and-tools#adding-an-agent-as-a-step",
+    permanent: true,
+  },
 ];
