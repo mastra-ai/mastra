@@ -18,7 +18,7 @@ Mastra's Model Router standardizes how you work with AI models across providers.
 
 Whether you're using providers directly like OpenAI, Anthropic, or Google, or working through gateways like OpenRouter, the Model Router manages all the routing, authentication, and API compatibility for you. When you need a specific model, you write it as `provider/model-name` and Mastra reads the appropriate environment variable (like `ANTHROPIC_API_KEY`) automatically.
 
-<Tabs items={["OpenAI", "Anthropic", "OpenRouter"]}>
+<Tabs items={["OpenAI", "Anthropic", "Google Gemini", "xAI", "OpenRouter"]}>
   <Tab>
     ```typescript copy
     import { Agent } from "@mastra/core";
@@ -38,6 +38,28 @@ Whether you're using providers directly like OpenAI, Anthropic, or Google, or wo
       name: "assistant", 
       instructions: "You are a helpful assistant",
       model: "anthropic/claude-3-5-sonnet"
+    });
+    ```
+  </Tab>
+  <Tab>
+    ```typescript copy
+    import { Agent } from "@mastra/core";
+
+    const agent = new Agent({
+      name: "my-agent",
+      instructions: "You are a helpful assistant",
+      model: "openai/gpt-4o"  // Works with any provider/model
+    });
+    ```
+  </Tab>
+  <Tab>
+    ```typescript copy
+    import { Agent } from "@mastra/core";
+
+    const agent = new Agent({
+      name: "my-agent",
+      instructions: "You are a helpful assistant",
+      model: "openai/gpt-4o"  // Works with any provider/model
     });
     ```
   </Tab>
@@ -115,7 +137,7 @@ Mastra supports models from all major AI providers and gateways. Browse the comp
 
 Direct providers include OpenAI, Anthropic, Google, Cohere, and more. Gateways like OpenRouter give you access to even more models through a unified billing interface. Each provider's models are available with the same simple string format: provider/model-name.
 
-## Model Discovery
+## Model discovery
 
 Mastra automatically pulls in the latest models from providers like OpenAI, Anthropic, Google, and gateways like OpenRouter. When providers release new models, they appear in your IDE autocomplete without any package updates.
 
@@ -127,7 +149,7 @@ The model registry fetches from sources including models.dev, OpenRouter's model
 
 
 
-## Mix and Match Models
+## Mix and match models
 
 Use different models for different parts of your application to optimize both cost and performance. Each agent can use the model best suited for its specific task:
 
@@ -158,7 +180,7 @@ const chatAgent = new Agent({
 
 This approach lets you build sophisticated AI systems where each component uses the optimal model — avoiding overpaying for simple tasks while ensuring complex operations have the power they need.
 
-## Model Fallbacks
+## Model fallbacks
 
 Configure backup models that activate automatically when your primary provider fails:
 
@@ -189,7 +211,7 @@ The system tries your primary model first. If it encounters a 500 error, rate li
 Your users never experience the disruption — the response comes back with the same format, just from a different model. The error context is preserved as the system moves through your fallback chain, ensuring clean error propagation while maintaining streaming compatibility.
 
 
-## Dynamic Model Selection at Runtime
+## Dynamic nodel selection at runtime
 
 Since models are just strings, you can select them dynamically based on runtime context:
 
@@ -213,40 +235,80 @@ This enables powerful patterns:
 
 ## Provider-specific options
 
-Each model provider also enables a few different options, including prompt caching and configuring reasoning. We provide a providerOptions flag to manage these. You can set providerOptions on the instruction level to set different caching strategy per system instruction/prompt.
 
+You can pass provider-specific options either at the agent level or per message. This gives you fine-grained control over model behavior:
+
+### Agent-level provider options
+
+Configure provider options that apply to all messages from an agent:
 ```typescript
-// With provider-specific options (e.g., caching, reasoning)
-instructions: {
-  role: "system",
-  content:
-    "You are an expert code reviewer. Analyze code for bugs, performance issues, and best practices.",
-  providerOptions: {
-    openai: { reasoning_effort: "high" },        // OpenAI's reasoning models
-    anthropic: { cache_control: { type: "ephemeral" } }  // Anthropic's prompt caching
-  }
-}
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "technical-writer",
+  instructions: {
+    role: 'system',
+    content: 'You are a helpful assistant specialized in technical documentation.',
+    providerOptions: {
+      openai: { 
+        reasoningEffort: 'low'  // OpenAI-specific option for o1 models
+      }
+    }
+  },
+  model: openai("o1-preview")
+});
 ```
 
+### Message-level provider options
+
+Override provider options for specific generation calls:
+```typescript
+const response = await agent.generate([
+  { 
+    role: "user", 
+    content: "Help me organize my day",
+    providerOptions: {
+      openai: {
+        reasoningEffort: 'high'  // Use more reasoning for this complex task
+      }
+    }
+  },
+  { role: "user", content: "My day starts at 9am and finishes at 5:30pm" },
+  { role: "user", content: "I take lunch between 12:30 and 13:30" },
+  { role: "user", content: "I have meetings Monday to Friday between 10:30 and 11:30" }
+]);
+```
+
+Provider options let you access model-specific features like OpenAI's reasoning effort, Anthropic's cache controls, or Google's safety settings. Message-level options override agent-level defaults, giving you flexibility to adjust behavior based on the specific task.
+
+
 ## Custom headers
+
+When using Mastra's model router, you can specify custom headers for your API requests. This is useful when you need to use a different API endpoint, pull your API key from a secrets manager, or add organization-specific headers:
+
 
 ```typescript
 const agent = new Agent({
   name: "custom-agent",
   model: {
-    url: "https://llm.chutes.ai/v1",
-    modelId: "Qwen/Qwen3-235B-A22B-Instruct-2507",
-    apiKey: process.env.CHUTES_API_KEY,
+    modelId: "gpt-4-turbo",
+    apiKey: process.env.OPENAI_API_KEY,
     headers: {
-      "X-Custom-Header": "value"
+      "OpenAI-Organization": "org-abc123"  // Specify which OpenAI organization to use
     }
   }
 });
 ```
 
-## Alternative Model Providers (AI SDK)
+<Callout>
+Note: Each model provider handles configuration slightly differently. While OpenAI accepts just the model name, providers like ElevenLabs require additional parameters like URLs. Check the individual model pages in the documentation for provider-specific configuration details — each has a section on custom headers with the exact format required.
+</Callout>
 
-While Mastra provides built-in support for 600+ models, you can also use Vercel AI SDK model providers for additional flexibility:
+## Direct Provider Installation
+
+Mastra uses official SDK clients for major providers like OpenAI, Anthropic, Google, XAI, and OpenRouter, giving you full access to their native features. For other providers, Mastra uses the OpenAI-compatible API standard, which works perfectly for most use cases.
+However, some providers implement unique features that require specific SDK client logic not available through the OpenAI-compatible interface. In these rare cases, you can use the Vercel AI SDK directly:
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -258,3 +320,18 @@ const agent = new Agent({
 });
 ```
 
+When to use direct providers:
+
+You need a provider-specific feature not available through OpenAI-compatible APIs
+You're already using AI SDK in your project and want consistency
+You require custom client configuration beyond what the model router supports
+
+Recommendation: Start with Mastra's built-in model router ("provider/model" strings) for simplicity. Only switch to direct providers when you need specific features not available through the standard interface.
+
+
+## Custom models
+To implement support for a model API that's not already supported, do this:
+
+```typescript
+example
+```
