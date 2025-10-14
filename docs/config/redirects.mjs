@@ -1246,4 +1246,9 @@ export const redirectList = [
     destination: "/:locale/docs/workflows/using-with-agents-and-tools#adding-an-agent-as-a-step",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/server-db/snapshots",
+    destination: "/:locale/docs/workflows/snapshots",
+    permanent: true,
+  },
 ];
