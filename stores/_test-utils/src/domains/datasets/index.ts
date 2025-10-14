@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { isValid } from 'ulid';
-import { TABLE_DATASET_ROWS, TABLE_DATASET_VERSIONS, TABLE_DATASETS, type MastraStorage } from '@mastra/core/storage';
+import {
+  TABLE_DATASET_ROWS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_DATASETS,
+  TABLE_EXPERIMENTS,
+  TABLE_EXPERIMENT_ROW_RESULTS,
+  type MastraStorage,
+} from '@mastra/core/storage';
 // import type { DatasetRecord, DatasetRow, DatasetVersion } from '@mastra/core/storage/domains';
 
 // Helper functions for pagination tests
@@ -63,11 +70,14 @@ async function createMultipleRowVersions(
 }
 
 export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
-  describe.only('Dataset Operations', () => {
+  describe('Dataset Operations', () => {
+    // describe('Dataset Operations', () => {
     beforeEach(async () => {
       await storage.clearTable({ tableName: TABLE_DATASETS });
       await storage.clearTable({ tableName: TABLE_DATASET_ROWS });
       await storage.clearTable({ tableName: TABLE_DATASET_VERSIONS });
+      await storage.clearTable({ tableName: TABLE_EXPERIMENTS });
+      await storage.clearTable({ tableName: TABLE_EXPERIMENT_ROW_RESULTS });
     });
 
     describe('dataset management', () => {
@@ -1455,6 +1465,1294 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
           result.rows.forEach(row => {
             expect(row.rowId).toBe(rowId1);
           });
+        });
+      });
+    });
+
+    describe.only('experiment management', () => {
+      // describe('experiment management', () => {
+      let dataset: any;
+
+      beforeEach(async () => {
+        dataset = await storage.createDataset({
+          name: 'test-dataset-experiments',
+        });
+      });
+
+      describe('createExperiment', () => {
+        it('should create an experiment with all required fields', async () => {
+          const experiment = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'agent-123',
+          });
+
+          expect(experiment.id).toBeDefined();
+          expect(experiment.datasetId).toBe(dataset.id);
+          expect(experiment.datasetVersionId).toBe(dataset.currentVersion.id);
+          expect(experiment.targetType).toBe('agent');
+          expect(experiment.targetId).toBe('agent-123');
+          expect(experiment.status).toBe('pending');
+          expect(experiment.createdAt).toBeInstanceOf(Date);
+        });
+
+        it('should create an experiment with optional fields', async () => {
+          const experiment = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'agent-789',
+            concurrency: 10,
+            scorers: {
+              'scorer-1': { type: 'automatic' },
+              'scorer-2': { type: 'manual' },
+            },
+          });
+
+          expect(experiment.concurrency).toBe(10);
+          expect(experiment.scorers).toEqual({
+            'scorer-1': { type: 'automatic' },
+            'scorer-2': { type: 'manual' },
+          });
+        });
+
+        it('should create experiment with default status as pending', async () => {
+          const experiment = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'agent-default-status',
+          });
+
+          expect(experiment.status).toBe('pending');
+        });
+      });
+
+      describe('getExperiment', () => {
+        it('should get an experiment by id', async () => {
+          const created = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'agent-123',
+          });
+
+          const fetched = await storage.getExperiment({ id: created.id });
+
+          expect(fetched.id).toBe(created.id);
+          expect(fetched.datasetId).toBe(dataset.id);
+          expect(fetched.datasetVersionId).toBe(dataset.currentVersion.id);
+          expect(fetched.targetType).toBe('agent');
+          expect(fetched.targetId).toBe('agent-123');
+          expect(fetched.status).toBe('pending');
+          expect(fetched.createdAt).toBeInstanceOf(Date);
+        });
+
+        it('should get an experiment with all optional fields', async () => {
+          const created = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'workflow',
+            targetId: 'workflow-456',
+            concurrency: 5,
+            scorers: {
+              'scorer-a': { type: 'automatic' },
+              'scorer-b': { type: 'manual' },
+            },
+          });
+
+          const fetched = await storage.getExperiment({ id: created.id });
+
+          expect(fetched.id).toBe(created.id);
+          expect(fetched.targetType).toBe('workflow');
+          expect(fetched.targetId).toBe('workflow-456');
+          expect(fetched.concurrency).toBe(5);
+          expect(fetched.scorers).toEqual({
+            'scorer-a': { type: 'automatic' },
+            'scorer-b': { type: 'manual' },
+          });
+        });
+
+        it('should throw error when experiment does not exist', async () => {
+          await expect(storage.getExperiment({ id: 'non-existent-id' })).rejects.toThrow();
+        });
+      });
+
+      describe('updateExperiment', () => {
+        it('should update experiment status', async () => {
+          const created = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'agent-123',
+          });
+
+          const updated = await storage.updateExperiment({
+            id: created.id,
+            updates: {
+              status: 'running',
+            },
+          });
+
+          expect(updated.id).toBe(created.id);
+          expect(updated.status).toBe('running');
+          expect(updated.datasetId).toBe(dataset.id);
+          expect(updated.targetId).toBe('agent-123');
+        });
+
+        it('should update experiment with multiple fields', async () => {
+          const created = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'workflow',
+            targetId: 'workflow-123',
+          });
+
+          const updated = await storage.updateExperiment({
+            id: created.id,
+            updates: {
+              status: 'completed',
+              totalItems: 100,
+              averageScores: {
+                accuracy: 0.95,
+                relevance: 0.88,
+              },
+              completedAt: new Date(),
+            },
+          });
+
+          expect(updated.status).toBe('completed');
+          expect(updated.totalItems).toBe(100);
+          expect(updated.averageScores).toEqual({
+            accuracy: 0.95,
+            relevance: 0.88,
+          });
+          expect(updated.completedAt).toBeInstanceOf(Date);
+        });
+
+        it('should update experiment scorers', async () => {
+          const created = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'agent-456',
+            scorers: {
+              'scorer-1': { type: 'automatic' },
+            },
+          });
+
+          const updated = await storage.updateExperiment({
+            id: created.id,
+            updates: {
+              scorers: {
+                'scorer-1': { type: 'automatic' },
+                'scorer-2': { type: 'manual' },
+              },
+            },
+          });
+
+          expect(updated.scorers).toEqual({
+            'scorer-1': { type: 'automatic' },
+            'scorer-2': { type: 'manual' },
+          });
+        });
+
+        it('should preserve unchanged fields when updating', async () => {
+          const created = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'agent-preserve',
+            concurrency: 5,
+          });
+
+          const updated = await storage.updateExperiment({
+            id: created.id,
+            updates: {
+              status: 'running',
+            },
+          });
+
+          expect(updated.id).toBe(created.id);
+          expect(updated.status).toBe('running');
+          expect(updated.datasetId).toBe(created.datasetId);
+          expect(updated.datasetVersionId).toBe(created.datasetVersionId);
+          expect(updated.targetType).toBe(created.targetType);
+          expect(updated.targetId).toBe(created.targetId);
+          expect(updated.concurrency).toBe(created.concurrency);
+        });
+
+        it('should throw error when updating non-existent experiment', async () => {
+          await expect(
+            storage.updateExperiment({
+              id: 'non-existent-id',
+              updates: { status: 'running' },
+            }),
+          ).rejects.toThrow();
+        });
+      });
+
+      describe('deleteExperiment', () => {
+        it('should delete an experiment', async () => {
+          const experiment = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'agent-to-delete',
+          });
+
+          await storage.deleteExperiment({ id: experiment.id });
+
+          await expect(storage.getExperiment({ id: experiment.id })).rejects.toThrow();
+        });
+
+        it('should delete experiment and cascade delete all experiment row results', async () => {
+          const experiment = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'agent-cascade',
+          });
+
+          // Add some dataset rows
+          const { rows } = await storage.addDatasetRows({
+            datasetId: dataset.id,
+            rows: [{ input: { test: 1 } }, { input: { test: 2 } }],
+          });
+
+          // Add experiment row results
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: rows?.[0]!.rowId,
+              input: { test: 1 },
+              output: { result: 'a' },
+              status: 'success',
+            },
+            {
+              experimentId: experiment.id,
+              datasetRowId: rows?.[1]!.rowId,
+              input: { test: 2 },
+              output: { result: 'b' },
+              status: 'success',
+            },
+          ]);
+
+          // Delete the experiment
+          await storage.deleteExperiment({ id: experiment.id });
+
+          // Experiment should be deleted
+          await expect(storage.getExperiment({ id: experiment.id })).rejects.toThrow();
+
+          // Experiment row results should also be deleted
+          const results = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+          expect(results.results.length).toBe(0);
+        });
+
+        it('should throw error when deleting non-existent experiment', async () => {
+          await expect(storage.deleteExperiment({ id: 'non-existent-id' })).rejects.toThrow();
+        });
+      });
+
+      describe('addExperimentRowResults', () => {
+        let experiment: any;
+        let datasetRows: any[];
+
+        beforeEach(async () => {
+          experiment = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'test-agent',
+          });
+
+          // Add some dataset rows
+          const result = await storage.addDatasetRows({
+            datasetId: dataset.id,
+            rows: [
+              { input: { query: 'test 1' }, groundTruth: { answer: 'answer 1' } },
+              { input: { query: 'test 2' }, groundTruth: { answer: 'answer 2' } },
+              { input: { query: 'test 3' }, groundTruth: { answer: 'answer 3' } },
+            ],
+          });
+          datasetRows = result.rows;
+        });
+
+        it('should add experiment row results with required fields', async () => {
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[0].rowId,
+              input: { query: 'test 1' },
+              status: 'success',
+            },
+          ]);
+
+          const results = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+
+          expect(results.results.length).toBe(1);
+          expect(results.results[0]!.experimentId).toBe(experiment.id);
+          expect(results.results[0]!.datasetRowId).toBe(datasetRows[0].rowId);
+          expect(results.results[0]!.input).toEqual({ query: 'test 1' });
+          expect(results.results[0]!.status).toBe('success');
+          expect(results.results[0]!.id).toBeDefined();
+          expect(results.results[0]!.createdAt).toBeInstanceOf(Date);
+        });
+
+        it('should add experiment row results with all optional fields', async () => {
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[0].rowId,
+              input: { query: 'test 1' },
+              output: { response: 'output 1' },
+              groundTruth: { answer: 'answer 1' },
+              runtimeContext: { userId: 'user-123' },
+              status: 'success',
+              traceId: 'trace-abc',
+              spanId: 'span-xyz',
+            },
+          ]);
+
+          const results = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+
+          expect(results.results.length).toBe(1);
+          const result = results.results[0];
+          expect(result!.output).toEqual({ response: 'output 1' });
+          expect(result!.groundTruth).toEqual({ answer: 'answer 1' });
+          // expect(result.runtimeContext).toEqual({ userId: 'user-123' });
+          expect(result!.traceId).toBe('trace-abc');
+          expect(result!.spanId).toBe('span-xyz');
+        });
+
+        // it('should add experiment row result with error status and error details', async () => {
+        //   await storage.addExperimentRowResults([
+        //     {
+        //       experimentId: experiment.id,
+        //       datasetRowId: datasetRows[0].rowId,
+        //       input: { query: 'test 1' },
+        //       status: 'error',
+        //       error: {
+        //         message: 'Something went wrong',
+        //         code: 'ERR_001',
+        //       },
+        //     },
+        //   ]);
+
+        //   const results = await storage.getExperimentRowResults({
+        //     experimentId: experiment.id,
+        //   });
+
+        //   expect(results.results.length).toBe(1);
+        //   expect(results.results[0].status).toBe('error');
+        //   expect(results.results[0].error).toEqual({
+        //     message: 'Something went wrong',
+        //     code: 'ERR_001',
+        //   });
+        // });
+
+        it('should add multiple experiment row results in batch', async () => {
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[0].rowId,
+              input: { query: 'test 1' },
+              output: { response: 'output 1' },
+              status: 'success',
+            },
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[1].rowId,
+              input: { query: 'test 2' },
+              output: { response: 'output 2' },
+              status: 'success',
+            },
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[2].rowId,
+              input: { query: 'test 3' },
+              status: 'error',
+              error: { message: 'Failed' },
+            },
+          ]);
+
+          const results = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+
+          expect(results.results.length).toBe(3);
+          expect(results.results.filter(r => r.status === 'success').length).toBe(2);
+          expect(results.results.filter(r => r.status === 'error').length).toBe(1);
+        });
+
+        it('should add results for multiple dataset rows across multiple calls', async () => {
+          // First batch
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[0].rowId,
+              input: { query: 'test 1' },
+              status: 'success',
+            },
+          ]);
+
+          // Second batch
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[1].rowId,
+              input: { query: 'test 2' },
+              status: 'success',
+            },
+          ]);
+
+          const results = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+
+          expect(results.results.length).toBe(2);
+        });
+
+        it('should generate unique ids for each result', async () => {
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[0].rowId,
+              input: { query: 'test 1' },
+              status: 'success',
+            },
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[1].rowId,
+              input: { query: 'test 2' },
+              status: 'success',
+            },
+          ]);
+
+          const results = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+
+          const ids = new Set(results.results.map(r => r.id));
+          expect(ids.size).toBe(2); // All unique
+        });
+      });
+
+      describe('getExperimentRowResults', () => {
+        let experiment: any;
+        let datasetRows: any[];
+
+        beforeEach(async () => {
+          experiment = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'test-agent',
+          });
+
+          // Add some dataset rows
+          const result = await storage.addDatasetRows({
+            datasetId: dataset.id,
+            rows: Array.from({ length: 30 }, (_, i) => ({
+              input: { query: `test ${i}` },
+            })),
+          });
+          datasetRows = result.rows;
+        });
+
+        it('should return first page with correct results when multiple pages exist', async () => {
+          // Add 25 experiment row results
+          const rowResults = Array.from({ length: 25 }, (_, i) => ({
+            experimentId: experiment.id,
+            datasetRowId: datasetRows[i].rowId,
+            input: { query: `test ${i}` },
+            output: { response: `output ${i}` },
+            status: 'success' as const,
+          }));
+          await storage.addExperimentRowResults(rowResults);
+
+          const result = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.results.length).toBe(10);
+          expect(result.pagination.total).toBe(25);
+          expect(result.pagination.hasMore).toBe(true);
+          expect(result.pagination.page).toBe(0);
+          expect(result.pagination.perPage).toBe(10);
+        });
+
+        it('should return second page correctly', async () => {
+          const rowResults = Array.from({ length: 25 }, (_, i) => ({
+            experimentId: experiment.id,
+            datasetRowId: datasetRows[i].rowId,
+            input: { query: `test ${i}` },
+            status: 'success' as const,
+          }));
+          await storage.addExperimentRowResults(rowResults);
+
+          const result = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+            pagination: { page: 1, perPage: 10 },
+          });
+
+          expect(result.results.length).toBe(10);
+          expect(result.pagination.total).toBe(25);
+          expect(result.pagination.hasMore).toBe(true);
+          expect(result.pagination.page).toBe(1);
+          expect(result.pagination.perPage).toBe(10);
+        });
+
+        it('should return last page with hasMore=false', async () => {
+          const rowResults = Array.from({ length: 25 }, (_, i) => ({
+            experimentId: experiment.id,
+            datasetRowId: datasetRows[i].rowId,
+            input: { query: `test ${i}` },
+            status: 'success' as const,
+          }));
+          await storage.addExperimentRowResults(rowResults);
+
+          const result = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+            pagination: { page: 2, perPage: 10 },
+          });
+
+          expect(result.results.length).toBe(5);
+          expect(result.pagination.total).toBe(25);
+          expect(result.pagination.hasMore).toBe(false);
+          expect(result.pagination.page).toBe(2);
+          expect(result.pagination.perPage).toBe(10);
+        });
+
+        it('should return empty array when no results exist', async () => {
+          const result = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.results.length).toBe(0);
+          expect(result.pagination.total).toBe(0);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should handle single result correctly', async () => {
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[0].rowId,
+              input: { query: 'test 0' },
+              status: 'success',
+            },
+          ]);
+
+          const result = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.results.length).toBe(1);
+          expect(result.pagination.total).toBe(1);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should handle exact page boundary correctly', async () => {
+          const rowResults = Array.from({ length: 10 }, (_, i) => ({
+            experimentId: experiment.id,
+            datasetRowId: datasetRows[i].rowId,
+            input: { query: `test ${i}` },
+            status: 'success' as const,
+          }));
+          await storage.addExperimentRowResults(rowResults);
+
+          const result = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result.results.length).toBe(10);
+          expect(result.pagination.total).toBe(10);
+          expect(result.pagination.hasMore).toBe(false);
+        });
+
+        it('should handle one item over boundary correctly', async () => {
+          const rowResults = Array.from({ length: 11 }, (_, i) => ({
+            experimentId: experiment.id,
+            datasetRowId: datasetRows[i].rowId,
+            input: { query: `test ${i}` },
+            status: 'success' as const,
+          }));
+          await storage.addExperimentRowResults(rowResults);
+
+          const firstPage = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+          const secondPage = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+            pagination: { page: 1, perPage: 10 },
+          });
+
+          expect(firstPage.results.length).toBe(10);
+          expect(firstPage.pagination.hasMore).toBe(true);
+          expect(secondPage.results.length).toBe(1);
+          expect(secondPage.pagination.hasMore).toBe(false);
+        });
+
+        it('should default negative page to 0', async () => {
+          const rowResults = Array.from({ length: 5 }, (_, i) => ({
+            experimentId: experiment.id,
+            datasetRowId: datasetRows[i].rowId,
+            input: { query: `test ${i}` },
+            status: 'success' as const,
+          }));
+          await storage.addExperimentRowResults(rowResults);
+
+          const result = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+            pagination: { page: -1, perPage: 10 },
+          });
+
+          expect(result.pagination.page).toBe(0);
+          expect(result.results.length).toBe(5);
+        });
+
+        it('should default zero perPage to 1', async () => {
+          const rowResults = Array.from({ length: 5 }, (_, i) => ({
+            experimentId: experiment.id,
+            datasetRowId: datasetRows[i].rowId,
+            input: { query: `test ${i}` },
+            status: 'success' as const,
+          }));
+          await storage.addExperimentRowResults(rowResults);
+
+          const result = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+            pagination: { page: 0, perPage: 0 },
+          });
+
+          expect(result.pagination.perPage).toBe(1);
+          expect(result.results.length).toBe(1);
+        });
+
+        it('should default negative perPage to 1', async () => {
+          const rowResults = Array.from({ length: 5 }, (_, i) => ({
+            experimentId: experiment.id,
+            datasetRowId: datasetRows[i].rowId,
+            input: { query: `test ${i}` },
+            status: 'success' as const,
+          }));
+          await storage.addExperimentRowResults(rowResults);
+
+          const result = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+            pagination: { page: 0, perPage: -5 },
+          });
+
+          expect(result.pagination.perPage).toBe(1);
+          expect(result.results.length).toBe(1);
+        });
+
+        it('should return empty array when page number exceeds available pages', async () => {
+          const rowResults = Array.from({ length: 5 }, (_, i) => ({
+            experimentId: experiment.id,
+            datasetRowId: datasetRows[i].rowId,
+            input: { query: `test ${i}` },
+            status: 'success' as const,
+          }));
+          await storage.addExperimentRowResults(rowResults);
+
+          const result = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+            pagination: { page: 10, perPage: 10 },
+          });
+
+          expect(result.results.length).toBe(0);
+          expect(result.pagination.hasMore).toBe(false);
+          expect(result.pagination.total).toBe(5);
+        });
+
+        it('should use defaults when pagination parameter is omitted', async () => {
+          const rowResults = Array.from({ length: 15 }, (_, i) => ({
+            experimentId: experiment.id,
+            datasetRowId: datasetRows[i].rowId,
+            input: { query: `test ${i}` },
+            status: 'success' as const,
+          }));
+          await storage.addExperimentRowResults(rowResults);
+
+          const result = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+
+          expect(result.results.length).toBe(10);
+          expect(result.pagination.page).toBe(0);
+          expect(result.pagination.perPage).toBe(10);
+          expect(result.pagination.hasMore).toBe(true);
+        });
+
+        it('should not have duplicate results across pages', async () => {
+          const rowResults = Array.from({ length: 25 }, (_, i) => ({
+            experimentId: experiment.id,
+            datasetRowId: datasetRows[i].rowId,
+            input: { query: `test ${i}` },
+            status: 'success' as const,
+          }));
+          await storage.addExperimentRowResults(rowResults);
+
+          const firstPage = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+          const secondPage = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+            pagination: { page: 1, perPage: 10 },
+          });
+
+          const firstPageIds = new Set(firstPage.results.map(r => r.id));
+          const secondPageIds = new Set(secondPage.results.map(r => r.id));
+
+          const intersection = [...firstPageIds].filter(id => secondPageIds.has(id));
+          expect(intersection.length).toBe(0);
+        });
+
+        it('should return all results when fetching all pages', async () => {
+          const rowResults = Array.from({ length: 25 }, (_, i) => ({
+            experimentId: experiment.id,
+            datasetRowId: datasetRows[i].rowId,
+            input: { query: `test ${i}` },
+            status: 'success' as const,
+          }));
+          await storage.addExperimentRowResults(rowResults);
+
+          const allResults: any[] = [];
+          for (let page = 0; page < 3; page++) {
+            const result = await storage.getExperimentRowResults({
+              experimentId: experiment.id,
+              pagination: { page, perPage: 10 },
+            });
+            allResults.push(...result.results);
+          }
+
+          expect(allResults.length).toBe(25);
+          const ids = new Set(allResults.map(r => r.id));
+          expect(ids.size).toBe(25);
+        });
+
+        it('should only return results for the specified experiment', async () => {
+          // Create another experiment
+          const experiment2 = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'test-agent-2',
+          });
+
+          // Add results for first experiment
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[0].rowId,
+              input: { query: 'test 0' },
+              status: 'success',
+            },
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[1].rowId,
+              input: { query: 'test 1' },
+              status: 'success',
+            },
+          ]);
+
+          // Add results for second experiment
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment2.id,
+              datasetRowId: datasetRows[2].rowId,
+              input: { query: 'test 2' },
+              status: 'success',
+            },
+          ]);
+
+          const result = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+
+          expect(result.results.length).toBe(2);
+          result.results.forEach(r => {
+            expect(r.experimentId).toBe(experiment.id);
+          });
+        });
+      });
+
+      describe('getExperimentRowResult', () => {
+        let experiment: any;
+        let datasetRows: any[];
+
+        beforeEach(async () => {
+          experiment = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'test-agent',
+          });
+
+          // Add some dataset rows
+          const result = await storage.addDatasetRows({
+            datasetId: dataset.id,
+            rows: [{ input: { query: 'test 1' } }, { input: { query: 'test 2' } }],
+          });
+          datasetRows = result.rows;
+        });
+
+        it('should get an experiment row result by id', async () => {
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[0].rowId,
+              input: { query: 'test 1' },
+              output: { response: 'output 1' },
+              status: 'success',
+            },
+          ]);
+
+          const results = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+          const resultId = results.results[0]!.id;
+
+          const fetched = await storage.getExperimentRowResult({ id: resultId });
+
+          expect(fetched.id).toBe(resultId);
+          expect(fetched.experimentId).toBe(experiment.id);
+          expect(fetched.datasetRowId).toBe(datasetRows[0].rowId);
+          expect(fetched.input).toEqual({ query: 'test 1' });
+          expect(fetched.output).toEqual({ response: 'output 1' });
+          expect(fetched.status).toBe('success');
+          expect(fetched.createdAt).toBeInstanceOf(Date);
+        });
+
+        it('should get an experiment row result with all optional fields', async () => {
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[0].rowId,
+              input: { query: 'test 1' },
+              output: { response: 'output 1' },
+              groundTruth: { answer: 'answer 1' },
+              runtimeContext: { userId: 'user-123' },
+              status: 'success',
+              traceId: 'trace-abc',
+              spanId: 'span-xyz',
+            },
+          ]);
+
+          const results = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+          const resultId = results.results[0]!.id;
+
+          const fetched = await storage.getExperimentRowResult({ id: resultId });
+
+          expect(fetched.output).toEqual({ response: 'output 1' });
+          expect(fetched.groundTruth).toEqual({ answer: 'answer 1' });
+          // expect(fetched.runtimeContext).toEqual({ userId: 'user-123' });
+          expect(fetched.traceId).toBe('trace-abc');
+          expect(fetched.spanId).toBe('span-xyz');
+        });
+
+        it('should get an experiment row result with error status', async () => {
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[0].rowId,
+              input: { query: 'test 1' },
+              status: 'error',
+              error: {
+                message: 'Something went wrong',
+                code: 'ERR_001',
+              },
+            },
+          ]);
+
+          const results = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+          const resultId = results.results[0]!.id;
+
+          const fetched = await storage.getExperimentRowResult({ id: resultId });
+
+          expect(fetched.status).toBe('error');
+          expect(fetched.error).toEqual({
+            message: 'Something went wrong',
+            code: 'ERR_001',
+          });
+        });
+
+        it('should throw error when experiment row result does not exist', async () => {
+          await expect(storage.getExperimentRowResult({ id: 'non-existent-id' })).rejects.toThrow();
+        });
+
+        it('should get an experiment row result with comments', async () => {
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[0].rowId,
+              input: { query: 'test 1' },
+              output: { response: 'output 1' },
+              status: 'success',
+            },
+          ]);
+
+          const results = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+          const resultId = results.results[0]!.id;
+
+          // Add comments
+          await storage.addCommentToRowResult({
+            experimentRowResultId: resultId,
+            comment: 'First comment',
+          });
+
+          await storage.addCommentToRowResult({
+            experimentRowResultId: resultId,
+            comment: 'Second comment',
+          });
+
+          // Fetch the result
+          const fetched = await storage.getExperimentRowResult({ id: resultId });
+
+          expect(fetched.id).toBe(resultId);
+          expect(fetched.comments).toBeDefined();
+          expect(fetched.comments!.length).toBe(2);
+          expect(fetched.comments![0]!.comment).toBe('First comment');
+          expect(fetched.comments![0]!.createdAt).toBeInstanceOf(Date);
+          expect(fetched.comments![1]!.comment).toBe('Second comment');
+          expect(fetched.comments![1]!.createdAt).toBeInstanceOf(Date);
+        });
+      });
+
+      describe('updateExperimentRowResults', () => {
+        let experiment: any;
+        let datasetRows: any[];
+        let resultIds: string[];
+
+        beforeEach(async () => {
+          experiment = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'test-agent',
+          });
+
+          // Add some dataset rows
+          const result = await storage.addDatasetRows({
+            datasetId: dataset.id,
+            rows: [{ input: { query: 'test 1' } }, { input: { query: 'test 2' } }, { input: { query: 'test 3' } }],
+          });
+          datasetRows = result.rows;
+
+          // Add experiment row results
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[0].rowId,
+              input: { query: 'test 1' },
+              status: 'success',
+            },
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[1].rowId,
+              input: { query: 'test 2' },
+              status: 'success',
+            },
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[2].rowId,
+              input: { query: 'test 3' },
+              status: 'success',
+            },
+          ]);
+
+          const results = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+          resultIds = results.results.map(r => r.id);
+        });
+
+        it('should update an experiment row result', async () => {
+          await storage.updateExperimentRowResults([
+            {
+              id: resultIds[0]!,
+              output: { response: 'updated output' },
+              status: 'error',
+              error: { message: 'Failed' },
+              traceId: 'trace-123',
+              spanId: 'span-456',
+            },
+          ]);
+
+          const updated = await storage.getExperimentRowResult({ id: resultIds[0]! });
+
+          expect(updated.id).toBe(resultIds[0]);
+          expect(updated.output).toEqual({ response: 'updated output' });
+          expect(updated.status).toBe('error');
+          expect(updated.error).toEqual({ message: 'Failed' });
+          expect(updated.traceId).toBe('trace-123');
+          expect(updated.spanId).toBe('span-456');
+          expect(updated.updatedAt).toBeInstanceOf(Date);
+        });
+
+        it('should update multiple experiment row results in batch', async () => {
+          await storage.updateExperimentRowResults([
+            {
+              id: resultIds[0]!,
+              output: { response: 'output 1' },
+            },
+            {
+              id: resultIds[1]!,
+              output: { response: 'output 2' },
+            },
+            {
+              id: resultIds[2]!,
+              output: { response: 'output 3' },
+            },
+          ]);
+
+          const updated1 = await storage.getExperimentRowResult({ id: resultIds[0]! });
+          const updated2 = await storage.getExperimentRowResult({ id: resultIds[1]! });
+          const updated3 = await storage.getExperimentRowResult({ id: resultIds[2]! });
+
+          expect(updated1.output).toEqual({ response: 'output 1' });
+          expect(updated2.output).toEqual({ response: 'output 2' });
+          expect(updated3.output).toEqual({ response: 'output 3' });
+        });
+
+        it('should preserve unchanged fields when updating', async () => {
+          // First add an initial output and traceId
+          await storage.updateExperimentRowResults([
+            {
+              id: resultIds[0]!,
+              output: { response: 'initial output' },
+              traceId: 'trace-initial',
+            },
+          ]);
+
+          // Now update only the output
+          await storage.updateExperimentRowResults([
+            {
+              id: resultIds[0]!,
+              output: { response: 'updated output' },
+            },
+          ]);
+
+          const updated = await storage.getExperimentRowResult({ id: resultIds[0]! });
+
+          expect(updated.output).toEqual({ response: 'updated output' });
+          expect(updated.traceId).toBe('trace-initial'); // Should be preserved
+          expect(updated.status).toBe('success'); // Should be preserved
+          expect(updated.experimentId).toBe(experiment.id); // Should be preserved
+        });
+
+        it('should throw error when updating non-existent experiment row result', async () => {
+          await expect(
+            storage.updateExperimentRowResults([
+              {
+                id: 'non-existent-id',
+                output: { response: 'updated' },
+              },
+            ]),
+          ).rejects.toThrow();
+        });
+      });
+
+      describe('deleteExperimentRowResults', () => {
+        let experiment: any;
+        let datasetRows: any[];
+        let resultIds: string[];
+
+        beforeEach(async () => {
+          experiment = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'test-agent',
+          });
+
+          // Add some dataset rows
+          const result = await storage.addDatasetRows({
+            datasetId: dataset.id,
+            rows: [{ input: { query: 'test 1' } }, { input: { query: 'test 2' } }, { input: { query: 'test 3' } }],
+          });
+          datasetRows = result.rows;
+
+          // Add experiment row results
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[0].rowId,
+              input: { query: 'test 1' },
+              status: 'success',
+            },
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[1].rowId,
+              input: { query: 'test 2' },
+              status: 'success',
+            },
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[2].rowId,
+              input: { query: 'test 3' },
+              status: 'success',
+            },
+          ]);
+
+          const results = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+          resultIds = results.results.map(r => r.id);
+        });
+
+        it('should delete an experiment row result', async () => {
+          await storage.deleteExperimentRowResults({
+            ids: [resultIds[0]!],
+          });
+
+          await expect(storage.getExperimentRowResult({ id: resultIds[0]! })).rejects.toThrow();
+
+          // Other results should still exist
+          const remaining = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+          expect(remaining.results.length).toBe(2);
+        });
+
+        it('should delete multiple experiment row results in batch', async () => {
+          await storage.deleteExperimentRowResults({
+            ids: [resultIds[0]!, resultIds[1]!],
+          });
+
+          await expect(storage.getExperimentRowResult({ id: resultIds[0]! })).rejects.toThrow();
+          await expect(storage.getExperimentRowResult({ id: resultIds[1]! })).rejects.toThrow();
+
+          // Only one result should remain
+          const remaining = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+          expect(remaining.results.length).toBe(1);
+          expect(remaining.results[0]!.id).toBe(resultIds[2]!);
+        });
+
+        it('should throw error when deleting non-existent experiment row result', async () => {
+          await expect(
+            storage.deleteExperimentRowResults({
+              ids: ['non-existent-id'],
+            }),
+          ).rejects.toThrow();
+        });
+      });
+
+      describe('addCommentToRowResult', () => {
+        let experiment: any;
+        let datasetRows: any[];
+        let resultId: string;
+
+        beforeEach(async () => {
+          experiment = await storage.createExperiment({
+            datasetId: dataset.id,
+            datasetVersionId: dataset.currentVersion.id,
+            targetType: 'agent',
+            targetId: 'test-agent',
+          });
+
+          // Add a dataset row
+          const result = await storage.addDatasetRows({
+            datasetId: dataset.id,
+            rows: [{ input: { query: 'test 1' } }],
+          });
+          datasetRows = result.rows;
+
+          // Add an experiment row result
+          await storage.addExperimentRowResults([
+            {
+              experimentId: experiment.id,
+              datasetRowId: datasetRows[0].rowId,
+              input: { query: 'test 1' },
+              output: { response: 'output 1' },
+              status: 'success',
+            },
+          ]);
+
+          const results = await storage.getExperimentRowResults({
+            experimentId: experiment.id,
+          });
+          resultId = results.results[0]!.id;
+        });
+
+        it('should add a comment to an experiment row result', async () => {
+          const updated = await storage.addCommentToRowResult({
+            experimentRowResultId: resultId,
+            comment: 'This is a great result',
+          });
+
+          expect(updated.id).toBe(resultId);
+          expect(updated.comments).toBeDefined();
+          expect(updated.comments!.length).toBe(1);
+          expect(updated.comments![0]!.comment).toBe('This is a great result');
+          expect(updated.comments![0]!.createdAt).toBeInstanceOf(Date);
+        });
+
+        it('should add multiple comments to the same result', async () => {
+          await storage.addCommentToRowResult({
+            experimentRowResultId: resultId,
+            comment: 'First comment',
+          });
+
+          await storage.addCommentToRowResult({
+            experimentRowResultId: resultId,
+            comment: 'Second comment',
+          });
+
+          const updated = await storage.addCommentToRowResult({
+            experimentRowResultId: resultId,
+            comment: 'Third comment',
+          });
+
+          expect(updated.comments!.length).toBe(3);
+          expect(updated.comments![0]!.comment).toBe('First comment');
+          expect(updated.comments![1]!.comment).toBe('Second comment');
+          expect(updated.comments![2]!.comment).toBe('Third comment');
+        });
+
+        it('should preserve existing data when adding a comment', async () => {
+          const updated = await storage.addCommentToRowResult({
+            experimentRowResultId: resultId,
+            comment: 'Great result',
+          });
+
+          expect(updated.experimentId).toBe(experiment.id);
+          expect(updated.datasetRowId).toBe(datasetRows[0].rowId);
+          expect(updated.input).toEqual({ query: 'test 1' });
+          expect(updated.output).toEqual({ response: 'output 1' });
+          expect(updated.status).toBe('success');
+        });
+
+        it('should throw error when adding comment to non-existent result', async () => {
+          await expect(
+            storage.addCommentToRowResult({
+              experimentRowResultId: 'non-existent-id',
+              comment: 'This will fail',
+            }),
+          ).rejects.toThrow();
         });
       });
     });
