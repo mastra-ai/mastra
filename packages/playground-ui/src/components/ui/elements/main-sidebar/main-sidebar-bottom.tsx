@@ -1,9 +1,6 @@
 'use client';
 
-import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';
-import { PanelRightIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
 type MainSidebarBottomProps = {
   children: React.ReactNode;
