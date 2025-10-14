@@ -59,8 +59,8 @@ jobs:
       - name: Create changeset
         if: steps.git-check.outputs.changed == 'true'
         run: |
-          # Generate a unique changeset filename
-          CHANGESET_ID="automated-provider-registry-$(date +%Y%m%d)"
+          # Generate a unique changeset filename with timestamp
+          CHANGESET_ID="automated-provider-registry-$(date +%Y%m%d-%H%M%S)"
           CHANGESET_FILE=".changeset/${CHANGESET_ID}.md"
           
           # Create changeset for @mastra/core with patch bump
@@ -73,6 +73,7 @@ jobs:
           EOF
           
           echo "Created changeset: ${CHANGESET_FILE}"
+          echo "CHANGESET_FILE=${CHANGESET_FILE}" >> $GITHUB_ENV
 
       - name: Commit and push changes
         if: steps.git-check.outputs.changed == 'true'
@@ -81,7 +82,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git add packages/core/src/llm/model/provider-registry.json
           git add packages/core/src/llm/model/provider-types.generated.d.ts
-          git add .changeset/*.md
+          git add "${CHANGESET_FILE}"
           git commit -m "chore: regenerate provider registry [skip ci]"
           git push
 
