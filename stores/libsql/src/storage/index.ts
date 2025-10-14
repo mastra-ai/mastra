@@ -25,6 +25,7 @@ import type {
 
 import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { LibSQLDatasetsStorage } from './domains/datasets';
 import { LegacyEvalsLibSQL } from './domains/legacy-evals';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
@@ -32,7 +33,6 @@ import { StoreOperationsLibSQL } from './domains/operations';
 import { ScoresLibSQL } from './domains/scores';
 import { TracesLibSQL } from './domains/traces';
 import { WorkflowsLibSQL } from './domains/workflows';
-import { LibSQLDatasetsStorage } from './domains/datasets';
 
 export type LibSQLConfig =
   | {

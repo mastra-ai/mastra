@@ -111,7 +111,6 @@ export class StoreOperationsLibSQL extends StoreOperations {
     }
 
     const stmt = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (${columns.join(', ')})`;
-    console.log('stmt', stmt);
     return stmt;
   }
 

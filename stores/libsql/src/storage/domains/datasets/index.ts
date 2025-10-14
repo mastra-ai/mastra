@@ -1,3 +1,6 @@
+import type { Client } from '@libsql/client';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import {
   DatasetsStorage,
   normalizePagination,
@@ -19,9 +22,6 @@ import type {
   UpdateDatasetRowsPayload,
 } from '@mastra/core/storage';
 import type { StoreOperationsLibSQL } from '../operations';
-import type { Client } from '@libsql/client';
-import { RuntimeContext } from '@mastra/core/runtime-context';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 export class LibSQLDatasetsStorage extends DatasetsStorage {
   operations: StoreOperationsLibSQL;
@@ -353,7 +353,6 @@ export class LibSQLDatasetsStorage extends DatasetsStorage {
     const totalSql = `SELECT COUNT(*) as count FROM ${TABLE_DATASET_ROWS} WHERE rowId = ?`;
     const totalRecords = await this.client.execute(totalSql, [rowId]);
     const total = totalRecords.rows[0]?.count as number;
-    console.log('total', total);
 
     if (total === 0) {
       return { rows: [], pagination: { total: 0, page: 0, perPage: 0, hasMore: false } };
@@ -371,7 +370,6 @@ export class LibSQLDatasetsStorage extends DatasetsStorage {
     const hasMore = result.rows.length > perPage;
     const rows = result.rows.slice(0, perPage).map((row: any) => this.transformDatasetRow(row));
 
-    console.log('rows', JSON.stringify(rows, null, 2));
     return {
       rows,
       pagination: {
