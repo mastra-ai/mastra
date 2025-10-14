@@ -28,8 +28,6 @@ function retryWithTimeout(fn, timeout, name, retryCount = 0) {
 }
 
 function cleanup(monorepoDir, resetChanges = false) {
-  return undefined
-
   execSync('git checkout .', {
     cwd: monorepoDir,
     stdio: ['inherit', 'inherit', 'pipe'],
