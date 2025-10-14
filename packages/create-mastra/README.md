@@ -1,8 +1,15 @@
-# Create Mastra
+# create-mastra
 
-The easiest way to get started with Mastra is by using `create-mastra`. This CLI tool enables you to quickly start building a new Mastra application, with everything set up for you.
+Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
+
+It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server. It's the easiest way to build, tune, and scale reliable AI products.
+
+`create-mastra` is the **recommended** way to get started with Mastra. This CLI tool enables you to quickly start building a new Mastra application, with everything set up for you.
 
 ## Usage
+
+> [!IMPORTANT]
+> Make sure that you have Node.js 20 or later installed on your system.
 
 Using npm:
 
@@ -22,33 +29,4 @@ Using pnpm:
 pnpm create mastra
 ```
 
-## Options
-
-- `--default` - Quick start with defaults (src directory, OpenAI, no examples)
-- `-c, --components <components>` - Comma-separated list of components (agents, tools, workflows)
-- `-l, --llm <model-provider>` - Default model provider (openai, anthropic, groq, google, or cerebras)
-- `-e, --example` - Include example code
-
-## Examples
-
-Create a new project with default settings
-npx create-mastra@latest --default
-Create a project with specific components and LLM provider
-npx create-mastra@latest -c agents,tools -l anthropic
-Create a project with example code
-npx create-mastra@latest --example
-
-## What's included?
-
-The generated project will have:
-
-- A configured Mastra setup in the src directory
-- Selected components (agents, tools, workflows)
-- Environment configuration for your chosen LLM provider
-- TypeScript configuration
-- Example code (if selected)
-
-## System Requirements
-
-- Node.js 20 or later
-- MacOS, Windows, and Linux are supported
+Learn more about `create-mastra` in the [CLI reference documentation](https://mastra.ai/reference/cli/create-mastra).
