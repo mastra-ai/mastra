@@ -48,7 +48,6 @@ export const useThreads = ({
     enabled: Boolean(isMemoryEnabled),
     staleTime: 0,
     gcTime: 0,
-    refetchInterval: 5000,
     retry: false,
     refetchOnWindowFocus: false,
   });
