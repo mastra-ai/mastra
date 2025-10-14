@@ -3621,6 +3621,57 @@ describe('MessageList', () => {
         const secondPart = (retrievedMessage?.content as any[])?.[1];
         expect(secondPart?.providerOptions).toBeUndefined();
       });
+
+      it('should preserve both message-level and part-level providerOptions', async () => {
+        const messageList = new MessageList();
+
+        // AIV5 ModelMessage with BOTH message-level AND part-level providerOptions
+        const userMessage: AIV5Type.ModelMessage = {
+          role: 'user' as const,
+          content: [
+            {
+              type: 'text' as const,
+              text: 'First part with its own cache',
+              providerOptions: {
+                anthropic: { cacheControl: { type: 'ephemeral' as const } },
+              },
+            },
+            {
+              type: 'text' as const,
+              text: 'Second part without part-level options',
+            },
+          ],
+          // Message-level providerOptions
+          providerOptions: {
+            openai: { store: true },
+          },
+        };
+
+        messageList.add(userMessage, 'input');
+
+        // Debug: check UIMessage before AI SDK conversion
+        const uiMessages = messageList.get.all.aiV5.ui();
+
+        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
+
+        expect(retrievedMessage).toBeDefined();
+        expect(Array.isArray(retrievedMessage?.content)).toBe(true);
+
+        // First part should have BOTH message-level and part-level providerOptions merged
+        // (message-level is spread first, then part-level overrides)
+        const firstPart = (retrievedMessage?.content as any[])?.[0];
+        expect(firstPart?.providerOptions).toEqual({
+          openai: { store: true }, // from message-level
+          anthropic: { cacheControl: { type: 'ephemeral' } }, // from part-level
+        });
+
+        // Second part should inherit message-level providerOptions only
+        const secondPart = (retrievedMessage?.content as any[])?.[1];
+        expect(secondPart?.providerOptions).toEqual({
+          openai: { store: true },
+        });
+      });
     });
 
     describe('AIV5 ModelMessage - Assistant messages', () => {

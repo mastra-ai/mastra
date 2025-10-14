@@ -1410,11 +1410,17 @@ export class MessageList {
             if (coreMessage.role === 'assistant' && prevPart && prevPart.type === 'tool-invocation') {
               parts.push({ type: 'step-start' });
             }
+            // Merge part-level and message-level providerOptions
+            // Part-level takes precedence over message-level
+            const mergedProviderMetadata = {
+              ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
+              ...('providerOptions' in part && part.providerOptions ? part.providerOptions : {}),
+            };
+
             parts.push({
               type: 'text',
               text: part.text,
-              // Preserve providerOptions from content parts (e.g., for cacheControl on specific parts)
-              ...('providerOptions' in part && part.providerOptions ? { providerMetadata: part.providerOptions } : {}),
+              ...(Object.keys(mergedProviderMetadata).length > 0 ? { providerMetadata: mergedProviderMetadata } : {}),
             });
             break;
 
@@ -2635,10 +2641,19 @@ export class MessageList {
                 type: 'step-start',
               });
             }
+            // Merge part-level and message-level providerOptions for AIV5 ModelMessage
+            // Part-level takes precedence over message-level
+            const mergedProviderMetadataV3 = {
+              ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
+              ...(part.providerOptions || {}),
+            };
+
             parts.push({
               type: 'text',
               text: part.text,
-              providerMetadata: part.providerOptions,
+              ...(Object.keys(mergedProviderMetadataV3).length > 0
+                ? { providerMetadata: mergedProviderMetadataV3 }
+                : {}),
             });
             break;
 
