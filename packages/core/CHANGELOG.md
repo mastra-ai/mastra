@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.21.0-alpha.2
+
+### Patch Changes
+
+- fix: preserve providerOptions through message list conversions ([#8837](https://github.com/mastra-ai/mastra/pull/8837))
+
 ## 0.21.0-alpha.1
 
 ### Patch Changes
