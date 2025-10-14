@@ -1125,4 +1125,90 @@ export const redirectList = [
     destination: "/:locale/docs/server-db/middleware",
     permanent: true,
   },
+
+  {
+    source: "/:locale/examples/scorers/answer-relevancy",
+    destination: "/:locale/reference/scorers/answer-relevancy",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/answer-similarity",
+    destination: "/:locale/reference/scorers/answer-similarity",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/bias",
+    destination: "/:locale/reference/scorers/bias",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/completeness",
+    destination: "/:locale/reference/scorers/completeness",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/content-similarity",
+    destination: "/:locale/reference/scorers/content-similarity",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/context-precision",
+    destination: "/:locale/reference/scorers/context-precision",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/context-relevance",
+    destination: "/:locale/reference/scorers/context-relevance",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/faithfulness",
+    destination: "/:locale/reference/scorers/faithfulness",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/hallucination",
+    destination: "/:locale/reference/scorers/hallucination",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/keyword-coverage",
+    destination: "/:locale/reference/scorers/keyword-coverage",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/textual-difference",
+    destination: "/:locale/reference/scorers/textual-difference",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/tone-consistency",
+    destination: "/:locale/reference/scorers/tone-consistency",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/tool-call-accuracy",
+    destination: "/:locale/reference/scorers/tool-call-accuracy",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/prompt-alignment",
+    destination: "/:locale/reference/scorers/prompt-alignment",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/noise-sensitivity",
+    destination: "/:locale/reference/scorers/noise-sensitivity",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/toxicity",
+    destination: "/:locale/reference/scorers/toxicity",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/custom-scorer",
+    destination: "/:locale/docs/scorers/custom-scorers",
+    permanent: true,
+  },
 ];

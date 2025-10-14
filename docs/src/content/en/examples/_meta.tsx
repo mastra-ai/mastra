@@ -36,10 +36,6 @@ const meta = {
     title: "Evals",
     theme: { collapsed: true },
   },
-  scorers: {
-    title: <Tag text="experimental">Scorers</Tag>,
-    theme: { collapsed: true },
-  },
   voice: {
     title: "Voice",
     theme: { collapsed: true },
