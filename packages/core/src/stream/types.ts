@@ -336,6 +336,10 @@ interface RoutingAgentEndPayload {
   runId: string;
 }
 
+interface RoutingAgentTextDeltaPayload {
+  text: string;
+}
+
 interface AgentExecutionStartPayload {
   agentId: string;
   args: {
@@ -444,6 +448,7 @@ interface ToolCallSuspendedPayload {
 
 export type NetworkChunkType =
   | (BaseChunkType & { type: 'routing-agent-start'; payload: RoutingAgentStartPayload })
+  | (BaseChunkType & { type: 'routing-agent-text-delta'; payload: RoutingAgentTextDeltaPayload })
   | (BaseChunkType & { type: 'routing-agent-end'; payload: RoutingAgentEndPayload })
   | (BaseChunkType & { type: 'agent-execution-start'; payload: AgentExecutionStartPayload })
   | (BaseChunkType & { type: 'agent-execution-end'; payload: AgentExecutionEndPayload })

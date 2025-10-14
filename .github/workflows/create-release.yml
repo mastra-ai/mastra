@@ -23,7 +23,7 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v2
         id: app-token
         with:
           app-id: ${{ vars.DANE_APP_ID }}
@@ -131,7 +131,7 @@ jobs:
     if: ${{ github.repository == 'mastra-ai/mastra' && needs.release.outputs.exited_prerelease == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v2
         id: app-token
         with:
           app-id: ${{ vars.DANE_APP_ID }}
