@@ -280,6 +280,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             options: {
               onError: () => {},
             },
+            modelSettings: {
+              maxRetries: 0,
+            },
           });
 
           expect(await convertAsyncIterableToArray(result.objectStream)).toStrictEqual([]);
@@ -308,6 +311,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               onError(event) {
                 errors.push(event);
               },
+            },
+            modelSettings: {
+              maxRetries: 0,
             },
           });
 

@@ -220,6 +220,7 @@
     "json-schema": "^0.4.0",
     "json-schema-to-zod": "^2.6.1",
     "p-map": "^7.0.3",
+    "p-retry": "^7.1.0",
     "pino": "^9.7.0",
     "pino-pretty": "^13.0.0",
     "radash": "^12.1.1",
