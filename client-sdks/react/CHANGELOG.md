@@ -1,5 +1,18 @@
 # @mastra/react-hooks
 
+## 0.0.6-alpha.1
+
+### Patch Changes
+
+- Improve the surface API of the react sdk ([#8715](https://github.com/mastra-ai/mastra/pull/8715))
+
+- Move react and react-dom deps to peer and dev deps ([#8698](https://github.com/mastra-ai/mastra/pull/8698))
+
+- Stream finalResult from network loop ([#8795](https://github.com/mastra-ai/mastra/pull/8795))
+
+- Updated dependencies []:
+  - @mastra/client-js@0.16.0-alpha.1
+
 ## 0.0.6-alpha.0
 
 ### Patch Changes
