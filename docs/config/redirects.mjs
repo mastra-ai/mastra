@@ -1206,4 +1206,9 @@ export const redirectList = [
     destination: "/:locale/docs/scorers/custom-scorers",
     permanent: true,
   },
+  {
+    source: "/:locale/en/docs/tools-mcp/runtime-context",
+    destination: "/:locale/en/docs/server-db/runtime-context",
+    permanent: true,
+  },
 ];
