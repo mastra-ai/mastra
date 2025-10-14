@@ -61,7 +61,7 @@ type SearchResult = AlgoliaResult | FlattenedResult;
  */
 export const CustomSearchWithoutAI: FC<SearchProps> = ({
   className,
-  placeholder = 'Search docs...',
+  placeholder = 'What are you searching for?',
   searchOptions,
   closeModal,
 }) => {
