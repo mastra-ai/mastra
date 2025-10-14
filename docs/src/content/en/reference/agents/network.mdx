@@ -107,14 +107,40 @@ await agent.network(`
       name: "tracingContext",
       type: "TracingContext",
       isOptional: true,
-      description: "AI tracing context for span hierarchy and metadata.",
+      description: "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+      properties: [
+        {
+          parameters: [{
+            name: "currentSpan",
+            type: "AISpan",
+            isOptional: true,
+            description: "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution."
+          }]
+        }
+      ]
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "Options for AI tracing configuration.",
+      properties: [
+        {
+          parameters: [{
+            name: "metadata",
+            type: "Record<string, any>",
+            isOptional: true,
+            description: "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags."
+          }]
+        }
+      ]
     },
     {
       name: "telemetry",
       type: "TelemetrySettings",
       isOptional: true,
       description:
-        "Settings for telemetry collection during streaming.",
+        "Settings for OTLP telemetry collection during streaming (not AI tracing).",
       properties: [
         {
           parameters: [{
@@ -227,6 +253,12 @@ await agent.network(`
       isOptional: true,
       description: "Runtime context for dependency injection and contextual information.",
     },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description: "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
+    },
   ]}
 />
 
@@ -246,7 +278,7 @@ await agent.network(`
     },
     {
       name: "result",
-      type: "Promise<WorkflowResult<TOutput, TSteps>>",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
       description: "A promise that resolves to the final workflow result",
     },
     {

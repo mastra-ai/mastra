@@ -1,6 +1,5 @@
 import { Badge } from '@/ds/components/Badge';
 import { Cell, EntryCell } from '@/ds/components/Table';
-import { ApiIcon } from '@/ds/icons/ApiIcon';
 import { OpenAIIcon } from '@/ds/icons/OpenAIIcon';
 import { ColumnDef, Row } from '@tanstack/react-table';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
@@ -9,25 +8,25 @@ import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
 import { providerMapToIcon } from '../provider-map-icon';
 
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { ToolsIcon, WorkflowIcon } from '@/ds/icons';
+import { extractPrompt } from '../../utils/extractPrompt';
+
 export type AgentTableColumn = {
-  repoUrl: string;
-  executedAt: Date | null;
-  modelId: string;
-  link: string;
+  id: string;
 } & AgentTableData;
 
 const NameCell = ({ row }: { row: Row<AgentTableColumn> }) => {
-  const { Link } = useLinkComponent();
+  const { Link, paths } = useLinkComponent();
 
   return (
     <EntryCell
-      icon={<AgentIcon />}
       name={
-        <Link className="w-full space-y-0" href={row.original.link}>
+        <Link className="w-full space-y-0" href={paths.agentLink(row.original.id)}>
           {row.original.name}
         </Link>
       }
-      description={row.original.instructions}
+      description={extractPrompt(row.original.instructions)}
     />
   );
 };
@@ -41,7 +40,6 @@ export const columns: ColumnDef<AgentTableColumn>[] = [
   {
     header: 'Model',
     accessorKey: 'model',
-    size: 160,
     cell: ({ row }) => {
       return (
         <Cell>
@@ -52,22 +50,54 @@ export const columns: ColumnDef<AgentTableColumn>[] = [
           >
             {row.original.modelId || 'N/A'}
           </Badge>
+          {row.original.modelList && row.original.modelList.length > 1 ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="info" className="ml-2">
+                  + {row.original.modelList.length - 1} more
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="bg-surface5 flex flex-col gap-2">
+                {row.original.modelList.slice(1).map(mdl => (
+                  <div key={mdl.id}>
+                    <Badge
+                      variant="default"
+                      icon={providerMapToIcon[mdl.model.provider as keyof typeof providerMapToIcon]}
+                    >
+                      {mdl.model.modelId}
+                    </Badge>
+                  </div>
+                ))}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
         </Cell>
       );
     },
   },
   {
-    size: 160,
-    header: 'Tools',
-    accessorKey: 'tools',
+    header: 'Attached entities',
+    accessorKey: 'attachedEntities',
     cell: ({ row }) => {
-      const toolsCount = row.original.tools ? Object.keys(row.original.tools).length : 0;
+      const agent = row.original;
+
+      const agentsCount = Object.keys(agent.agents || {}).length;
+      const toolsCount = Object.keys(agent.tools || {}).length;
+      const workflowsCount = Object.keys(agent.workflows || {}).length;
 
       return (
         <Cell>
-          <Badge variant="default" icon={<ApiIcon />}>
-            {toolsCount} tool{toolsCount > 1 ? 's' : ''}
-          </Badge>
+          <span className="flex flex-row gap-2 w-full items-center">
+            <Badge variant="default" icon={<AgentIcon className="text-accent1" />}>
+              {agentsCount} agent{agentsCount > 1 ? 's' : ''}
+            </Badge>
+            <Badge variant="default" icon={<ToolsIcon className="text-accent6" />}>
+              {toolsCount} tool{toolsCount > 1 ? 's' : ''}
+            </Badge>
+            <Badge variant="default" icon={<WorkflowIcon className="text-accent3" />}>
+              {workflowsCount} workflow{workflowsCount > 1 ? 's' : ''}
+            </Badge>
+          </span>
         </Cell>
       );
     },

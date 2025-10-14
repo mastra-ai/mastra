@@ -36,6 +36,8 @@ type TraceData = {
   trace: LangfuseTraceClient; // Langfuse trace object
   spans: Map<string, LangfuseSpanClient | LangfuseGenerationClient>; // Maps span.id to Langfuse span/generation
   events: Map<string, LangfuseEventClient>; // Maps span.id to Langfuse event
+  activeSpans: Set<string>; // Tracks which spans haven't ended yet
+  rootSpanId?: string; // Track the root span ID
 };
 
 type LangfuseParent = LangfuseTraceClient | LangfuseSpanClient | LangfuseGenerationClient | LangfuseEventClient;
@@ -120,6 +122,7 @@ export class LangfuseExporter implements AITracingExporter {
       span.type === AISpanType.LLM_GENERATION ? langfuseParent.generation(payload) : langfuseParent.span(payload);
 
     traceData.spans.set(span.id, langfuseSpan);
+    traceData.activeSpans.add(span.id); // Track as active
   }
 
   private async handleSpanUpdateOrEnd(span: AnyExportedAISpan, isEnd: boolean): Promise<void> {
@@ -132,6 +135,16 @@ export class LangfuseExporter implements AITracingExporter {
 
     const langfuseSpan = traceData.spans.get(span.id);
     if (!langfuseSpan) {
+      // For event spans that only send SPAN_ENDED, we might not have the span yet
+      if (isEnd && span.isEvent) {
+        // Just make sure it's not in active spans
+        traceData.activeSpans.delete(span.id);
+        if (traceData.activeSpans.size === 0) {
+          this.traceMap.delete(span.traceId);
+        }
+        return;
+      }
+
       this.logger.warn('Langfuse exporter: No Langfuse span found for span update/end', {
         traceId: span.traceId,
         spanId: span.id,
@@ -148,9 +161,18 @@ export class LangfuseExporter implements AITracingExporter {
     // end time we set when ending the span.
     langfuseSpan.update(this.buildSpanPayload(span, false));
 
-    if (isEnd && span.isRootSpan) {
-      traceData.trace.update({ output: span.output });
-      this.traceMap.delete(span.traceId);
+    if (isEnd) {
+      // Remove from active spans
+      traceData.activeSpans.delete(span.id);
+
+      if (span.isRootSpan) {
+        traceData.trace.update({ output: span.output });
+      }
+
+      // Only clean up the trace when ALL spans have ended
+      if (traceData.activeSpans.size === 0) {
+        this.traceMap.delete(span.traceId);
+      }
     }
   }
 
@@ -181,18 +203,31 @@ export class LangfuseExporter implements AITracingExporter {
     const langfuseEvent = langfuseParent.event(payload);
 
     traceData.events.set(span.id, langfuseEvent);
+
+    // Event spans are typically immediately ended, but let's track them properly
+    if (!span.endTime) {
+      traceData.activeSpans.add(span.id);
+    }
   }
 
   private initTrace(span: AnyExportedAISpan): void {
     const trace = this.client.trace(this.buildTracePayload(span));
-    this.traceMap.set(span.traceId, { trace, spans: new Map(), events: new Map() });
+    this.traceMap.set(span.traceId, {
+      trace,
+      spans: new Map(),
+      events: new Map(),
+      activeSpans: new Set(),
+      rootSpanId: span.id,
+    });
   }
 
   private getTraceData(options: { span: AnyExportedAISpan; method: string }): TraceData | undefined {
     const { span, method } = options;
+
     if (this.traceMap.has(span.traceId)) {
       return this.traceMap.get(span.traceId);
     }
+
     this.logger.warn('Langfuse exporter: No trace data found for span', {
       traceId: span.traceId,
       spanId: span.id,
@@ -302,6 +337,44 @@ export class LangfuseExporter implements AITracingExporter {
     }
 
     return payload;
+  }
+
+  async addScoreToTrace({
+    traceId,
+    spanId,
+    score,
+    reason,
+    scorerName,
+    metadata,
+  }: {
+    traceId: string;
+    spanId?: string;
+    score: number;
+    reason?: string;
+    scorerName: string;
+    metadata?: Record<string, any>;
+  }): Promise<void> {
+    if (!this.client) return;
+
+    try {
+      await this.client.score({
+        id: `${traceId}-${scorerName}`,
+        traceId,
+        observationId: spanId,
+        name: scorerName,
+        value: score,
+        ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
+        metadata: { ...(reason ? { reason } : {}) },
+        dataType: 'NUMERIC',
+      });
+    } catch (error) {
+      this.logger.error('Langfuse exporter: Error adding score to trace', {
+        error,
+        traceId,
+        spanId,
+        scorerName,
+      });
+    }
   }
 
   async shutdown(): Promise<void> {

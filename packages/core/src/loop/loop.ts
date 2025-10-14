@@ -1,14 +1,16 @@
-import { generateId } from 'ai-v5';
-import type { ToolSet } from 'ai-v5';
+import { generateId } from 'ai';
+import type { ToolSet } from 'ai';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { ConsoleLogger } from '../logger';
-import { MastraModelOutput } from '../stream/base/output';
+import type { ProcessorState } from '../processors';
+import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
 import { getRootSpan } from './telemetry';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflows/stream';
 
-export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
+export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
+  resumeContext,
   models,
   logger,
   runId,
@@ -23,6 +25,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   outputProcessors,
   returnScorerData,
   llmAISpan,
+  requireToolApproval,
+  agentId,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
@@ -90,7 +94,20 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
 
   const messageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
 
+  let modelOutput: MastraModelOutput<OUTPUT> | undefined;
+  const serializeStreamState = () => {
+    return modelOutput?.serializeState();
+  };
+  const deserializeStreamState = (state: any) => {
+    modelOutput?.deserializeState(state);
+  };
+
+  // Create processor states map that will be shared across all LLM execution steps
+  const processorStates =
+    outputProcessors && outputProcessors.length > 0 ? new Map<string, ProcessorState<OUTPUT>>() : undefined;
+
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
+    resumeContext,
     models,
     runId: runIdToUse,
     logger: loggerToUse,
@@ -105,12 +122,19 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     outputProcessors,
     llmAISpan,
     messageId: messageId!,
+    agentId,
+    requireToolApproval,
+    streamState: {
+      serialize: serializeStreamState,
+      deserialize: deserializeStreamState,
+    },
+    processorStates,
     ...rest,
   };
 
   const stream = workflowLoopStream(workflowLoopProps);
 
-  return new MastraModelOutput({
+  modelOutput = new MastraModelOutput({
     model: {
       modelId: firstModel.model.modelId,
       provider: firstModel.model.provider,
@@ -127,11 +151,12 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
       includeRawChunks: !!includeRawChunks,
-      output: rest.output,
+      structuredOutput: rest.structuredOutput,
       outputProcessors,
-      outputProcessorRunnerMode: 'result',
       returnScorerData,
       tracingContext: { currentSpan: llmAISpan },
     },
   });
+
+  return createDestructurableOutput(modelOutput);
 }

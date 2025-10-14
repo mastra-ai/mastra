@@ -1,12 +1,33 @@
 import { ReadableStream } from 'stream/web';
-import type { ToolSet } from 'ai-v5';
+import type { ToolSet } from 'ai';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { LoopRun } from '../types';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
-export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
+/**
+ * Check if a ReadableStreamDefaultController is open and can accept data.
+ *
+ * Note: While the ReadableStream spec indicates desiredSize can be:
+ * - positive (ready), 0 (full but open), or null (closed/errored),
+ * our empirical testing shows that after controller.close(), desiredSize becomes 0.
+ * Therefore, we treat both 0 and null as closed states to prevent
+ * "Invalid state: Controller is already closed" errors.
+ *
+ * @param controller - The ReadableStreamDefaultController to check
+ * @returns true if the controller is open and can accept data
+ */
+export function isControllerOpen(controller: ReadableStreamDefaultController<any>): boolean {
+  return controller.desiredSize !== 0 && controller.desiredSize !== null;
+}
+
+export function workflowLoopStream<
+  Tools extends ToolSet = ToolSet,
+  OUTPUT extends OutputSchema | undefined = undefined,
+>({
+  resumeContext,
+  requireToolApproval,
   telemetry_settings,
   models,
   toolChoice,
@@ -18,11 +39,13 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT exten
   runId,
   messageList,
   startTimestamp,
+  streamState,
+  agentId,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
-  return new ReadableStream<ChunkType>({
+  return new ReadableStream<ChunkType<OUTPUT>>({
     start: async controller => {
-      const writer = new WritableStream<ChunkType>({
+      const writer = new WritableStream<ChunkType<OUTPUT>>({
         write: chunk => {
           controller.enqueue(chunk);
         },
@@ -37,6 +60,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT exten
       });
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
+        resumeContext,
+        requireToolApproval,
         messageId: messageId!,
         models,
         telemetry_settings,
@@ -49,8 +74,14 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT exten
         runId,
         messageList,
         startTimestamp,
+        streamState,
+        agentId,
         ...rest,
       });
+
+      if (rest.mastra) {
+        agenticLoopWorkflow.__registerMastra(rest.mastra);
+      }
 
       const initialData = {
         messageId: messageId!,
@@ -83,21 +114,44 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT exten
         'stream.response.msToFirstChunk': msToFirstChunk,
       });
 
-      controller.enqueue({
-        type: 'start',
+      if (!resumeContext) {
+        controller.enqueue({
+          type: 'start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            id: agentId,
+          },
+        });
+      }
+
+      const existingSnapshot = await rest.mastra?.getStorage()?.loadWorkflowSnapshot({
+        workflowName: 'agentic-loop',
         runId,
-        from: ChunkFrom.AGENT,
-        payload: {},
       });
+      if (existingSnapshot) {
+        for (const key in existingSnapshot?.context) {
+          const step = existingSnapshot?.context[key];
+          if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
+            streamState.deserialize(step.suspendPayload?.__streamState);
+            break;
+          }
+        }
+      }
 
       const run = await agenticLoopWorkflow.createRunAsync({
         runId,
       });
 
-      const executionResult = await run.start({
-        inputData: initialData,
-        tracingContext: { currentSpan: llmAISpan },
-      });
+      const executionResult = resumeContext
+        ? await run.resume({
+            resumeData: resumeContext,
+            tracingContext: { currentSpan: llmAISpan },
+          })
+        : await run.start({
+            inputData: initialData,
+            tracingContext: { currentSpan: llmAISpan },
+          });
 
       if (executionResult.status !== 'success') {
         controller.close();

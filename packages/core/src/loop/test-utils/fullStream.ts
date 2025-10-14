@@ -1,7 +1,7 @@
 import { delay } from '@ai-sdk/provider-utils';
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils/test';
-import { tool } from 'ai-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2, mockValues, mockId } from 'ai-v5/test';
+import { tool } from 'ai';
+import { convertArrayToReadableStream, MockLanguageModelV2, mockValues, mockId } from 'ai/test';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
@@ -44,6 +44,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
         'input',
       );
       const result = loopFn({
+        agentId: 'agent-id',
         runId,
         models: [
           {
@@ -142,6 +143,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "response-id",
               "modelId": "response-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "timestamp": 1970-01-01T00:00:05.000Z,
             },
             "type": "finish-step",
@@ -175,6 +181,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       );
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: [
           {
             maxRetries: 0,
@@ -265,6 +272,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "response-id",
               "modelId": "response-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "timestamp": 1970-01-01T00:00:05.000Z,
             },
             "type": "finish-step",
@@ -474,6 +486,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "id-0",
               "modelId": "mock-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "type": "finish-step",
@@ -517,9 +534,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "warnings": [],
           },
           {
-            "filename": undefined,
             "id": "123",
-            "mediaType": undefined,
             "providerMetadata": {
               "provider": {
                 "custom": "value",
@@ -547,9 +562,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "type": "text-end",
           },
           {
-            "filename": undefined,
             "id": "456",
-            "mediaType": undefined,
             "providerMetadata": {
               "provider": {
                 "custom": "value2",
@@ -567,6 +580,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "id-0",
               "modelId": "mock-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:00.000Z,
@@ -654,6 +672,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "id-0",
               "modelId": "mock-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:00.000Z,
@@ -689,6 +712,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       );
 
       const result = await loopFn({
+        agentId: 'agent-id',
         runId,
         messageList,
         models: [
@@ -774,6 +798,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "id-2000",
               "modelId": "mock-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:02.000Z,
@@ -810,6 +839,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         messageList,
         models: [
           {
@@ -899,6 +929,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {
@@ -1062,6 +1093,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "id-0",
               "modelId": "mock-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "type": "finish-step",
@@ -1100,6 +1136,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {
@@ -1161,6 +1198,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {
@@ -1216,6 +1254,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {
@@ -1293,6 +1332,11 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               "headers": undefined,
               "id": "id-0",
               "modelId": "mock-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "type": "finish-step",

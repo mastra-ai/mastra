@@ -1,9 +1,14 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider';
 import type { StreamInternal } from '../types';
 
 type State = {
   stepResult: Record<string, any> | undefined;
   responseMetadata: Record<string, any> | undefined;
+  modelMetadata: {
+    modelId: string;
+    modelVersion: string;
+    modelProvider: string;
+  };
   hasToolCallStreaming: boolean;
   hasErrored: boolean;
   reasoningDeltas: string[];
@@ -24,6 +29,11 @@ export class AgenticRunState {
         modelVersion: model.specificationVersion,
         modelProvider: model.provider,
         headers: undefined,
+      },
+      modelMetadata: {
+        modelId: model.modelId,
+        modelVersion: model.specificationVersion,
+        modelProvider: model.provider,
       },
       isReasoning: false,
       isStreaming: false,

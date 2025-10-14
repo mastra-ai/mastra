@@ -1,3 +1,4 @@
+import pMap from 'p-map';
 import type { Mastra } from '..';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { saveScorePayloadSchema } from '../scores';
@@ -17,7 +18,7 @@ export function createOnScorerHook(mastra: Mastra) {
     const entityType = hookData.entityType;
     const scorer = hookData.scorer;
     try {
-      const scorerToUse = await findScorer(mastra, entityId, entityType, scorer.id);
+      const scorerToUse = await findScorer(mastra, entityId, entityType, scorer.name);
 
       if (!scorerToUse) {
         throw new MastraError({
@@ -31,10 +32,6 @@ export function createOnScorerHook(mastra: Mastra) {
       let input = hookData.input;
       let output = hookData.output;
 
-      if (entityType !== 'AGENT') {
-        output = { object: hookData.output };
-      }
-
       const { structuredOutput, ...rest } = hookData;
 
       const runResult = await scorerToUse.scorer.run({
@@ -47,13 +44,35 @@ export function createOnScorerHook(mastra: Mastra) {
         ...rest,
         ...runResult,
         entityId,
-        scorerId: hookData.scorer.id,
+        scorerId: hookData.scorer.name,
         metadata: {
           structuredOutput: !!structuredOutput,
         },
       };
 
       await validateAndSaveScore(storage, payload);
+
+      const currentSpan = hookData.tracingContext?.currentSpan;
+      if (currentSpan && currentSpan.isValid) {
+        await pMap(
+          currentSpan.aiTracing.getExporters(),
+          async exporter => {
+            if (exporter.addScoreToTrace) {
+              await exporter.addScoreToTrace({
+                traceId: currentSpan.traceId,
+                spanId: currentSpan.id,
+                score: runResult.score,
+                reason: runResult.reason,
+                scorerName: scorerToUse.scorer.name,
+                metadata: {
+                  ...(currentSpan.metadata ?? {}),
+                },
+              });
+            }
+          },
+          { concurrency: 3 },
+        );
+      }
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -80,19 +99,29 @@ export async function validateAndSaveScore(storage: MastraStorage, payload: unkn
   await storage?.saveScore(payloadToSave);
 }
 
-async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerId: string) {
+async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerName: string) {
   let scorerToUse;
   if (entityType === 'AGENT') {
     const scorers = await mastra.getAgentById(entityId).getScorers();
-    scorerToUse = scorers[scorerId];
+    for (const [_, scorer] of Object.entries(scorers)) {
+      if (scorer.scorer.name === scorerName) {
+        scorerToUse = scorer;
+        break;
+      }
+    }
   } else if (entityType === 'WORKFLOW') {
     const scorers = await mastra.getWorkflowById(entityId).getScorers();
-    scorerToUse = scorers[scorerId];
+    for (const [_, scorer] of Object.entries(scorers)) {
+      if (scorer.scorer.name === scorerName) {
+        scorerToUse = scorer;
+        break;
+      }
+    }
   }
 
   // Fallback to mastra-registered scorer
   if (!scorerToUse) {
-    const mastraRegisteredScorer = mastra.getScorerByName(scorerId);
+    const mastraRegisteredScorer = mastra.getScorerByName(scorerName);
     scorerToUse = mastraRegisteredScorer ? { scorer: mastraRegisteredScorer } : undefined;
   }
 

@@ -1,5 +1,5 @@
-import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai';
+import type { EmbeddingModelV2 } from '@ai-sdk/provider';
+import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai-v4';
 import { MessageList } from '../agent/message-list';
 import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
 import { MastraBase } from '../base';
@@ -62,8 +62,13 @@ export const memoryDefaultOptions = {
 } satisfies MemoryConfig;
 
 /**
- * Abstract Memory class that defines the interface for storing and retrieving
- * conversation threads and messages.
+ * Abstract base class for implementing conversation memory systems.
+ *
+ * Key features:
+ * - Thread-based conversation organization with resource association
+ * - Optional vector database integration for semantic similarity search
+ * - Working memory templates for structured conversation state
+ * - Handles memory processors to manipulate messages before they are sent to the LLM
  */
 export abstract class MastraMemory extends MastraBase {
   MAX_CONTEXT_TOKENS?: number;
@@ -159,7 +164,7 @@ export abstract class MastraMemory extends MastraBase {
     return {};
   }
 
-  protected async createEmbeddingIndex(dimensions?: number): Promise<{ indexName: string }> {
+  protected async createEmbeddingIndex(dimensions?: number, config?: MemoryConfig): Promise<{ indexName: string }> {
     const defaultDimensions = 1536;
     const isDefault = dimensions === defaultDimensions;
     const usedDimensions = dimensions ?? defaultDimensions;
@@ -171,10 +176,28 @@ export abstract class MastraMemory extends MastraBase {
     if (typeof this.vector === `undefined`) {
       throw new Error(`Tried to create embedding index but no vector db is attached to this Memory instance.`);
     }
-    await this.vector.createIndex({
+
+    // Get index configuration from memory config
+    const semanticConfig = typeof config?.semanticRecall === 'object' ? config.semanticRecall : undefined;
+    const indexConfig = semanticConfig?.indexConfig;
+
+    // Base parameters that all vector stores support
+    const createParams: any = {
       indexName,
       dimension: usedDimensions,
-    });
+      ...(indexConfig?.metric && { metric: indexConfig.metric }),
+    };
+
+    // Add PG-specific configuration if provided
+    // Only PG vector store will use these parameters
+    if (indexConfig && (indexConfig.type || indexConfig.ivf || indexConfig.hnsw)) {
+      createParams.indexConfig = {};
+      if (indexConfig.type) createParams.indexConfig.type = indexConfig.type;
+      if (indexConfig.ivf) createParams.indexConfig.ivf = indexConfig.ivf;
+      if (indexConfig.hnsw) createParams.indexConfig.hnsw = indexConfig.hnsw;
+    }
+
+    await this.vector.createIndex(createParams);
     return { indexName };
   }
 
@@ -189,6 +212,12 @@ export abstract class MastraMemory extends MastraBase {
         mergedConfig.workingMemory.schema = config.workingMemory.schema;
       }
     }
+
+    if (!mergedConfig?.threads) {
+      mergedConfig.threads = {};
+    }
+
+    mergedConfig.threads.generateTitle = config?.threads?.generateTitle !== false;
 
     return mergedConfig;
   }

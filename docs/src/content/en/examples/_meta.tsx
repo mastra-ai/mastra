@@ -13,6 +13,9 @@ const meta = {
   tools: {
     title: "Tools",
   },
+  processors: {
+    title: "Processors",
+  },
   workflows_legacy: {
     title: "Workflows (Legacy)",
     display: "hidden",
@@ -29,6 +32,9 @@ const meta = {
   scorers: <Tag text="experimental">Scorers</Tag>,
   voice: {
     title: "Voice",
+  },
+  observability: {
+    title: "Observability",
   },
   deployment: {
     title: "Deployment",

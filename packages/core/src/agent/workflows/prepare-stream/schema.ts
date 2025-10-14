@@ -3,6 +3,7 @@ import type { MastraBase } from '../../../base';
 import type { MastraLLMVNext } from '../../../llm/model/model.loop';
 import type { Mastra } from '../../../mastra';
 import type { OutputProcessor } from '../../../processors';
+import type { Telemetry } from '../../../telemetry';
 import type { DynamicArgument } from '../../../types';
 import type { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
@@ -22,6 +23,7 @@ export type AgentCapabilities = {
   executeOnFinish: (args: AgentExecuteOnFinishOptions) => Promise<void>;
   outputProcessors?: DynamicArgument<OutputProcessor[]>;
   llm: MastraLLMVNext;
+  getTelemetry?: () => Telemetry | undefined;
 };
 
 const coreToolSchema = z.object({

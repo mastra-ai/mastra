@@ -1,4 +1,4 @@
-import { google } from '@ai-sdk/google-v5';
+import { google } from '@ai-sdk/google';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { RuntimeContext } from '../runtime-context';

@@ -20,8 +20,7 @@ interface PrepareToolsStepOptions<
   runId: string;
   runtimeContext: RuntimeContext;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
-  format?: FORMAT;
+  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   memory?: MastraMemory;
 }
 
@@ -37,7 +36,6 @@ export function createPrepareToolsStep<
   runtimeContext,
   agentAISpan,
   methodType,
-  format,
   memory,
 }: PrepareToolsStepOptions<OUTPUT, FORMAT>) {
   return createStep({
@@ -74,7 +72,6 @@ export function createPrepareToolsStep<
         tracingContext: { currentSpan: agentAISpan },
         writableStream: options.writableStream,
         methodType,
-        format: format as 'aisdk' | 'mastra' | undefined,
       });
 
       return {

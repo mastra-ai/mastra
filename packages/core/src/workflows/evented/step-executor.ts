@@ -1,10 +1,12 @@
 import EventEmitter from 'events';
-import type { Emitter, ExecuteFunction, Mastra, Step, StepFlowEntry, StepResult } from '../..';
+import type { Emitter, LoopConditionFunction, Mastra, Step, StepFlowEntry, StepResult } from '../..';
 import { MastraBase } from '../../base';
 import type { RuntimeContext } from '../../di';
 import type { PubSub } from '../../events';
 import { RegisteredLogger } from '../../logger';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { getStepResult } from '../step';
+import { validateStepInput } from '../utils';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
@@ -24,10 +26,12 @@ export class StepExecutor extends MastraBase {
     input?: any;
     resumeData?: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     emitter: EventEmitter;
     runtimeContext: RuntimeContext;
     runCount?: number;
     foreachIdx?: number;
+    validateInputs?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
     const { step, stepResults, runId, runtimeContext, runCount = 0 } = params;
 
@@ -36,6 +40,12 @@ export class StepExecutor extends MastraBase {
     let suspended: { payload: any } | undefined;
     let bailed: { payload: any } | undefined;
     const startedAt = Date.now();
+    const { inputData, validationError } = await validateStepInput({
+      prevOutput: typeof params.foreachIdx === 'number' ? params.input?.[params.foreachIdx] : params.input,
+      step,
+      validateInputs: params.validateInputs ?? false,
+    });
+
     let stepInfo: {
       startedAt: number;
       payload: any;
@@ -45,7 +55,7 @@ export class StepExecutor extends MastraBase {
     } = {
       ...stepResults[step.id],
       startedAt,
-      payload: params.input ?? {},
+      payload: (typeof params.foreachIdx === 'number' ? params.input : inputData) ?? {},
     };
 
     if (params.resumeData) {
@@ -55,27 +65,25 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
+      if (validationError) {
+        throw validationError;
+      }
+
       const stepResult = await step.execute({
         workflowId: params.workflowId,
         runId,
         mastra: this.mastra!,
         runtimeContext,
-        inputData: typeof params.foreachIdx === 'number' ? params.input?.[params.foreachIdx] : params.input,
+        inputData,
+        state: params.state,
+        setState: (state: any) => {
+          // TODO
+          params.state = state;
+        },
         runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          if (result?.status === 'success') {
-            return result.output;
-          }
-
-          return null;
-        },
+        getStepResult: getStepResult.bind(this, stepResults),
         suspend: async (suspendPayload: any): Promise<any> => {
           suspended = { payload: { ...suspendPayload, __workflow_meta: { runId, path: [step.id] } } };
         },
@@ -145,6 +153,7 @@ export class StepExecutor extends MastraBase {
     input?: any;
     resumeData?: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     emitter: { runtime: PubSub; events: PubSub };
     runtimeContext: RuntimeContext;
     runCount?: number;
@@ -163,11 +172,13 @@ export class StepExecutor extends MastraBase {
             runId,
             runtimeContext,
             inputData: params.input,
+            state: params.state,
             runCount,
             resumeData: params.resumeData,
             abortController,
             stepResults,
             emitter: ee,
+            iterationCount: 0,
           });
         } catch (e) {
           console.error('error evaluating condition', e);
@@ -194,21 +205,25 @@ export class StepExecutor extends MastraBase {
     inputData,
     resumeData,
     stepResults,
+    state,
     runtimeContext,
     emitter,
     abortController,
     runCount = 0,
+    iterationCount,
   }: {
     workflowId: string;
-    condition: ExecuteFunction<any, any, any, any, any>;
+    condition: LoopConditionFunction<any, any, any, any, any>;
     runId: string;
     inputData?: any;
     resumeData?: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
     emitter: EventEmitter;
     runtimeContext: RuntimeContext;
     abortController: AbortController;
     runCount?: number;
+    iterationCount: number;
   }): Promise<boolean> {
     return condition({
       workflowId,
@@ -216,21 +231,14 @@ export class StepExecutor extends MastraBase {
       mastra: this.mastra!,
       runtimeContext,
       inputData,
+      state,
+      setState: (_state: any) => {
+        // TODO
+      },
       runCount,
       resumeData: resumeData,
       getInitData: () => stepResults?.input as any,
-      getStepResult: (step: any) => {
-        if (!step?.id) {
-          return null;
-        }
-
-        const result = stepResults[step.id];
-        if (result?.status === 'success') {
-          return result.output;
-        }
-
-        return null;
-      },
+      getStepResult: getStepResult.bind(this, stepResults),
       suspend: async (_suspendPayload: any): Promise<any> => {
         throw new Error('Not implemented');
       },
@@ -248,6 +256,7 @@ export class StepExecutor extends MastraBase {
       abortSignal: abortController?.signal,
       // TODO
       tracingContext: {},
+      iterationCount,
     });
   }
 
@@ -282,21 +291,15 @@ export class StepExecutor extends MastraBase {
         mastra: this.mastra!,
         runtimeContext,
         inputData: params.input,
+        // TODO: implement state
+        state: {},
+        setState: (_state: any) => {
+          // TODO
+        },
         runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          if (result?.status === 'success') {
-            return result.output;
-          }
-
-          return null;
-        },
+        getStepResult: getStepResult.bind(this, stepResults),
         suspend: async (_suspendPayload: any): Promise<any> => {
           throw new Error('Not implemented');
         },
@@ -352,21 +355,15 @@ export class StepExecutor extends MastraBase {
         mastra: this.mastra!,
         runtimeContext,
         inputData: params.input,
+        // TODO: implement state
+        state: {},
+        setState: (_state: any) => {
+          // TODO
+        },
         runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
-        getStepResult: (step: any) => {
-          if (!step?.id) {
-            return null;
-          }
-
-          const result = stepResults[step.id];
-          if (result?.status === 'success') {
-            return result.output;
-          }
-
-          return null;
-        },
+        getStepResult: getStepResult.bind(this, stepResults),
         suspend: async (_suspendPayload: any): Promise<any> => {
           throw new Error('Not implemented');
         },

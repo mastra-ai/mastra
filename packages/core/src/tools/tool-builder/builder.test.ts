@@ -1,9 +1,9 @@
-import { openai } from '@ai-sdk/openai';
-import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
-import type { LanguageModel } from 'ai';
+import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai';
+import { openai } from '@ai-sdk/openai-v4';
+import type { LanguageModelV2 } from '@ai-sdk/provider';
+import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider-v4';
+import type { LanguageModel } from 'ai-v4';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
@@ -177,7 +177,11 @@ async function runSingleOutputsTest(
     //   prompt: 'You are a test agent. Your task is to respond with valid JSON matching the schema provided.',
     // });
 
-    const response = await agent.generateVNext(allSchemas[schemaName].description, generateOptions);
+    // Check if model is V1 or V2 and use appropriate method
+    const isV2Model = 'specificationVersion' in model && model.specificationVersion === 'v2';
+    const response = isV2Model
+      ? await agent.generate(allSchemas[schemaName].description, generateOptions)
+      : await agent.generateLegacy(allSchemas[schemaName].description, generateOptions);
 
     if (!response.object) {
       throw new Error('No object generated for schema: ' + schemaName + ' with text: ' + response.text);
@@ -231,10 +235,17 @@ async function runSingleInputTest(
       tools: { [toolName]: testTool },
     });
 
-    const response = await agent.generate(`Please call the tool named '${toolName}'.`, {
-      toolChoice: 'required',
-      maxSteps: 1,
-    });
+    // Check if model is V1 or V2 and use appropriate method
+    const isV2Model = 'specificationVersion' in model && model.specificationVersion === 'v2';
+    const response = isV2Model
+      ? await agent.generate(`Please call the tool named '${toolName}'.`, {
+          toolChoice: 'required',
+          maxSteps: 1,
+        })
+      : await agent.generateLegacy(`Please call the tool named '${toolName}'.`, {
+          toolChoice: 'required',
+          maxSteps: 1,
+        });
 
     const toolCall = response.toolCalls.find(tc => tc.toolName === toolName);
     const toolResult = response.toolResults.find(tr => tr.toolCallId === toolCall?.toolCallId);
@@ -887,6 +898,7 @@ describe('Tool Input Validation', () => {
       },
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      suspend: async () => {},
     });
 
     expect(result).toEqual({
@@ -904,6 +916,7 @@ describe('Tool Input Validation', () => {
       },
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      suspend: async () => {},
     });
 
     expect(result).toEqual({
@@ -922,6 +935,7 @@ describe('Tool Input Validation', () => {
       },
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      suspend: async () => {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -940,6 +954,7 @@ describe('Tool Input Validation', () => {
       },
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      suspend: async () => {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -959,6 +974,7 @@ describe('Tool Input Validation', () => {
       },
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      suspend: async () => {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -977,6 +993,7 @@ describe('Tool Input Validation', () => {
         age: 30,
       },
       runtimeContext: new RuntimeContext(),
+      suspend: async () => {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -996,6 +1013,7 @@ describe('Tool Input Validation', () => {
       },
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      suspend: async () => {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -1016,6 +1034,7 @@ describe('Tool Input Validation', () => {
       },
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      suspend: async () => {},
     });
 
     expect(result).toHaveProperty('error', true);

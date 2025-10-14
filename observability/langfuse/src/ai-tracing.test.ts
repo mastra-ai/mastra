@@ -8,7 +8,12 @@
  * - Langfuse-specific error handling
  */
 
-import type { AITracingEvent, AnyAISpan, LLMGenerationAttributes, ToolCallAttributes } from '@mastra/core/ai-tracing';
+import type {
+  AITracingEvent,
+  AnyExportedAISpan,
+  LLMGenerationAttributes,
+  ToolCallAttributes,
+} from '@mastra/core/ai-tracing';
 import { AISpanType, AITracingEventType } from '@mastra/core/ai-tracing';
 import { Langfuse } from 'langfuse';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -170,7 +175,7 @@ describe('LangfuseExporter', () => {
 
       const event: AITracingEvent = {
         type: AITracingEventType.SPAN_STARTED,
-        span: rootSpan,
+        exportedSpan: rootSpan,
       };
 
       await exporter.exportEvent(event);
@@ -200,7 +205,7 @@ describe('LangfuseExporter', () => {
 
       const event: AITracingEvent = {
         type: AITracingEventType.SPAN_STARTED,
-        span: childSpan,
+        exportedSpan: childSpan,
       };
 
       await exporter.exportEvent(event);
@@ -239,7 +244,7 @@ describe('LangfuseExporter', () => {
 
       const event: AITracingEvent = {
         type: AITracingEventType.SPAN_STARTED,
-        span: llmSpan,
+        exportedSpan: llmSpan,
       };
 
       await exporter.exportEvent(event);
@@ -285,7 +290,7 @@ describe('LangfuseExporter', () => {
 
       const event: AITracingEvent = {
         type: AITracingEventType.SPAN_STARTED,
-        span: minimalLlmSpan,
+        exportedSpan: minimalLlmSpan,
       };
 
       await exporter.exportEvent(event);
@@ -319,7 +324,7 @@ describe('LangfuseExporter', () => {
 
       const event: AITracingEvent = {
         type: AITracingEventType.SPAN_STARTED,
-        span: toolSpan,
+        exportedSpan: toolSpan,
       };
 
       await exporter.exportEvent(event);
@@ -357,7 +362,7 @@ describe('LangfuseExporter', () => {
 
       const event: AITracingEvent = {
         type: AITracingEventType.SPAN_STARTED,
-        span: agentSpan,
+        exportedSpan: agentSpan,
       };
 
       await exporter.exportEvent(event);
@@ -391,7 +396,7 @@ describe('LangfuseExporter', () => {
 
       const event: AITracingEvent = {
         type: AITracingEventType.SPAN_STARTED,
-        span: mcpSpan,
+        exportedSpan: mcpSpan,
       };
 
       await exporter.exportEvent(event);
@@ -423,7 +428,7 @@ describe('LangfuseExporter', () => {
 
       const event: AITracingEvent = {
         type: AITracingEventType.SPAN_STARTED,
-        span: workflowSpan,
+        exportedSpan: workflowSpan,
       };
 
       await exporter.exportEvent(event);
@@ -453,7 +458,7 @@ describe('LangfuseExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_STARTED,
-        span: llmSpan,
+        exportedSpan: llmSpan,
       });
 
       // Then update it
@@ -465,7 +470,7 @@ describe('LangfuseExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_UPDATED,
-        span: llmSpan,
+        exportedSpan: llmSpan,
       });
 
       expect(mockGeneration.update).toHaveBeenCalledWith({
@@ -491,7 +496,7 @@ describe('LangfuseExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_STARTED,
-        span: toolSpan,
+        exportedSpan: toolSpan,
       });
 
       // Update with success
@@ -503,7 +508,7 @@ describe('LangfuseExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_UPDATED,
-        span: toolSpan,
+        exportedSpan: toolSpan,
       });
 
       expect(mockSpan.update).toHaveBeenCalledWith({
@@ -518,7 +523,7 @@ describe('LangfuseExporter', () => {
 
   describe('Span Ending', () => {
     it('should update span with endTime on span end', async () => {
-      const span = createMockSpan({
+      const exportedSpan = createMockSpan({
         id: 'test-span',
         name: 'test',
         type: AISpanType.GENERIC,
@@ -528,18 +533,18 @@ describe('LangfuseExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_STARTED,
-        span,
+        exportedSpan,
       });
 
-      span.endTime = new Date();
+      exportedSpan.endTime = new Date();
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span,
+        exportedSpan,
       });
 
       expect(mockSpan.update).toHaveBeenCalledWith({
-        endTime: span.endTime,
+        endTime: exportedSpan.endTime,
         metadata: expect.objectContaining({
           spanType: 'generic',
         }),
@@ -566,12 +571,12 @@ describe('LangfuseExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_STARTED,
-        span: errorSpan,
+        exportedSpan: errorSpan,
       });
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: errorSpan,
+        exportedSpan: errorSpan,
       });
 
       expect(mockSpan.update).toHaveBeenCalledWith({
@@ -585,7 +590,7 @@ describe('LangfuseExporter', () => {
       });
     });
 
-    it('should update root trace and delete from traceMap when root span ends', async () => {
+    it('should update root trace and clean up when root span ends (if no other active spans)', async () => {
       const rootSpan = createMockSpan({
         id: 'root-span-id',
         name: 'root-span',
@@ -599,15 +604,17 @@ describe('LangfuseExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_STARTED,
-        span: rootSpan,
+        exportedSpan: rootSpan,
       });
 
-      // Verify trace was created
+      // Verify trace was created and span is tracked as active
       expect((exporter as any).traceMap.has('root-span-id')).toBe(true);
+      const traceData = (exporter as any).traceMap.get('root-span-id');
+      expect(traceData.activeSpans.has('root-span-id')).toBe(true);
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: rootSpan,
+        exportedSpan: rootSpan,
       });
 
       // Should update trace with output
@@ -615,7 +622,7 @@ describe('LangfuseExporter', () => {
         output: { result: 'success' },
       });
 
-      // Should remove trace from traceMap
+      // Trace should be cleaned up since this was the only active span
       expect((exporter as any).traceMap.has('root-span-id')).toBe(false);
     });
   });
@@ -634,7 +641,7 @@ describe('LangfuseExporter', () => {
       await expect(
         exporter.exportEvent({
           type: AITracingEventType.SPAN_STARTED,
-          span: orphanSpan,
+          exportedSpan: orphanSpan,
         }),
       ).resolves.not.toThrow();
 
@@ -644,7 +651,7 @@ describe('LangfuseExporter', () => {
     });
 
     it('should handle missing Langfuse objects gracefully', async () => {
-      const span = createMockSpan({
+      const exportedSpan = createMockSpan({
         id: 'missing-span',
         name: 'missing',
         type: AISpanType.GENERIC,
@@ -656,7 +663,7 @@ describe('LangfuseExporter', () => {
       await expect(
         exporter.exportEvent({
           type: AITracingEventType.SPAN_UPDATED,
-          span,
+          exportedSpan,
         }),
       ).resolves.not.toThrow();
 
@@ -664,7 +671,7 @@ describe('LangfuseExporter', () => {
       await expect(
         exporter.exportEvent({
           type: AITracingEventType.SPAN_ENDED,
-          span,
+          exportedSpan,
         }),
       ).resolves.not.toThrow();
     });
@@ -698,7 +705,7 @@ describe('LangfuseExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_STARTED,
-        span: eventSpan,
+        exportedSpan: eventSpan,
       });
 
       // Should create trace for root event span
@@ -739,7 +746,7 @@ describe('LangfuseExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_STARTED,
-        span: rootSpan,
+        exportedSpan: rootSpan,
       });
 
       // Then create a child event span
@@ -756,11 +763,11 @@ describe('LangfuseExporter', () => {
       });
       childEventSpan.isEvent = true;
       childEventSpan.traceId = 'root-span-id';
-      childEventSpan.parent = { id: 'root-span-id' };
+      childEventSpan.parentSpanId = 'root-span-id';
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_STARTED,
-        span: childEventSpan,
+        exportedSpan: childEventSpan,
       });
 
       // Should create event under the parent span
@@ -792,7 +799,7 @@ describe('LangfuseExporter', () => {
       await expect(
         exporter.exportEvent({
           type: AITracingEventType.SPAN_STARTED,
-          span: orphanEventSpan,
+          exportedSpan: orphanEventSpan,
         }),
       ).resolves.not.toThrow();
 
@@ -802,10 +809,367 @@ describe('LangfuseExporter', () => {
     });
   });
 
+  describe('Out-of-order span handling with delayed ends', () => {
+    it('should handle spans that end after parent trace is removed', async () => {
+      // Create a root workflow span
+      const workflowSpan = createMockSpan({
+        id: 'workflow-1',
+        name: 'test-workflow',
+        type: AISpanType.WORKFLOW_RUN,
+        isRoot: true,
+        attributes: { workflowId: 'wf-123' },
+      });
+
+      // Create a child step span
+      const step1Span = createMockSpan({
+        id: 'step-1',
+        name: 'step-one',
+        type: AISpanType.WORKFLOW_STEP,
+        isRoot: false,
+        attributes: { stepId: 'step-1' },
+      });
+      step1Span.traceId = 'workflow-1';
+      step1Span.parentSpanId = 'workflow-1';
+
+      // Start workflow and step
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_STARTED,
+        exportedSpan: workflowSpan,
+      });
+
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_STARTED,
+        exportedSpan: step1Span,
+      });
+
+      // Verify trace and spans are tracked
+      expect((exporter as any).traceMap.has('workflow-1')).toBe(true);
+      const traceInfo = (exporter as any).traceMap.get('workflow-1');
+      expect(traceInfo.spans.has('step-1')).toBe(true);
+
+      // Clear mock calls to make assertions clearer
+      mockTrace.span.mockClear();
+      mockSpan.update.mockClear();
+      mockTrace.update.mockClear();
+
+      // Update step 1
+      step1Span.output = { result: 'step1-complete' };
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_UPDATED,
+        exportedSpan: step1Span,
+      });
+
+      expect(mockSpan.update).toHaveBeenCalledWith({
+        output: { result: 'step1-complete' },
+        metadata: expect.objectContaining({
+          spanType: 'workflow_step',
+          stepId: 'step-1',
+        }),
+      });
+
+      // End step 1
+      step1Span.endTime = new Date();
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_ENDED,
+        exportedSpan: step1Span,
+      });
+
+      expect(mockSpan.update).toHaveBeenCalledWith({
+        endTime: step1Span.endTime,
+        output: { result: 'step1-complete' }, // Output is still included from previous update
+        metadata: expect.objectContaining({
+          spanType: 'workflow_step',
+          stepId: 'step-1',
+        }),
+      });
+
+      // Start step 2 (but don't end it yet - this is the key to testing out-of-order)
+      const step2Span = createMockSpan({
+        id: 'step-2',
+        name: 'step-two',
+        type: AISpanType.WORKFLOW_STEP,
+        isRoot: false,
+        attributes: { stepId: 'step-2' },
+      });
+      step2Span.traceId = 'workflow-1';
+      step2Span.parentSpanId = 'workflow-1';
+
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_STARTED,
+        exportedSpan: step2Span,
+      });
+
+      // Update workflow
+      workflowSpan.output = { status: 'completed' };
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_UPDATED,
+        exportedSpan: workflowSpan,
+      });
+
+      // End workflow (root span) BEFORE step-2 ends - this is the out-of-order scenario
+      workflowSpan.endTime = new Date();
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_ENDED,
+        exportedSpan: workflowSpan,
+      });
+
+      // Verify trace is still in map because step-2 hasn't ended yet
+      expect((exporter as any).traceMap.has('workflow-1')).toBe(true);
+      const traceData = (exporter as any).traceMap.get('workflow-1');
+      // step-2 should still be in activeSpans
+      expect(traceData.activeSpans.has('step-2')).toBe(true);
+      expect(traceData.activeSpans.has('step-1')).toBe(false); // step-1 already ended
+      expect(traceData.activeSpans.has('workflow-1')).toBe(false); // workflow ended
+
+      // Now end step-2 (the last active span) AFTER the root ended
+      step2Span.endTime = new Date();
+      step2Span.output = { result: 'step2-complete' };
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_ENDED,
+        exportedSpan: step2Span,
+      });
+
+      // NOW the trace should be cleaned up since all spans have ended
+      expect((exporter as any).traceMap.has('workflow-1')).toBe(false);
+
+      // Clear mocks for late event testing
+      mockSpan.update.mockClear();
+      mockTrace.update.mockClear();
+
+      // Now try to send late updates/ends for already completed trace
+      const lateStep1Update = createMockSpan({
+        id: 'step-1',
+        name: 'step-one',
+        type: AISpanType.WORKFLOW_STEP,
+        isRoot: false,
+        attributes: { stepId: 'step-1', lateUpdate: true },
+      });
+      lateStep1Update.traceId = 'workflow-1';
+      lateStep1Update.parentSpanId = 'workflow-1';
+      lateStep1Update.output = { result: 'late-update' };
+
+      // This should handle gracefully without errors
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_UPDATED,
+        exportedSpan: lateStep1Update,
+      });
+
+      // Should not attempt to update since trace is gone
+      expect(mockSpan.update).not.toHaveBeenCalled();
+    });
+
+    it('should handle multiple rapid updates and ends in sequence', async () => {
+      // Simulate rapid-fire events that might arrive out of order
+      const rootSpan = createMockSpan({
+        id: 'root-1',
+        name: 'rapid-root',
+        type: AISpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'rapid-agent' },
+      });
+
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      // Create multiple child spans
+      const childSpans: AnyExportedAISpan[] = [];
+      for (let i = 1; i <= 5; i++) {
+        const child = createMockSpan({
+          id: `child-${i}`,
+          name: `rapid-child-${i}`,
+          type: AISpanType.TOOL_CALL,
+          isRoot: false,
+          attributes: { toolId: `tool-${i}` },
+        });
+        child.traceId = 'root-1';
+        child.parentSpanId = 'root-1';
+        childSpans.push(child);
+      }
+
+      // Start all children rapidly
+      for (const child of childSpans) {
+        await exporter.exportEvent({
+          type: AITracingEventType.SPAN_STARTED,
+          exportedSpan: child,
+        });
+      }
+
+      // Update and end children in mixed order
+      // End child 3
+      childSpans[2].endTime = new Date();
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_ENDED,
+        exportedSpan: childSpans[2],
+      });
+
+      // Update child 1
+      childSpans[0].output = { result: 'child-1-result' };
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_UPDATED,
+        exportedSpan: childSpans[0],
+      });
+
+      // End child 5
+      childSpans[4].endTime = new Date();
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_ENDED,
+        exportedSpan: childSpans[4],
+      });
+
+      // Update child 3 (after it ended)
+      childSpans[2].output = { result: 'late-update-3' };
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_UPDATED,
+        exportedSpan: childSpans[2],
+      });
+
+      // End remaining children
+      for (const child of [childSpans[0], childSpans[1], childSpans[3]]) {
+        child.endTime = new Date();
+        await exporter.exportEvent({
+          type: AITracingEventType.SPAN_ENDED,
+          exportedSpan: child,
+        });
+      }
+
+      // End root
+      rootSpan.endTime = new Date();
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_ENDED,
+        exportedSpan: rootSpan,
+      });
+
+      // All operations should complete without errors
+      // Trace should be cleaned up since all spans have ended
+      expect((exporter as any).traceMap.has('root-1')).toBe(false);
+    });
+  });
+
+  describe('Score Management', () => {
+    let mockScore: any;
+
+    beforeEach(() => {
+      mockScore = {
+        id: 'test-score-id',
+        traceId: 'test-trace-id',
+        observationId: 'test-span-id',
+        name: 'test-scorer',
+        value: 0.85,
+        sessionId: 'test-session',
+        metadata: { reason: 'Test score' },
+        dataType: 'NUMERIC',
+      };
+      mockLangfuseClient.score = vi.fn().mockResolvedValue(mockScore);
+    });
+
+    it('should add score to trace with all parameters', async () => {
+      const scoreData = {
+        traceId: 'trace-123',
+        spanId: 'span-456',
+        score: 0.95,
+        reason: 'High quality response',
+        scorerName: 'quality-scorer',
+        metadata: {
+          sessionId: 'session-789',
+          userId: 'user-123',
+          customField: 'custom-value',
+        },
+      };
+
+      await exporter.addScoreToTrace(scoreData);
+
+      expect(mockLangfuseClient.score).toHaveBeenCalledWith({
+        id: 'trace-123-quality-scorer',
+        traceId: 'trace-123',
+        observationId: 'span-456',
+        name: 'quality-scorer',
+        value: 0.95,
+        sessionId: 'session-789',
+        metadata: { reason: 'High quality response' },
+        dataType: 'NUMERIC',
+      });
+    });
+
+    it('should add score to trace with only required parameters', async () => {
+      const scoreData = {
+        traceId: 'trace-123',
+        score: 0.75,
+        scorerName: 'trace-scorer',
+      };
+
+      await exporter.addScoreToTrace(scoreData);
+
+      expect(mockLangfuseClient.score).toHaveBeenCalledWith({
+        id: 'trace-123-trace-scorer',
+        traceId: 'trace-123',
+        name: 'trace-scorer',
+        value: 0.75,
+        metadata: {},
+        dataType: 'NUMERIC',
+      });
+    });
+
+    it('should not call Langfuse client when client is null', async () => {
+      // Create exporter with missing keys to disable client
+      const disabledExporter = new LangfuseExporter({
+        baseUrl: 'https://test-langfuse.com',
+      });
+
+      const scoreData = {
+        traceId: 'trace-123',
+        spanId: 'span-456',
+        score: 0.8,
+        reason: 'Test score',
+        scorerName: 'test-scorer',
+        metadata: {
+          sessionId: 'session-789',
+        },
+      };
+
+      await disabledExporter.addScoreToTrace(scoreData);
+
+      // Should not call Langfuse client
+      expect(mockLangfuseClient.score).not.toHaveBeenCalled();
+    });
+
+    it('should handle Langfuse client errors gracefully', async () => {
+      const mockError = new Error('Langfuse API error');
+      mockLangfuseClient.score.mockRejectedValue(mockError);
+
+      const mockLoggerError = vi.spyOn(exporter['logger'], 'error').mockImplementation(() => {});
+
+      const scoreData = {
+        traceId: 'trace-123',
+        spanId: 'span-456',
+        score: 0.8,
+        reason: 'Test score',
+        scorerName: 'test-scorer',
+        metadata: {
+          sessionId: 'session-789',
+        },
+      };
+
+      // Should not throw
+      await expect(exporter.addScoreToTrace(scoreData)).resolves.not.toThrow();
+
+      // Should log error
+      expect(mockLoggerError).toHaveBeenCalledWith('Langfuse exporter: Error adding score to trace', {
+        error: mockError,
+        traceId: 'trace-123',
+        spanId: 'span-456',
+        scorerName: 'test-scorer',
+      });
+
+      mockLoggerError.mockRestore();
+    });
+  });
+
   describe('Shutdown', () => {
     it('should shutdown Langfuse client and clear maps', async () => {
       // Add some data to internal maps
-      const span = createMockSpan({
+      const exportedSpan = createMockSpan({
         id: 'test-span',
         name: 'test',
         type: AISpanType.GENERIC,
@@ -815,7 +1179,7 @@ describe('LangfuseExporter', () => {
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_STARTED,
-        span,
+        exportedSpan,
       });
 
       // Verify maps have data
@@ -855,8 +1219,8 @@ function createMockSpan({
   input?: any;
   output?: any;
   errorInfo?: any;
-}): AnyAISpan {
-  const mockSpan = {
+}): AnyExportedAISpan {
+  return {
     id,
     name,
     type,
@@ -868,22 +1232,8 @@ function createMockSpan({
     startTime: new Date(),
     endTime: undefined,
     traceId: isRoot ? id : 'parent-trace-id',
-    get isRootSpan() {
-      return isRoot;
-    },
-    trace: {
-      id: isRoot ? id : 'parent-trace-id',
-      traceId: isRoot ? id : 'parent-trace-id',
-    } as AnyAISpan,
-    parent: isRoot ? undefined : { id: 'parent-id' },
-    aiTracing: {} as any,
-    end: vi.fn(),
-    error: vi.fn(),
-    update: vi.fn(),
-    createChildSpan: vi.fn(),
-    createEventSpan: vi.fn(),
+    isRootSpan: isRoot,
+    parentSpanId: isRoot ? undefined : 'parent-id',
     isEvent: false,
-  } as AnyAISpan;
-
-  return mockSpan;
+  };
 }

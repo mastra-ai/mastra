@@ -5,13 +5,16 @@ import virtual from '@rollup/plugin-virtual';
 import esmShim from '@rollup/plugin-esm-shim';
 import { basename } from 'node:path/posix';
 import * as path from 'node:path';
-import { rollup, type OutputChunk, type OutputAsset } from 'rollup';
+import { rollup, type OutputChunk, type OutputAsset, type Plugin } from 'rollup';
 import { esbuild } from '../plugins/esbuild';
 import { aliasHono } from '../plugins/hono-alias';
-import { getCompiledDepCachePath, getPackageRootPath } from '../utils';
+import { getCompiledDepCachePath, getPackageRootPath, rollupSafeName, slash } from '../utils';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
+import * as resolve from 'resolve.exports';
+import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
+import { readFile } from 'node:fs/promises';
 
 type VirtualDependency = {
   name: string;
@@ -19,19 +22,7 @@ type VirtualDependency = {
 };
 
 function prepareEntryFileName(name: string, rootDir: string) {
-  /**
-   * The Rollup output.entryFileNames option doesn't allow relative (like `../../foo`) or absolute paths
-   * Since the current working directory is the project root, the resulting path won't have any `..` segments
-   */
-  const relativePath = path.relative(rootDir, name);
-
-  return (
-    relativePath
-      /**
-       * Use posix separators (/) for entry names, as Rollup expects that
-       */
-      .replaceAll(path.sep, path.posix.sep)
-  );
+  return rollupSafeName(name, rootDir);
 }
 
 /**
@@ -39,11 +30,17 @@ function prepareEntryFileName(name: string, rootDir: string) {
  */
 export function createVirtualDependencies(
   depsToOptimize: Map<string, DependencyMetadata>,
-  { projectRoot, workspaceRoot, outputDir }: { workspaceRoot: string | null; projectRoot: string; outputDir: string },
+  {
+    projectRoot,
+    workspaceRoot,
+    outputDir,
+    bundlerOptions,
+  }: { workspaceRoot: string | null; projectRoot: string; outputDir: string; bundlerOptions?: { isDev?: boolean } },
 ): {
   optimizedDependencyEntries: Map<string, VirtualDependency>;
   fileNameToDependencyMap: Map<string, string>;
 } {
+  const { isDev = false } = bundlerOptions || {};
   const fileNameToDependencyMap = new Map<string, string>();
   const optimizedDependencyEntries = new Map<string, VirtualDependency>();
   const rootDir = workspaceRoot || projectRoot;
@@ -84,25 +81,26 @@ export function createVirtualDependencies(
 
   // For workspace packages, we still want the dependencies to be imported from the original path
   // We rewrite the path to the original folder inside node_modules/.cache
-  for (const [dep, { isWorkspace, rootPath }] of depsToOptimize.entries()) {
-    if (!isWorkspace || !rootPath || !workspaceRoot) {
-      continue;
+  if (isDev) {
+    for (const [dep, { isWorkspace, rootPath }] of depsToOptimize.entries()) {
+      if (!isWorkspace || !rootPath || !workspaceRoot) {
+        continue;
+      }
+
+      const currentDepPath = optimizedDependencyEntries.get(dep);
+      if (!currentDepPath) {
+        continue;
+      }
+
+      const fileName = basename(currentDepPath.name);
+      const entryName = prepareEntryFileName(getCompiledDepCachePath(rootPath, fileName), rootDir);
+
+      fileNameToDependencyMap.set(entryName, dep);
+      optimizedDependencyEntries.set(dep, {
+        ...currentDepPath,
+        name: entryName,
+      });
     }
-
-    const currentDepPath = optimizedDependencyEntries.get(dep);
-
-    if (!currentDepPath) {
-      continue;
-    }
-
-    const fileName = basename(currentDepPath.name);
-    const entryName = prepareEntryFileName(getCompiledDepCachePath(rootPath, fileName), rootDir);
-
-    fileNameToDependencyMap.set(entryName, dep);
-    optimizedDependencyEntries.set(dep, {
-      ...currentDepPath,
-      name: entryName,
-    });
   }
 
   return { optimizedDependencyEntries, fileNameToDependencyMap };
@@ -113,11 +111,17 @@ export function createVirtualDependencies(
  * Sets up virtual modules, TypeScript compilation, CommonJS transformation, and workspace resolution.
  */
 async function getInputPlugins(
-  virtualDependencies: Map<string, { virtual: string }>,
-  transpilePackages: Set<string>,
-  workspaceMap: Map<string, WorkspacePackageInfo>,
-  bundlerOptions: {
-    enableEsmShim: boolean;
+  virtualDependencies: Map<string, { name: string; virtual: string }>,
+  {
+    transpilePackages,
+    workspaceMap,
+    bundlerOptions,
+    rootDir,
+  }: {
+    transpilePackages: Set<string>;
+    workspaceMap: Map<string, WorkspacePackageInfo>;
+    bundlerOptions: { enableEsmShim: boolean; isDev: boolean };
+    rootDir: string;
   },
 ) {
   const transpilePackagesMap = new Map<string, string>();
@@ -125,7 +129,9 @@ async function getInputPlugins(
     const dir = await getPackageRootPath(pkg);
 
     if (dir) {
-      transpilePackagesMap.set(pkg, dir);
+      transpilePackagesMap.set(pkg, slash(dir));
+    } else {
+      transpilePackagesMap.set(pkg, workspaceMap.get(pkg)?.location ?? pkg);
     }
   }
 
@@ -146,26 +152,55 @@ async function getInputPlugins(
             // Match files from transpilePackages but exclude any nested node_modules
             // Escapes regex special characters in the path and uses negative lookahead to avoid node_modules
             // generated by cursor
-            return new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?!.*node_modules).*$`);
+            if (path.isAbsolute(p)) {
+              return new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?!.*node_modules).*$`);
+            } else {
+              return new RegExp(`\/${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?!.*node_modules).*$`);
+            }
           }),
         })
       : null,
+    bundlerOptions.isDev
+      ? ({
+          name: 'alias-optimized-deps',
+          async resolveId(id, importer, options) {
+            if (!virtualDependencies.has(id)) {
+              return null;
+            }
+
+            const info = virtualDependencies.get(id)!;
+            // go from ./node_modules/.cache/index.js to ./pkg
+            const packageRootPath = path.join(rootDir, path.dirname(path.dirname(path.dirname(info.name))));
+            const pkgJsonBuffer = await readFile(path.join(packageRootPath, 'package.json'), 'utf-8');
+            const pkgJson = JSON.parse(pkgJsonBuffer);
+            if (!pkgJson) {
+              return null;
+            }
+
+            const pkgName = pkgJson.name || '';
+            let resolvedPath: string | undefined = resolve.exports(pkgJson, id.replace(pkgName, '.'))?.[0];
+            if (!resolvedPath) {
+              resolvedPath = pkgJson!.main ?? 'index.js';
+            }
+
+            return await this.resolve(path.posix.join(packageRootPath, resolvedPath!), importer, options);
+          },
+        } satisfies Plugin)
+      : null,
+    optimizeLodashImports({
+      include: '**/*.{js,ts,mjs,cjs}',
+    }),
     commonjs({
       strictRequires: 'strict',
       transformMixedEsModules: true,
       ignoreTryCatch: false,
     }),
+    bundlerOptions.isDev ? null : nodeResolve(),
     bundlerOptions.enableEsmShim ? esmShim() : undefined,
-    nodeResolve({
-      preferBuiltins: true,
-      exportConditions: ['node'],
-      // Do not embed external dependencies into files that we write to `node_modules/.cache` (for the mastra dev + workspace use case)
-      ...(workspaceMap.size > 0 ? { resolveOnly: Array.from(workspaceMap.keys()) } : {}),
-    }),
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
     json(),
-  ];
+  ].filter(Boolean);
 }
 
 /**
@@ -189,6 +224,7 @@ async function buildExternalDependencies(
     outputDir: string;
     bundlerOptions: {
       enableEsmShim: boolean;
+      isDev: boolean;
     };
   },
 ) {
@@ -198,7 +234,6 @@ async function buildExternalDependencies(
   if (virtualDependencies.size === 0) {
     return [] as unknown as [OutputChunk, ...(OutputAsset | OutputChunk)[]];
   }
-
   const bundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     input: Array.from(virtualDependencies.entries()).reduce(
@@ -210,7 +245,12 @@ async function buildExternalDependencies(
     ),
     external: externals,
     treeshake: 'smallest',
-    plugins: getInputPlugins(virtualDependencies, packagesToTranspile, workspaceMap, bundlerOptions),
+    plugins: getInputPlugins(virtualDependencies, {
+      transpilePackages: packagesToTranspile,
+      workspaceMap,
+      bundlerOptions,
+      rootDir,
+    }),
   });
 
   const outputDirRelative = prepareEntryFileName(outputDir, rootDir);
@@ -303,16 +343,20 @@ export async function bundleExternals(
     workspaceRoot,
     outputDir,
     projectRoot,
+    bundlerOptions: {
+      isDev,
+    },
   });
 
   const output = await buildExternalDependencies(optimizedDependencyEntries, {
     externals: allExternals,
     packagesToTranspile,
-    workspaceMap: isDev ? workspaceMap : new Map(),
+    workspaceMap,
     rootDir: workspaceRoot || projectRoot,
     outputDir,
     bundlerOptions: {
       enableEsmShim,
+      isDev,
     },
   });
 

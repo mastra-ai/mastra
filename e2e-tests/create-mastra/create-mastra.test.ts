@@ -98,6 +98,7 @@ describe('create mastra', () => {
               "agents": {},
               "defaultGenerateOptions": {},
               "defaultStreamOptions": {},
+              "inputProcessors": [],
               "instructions": "
                 You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
 
@@ -113,15 +114,17 @@ describe('create mastra', () => {
                 Use the weatherTool to fetch current weather data.
           ",
               "modelId": "gpt-4o-mini",
-              "modelVersion": "v1",
+              "modelVersion": "v2",
               "name": "Weather Agent",
-              "provider": "openai.chat",
+              "outputProcessors": [],
+              "provider": "openai",
               "tools": {
                 "weatherTool": {
                   "description": "Get current weather for a location",
                   "id": "get-weather",
                   "inputSchema": "{"json":{"type":"object","properties":{"location":{"type":"string","description":"City name"}},"required":["location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}",
                   "outputSchema": "{"json":{"type":"object","properties":{"temperature":{"type":"number"},"feelsLike":{"type":"number"},"humidity":{"type":"number"},"windSpeed":{"type":"number"},"windGust":{"type":"number"},"conditions":{"type":"string"},"location":{"type":"string"}},"required":["temperature","feelsLike","humidity","windSpeed","windGust","conditions","location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}",
+                  "requireApproval": false,
                 },
               },
               "workflows": {},

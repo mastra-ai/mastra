@@ -1,17 +1,31 @@
 ---
 title: "Handling Complex LLM Operations | Workflows | Mastra"
-description: "Workflows in Mastra help you orchestrate complex sequences of operations with features like branching, parallel execution, resource suspension, and more."
+description: "Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more."
 ---
 
 import { Steps } from "nextra/components";
 
 # Workflows overview
 
-Workflows let you define and orchestrate complex sequences of tasks as **typed steps** connected by data flows. Each step has clearly defined inputs and outputs validated by Zod schemas.
-
-A workflow manages execution order, dependencies, branching, parallelism, and error handling — enabling you to build robust, reusable processes. Steps can be nested or cloned to compose larger workflows.
+Workflows allow you to define and manage complex sequences of tasks by connecting them with clear, structured processes. Unlike a single agent, which operates independently, workflows enable you to orchestrate multiple steps with specific logic, tools, and external services. This approach provides more control and predictability, ensuring consistent results by allowing you to determine what tasks are performed and when they are completed.
 
 ![Workflows overview](/image/workflows/workflows-overview.jpg)
+
+## When to use a workflow
+
+For example, you might want to perform a sequence of tasks:
+
+1. Handle a user question like “Can I return my last order?”
+2. Fetch user-specific data from a database using their `user_id`.
+3. Check return eligibility via an external API or business logic.
+4. Make a conditional decision (e.g. approve, deny, escalate) based on the data.
+5. Generate a tailored response based on the outcome.
+
+Each of these tasks is created as a **step** in a workflow, giving you fine-grained control over data flow, execution order, and side effects.
+
+> **📹 Watch**:  → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
+
+## Building workflows
 
 You create workflows by:
 
@@ -21,7 +35,10 @@ You create workflows by:
 
 This structure provides full type safety and runtime validation, ensuring data integrity across the entire workflow.
 
-> **📹 Watch**:  → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
+### Visual testing
+
+Use the [Playground](../server-db/local-dev-playground.mdx#workflows) to visualize workflow execution in real time. It shows which steps are running, completed, or suspended.
+
 
 ## Getting started
 
@@ -66,7 +83,11 @@ export const testWorkflow = createWorkflow({
   }),
   outputSchema: z.object({
     output: z.string()
-  })
+  }),
+  options: {
+    // enables runtime validation of inputs and applies zod default values.
+    validateInputs: true, 
+  }
 })
   .then(step1)
   .commit();
@@ -151,6 +172,29 @@ export const mastra = new Mastra({
     name: "Mastra",
     level: "info"
   })
+});
+```
+
+## Using `RuntimeContext`
+
+Use `RuntimeContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const stepOne = createStep({
+  // ...
+  execute: async ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+
+    const maxResults = userTier === "enterprise"
+      ? 1000
+      : 50;
+
+    return { maxResults };
+  }
 });
 ```
 

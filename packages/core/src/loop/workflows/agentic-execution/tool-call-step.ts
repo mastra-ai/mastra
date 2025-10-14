@@ -1,22 +1,30 @@
-import type { ToolCallOptions, ToolSet } from 'ai-v5';
+import type { ToolCallOptions, ToolSet } from 'ai';
 import type { OutputSchema } from '../../../stream/base/schema';
+import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
 import { assembleOperationName, getTracer } from '../../telemetry';
 import type { OuterLLMRun } from '../../types';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
 
-export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
+export function createToolCallStep<
+  Tools extends ToolSet = ToolSet,
+  OUTPUT extends OutputSchema | undefined = undefined,
+>({
   tools,
   messageList,
   options,
   telemetry_settings,
   writer,
+  requireToolApproval,
+  controller,
+  runId,
+  streamState,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
-    execute: async ({ inputData }) => {
+    execute: async ({ inputData, suspend, resumeData }) => {
       // If the tool was already executed by the provider, skip execution
       if (inputData.providerExecuted) {
         // Still emit telemetry for provider-executed tools
@@ -92,11 +100,64 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT exten
       });
 
       try {
+        if (requireToolApproval || (tool as any).requireApproval) {
+          if (!resumeData) {
+            controller.enqueue({
+              type: 'tool-call-approval',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                args: inputData.args,
+              },
+            });
+            await suspend({
+              requireToolApproval: {
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                args: inputData.args,
+              },
+              __streamState: streamState.serialize(),
+            });
+          } else {
+            if (!resumeData.approved) {
+              const error = new Error(
+                'Tool call was declined: ' +
+                  JSON.stringify({
+                    toolCallId: inputData.toolCallId,
+                    toolName: inputData.toolName,
+                    args: inputData.args,
+                  }),
+              );
+
+              return {
+                error,
+                ...inputData,
+              };
+            }
+          }
+        }
+
         const result = await tool.execute(inputData.args, {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
           messages: messageList.get.input.aiV5.model(),
           writableStream: writer,
+          suspend: async (suspendPayload: any) => {
+            controller.enqueue({
+              type: 'tool-call-suspended',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { toolCallId: inputData.toolCallId, toolName: inputData.toolName, suspendPayload },
+            });
+
+            return await suspend({
+              toolCallSuspended: suspendPayload,
+              __streamState: streamState.serialize(),
+            });
+          },
+          resumeData,
         } as ToolCallOptions);
 
         span.setAttributes({

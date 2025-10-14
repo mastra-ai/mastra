@@ -700,6 +700,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       step: step.step,
       runId,
       stepResults,
+      // TODO: implement state
+      state: {},
       emitter: ee,
       runtimeContext: rc,
       input: (prevResult as any)?.output,
@@ -709,6 +711,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           : undefined,
       runCount,
       foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
+      validateInputs: workflow.options.validateInputs,
     });
     runtimeContext = Object.fromEntries(rc.entries());
 
@@ -1175,9 +1178,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    const workflow = workflowData.parentWorkflow
-      ? getNestedWorkflow(this.mastra, workflowData.parentWorkflow)
-      : this.mastra.getWorkflow(workflowData.workflowId);
+    let workflow;
+    if (this.mastra.__hasInternalWorkflow(workflowData.workflowId)) {
+      workflow = this.mastra.__getInternalWorkflow(workflowData.workflowId);
+    } else if (workflowData.parentWorkflow) {
+      workflow = getNestedWorkflow(this.mastra, workflowData.parentWorkflow);
+    } else {
+      workflow = this.mastra.getWorkflow(workflowData.workflowId);
+    }
 
     if (!workflow) {
       return this.errorWorkflow(

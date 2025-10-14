@@ -1,4 +1,4 @@
-import { isUrlSupported } from '@ai-sdk/provider-utils-v5';
+import { isUrlSupported } from '@ai-sdk/provider-utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { fetchWithRetry } from '../../../utils';
 import type { AIV5Type } from '../types';
@@ -100,7 +100,7 @@ export async function downloadAssetsFromMessages({
         downloadedFile,
       ): downloadedFile is {
         mediaType: string | undefined;
-        data: Uint8Array;
+        data: Uint8Array<ArrayBuffer>;
       } => downloadedFile?.data != null,
     )
     .map(({ data, mediaType }, index) => [filesToDownload?.[index]?.url.toString(), { data, mediaType }]);

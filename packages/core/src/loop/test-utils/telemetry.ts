@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, mockValues } from 'ai-v5/test';
+import { convertArrayToReadableStream, mockValues } from 'ai/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
@@ -31,6 +31,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
         _internal: {
           now: mockValues(0, 100, 500),
         },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -75,6 +76,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
           tracer,
         },
         _internal: { now: mockValues(0, 100, 500) },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -124,6 +126,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
         messageList,
         telemetry_settings: { isEnabled: true, tracer },
         _internal: { now: mockValues(0, 100, 500) },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -175,6 +178,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
         messageList,
         telemetry_settings: { isEnabled: true, tracer },
         _internal: { now: mockValues(0, 100, 500) },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -251,6 +255,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
           tracer,
         },
         _internal: { now: mockValues(0, 100, 500) },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();

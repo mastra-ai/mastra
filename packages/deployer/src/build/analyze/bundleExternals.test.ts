@@ -4,20 +4,24 @@ import type { DependencyMetadata } from '../types';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { ensureDir, remove, pathExists } from 'fs-extra';
+import { ensureDir, remove, pathExists, writeFile } from 'fs-extra';
 
 // Mock the utilities that bundleExternals depends on
-vi.mock('../utils', () => ({
-  getCompiledDepCachePath: vi.fn((rootPath: string, fileName: string) =>
-    join(rootPath, 'node_modules', '.cache', fileName),
-  ),
-  getPackageRootPath: vi.fn((pkg: string) => {
-    if (pkg.startsWith('@workspace/')) return '/workspace/packages/' + pkg.split('/')[1];
-    if (pkg === 'lodash') return '/node_modules/lodash';
-    if (pkg === 'react') return '/node_modules/react';
-    return null;
-  }),
-}));
+vi.mock('../utils', async importOriginal => {
+  const actual = await importOriginal<typeof import('../utils')>();
+  return {
+    ...actual,
+    getCompiledDepCachePath: vi.fn((rootPath: string, fileName: string) =>
+      join(rootPath, 'node_modules', '.cache', fileName),
+    ),
+    getPackageRootPath: vi.fn((pkg: string) => {
+      if (pkg.startsWith('@workspace/')) return '/workspace/packages/' + pkg.split('/')[1];
+      if (pkg === 'lodash') return '/node_modules/lodash';
+      if (pkg === 'react') return '/node_modules/react';
+      return null;
+    }),
+  };
+});
 
 vi.mock('../plugins/esbuild', () => ({
   esbuild: vi.fn(() => ({ name: 'esbuild-mock' })),
@@ -293,7 +297,7 @@ export { default } from 'full-lib';`,
     expect(result.optimizedDependencyEntries.get('empty-lib')).toBeUndefined();
   });
 
-  it('should handle workspace packages', () => {
+  it('should handle workspace packages (dev)', () => {
     const depsToOptimize = new Map<string, DependencyMetadata>([
       [
         '@workspace/internal-lib',
@@ -309,12 +313,50 @@ export { default } from 'full-lib';`,
       workspaceRoot: '/workspace',
       projectRoot: '/workspace/app',
       outputDir: '/workspace/app/.mastra/.build',
+      bundlerOptions: {
+        isDev: true,
+      },
     });
 
     const compiledDepCachePath = `packages/internal-lib/node_modules/.cache/@workspace-internal-lib`;
     expect(result.fileNameToDependencyMap.get(compiledDepCachePath)).toBe('@workspace/internal-lib');
     expect(result.optimizedDependencyEntries.get('@workspace/internal-lib')).toEqual({
       name: compiledDepCachePath,
+      virtual: "export { internalUtil, default } from '@workspace/internal-lib';",
+    });
+  });
+
+  it('should handle workspace packages (build)', () => {
+    const depsToOptimize = new Map<string, DependencyMetadata>([
+      [
+        '@workspace/internal-lib',
+        {
+          exports: ['internalUtil', 'default'],
+          rootPath: '/workspace/packages/internal-lib',
+          isWorkspace: true,
+        },
+      ],
+    ]);
+
+    const result = createVirtualDependencies(depsToOptimize, {
+      workspaceRoot: '/workspace',
+      projectRoot: '/workspace/app',
+      outputDir: '/workspace/app/.mastra/.build',
+      bundlerOptions: {
+        isDev: false,
+      },
+    });
+
+    const entryName = result.optimizedDependencyEntries.get('@workspace/internal-lib')?.name;
+    expect(entryName).not.toContain('node_modules/.cache');
+    expect(entryName).toBe('app/.mastra/.build/@workspace-internal-lib');
+
+    expect(result.fileNameToDependencyMap.get('app/.mastra/.build/@workspace-internal-lib')).toBe(
+      '@workspace/internal-lib',
+    );
+
+    expect(result.optimizedDependencyEntries.get('@workspace/internal-lib')).toEqual({
+      name: 'app/.mastra/.build/@workspace-internal-lib',
       virtual: "export { internalUtil, default } from '@workspace/internal-lib';",
     });
   });
@@ -333,6 +375,18 @@ describe('bundleExternals', () => {
       await remove(testDir);
     }
   });
+
+  async function createWorkspacePackageJson(packagePath: string, packageName: string) {
+    await ensureDir(packagePath);
+    await writeFile(
+      join(packagePath, 'package.json'),
+      JSON.stringify({
+        name: packageName,
+        version: '1.0.0',
+        main: 'index.js',
+      }),
+    );
+  }
 
   it('should bundle dependencies and return correct structure', async () => {
     const depsToOptimize = new Map<string, DependencyMetadata>([
@@ -371,6 +425,15 @@ describe('bundleExternals', () => {
   });
 
   it('should handle different bundler options configurations', async () => {
+    await writeFile(
+      join(testDir, 'package.json'),
+      JSON.stringify({
+        name: 'react',
+        version: '18.0.0',
+        main: 'index.js',
+      }),
+    );
+
     const depsToOptimize = new Map<string, DependencyMetadata>([
       [
         'react',
@@ -404,7 +467,95 @@ describe('bundleExternals', () => {
     expect(result2.fileNameToDependencyMap.size).toBe(1);
   });
 
+  it('should handle isDev: false explicitly and use standard bundling behavior', async () => {
+    const depsToOptimize = new Map<string, DependencyMetadata>([
+      [
+        'react',
+        {
+          exports: ['default', 'useState'],
+          rootPath: '/node_modules/react',
+          isWorkspace: false,
+        },
+      ],
+    ]);
+
+    const result = await bundleExternals(depsToOptimize, testDir, {
+      projectRoot: testDir,
+      bundlerOptions: {
+        isDev: false,
+        externals: ['some-external'],
+        transpilePackages: ['some-package'],
+      },
+    });
+
+    expect(result.output).toBeDefined();
+    expect(result.fileNameToDependencyMap.size).toBe(1);
+    expect(Array.from(result.fileNameToDependencyMap.values())[0]).toBe('react');
+
+    const chunks = result.output.filter(o => o.type === 'chunk');
+    chunks.forEach(chunk => {
+      expect(chunk.fileName).toMatch(/\.mjs$/);
+    });
+
+    expect(typeof result.usedExternals).toBe('object');
+    expect(result.usedExternals).not.toBeInstanceOf(Map);
+  });
+
+  it('should handle workspace packages with isDev: false', async () => {
+    const workspaceMap = new Map<string, WorkspacePackageInfo>([
+      [
+        '@workspace/utils',
+        {
+          location: join(testDir, 'packages', 'utils'),
+          dependencies: {},
+          version: '1.0.0',
+        },
+      ],
+    ]);
+
+    const depsToOptimize = new Map<string, DependencyMetadata>([
+      [
+        '@workspace/utils',
+        {
+          exports: ['helper', 'default'],
+          rootPath: join(testDir, 'packages', 'utils'),
+          isWorkspace: true,
+        },
+      ],
+    ]);
+
+    const result = await bundleExternals(depsToOptimize, testDir, {
+      workspaceRoot: testDir,
+      projectRoot: join(testDir, 'app'),
+      workspaceMap,
+      bundlerOptions: {
+        isDev: false,
+      },
+    });
+
+    expect(result.output).toBeDefined();
+    expect(result.fileNameToDependencyMap).toBeInstanceOf(Map);
+
+    const fileNames = Array.from(result.fileNameToDependencyMap.keys());
+    fileNames.forEach(fileName => {
+      expect(fileName).not.toContain('node_modules/.cache');
+    });
+
+    const dependencyValues = Array.from(result.fileNameToDependencyMap.values());
+    expect(dependencyValues).toContain('@workspace/utils');
+  });
+
   it('should handle workspace packages correctly', async () => {
+    await createWorkspacePackageJson(join(testDir, 'packages', 'utils'), '@workspace/utils');
+    await writeFile(
+      join(testDir, 'package.json'),
+      JSON.stringify({
+        name: 'lodash',
+        version: '4.17.21',
+        main: 'index.js',
+      }),
+    );
+
     const workspaceMap = new Map<string, WorkspacePackageInfo>([
       [
         '@workspace/utils',

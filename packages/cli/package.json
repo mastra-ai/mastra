@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.13.2-alpha.1",
+  "version": "0.15.2-alpha.0",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -91,8 +91,8 @@
     "@types/node": "^20.19.0",
     "@types/shell-quote": "^1.7.5",
     "@types/tcp-port-used": "^1.0.4",
-    "cpy-cli": "^5.0.0",
-    "eslint": "^9.35.0",
+    "cpy-cli": "^6.0.0",
+    "eslint": "^9.36.0",
     "memfs": "^4.17.2",
     "rollup": "^4.50.2",
     "tsup": "^8.5.0",
@@ -101,7 +101,7 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.17.0-0 <0.19.0-0",
+    "@mastra/core": ">=0.21.0-0 <0.22.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",
