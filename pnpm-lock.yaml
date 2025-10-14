@@ -1229,8 +1229,8 @@ importers:
         specifier: ^1.1.1
         version: 1.1.1
       posthog-node:
-        specifier: 4.18.0
-        version: 4.18.0
+        specifier: 5.9.5
+        version: 5.9.5
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
@@ -1577,8 +1577,8 @@ importers:
         specifier: ^13.0.0
         version: 13.1.1
       posthog-node:
-        specifier: ^4.18.0
-        version: 4.18.0
+        specifier: ^5.9.5
+        version: 5.9.5
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
@@ -14476,9 +14476,9 @@ packages:
       rrweb-snapshot:
         optional: true
 
-  posthog-node@4.18.0:
-    resolution: {integrity: sha512-XROs1h+DNatgKh/AlIlCtDxWzwrKdYDb2mOs58n4yN8BkGN9ewqeQwG5ApS4/IzwCb7HPttUkOVulkYatd2PIw==}
-    engines: {node: '>=15.0.0'}
+  posthog-node@5.9.5:
+    resolution: {integrity: sha512-Rv82jMVhnxlBNf8wDbP+iAJdZrhU0aHul0LaFrQ/JGxxDiK3EkclIqr+QUwA9CulleTtXf6AIFz22tLvbVs/HA==}
+    engines: {node: '>=20'}
 
   preact@10.27.2:
     resolution: {integrity: sha512-5SYSgFKSyhCbk6SrXyMpqjb5+MQBgfvEKE/OC+PujcY34sOpqtr+0AZQtPYx5IA6VxynQ7rUPCtKzyovpj9Bpg==}
@@ -28974,11 +28974,9 @@ snapshots:
       preact: 10.27.2
       web-vitals: 4.2.4
 
-  posthog-node@4.18.0:
+  posthog-node@5.9.5:
     dependencies:
-      axios: 1.12.2(debug@4.4.3)
-    transitivePeerDependencies:
-      - debug
+      '@posthog/core': 1.2.4
 
   preact@10.27.2: {}
 
