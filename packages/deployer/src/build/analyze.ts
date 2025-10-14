@@ -13,6 +13,7 @@ import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
 import { getPackageInfo } from 'local-pkg';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { findNativePackageModule } from './utils';
 
 /**
  * Validates the bundled output by attempting to import each generated module.
@@ -76,7 +77,7 @@ async function validateOutput(
       }
     } catch (err) {
       if (err instanceof Error && err.message.includes('Error: No native build was found for ')) {
-        const moduleName = file.moduleIds[file.moduleIds.length - 2];
+        const moduleName = findNativePackageModule(file.moduleIds);
 
         if (!moduleName) {
           logger.debug(`Could not determine the module name for file ${file.fileName}`);
@@ -101,8 +102,7 @@ export const mastra = new Mastra({
   bundler: {
     externals: ["${packageName}"],
   }
-})
-            `,
+})`,
           });
         }
       }

@@ -231,8 +231,7 @@ export const mastra = new Mastra({
   bundler: {
     externals: ["${packageName}"],
   }
-})
-              `,
+})`,
           });
         },
       },
