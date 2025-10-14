@@ -83,7 +83,11 @@ export const testWorkflow = createWorkflow({
   }),
   outputSchema: z.object({
     output: z.string()
-  })
+  }),
+  options: {
+    // enables runtime validation of inputs and applies zod default values.
+    validateInputs: true, 
+  }
 })
   .then(step1)
   .commit();
@@ -168,6 +172,29 @@ export const mastra = new Mastra({
     name: "Mastra",
     level: "info"
   })
+});
+```
+
+## Using `RuntimeContext`
+
+Use `RuntimeContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const stepOne = createStep({
+  // ...
+  execute: async ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+
+    const maxResults = userTier === "enterprise"
+      ? 1000
+      : 50;
+
+    return { maxResults };
+  }
 });
 ```
 

@@ -237,9 +237,19 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                * Need to update controller on each new LLM execution step since each step has its own TransformStream.
                */
               if (!processorStates.has(STRUCTURED_OUTPUT_PROCESSOR_NAME)) {
-                const structuredOutputProcessorState = new ProcessorState<OUTPUT>(STRUCTURED_OUTPUT_PROCESSOR_NAME);
-                structuredOutputProcessorState.customState = { controller };
-                processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
+                const processorIndex = processorRunner.outputProcessors.findIndex(
+                  p => p.name === STRUCTURED_OUTPUT_PROCESSOR_NAME,
+                );
+                // Only create the state if the processor actually exists in the list
+                if (processorIndex !== -1) {
+                  const structuredOutputProcessorState = new ProcessorState<OUTPUT>({
+                    processorName: STRUCTURED_OUTPUT_PROCESSOR_NAME,
+                    tracingContext: options.tracingContext,
+                    processorIndex,
+                  });
+                  structuredOutputProcessorState.customState = { controller };
+                  processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
+                }
               } else {
                 // Update controller for new LLM execution step
                 const structuredOutputProcessorState = processorStates.get(STRUCTURED_OUTPUT_PROCESSOR_NAME);
@@ -248,7 +258,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 }
               }
 
-              const { part: processed, blocked, reason } = await processorRunner.processPart(chunk, processorStates);
+              const {
+                part: processed,
+                blocked,
+                reason,
+              } = await processorRunner.processPart(chunk, processorStates, options.tracingContext);
               if (blocked) {
                 // Emit a tripwire chunk so downstream knows about the abort
                 controller.enqueue({
@@ -565,7 +579,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               try {
                 if (self.processorRunner && !self.#options.isLLMExecutionStep) {
-                  self.messageList = await self.processorRunner.runOutputProcessors(self.messageList);
+                  self.messageList = await self.processorRunner.runOutputProcessors(
+                    self.messageList,
+                    options.tracingContext,
+                  );
                   const outputText = self.messageList.get.response.aiV4
                     .core()
                     .map(m => MessageList.coreContentToString(m.content))

@@ -52,7 +52,7 @@ export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
   const filteredRows = rows.filter(row => row.original.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <>
+    <div>
       <SearchbarWrapper>
         <Searchbar onSearch={setSearch} label="Search workflows" placeholder="Search workflows" />
       </SearchbarWrapper>
@@ -83,7 +83,7 @@ export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
           </Table>
         </ScrollableContainer>
       )}
-    </>
+    </div>
   );
 }
 

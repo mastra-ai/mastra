@@ -34,7 +34,7 @@ Mastra's model router auto-detects environment variables for your chosen provide
 OPENAI_API_KEY=<your-api-key>
 ```
 
-> Mastra supports more than 600 models. Choose from the full list [here](../getting-started/model-providers.mdx).
+> Mastra supports more than 600 models. Choose from the full list [here](/models).
 
 ### Create an agent
 
@@ -314,7 +314,37 @@ const response = await testAgent.generate("Help me organize my day", {
 
 Agents can use tools to go beyond language generation, enabling structured interactions with external APIs and services. Tools allow agents to access data and perform clearly defined operations in a reliable, repeatable way.
 
-See the [using tools](./using-tools.mdx) section for more information.
+```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers
+export const testAgent = new Agent({
+  // ...
+  tools: { testTool }
+});
+```
+
+> See [Using Tools](./using-tools.mdx) for more information.
+
+## Using `RuntimeContext`
+
+Use `RuntimeContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+
+```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+export const testAgent = new Agent({
+  // ...
+  model: ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+
+    return userTier === "enterprise"
+      ? openai("gpt-4o-mini")
+      : openai("gpt-4.1-nano");
+  }
+});
+```
+
+> See [Runtime Context](../server-db/runtime-context.mdx) for more information.
 
 ## Testing agents locally
 There are two ways to run and test agents.
@@ -357,5 +387,5 @@ npx tsx src/test-agent.ts
 
 - [Using Tools](./using-tools.mdx)
 - [Agent Memory](./agent-memory.mdx)
-- [Runtime Context](./runtime-context.mdx)
+- [Runtime Context](../../examples/agents/runtime-context.mdx)
 - [Calling Agents](../../examples/agents/calling-agents.mdx)
