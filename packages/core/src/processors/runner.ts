@@ -384,17 +384,7 @@ export class ProcessorRunner {
     }
 
     if (processableMessages.length > 0) {
-      // Process messages based on their actual roles
-      for (const message of processableMessages) {
-        if (message.role === 'system') {
-          const coreMessage = convertMessages([message]).to('AIV4.Core')[0];
-          messageList.addSystem(coreMessage!);
-        } else if (message.role === 'user') {
-          messageList.add(message, 'user');
-        } else if (message.role === 'assistant') {
-          messageList.add(message, 'response');
-        }
-      }
+      messageList.add(processableMessages, 'input');
     }
 
     return messageList;

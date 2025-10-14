@@ -656,6 +656,8 @@ export class MessageList {
       | AIV4Type.CoreMessage[]
       | AIV5Type.ModelMessage
       | AIV5Type.ModelMessage[]
+      | MastraMessageV2
+      | MastraMessageV2[]
       | string
       | string[]
       | null,
@@ -702,12 +704,21 @@ export class MessageList {
     return msgs;
   }
 
-  private addOneSystem(message: AIV4Type.CoreMessage | AIV5Type.ModelMessage | string, tag?: string) {
+  private addOneSystem(message: AIV4Type.CoreMessage | AIV5Type.ModelMessage | MastraMessageV2 | string, tag?: string) {
     if (typeof message === `string`) message = { role: 'system', content: message };
 
-    const coreMessage = MessageList.isAIV4CoreMessage(message)
-      ? message
-      : this.aiV5ModelMessagesToAIV4CoreMessages([message], `system`)[0]!;
+    let coreMessage: AIV4Type.CoreMessage;
+
+    if (MessageList.isAIV4CoreMessage(message)) {
+      coreMessage = message;
+    } else if (MessageList.isMastraMessageV2(message)) {
+      // Convert MastraMessageV2 to CoreMessage format by reusing existing conversion utilities
+      const uiMessage = MessageList.mastraMessageV2ToAIV4UIMessage(message);
+      const coreMessages = AIV4.convertToCoreMessages([uiMessage]);
+      coreMessage = coreMessages[0]!;
+    } else {
+      coreMessage = this.aiV5ModelMessagesToAIV4CoreMessages([message as AIV5Type.ModelMessage], `system`)[0]!;
+    }
 
     if (coreMessage.role !== `system`) {
       throw new Error(
@@ -910,7 +921,11 @@ export class MessageList {
       // In the past system messages were accidentally stored in the db. these should be ignored because memory is not supposed to store system messages.
       if (messageSource === `memory`) return null;
 
-      if (MessageList.isAIV4CoreMessage(message) || MessageList.isAIV5CoreMessage(message))
+      if (
+        MessageList.isAIV4CoreMessage(message) ||
+        MessageList.isAIV5CoreMessage(message) ||
+        MessageList.isMastraMessageV2(message)
+      )
         return this.addSystem(message);
 
       // if we didn't add the message and we didn't ignore this intentionally, then it's a problem!
