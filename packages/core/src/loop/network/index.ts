@@ -1,7 +1,7 @@
 import z from 'zod';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
-import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
+import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraMessageV2, MessageListInput } from '../../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
@@ -243,7 +243,7 @@ export async function createNetworkLoop({
                           }
                       `;
 
-        completionResult = await tryGenerateWithJsonFallback(routingAgent, completionPrompt, {
+        const completionStream = await tryStreamWithJsonFallback(routingAgent, completionPrompt, {
           structuredOutput: {
             schema: completionSchema,
           },
@@ -256,6 +256,28 @@ export async function createNetworkLoop({
           },
           ...routingAgentOptions,
         });
+
+        let currentText = '';
+        let currentTextIdx = 0;
+        for await (const chunk of completionStream.objectStream) {
+          if (chunk?.finalResult) {
+            currentText = chunk.finalResult;
+          }
+
+          const currentSlice = currentText.slice(currentTextIdx);
+          if (chunk?.isComplete && currentSlice.length) {
+            await writer.write({
+              type: 'routing-agent-text-delta',
+              payload: {
+                text: currentSlice,
+              },
+              from: ChunkFrom.NETWORK,
+            });
+            currentTextIdx = currentText.length;
+          }
+        }
+
+        completionResult = await completionStream.getFullOutput();
 
         if (completionResult?.object?.isComplete) {
           const endPayload = {
@@ -499,6 +521,7 @@ export async function createNetworkLoop({
         type: 'agent-execution-end',
         payload: endPayload,
         from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return {
@@ -651,12 +674,14 @@ export async function createNetworkLoop({
         result: finalResult,
         isComplete: false,
         iteration: inputData.iteration,
+        name: wf.name,
       };
 
       await writer?.write({
         type: 'workflow-execution-end',
         payload: endPayload,
         from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return endPayload;
@@ -814,6 +839,7 @@ export async function createNetworkLoop({
         type: 'tool-execution-end',
         payload: endPayload,
         from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return endPayload;
