@@ -1,18 +1,20 @@
 import { analytics } from '../..';
 import type { CLI_ORIGIN } from '../../analytics';
 import { init } from '../init/init';
+import type { Editor } from '../init/mcp-docs-server-install';
 import { checkAndInstallCoreDeps, checkForPkgJson, interactivePrompt } from '../init/utils';
+import type { Components, LLMProvider } from '../init/utils';
 
 const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
 
 interface InitArgs {
   default?: boolean;
   dir?: string;
-  components?: string;
-  llm?: string;
+  components?: Components[];
+  llm?: LLMProvider;
   llmApiKey?: string;
   example?: boolean;
-  mcp?: string;
+  mcp?: Editor;
 }
 
 export const initProject = async (args: InitArgs) => {
@@ -41,21 +43,18 @@ export const initProject = async (args: InitArgs) => {
           components: ['agents', 'tools', 'workflows'],
           llmProvider: 'openai',
           addExample: true,
-          // @ts-expect-error: TODO - Fix this
           configureEditorWithDocsMCP: args.mcp,
         });
         return;
       }
 
-      const componentsArr = args.components ? args.components.split(',') : [];
+      const componentsArr = args.components ? args.components : [];
       await init({
         directory: args.dir,
         components: componentsArr,
-        // @ts-expect-error: TODO - Fix this
         llmProvider: args.llm,
         addExample: args.example,
         llmApiKey: args.llmApiKey,
-        // @ts-expect-error: TODO - Fix this
         configureEditorWithDocsMCP: args.mcp,
       });
       return;

@@ -1,19 +1,21 @@
 import { analytics } from '../..';
 import type { CLI_ORIGIN } from '../../analytics';
 import { create } from '../create/create';
+import type { Editor } from '../init/mcp-docs-server-install';
+import type { Components, LLMProvider } from '../init/utils';
 
 const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
 
 interface CreateProjectArgs {
   default?: boolean;
-  components?: string;
-  llm?: string;
+  components?: Components[];
+  llm?: LLMProvider;
   llmApiKey?: string;
   example?: boolean;
   timeout?: string | boolean;
   dir?: string;
   projectName?: string;
-  mcp?: string;
+  mcp?: Editor;
   template?: string | boolean;
 }
 
@@ -30,22 +32,19 @@ export const createProject = async (projectNameArg: string | undefined, args: Cr
           llmProvider: 'openai',
           addExample: true,
           timeout,
-          // @ts-expect-error: TODO - Fix this
           mcpServer: args.mcp,
           template: args.template,
         });
         return;
       }
       await create({
-        components: args.components ? args.components.split(',') : [],
-        // @ts-expect-error: TODO - Fix this
+        components: args.components ? args.components : [],
         llmProvider: args.llm,
         addExample: args.example,
         llmApiKey: args.llmApiKey,
         timeout,
         projectName,
         directory: args.dir,
-        // @ts-expect-error: TODO - Fix this
         mcpServer: args.mcp,
         template: args.template,
       });

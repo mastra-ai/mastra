@@ -14,6 +14,8 @@ import { lintProject } from './commands/actions/lint-project';
 import { listScorers } from './commands/actions/list-scorers';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
+import { COMPONENTS, LLMProvider } from './commands/init/utils';
+import { parseComponents, parseLlmProvider, parseMcp } from './commands/utils';
 
 const mastraPkg = pkgJson as PackageJson;
 export const version = mastraPkg.version;
@@ -47,8 +49,12 @@ program
   .command('create [project-name]')
   .description('Create a new Mastra project')
   .option('--default', 'Quick start with defaults(src, OpenAI, examples)')
-  .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
-  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, cerebras or mistral)')
+  .option(
+    '-c, --components <components>',
+    `Comma-separated list of components (${COMPONENTS.join(', ')})`,
+    parseComponents,
+  )
+  .option('-l, --llm <model-provider>', `Default model provider (${LLMProvider.join(', ')})`, parseLlmProvider)
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
   .option('-n, --no-example', 'Do not include example code')
@@ -58,7 +64,7 @@ program
     '-p, --project-name <string>',
     'Project name that will be used in package.json and as the project directory name.',
   )
-  .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)')
+  .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)', parseMcp)
   .option(
     '--template [template-name]',
     'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
@@ -70,12 +76,16 @@ program
   .description('Initialize Mastra in your project')
   .option('--default', 'Quick start with defaults(src, OpenAI, examples)')
   .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/)')
-  .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
-  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google or cerebras))')
+  .option(
+    '-c, --components <components>',
+    `Comma-separated list of components (${COMPONENTS.join(', ')})`,
+    parseComponents,
+  )
+  .option('-l, --llm <model-provider>', `Default model provider (${LLMProvider.join(', ')})`, parseLlmProvider)
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
   .option('-n, --no-example', 'Do not include example code')
-  .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)')
+  .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)', parseMcp)
   .action(initProject);
 
 program
