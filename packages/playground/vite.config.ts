@@ -22,8 +22,9 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
-      process: {},
-      'process.env.VSCODE_TEXTMATE_DEBUG': JSON.stringify(process.env.VSCODE_TEXTMATE_DEBUG || ''),
+      process: {
+        env: {},
+      },
     },
   };
 
