@@ -11,17 +11,20 @@ import { getWorkspaceInformation, type WorkspacePackageInfo } from '../bundler/w
 import type { DependencyMetadata } from './types';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
+import { getPackageInfo } from 'local-pkg';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { findNativePackageModule } from './utils';
 
 /**
  * Validates the bundled output by attempting to import each generated module.
- * Tracks invalid chunks and external dependencies that couldn't be bundled.
+ * Tracks external dependencies that couldn't be bundled.
  *
  * @param output - Bundle output from rollup
  * @param reverseVirtualReferenceMap - Map to resolve virtual module names back to original deps
  * @param outputDir - Directory containing the bundled files
  * @param logger - Logger instance for debugging
  * @param workspaceMap - Map of workspace packages that gets directly passed through for later consumption
- * @returns Analysis result containing invalid chunks and dependency mappings
+ * @returns Analysis result containing dependency mappings
  */
 async function validateOutput(
   {
@@ -42,7 +45,6 @@ async function validateOutput(
   logger: IMastraLogger,
 ) {
   const result = {
-    invalidChunks: new Set<string>(),
     dependencies: new Map<string, string>(),
     externalDependencies: new Set<string>(),
     workspaceMap,
@@ -74,12 +76,35 @@ async function validateOutput(
         await validate(join(projectRoot, file.fileName));
       }
     } catch (err) {
-      result.invalidChunks.add(file.fileName);
-      if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
-        const reference = reverseVirtualReferenceMap.get(file.name)!;
-        const dep = reference.startsWith('@') ? reference.split('/').slice(0, 2).join('/') : reference.split('/')[0];
+      if (err instanceof Error && err.message.includes('Error: No native build was found for ')) {
+        const moduleName = findNativePackageModule(file.moduleIds);
 
-        result.externalDependencies.add(dep!);
+        if (!moduleName) {
+          logger.debug(`Could not determine the module name for file ${file.fileName}`);
+          continue;
+        }
+
+        const pkgInfo = await getPackageInfo(moduleName);
+        const packageName = pkgInfo?.packageJson?.name;
+
+        if (packageName) {
+          throw new MastraError({
+            id: 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD',
+            domain: ErrorDomain.DEPLOYER,
+            category: ErrorCategory.USER,
+            details: {
+              importFile: moduleName,
+              packageName: packageName,
+            },
+            text: `We found a binary dependency in your bundle. Please add \`${packageName}\` to your externals.
+
+export const mastra = new Mastra({
+  bundler: {
+    externals: ["${packageName}"],
+  }
+})`,
+          });
+        }
       }
     }
   }
