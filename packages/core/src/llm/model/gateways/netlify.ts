@@ -40,7 +40,6 @@ export class NetlifyGateway extends MastraModelGateway {
   private tokenCache = new InMemoryServerCache();
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
-    console.info('Fetching providers from Netlify AI Gateway...');
     const response = await fetch('https://api.netlify.com/api/v1/ai-gateway/providers');
     if (!response.ok) {
       throw new Error(`Failed to fetch from Netlify: ${response.statusText}`);
@@ -60,7 +59,6 @@ export class NetlifyGateway extends MastraModelGateway {
         netlify.models.push(`${providerId}/${model}`);
       }
     }
-    console.info(`Found ${Object.keys(data.providers).length} models via Netlify Gateway`);
     return { netlify };
   }
 
