@@ -112,7 +112,7 @@ export function createToolCallStep<
                 args: inputData.args,
               },
             });
-            await suspend({
+            return suspend({
               requireToolApproval: {
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,

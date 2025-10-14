@@ -17,6 +17,7 @@ import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
 
 import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
+import { ToolCallProvider } from './tool-call-provider';
 
 const handleFinishReason = (finishReason: string) => {
   switch (finishReason) {
@@ -165,6 +166,8 @@ export function MastraRuntimeProvider({
     cancelRun,
     isRunning: isRunningStream,
     setMessages,
+    approveToolCall,
+    declineToolCall,
   } = useChat({
     agentId,
     initializeMessages: () => initialMessages || [],
@@ -187,6 +190,7 @@ export function MastraRuntimeProvider({
     chatWithGenerate,
     chatWithNetwork,
     providerOptions,
+    requireToolApproval,
   } = settings?.modelSettings ?? {};
   const toolCallIdToName = useRef<Record<string, string>>({});
 
@@ -206,6 +210,7 @@ export function MastraRuntimeProvider({
     instructions,
     providerOptions,
     maxSteps,
+    requireToolApproval,
   };
 
   const baseClient = useMastraClient();
@@ -683,9 +688,19 @@ export function MastraRuntimeProvider({
     onNew,
     onCancel,
     adapters: isReady ? adapters : undefined,
+    extras: {
+      approveToolCall,
+      declineToolCall,
+    },
   });
 
   if (!isReady) return null;
 
-  return <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>;
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <ToolCallProvider approveToolcall={approveToolCall} declineToolcall={declineToolCall}>
+        {children}
+      </ToolCallProvider>
+    </AssistantRuntimeProvider>
+  );
 }

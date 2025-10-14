@@ -8,6 +8,7 @@ import { LoadingBadge } from './badges/loading-badge';
 import { AgentBadge } from './badges/agent-badge';
 import { MastraUIMessage } from '@mastra/react';
 import { ToolApproval } from './tool-approval';
+import { useToolCall } from '@/services/tool-call-provider';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
   metadata?: MastraUIMessage['metadata'];
@@ -29,12 +30,14 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, ...props }: ToolF
   useWorkflowStream(result);
   const { data: workflow, isLoading } = useWorkflow(toolName);
 
+  const { approveToolcall, declineToolcall } = useToolCall();
+
   const handleApprove = () => {
-    console.log('approve');
+    approveToolcall();
   };
 
   const handleDecline = () => {
-    console.log('decline');
+    declineToolcall();
   };
 
   const isAgent = metadata?.mode === 'network' && metadata.from === 'AGENT';

@@ -14,6 +14,7 @@ export const weatherInfo = createTool({
     city: z.string(),
   }),
   execute: async ({ context }) => {
+    console.log('context==', context);
     return {
       city: context.city,
       weather: 'sunny',
@@ -43,6 +44,7 @@ export const chefModelV2Agent = new Agent({
 
   tools: {
     weatherInfo,
+    cookingTool,
   },
   workflows: {
     myWorkflow,

@@ -45,6 +45,7 @@ export interface ModelSettings {
   chatWithGenerateLegacy?: boolean;
   chatWithGenerate?: boolean;
   chatWithNetwork?: boolean;
+  requireToolApproval?: boolean;
 }
 
 export interface AgentSettingsType {

@@ -157,6 +157,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
       instructions,
       providerOptions,
       maxSteps,
+      requireToolApproval,
     } = modelSettings || {};
 
     setIsRunning(true);
@@ -189,6 +190,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
       runtimeContext,
       ...(threadId ? { threadId, resourceId: agentId } : {}),
       providerOptions: providerOptions as any,
+      requireToolApproval,
     });
 
     _onChunk.current = onChunk;
@@ -272,6 +274,19 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
     await handleStreamResponse(response, onChunk);
   };
 
+  const declineToolCall = async () => {
+    const onChunk = _onChunk.current;
+    const currentRunId = _currentRunId.current;
+
+    if (!currentRunId)
+      return console.info('[declineToolCall] declineToolCall can only be called after a stream has started');
+
+    const agent = baseClient.getAgent(agentId);
+    const response = await agent.declineToolCall({ runId: currentRunId });
+
+    await handleStreamResponse(response, onChunk);
+  };
+
   const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {
     const nextMessage: Omit<CoreUserMessage, 'id'> = { role: 'user', content: [{ type: 'text', text: args.message }] };
     const messages = args.coreUserMessages ? [nextMessage, ...args.coreUserMessages] : [nextMessage];
@@ -293,6 +308,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
     isRunning,
     messages,
     approveToolCall,
+    declineToolCall,
     cancelRun: handleCancelRun,
   };
 };

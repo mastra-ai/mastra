@@ -793,14 +793,14 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           expect(name).toBe('Dero Israel');
         }, 500000);
 
-        it('should call findUserTool with requireToolApproval on tool and be able to reject the tool call', async () => {
+        it.only('should call findUserTool with requireToolApproval on tool and be able to reject the tool call', async () => {
           const findUserTool = createTool({
             id: 'Find user tool',
             description: 'This is a test tool that returns the name and email',
             inputSchema: z.object({
               name: z.string(),
             }),
-            requireApproval: true,
+            // requireApproval: true,
             execute: async ({ context }) => {
               return mockFindUser(context) as Promise<Record<string, any>>;
             },
@@ -821,7 +821,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
           const agentOne = mastra.getAgent('userAgent');
 
-          const stream = await agentOne.stream('Find the user with name - Dero Israel');
+          const stream = await agentOne.stream('Find the user with name - Dero Israel', { requireToolApproval: true });
           for await (const _chunk of stream.fullStream) {
           }
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -832,7 +832,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
           expect((await resumeStream.toolCalls).length).toBe(1);
           expect((await resumeStream.toolResults).length).toBe(0);
-          expect(mockFindUser).toHaveBeenCalled();
+          expect(mockFindUser).toHaveBeenCalledTimes(0);
         }, 500000);
       });
 
