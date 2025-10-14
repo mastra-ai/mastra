@@ -167,7 +167,7 @@ format.
 ### Manual Stream Transformations
 To manually transform Mastra streams to AI SDK compatible format, leverage the `toAISdkFormat` util
 
-```typescript filename="app/api/chat/route.ts" showLineNumbers copy
+```typescript filename="app/api/chat/route.ts" copy {3,12}
   import { mastra } from "../../mastra";
   import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
   import {toAISdkFormat} from '@mastra/ai-sdk'
