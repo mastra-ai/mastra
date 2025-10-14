@@ -199,7 +199,7 @@ const secondNavigation: NavSection = {
     },
     {
       name: 'Community',
-      url: 'https://discord.gg/mastra',
+      url: 'https://discord.gg/BTYqqHKUrf',
       icon: <MessagesSquareIcon />,
     },
   ],
