@@ -1,7 +1,4 @@
-import React from 'react';
-
 import { AppSidebar } from './ui/app-sidebar';
-/// import { AppSidebar } from './ui/app-sidebar-cloud';
 import { Toaster } from './ui/sonner';
 import { ThemeProvider } from './ui/theme-provider';
 import { MainSidebarProvider, TooltipProvider } from '@mastra/playground-ui';

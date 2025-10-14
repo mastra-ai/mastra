@@ -16,9 +16,9 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
   return (
     <div
       className={cn(
-        'flex flex-col px-[1rem] pb-[1rem] relative overflow-y-auto',
+        'flex flex-col h-full px-[1rem] pb-[1rem] relative overflow-y-auto',
         {
-          'lg:min-w-[12rem] xl:min-w-[13rem] 2xl:min-w-[14rem] 3xl:min-w-[15rem] 4xl:min-w-[16rem]': !isCollapsed,
+          'lg:min-w-[13rem] xl:min-w-[14rem] 2xl:min-w-[15rem] 3xl:min-w-[16rem] 4xl:min-w-[17rem]': !isCollapsed,
         },
         className,
       )}

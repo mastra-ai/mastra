@@ -119,18 +119,7 @@ export const LogoWithoutText = (props: { className?: string }) => (
 
 const mainNavigation: NavSection[] = [
   {
-    key: 'home',
-    links: [
-      {
-        name: 'Welcome',
-        url: '/',
-        icon: <HomeIcon />,
-      },
-    ],
-  },
-  {
     key: 'main',
-    separator: true,
     links: [
       {
         name: 'Agents',

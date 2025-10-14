@@ -32,6 +32,7 @@ export function MainSidebarNavLink({
   const { Link } = useLinkComponent();
   const isDefaultState = state === 'default';
   const isFeatured = link?.variant === 'featured';
+  const linkParams = link?.url?.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {};
 
   return (
     <li
@@ -53,7 +54,7 @@ export function MainSidebarNavLink({
       )}
     >
       {link ? (
-        <Link href={link.url}>
+        <Link href={link.url} {...linkParams}>
           {isDefaultState ? (
             <>{link.icon && link.icon}</>
           ) : (
