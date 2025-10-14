@@ -58,7 +58,7 @@
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "ts-jest": "^29.3.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   },
   "version": "0.0.1",
   "pnpm": {
