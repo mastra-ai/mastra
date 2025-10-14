@@ -13,6 +13,9 @@ const meta = {
   tools: {
     title: "Tools",
   },
+  processors: {
+    title: "Processors",
+  },
   workflows_legacy: {
     title: "Workflows (Legacy)",
     display: "hidden",
