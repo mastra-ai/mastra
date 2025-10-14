@@ -15,6 +15,7 @@ import { SpanKind } from '@opentelemetry/api';
 import type { Attributes } from '@opentelemetry/api';
 import type { InstrumentationScope } from '@opentelemetry/core';
 import type { Resource } from '@opentelemetry/resources';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 import { MastraReadableSpan } from './mastra-span.js';
 
 // Map Mastra span types to OpenTelemetry span kinds following OTEL conventions
@@ -31,6 +32,30 @@ const SPAN_KIND_MAPPING: Partial<Record<AISpanType, SpanKind>> = {
   [AISpanType.AGENT_RUN]: SpanKind.SERVER,
   [AISpanType.WORKFLOW_RUN]: SpanKind.SERVER,
 };
+
+/**
+ * Interface for converter classes that convert a ReadableSpan to a ReadableSpan
+ *
+ * Useful for pre-processing ReadableSpans before they are exported.
+ * For example, adding additional attributes or converting between different semantic conventions.
+ */
+export abstract class ReadableSpanConverterInterface {
+  resource?: Resource;
+  constructor(resource?: Resource) {
+    this.init(resource);
+  }
+  /**
+   * Initialize the converter with a resource
+   * @param resource The resource to be attached to the ReadableSpan
+   */
+  abstract init(resource?: Resource): void;
+  /**
+   * Convert a ReadableSpan to a ReadableSpan
+   * @param span The ReadableSpan to convert
+   * @returns The converted ReadableSpan
+   */
+  abstract convertSpan(span: ReadableSpan): ReadableSpan;
+}
 
 export class SpanConverter {
   private resource?: Resource;

@@ -20,6 +20,10 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./span-converter": {
+      "types": "./dist/span-converter.d.ts",
+      "default": "./dist/span-converter.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

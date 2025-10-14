@@ -8,7 +8,7 @@ import { ConsoleLogger } from '@mastra/core/logger';
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import type { SpanExporter } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
@@ -19,6 +19,7 @@ import {
 
 import { loadExporter } from './loadExporter.js';
 import { resolveProviderConfig } from './provider-configs.js';
+import type { ReadableSpanConverterInterface } from './span-converter.js';
 import { SpanConverter } from './span-converter.js';
 import type { OtelExporterConfig } from './types.js';
 
@@ -26,6 +27,7 @@ export class OtelExporter implements AITracingExporter {
   private config: OtelExporterConfig;
   private tracingConfig?: TracingConfig;
   private spanConverter: SpanConverter;
+  private additionalSpanConverters: InstanceType<typeof ReadableSpanConverterInterface>[];
   private processor?: BatchSpanProcessor;
   private exporter?: SpanExporter;
   private isSetup: boolean = false;
@@ -37,6 +39,7 @@ export class OtelExporter implements AITracingExporter {
   constructor(config: OtelExporterConfig) {
     this.config = config;
     this.spanConverter = new SpanConverter();
+    this.additionalSpanConverters = [];
     this.logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
 
     // Set up OpenTelemetry diagnostics if debug mode
@@ -154,8 +157,15 @@ export class OtelExporter implements AITracingExporter {
       );
     }
 
-    // Store the resource for the span converter
+    // Store the resource in the genai span converter
     this.spanConverter = new SpanConverter(resource);
+    // If  additional span converters are provided, initialize them
+    if (Array.isArray(this.config.spanConverters)) {
+      this.additionalSpanConverters = this.config.spanConverters.map(ConverterClass => {
+        ConverterClass.init(resource);
+        return ConverterClass;
+      });
+    }
 
     // Always use BatchSpanProcessor for production
     // It queues spans and exports them in batches for better performance
@@ -201,7 +211,11 @@ export class OtelExporter implements AITracingExporter {
 
     try {
       // Convert the span to OTEL format
-      const readableSpan = this.spanConverter.convertSpan(span);
+      let readableSpan: ReadableSpan | undefined = this.spanConverter.convertSpan(span);
+      // Apply additional span converters in series
+      for (const converter of this.additionalSpanConverters) {
+        readableSpan = converter.convertSpan(readableSpan);
+      }
 
       // Export the span immediately through the processor
       // The processor will handle batching if configured

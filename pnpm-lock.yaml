@@ -765,6 +765,52 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@20.19.21)(@vitest/ui@3.2.4(vitest@3.2.4))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(lightningcss@1.30.1)(msw@2.11.3(@types/node@20.19.21)(typescript@5.8.3))(terser@5.43.1)
 
+  observability/arize:
+    dependencies:
+      '@arizeai/openinference-genai':
+        specifier: https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-genai@2298
+        version: https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-genai@2298(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.1.0(@opentelemetry/api@1.9.0))(@opentelemetry/semantic-conventions@1.37.0)
+      '@mastra/otel-exporter':
+        specifier: workspace:*
+        version: link:../otel-exporter
+      '@opentelemetry/exporter-trace-otlp-proto':
+        specifier: ^0.205.0
+        version: 0.205.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resources':
+        specifier: ^2.1.0
+        version: 2.1.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-trace-base':
+        specifier: ^2.1.0
+        version: 2.1.0(@opentelemetry/api@1.9.0)
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@microsoft/api-extractor':
+        specifier: ^7.52.8
+        version: 7.52.8(@types/node@20.19.21)
+      '@types/node':
+        specifier: ^20.19.21
+        version: 20.19.21
+      eslint:
+        specifier: ^9.36.0
+        version: 9.36.0(jiti@2.6.0)
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.21))(jiti@2.6.0)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.8.3)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.8.3
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.21)(@vitest/ui@3.2.4)(jiti@2.6.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(lightningcss@1.30.1)(msw@2.11.3(@types/node@20.19.21)(typescript@5.8.3))(terser@5.43.1)(tsx@4.20.6)(yaml@2.8.1)
+
   observability/braintrust:
     dependencies:
       braintrust:
@@ -4486,6 +4532,23 @@ packages:
     engines: {node: '>= 20'}
     peerDependencies:
       '@types/json-schema': ^7.0.15
+
+  '@arizeai/openinference-core@https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-core@387e894b2e96484fa2e42bef3a5e401ac01717e8':
+    resolution: {tarball: https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-core@387e894b2e96484fa2e42bef3a5e401ac01717e8}
+    version: 1.0.7
+
+  '@arizeai/openinference-genai@https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-genai@2298':
+    resolution: {tarball: https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-genai@2298}
+    version: 0.0.0
+    peerDependencies:
+      '@opentelemetry/api': '>=1.9.0'
+      '@opentelemetry/core': '>=2.0.1'
+      '@opentelemetry/sdk-trace-base': '>=2.0.1'
+      '@opentelemetry/semantic-conventions': '>=1.37.0'
+
+  '@arizeai/openinference-semantic-conventions@https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-semantic-conventions@387e894b2e96484fa2e42bef3a5e401ac01717e8':
+    resolution: {tarball: https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-semantic-conventions@387e894b2e96484fa2e42bef3a5e401ac01717e8}
+    version: 2.1.2
 
   '@asamuzakjp/css-color@3.2.0':
     resolution: {integrity: sha512-K1A6z8tS3XsmCMM86xoWdn7Fkdn9m6RSVtocUrJYIwZnFVkng/PvkEoWtOWmP+Scc6saYWHWZYbndEEXxl24jw==}
@@ -17466,6 +17529,23 @@ snapshots:
       '@types/json-schema': 7.0.15
       js-yaml: 4.1.0
 
+  '@arizeai/openinference-core@https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-core@387e894b2e96484fa2e42bef3a5e401ac01717e8':
+    dependencies:
+      '@arizeai/openinference-semantic-conventions': https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-semantic-conventions@387e894b2e96484fa2e42bef3a5e401ac01717e8
+      '@opentelemetry/api': 1.9.0
+      '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.0)
+
+  '@arizeai/openinference-genai@https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-genai@2298(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.1.0(@opentelemetry/api@1.9.0))(@opentelemetry/semantic-conventions@1.37.0)':
+    dependencies:
+      '@arizeai/openinference-core': https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-core@387e894b2e96484fa2e42bef3a5e401ac01717e8
+      '@arizeai/openinference-semantic-conventions': https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-semantic-conventions@387e894b2e96484fa2e42bef3a5e401ac01717e8
+      '@opentelemetry/api': 1.9.0
+      '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-trace-base': 2.1.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/semantic-conventions': 1.37.0
+
+  '@arizeai/openinference-semantic-conventions@https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-semantic-conventions@387e894b2e96484fa2e42bef3a5e401ac01717e8': {}
+
   '@asamuzakjp/css-color@3.2.0':
     dependencies:
       '@csstools/css-calc': 2.1.4(@csstools/css-parser-algorithms@3.0.5(@csstools/css-tokenizer@3.0.4))(@csstools/css-tokenizer@3.0.4)
@@ -21291,7 +21371,6 @@ snapshots:
   '@opentelemetry/api-logs@0.205.0':
     dependencies:
       '@opentelemetry/api': 1.9.0
-    optional: true
 
   '@opentelemetry/api-logs@0.57.2':
     dependencies:
@@ -21651,7 +21730,6 @@ snapshots:
       '@opentelemetry/otlp-transformer': 0.205.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resources': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-trace-base': 2.1.0(@opentelemetry/api@1.9.0)
-    optional: true
 
   '@opentelemetry/exporter-trace-otlp-proto@0.57.2(@opentelemetry/api@1.9.0)':
     dependencies:
@@ -22394,7 +22472,6 @@ snapshots:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/otlp-transformer': 0.205.0(@opentelemetry/api@1.9.0)
-    optional: true
 
   '@opentelemetry/otlp-exporter-base@0.57.2(@opentelemetry/api@1.9.0)':
     dependencies:
@@ -22448,7 +22525,6 @@ snapshots:
       '@opentelemetry/sdk-metrics': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-trace-base': 2.1.0(@opentelemetry/api@1.9.0)
       protobufjs: 7.5.3
-    optional: true
 
   '@opentelemetry/otlp-transformer@0.57.2(@opentelemetry/api@1.9.0)':
     dependencies:
@@ -22598,7 +22674,6 @@ snapshots:
       '@opentelemetry/api-logs': 0.205.0
       '@opentelemetry/core': 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resources': 2.1.0(@opentelemetry/api@1.9.0)
-    optional: true
 
   '@opentelemetry/sdk-logs@0.57.2(@opentelemetry/api@1.9.0)':
     dependencies:
