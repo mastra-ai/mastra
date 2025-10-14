@@ -1,5 +1,5 @@
-import type { LanguageModelV2FilePart, LanguageModelV2TextPart } from '@ai-sdk/provider';
-import type { DataContent, ImagePart, FilePart } from '@ai-sdk/provider-utils';
+import type { DataContent, ImagePart, FilePart } from '@ai-sdk/provider-utils-v5';
+import type { LanguageModelV2FilePart, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
 import { convertToDataContent, detectMediaType, imageMediaTypeSignatures } from '../../../stream/aisdk/v5/compat';
 
 export function convertImageFilePart(

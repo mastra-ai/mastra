@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
-import { appendClientMessage, appendResponseMessages } from 'ai-v4';
-import type { UIMessage, CoreMessage, Message } from 'ai-v4';
+import { appendClientMessage, appendResponseMessages } from 'ai';
+import type { UIMessage, CoreMessage, Message } from 'ai';
 import { describe, expect, it } from 'vitest';
 import type { MastraMessageV2, UIMessageWithMetadata } from '../';
 import type { MastraMessageV1 } from '../../../memory';

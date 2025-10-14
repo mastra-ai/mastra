@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { MockLanguageModelV1 } from 'ai-v4/test';
+import { MockLanguageModelV1 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
