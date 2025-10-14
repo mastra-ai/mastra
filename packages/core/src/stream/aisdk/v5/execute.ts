@@ -3,12 +3,21 @@ import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils';
 import { isAbortError } from '@ai-sdk/provider-utils-v4';
 import type { Span } from '@opentelemetry/api';
 import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai';
+import pRetry from 'p-retry';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
 import { AISDKV5InputStream } from './input';
+
+function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
+  const newObj = { ...obj };
+  for (const key of keys) {
+    delete newObj[key];
+  }
+  return newObj;
+}
 
 type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   runId: string;
@@ -52,6 +61,15 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   headers,
   shouldThrowError,
 }: ExecutionProps<OUTPUT>) {
+  // Deprecation warning for top-level abortSignal
+  if (options?.abortSignal && !modelSettings?.abortSignal) {
+    console.warn(
+      '[Deprecation Warning] Using top-level `abortSignal` is deprecated. ' +
+        'Please use `modelSettings.abortSignal` instead. ' +
+        'The top-level `abortSignal` option will be removed in a future version.',
+    );
+  }
+
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
     name: model.modelId,
@@ -84,28 +102,42 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
       schema: responseFormat.schema,
     });
   }
-
   const stream = v5.initialize({
     runId,
     onResult,
     createStream: async () => {
       try {
-        const streamResult = await model.doStream({
-          ...toolsAndToolChoice,
-          prompt,
-          providerOptions,
-          abortSignal: options?.abortSignal,
-          includeRawChunks,
-          responseFormat:
-            structuredOutputMode === 'direct' && !structuredOutput?.jsonPromptInjection ? responseFormat : undefined,
-          ...(modelSettings ?? {}),
-          headers,
-        });
-        // We have to cast this because doStream is missing the warnings property in its return type even though it exists
-        return streamResult as unknown as LanguageModelV2StreamResult;
+        const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers', 'abortSignal']);
+        const abortSignal = modelSettings?.abortSignal || options?.abortSignal;
+
+        return await pRetry(
+          async () => {
+            const streamResult = await model.doStream({
+              ...toolsAndToolChoice,
+              prompt,
+              providerOptions,
+              abortSignal,
+              includeRawChunks,
+              responseFormat:
+                structuredOutputMode === 'direct' && !structuredOutput?.jsonPromptInjection
+                  ? responseFormat
+                  : undefined,
+              ...filteredModelSettings,
+              headers,
+            });
+
+            // We have to cast this because doStream is missing the warnings property in its return type even though it exists
+            return streamResult as unknown as LanguageModelV2StreamResult;
+          },
+          {
+            retries: modelSettings?.maxRetries ?? 2,
+            signal: abortSignal,
+          },
+        );
       } catch (error) {
         console.error('Error creating stream', error);
-        if (isAbortError(error) && options?.abortSignal?.aborted) {
+        const abortSignal = modelSettings?.abortSignal || options?.abortSignal;
+        if (isAbortError(error) && abortSignal?.aborted) {
           console.error('Abort error', error);
         }
 

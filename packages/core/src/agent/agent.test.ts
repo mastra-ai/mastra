@@ -6324,6 +6324,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             errorCaught = true;
             caughtError = error;
           },
+          modelSettings: {
+            maxRetries: 0,
+          },
         });
 
         // Consume the stream to trigger the error
