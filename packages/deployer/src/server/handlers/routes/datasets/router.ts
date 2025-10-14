@@ -15,6 +15,7 @@ import {
   deleteDatasetRowsHandler,
   getDatasetRowByIdHandler,
   getDatasetRowVersionsHandler,
+  runExperimentHandler,
 } from './handlers';
 
 export function datasetsRoutes(bodyLimitOptions: BodyLimitOptions) {
@@ -708,6 +709,95 @@ export function datasetsRoutes(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getDatasetRowVersionsHandler,
+  );
+
+  // Experiment Routes
+
+  router.post(
+    '/:datasetId/experiments',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Run an experiment on a dataset',
+      tags: ['datasets', 'experiments'],
+      parameters: [
+        {
+          name: 'datasetId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'Dataset ID',
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                targetType: {
+                  type: 'string',
+                  enum: ['agent', 'workflow'],
+                  description: 'Type of target to run (agent or workflow)',
+                },
+                targetId: {
+                  type: 'string',
+                  description: 'ID of the agent or workflow to run',
+                },
+                datasetVersionId: {
+                  type: 'string',
+                  description: 'Specific dataset version to use (optional, defaults to current version)',
+                },
+                concurrency: {
+                  type: 'number',
+                  description: 'Number of concurrent executions (optional, defaults to 1)',
+                },
+                scorerNames: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Names of scorers to use for evaluation (optional)',
+                },
+              },
+              required: ['targetType', 'targetId'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Experiment created and started in background',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', description: 'Experiment ID' },
+                  datasetId: { type: 'string' },
+                  datasetVersionId: { type: 'string' },
+                  targetType: { type: 'string', enum: ['agent', 'workflow'] },
+                  targetId: { type: 'string' },
+                  status: {
+                    type: 'string',
+                    enum: ['pending', 'running', 'completed', 'failed', 'cancelled'],
+                    description: 'Current status of the experiment',
+                  },
+                  concurrency: { type: 'number' },
+                  scorers: {
+                    type: 'object',
+                    description: 'Scorers being used in the experiment',
+                  },
+                  createdAt: { type: 'string', format: 'date-time' },
+                },
+              },
+            },
+          },
+        },
+        400: { description: 'Invalid request body' },
+        404: { description: 'Dataset, agent, or workflow not found' },
+        500: { description: 'Internal server error' },
+      },
+    }),
+    runExperimentHandler,
   );
 
   return router;

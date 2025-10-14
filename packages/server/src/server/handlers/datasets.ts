@@ -12,6 +12,7 @@ import type { Context } from '../types';
 
 import { handleError } from './error';
 import { validateBody } from './utils';
+import { Dataset, MastraScorer, runExperiment } from '@mastra/core/scores';
 
 // Dataset Management Handlers
 
@@ -315,5 +316,117 @@ export async function getDatasetRowVersionsHandler({
     return result;
   } catch (error) {
     return handleError(error, 'Error getting dataset row versions');
+  }
+}
+
+// Experiment Handlers
+
+export async function runExperimentHandler({
+  mastra,
+  datasetId,
+  body,
+}: Context & {
+  datasetId: string;
+  body: {
+    targetType: 'agent' | 'workflow';
+    targetId: string;
+    datasetId: string;
+    datasetVersionId?: string;
+    concurrency?: number;
+    scorerNames?: string[];
+  };
+}) {
+  try {
+    const storage = mastra.getStorage();
+    if (!storage) {
+      throw new HTTPException(400, { message: 'Storage is not initialized' });
+    }
+
+    validateBody({ datasetId, targetType: body.targetType, targetId: body.targetId });
+
+    // Get the dataset to retrieve the current version if not specified
+    const dataset = await storage.getDataset({ id: datasetId });
+    const datasetVersionId = body.datasetVersionId || dataset.currentVersion.id;
+
+    let scorers: MastraScorer<any, any, any, any>[] = [];
+    if (body.scorerNames) {
+      scorers = body.scorerNames.map(name => mastra.getScorerByName(name));
+    }
+
+    const scorersConfig: Record<string, { type: 'automatic' }> = {};
+    for (const scorer of scorers) {
+      scorersConfig[scorer.name] = { type: 'automatic' };
+    }
+
+    const experiment = await storage.createExperiment({
+      datasetId,
+      datasetVersionId,
+      targetType: body.targetType,
+      targetId: body.targetId,
+      concurrency: body.concurrency,
+      scorers: scorers.length > 0 ? scorersConfig : undefined,
+    });
+
+    const datasetObj = new Dataset(datasetId, storage);
+
+    // Fire and forget - run experiment in background
+    (async () => {
+      try {
+        // Update status to running
+        await storage.updateExperiment({
+          id: experiment.id,
+          updates: { status: 'running' },
+        });
+
+        const target =
+          body.targetType === 'agent' ? mastra.getAgentById(body.targetId) : mastra.getWorkflowById(body.targetId);
+
+        const result = await runExperiment({
+          data: datasetObj,
+          target: target as any,
+          concurrency: body.concurrency,
+          scorers: scorers.length > 0 ? scorers : undefined,
+          experimentTracking: {
+            experimentId: experiment.id,
+            storage: storage,
+          },
+        });
+
+        // Update experiment with results
+        await storage.updateExperiment({
+          id: experiment.id,
+          updates: {
+            status: 'completed',
+            totalItems: result.summary.totalItems,
+            averageScores: result.scores,
+            completedAt: new Date(),
+          },
+        });
+      } catch (error) {
+        console.error(`Error running experiment ${experiment.id}:`, error);
+
+        // Mark experiment as failed
+        await storage
+          .updateExperiment({
+            id: experiment.id,
+            updates: {
+              status: 'failed',
+              completedAt: new Date(),
+            },
+          })
+          .catch(updateError => {
+            console.error(`Failed to update experiment status:`, updateError);
+          });
+      } finally {
+        await storage.updateExperiment({
+          id: experiment.id,
+          updates: { status: 'completed' },
+        });
+      }
+    })();
+
+    return experiment;
+  } catch (error) {
+    return handleError(error, 'Error creating experiment');
   }
 }

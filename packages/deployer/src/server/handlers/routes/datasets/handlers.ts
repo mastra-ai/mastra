@@ -13,6 +13,7 @@ import {
   deleteDatasetRowsHandler as getOriginalDeleteDatasetRowsHandler,
   getDatasetRowByIdHandler as getOriginalGetDatasetRowByIdHandler,
   getDatasetRowVersionsHandler as getOriginalGetDatasetRowVersionsHandler,
+  runExperimentHandler as getOriginalRunExperimentHandler,
 } from '@mastra/server/handlers/datasets';
 import type { Context } from 'hono';
 
@@ -274,5 +275,25 @@ export async function getDatasetRowVersionsHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error getting dataset row versions');
+  }
+}
+
+// Experiment Handlers
+
+export async function runExperimentHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const datasetId = c.req.param('datasetId');
+    const body = await c.req.json();
+
+    const result = await getOriginalRunExperimentHandler({
+      mastra,
+      datasetId,
+      body,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error running experiment');
   }
 }
