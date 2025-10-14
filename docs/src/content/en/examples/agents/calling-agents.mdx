@@ -77,23 +77,6 @@ console.log(response.text);
 
 > See [Mastra Client SDK](../../docs/server-db/mastra-client.mdx) for more information.
 
-## From the command line
-
-You can create a simple script to test your agent locally. The `mastra` instance provides access to registered agents using `getAgent()`.
-
-To ensure your model has access to environment variables (like `OPENAI_API_KEY`), install `dotenv` and import it at the top of your script.
-
-```typescript filename="src/test-agent.ts" showLineNumbers copy
-import "dotenv/config";
-
-import { mastra } from "./mastra";
-
-const agent = mastra.getAgent("harryPotterAgent");
-const response = await agent.generate("What is your favorite room in Hogwarts?");
-
-console.log(response.text);
-```
-
 ### Run the script
 
 Run this script from your command line using:
