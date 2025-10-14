@@ -6,15 +6,19 @@ const meta = {
   },
   agents: {
     title: "Agents",
+    theme: { collapsed: true },
   },
   workflows: {
     title: "Workflows",
+    theme: { collapsed: true },
   },
   tools: {
     title: "Tools",
+    theme: { collapsed: true },
   },
   processors: {
     title: "Processors",
+    theme: { collapsed: true },
   },
   workflows_legacy: {
     title: "Workflows (Legacy)",
@@ -22,22 +26,31 @@ const meta = {
   },
   rag: {
     title: "RAG",
+    theme: { collapsed: true },
   },
   memory: {
     title: "Memory",
+    theme: { collapsed: true },
   },
   evals: {
     title: "Evals",
+    theme: { collapsed: true },
   },
-  scorers: <Tag text="experimental">Scorers</Tag>,
+  scorers: {
+    title: <Tag text="experimental">Scorers</Tag>,
+    theme: { collapsed: true },
+  },
   voice: {
     title: "Voice",
+    theme: { collapsed: true },
   },
   observability: {
     title: "Observability",
+    theme: { collapsed: true },
   },
   deployment: {
     title: "Deployment",
+    theme: { collapsed: true },
   },
 };
 
