@@ -128,7 +128,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
             // We have to cast this because doStream is missing the warnings property in its return type even though it exists
             return streamResult as unknown as LanguageModelV2StreamResult;
           },
-          { retries: modelSettings?.maxRetries || 2, signal: modelSettings?.abortSignal || options?.abortSignal },
+          { retries: modelSettings?.maxRetries ?? 2, signal: modelSettings?.abortSignal || options?.abortSignal },
         );
       } catch (error) {
         console.error('Error creating stream', error);
