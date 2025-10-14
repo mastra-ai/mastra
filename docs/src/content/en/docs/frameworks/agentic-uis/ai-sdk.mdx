@@ -164,8 +164,9 @@ format.
   - `data-tool-network`: Nested network emitted from within an tool stream.
   - `data-tool-agent`: Nested agent emitted from within an tool stream.
 
-### Manual Stream Transformations
-To manually transform Mastra streams to AI SDK compatible format, leverage the `toAISdkFormat` util
+### Stream Transformations
+
+To manually transform Mastra's streams to AI SDK-compatible format, use the `toAISdkFormat()` utility.
 
 ```typescript filename="app/api/chat/route.ts" copy {3,12}
   import { mastra } from "../../mastra";
