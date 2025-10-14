@@ -138,7 +138,7 @@ export class OtelExporter implements AITracingExporter {
     }
 
     // Create resource with service name from TracingConfig
-    const resource = resourceFromAttributes({
+    let resource = resourceFromAttributes({
       [ATTR_SERVICE_NAME]: this.tracingConfig?.serviceName || 'mastra-service',
       [ATTR_SERVICE_VERSION]: '1.0.0',
       // Add telemetry SDK information
@@ -146,6 +146,13 @@ export class OtelExporter implements AITracingExporter {
       [ATTR_TELEMETRY_SDK_VERSION]: '1.0.0',
       [ATTR_TELEMETRY_SDK_LANGUAGE]: 'nodejs',
     });
+
+    if (this.config.resourceAttributes) {
+      resource = resource.merge(
+        // Duplicate attributes from config will override defaults above
+        resourceFromAttributes(this.config.resourceAttributes),
+      );
+    }
 
     // Store the resource for the span converter
     this.spanConverter = new SpanConverter(resource);
