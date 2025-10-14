@@ -49,6 +49,7 @@ export async function getInputOptions(
     {
       dependencies: deps,
       externalDependencies: new Set(),
+      invalidChunks: new Set(),
       workspaceMap,
     },
     platform,
