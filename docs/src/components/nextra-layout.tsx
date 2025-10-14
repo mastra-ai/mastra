@@ -24,7 +24,6 @@ export const NextraLayout = ({
   stars: number;
 }) => {
   const pathname = usePathname();
-  const isReference = pathname.includes("/reference");
   return (
     <Layout
       search={<SearchWrapper locale={locale} />}
@@ -54,7 +53,7 @@ export const NextraLayout = ({
       footer={footer}
       sidebar={{
         autoCollapse: true,
-        defaultMenuCollapseLevel: pathname.includes('/getting-started') ? 3 : 1,
+        defaultMenuCollapseLevel: pathname.includes("/getting-started") ? 3 : 1,
       }}
       i18n={[
         { locale: "en", name: "English" },
