@@ -147,6 +147,8 @@
   --ifm-line-height-base: 1.6;
   --ifm-code-font-size: 0.875rem;
   --ifm-heading-color: var(--mastra-text-primary);
+  --ifm-list-margin: 0.5rem;
+  --ifm-list-left-padding: 1.5rem;
 
   /* Background colors */
   --ifm-background-color: #fafafa;
@@ -330,7 +332,7 @@ span[class*="categoryLinkLabel"] {
 
 .menu__link {
   font-size: 14px;
-  color: oklch(44.6% 0.03 256.802);
+  color: var(--mastra-text-tertiary);
   font-weight: 400;
   padding-block: 0.25rem;
   padding-inline-start: 0.5rem;
@@ -342,11 +344,12 @@ span[class*="categoryLinkLabel"] {
   }
 }
 
-.menu__link--active:not(.menu__link--sublist){
-  &after{
+.menu__link--active:not(.menu__link--sublist) {
+  &after {
     background: var(--ifm-menu-link-sublist-icon) center;
     transform-origin: center;
   }
+
   background: transparent;
 }
 
@@ -379,6 +382,40 @@ span[class*="categoryLinkLabel"] {
   --ifm-h1-font-size: 2.25rem;
   letter-spacing: -0.028em;
 }
+
+/* ======= BreadCrumbs ==================== */
+
+.breadcrumbs{
+  margin-bottom: 0;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.breadcrumbs__link {
+  font-size: 14px;
+  padding: 0;
+}
+
+.breadcrumbs__item:not(:last-child):after{
+    margin: 0;
+    margin-inline-start: var(--ifm-breadcrumb-spacing);
+}
+
+.breadcrumbs__item--active .breadcrumbs__link {
+  background: transparent;
+  color: var(--mastra-text-primary);
+}
+
+.breadcrumbs__item a {
+  text-transform: capitalize;
+  font-size: 14px;
+  text-decoration: none;
+  color: var(--mastra-text-tertiary);
+  padding: 0;
+  font-size: 14px;
+}
+
 
 
 /* ==================== CODE BLOCKS ==================== */
@@ -767,4 +804,12 @@ input[type="search"]::-webkit-search-cancel-button {
 /* Hide in other browsers */
 input[type="search"]::-ms-clear {
   display: none;
+}
+
+iframe {
+  border-radius: 12px;
+}
+
+ul{
+  list-style: disc;
 }
