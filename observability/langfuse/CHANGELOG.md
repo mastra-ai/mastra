@@ -1,5 +1,31 @@
 # @mastra/langfuse
 
+## 0.1.0-alpha.1
+
+### Patch Changes
+
+- Add AI SDK v5 compatibility to Langfuse exporter while maintaining backward compatibility with v4 ([#8790](https://github.com/mastra-ai/mastra/pull/8790))
+
+  **Features:**
+  - Normalize token usage to handle both AI SDK v4 format (`promptTokens`/`completionTokens`) and v5 format (`inputTokens`/`outputTokens`)
+  - Support AI SDK v5-specific features:
+    - Reasoning tokens for models like o1-preview
+    - Cached input tokens (prompt cache hit)
+    - Enhanced cache metrics
+  - Automatic detection and normalization of token formats with v5 taking precedence
+  - Comprehensive type definitions with JSDoc annotations indicating version compatibility
+
+  **Technical Changes:**
+  - Added `NormalizedUsage` interface with detailed version documentation
+  - Implemented `normalizeUsage()` method using nullish coalescing (`??`) to safely handle both formats
+  - Added 8 new test cases covering v4/v5 compatibility scenarios
+  - Updated documentation with AI SDK v5 compatibility guide
+
+  **Breaking Changes:** None - fully backward compatible with existing AI SDK v4 implementations
+
+- Updated dependencies [[`1ed9670`](https://github.com/mastra-ai/mastra/commit/1ed9670d3ca50cb60dc2e517738c5eef3968ed27), [`158381d`](https://github.com/mastra-ai/mastra/commit/158381d39335be934b81ef8a1947bccace492c25), [`fb703b9`](https://github.com/mastra-ai/mastra/commit/fb703b9634eeaff1a6eb2b5531ce0f9e8fb04727), [`37a2314`](https://github.com/mastra-ai/mastra/commit/37a23148e0e5a3b40d4f9f098b194671a8a49faf), [`05a9dee`](https://github.com/mastra-ai/mastra/commit/05a9dee3d355694d28847bfffb6289657fcf7dfa), [`e3c1077`](https://github.com/mastra-ai/mastra/commit/e3c107763aedd1643d3def5df450c235da9ff76c), [`1bccdb3`](https://github.com/mastra-ai/mastra/commit/1bccdb33eb90cbeba2dc5ece1c2561fb774b26b6), [`5ef944a`](https://github.com/mastra-ai/mastra/commit/5ef944a3721d93105675cac2b2311432ff8cc393), [`d6b186f`](https://github.com/mastra-ai/mastra/commit/d6b186fb08f1caf1b86f73d3a5ee88fb999ca3be), [`65493b3`](https://github.com/mastra-ai/mastra/commit/65493b31c36f6fdb78f9679f7e1ecf0c250aa5ee), [`a998b8f`](https://github.com/mastra-ai/mastra/commit/a998b8f858091c2ec47683e60766cf12d03001e4), [`8a37bdd`](https://github.com/mastra-ai/mastra/commit/8a37bddb6d8614a32c5b70303d583d80c620ea61)]:
+  - @mastra/core@0.21.0-alpha.1
+
 ## 0.1.0-alpha.0
 
 ### Minor Changes

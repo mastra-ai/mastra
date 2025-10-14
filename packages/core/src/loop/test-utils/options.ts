@@ -109,6 +109,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             }),
           },
         ],
+        modelSettings: {
+          maxRetries: 0,
+        },
         messageList,
         options: {
           onError(event) {
@@ -3969,6 +3972,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             }),
           },
         ],
+        modelSettings: {
+          maxRetries: 0,
+        },
         messageList,
         options: {
           onFinish() {}, // just defined; do nothing

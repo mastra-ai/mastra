@@ -1,5 +1,20 @@
 # @mastra/deployer
 
+## 0.21.0-alpha.1
+
+### Patch Changes
+
+- Add typescript to global externals to reduce bundling OOM ([#8789](https://github.com/mastra-ai/mastra/pull/8789))
+
+- Improve error handling formatting in dev/build bundling. ([#8792](https://github.com/mastra-ai/mastra/pull/8792))
+
+- Remove validation step in bundling process ([#8778](https://github.com/mastra-ai/mastra/pull/8778))
+  - Fixes transpilation of ts files with binary dependencies
+  - Add logging to add packages to externals
+- Updated dependencies [[`1ed9670`](https://github.com/mastra-ai/mastra/commit/1ed9670d3ca50cb60dc2e517738c5eef3968ed27), [`158381d`](https://github.com/mastra-ai/mastra/commit/158381d39335be934b81ef8a1947bccace492c25), [`fb703b9`](https://github.com/mastra-ai/mastra/commit/fb703b9634eeaff1a6eb2b5531ce0f9e8fb04727), [`37a2314`](https://github.com/mastra-ai/mastra/commit/37a23148e0e5a3b40d4f9f098b194671a8a49faf), [`05a9dee`](https://github.com/mastra-ai/mastra/commit/05a9dee3d355694d28847bfffb6289657fcf7dfa), [`e3c1077`](https://github.com/mastra-ai/mastra/commit/e3c107763aedd1643d3def5df450c235da9ff76c), [`1bccdb3`](https://github.com/mastra-ai/mastra/commit/1bccdb33eb90cbeba2dc5ece1c2561fb774b26b6), [`5ef944a`](https://github.com/mastra-ai/mastra/commit/5ef944a3721d93105675cac2b2311432ff8cc393), [`d6b186f`](https://github.com/mastra-ai/mastra/commit/d6b186fb08f1caf1b86f73d3a5ee88fb999ca3be), [`65493b3`](https://github.com/mastra-ai/mastra/commit/65493b31c36f6fdb78f9679f7e1ecf0c250aa5ee), [`a998b8f`](https://github.com/mastra-ai/mastra/commit/a998b8f858091c2ec47683e60766cf12d03001e4), [`8a37bdd`](https://github.com/mastra-ai/mastra/commit/8a37bddb6d8614a32c5b70303d583d80c620ea61)]:
+  - @mastra/core@0.21.0-alpha.1
+  - @mastra/server@0.21.0-alpha.1
+
 ## 0.21.0-alpha.0
 
 ### Minor Changes

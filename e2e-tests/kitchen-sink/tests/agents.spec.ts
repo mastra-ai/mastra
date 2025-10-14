@@ -1,17 +1,22 @@
 import { test, expect } from '@playwright/test';
 
-test('has title', async ({ page }) => {
+test('has overall information', async ({ page }) => {
   await page.goto('http://localhost:4111/agents');
 
-  // Expect a title "to contain" a substring.
   await expect(page).toHaveTitle(/Mastra Playground/);
-});
+  await expect(page.locator('h1')).toHaveText('Agents');
+  await expect(page.locator('text=Agents documentation')).toHaveAttribute(
+    'href',
+    'https://mastra.ai/en/docs/agents/overview',
+  );
 
-test('has valid links', async ({ page }) => {
-  await page.goto('http://localhost:4111/agents');
-
-  const el = await page.locator('text=Weather Agent');
-  await expect(el).toHaveAttribute('href', '/agents/weatherAgent');
+  const table = page.locator('table');
+  const firstRow = table.locator('tr:first-child');
+  await expect(firstRow.locator('text=1 tool')).toBeVisible();
+  await expect(firstRow.locator('text=0 workflow')).toBeVisible();
+  await expect(firstRow.locator('text=0 agent')).toBeVisible();
+  await expect(firstRow.locator('text=gpt-4o-mini')).toBeVisible();
+  await expect(firstRow.locator('text=Weather Agent')).toHaveAttribute('href', '/agents/weatherAgent');
 });
 
 test('clicking on the agent row redirects', async ({ page }) => {
@@ -20,5 +25,5 @@ test('clicking on the agent row redirects', async ({ page }) => {
   const el = await page.locator('tr:has-text("Weather Agent")');
   await el.click();
 
-  await expect(page).toHaveURL('http://localhost:4111/agents/weatherAgent/chat');
+  await expect(page).toHaveURL(/http:\/\/localhost:4111\/agents\/weatherAgent\/chat.*/);
 });
