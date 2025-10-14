@@ -658,7 +658,7 @@ describe('Structured Output with Tool Execution', () => {
       },
     });
 
-    const stream = await agent.stream('What is the weather in Toronto?', {
+    const stream = await agent.stream('What is the weather in Toronto? Also what are some activities I can do there?', {
       format: 'aisdk',
       maxSteps: 10,
       structuredOutput: {
