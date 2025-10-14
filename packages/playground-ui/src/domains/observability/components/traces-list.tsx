@@ -11,7 +11,7 @@ export const tracesListColumns = [
   { name: 'status', label: 'Status', size: '3rem' },
 ];
 
-type CustomAiSpanRecord = Pick<AISpanRecord, 'traceId' | 'name'> & {
+type AITrace = Pick<AISpanRecord, 'traceId' | 'name'> & {
   attributes?: Record<string, any> | null;
   createdAt: Date | string;
 };
@@ -19,7 +19,7 @@ type CustomAiSpanRecord = Pick<AISpanRecord, 'traceId' | 'name'> & {
 type TracesListProps = {
   selectedTraceId?: string;
   onTraceClick?: (id: string) => void;
-  traces?: CustomAiSpanRecord[];
+  traces?: AITrace[];
   errorMsg?: string;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   filtersApplied?: boolean;
