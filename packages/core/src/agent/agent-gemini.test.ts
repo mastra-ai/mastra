@@ -50,7 +50,7 @@ describe('Gemini Model Compatibility Tests', () => {
       expect(Array.isArray(result.object.benefits)).toBe(true);
     });
 
-    it('should handle empty user message with system context', async () => {
+    it('should throw error for empty user message', async () => {
       const agent = new Agent({
         id: 'system-context-agent',
         name: 'System Context Agent',
@@ -58,9 +58,7 @@ describe('Gemini Model Compatibility Tests', () => {
         model: google('gemini-2.5-flash-lite'),
       });
 
-      const result = await agent.generate('');
-
-      expect(result).toBeDefined();
+      await expect(agent.generate('')).rejects.toThrow();
     });
 
     it('should handle single turn with maxSteps=1 and messages ending with assistant', async () => {

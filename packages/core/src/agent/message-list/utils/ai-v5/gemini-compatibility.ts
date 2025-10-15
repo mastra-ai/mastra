@@ -28,7 +28,7 @@ export function ensureGeminiCompatibleMessages<T extends GeminiCompatibleMessage
   if (firstNonSystemIndex === -1) {
     // Only system messages or empty - this is an error condition
     throw new MastraError({
-      id: 'INVALID_MESSAGE_LIST',
+      id: 'NO_USER_OR_ASSISTANT_MESSAGES',
       domain: ErrorDomain.AGENT,
       category: ErrorCategory.USER,
       text: 'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
