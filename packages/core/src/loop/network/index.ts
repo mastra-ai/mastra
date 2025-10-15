@@ -2,6 +2,7 @@ import z from 'zod';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
 import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback } from '../../agent/index';
+import type { TracingContext } from '../../ai-tracing/types';
 import { MessageList } from '../../agent/message-list';
 import type { MastraMessageV2, MessageListInput } from '../../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
@@ -109,6 +110,8 @@ export async function prepareMemoryStep({
   routingAgent,
   runtimeContext,
   generateId,
+  tracingContext,
+  memoryConfig,
 }: {
   threadId: string;
   resourceId: string;
@@ -116,17 +119,22 @@ export async function prepareMemoryStep({
   routingAgent: Agent;
   runtimeContext: RuntimeContext;
   generateId: () => string;
+  tracingContext?: TracingContext;
+  memoryConfig?: any;
 }) {
   const memory = await routingAgent.getMemory({ runtimeContext });
   let thread = await memory?.getThreadById({ threadId });
   if (!thread) {
     thread = await memory?.createThread({
       threadId,
-      title: '',
+      title: `New Thread ${new Date().toISOString()}`,
       resourceId,
     });
   }
+  let userMessage: string | undefined;
+
   if (typeof messages === 'string') {
+    userMessage = messages;
     await memory?.saveMessages({
       messages: [
         {
@@ -153,6 +161,45 @@ export async function prepareMemoryStep({
       messages: messagesToSave,
       format: 'v2',
     });
+
+    // Get the user message for title generation
+    const uiMessages = messageList.get.all.ui();
+    const mostRecentUserMessage = routingAgent.getMostRecentUserMessage(uiMessages);
+    userMessage = mostRecentUserMessage?.content;
+  }
+
+  // Generate title if needed
+  if (thread?.title?.startsWith('New Thread') && memory) {
+    const config = memory.getMergedThreadConfig(memoryConfig || {});
+
+    const {
+      shouldGenerate,
+      model: titleModel,
+      instructions: titleInstructions,
+    } = routingAgent.resolveTitleGenerationConfig(config?.threads?.generateTitle);
+
+    if (shouldGenerate && userMessage) {
+      const title = await routingAgent.genTitle(
+        userMessage,
+        runtimeContext,
+        tracingContext || { currentSpan: undefined },
+        titleModel,
+        titleInstructions,
+      );
+
+      if (title) {
+        await memory.createThread({
+          threadId: thread.id,
+          resourceId: thread.resourceId,
+          memoryConfig,
+          title,
+          metadata: thread.metadata,
+        });
+
+        // Update the thread object with the new title
+        thread = { ...thread, title };
+      }
+    }
   }
 
   return { thread };
@@ -1092,6 +1139,8 @@ export async function networkLoop<
     messages,
     routingAgent,
     generateId,
+    tracingContext: routingAgentOptions?.tracingContext,
+    memoryConfig: routingAgentOptions?.memory?.options,
   });
 
   const task = getLastMessage(messages);
