@@ -2,7 +2,6 @@ import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
-import esmShim from '@rollup/plugin-esm-shim';
 import { basename } from 'node:path/posix';
 import * as path from 'node:path';
 import { rollup, type OutputChunk, type OutputAsset, type Plugin } from 'rollup';
@@ -198,7 +197,6 @@ async function getInputPlugins(
       ignoreTryCatch: false,
     }),
     bundlerOptions.isDev ? null : nodeResolve(),
-    bundlerOptions.enableEsmShim ? esmShim() : undefined,
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
     json(),
