@@ -1,0 +1,320 @@
+---
+title: "Memory Scope Defaults | Migration Guide"
+description: "Learn how to migrate from thread-scoped to resource-scoped memory defaults in Mastra."
+---
+
+## Overview
+
+As of `@mastra/memory@0.16.0` and `@mastra/core@0.22.0`, the default memory scope for both **working memory** and **semantic recall** has changed from `'thread'` to `'resource'`.
+
+## What changed
+
+### Before
+
+- Working memory defaulted to `scope: 'thread'` (isolated per conversation)
+- Semantic recall defaulted to `scope: 'thread'` (search within current conversation only)
+
+### After
+
+- Working memory defaults to `scope: 'resource'` (persists across all user conversations)
+- Semantic recall defaults to `scope: 'resource'` (search across all user conversations)
+
+## Why this change?
+
+This change was made because:
+
+1. **Better user experience**: Most applications want to remember user information across conversations, not just within a single thread
+2. **More intuitive default**: Users expect AI agents to "remember" them, which requires resource-scoped memory
+3. **Alignment with common use cases**: The majority of production applications use resource-scoped memory
+
+## Migration paths
+
+Choose the migration path that fits your needs:
+
+### Keep using thread-scoped memory
+
+If you want to maintain the old behavior where memory is isolated per conversation thread, explicitly set `scope: 'thread'` in your memory configuration:
+
+```typescript showLineNumbers copy
+import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
+
+const memory = new Memory({
+  storage: new LibSQLStore({ url: 'file:local.db' }),
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: 'thread', // Explicitly set to thread-scoped
+      template: `# User Profile
+- **Name**: 
+- **Interests**: 
+`,
+    },
+    semanticRecall: {
+      topK: 3,
+      scope: 'thread', // Explicitly set to thread-scoped
+    },
+  },
+});
+```
+
+> No further changes required.
+
+### Upgrade to resource-scoped memory
+
+If you want to adopt the new default behavior where memory persists across all conversations for the same user:
+
+#### 1. Ensure your storage adapter supports resource-scoped memory
+
+Resource-scoped memory requires storage adapters that support the `mastra_resources` table:
+
+✅ **Supported:**
+- `@mastra/libsql`
+- `@mastra/pg`
+- `@mastra/upstash`
+
+❌ **Not Supported:**
+- `@mastra/cloudflare-d1` (thread-scoped only)
+
+If you're using an unsupported adapter, you must either:
+- Upgrade to a supported adapter, or
+- Explicitly set `scope: 'thread'` to maintain compatibility
+
+#### 2. Remove explicit `scope: 'resource'` declarations (optional)
+
+Since `'resource'` is now the default, you can simplify your code by removing explicit declarations:
+
+**Before:**
+```typescript showLineNumbers copy
+const memory = new Memory({
+  storage,
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: 'resource', // Explicit declaration
+      template: `# User Profile
+- **Name**: 
+- **Interests**: 
+`,
+    },
+    semanticRecall: {
+      topK: 3,
+      scope: 'resource', // Explicit declaration
+    },
+  },
+});
+```
+
+**After:**
+```typescript showLineNumbers copy
+const memory = new Memory({
+  storage,
+  options: {
+    workingMemory: {
+      enabled: true,
+      // scope: 'resource' is now the default
+      template: `# User Profile
+- **Name**: 
+- **Interests**: 
+`,
+    },
+    semanticRecall: {
+      topK: 3,
+      // scope: 'resource' is now the default
+    },
+  },
+});
+```
+
+> You can also keep the explicit declaration for clarity if you prefer.
+
+#### 3. Ensure you provide `resourceId` in agent calls
+
+When using resource-scoped memory (the new default), you **must** provide a `resourceId` in your agent calls:
+
+```typescript showLineNumbers copy
+await agent.generate("Hello!", {
+  memory: {
+    thread: "conversation-123",
+    resource: "user-alice-456", // Required for resource-scoped memory
+  },
+});
+```
+
+**Important:** If you don't provide a `resourceId`, the memory system will fall back to thread-scoped behavior, which may not be what you expect.
+
+## Common migration scenarios
+
+### Scenario 1: Simple agent with memory
+
+**Before (v0.x):**
+```typescript showLineNumbers copy
+import { Agent } from '@mastra/core';
+import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
+
+const memory = new Memory({
+  storage: new LibSQLStore({ url: 'file:local.db' }),
+  options: {
+    workingMemory: {
+      enabled: true,
+      // Defaults to scope: 'thread' in v0.x
+    },
+  },
+});
+
+const agent = new Agent({
+  name: 'assistant',
+  model: openai('gpt-4o-mini'),
+  memory,
+});
+
+// Thread-scoped by default
+await agent.generate("My name is Alice", {
+  memory: {
+    thread: "thread-1",
+  },
+});
+```
+
+**After (v1.x):**
+```typescript showLineNumbers copy
+import { Agent } from '@mastra/core';
+import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
+
+const memory = new Memory({
+  storage: new LibSQLStore({ url: 'file:local.db' }),
+  options: {
+    workingMemory: {
+      enabled: true,
+      // Now defaults to scope: 'resource' in v1.x
+    },
+  },
+});
+
+const agent = new Agent({
+  name: 'assistant',
+  model: openai('gpt-4o-mini'),
+  memory,
+});
+
+// Resource-scoped by default - must provide resourceId
+await agent.generate("My name is Alice", {
+  memory: {
+    thread: "thread-1",
+    resource: "user-alice", // Now required!
+  },
+});
+```
+
+### Scenario 2: Maintaining thread-scoped behavior
+
+If you want to keep the old thread-scoped behavior:
+
+```typescript showLineNumbers copy
+const memory = new Memory({
+  storage: new LibSQLStore({ url: 'file:local.db' }),
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: 'thread', // Explicitly set to maintain old behavior
+    },
+    semanticRecall: {
+      topK: 3,
+      scope: 'thread', // Explicitly set to maintain old behavior
+    },
+  },
+});
+
+// Can continue using without resourceId
+await agent.generate("My name is Alice", {
+  memory: {
+    thread: "thread-1",
+  },
+});
+```
+
+### Scenario 3: Using Cloudflare D1 (unsupported adapter)
+
+If you're using Cloudflare D1, which doesn't support resource-scoped memory:
+
+```typescript showLineNumbers copy
+import { CloudflareD1Store } from '@mastra/cloudflare-d1';
+
+const memory = new Memory({
+  storage: new CloudflareD1Store({ db }),
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: 'thread', // Must explicitly set to 'thread'
+    },
+    semanticRecall: {
+      topK: 3,
+      scope: 'thread', // Must explicitly set to 'thread'
+    },
+  },
+});
+```
+
+> **Note:** If you don't explicitly set `scope: 'thread'` with an unsupported adapter, you'll get a runtime error.
+
+## Troubleshooting
+
+### Error: Storage adapter doesn't support resource-scoped memory
+
+**Problem:**
+```
+Memory error: Attached storage adapter "cloudflare-d1" doesn't support semanticRecall: { scope: "resource" } yet and currently only supports per-thread semantic recall.
+```
+
+**Solution:**
+Either upgrade to a supported storage adapter (`@mastra/libsql`, `@mastra/pg`, or `@mastra/upstash`) or explicitly set `scope: 'thread'`:
+
+```typescript showLineNumbers copy
+const memory = new Memory({
+  storage,
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: 'thread',
+    },
+    semanticRecall: {
+      topK: 3,
+      scope: 'thread',
+    },
+  },
+});
+```
+
+### Memory not persisting across conversations
+
+**Problem:**
+Working memory or semantic recall isn't persisting across different conversation threads.
+
+**Solution:**
+Make sure you're providing a `resourceId` in your agent calls:
+
+```typescript showLineNumbers copy
+await agent.generate("Hello!", {
+  memory: {
+    thread: "conversation-123",
+    resource: "user-alice-456", // Don't forget this!
+  },
+});
+```
+
+### Memory behaving unexpectedly
+
+**Problem:**
+Memory is behaving differently than expected after upgrading.
+
+**Solution:**
+Check if you're providing a `resourceId`. If you don't provide one, the memory system falls back to thread-scoped behavior, even though the default is now resource-scoped.
+
+## Additional resources
+
+- [Memory Overview](../../docs/memory/overview.mdx)
+- [Working Memory](../../docs/memory/working-memory.mdx)
+- [Semantic Recall](../../docs/memory/semantic-recall.mdx)
+- [Threads and Resources](../../docs/memory/threads-and-resources.mdx)

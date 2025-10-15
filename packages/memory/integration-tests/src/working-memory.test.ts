@@ -1262,12 +1262,12 @@ describe('Working Memory Tests', () => {
         connectionUrl: `file:${dbPath}`,
       });
 
-      // Create memory instance with thread-scoped working memory (default)
+      // Create memory instance with thread-scoped working memory (explicitly set)
       memory = new Memory({
         options: {
           workingMemory: {
             enabled: true,
-            // scope defaults to 'thread'
+            scope: 'thread', // Explicitly set to thread-scoped (default is now 'resource')
             template: `# User Information
 - **First Name**: 
 - **Last Name**: 

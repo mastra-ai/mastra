@@ -54,7 +54,7 @@ export class Memory extends MastraMemory {
   }
 
   protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string, config: MemoryConfig) {
-    const resourceScope = typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === 'resource';
+    const resourceScope = typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread';
 
     const thread = await this.storage.getThreadById({ threadId });
 
@@ -75,7 +75,7 @@ export class Memory extends MastraMemory {
   protected checkStorageFeatureSupport(config: MemoryConfig) {
     if (
       typeof config.semanticRecall === `object` &&
-      config.semanticRecall.scope === `resource` &&
+      config.semanticRecall.scope !== `thread` &&
       !this.storage.supports.selectByIncludeResourceScope
     ) {
       throw new Error(
@@ -134,7 +134,7 @@ export class Memory extends MastraMemory {
             messageRange: config?.semanticRecall?.messageRange ?? defaultRange,
           };
 
-    const resourceScope = typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === `resource`;
+    const resourceScope = typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`;
 
     if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector) {
       const { embeddings, dimension } = await this.embedMessageContent(selectBy.vectorSearchString!);
@@ -340,7 +340,7 @@ export class Memory extends MastraMemory {
     if (config.workingMemory?.enabled) {
       this.checkStorageFeatureSupport(config);
 
-      const scope = config.workingMemory.scope || 'thread';
+      const scope = config.workingMemory.scope || 'resource';
 
       // For resource scope, update the resource's working memory
       if (scope === 'resource' && resourceId) {
@@ -426,7 +426,7 @@ export class Memory extends MastraMemory {
 
     this.checkStorageFeatureSupport(config);
 
-    const scope = config.workingMemory.scope || 'thread';
+    const scope = config.workingMemory.scope || 'resource';
 
     if (scope === 'resource' && resourceId) {
       // Update working memory in resource table
@@ -526,7 +526,7 @@ export class Memory extends MastraMemory {
       // remove empty template insertions which models sometimes duplicate
       workingMemory = template?.content ? workingMemory.replaceAll(template?.content, '') : workingMemory;
 
-      const scope = config.workingMemory.scope || 'thread';
+      const scope = config.workingMemory.scope || 'resource';
 
       if (scope === 'resource' && resourceId) {
         // Update working memory in resource table
@@ -842,7 +842,7 @@ export class Memory extends MastraMemory {
 
     this.checkStorageFeatureSupport(config);
 
-    const scope = config.workingMemory.scope || 'thread';
+    const scope = config.workingMemory.scope || 'resource';
     let workingMemoryData: string | null = null;
 
     if (scope === 'resource' && resourceId) {
