@@ -7,7 +7,12 @@ import { LibSQLStore } from '@mastra/libsql';
 // import { OpenAIVoice } from '@mastra/voice-openai';
 
 import { weatherTool } from '../tools';
-import { toolCallAccuracyScorer, promptAlignmentScorer, completenessScorer } from '../scorers';
+import {
+  toolCallAppropriatenessScorer,
+  promptAlignmentScorer,
+  completenessScorer,
+  translationScorer,
+} from '../scorers';
 
 // const voice = new OpenAIVoice();
 
@@ -40,11 +45,14 @@ Use the weatherTool to fetch current weather data.`,
     promptAlignment: {
       scorer: promptAlignmentScorer,
     },
+    translation: {
+      scorer: translationScorer,
+    },
     completeness: {
       scorer: completenessScorer,
     },
     toolUseAppropriateness: {
-      scorer: toolCallAccuracyScorer,
+      scorer: toolCallAppropriatenessScorer,
     },
   },
   // memory,

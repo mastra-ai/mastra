@@ -10,6 +10,11 @@ export const mastra = new Mastra({
   storage: new LibSQLStore({
     url: 'file:./mastra.db',
   }),
+  observability: {
+    default: {
+      enabled: true,
+    },
+  },
   agents: { weatherAgent, weatherReporterAgent },
   legacy_workflows: { legacyWeatherWorkflow },
   workflows: { weatherWorkflow, weatherWorkflow2 },
