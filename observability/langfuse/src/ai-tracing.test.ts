@@ -250,6 +250,7 @@ describe('LangfuseExporter', () => {
       await exporter.exportEvent(event);
 
       // Should create Langfuse generation with LLM-specific fields
+      // Note: usage is normalized from v4 format to unified format
       expect(mockTrace.generation).toHaveBeenCalledWith({
         id: 'llm-span-id',
         name: 'gpt-4-call',
@@ -263,9 +264,9 @@ describe('LangfuseExporter', () => {
         input: { messages: [{ role: 'user', content: 'Hello' }] },
         output: { content: 'Hi there!' },
         usage: {
-          promptTokens: 10,
-          completionTokens: 5,
-          totalTokens: 15,
+          input: 10,
+          output: 5,
+          total: 15,
         },
         metadata: {
           provider: 'openai',
@@ -480,7 +481,7 @@ describe('LangfuseExporter', () => {
         model: 'gpt-4',
         output: { content: 'Updated response' },
         usage: {
-          totalTokens: 150,
+          total: 150,
         },
       });
     });
@@ -1044,6 +1045,378 @@ describe('LangfuseExporter', () => {
       // All operations should complete without errors
       // Trace should be cleaned up since all spans have ended
       expect((exporter as any).traceMap.has('root-1')).toBe(false);
+    });
+  });
+
+  describe('Score Management', () => {
+    let mockScore: any;
+
+    beforeEach(() => {
+      mockScore = {
+        id: 'test-score-id',
+        traceId: 'test-trace-id',
+        observationId: 'test-span-id',
+        name: 'test-scorer',
+        value: 0.85,
+        sessionId: 'test-session',
+        metadata: { reason: 'Test score' },
+        dataType: 'NUMERIC',
+      };
+      mockLangfuseClient.score = vi.fn().mockResolvedValue(mockScore);
+    });
+
+    it('should add score to trace with all parameters', async () => {
+      const scoreData = {
+        traceId: 'trace-123',
+        spanId: 'span-456',
+        score: 0.95,
+        reason: 'High quality response',
+        scorerName: 'quality-scorer',
+        metadata: {
+          sessionId: 'session-789',
+          userId: 'user-123',
+          customField: 'custom-value',
+        },
+      };
+
+      await exporter.addScoreToTrace(scoreData);
+
+      expect(mockLangfuseClient.score).toHaveBeenCalledWith({
+        id: 'trace-123-quality-scorer',
+        traceId: 'trace-123',
+        observationId: 'span-456',
+        name: 'quality-scorer',
+        value: 0.95,
+        sessionId: 'session-789',
+        metadata: { reason: 'High quality response' },
+        dataType: 'NUMERIC',
+      });
+    });
+
+    it('should add score to trace with only required parameters', async () => {
+      const scoreData = {
+        traceId: 'trace-123',
+        score: 0.75,
+        scorerName: 'trace-scorer',
+      };
+
+      await exporter.addScoreToTrace(scoreData);
+
+      expect(mockLangfuseClient.score).toHaveBeenCalledWith({
+        id: 'trace-123-trace-scorer',
+        traceId: 'trace-123',
+        name: 'trace-scorer',
+        value: 0.75,
+        metadata: {},
+        dataType: 'NUMERIC',
+      });
+    });
+
+    it('should not call Langfuse client when client is null', async () => {
+      // Create exporter with missing keys to disable client
+      const disabledExporter = new LangfuseExporter({
+        baseUrl: 'https://test-langfuse.com',
+      });
+
+      const scoreData = {
+        traceId: 'trace-123',
+        spanId: 'span-456',
+        score: 0.8,
+        reason: 'Test score',
+        scorerName: 'test-scorer',
+        metadata: {
+          sessionId: 'session-789',
+        },
+      };
+
+      await disabledExporter.addScoreToTrace(scoreData);
+
+      // Should not call Langfuse client
+      expect(mockLangfuseClient.score).not.toHaveBeenCalled();
+    });
+
+    it('should handle Langfuse client errors gracefully', async () => {
+      const mockError = new Error('Langfuse API error');
+      mockLangfuseClient.score.mockRejectedValue(mockError);
+
+      const mockLoggerError = vi.spyOn(exporter['logger'], 'error').mockImplementation(() => {});
+
+      const scoreData = {
+        traceId: 'trace-123',
+        spanId: 'span-456',
+        score: 0.8,
+        reason: 'Test score',
+        scorerName: 'test-scorer',
+        metadata: {
+          sessionId: 'session-789',
+        },
+      };
+
+      // Should not throw
+      await expect(exporter.addScoreToTrace(scoreData)).resolves.not.toThrow();
+
+      // Should log error
+      expect(mockLoggerError).toHaveBeenCalledWith('Langfuse exporter: Error adding score to trace', {
+        error: mockError,
+        traceId: 'trace-123',
+        spanId: 'span-456',
+        scorerName: 'test-scorer',
+      });
+
+      mockLoggerError.mockRestore();
+    });
+  });
+
+  describe('AI SDK v4 and v5 Compatibility', () => {
+    describe('Token Usage Normalization', () => {
+      it('should handle AI SDK v4 token format (promptTokens/completionTokens)', async () => {
+        const llmSpan = createMockSpan({
+          id: 'llm-v4-span',
+          name: 'llm-generation-v4',
+          type: AISpanType.LLM_GENERATION,
+          isRoot: true,
+          attributes: {
+            model: 'gpt-4',
+            provider: 'openai',
+            usage: {
+              promptTokens: 100,
+              completionTokens: 50,
+              totalTokens: 150,
+            },
+          },
+        });
+
+        await exporter.exportEvent({
+          type: AITracingEventType.SPAN_STARTED,
+          exportedSpan: llmSpan,
+        });
+
+        expect(mockTrace.generation).toHaveBeenCalledWith(
+          expect.objectContaining({
+            model: 'gpt-4',
+            usage: {
+              input: 100,
+              output: 50,
+              total: 150,
+            },
+          }),
+        );
+      });
+
+      it('should handle AI SDK v5 token format (inputTokens/outputTokens)', async () => {
+        const llmSpan = createMockSpan({
+          id: 'llm-v5-span',
+          name: 'llm-generation-v5',
+          type: AISpanType.LLM_GENERATION,
+          isRoot: true,
+          attributes: {
+            model: 'gpt-4o',
+            provider: 'openai',
+            usage: {
+              inputTokens: 120,
+              outputTokens: 60,
+              totalTokens: 180,
+            },
+          },
+        });
+
+        await exporter.exportEvent({
+          type: AITracingEventType.SPAN_STARTED,
+          exportedSpan: llmSpan,
+        });
+
+        expect(mockTrace.generation).toHaveBeenCalledWith(
+          expect.objectContaining({
+            model: 'gpt-4o',
+            usage: {
+              input: 120,
+              output: 60,
+              total: 180,
+            },
+          }),
+        );
+      });
+
+      it('should handle AI SDK v5 reasoning tokens', async () => {
+        const llmSpan = createMockSpan({
+          id: 'llm-v5-reasoning-span',
+          name: 'llm-generation-reasoning',
+          type: AISpanType.LLM_GENERATION,
+          isRoot: true,
+          attributes: {
+            model: 'o1-preview',
+            provider: 'openai',
+            usage: {
+              inputTokens: 100,
+              outputTokens: 50,
+              reasoningTokens: 1000,
+              totalTokens: 1150,
+            },
+          },
+        });
+
+        await exporter.exportEvent({
+          type: AITracingEventType.SPAN_STARTED,
+          exportedSpan: llmSpan,
+        });
+
+        expect(mockTrace.generation).toHaveBeenCalledWith(
+          expect.objectContaining({
+            model: 'o1-preview',
+            usage: {
+              input: 100,
+              output: 50,
+              reasoning: 1000,
+              total: 1150,
+            },
+          }),
+        );
+      });
+
+      it('should handle AI SDK v5 cached input tokens', async () => {
+        const llmSpan = createMockSpan({
+          id: 'llm-v5-cached-span',
+          name: 'llm-generation-cached',
+          type: AISpanType.LLM_GENERATION,
+          isRoot: true,
+          attributes: {
+            model: 'claude-3-5-sonnet',
+            provider: 'anthropic',
+            usage: {
+              inputTokens: 150,
+              outputTokens: 75,
+              cachedInputTokens: 100,
+              totalTokens: 225,
+            },
+          },
+        });
+
+        await exporter.exportEvent({
+          type: AITracingEventType.SPAN_STARTED,
+          exportedSpan: llmSpan,
+        });
+
+        expect(mockTrace.generation).toHaveBeenCalledWith(
+          expect.objectContaining({
+            model: 'claude-3-5-sonnet',
+            usage: {
+              input: 150,
+              output: 75,
+              cachedInput: 100,
+              total: 225,
+            },
+          }),
+        );
+      });
+
+      it('should handle legacy cache metrics (promptCacheHitTokens/promptCacheMissTokens)', async () => {
+        const llmSpan = createMockSpan({
+          id: 'llm-cache-legacy-span',
+          name: 'llm-generation-cache-legacy',
+          type: AISpanType.LLM_GENERATION,
+          isRoot: true,
+          attributes: {
+            model: 'gpt-4',
+            provider: 'openai',
+            usage: {
+              promptTokens: 200,
+              completionTokens: 100,
+              totalTokens: 300,
+              promptCacheHitTokens: 150,
+              promptCacheMissTokens: 50,
+            },
+          },
+        });
+
+        await exporter.exportEvent({
+          type: AITracingEventType.SPAN_STARTED,
+          exportedSpan: llmSpan,
+        });
+
+        expect(mockTrace.generation).toHaveBeenCalledWith(
+          expect.objectContaining({
+            model: 'gpt-4',
+            usage: {
+              input: 200,
+              output: 100,
+              total: 300,
+              promptCacheHit: 150,
+              promptCacheMiss: 50,
+            },
+          }),
+        );
+      });
+
+      it('should calculate total tokens when not provided', async () => {
+        const llmSpan = createMockSpan({
+          id: 'llm-calculated-total',
+          name: 'llm-generation-calc',
+          type: AISpanType.LLM_GENERATION,
+          isRoot: true,
+          attributes: {
+            model: 'gpt-4',
+            provider: 'openai',
+            usage: {
+              inputTokens: 80,
+              outputTokens: 40,
+              // no totalTokens provided
+            },
+          },
+        });
+
+        await exporter.exportEvent({
+          type: AITracingEventType.SPAN_STARTED,
+          exportedSpan: llmSpan,
+        });
+
+        expect(mockTrace.generation).toHaveBeenCalledWith(
+          expect.objectContaining({
+            model: 'gpt-4',
+            usage: {
+              input: 80,
+              output: 40,
+              total: 120, // calculated
+            },
+          }),
+        );
+      });
+
+      it('should handle mixed v4/v5 format gracefully (prioritizing v5)', async () => {
+        const llmSpan = createMockSpan({
+          id: 'llm-mixed-span',
+          name: 'llm-generation-mixed',
+          type: AISpanType.LLM_GENERATION,
+          isRoot: true,
+          attributes: {
+            model: 'gpt-4',
+            provider: 'openai',
+            usage: {
+              // Both formats present - v5 should take precedence
+              inputTokens: 100,
+              promptTokens: 90,
+              outputTokens: 50,
+              completionTokens: 45,
+              totalTokens: 150,
+            },
+          },
+        });
+
+        await exporter.exportEvent({
+          type: AITracingEventType.SPAN_STARTED,
+          exportedSpan: llmSpan,
+        });
+
+        expect(mockTrace.generation).toHaveBeenCalledWith(
+          expect.objectContaining({
+            model: 'gpt-4',
+            usage: {
+              input: 100, // v5 value, not 90
+              output: 50, // v5 value, not 45
+              total: 150,
+            },
+          }),
+        );
+      });
     });
   });
 

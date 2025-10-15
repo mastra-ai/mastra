@@ -11,6 +11,7 @@ import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
+import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type {
   GenerateObjectWithMessagesArgs,
@@ -27,13 +28,11 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
-import { OpenAICompatibleModel } from '../llm/model/openai-compatible';
 import type {
   TripwireProperties,
   MastraLanguageModel,
   MastraLanguageModelV2,
   MastraModelConfig,
-  OpenAICompatibleConfig,
 } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
@@ -66,7 +65,12 @@ import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
-import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
+import type {
+  AgentExecutionOptions,
+  DeprecatedOutputOptions,
+  InnerAgentExecutionOptions,
+  MultiPrimitiveExecutionOptions,
+} from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -83,6 +87,7 @@ import type {
   AgentExecuteOnFinishOptions,
   AgentInstructions,
   DynamicAgentInstructions,
+  StructuredOutputOptions,
 } from './types';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
@@ -116,6 +121,26 @@ function resolveThreadIdFromArgs(args: {
   return undefined;
 }
 
+/**
+ * The Agent class is the foundation for creating AI agents in Mastra. It provides methods for generating responses,
+ * streaming interactions, managing memory, and handling voice capabilities.
+ *
+ * @example
+ * ```typescript
+ * import { Agent } from '@mastra/core/agent';
+ * import { Memory } from '@mastra/memory';
+ *
+ * const agent = new Agent({
+ *   name: 'my-agent',
+ *   instructions: 'You are a helpful assistant',
+ *   model: 'openai/gpt-5',
+ *   tools: {
+ *     calculator: calculatorTool,
+ *   },
+ *   memory: new Memory(),
+ * });
+ * ```
+ */
 @InstrumentClass({
   prefix: 'agent',
   excludeMethods: [
@@ -161,7 +186,7 @@ export class Agent<
   #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
   #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
-  #defaultVNextStreamOptions: DynamicArgument<AgentExecutionOptions>;
+  #defaultVNextStreamOptions: DynamicArgument<AgentExecutionOptions & DeprecatedOutputOptions>;
   #tools: DynamicArgument<TTools>;
   evals: TMetrics;
   #scorers: DynamicArgument<MastraScorers>;
@@ -174,6 +199,24 @@ export class Agent<
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
 
+  /**
+   * Creates a new Agent instance with the specified configuration.
+   *
+   * @example
+   * ```typescript
+   * import { Agent } from '@mastra/core/agent';
+   * import { Memory } from '@mastra/memory';
+   *
+   * const agent = new Agent({
+   *   name: 'weatherAgent',
+   *   instructions: 'You help users with weather information',
+   *   model: 'openai/gpt-5',
+   *   tools: { getWeather },
+   *   memory: new Memory(),
+   *   maxRetries: 2,
+   * });
+   * ```
+   */
   constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
 
@@ -286,6 +329,16 @@ export class Agent<
     return this.#mastra;
   }
 
+  /**
+   * Returns the agents configured for this agent, resolving function-based agents if necessary.
+   * Used in multi-agent collaboration scenarios where this agent can delegate to other agents.
+   *
+   * @example
+   * ```typescript
+   * const agents = await agent.listAgents();
+   * console.log(Object.keys(agents)); // ['agent1', 'agent2']
+   * ```
+   */
   public listAgents({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}) {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
@@ -313,6 +366,10 @@ export class Agent<
     });
   }
 
+  /**
+   * Creates and returns a ProcessorRunner with resolved input/output processors.
+   * @internal
+   */
   private async getProcessorRunner({
     runtimeContext,
     inputProcessorOverrides,
@@ -349,6 +406,10 @@ export class Agent<
     });
   }
 
+  /**
+   * Resolves and returns output processors from agent configuration.
+   * @internal
+   */
   private async getResolvedOutputProcessors(runtimeContext?: RuntimeContext): Promise<OutputProcessor[]> {
     if (!this.#outputProcessors) {
       return [];
@@ -361,10 +422,62 @@ export class Agent<
     return this.#outputProcessors;
   }
 
+  /**
+   * Resolves and returns input processors from agent configuration.
+   * @internal
+   */
+  private async getResolvedInputProcessors(runtimeContext?: RuntimeContext): Promise<InputProcessor[]> {
+    if (!this.#inputProcessors) {
+      return [];
+    }
+
+    if (typeof this.#inputProcessors === 'function') {
+      return await this.#inputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() });
+    }
+
+    return this.#inputProcessors;
+  }
+
+  /**
+   * Returns the input processors for this agent, resolving function-based processors if necessary.
+   */
+  public async getInputProcessors(runtimeContext?: RuntimeContext): Promise<InputProcessor[]> {
+    return this.getResolvedInputProcessors(runtimeContext);
+  }
+
+  /**
+   * Returns the output processors for this agent, resolving function-based processors if necessary.
+   */
+  public async getOutputProcessors(runtimeContext?: RuntimeContext): Promise<OutputProcessor[]> {
+    return this.getResolvedOutputProcessors(runtimeContext);
+  }
+
+  /**
+   * Returns whether this agent has its own memory configured.
+   *
+   * @example
+   * ```typescript
+   * if (agent.hasOwnMemory()) {
+   *   const memory = await agent.getMemory();
+   * }
+   * ```
+   */
   public hasOwnMemory(): boolean {
     return Boolean(this.#memory);
   }
 
+  /**
+   * Gets the memory instance for this agent, resolving function-based memory if necessary.
+   * The memory system enables conversation persistence, semantic recall, and working memory.
+   *
+   * @example
+   * ```typescript
+   * const memory = await agent.getMemory();
+   * if (memory) {
+   *   // Memory is configured
+   * }
+   * ```
+   */
   public async getMemory({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}): Promise<
     MastraMemory | undefined
   > {
@@ -429,6 +542,16 @@ export class Agent<
     return this.#voice;
   }
 
+  /**
+   * Gets the workflows configured for this agent, resolving function-based workflows if necessary.
+   * Workflows are step-based execution flows that can be triggered by the agent.
+   *
+   * @example
+   * ```typescript
+   * const workflows = await agent.getWorkflows();
+   * const workflow = workflows['myWorkflow'];
+   * ```
+   */
   public async getWorkflows({
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any>>> {
@@ -476,6 +599,16 @@ export class Agent<
     });
   }
 
+  /**
+   * Gets the voice instance for this agent with tools and instructions configured.
+   * The voice instance enables text-to-speech and speech-to-text capabilities.
+   *
+   * @example
+   * ```typescript
+   * const voice = await agent.getVoice();
+   * const audioStream = await voice.speak('Hello world');
+   * ```
+   */
   public async getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}) {
     if (this.#voice) {
       const voice = this.#voice;
@@ -526,6 +659,16 @@ export class Agent<
     return this.#instructions;
   }
 
+  /**
+   * Gets the instructions for this agent, resolving function-based instructions if necessary.
+   * Instructions define the agent's behavior and capabilities.
+   *
+   * @example
+   * ```typescript
+   * const instructions = await agent.getInstructions();
+   * console.log(instructions); // 'You are a helpful assistant'
+   * ```
+   */
   public getInstructions({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
     | AgentInstructions
     | Promise<AgentInstructions> {
@@ -557,6 +700,7 @@ export class Agent<
   /**
    * Helper function to convert agent instructions to string for backward compatibility
    * Used for legacy methods that expect string instructions (e.g., voice, telemetry)
+   * @internal
    */
   #convertInstructionsToString(instructions: AgentInstructions): string {
     if (typeof instructions === 'string') {
@@ -581,10 +725,29 @@ export class Agent<
     return typeof instructions.content === 'string' ? instructions.content : '';
   }
 
+  /**
+   * Returns the description of the agent.
+   *
+   * @example
+   * ```typescript
+   * const description = agent.getDescription();
+   * console.log(description); // 'A helpful weather assistant'
+   * ```
+   */
   public getDescription(): string {
     return this.#description ?? '';
   }
 
+  /**
+   * Gets the default generate options for this agent, resolving function-based options if necessary.
+   * These options are used as defaults when calling `generate()` without explicit options.
+   *
+   * @example
+   * ```typescript
+   * const options = await agent.getDefaultGenerateOptions();
+   * console.log(options.maxSteps); // 5
+   * ```
+   */
   public getDefaultGenerateOptions({
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): AgentGenerateOptions | Promise<AgentGenerateOptions> {
@@ -613,6 +776,16 @@ export class Agent<
     });
   }
 
+  /**
+   * Gets the default stream options for this agent, resolving function-based options if necessary.
+   * These options are used as defaults when calling `stream()` without explicit options.
+   *
+   * @example
+   * ```typescript
+   * const options = await agent.getDefaultStreamOptions();
+   * console.log(options.temperature); // 0.7
+   * ```
+   */
   public getDefaultStreamOptions({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
     | AgentStreamOptions
     | Promise<AgentStreamOptions> {
@@ -641,16 +814,39 @@ export class Agent<
     });
   }
 
+  /**
+   * Gets the default VNext stream options for this agent, resolving function-based options if necessary.
+   * These options are used as defaults when calling `streamVNext()` or `generateVNext()` without explicit options.
+   *
+   * @example
+   * ```typescript
+   * const options = await agent.getDefaultVNextStreamOptions();
+   * console.log(options.maxSteps); // 5
+   * ```
+   */
   public getDefaultVNextStreamOptions<OUTPUT extends OutputSchema = undefined>({
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>> {
     if (typeof this.#defaultVNextStreamOptions !== 'function') {
-      return this.#defaultVNextStreamOptions as AgentExecutionOptions<OUTPUT>;
+      if (this.#defaultVNextStreamOptions.output && this.#defaultVNextStreamOptions.structuredOutput) {
+        throw new MastraError({
+          id: 'AGENT_GET_DEFAULT_VNEXT_STREAM_OPTIONS_OUTPUT_AND_STRUCTURED_OUTPUT_PROVIDED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'output and structuredOutput cannot be provided at the same time',
+        });
+      }
+
+      const { output, ...defaultVNextStreamOptions } = this.#defaultVNextStreamOptions;
+      return {
+        ...(output ? { structuredOutput: { schema: output } } : {}),
+        ...defaultVNextStreamOptions,
+      } as AgentExecutionOptions<OUTPUT>;
     }
 
     const result = this.#defaultVNextStreamOptions({ runtimeContext, mastra: this.#mastra }) as
-      | AgentExecutionOptions<OUTPUT>
-      | Promise<AgentExecutionOptions<OUTPUT>>;
+      | (AgentExecutionOptions<OUTPUT> & DeprecatedOutputOptions<OUTPUT>)
+      | Promise<AgentExecutionOptions<OUTPUT> & DeprecatedOutputOptions<OUTPUT>>;
 
     return resolveMaybePromise(result, options => {
       if (!options) {
@@ -668,7 +864,21 @@ export class Agent<
         throw mastraError;
       }
 
-      return options;
+      if (options.output && options.structuredOutput) {
+        throw new MastraError({
+          id: 'AGENT_GET_DEFAULT_VNEXT_STREAM_OPTIONS_OUTPUT_AND_STRUCTURED_OUTPUT_PROVIDED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'output and structuredOutput cannot be provided at the same time',
+        });
+      }
+
+      const { output, ...restOptions } = options;
+
+      return {
+        ...(output ? { structuredOutput: { schema: output } } : {}),
+        ...restOptions,
+      } as AgentExecutionOptions<OUTPUT>;
     });
   }
 
@@ -693,6 +903,16 @@ export class Agent<
     return ensureToolProperties(this.#tools) as TTools;
   }
 
+  /**
+   * Gets the tools configured for this agent, resolving function-based tools if necessary.
+   * Tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
+   *
+   * @example
+   * ```typescript
+   * const tools = await agent.getTools();
+   * console.log(Object.keys(tools)); // ['calculator', 'weather']
+   * ```
+   */
   public getTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
     | TTools
     | Promise<TTools> {
@@ -744,9 +964,15 @@ export class Agent<
   }
 
   /**
-   * Gets or creates an LLM instance based on the current model
-   * @param options Options for getting the LLM
-   * @returns A promise that resolves to the LLM instance
+   * Gets or creates an LLM instance based on the provided or configured model.
+   * The LLM wraps the language model with additional capabilities like telemetry and error handling.
+   *
+   * @example
+   * ```typescript
+   * const llm = await agent.getLLM();
+   * // Use with custom model
+   * const customLlm = await agent.getLLM({ model: 'openai/gpt-5' });
+   * ```
    */
   public getLLM({
     runtimeContext = new RuntimeContext(),
@@ -795,64 +1021,47 @@ export class Agent<
     });
   }
 
-  // Returns true for model router config object
-  private isOpenaiCompatibleObjectConfig(
-    modelConfig: DynamicArgument<MastraModelConfig>,
-  ): modelConfig is OpenAICompatibleConfig {
-    if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) return false;
-    // Check for OpenAICompatibleConfig specifically - it should have 'id' but NOT 'model'
-    // ModelWithRetries has both 'id' and 'model', so we exclude it
-    // TODO: should probably do some additional checking using providers list to see if the ID starts with a known provider
-    // we can also do some duck typing around optional properties like url/apiKey/etc
-    if (typeof modelConfig === 'object' && 'id' in modelConfig && !('model' in modelConfig)) return true;
-    return false;
-  }
-
   /**
    * Resolves a model configuration to a LanguageModel instance
    * @param modelConfig The model configuration (magic string, config object, or LanguageModel)
    * @returns A LanguageModel instance
+   * @internal
    */
   private async resolveModelConfig(
     modelConfig: DynamicArgument<MastraModelConfig>,
     runtimeContext: RuntimeContext,
   ): Promise<MastraLanguageModel> {
-    // If it's already a LanguageModel, return it
-    if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) {
-      return modelConfig;
+    try {
+      return await resolveModelConfig(modelConfig, runtimeContext, this.#mastra);
+    } catch (error) {
+      const mastraError = new MastraError({
+        id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+          originalError: error instanceof Error ? error.message : String(error),
+        },
+        text: `[Agent:${this.name}] - Failed to resolve model configuration`,
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
-
-    // If it's a string (magic string like "openai/gpt-4o" or URL) or OpenAICompatibleConfig, create OpenAICompatibleModel
-    if (typeof modelConfig === 'string' || this.isOpenaiCompatibleObjectConfig(modelConfig)) {
-      return new OpenAICompatibleModel(modelConfig);
-    }
-
-    if (typeof modelConfig === `function`) {
-      const fromDynamic = await modelConfig({ runtimeContext, mastra: this.#mastra });
-      if (typeof fromDynamic === `string` || this.isOpenaiCompatibleObjectConfig(fromDynamic)) {
-        return new OpenAICompatibleModel(fromDynamic);
-      }
-      return fromDynamic;
-    }
-
-    const mastraError = new MastraError({
-      id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
-      domain: ErrorDomain.AGENT,
-      category: ErrorCategory.USER,
-      details: {
-        agentName: this.name,
-      },
-      text: `[Agent:${this.name}] - No model provided`,
-    });
-    this.logger.trackException(mastraError);
-    this.logger.error(mastraError.toString());
-    throw mastraError;
   }
 
   /**
-   * Gets the model, resolving it if it's a function
-   * @param options Options for getting the model
-   * @returns A promise that resolves to the model
+   * Gets the model instance, resolving it if it's a function or model configuration.
+   * When the agent has multiple models configured, returns the first enabled model.
+   *
+   * @example
+   * ```typescript
+   * const model = await agent.getModel();
+   * // Get with custom model config
+   * const customModel = await agent.getModel({
+   *   modelConfig: 'openai/gpt-5'
+   * });
+   * ```
    */
   public getModel({
     runtimeContext = new RuntimeContext(),
@@ -879,6 +1088,18 @@ export class Agent<
     return this.resolveModelConfig(modelConfig[0].model, runtimeContext);
   }
 
+  /**
+   * Gets the list of configured models if the agent has multiple models, otherwise returns null.
+   * Used for model fallback and load balancing scenarios.
+   *
+   * @example
+   * ```typescript
+   * const models = await agent.getModelList();
+   * if (models) {
+   *   console.log(models.map(m => m.id));
+   * }
+   * ```
+   */
   public async getModelList(
     runtimeContext: RuntimeContext = new RuntimeContext(),
   ): Promise<Array<AgentModelManagerConfig> | null> {
@@ -888,11 +1109,19 @@ export class Agent<
     return this.prepareModels(runtimeContext);
   }
 
+  /**
+   * Updates the agent's instructions.
+   * @internal
+   */
   __updateInstructions(newInstructions: string) {
     this.#instructions = newInstructions;
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
 
+  /**
+   * Updates the agent's model configuration.
+   * @internal
+   */
   __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> }) {
     this.model = model;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
@@ -950,6 +1179,10 @@ export class Agent<
 
   #primitives?: MastraPrimitives;
 
+  /**
+   * Registers telemetry and logger primitives with the agent.
+   * @internal
+   */
   __registerPrimitives(p: MastraPrimitives) {
     if (p.telemetry) {
       this.__setTelemetry(p.telemetry);
@@ -965,6 +1198,10 @@ export class Agent<
     this.logger.debug(`[Agents:${this.name}] initialized.`, { model: this.model, name: this.name });
   }
 
+  /**
+   * Registers the Mastra instance with the agent.
+   * @internal
+   */
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
     // Mastra will be passed to the LLM when it's created in getLLM()
@@ -973,6 +1210,7 @@ export class Agent<
   /**
    * Set the concrete tools for the agent
    * @param tools
+   * @internal
    */
   __setTools(tools: TTools) {
     this.#tools = tools;
@@ -1046,6 +1284,7 @@ export class Agent<
         runtimeContext,
         tracingContext,
         messageList,
+        agentId: this.id,
       });
 
       text = await result.text;
@@ -1206,6 +1445,10 @@ export class Agent<
     return { threadId: threadId || '', messages: userMessages || [] };
   }
 
+  /**
+   * Retrieves and converts memory tools to CoreTool format.
+   * @internal
+   */
   private async getMemoryTools({
     runId,
     resourceId,
@@ -1256,6 +1499,10 @@ export class Agent<
     return convertedMemoryTools;
   }
 
+  /**
+   * Executes input processors on the message list before LLM processing.
+   * @internal
+   */
   private async __runInputProcessors({
     runtimeContext,
     tracingContext,
@@ -1328,6 +1575,10 @@ export class Agent<
     };
   }
 
+  /**
+   * Executes output processors on the message list after LLM processing.
+   * @internal
+   */
   private async __runOutputProcessors({
     runtimeContext,
     tracingContext,
@@ -1394,6 +1645,10 @@ export class Agent<
     };
   }
 
+  /**
+   * Fetches remembered messages from memory for the current thread.
+   * @internal
+   */
   private async getMemoryMessages({
     resourceId,
     threadId,
@@ -1422,6 +1677,10 @@ export class Agent<
       .then(r => r.messagesV2);
   }
 
+  /**
+   * Retrieves and converts assigned tools to CoreTool format.
+   * @internal
+   */
   private async getAssignedTools({
     runId,
     resourceId,
@@ -1488,6 +1747,10 @@ export class Agent<
     return toolsForRequest;
   }
 
+  /**
+   * Retrieves and converts toolset tools to CoreTool format.
+   * @internal
+   */
   private async getToolsets({
     runId,
     threadId,
@@ -1540,6 +1803,10 @@ export class Agent<
     return toolsForRequest;
   }
 
+  /**
+   * Retrieves and converts client-side tools to CoreTool format.
+   * @internal
+   */
   private async getClientTools({
     runId,
     threadId,
@@ -1589,6 +1856,10 @@ export class Agent<
     return toolsForRequest;
   }
 
+  /**
+   * Retrieves and converts workflow tools to CoreTool format.
+   * @internal
+   */
   private async getWorkflowTools({
     runId,
     threadId,
@@ -1596,7 +1867,6 @@ export class Agent<
     runtimeContext,
     tracingContext,
     methodType,
-    format,
   }: {
     runId?: string;
     threadId?: string;
@@ -1604,7 +1874,6 @@ export class Agent<
     runtimeContext: RuntimeContext;
     tracingContext?: TracingContext;
     methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
-    format?: 'mastra' | 'aisdk';
   }) {
     const convertedWorkflowTools: Record<string, CoreTool> = {};
     const workflows = await this.getWorkflows({ runtimeContext });
@@ -1660,7 +1929,6 @@ export class Agent<
                   inputData: context,
                   runtimeContext,
                   tracingContext: innerTracingContext,
-                  format,
                 });
 
                 if (writer) {
@@ -1716,6 +1984,10 @@ export class Agent<
     return convertedWorkflowTools;
   }
 
+  /**
+   * Assembles all tools from various sources into a unified CoreTool dictionary.
+   * @internal
+   */
   private async convertTools({
     toolsets,
     clientTools,
@@ -1726,7 +1998,6 @@ export class Agent<
     tracingContext,
     writableStream,
     methodType,
-    format,
   }: {
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
@@ -1737,7 +2008,6 @@ export class Agent<
     tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
     methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
-    format?: 'mastra' | 'aisdk';
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -1791,7 +2061,6 @@ export class Agent<
       threadId,
       runtimeContext,
       methodType,
-      format,
       tracingContext,
     });
 
@@ -1804,6 +2073,10 @@ export class Agent<
     });
   }
 
+  /**
+   * Formats and validates tool names to comply with naming restrictions.
+   * @internal
+   */
   private formatTools(tools: Record<string, CoreTool>): Record<string, CoreTool> {
     const INVALID_CHAR_REGEX = /[^a-zA-Z0-9_\-]/g;
     const STARTING_CHAR_REGEX = /[a-zA-Z_]/;
@@ -1850,6 +2123,7 @@ export class Agent<
    * @param threadId - The thread ID.
    * @param memoryConfig - The memory configuration for saving.
    * @param runId - (Optional) The run ID for logging.
+   * @internal
    */
   private async saveStepMessages({
     saveQueueManager,
@@ -1879,6 +2153,10 @@ export class Agent<
     }
   }
 
+  /**
+   * Prepares message list and tools before LLM execution and handles memory persistence after.
+   * @internal
+   */
   __primitive({
     instructions,
     messages,
@@ -2497,6 +2775,10 @@ export class Agent<
     }
   }
 
+  /**
+   * Resolves scorer name references to actual scorer instances from Mastra.
+   * @internal
+   */
   private resolveOverrideScorerReferences(
     overrideScorers: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>,
   ) {
@@ -2536,6 +2818,10 @@ export class Agent<
     return result;
   }
 
+  /**
+   * Prepares options and handlers for LLM text/object generation or streaming.
+   * @internal
+   */
   private prepareLLMOptions<
     Tools extends ToolSet,
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -2572,6 +2858,9 @@ export class Agent<
     }>;
     llm: MastraLLM;
   }>;
+  /**
+   * @internal
+   */
   private prepareLLMOptions<
     Tools extends ToolSet,
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -2608,6 +2897,9 @@ export class Agent<
     }>;
     llm: MastraLLMV1;
   }>;
+  /**
+   * @internal
+   */
   private async prepareLLMOptions<
     Tools extends ToolSet,
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -2851,6 +3143,10 @@ export class Agent<
     };
   }
 
+  /**
+   * Resolves and prepares model configurations for the LLM.
+   * @internal
+   */
   private async prepareModels(
     runtimeContext: RuntimeContext,
     model?: DynamicArgument<MastraLanguageModel> | ModelFallbacks,
@@ -2932,6 +3228,7 @@ export class Agent<
   }
   /**
    * Merges telemetry wrapper with default onFinish callback when needed
+   * @internal
    */
   #mergeOnFinishWithTelemetry(streamOptions: any, defaultStreamOptions: any) {
     let finalOnFinish = streamOptions?.onFinish || defaultStreamOptions.onFinish;
@@ -2956,6 +3253,10 @@ export class Agent<
     return finalOnFinish;
   }
 
+  /**
+   * Executes the agent with VNext execution model, handling tools, memory, and streaming.
+   * @internal
+   */
   async #execute<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
@@ -3071,6 +3372,7 @@ export class Agent<
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
       resumeContext,
+      agentId: this.id,
     });
 
     const run = await executionWorkflow.createRunAsync();
@@ -3079,6 +3381,10 @@ export class Agent<
     return result;
   }
 
+  /**
+   * Handles post-execution tasks including memory persistence and title generation.
+   * @internal
+   */
   async #executeOnFinish({
     result,
     instructions,
@@ -3264,6 +3570,27 @@ export class Agent<
     });
   }
 
+  /**
+   * Executes a network loop where multiple agents can collaborate to handle messages.
+   * The routing agent delegates tasks to appropriate sub-agents based on the conversation.
+   *
+   * @experimental
+   *
+   * @example
+   * ```typescript
+   * const result = await agent.network('Find the weather in Tokyo and plan an activity', {
+   *   memory: {
+   *     thread: 'user-123',
+   *     resource: 'my-app'
+   *   },
+   *   maxSteps: 10
+   * });
+   *
+   * for await (const chunk of result.stream) {
+   *   console.log(chunk);
+   * }
+   * ```
+   */
   async network(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions) {
     const runId = options?.runId || this.#mastra?.generateId() || randomUUID();
     const runtimeContextToUse = options?.runtimeContext || new RuntimeContext();
@@ -3286,7 +3613,7 @@ export class Agent<
   }
 
   /**
-   * @deprecated generateVNext has been renamed to generate. Please use generate instead.
+   * @deprecated `generateVNext()` has been renamed to `generate()`. Please use `generate()` instead.
    */
   async generateVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
     _messages: MessageListInput,
@@ -3306,13 +3633,34 @@ export class Agent<
 
   async generate<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
     messages: MessageListInput,
-    options?: AgentExecutionOptions<OUTPUT, FORMAT>,
+    options?: AgentExecutionOptions<OUTPUT, FORMAT> & DeprecatedOutputOptions<OUTPUT>,
   ): Promise<
     FORMAT extends 'aisdk'
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
   > {
-    const result = await this.stream(messages, options);
+    if (options?.structuredOutput?.schema && options?.output) {
+      throw new MastraError({
+        id: 'AGENT_GENERATE_STRUCTURED_OUTPUT_AND_OUTPUT_PROVIDED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'structuredOutput and output cannot be provided at the same time to agent.generate',
+      });
+    }
+    // Deprecated `output` option now just maps to structuredOutput.schema
+    // Create a new options object to avoid mutating the input parameter
+    const normalizedOptions = options?.output
+      ? {
+          structuredOutput: {
+            schema: options.output as OUTPUT extends OutputSchema ? OUTPUT : never,
+            ...options.structuredOutput,
+          },
+          ...options,
+          output: undefined,
+        }
+      : options;
+
+    const result = await this.stream(messages, normalizedOptions);
     const fullOutput = await result.getFullOutput();
 
     const error = fullOutput.error;
@@ -3327,7 +3675,7 @@ export class Agent<
   }
 
   /**
-   * @deprecated streamVNext has been renamed to stream. Please use stream instead.
+   * @deprecated `streamVNext()` has been renamed to `stream()`. Please use `stream()` instead.
    */
   async streamVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
     _messages: MessageListInput,
@@ -3343,58 +3691,41 @@ export class Agent<
 
   async stream<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> & DeprecatedOutputOptions<OUTPUT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
+    const defaultStreamOptions = await this.getDefaultVNextStreamOptions<OUTPUT>({
       runtimeContext: streamOptions?.runtimeContext,
     });
-
-    if (
-      (defaultStreamOptions.structuredOutput && defaultStreamOptions.output) ||
-      (streamOptions?.structuredOutput && streamOptions.output)
-    ) {
+    if (streamOptions?.structuredOutput?.schema && streamOptions?.output) {
       throw new MastraError({
         id: 'AGENT_STREAM_STRUCTURED_OUTPUT_AND_OUTPUT_PROVIDED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: 'structuredOutput and output cannot be provided at the same time',
+        text: 'structuredOutput and output cannot be provided at the same time to agent.stream',
       });
     }
 
-    // If streamOptions has either output or structuredOutput, remove both from defaultStreamOptions
-    // to ensure streamOptions takes precedence and avoid union type conflicts
-    let adjustedDefaultStreamOptions = { ...defaultStreamOptions };
-    if (streamOptions?.structuredOutput || streamOptions?.output) {
-      const { output, structuredOutput, ...restDefaultOptions } = adjustedDefaultStreamOptions;
-      adjustedDefaultStreamOptions = restDefaultOptions as typeof defaultStreamOptions;
-    }
-
-    let mergedStreamOptions = {
-      ...adjustedDefaultStreamOptions,
+    const baseStreamOptions = {
+      ...defaultStreamOptions,
       ...(streamOptions ?? {}),
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
-    // Map structuredOutput to output when maxSteps is explicitly set to 1
-    // This allows the new structuredOutput API to use the existing output implementation
-    let modelOverride: MastraLanguageModel | undefined;
-    if (mergedStreamOptions.structuredOutput && mergedStreamOptions.maxSteps === 1) {
-      // If structuredOutput has a model, use it to override the agent's model
-      if (mergedStreamOptions.structuredOutput.model) {
-        modelOverride = mergedStreamOptions.structuredOutput.model;
-      }
-
-      // assign structuredOutput.schema to output when maxSteps is explicitly set to 1
-      const { structuredOutput, ...optionsWithoutStructuredOutput } = mergedStreamOptions;
-      mergedStreamOptions = {
-        ...optionsWithoutStructuredOutput,
-        output: structuredOutput.schema as OUTPUT,
-      };
-    }
+    // Deprecated `output` option now just maps to structuredOutput.schema
+    // Create a new options object to avoid mutating
+    const mergedStreamOptions = baseStreamOptions.output
+      ? {
+          structuredOutput: {
+            schema: baseStreamOptions.output,
+            ...baseStreamOptions.structuredOutput,
+          } as StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>,
+          ...baseStreamOptions,
+          output: undefined,
+        }
+      : baseStreamOptions;
 
     const llm = await this.getLLM({
       runtimeContext: mergedStreamOptions.runtimeContext,
-      model: modelOverride,
     });
 
     if (llm.getModel().specificationVersion !== 'v2') {
@@ -3420,22 +3751,21 @@ export class Agent<
       ...mergedStreamOptions,
       messages,
       methodType: 'stream',
-      model: modelOverride,
     } as InnerAgentExecutionOptions<OUTPUT, FORMAT>;
 
     const result = await this.#execute(executeOptions);
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
-        throw new MastraError({
-          id: 'AGENT_STREAM_FAILED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: result.error.message,
-          details: {
-            error: result.error.message,
+        throw new MastraError(
+          {
+            id: 'AGENT_STREAM_FAILED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
           },
-        });
+          // pass original error to preserve stack trace
+          result.error,
+        );
       }
       throw new MastraError({
         id: 'AGENT_STREAM_UNKNOWN_ERROR',
@@ -3448,6 +3778,19 @@ export class Agent<
     return result.result as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
+  /**
+   * Resumes a previously suspended VNext stream execution.
+   * Used to continue execution after a suspension point (e.g., tool approval, workflow suspend).
+   *
+   * @example
+   * ```typescript
+   * // Resume after suspension
+   * const stream = await agent.resumeStreamVNext(
+   *   { approved: true },
+   *   { runId: 'previous-run-id' }
+   * );
+   * ```
+   */
   async resumeStreamVNext<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
@@ -3465,25 +3808,8 @@ export class Agent<
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
-    // Map structuredOutput to output when maxSteps is explicitly set to 1
-    // This allows the new structuredOutput API to use the existing output implementation
-    let modelOverride: MastraLanguageModel | undefined;
-    if (mergedStreamOptions.structuredOutput && mergedStreamOptions.maxSteps === 1) {
-      // If structuredOutput has a model, use it to override the agent's model
-      if (mergedStreamOptions.structuredOutput.model) {
-        modelOverride = mergedStreamOptions.structuredOutput.model;
-      }
-
-      mergedStreamOptions = {
-        ...mergedStreamOptions,
-        output: mergedStreamOptions.structuredOutput.schema as OUTPUT,
-        structuredOutput: undefined, // Remove structuredOutput to avoid confusion downstream
-      };
-    }
-
     const llm = await this.getLLM({
       runtimeContext: mergedStreamOptions.runtimeContext,
-      model: modelOverride,
     });
 
     if (llm.getModel().specificationVersion !== 'v2') {
@@ -3500,20 +3826,19 @@ export class Agent<
       messages: [],
       resumeContext,
       methodType: 'stream',
-      model: modelOverride,
     } as InnerAgentExecutionOptions<OUTPUT, FORMAT>);
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
-        throw new MastraError({
-          id: 'AGENT_STREAM_VNEXT_FAILED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: result.error.message,
-          details: {
-            error: result.error.message,
+        throw new MastraError(
+          {
+            id: 'AGENT_STREAM_VNEXT_FAILED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
           },
-        });
+          // pass original error to preserve stack trace
+          result.error,
+        );
       }
       throw new MastraError({
         id: 'AGENT_STREAM_VNEXT_UNKNOWN_ERROR',
@@ -3526,6 +3851,21 @@ export class Agent<
     return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
+  /**
+   * Approves a pending tool call and resumes execution.
+   * Used when `requireToolApproval` is enabled to allow the agent to proceed with a tool call.
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.approveToolCall({
+   *   runId: 'pending-run-id'
+   * });
+   *
+   * for await (const chunk of stream) {
+   *   console.log(chunk);
+   * }
+   * ```
+   */
   async approveToolCall<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
@@ -3535,6 +3875,21 @@ export class Agent<
     return this.resumeStreamVNext({ approved: true }, options);
   }
 
+  /**
+   * Declines a pending tool call and resumes execution.
+   * Used when `requireToolApproval` is enabled to prevent the agent from executing a tool call.
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.declineToolCall({
+   *   runId: 'pending-run-id'
+   * });
+   *
+   * for await (const chunk of stream) {
+   *   console.log(chunk);
+   * }
+   * ```
+   */
   async declineToolCall<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
@@ -3544,6 +3899,16 @@ export class Agent<
     return this.resumeStreamVNext({ approved: false }, options);
   }
 
+  /**
+   * Legacy implementation of generate method using AI SDK v4 models.
+   * Use this method if you need to continue using AI SDK v4 models after `generate()` switches to VNext.
+   *
+   * @example
+   * ```typescript
+   * const result = await agent.generateLegacy('What is 2+2?');
+   * console.log(result.text);
+   * ```
+   */
   async generateLegacy(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
@@ -3857,6 +4222,18 @@ export class Agent<
       : GenerateObjectResult<OUTPUT>;
   }
 
+  /**
+   * Legacy implementation of stream method using AI SDK v4 models.
+   * Use this method if you need to continue using AI SDK v4 models after `stream()` switches to VNext.
+   *
+   * @example
+   * ```typescript
+   * const result = await agent.streamLegacy('Tell me a story');
+   * for await (const chunk of result.textStream) {
+   *   process.stdout.write(chunk);
+   * }
+   * ```
+   */
   async streamLegacy<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -4233,6 +4610,22 @@ export class Agent<
     }
   }
 
+  /**
+   * Converts the agent to a workflow step for use in legacy workflows.
+   * The step accepts a prompt and returns text output.
+   *
+   * @deprecated Use agent directly in workflows instead
+   *
+   * @example
+   * ```typescript
+   * const agentStep = agent.toStep();
+   * const workflow = new Workflow({
+   *   steps: {
+   *     analyze: agentStep
+   *   }
+   * });
+   * ```
+   */
   toStep(): Step<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any> {
     const x = agentToStep(this);
     return new Step(x);
@@ -4241,6 +4634,7 @@ export class Agent<
   /**
    * Resolves the configuration for title generation.
    * @private
+   * @internal
    */
   private resolveTitleGenerationConfig(
     generateTitleConfig:
@@ -4270,6 +4664,7 @@ export class Agent<
   /**
    * Resolves title generation instructions, handling both static strings and dynamic functions
    * @private
+   * @internal
    */
   private async resolveTitleInstructions(
     runtimeContext: RuntimeContext,

@@ -1,12 +1,11 @@
-import { GetAgentResponse, McpServerListResponse } from '@mastra/client-js';
+import { McpServerListResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
-import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
+
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo } from 'react';
+import React, { useState } from 'react';
 
 import { ScrollableContainer } from '@/components/scrollable-container';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,6 +14,7 @@ import { columns } from './columns';
 import { useLinkComponent } from '@/lib/framework';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { McpCoinIcon, McpServerIcon } from '@/ds/icons';
+import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
 
 export interface MCPTableProps {
   mcpServers: McpServerListResponse['servers'];
@@ -23,51 +23,61 @@ export interface MCPTableProps {
 
 export function MCPTable({ mcpServers, isLoading }: MCPTableProps) {
   const { navigate, paths } = useLinkComponent();
-
+  const [search, setSearch] = useState('');
   const table = useReactTable({
     data: mcpServers,
     columns: columns as ColumnDef<McpServerListResponse['servers'][number]>[],
     getCoreRowModel: getCoreRowModel(),
   });
 
-  if (isLoading) return <MCPTableSkeleton />;
-
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows.concat();
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && !isLoading) {
     return <EmptyMCPTable />;
   }
 
+  const filteredRows = rows.filter(row => row.original.name.toLowerCase().includes(search.toLowerCase()));
+
   return (
-    <ScrollableContainer>
-      <TooltipProvider>
-        <Table>
-          <Thead className="sticky top-0">
-            {ths.headers.map(header => (
-              <Th key={header.id} style={{ width: header.column.getSize() ?? 'auto' }}>
-                {flexRender(header.column.columnDef.header, header.getContext())}
-              </Th>
-            ))}
-          </Thead>
-          <Tbody>
-            {rows.map(row => (
-              <Row key={row.id} onClick={() => navigate(paths.mcpServerLink(row.original.id))}>
-                {row.getVisibleCells().map(cell => (
-                  <React.Fragment key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </React.Fragment>
+    <div>
+      <SearchbarWrapper>
+        <Searchbar onSearch={setSearch} label="Search MCP servers" placeholder="Search MCP servers" />
+      </SearchbarWrapper>
+
+      {isLoading ? (
+        <MCPTableSkeleton />
+      ) : (
+        <ScrollableContainer>
+          <TooltipProvider>
+            <Table>
+              <Thead className="sticky top-0">
+                {ths.headers.map(header => (
+                  <Th key={header.id} style={{ width: header.column.getSize() ?? 'auto' }}>
+                    {flexRender(header.column.columnDef.header, header.getContext())}
+                  </Th>
                 ))}
-              </Row>
-            ))}
-          </Tbody>
-        </Table>
-      </TooltipProvider>
-    </ScrollableContainer>
+              </Thead>
+              <Tbody>
+                {filteredRows.map(row => (
+                  <Row key={row.id} onClick={() => navigate(paths.mcpServerLink(row.original.id))}>
+                    {row.getVisibleCells().map(cell => (
+                      <React.Fragment key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </React.Fragment>
+                    ))}
+                  </Row>
+                ))}
+              </Tbody>
+            </Table>
+          </TooltipProvider>
+        </ScrollableContainer>
+      )}
+    </div>
   );
 }
 
-export const MCPTableSkeleton = () => (
+const MCPTableSkeleton = () => (
   <Table>
     <Thead>
       <Th>Name</Th>
@@ -92,7 +102,7 @@ export const MCPTableSkeleton = () => (
   </Table>
 );
 
-export const EmptyMCPTable = () => (
+const EmptyMCPTable = () => (
   <div className="flex h-full items-center justify-center">
     <EmptyState
       iconSlot={<McpCoinIcon />}

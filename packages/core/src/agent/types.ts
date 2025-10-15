@@ -12,7 +12,9 @@ import type {
   OutputType,
   SystemMessage,
   MastraModelConfig,
+  OpenAICompatibleConfig,
 } from '../llm';
+import type { ModelRouterModelId } from '../llm/model';
 import type {
   StreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback,
@@ -20,7 +22,7 @@ import type {
 } from '../llm/model/base.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MastraLanguageModel, MemoryConfig, StorageThreadType } from '../memory/types';
+import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
@@ -56,15 +58,28 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   schema: OUTPUT;
 
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
-  model?: MastraLanguageModel;
+  model?: MastraModelConfig;
 
   /**
    * Custom instructions for the structuring agent.
    * If not provided, will generate instructions based on the schema.
    */
   instructions?: string;
+
+  /**
+   * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+   */
+  jsonPromptInjection?: boolean;
 } & FallbackFields<OUTPUT>;
 
+export type SerializableStructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = Omit<
+  StructuredOutputOptions<OUTPUT>,
+  'model'
+> & { model?: ModelRouterModelId | OpenAICompatibleConfig };
+
+/**
+ * Provide options while creating an agent.
+ */
 export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
@@ -91,25 +106,88 @@ export interface AgentConfig<
   TTools extends ToolsInput = ToolsInput,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
+  /**
+   * Identifier for the agent.
+   * @defaultValue Uses `name` if not provided.
+   */
   id?: TAgentId;
+  /**
+   * Unique identifier for the agent.
+   */
   name: TAgentId;
+  /**
+   * Description of the agent's purpose and capabilities.
+   */
   description?: string;
+  /**
+   * Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
+   * array of system messages, or a function that returns any of these types dynamically.
+   */
   instructions: DynamicAgentInstructions;
+  /**
+   * The language model used by the agent. Can be provided statically or resolved at runtime.
+   */
   model: MastraModelConfig | DynamicModel | ModelWithRetries[];
-  maxRetries?: number; //defaults to 0
+  /**
+   * Maximum number of retries for model calls in case of failure.
+   * @defaultValue 0
+   */
+  maxRetries?: number;
+  /**
+   * Tools that the agent can access. Can be provided statically or resolved dynamically.
+   */
   tools?: DynamicArgument<TTools>;
+  /**
+   * Workflows that the agent can execute. Can be static or dynamically resolved.
+   */
   workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
+  /**
+   * Default options used when calling `generate()`.
+   */
   defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
+  /**
+   * Default options used when calling `stream()`.
+   */
   defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
+  /**
+   * Default options used when calling `stream()` in vNext mode.
+   */
   defaultVNextStreamOptions?: DynamicArgument<AgentExecutionOptions>;
+  /**
+   * Reference to the Mastra runtime instance (injected automatically).
+   */
   mastra?: Mastra;
+  /**
+   * Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.
+   */
   agents?: DynamicArgument<Record<string, Agent>>;
+  /**
+   * Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.
+   */
   scorers?: DynamicArgument<MastraScorers>;
+  /**
+   * Evaluation metrics for scoring agent responses.
+   */
   evals?: TMetrics;
+  /**
+   * Memory module used for storing and retrieving stateful context.
+   */
   memory?: DynamicArgument<MastraMemory>;
+  /**
+   * Voice settings for speech input and output.
+   */
   voice?: CompositeVoice;
+  /**
+   * Input processors that can modify or validate messages before they are processed by the agent. These processors need to implement the `processInput` function.
+   */
   inputProcessors?: DynamicArgument<InputProcessor[]>;
+  /**
+   * Output processors that can modify or validate messages from the agent, before it is sent to the client. These processors need to implement either (or both) of the `processOutputResult` and `processOutputStream` functions.
+   */
   outputProcessors?: DynamicArgument<OutputProcessor[]>;
+  /**
+   * Options to pass to the agent upon creation.
+   */
   options?: AgentCreateOptions;
 }
 

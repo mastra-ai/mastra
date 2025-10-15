@@ -1,5 +1,272 @@
 # @mastra/playground-ui
 
+## 6.5.0
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (0.21.0) ([#8619](https://github.com/mastra-ai/mastra/pull/8619))
+
+### Patch Changes
+
+- dependencies updates: ([#8685](https://github.com/mastra-ai/mastra/pull/8685))
+  - Updated dependency [`zod@^4.1.12` ↗︎](https://www.npmjs.com/package/zod/v/4.1.12) (from `^4.1.9`, in `dependencies`)
+
+- Prepares some basic set of homemade components ([#8619](https://github.com/mastra-ai/mastra/pull/8619))
+
+- Improve the surface API of the react sdk ([#8715](https://github.com/mastra-ai/mastra/pull/8715))
+
+- Fix auto tab for model picker in playground-ui, the UI no longer auto tabs to the next selector when selecting a model/provider. ([#8680](https://github.com/mastra-ai/mastra/pull/8680))
+
+- Create unified Sidebar component to use on Playground and Cloud ([#8655](https://github.com/mastra-ai/mastra/pull/8655))
+
+- Adds reset button to model picker to reset to original model set on the agent. ([#8633](https://github.com/mastra-ai/mastra/pull/8633))
+
+- Fix back the tripwire verification inside the new react system ([#8674](https://github.com/mastra-ai/mastra/pull/8674))
+
+- Use only zod validation in dynamic form ([#8802](https://github.com/mastra-ai/mastra/pull/8802))
+
+- Add div wrapper around entity tables to fix table vertical position ([#8758](https://github.com/mastra-ai/mastra/pull/8758))
+
+- Update peer dependencies to match core package version bump (0.21.0) ([#8557](https://github.com/mastra-ai/mastra/pull/8557))
+
+- handle error case in react sdk ([#8676](https://github.com/mastra-ai/mastra/pull/8676))
+
+- Make sure to convert the agent instructions when showing them ([#8702](https://github.com/mastra-ai/mastra/pull/8702))
+
+- Update peer dependencies to match core package version bump (0.21.0) ([#8626](https://github.com/mastra-ai/mastra/pull/8626))
+
+- Customize AITraces type to seamlessly work on Cloud too ([#8759](https://github.com/mastra-ai/mastra/pull/8759))
+
+- Refactor EntryList component and Scorer and Observability pages ([#8652](https://github.com/mastra-ai/mastra/pull/8652))
+
+- fix maxSteps model settings not being passed to generate and stream endpoints ([#8627](https://github.com/mastra-ai/mastra/pull/8627))
+
+- Update peer dependencies to match core package version bump (0.21.0) ([#8686](https://github.com/mastra-ai/mastra/pull/8686))
+
+- Updated dependencies [[`f920afd`](https://github.com/mastra-ai/mastra/commit/f920afdf8725d14d73f895f51a24bb7c79bb4fba), [`2ddb851`](https://github.com/mastra-ai/mastra/commit/2ddb8519c4b6f1d31be10ffd33b41d2b649a04ff), [`421f019`](https://github.com/mastra-ai/mastra/commit/421f01949651d2766046ca1961e32a2dc2fd712b), [`1ed9670`](https://github.com/mastra-ai/mastra/commit/1ed9670d3ca50cb60dc2e517738c5eef3968ed27), [`b5a66b7`](https://github.com/mastra-ai/mastra/commit/b5a66b748a14fc8b3f63b04642ddb9621fbcc9e0), [`f59fc1e`](https://github.com/mastra-ai/mastra/commit/f59fc1e406b8912e692f6bff6cfd4754cc8d165c), [`158381d`](https://github.com/mastra-ai/mastra/commit/158381d39335be934b81ef8a1947bccace492c25), [`a1799bc`](https://github.com/mastra-ai/mastra/commit/a1799bcc1b5a1cdc188f2ac0165f17a1c4ac6f7b), [`6ff6094`](https://github.com/mastra-ai/mastra/commit/6ff60946f4ecfebdeef6e21d2b230c2204f2c9b8), [`288c2ec`](https://github.com/mastra-ai/mastra/commit/288c2ec873ff9f296cebfdb4654d1b9ba498ad9b), [`fb703b9`](https://github.com/mastra-ai/mastra/commit/fb703b9634eeaff1a6eb2b5531ce0f9e8fb04727), [`2a90197`](https://github.com/mastra-ai/mastra/commit/2a90197276e8439a1ee8371c10cde4d6a23bddef), [`37a2314`](https://github.com/mastra-ai/mastra/commit/37a23148e0e5a3b40d4f9f098b194671a8a49faf), [`7b1ef57`](https://github.com/mastra-ai/mastra/commit/7b1ef57fc071c2aa2a2e32905b18cd88719c5a39), [`05a9dee`](https://github.com/mastra-ai/mastra/commit/05a9dee3d355694d28847bfffb6289657fcf7dfa), [`e3c1077`](https://github.com/mastra-ai/mastra/commit/e3c107763aedd1643d3def5df450c235da9ff76c), [`1908ca0`](https://github.com/mastra-ai/mastra/commit/1908ca0521f90e43779cc29ab590173ca560443c), [`1bccdb3`](https://github.com/mastra-ai/mastra/commit/1bccdb33eb90cbeba2dc5ece1c2561fb774b26b6), [`5ef944a`](https://github.com/mastra-ai/mastra/commit/5ef944a3721d93105675cac2b2311432ff8cc393), [`c3ef11f`](https://github.com/mastra-ai/mastra/commit/c3ef11f76e1931cf8f041e9eccf3b382260da022), [`78cfb6b`](https://github.com/mastra-ai/mastra/commit/78cfb6b66fe88bc848105fccb6459fd75413ec87), [`d6b186f`](https://github.com/mastra-ai/mastra/commit/d6b186fb08f1caf1b86f73d3a5ee88fb999ca3be), [`ee68e82`](https://github.com/mastra-ai/mastra/commit/ee68e8289ea4408d29849e899bc6e78b3bd4e843), [`228228b`](https://github.com/mastra-ai/mastra/commit/228228b0b1de9291cb8887587f5cea1a8757ebad), [`ea33930`](https://github.com/mastra-ai/mastra/commit/ea339301e82d6318257720d811b043014ee44064), [`5f7c6a9`](https://github.com/mastra-ai/mastra/commit/5f7c6a986cd9469279820961f8da0a0321fbbd71), [`65493b3`](https://github.com/mastra-ai/mastra/commit/65493b31c36f6fdb78f9679f7e1ecf0c250aa5ee), [`a998b8f`](https://github.com/mastra-ai/mastra/commit/a998b8f858091c2ec47683e60766cf12d03001e4), [`b5a66b7`](https://github.com/mastra-ai/mastra/commit/b5a66b748a14fc8b3f63b04642ddb9621fbcc9e0), [`8a37bdd`](https://github.com/mastra-ai/mastra/commit/8a37bddb6d8614a32c5b70303d583d80c620ea61), [`135d6f2`](https://github.com/mastra-ai/mastra/commit/135d6f22a326ed1dffff858700669dff09d2c9eb)]:
+  - @mastra/react@0.0.6
+  - @mastra/core@0.21.0
+  - @mastra/client-js@0.16.0
+
+## 6.5.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`1908ca0`](https://github.com/mastra-ai/mastra/commit/1908ca0521f90e43779cc29ab590173ca560443c)]:
+  - @mastra/core@0.21.0-alpha.4
+  - @mastra/client-js@0.16.0-alpha.4
+  - @mastra/react@0.0.6-alpha.4
+
+## 6.5.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`a1799bc`](https://github.com/mastra-ai/mastra/commit/a1799bcc1b5a1cdc188f2ac0165f17a1c4ac6f7b), [`6ff6094`](https://github.com/mastra-ai/mastra/commit/6ff60946f4ecfebdeef6e21d2b230c2204f2c9b8)]:
+  - @mastra/core@0.21.0-alpha.3
+  - @mastra/client-js@0.16.0-alpha.3
+  - @mastra/react@0.0.6-alpha.3
+
+## 6.5.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`f59fc1e`](https://github.com/mastra-ai/mastra/commit/f59fc1e406b8912e692f6bff6cfd4754cc8d165c)]:
+  - @mastra/core@0.21.0-alpha.2
+  - @mastra/client-js@0.16.0-alpha.2
+  - @mastra/react@0.0.6-alpha.2
+
+## 6.5.0-alpha.1
+
+### Patch Changes
+
+- Improve the surface API of the react sdk ([#8715](https://github.com/mastra-ai/mastra/pull/8715))
+
+- Fix auto tab for model picker in playground-ui, the UI no longer auto tabs to the next selector when selecting a model/provider. ([#8680](https://github.com/mastra-ai/mastra/pull/8680))
+
+- Create unified Sidebar component to use on Playground and Cloud ([#8655](https://github.com/mastra-ai/mastra/pull/8655))
+
+- Use only zod validation in dynamic form ([#8802](https://github.com/mastra-ai/mastra/pull/8802))
+
+- Add div wrapper around entity tables to fix table vertical position ([#8758](https://github.com/mastra-ai/mastra/pull/8758))
+
+- Customize AITraces type to seamlessly work on Cloud too ([#8759](https://github.com/mastra-ai/mastra/pull/8759))
+
+- Updated dependencies [[`421f019`](https://github.com/mastra-ai/mastra/commit/421f01949651d2766046ca1961e32a2dc2fd712b), [`1ed9670`](https://github.com/mastra-ai/mastra/commit/1ed9670d3ca50cb60dc2e517738c5eef3968ed27), [`158381d`](https://github.com/mastra-ai/mastra/commit/158381d39335be934b81ef8a1947bccace492c25), [`288c2ec`](https://github.com/mastra-ai/mastra/commit/288c2ec873ff9f296cebfdb4654d1b9ba498ad9b), [`fb703b9`](https://github.com/mastra-ai/mastra/commit/fb703b9634eeaff1a6eb2b5531ce0f9e8fb04727), [`37a2314`](https://github.com/mastra-ai/mastra/commit/37a23148e0e5a3b40d4f9f098b194671a8a49faf), [`05a9dee`](https://github.com/mastra-ai/mastra/commit/05a9dee3d355694d28847bfffb6289657fcf7dfa), [`e3c1077`](https://github.com/mastra-ai/mastra/commit/e3c107763aedd1643d3def5df450c235da9ff76c), [`1bccdb3`](https://github.com/mastra-ai/mastra/commit/1bccdb33eb90cbeba2dc5ece1c2561fb774b26b6), [`5ef944a`](https://github.com/mastra-ai/mastra/commit/5ef944a3721d93105675cac2b2311432ff8cc393), [`d6b186f`](https://github.com/mastra-ai/mastra/commit/d6b186fb08f1caf1b86f73d3a5ee88fb999ca3be), [`65493b3`](https://github.com/mastra-ai/mastra/commit/65493b31c36f6fdb78f9679f7e1ecf0c250aa5ee), [`a998b8f`](https://github.com/mastra-ai/mastra/commit/a998b8f858091c2ec47683e60766cf12d03001e4), [`8a37bdd`](https://github.com/mastra-ai/mastra/commit/8a37bddb6d8614a32c5b70303d583d80c620ea61)]:
+  - @mastra/react@0.0.6-alpha.1
+  - @mastra/core@0.21.0-alpha.1
+  - @mastra/client-js@0.16.0-alpha.1
+
+## 6.5.0-alpha.0
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (0.21.0) ([#8619](https://github.com/mastra-ai/mastra/pull/8619))
+
+### Patch Changes
+
+- dependencies updates: ([#8685](https://github.com/mastra-ai/mastra/pull/8685))
+  - Updated dependency [`zod@^4.1.12` ↗︎](https://www.npmjs.com/package/zod/v/4.1.12) (from `^4.1.9`, in `dependencies`)
+
+- Prepares some basic set of homemade components ([#8619](https://github.com/mastra-ai/mastra/pull/8619))
+
+- Adds reset button to model picker to reset to original model set on the agent. ([#8633](https://github.com/mastra-ai/mastra/pull/8633))
+
+- Fix back the tripwire verification inside the new react system ([#8674](https://github.com/mastra-ai/mastra/pull/8674))
+
+- Update peer dependencies to match core package version bump (0.21.0) ([#8557](https://github.com/mastra-ai/mastra/pull/8557))
+
+- handle error case in react sdk ([#8676](https://github.com/mastra-ai/mastra/pull/8676))
+
+- Make sure to convert the agent instructions when showing them ([#8702](https://github.com/mastra-ai/mastra/pull/8702))
+
+- Update peer dependencies to match core package version bump (0.21.0) ([#8626](https://github.com/mastra-ai/mastra/pull/8626))
+
+- Refactor EntryList component and Scorer and Observability pages ([#8652](https://github.com/mastra-ai/mastra/pull/8652))
+
+- fix maxSteps model settings not being passed to generate and stream endpoints ([#8627](https://github.com/mastra-ai/mastra/pull/8627))
+
+- Update peer dependencies to match core package version bump (0.21.0) ([#8686](https://github.com/mastra-ai/mastra/pull/8686))
+
+- Updated dependencies [[`f920afd`](https://github.com/mastra-ai/mastra/commit/f920afdf8725d14d73f895f51a24bb7c79bb4fba), [`2ddb851`](https://github.com/mastra-ai/mastra/commit/2ddb8519c4b6f1d31be10ffd33b41d2b649a04ff), [`b5a66b7`](https://github.com/mastra-ai/mastra/commit/b5a66b748a14fc8b3f63b04642ddb9621fbcc9e0), [`2a90197`](https://github.com/mastra-ai/mastra/commit/2a90197276e8439a1ee8371c10cde4d6a23bddef), [`7b1ef57`](https://github.com/mastra-ai/mastra/commit/7b1ef57fc071c2aa2a2e32905b18cd88719c5a39), [`c3ef11f`](https://github.com/mastra-ai/mastra/commit/c3ef11f76e1931cf8f041e9eccf3b382260da022), [`78cfb6b`](https://github.com/mastra-ai/mastra/commit/78cfb6b66fe88bc848105fccb6459fd75413ec87), [`ee68e82`](https://github.com/mastra-ai/mastra/commit/ee68e8289ea4408d29849e899bc6e78b3bd4e843), [`228228b`](https://github.com/mastra-ai/mastra/commit/228228b0b1de9291cb8887587f5cea1a8757ebad), [`ea33930`](https://github.com/mastra-ai/mastra/commit/ea339301e82d6318257720d811b043014ee44064), [`5f7c6a9`](https://github.com/mastra-ai/mastra/commit/5f7c6a986cd9469279820961f8da0a0321fbbd71), [`b5a66b7`](https://github.com/mastra-ai/mastra/commit/b5a66b748a14fc8b3f63b04642ddb9621fbcc9e0), [`135d6f2`](https://github.com/mastra-ai/mastra/commit/135d6f22a326ed1dffff858700669dff09d2c9eb), [`59d036d`](https://github.com/mastra-ai/mastra/commit/59d036d4c2706b430b0e3f1f1e0ee853ce16ca04)]:
+  - @mastra/react@0.0.6-alpha.0
+  - @mastra/core@0.21.0-alpha.0
+  - @mastra/client-js@0.16.0-alpha.0
+
+## 6.4.1
+
+### Patch Changes
+
+- Updated dependencies [[`07eaf25`](https://github.com/mastra-ai/mastra/commit/07eaf25aada9e42235dbf905854de53da4d8121b), [`0d71771`](https://github.com/mastra-ai/mastra/commit/0d71771f5711164c79f8e80919bc84d6bffeb6bc), [`0d6e55e`](https://github.com/mastra-ai/mastra/commit/0d6e55ecc5a2e689cd4fc9c86525e0eb54d82372), [`68b1111`](https://github.com/mastra-ai/mastra/commit/68b11118a1303f93e9c0c157850c0751309304c5)]:
+  - @mastra/core@0.20.2
+  - @mastra/client-js@0.15.2
+  - @mastra/react@0.0.5
+
+## 6.4.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`07eaf25`](https://github.com/mastra-ai/mastra/commit/07eaf25aada9e42235dbf905854de53da4d8121b), [`68b1111`](https://github.com/mastra-ai/mastra/commit/68b11118a1303f93e9c0c157850c0751309304c5)]:
+  - @mastra/core@0.20.2-alpha.1
+  - @mastra/client-js@0.15.2-alpha.1
+  - @mastra/react@0.0.5-alpha.1
+
+## 6.4.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`0d71771`](https://github.com/mastra-ai/mastra/commit/0d71771f5711164c79f8e80919bc84d6bffeb6bc), [`0d6e55e`](https://github.com/mastra-ai/mastra/commit/0d6e55ecc5a2e689cd4fc9c86525e0eb54d82372)]:
+  - @mastra/core@0.20.2-alpha.0
+  - @mastra/client-js@0.15.2-alpha.0
+  - @mastra/react@0.0.5-alpha.0
+
+## 6.4.0
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (0.20.1) ([#8589](https://github.com/mastra-ai/mastra/pull/8589))
+
+### Patch Changes
+
+- workflow run thread more visible ([#8539](https://github.com/mastra-ai/mastra/pull/8539))
+
+- Mutable shared workflow run state ([#8545](https://github.com/mastra-ai/mastra/pull/8545))
+
+- streamLegacy/generateLegacy clarification in playground ([#8468](https://github.com/mastra-ai/mastra/pull/8468))
+
+- add tripwire reason in playground ([#8568](https://github.com/mastra-ai/mastra/pull/8568))
+
+- Save waiting step status in snapshot ([#8576](https://github.com/mastra-ai/mastra/pull/8576))
+
+- Added AI SDK provider packages to model router for anthropic/google/openai/openrouter/xai ([#8559](https://github.com/mastra-ai/mastra/pull/8559))
+
+- type fixes and missing changeset ([#8545](https://github.com/mastra-ai/mastra/pull/8545))
+
+- Convert WorkflowWatchResult to WorkflowResult in workflow graph ([#8541](https://github.com/mastra-ai/mastra/pull/8541))
+
+- remove icons in entity lists ([#8520](https://github.com/mastra-ai/mastra/pull/8520))
+
+- extract mcp servers into playground + use a table instead of custom stuff ([#8521](https://github.com/mastra-ai/mastra/pull/8521))
+
+- add client search to all entities ([#8523](https://github.com/mastra-ai/mastra/pull/8523))
+
+- Fixed an issue where model router was adding /chat/completions to API urls when it shouldn't. ([#8589](https://github.com/mastra-ai/mastra/pull/8589))
+  fixed an issue with provider ID rendering in playground UI
+
+- UX for the agents page ([#8517](https://github.com/mastra-ai/mastra/pull/8517))
+
+- add icons into playground titles + a link to the entity doc ([#8518](https://github.com/mastra-ai/mastra/pull/8518))
+
+- Updated dependencies [[`c621613`](https://github.com/mastra-ai/mastra/commit/c621613069173c69eb2c3ef19a5308894c6549f0), [`12b1189`](https://github.com/mastra-ai/mastra/commit/12b118942445e4de0dd916c593e33ec78dc3bc73), [`4783b30`](https://github.com/mastra-ai/mastra/commit/4783b3063efea887825514b783ba27f67912c26d), [`076b092`](https://github.com/mastra-ai/mastra/commit/076b0924902ff0f49d5712d2df24c4cca683713f), [`2aee9e7`](https://github.com/mastra-ai/mastra/commit/2aee9e7d188b8b256a4ddc203ccefb366b4867fa), [`c582906`](https://github.com/mastra-ai/mastra/commit/c5829065a346260f96c4beb8af131b94804ae3ad), [`fa2eb96`](https://github.com/mastra-ai/mastra/commit/fa2eb96af16c7d433891a73932764960d3235c1d), [`ee9108f`](https://github.com/mastra-ai/mastra/commit/ee9108fa29bb8368fc23df158c9f0645b2d7b65c), [`4783b30`](https://github.com/mastra-ai/mastra/commit/4783b3063efea887825514b783ba27f67912c26d), [`a739d0c`](https://github.com/mastra-ai/mastra/commit/a739d0c8b37cd89569e04a6ca0827083c6167e19), [`603e927`](https://github.com/mastra-ai/mastra/commit/603e9279db8bf8a46caf83881c6b7389ccffff7e), [`cd45982`](https://github.com/mastra-ai/mastra/commit/cd4598291cda128a88738734ae6cbef076ebdebd), [`874f74d`](https://github.com/mastra-ai/mastra/commit/874f74da4b1acf6517f18132d035612c3ecc394a), [`b728a45`](https://github.com/mastra-ai/mastra/commit/b728a45ab3dba59da0f5ee36b81fe246659f305d), [`0baf2ba`](https://github.com/mastra-ai/mastra/commit/0baf2bab8420277072ef1f95df5ea7b0a2f61fe7), [`10e633a`](https://github.com/mastra-ai/mastra/commit/10e633a07d333466d9734c97acfc3dbf757ad2d0), [`a6d69c5`](https://github.com/mastra-ai/mastra/commit/a6d69c5fb50c0875b46275811fece5862f03c6a0), [`84199af`](https://github.com/mastra-ai/mastra/commit/84199af8673f6f9cb59286ffb5477a41932775de), [`7f431af`](https://github.com/mastra-ai/mastra/commit/7f431afd586b7d3265075e73106eb73167edbb86), [`26e968d`](https://github.com/mastra-ai/mastra/commit/26e968db2171ded9e4d47aa1b4f19e1e771158d0), [`cbd3fb6`](https://github.com/mastra-ai/mastra/commit/cbd3fb65adb03a7c0df193cb998aed5ac56675ee)]:
+  - @mastra/core@0.20.1
+  - @mastra/client-js@0.15.1
+  - @mastra/react@0.0.4
+
+## 6.4.0-alpha.4
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (0.20.1) ([#8589](https://github.com/mastra-ai/mastra/pull/8589))
+
+### Patch Changes
+
+- Fixed an issue where model router was adding /chat/completions to API urls when it shouldn't. ([#8589](https://github.com/mastra-ai/mastra/pull/8589))
+  fixed an issue with provider ID rendering in playground UI
+- Updated dependencies [[`b728a45`](https://github.com/mastra-ai/mastra/commit/b728a45ab3dba59da0f5ee36b81fe246659f305d)]:
+  - @mastra/core@0.20.1-alpha.4
+  - @mastra/client-js@0.15.1-alpha.4
+  - @mastra/react@0.0.4-alpha.4
+
+## 6.3.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`a6d69c5`](https://github.com/mastra-ai/mastra/commit/a6d69c5fb50c0875b46275811fece5862f03c6a0), [`84199af`](https://github.com/mastra-ai/mastra/commit/84199af8673f6f9cb59286ffb5477a41932775de), [`7f431af`](https://github.com/mastra-ai/mastra/commit/7f431afd586b7d3265075e73106eb73167edbb86)]:
+  - @mastra/core@0.20.1-alpha.3
+  - @mastra/client-js@0.15.1-alpha.3
+  - @mastra/react@0.0.4-alpha.3
+
+## 6.3.1-alpha.2
+
+### Patch Changes
+
+- Added AI SDK provider packages to model router for anthropic/google/openai/openrouter/xai ([#8559](https://github.com/mastra-ai/mastra/pull/8559))
+
+- Updated dependencies [[`ee9108f`](https://github.com/mastra-ai/mastra/commit/ee9108fa29bb8368fc23df158c9f0645b2d7b65c)]:
+  - @mastra/core@0.20.1-alpha.2
+  - @mastra/client-js@0.15.1-alpha.2
+  - @mastra/react@0.0.4-alpha.2
+
+## 6.3.1-alpha.1
+
+### Patch Changes
+
+- workflow run thread more visible ([#8539](https://github.com/mastra-ai/mastra/pull/8539))
+
+- Mutable shared workflow run state ([#8545](https://github.com/mastra-ai/mastra/pull/8545))
+
+- add tripwire reason in playground ([#8568](https://github.com/mastra-ai/mastra/pull/8568))
+
+- Save waiting step status in snapshot ([#8576](https://github.com/mastra-ai/mastra/pull/8576))
+
+- type fixes and missing changeset ([#8545](https://github.com/mastra-ai/mastra/pull/8545))
+
+- Convert WorkflowWatchResult to WorkflowResult in workflow graph ([#8541](https://github.com/mastra-ai/mastra/pull/8541))
+
+- remove icons in entity lists ([#8520](https://github.com/mastra-ai/mastra/pull/8520))
+
+- extract mcp servers into playground + use a table instead of custom stuff ([#8521](https://github.com/mastra-ai/mastra/pull/8521))
+
+- add client search to all entities ([#8523](https://github.com/mastra-ai/mastra/pull/8523))
+
+- UX for the agents page ([#8517](https://github.com/mastra-ai/mastra/pull/8517))
+
+- add icons into playground titles + a link to the entity doc ([#8518](https://github.com/mastra-ai/mastra/pull/8518))
+
+- Updated dependencies [[`c621613`](https://github.com/mastra-ai/mastra/commit/c621613069173c69eb2c3ef19a5308894c6549f0), [`12b1189`](https://github.com/mastra-ai/mastra/commit/12b118942445e4de0dd916c593e33ec78dc3bc73), [`4783b30`](https://github.com/mastra-ai/mastra/commit/4783b3063efea887825514b783ba27f67912c26d), [`076b092`](https://github.com/mastra-ai/mastra/commit/076b0924902ff0f49d5712d2df24c4cca683713f), [`2aee9e7`](https://github.com/mastra-ai/mastra/commit/2aee9e7d188b8b256a4ddc203ccefb366b4867fa), [`c582906`](https://github.com/mastra-ai/mastra/commit/c5829065a346260f96c4beb8af131b94804ae3ad), [`fa2eb96`](https://github.com/mastra-ai/mastra/commit/fa2eb96af16c7d433891a73932764960d3235c1d), [`4783b30`](https://github.com/mastra-ai/mastra/commit/4783b3063efea887825514b783ba27f67912c26d), [`a739d0c`](https://github.com/mastra-ai/mastra/commit/a739d0c8b37cd89569e04a6ca0827083c6167e19), [`603e927`](https://github.com/mastra-ai/mastra/commit/603e9279db8bf8a46caf83881c6b7389ccffff7e), [`cd45982`](https://github.com/mastra-ai/mastra/commit/cd4598291cda128a88738734ae6cbef076ebdebd), [`874f74d`](https://github.com/mastra-ai/mastra/commit/874f74da4b1acf6517f18132d035612c3ecc394a), [`0baf2ba`](https://github.com/mastra-ai/mastra/commit/0baf2bab8420277072ef1f95df5ea7b0a2f61fe7), [`26e968d`](https://github.com/mastra-ai/mastra/commit/26e968db2171ded9e4d47aa1b4f19e1e771158d0), [`cbd3fb6`](https://github.com/mastra-ai/mastra/commit/cbd3fb65adb03a7c0df193cb998aed5ac56675ee)]:
+  - @mastra/core@0.20.1-alpha.1
+  - @mastra/client-js@0.15.1-alpha.1
+  - @mastra/react@0.0.4-alpha.1
+
 ## 6.3.1-alpha.0
 
 ### Patch Changes

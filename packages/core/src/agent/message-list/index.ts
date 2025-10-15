@@ -1396,6 +1396,10 @@ export class MessageList {
       parts.push({
         type: 'text',
         text: coreMessage.content,
+        // Preserve providerOptions from CoreMessage (e.g., for system messages with cacheControl)
+        ...('providerOptions' in coreMessage && coreMessage.providerOptions
+          ? { providerMetadata: coreMessage.providerOptions }
+          : {}),
       });
     } else if (Array.isArray(coreMessage.content)) {
       for (const part of coreMessage.content) {
@@ -1406,9 +1410,17 @@ export class MessageList {
             if (coreMessage.role === 'assistant' && prevPart && prevPart.type === 'tool-invocation') {
               parts.push({ type: 'step-start' });
             }
+            // Merge part-level and message-level providerOptions
+            // Part-level takes precedence over message-level
+            const mergedProviderMetadata = {
+              ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
+              ...('providerOptions' in part && part.providerOptions ? part.providerOptions : {}),
+            };
+
             parts.push({
               type: 'text',
               text: part.text,
+              ...(Object.keys(mergedProviderMetadata).length > 0 ? { providerMetadata: mergedProviderMetadata } : {}),
             });
             break;
 
@@ -2608,6 +2620,10 @@ export class MessageList {
       parts.push({
         type: 'text',
         text: coreMessage.content,
+        // Preserve providerOptions from ModelMessage level (e.g., system messages with cacheControl)
+        ...('providerOptions' in coreMessage && coreMessage.providerOptions
+          ? { providerMetadata: coreMessage.providerOptions }
+          : {}),
       });
     } else if (Array.isArray(coreMessage.content)) {
       for (const part of coreMessage.content) {
@@ -2625,10 +2641,19 @@ export class MessageList {
                 type: 'step-start',
               });
             }
+            // Merge part-level and message-level providerOptions
+            // Part-level takes precedence over message-level
+            const mergedProviderMetadataV3 = {
+              ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
+              ...(part.providerOptions || {}),
+            };
+
             parts.push({
               type: 'text',
               text: part.text,
-              providerMetadata: part.providerOptions,
+              ...(Object.keys(mergedProviderMetadataV3).length > 0
+                ? { providerMetadata: mergedProviderMetadataV3 }
+                : {}),
             });
             break;
 

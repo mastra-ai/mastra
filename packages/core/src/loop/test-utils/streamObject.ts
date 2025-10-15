@@ -14,7 +14,6 @@ import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import { createMockServerResponse } from './mock-server-response';
 import { mockDate, testUsage } from './utils';
-import { MastraError } from '../../error';
 
 function createTestModels({
   warnings = [],
@@ -92,8 +91,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should resolve object promise without manual stream consumption', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: createTestModels(),
-          output: z.object({ content: z.string() }),
+          structuredOutput: { schema: z.object({ content: z.string() }) },
           messageList: new MessageList(),
         });
 
@@ -109,6 +109,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should work with array schemas too', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: createTestModels({
             stream: convertArrayToReadableStream([
               { type: 'text-start', id: '1' },
@@ -121,7 +122,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ]),
           }),
-          output: z.array(z.object({ content: z.string() })),
+          structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
           messageList: new MessageList(),
         });
 
@@ -134,8 +135,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should still work when stream is manually consumed first', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: createTestModels(),
-          output: z.object({ content: z.string() }),
+          structuredOutput: { schema: z.object({ content: z.string() }) },
           messageList: new MessageList(),
         });
 
@@ -158,9 +160,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const messageList = new MessageList();
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: mockModel,
             messageList,
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
           });
 
           expect(await convertAsyncIterableToArray(result.objectStream)).toMatchInlineSnapshot(`
@@ -178,33 +181,33 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             ]
           `);
 
-          // TODO: responseFormat disabled in favor of json schema in system prompt
-          // expect(mockModel[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
-          //   {
-          //     "schema": {
-          //       "$schema": "http://json-schema.org/draft-07/schema#",
-          //       "additionalProperties": false,
-          //       "properties": {
-          //         "content": {
-          //           "type": "string",
-          //         },
-          //       },
-          //       "required": [
-          //         "content",
-          //       ],
-          //       "type": "object",
-          //     },
-          //     "type": "json",
-          //   }
-          // `);
+          expect(mockModel[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+            {
+              "schema": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "additionalProperties": false,
+                "properties": {
+                  "content": {
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "content",
+                ],
+                "type": "object",
+              },
+              "type": "json",
+            }
+          `);
         });
 
         it('should use name and description', async () => {
           const models = createTestModels();
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models,
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -225,12 +228,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           expect(models[0]?.model?.doStreamCalls?.[0]?.prompt).toMatchInlineSnapshot(`
             [
               {
-                "content": "JSON schema:
-            {"type":"object","properties":{"content":{"type":"string"}},"required":["content"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}
-            You MUST answer with a JSON object that matches the JSON schema above.",
-                "role": "system",
-              },
-              {
                 "content": [
                   {
                     "text": ".",
@@ -243,29 +240,29 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             ]
           `);
 
-          // TODO: responseFormat disabled in favor of json schema in system prompt
-          // expect(models[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
-          //   {
-          //     "schema": {
-          //       "$schema": "http://json-schema.org/draft-07/schema#",
-          //       "additionalProperties": false,
-          //       "properties": {
-          //         "content": {
-          //           "type": "string",
-          //         },
-          //       },
-          //       "required": [
-          //         "content",
-          //       ],
-          //       "type": "object",
-          //     },
-          //     "type": "json",
-          //   }
-          // `);
+          expect(models[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+            {
+              "schema": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "additionalProperties": false,
+                "properties": {
+                  "content": {
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "content",
+                ],
+                "type": "object",
+              },
+              "type": "json",
+            }
+          `);
         });
 
         it('should suppress error in partialObjectStream', async () => {
           const result = loopFn({
+            agentId: 'agent-id',
             runId,
             models: [
               {
@@ -278,10 +275,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
             options: {
               onError: () => {},
+            },
+            modelSettings: {
+              maxRetries: 0,
             },
           });
 
@@ -293,6 +293,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
           const output = loopFn({
             runId,
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -304,12 +305,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
             options: {
               onError(event) {
                 errors.push(event);
               },
+            },
+            modelSettings: {
+              maxRetries: 0,
             },
           });
 
@@ -320,14 +324,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
       });
 
-      // TODO: aisdkv5 streamObject result.fullStream does not have start events, and for some reason has slightly different formats for text deltas
-      // TODO: should we support this?
       describe('result.fullStream', () => {
         it.todo('should send full stream data', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels(),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -407,8 +410,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should send text stream', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels(),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -437,8 +441,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should create a Response with a text stream', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels(),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -465,8 +470,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const mockResponse = createMockServerResponse();
 
           const result = loopFn({
+            agentId: 'agent-id',
             models: createTestModels(),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -502,6 +508,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.usage', () => {
         it('should resolve with token usage', async () => {
           const result = loopFn({
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -514,7 +521,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 { type: 'finish', finishReason: 'stop', usage: testUsage },
               ]),
             }),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -535,6 +542,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.providerMetadata', () => {
         it('should resolve with provider metadata', async () => {
           const result = loopFn({
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -554,7 +562,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 },
               ]),
             }),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -573,6 +581,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.response', () => {
         it('should resolve with response information', async () => {
           const result = loopFn({
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 {
@@ -596,7 +605,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ]),
               response: { headers: { call: '2' } },
             }),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -619,7 +628,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             },
             timestamp: new Date(0),
             headers: { call: '2' },
-            // TODO: result.response contains messages array but didnt in v5
             messages: [
               {
                 content: [
@@ -636,6 +644,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 id: expect.any(String),
                 metadata: {
                   __originalContent: '{"content": "Hello, world!"}',
+                  structuredOutput: {
+                    content: 'Hello, world!',
+                  },
                   createdAt: expect.any(Date),
                 },
                 parts: [
@@ -660,6 +671,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.request', () => {
         it('should contain request information', async () => {
           const result = loopFn({
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -691,15 +703,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
-          // TODO: This shouldn't need to be awaited if result.request is a delayed promise
-          // consume stream (runs in parallel)
-          // void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          // currently not a delayed promise
           expect(await result.request).toStrictEqual({
             body: 'test body',
           });
@@ -710,6 +717,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should resolve with typed object', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -735,7 +743,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -750,6 +758,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should reject object promise when the streamed object does not match the schema', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -775,19 +784,20 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
           // consume stream (runs in parallel)
           void convertAsyncIterableToArray(result.objectStream);
           // Expect the promise to be rejected with a validation error
-          await expect(result.object).rejects.toThrow('Type validation failed: Value: {"invalid":"Hello, world!"}.');
+          await expect(result.object).rejects.toThrow('Structured output validation failed');
         });
 
         it('should not lead to unhandled promise rejections when the streamed object does not match the schema', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -813,7 +823,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -827,6 +837,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.finishReason', () => {
         it('should resolve with finish reason', async () => {
           const result = loopFn({
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -852,7 +863,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -865,6 +876,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should be called when a valid object is generated', async () => {
           let result: any;
           const { objectStream } = loopFn({
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -898,7 +910,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             options: {
               onFinish: async event => {
                 result = event;
@@ -1075,6 +1087,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it("should be called when object doesn't match the schema without destructuring", async () => {
           let result: any;
           const output = loopFn({
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -1106,7 +1119,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             options: {
               onFinish: async event => {
                 result = event;
@@ -1121,8 +1134,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
           // consume expected error rejection
           await output.object.catch(err => {
-            expect(err).toMatchInlineSnapshot(`[Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
-Error message: Validation failed]`);
+            expect(err).toMatchInlineSnapshot(`[Error: Structured output validation failed
+✖ Required
+  → at content
+]`);
           });
 
           expect(result!).toMatchInlineSnapshot(`
@@ -1135,8 +1150,10 @@ Error message: Validation failed]`);
               ],
               "dynamicToolCalls": [],
               "dynamicToolResults": [],
-              "error": [Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
-            Error message: Validation failed],
+              "error": [Error: Structured output validation failed
+            ✖ Required
+              → at content
+            ],
               "files": [],
               "finishReason": "error",
               "model": {
@@ -1282,6 +1299,7 @@ Error message: Validation failed]`);
         it("should be called when object doesn't match the schema with destructuring", async () => {
           let result: any;
           const { consumeStream, objectStream, object } = loopFn({
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -1313,7 +1331,7 @@ Error message: Validation failed]`);
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             options: {
               onFinish: async event => {
                 result = event;
@@ -1328,8 +1346,10 @@ Error message: Validation failed]`);
 
           // consume expected error rejection
           await object.catch(err => {
-            expect(err).toMatchInlineSnapshot(`[Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
-Error message: Validation failed]`);
+            expect(err).toMatchInlineSnapshot(`[Error: Structured output validation failed
+✖ Required
+  → at content
+]`);
           });
 
           expect(result!).toMatchInlineSnapshot(`
@@ -1342,8 +1362,10 @@ Error message: Validation failed]`);
               ],
               "dynamicToolCalls": [],
               "dynamicToolResults": [],
-              "error": [Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
-            Error message: Validation failed],
+              "error": [Error: Structured output validation failed
+            ✖ Required
+              → at content
+            ],
               "files": [],
               "finishReason": "error",
               "model": {
@@ -1490,6 +1512,7 @@ Error message: Validation failed]`);
       describe('options.headers', () => {
         it('should pass headers to model', async () => {
           const result = loopFn({
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -1520,7 +1543,7 @@ Error message: Validation failed]`);
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
             modelSettings: { headers: { 'custom-request-header': 'request-header-value' } },
             headers: { 'custom-request-header': 'request-header-value' },
@@ -1540,6 +1563,7 @@ Error message: Validation failed]`);
         it('should pass provider options to model', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -1570,7 +1594,7 @@ Error message: Validation failed]`);
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
             providerOptions: {
               aProvider: { someKey: 'someValue' },
@@ -1593,14 +1617,17 @@ Error message: Validation failed]`);
           const models = createTestModels();
 
           const result = loopFn({
+            agentId: 'agent-id',
             runId,
             models,
-            output: jsonSchema({
-              type: 'object',
-              properties: { content: { type: 'string' } },
-              required: ['content'],
-              additionalProperties: false,
-            }),
+            structuredOutput: {
+              schema: jsonSchema({
+                type: 'object',
+                properties: { content: { type: 'string' } },
+                required: ['content'],
+                additionalProperties: false,
+              }),
+            },
             messageList: new MessageList(),
           });
           const expectedOutput = `
@@ -1620,34 +1647,31 @@ Error message: Validation failed]`);
           expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(expectedOutput);
           expect(await convertAsyncIterableToArray(result.objectStream)).toMatchInlineSnapshot(expectedOutput);
 
-          // TODO: responseFormat disabled in favor of json schema in system prompt
-          //   expect(models?.[0]?.model?.doStreamCalls[0].responseFormat).toMatchInlineSnapshot(`
-          //   {
-          //     "description": undefined,
-          //     "name": undefined,
-          //     "schema": {
-          //       "additionalProperties": false,
-          //       "properties": {
-          //         "content": {
-          //           "type": "string",
-          //         },
-          //       },
-          //       "required": [
-          //         "content",
-          //       ],
-          //       "type": "object",
-          //     },
-          //     "type": "json",
-          //   }
-          // `);
+          expect(models?.[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+            {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "content": {
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "content",
+                ],
+                "type": "object",
+              },
+              "type": "json",
+            }
+          `);
         });
       });
 
-      // TODO: throw mastra error instead
-      describe.todo('error handling', () => {
-        it('should throw NoObjectGeneratedError when schema validation fails', async () => {
+      describe('error handling', () => {
+        it('should throw zod validation error when zod schema validation fails', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: [
               {
                 id: 'test-model',
@@ -1674,124 +1698,26 @@ Error message: Validation failed]`);
                 }),
               },
             ],
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
+          const expectedErrorMessage = `Structured output validation failed
+✖ Expected string, received number
+  → at content
+`;
+          await expect(result.object).rejects.toThrow(expectedErrorMessage);
 
           try {
-            await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-            await result.aisdk.v5.object;
-            fail('must throw error');
+            await result.object;
           } catch (error) {
-            verifyNoObjectGeneratedError(error, {
-              message: 'No object generated: response did not match schema.',
-              response: {
-                id: 'id-1',
-                timestamp: new Date(123),
-                modelId: 'model-1',
-              },
-              usage: testUsage,
-              finishReason: 'stop',
-            });
-          }
-        });
-
-        it('should throw NoObjectGeneratedError when parsing fails', async () => {
-          const result = loopFn({
-            runId,
-            models: [
-              {
-                id: 'test-model',
-                maxRetries: 0,
-                model: new MockLanguageModelV2({
-                  doStream: async () => ({
-                    stream: convertArrayToReadableStream([
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ broken json' },
-                      { type: 'text-end', id: '1' },
-                      {
-                        type: 'response-metadata',
-                        id: 'id-1',
-                        timestamp: new Date(123),
-                        modelId: 'model-1',
-                      },
-                      {
-                        type: 'finish',
-                        finishReason: 'stop',
-                        usage: testUsage,
-                      },
-                    ]),
-                  }),
-                }),
-              },
-            ],
-            output: z.object({ content: z.string() }),
-            messageList: new MessageList(),
-          });
-
-          try {
-            await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-            await result.aisdk.v5.object;
-            fail('must throw error');
-          } catch (error) {
-            verifyNoObjectGeneratedError(error, {
-              message: 'No object generated: could not parse the response.',
-              response: {
-                id: 'id-1',
-                timestamp: new Date(123),
-                modelId: 'model-1',
-              },
-              usage: testUsage,
-              finishReason: 'stop',
-            });
-          }
-        });
-
-        it('should throw NoObjectGeneratedError when no text is generated', async () => {
-          const result = loopFn({
-            runId,
-            models: [
-              {
-                id: 'test-model',
-                maxRetries: 0,
-                model: new MockLanguageModelV2({
-                  doStream: async () => ({
-                    stream: convertArrayToReadableStream([
-                      {
-                        type: 'response-metadata',
-                        id: 'id-1',
-                        timestamp: new Date(123),
-                        modelId: 'model-1',
-                      },
-                      {
-                        type: 'finish',
-                        finishReason: 'stop',
-                        usage: testUsage,
-                      },
-                    ]),
-                  }),
-                }),
-              },
-            ],
-            output: z.object({ content: z.string() }),
-            messageList: new MessageList(),
-          });
-
-          try {
-            await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-            await result.aisdk.v5.object;
-            fail('must throw error');
-          } catch (error) {
-            verifyNoObjectGeneratedError(error, {
-              message: 'No object generated: could not parse the response.',
-              response: {
-                id: 'id-1',
-                timestamp: new Date(123),
-                modelId: 'model-1',
-              },
-              usage: testUsage,
-              finishReason: 'stop',
-            });
+            expect((error as Error).cause).toBeInstanceOf(Error);
+            expect(error).toMatchInlineSnapshot(`[Error: ${expectedErrorMessage}]`);
+            expect((error as Error)?.cause).toBeInstanceOf(z.ZodError);
+            expect(((error as Error)?.cause as z.ZodError)?.issues).toHaveLength(1);
+            expect(((error as Error)?.cause as z.ZodError)?.issues[0]?.message).toContain(
+              'Expected string, received number',
+            );
+            expect(((error as Error)?.cause as z.ZodError)?.issues[0]?.path).toEqual(['content']);
           }
         });
       });
@@ -1802,6 +1728,7 @@ Error message: Validation failed]`);
         it('should handle complete ```json...``` code blocks', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -1819,7 +1746,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -1840,6 +1767,7 @@ Error message: Validation failed]`);
         it('should handle ```json code blocks without newlines', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -1852,7 +1780,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -1866,6 +1794,7 @@ Error message: Validation failed]`);
         it('should handle ```json prefix during streaming', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -1884,7 +1813,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.object({ content: z.string() }),
+            structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: new MessageList(),
           });
 
@@ -1908,6 +1837,7 @@ Error message: Validation failed]`);
         it('should handle array wrapped in ```json...``` blocks', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -1925,7 +1855,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.array(z.object({ content: z.string() })),
+            structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
             messageList: new MessageList(),
           });
 
@@ -1935,6 +1865,7 @@ Error message: Validation failed]`);
         it('should handle partial array streaming with ```json prefix', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -1951,7 +1882,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.array(z.object({ content: z.string() })),
+            structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
             messageList: new MessageList(),
           });
 
@@ -1970,6 +1901,7 @@ Error message: Validation failed]`);
         it('should handle enum wrapped in ```json...``` blocks', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -1984,7 +1916,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.enum(['sunny', 'rainy', 'snowy']),
+            structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
             messageList: new MessageList(),
           });
 
@@ -1994,6 +1926,7 @@ Error message: Validation failed]`);
         it('should handle partial enum streaming with ```json prefix', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -2012,7 +1945,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.enum(['sunny', 'rainy', 'snowy']),
+            structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
             messageList: new MessageList(),
           });
 
@@ -2032,6 +1965,7 @@ Error message: Validation failed]`);
         beforeEach(async () => {
           result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -2063,7 +1997,7 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.array(z.object({ content: z.string() })),
+            structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
             options: {
               onFinish: async event => {
                 onFinishResult = event as unknown as typeof onFinishResult;
@@ -2096,7 +2030,13 @@ Error message: Validation failed]`);
 
         it('should have the correct object result', async () => {
           // consume stream
-          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          await result.consumeStream();
+
+          expect(await result.object).toStrictEqual([
+            { content: 'element 1' },
+            { content: 'element 2' },
+            { content: 'element 3' },
+          ]);
 
           expect(await result.aisdk.v5.object).toStrictEqual([
             { content: 'element 1' },
@@ -2105,10 +2045,10 @@ Error message: Validation failed]`);
           ]);
         });
 
-        // TODO: `object` is not passed to onFinish yet
-        it.todo('should call onFinish callback with full array', async () => {
-          console.log('onFinishResult2', onFinishResult);
-          expect(onFinishResult.object).toStrictEqual([
+        it('should call onFinish callback with full array', async () => {
+          await result.consumeStream();
+
+          expect(onFinishResult?.object).toStrictEqual([
             { content: 'element 1' },
             { content: 'element 2' },
             { content: 'element 3' },
@@ -2128,6 +2068,7 @@ Error message: Validation failed]`);
         beforeEach(async () => {
           result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 {
@@ -2150,10 +2091,8 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.array(z.object({ content: z.string() })),
+            structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
             options: {
-              // schema: z.object({ content: z.string() }),
-              // output: 'array',
               onFinish: async event => {
                 onFinishResult = event as unknown as typeof onFinishResult;
               },
@@ -2181,15 +2120,16 @@ Error message: Validation failed]`);
           expect(await result.aisdk.v5.object).toStrictEqual([{ content: 'element 1' }, { content: 'element 2' }]);
         });
 
-        // TODO: `object` is not passed to onFinish yet
-        it.todo('should call onFinish callback with full array', async () => {
-          // consume stream to trigger onFinish callback
-          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-
+        it('should call onFinish callback with full array', async () => {
+          await result.consumeStream();
           expect(onFinishResult.object).toStrictEqual([{ content: 'element 1' }, { content: 'element 2' }]);
         });
 
         it('should stream elements individually in elementStream', async () => {
+          assert.deepStrictEqual(await convertAsyncIterableToArray(result.elementStream), [
+            { content: 'element 1' },
+            { content: 'element 2' },
+          ]);
           assert.deepStrictEqual(await convertAsyncIterableToArray(result.aisdk.v5.elementStream), [
             { content: 'element 1' },
             { content: 'element 2' },
@@ -2198,10 +2138,10 @@ Error message: Validation failed]`);
       });
 
       describe('error handling', () => {
-        // This started failing after a hacky fix for object output with tool calls, https://github.com/mastra-ai/mastra/pull/8097/commits/88747401da54c2c1e1c1a267770de3362e35a705
-        it.skip('should reject object promise when the streamed object does not match the schema', async () => {
+        it('should reject object promise when the streamed object does not match the schema', async () => {
           const result = loopFn({
             runId,
+            agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
                 { type: 'text-start', id: '1' },
@@ -2233,12 +2173,19 @@ Error message: Validation failed]`);
                 },
               ]),
             }),
-            output: z.array(z.object({ content: z.string() })),
-
+            structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
             messageList: new MessageList(),
           });
-          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          await expect(result.aisdk.v5.object).rejects.toThrow('Validation failed');
+          await result.consumeStream();
+          const expectedErrorMessage = `Structured output validation failed
+✖ Required
+  → at [0].content
+✖ Required
+  → at [1].content
+✖ Required
+  → at [2].content`;
+          await expect(result.object).rejects.toThrow(expectedErrorMessage);
+          await expect(result.aisdk.v5.object).rejects.toThrow(expectedErrorMessage);
         });
       });
     });
@@ -2261,8 +2208,9 @@ Error message: Validation failed]`);
 
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: mockModels,
-          output: z.enum(['sunny', 'rainy', 'snowy']),
+          structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
           messageList: new MessageList(),
         });
 
@@ -2327,8 +2275,9 @@ Error message: Validation failed]`);
 
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: mockModels,
-          output: z.enum(['sunny', 'rainy', 'snowy']),
+          structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
           messageList: new MessageList(),
         });
 
@@ -2355,8 +2304,9 @@ Error message: Validation failed]`);
 
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: mockModels,
-          output: z.enum(['foobar', 'foobar2']),
+          structuredOutput: { schema: z.enum(['foobar', 'foobar2']) },
           messageList: new MessageList(),
         });
 
@@ -2389,8 +2339,9 @@ Error message: Validation failed]`);
 
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: mockModels,
-          output: z.enum(['foobar', 'barfoo']),
+          structuredOutput: { schema: z.enum(['foobar', 'barfoo']) },
           messageList: new MessageList(),
         });
 
@@ -2406,6 +2357,7 @@ Error message: Validation failed]`);
       it('should be able to repair a JSONParseError', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: [
             {
               id: 'test-model',
@@ -2436,7 +2388,7 @@ Error message: Validation failed]`);
               }),
             },
           ],
-          output: z.object({ content: z.string() }),
+          structuredOutput: { schema: z.object({ content: z.string() }) },
           // TODO
           // options: {
           //   experimental_repairText: async ({ text, error }) => {
@@ -2459,6 +2411,7 @@ Error message: Validation failed]`);
       it('should be able to repair a TypeValidationError', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: [
             {
               id: 'test-model',
@@ -2489,7 +2442,7 @@ Error message: Validation failed]`);
               }),
             },
           ],
-          output: z.object({ content: z.string() }),
+          structuredOutput: { schema: z.object({ content: z.string() }) },
           // TODO
           // options: {
           //   experimental_repairText: async ({ text, error }) => {
@@ -2512,6 +2465,7 @@ Error message: Validation failed]`);
       it('should be able to handle repair that returns null', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: [
             {
               id: 'test-model',
@@ -2543,7 +2497,7 @@ Error message: Validation failed]`);
             },
           ],
 
-          output: z.object({ content: z.string() }),
+          structuredOutput: { schema: z.object({ content: z.string() }) },
 
           // TODO: experimental_repairText?
           // options: {
@@ -2567,6 +2521,7 @@ Error message: Validation failed]`);
       it('should be able to repair JSON wrapped with markdown code blocks', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: [
             {
               id: 'test-model',
@@ -2597,7 +2552,7 @@ Error message: Validation failed]`);
               }),
             },
           ],
-          output: z.object({ content: z.string() }),
+          structuredOutput: { schema: z.object({ content: z.string() }) },
           // TODO
           // options: {
           //   experimental_repairText: async ({ text, error }) => {
@@ -2623,6 +2578,7 @@ Error message: Validation failed]`);
       it('should throw NoObjectGeneratedError when parsing fails with repairText', async () => {
         const result = loopFn({
           runId,
+          agentId: 'agent-id',
           models: [
             {
               id: 'test-model',
@@ -2649,7 +2605,7 @@ Error message: Validation failed]`);
               }),
             },
           ],
-          output: z.object({ content: z.string() }),
+          structuredOutput: { schema: z.object({ content: z.string() }) },
           // TODO
           // options: {
           //   experimental_repairText: async ({ text }) => text + '{',

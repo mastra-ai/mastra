@@ -2,9 +2,8 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import { InternalSpans } from '../../ai-tracing';
 import type { TracingContext } from '../../ai-tracing';
-import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
@@ -38,8 +37,11 @@ export interface ModerationResult {
  * Configuration options for ModerationInputProcessor
  */
 export interface ModerationOptions {
-  /** Model configuration for the moderation agent */
-  model: MastraLanguageModel;
+  /**
+   * Model configuration for the moderation agent
+   * Supports magic strings like "openai/gpt-4o", config objects, or direct LanguageModel instances
+   */
+  model: MastraModelConfig;
 
   /**
    * Categories to check for moderation.
@@ -125,7 +127,6 @@ export class ModerationProcessor implements Processor {
       name: 'content-moderator',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
-      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 
@@ -254,7 +255,9 @@ export class ModerationProcessor implements Processor {
       let response;
       if (model.specificationVersion === 'v2') {
         response = await this.moderationAgent.generate(prompt, {
-          output: schema,
+          structuredOutput: {
+            schema,
+          },
           modelSettings: {
             temperature: 0,
           },

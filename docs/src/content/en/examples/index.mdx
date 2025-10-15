@@ -11,7 +11,7 @@ import { Tabs } from "nextra/components";
 The Examples section is a short list of example projects demonstrating basic AI engineering with Mastra, including text generation, structured output, streaming responses, retrieval‐augmented generation (RAG), and voice.
 
 <CardItems
-  titles={["Agent", "Workflow", "Tool", "legacyWorkflow", "Memory", "RAG", "Evals", "Scorers (Experimental)", "Voice"]}
+  titles={["Agent", "Workflow", "Tool", "Processors", "legacyWorkflow", "Memory", "RAG", "Evals", "Scorers (Experimental)", "Voice"]}
   items={{
     Agent: [
       { title: "Calling Agents", href: "/examples/agents/calling-agents" },
@@ -42,6 +42,11 @@ The Examples section is a short list of example projects demonstrating basic AI 
       { title: "Calling Tools", href: "/examples/tools/calling-tools" },
       { title: "Dynamic Tools", href: "/examples/tools/dynamic-tools" },
       { title: "Tools with Workflows", href: "/examples/tools/workflow-as-tools" }
+    ],
+    Processors: [
+      { title: "Message Length Limiter", href: "/examples/processors/message-length-limiter" },
+      { title: "Response Length Limiter", href: "/examples/processors/response-length-limiter" },
+      { title: "Response Validator", href: "/examples/processors/response-validator" }
     ],
     legacyWorkflow: [
       { title: "Creating a Workflow", href: "/examples/workflows_legacy/creating-a-workflow" },

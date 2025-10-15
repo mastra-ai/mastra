@@ -1,10 +1,16 @@
 # @mastra/core
 
-Mastra is the Typescript framework for building AI agents and assistants. It’s used by some of the largest companies in the world to build internal AI automation tooling and customer-facing agents.
+Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
 
-This is the `core` package, which includes the main functionality of Mastra, including agents, workflows, tools, and telemetry.
+It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server. It's the easiest way to build, tune, and scale reliable AI products.
+
+This is the `@mastra/core` package, which includes the main functionality of Mastra, including agents, workflows, tools, memory, and tracing.
 
 ## Installation
+
+`@mastra/core` is an essential building block for a Mastra application and you most likely don't want to use it as a standalone package. Therefore we recommend following the [installation guide](https://mastra.ai/docs/getting-started/installation) to get started with Mastra.
+
+You can install the package like so:
 
 ```bash
 npm install @mastra/core
@@ -12,132 +18,38 @@ npm install @mastra/core
 
 ## Core Components
 
-### Agents (`/agent`)
+- **Mastra** (`/mastra`) - Central orchestration class that initializes and coordinates all Mastra components. Provides dependency injection for agents, workflows, tools,
+  memory, storage, and other services through a unified configuration interface. [Learn more about Mastra](https://mastra.ai/docs/getting-started/installation)
 
-Mastra agents are autonomous AI entities that can understand instructions, use tools, and complete tasks. They encapsulate LLM interactions and can maintain conversation history, use provided tools, and follow specific behavioral guidelines through instructions.
+- **Agents** (`/agent`) - Autonomous AI entities that understand instructions, use tools, and complete tasks. Encapsulate LLM interactions with conversation history, tool
+  execution, memory integration, and behavioral guidelines. [Learn more about Agents](https://mastra.ai/docs/agents/overview)
 
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
+- **Workflows** (`/workflows`) - Graph-based execution engine for chaining, branching, and parallelizing LLM calls. Orchestrates complex AI tasks with state management,
+  error recovery, and conditional logic. [Learn more about Workflows](https://mastra.ai/docs/workflows/overview)
 
-const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'Your task-specific instructions',
-  model: openai('gpt-4o-mini'),
-  tools: {}, // Optional tools
-});
-```
+- **Tools** (`/tools`) - Functions that agents can invoke to interact with external systems. Each tool has a schema and description enabling AI to understand and use them
+  effectively. Supports custom tools, toolsets, and runtime context. [Learn more about Tools](https://mastra.ai/docs/tools-mcp/overview)
 
-[Agent documentation →](https://mastra.ai/docs/agents/overview)
+- **Memory** (`/memory`) - Thread-based conversation persistence with semantic recall and working memory capabilities. Stores conversation history, retrieves contextually
+  relevant information, and maintains agent state across interactions. [Learn more about Memory](https://mastra.ai/docs/memory/overview)
 
-### Workflows (`/workflows`)
+- **MCP** (`/mcp`) - Model Context Protocol integration enabling external tool sources. Supports SSE, HTTP, and Hono-based MCP servers with automatic tool conversion and
+  registration. [Learn more about MCP](https://mastra.ai/docs/tools-mcp/mcp-overview)
 
-Mastra workflows are a graph-based execution engine allowing you to chain, branch, and parallelize LLM calls. You can orchestrate complex AI tasks by combining multiple actions. Workflows handle state management, error recovery, and can include conditional logic.
+- **AI Tracing** (`/ai-tracing`) - Type-safe observability system tracking AI operations through spans. Provides OpenTelemetry-compatible tracing with event-driven exports,
+  flexible sampling, and pluggable processors for real-time monitoring. [Learn more about AI Tracing](https://mastra.ai/docs/observability/ai-tracing/overview)
 
-```typescript
-import { createWorkflow } from '@mastra/core/workflows';
-import z from 'zod'
+- **Storage** (`/storage`) - Pluggable storage layer with standardized interfaces for multiple backends. Supports PostgreSQL, LibSQL, MongoDB, and other databases for
+  persisting agent data, memory, and workflow state. [Learn more about Storage](https://mastra.ai/docs/server-db/storage)
 
-const workflow = createWorkflow({
-  id: 'my-workflow',
-  inputSchema: z.object({}),
-  outputSchema: z.object({})
-  steps: [
-    // Workflow steps
-  ],
-});
-```
+- **Vector** (`/vector`) - Vector operations and embedding management for semantic search. Provides unified interface for vector stores with filtering capabilities and
+  similarity search. [Learn more about Vector](https://mastra.ai/docs/rag/vector-databases)
 
-[Workflow documentation →](https://mastra.ai/docs/workflows/overview)
+- **Server** (`/server`) - HTTP server implementation built on Hono with OpenAPI support. Provides custom API routes, middleware, authentication, and runtime context for
+  deploying Mastra as a standalone service. [Learn more about Server](https://mastra.ai/docs/server-db/production-server)
 
-### Tools (`/tools`)
-
-Tools are functions that agents can use to interact with external systems or perform specific tasks. Each tool has a clear description and schema, making it easy for AI to understand and use them effectively.
-
-```typescript
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
-
-const weatherInfo = createTool({
-  id: 'Get Weather Information',
-  inputSchema: z.object({
-    city: z.string(),
-  }),
-  description: 'Fetches the current weather information for a given city',
-  execute: async ({ context: { city } }) => {
-    // Tool implementation
-  },
-});
-```
-
-[Tools documentation →](https://mastra.ai/docs/agents/adding-tools)
-
-### Evals (`/eval`)
-
-The evaluation system enables quantitative assessment of AI outputs. Create custom metrics to measure specific aspects of AI performance, from response quality to task completion accuracy.
-
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { SummarizationMetric } from '@mastra/evals/llm';
-import { ContentSimilarityMetric, ToneConsistencyMetric } from '@mastra/evals/nlp';
-
-const model = openai('gpt-4o');
-
-const agent = new Agent({
-  name: 'ContentWriter',
-  instructions: 'You are a content writer that creates accurate summaries',
-  model,
-  evals: {
-    summarization: new SummarizationMetric(model),
-    contentSimilarity: new ContentSimilarityMetric(),
-    tone: new ToneConsistencyMetric(),
-  },
-});
-```
-
-[More evals documentation →](https://mastra.ai/docs/evals/overview)
-
-### Logger (`/logger`)
-
-The logging system provides structured, leveled logging with multiple transport options. It supports debug information, performance monitoring, and error tracking across your AI applications.
-
-```typescript
-import { LogLevel } from '@mastra/core/loggers';
-import { PinoLogger } from '@mastra/loggers';
-
-const logger = new PinoLogger({
-  name: 'MyApp',
-  level: LogLevel.INFO,
-});
-```
-
-[More logging documentation →](https://mastra.ai/reference/observability/logging)
-
-### Telemetry (`/telemetry`)
-
-Telemetry provides OpenTelemetry (Otel) integration for comprehensive monitoring of your AI systems. Track latency, success rates, and system health with distributed tracing and metrics collection.
-
-```typescript
-import { Mastra } from '@mastra/core';
-
-const mastra = new Mastra({
-  telemetry: {
-    serviceName: 'my-service',
-    enabled: true,
-    sampling: {
-      type: 'ratio',
-      probability: 0.5,
-    },
-    export: {
-      type: 'otlp',
-      endpoint: 'https://otel-collector.example.com/v1/traces',
-    },
-  },
-});
-```
-
-[More Telemetry documentation →](https://mastra.ai/reference/observability/telemetry)
+- **Voice** (`/voice`) - Voice interaction capabilities with text-to-speech and speech-to-text integration. Supports multiple voice providers and real-time voice
+  communication for agents. [Learn more about Voice](https://mastra.ai/docs/voice/overview)
 
 ## Additional Resources
 

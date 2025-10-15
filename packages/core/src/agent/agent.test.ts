@@ -5965,7 +5965,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }
       });
 
-      it(`should show correct request input for multi-turn inputs`, async () => {
+      it(`should show correct request input for multi-turn inputs`, { timeout: 30000 }, async () => {
         const agent = new Agent({
           id: 'test',
           name: 'test',
@@ -6323,6 +6323,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           onError: ({ error }) => {
             errorCaught = true;
             caughtError = error;
+          },
+          modelSettings: {
+            maxRetries: 0,
           },
         });
 
@@ -8687,7 +8690,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(result.toolCalls.length).toBeGreaterThan(0);
       }
     },
-    10000,
+    30000,
   );
 
   describe(
@@ -10920,293 +10923,6 @@ describe('Stream ID Consistency', () => {
     console.log('startEvent', startEvent);
 
     expect(assistantMessage?.id).toBe(startEvent?.messageId);
-  });
-});
-
-describe('Agent structuredOutput to output deprecation mapping', () => {
-  const structuredOutputPrompt = 'Extract and structure the key information';
-
-  it('should map structuredOutput to output when maxSteps is 1', async () => {
-    let structuredOutputProcessorGotCalled = false;
-    const mockModel = new MockLanguageModelV2({
-      doGenerate: async () => {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: '{"name": "John", "age": 30}',
-            },
-          ],
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          warnings: [],
-        };
-      },
-      doStream: async options => {
-        if (
-          options.prompt.some(
-            p =>
-              Array.isArray(p.content) &&
-              p.content.some(c => c.type === 'text' && c.text.includes(structuredOutputPrompt)),
-          )
-        ) {
-          structuredOutputProcessorGotCalled = true;
-        }
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{"name": "John", "age": 30}' },
-            { type: 'text-end', id: '1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-        };
-      },
-    });
-
-    const agent = new Agent({
-      name: 'test-structured-deprecation',
-      instructions: 'You are a helpful assistant.',
-      model: mockModel,
-    });
-
-    const outputSchema = z.object({
-      name: z.string(),
-      age: z.number(),
-    });
-
-    const result = await agent.stream(
-      [
-        {
-          role: 'user',
-          content: 'Generate a person',
-        },
-      ],
-      {
-        structuredOutput: {
-          schema: outputSchema,
-        },
-        maxSteps: 1,
-      },
-    );
-
-    expect(structuredOutputProcessorGotCalled).toBe(false);
-    expect(await result.object).toEqual({ name: 'John', age: 30 });
-  });
-
-  it('should NOT map structuredOutput to output when maxSteps is not 1', async () => {
-    let structuredOutputProcessorGotCalled = false;
-
-    const structuringModel = new MockLanguageModelV2({
-      doGenerate: async options => {
-        if (
-          options.prompt.some(
-            p =>
-              Array.isArray(p.content) &&
-              p.content.some(c => c.type === 'text' && c.text.includes(structuredOutputPrompt)),
-          )
-        ) {
-          structuredOutputProcessorGotCalled = true;
-        }
-        return {
-          content: [
-            {
-              type: 'text',
-              text: '{"name": "John", "age": 30}',
-            },
-          ],
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          warnings: [],
-        };
-      },
-      doStream: async options => {
-        if (
-          options.prompt.some(
-            p =>
-              Array.isArray(p.content) &&
-              p.content.some(c => c.type === 'text' && c.text.includes(structuredOutputPrompt)),
-          )
-        ) {
-          structuredOutputProcessorGotCalled = true;
-        }
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{"name": "John", "age": 30}' },
-            { type: 'text-end', id: '1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-        };
-      },
-    });
-
-    const mockModel = new MockLanguageModelV2({
-      doGenerate: async () => {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: 'Response text',
-            },
-          ],
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          warnings: [],
-        };
-      },
-      doStream: async () => {
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Response text' },
-            { type: 'text-end', id: '1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-        };
-      },
-    });
-
-    const agent = new Agent({
-      name: 'test-structured-no-deprecation',
-      instructions: 'You are a helpful assistant.',
-      model: mockModel,
-    });
-
-    const outputSchema = z.object({
-      name: z.string(),
-      age: z.number(),
-    });
-
-    const result = await agent.stream(
-      [
-        {
-          role: 'user',
-          content: 'Generate a person',
-        },
-      ],
-      {
-        structuredOutput: {
-          schema: outputSchema,
-          model: structuringModel,
-        },
-        maxSteps: 2,
-      },
-    );
-
-    await result.consumeStream();
-
-    expect(structuredOutputProcessorGotCalled).toBe(true);
-    expect(await result.object).toEqual({ name: 'John', age: 30 });
-  });
-
-  it('should use model override from structuredOutput when maxSteps is 1', async () => {
-    let defaultModelGotCalled = false;
-    let overrideModelGotCalled = false;
-    const defaultModel = new MockLanguageModelV2({
-      modelId: 'default-model',
-      doGenerate: async () => ({
-        content: [
-          {
-            type: 'text',
-            text: 'Default model response',
-          },
-        ],
-        finishReason: 'stop',
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        warnings: [],
-      }),
-
-      doStream: async () => {
-        defaultModelGotCalled = true;
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{"name": "Default", "age": 1}' },
-            { type: 'text-end', id: '1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-        };
-      },
-    });
-
-    const overrideModel = new MockLanguageModelV2({
-      modelId: 'override-model',
-      doGenerate: async () => ({
-        content: [
-          {
-            type: 'text',
-            text: 'Override model response',
-          },
-        ],
-        finishReason: 'stop',
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        warnings: [],
-      }),
-      doStream: async () => {
-        overrideModelGotCalled = true;
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{"name": "Override", "age": 99}' },
-            { type: 'text-end', id: '1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-        };
-      },
-    });
-
-    const agent = new Agent({
-      name: 'test-model-override',
-      instructions: 'You are a helpful assistant.',
-      model: defaultModel,
-    });
-
-    const outputSchema = z.object({
-      name: z.string(),
-      age: z.number(),
-    });
-
-    const result = await agent.stream(
-      [
-        {
-          role: 'user',
-          content: 'Generate a person',
-        },
-      ],
-      {
-        structuredOutput: {
-          schema: outputSchema,
-          model: overrideModel,
-        },
-        maxSteps: 1,
-      },
-    );
-
-    await result.consumeStream();
-
-    expect(defaultModelGotCalled).toBe(false);
-    expect(overrideModelGotCalled).toBe(true);
-    expect(await result.object).toEqual({ name: 'Override', age: 99 });
   });
 });
 

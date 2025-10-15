@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import Spinner from '@/components/ui/spinner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RotateCcw } from 'lucide-react';
 import { ProviderLogo } from './provider-logo';
 import { UpdateModelParams } from '@mastra/client-js';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -10,6 +10,7 @@ import { useModelReset } from '../../context/model-reset-context';
 import { cn } from '@/lib/utils';
 import { cleanProviderId } from './utils';
 import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
+import { Button } from '@/ds/components/Button';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -37,6 +38,10 @@ export const AgentMetadataModelSwitcher = ({
   updateModel,
   apiUrl = '/api/agents/providers',
 }: AgentMetadataModelSwitcherProps) => {
+  // Store the original values on first mount - these never change
+  const [originalProvider] = useState(defaultProvider);
+  const [originalModel] = useState(defaultModel);
+
   const [selectedModel, setSelectedModel] = useState(defaultModel);
   const [showModelSuggestions, setShowModelSuggestions] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState(defaultProvider || '');
@@ -84,7 +89,7 @@ export const AgentMetadataModelSwitcher = ({
     fetchProviders();
   }, [apiUrl]);
 
-  const currentModelProvider = selectedProvider;
+  const currentModelProvider = cleanProviderId(selectedProvider);
 
   // Get all models with their provider info
   const allModels = useMemo(() => {
@@ -191,7 +196,7 @@ export const AgentMetadataModelSwitcher = ({
 
   // Handle provider selection
   const handleProviderSelect = async (provider: Provider) => {
-    setSelectedProvider(provider.id);
+    setSelectedProvider(cleanProviderId(provider.id));
     setProviderSearch('');
     setIsSearchingProvider(false);
     setShowProviderSuggestions(false);
@@ -203,7 +208,7 @@ export const AgentMetadataModelSwitcher = ({
       setHighlightedModelIndex(0);
     }
 
-    // Only auto-focus model input if provider is connected
+    // Auto-focus model input if provider is connected
     if (provider.connected) {
       setTimeout(() => {
         modelInputRef.current?.focus();
@@ -229,19 +234,19 @@ export const AgentMetadataModelSwitcher = ({
       }
 
       // Check if provider changed but no model selected
-      const providerChanged = currentModelProvider && currentModelProvider !== defaultProvider;
+      const providerChanged = currentModelProvider && currentModelProvider !== originalProvider;
       const modelEmpty = !selectedModel || selectedModel === '';
 
       if (providerChanged && modelEmpty) {
-        // Reset to defaults
-        setSelectedProvider(defaultProvider);
-        setSelectedModel(defaultModel);
+        // Reset to original values
+        setSelectedProvider(cleanProviderId(originalProvider));
+        setSelectedModel(originalModel);
 
-        // Update back to default configuration
-        if (defaultProvider && defaultModel) {
+        // Update back to original configuration
+        if (originalProvider && originalModel) {
           updateModel({
-            provider: defaultProvider as UpdateModelParams['provider'],
-            modelId: defaultModel,
+            provider: originalProvider as UpdateModelParams['provider'],
+            modelId: originalModel,
           }).catch(error => {
             console.error('Failed to reset model:', error);
           });
@@ -259,8 +264,8 @@ export const AgentMetadataModelSwitcher = ({
     registerResetFn,
     currentModelProvider,
     selectedModel,
-    defaultProvider,
-    defaultModel,
+    originalProvider,
+    originalModel,
     updateModel,
     showProviderSuggestions,
     showModelSuggestions,
@@ -274,6 +279,31 @@ export const AgentMetadataModelSwitcher = ({
       </div>
     );
   }
+
+  // Handle reset button click - resets to the ORIGINAL values
+  const handleReset = async () => {
+    setSelectedProvider(cleanProviderId(originalProvider));
+    setSelectedModel(originalModel);
+    setProviderSearch('');
+    setModelSearch('');
+    setIsSearchingProvider(false);
+    setIsSearchingModel(false);
+    setShowProviderSuggestions(false);
+    setShowModelSuggestions(false);
+
+    // Update the model back to original values
+    try {
+      setLoading(true);
+      await updateModel({
+        provider: originalProvider as UpdateModelParams['provider'],
+        modelId: originalModel,
+      });
+    } catch (error) {
+      console.error('Failed to reset model:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <>
@@ -331,6 +361,7 @@ export const AgentMetadataModelSwitcher = ({
                 </>
               )}
               <Input
+                aria-label="Search providers"
                 spellCheck="false"
                 ref={providerInputRef}
                 className={`w-full ${!isSearchingProvider && currentModelProvider ? 'pl-8 pr-8' : ''}`}
@@ -381,23 +412,6 @@ export const AgentMetadataModelSwitcher = ({
                           handleProviderSelect(provider);
                         }
                         break;
-                      case 'Tab':
-                        // Only prevent default and handle Tab if NOT shift+tab
-                        if (!e.shiftKey) {
-                          e.preventDefault();
-                          if (highlightedProviderIndex >= 0 && highlightedProviderIndex < filteredProviders.length) {
-                            const provider = filteredProviders[highlightedProviderIndex];
-                            handleProviderSelect(provider);
-                          } else {
-                            // If no provider is highlighted, just close dropdown and let tab proceed
-                            setShowProviderSuggestions(false);
-                            setIsSearchingProvider(false);
-                            setProviderSearch('');
-                            setHighlightedProviderIndex(-1);
-                          }
-                        }
-                        // If shift+tab, let it proceed normally
-                        break;
                       case 'Escape':
                         e.preventDefault();
                         setIsSearchingProvider(false);
@@ -406,9 +420,6 @@ export const AgentMetadataModelSwitcher = ({
                         setShowProviderSuggestions(false);
                         break;
                     }
-                  } else if (e.key === 'Tab') {
-                    // Handle Tab when dropdown is closed - just let it proceed normally
-                    return;
                   }
                 }}
                 onFocus={() => {
@@ -503,6 +514,7 @@ export const AgentMetadataModelSwitcher = ({
         >
           <PopoverTrigger asChild>
             <Input
+              aria-label="Search models"
               spellCheck="false"
               ref={modelInputRef}
               className="w-full xl:w-3/5"
@@ -564,7 +576,6 @@ export const AgentMetadataModelSwitcher = ({
                     }, 0);
                     break;
                   case 'Enter':
-                  case 'Tab':
                     e.preventDefault();
                     if (highlightedModelIndex >= 0 && highlightedModelIndex < filteredModels.length) {
                       // User selected a model from the list
@@ -669,6 +680,16 @@ export const AgentMetadataModelSwitcher = ({
             </PopoverContent>
           )}
         </Popover>
+        <Button
+          variant="light"
+          size="md"
+          onClick={handleReset}
+          disabled={loading}
+          className="flex items-center gap-1.5 text-xs whitespace-nowrap !border-0"
+          title="Reset to original model"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+        </Button>
       </div>
 
       {/* Show warning if selected provider is not connected */}

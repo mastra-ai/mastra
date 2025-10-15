@@ -1,4 +1,4 @@
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils/test';
+import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import type {
   LanguageModelV2CallOptions,
   LanguageModelV2FunctionTool,
@@ -62,6 +62,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         options: {
           abortSignal: abortController.signal,
         },
+        agentId: 'agent-id',
       });
 
       await convertAsyncIterableToArray(result.aisdk.v5.fullStream as any);
@@ -108,12 +109,16 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             }),
           },
         ],
+        modelSettings: {
+          maxRetries: 0,
+        },
         messageList,
         options: {
           onError(event) {
             result.push(event);
           },
         },
+        agentId: 'agent-id',
       });
 
       await resultObject.aisdk.v5.consumeStream();
@@ -169,6 +174,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         providerOptions: {
           aProvider: { someKey: 'someValue' },
         },
+        agentId: 'agent-id',
       });
 
       expect(await convertAsyncIterableToArray(result.textStream as any)).toEqual(['provider metadata test']);
@@ -230,6 +236,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         options: {
           activeTools: ['tool1'],
         },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -378,6 +385,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             now: mockValues(0, 100, 500, 600, 1000),
             generateId: mockId({ prefix: 'id' }),
           },
+          agentId: 'agent-id',
         });
       });
 
@@ -1476,6 +1484,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               }),
             },
           ],
+          agentId: 'agent-id',
           tools: {
             tool1: tool({
               inputSchema: z.object({ value: z.string() }),
@@ -3026,6 +3035,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         let responseCount = 0;
         result = await loopFn({
           runId,
+          agentId: 'agent-id',
           models: [
             {
               id: 'test-model',
@@ -3950,6 +3960,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: [
           {
             id: 'test-model',
@@ -3961,6 +3972,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             }),
           },
         ],
+        modelSettings: {
+          maxRetries: 0,
+        },
         messageList,
         options: {
           onFinish() {}, // just defined; do nothing
@@ -4020,6 +4034,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       const resultObject = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
@@ -5973,6 +5988,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
 
       const result = await loopFn({
+        agentId: 'agent-id',
         runId,
         models: modelWithRawChunks,
         messageList,
@@ -6032,6 +6048,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
 
       const result = await loopFn({
+        agentId: 'agent-id',
         runId,
         models: modelWithRawChunks,
         messageList,
@@ -6074,6 +6091,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       ];
 
       const result = await loopFn({
+        agentId: 'agent-id',
         runId,
         models,
         messageList,
@@ -6142,6 +6160,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: modelWithRawChunks,
         messageList,
         includeRawChunks: true,
@@ -6246,6 +6265,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       ];
 
       const result = await loopFn({
+        agentId: 'agent-id',
         runId,
         models,
         messageList,
@@ -6256,6 +6276,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       expect(capturedOptions.includeRawChunks).toBe(true);
 
       const result2 = await loopFn({
+        agentId: 'agent-id',
         runId,
         models,
         messageList,
@@ -6266,6 +6287,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       expect(capturedOptions.includeRawChunks).toBe(false);
 
       const result3 = await loopFn({
+        agentId: 'agent-id',
         runId,
         models,
         messageList,
@@ -6291,6 +6313,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       beforeEach(async () => {
         result = await loopFn({
           runId,
+          agentId: 'agent-id',
           models: createTestModels({
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
@@ -6605,6 +6628,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
         result = await loopFn({
           runId,
+          agentId: 'agent-id',
           options: {
             abortSignal: abortController.signal,
             onError: error => {

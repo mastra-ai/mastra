@@ -9,8 +9,9 @@ const defaultTimeout = 3 * 60 * 1000;
 
 let maxRetries = 5;
 function retryWithTimeout(fn, timeout, name, retryCount = 0) {
+  let timeoutHandle;
   const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(
+    timeoutHandle = setTimeout(
       () => reject(new Error(`Command "${name}" timed out after ${timeout}ms in ${retryCount} retries`)),
       timeout,
     );
@@ -18,13 +19,18 @@ function retryWithTimeout(fn, timeout, name, retryCount = 0) {
 
   const callbackPromise = fn();
 
-  return Promise.race([callbackPromise, timeoutPromise]).catch(err => {
-    if (retryCount < maxRetries) {
-      return retryWithTimeout(fn, timeout, name, retryCount + 1);
-    }
-
-    throw err;
-  });
+  return Promise.race([callbackPromise, timeoutPromise])
+    .then(result => {
+      clearTimeout(timeoutHandle);
+      return result;
+    })
+    .catch(err => {
+      clearTimeout(timeoutHandle);
+      if (retryCount < maxRetries) {
+        return retryWithTimeout(fn, timeout, name, retryCount + 1);
+      }
+      throw err;
+    });
 }
 
 function cleanup(monorepoDir, resetChanges = false) {
@@ -134,28 +140,28 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
     changeset += `---`;
     writeFileSync(join(monorepoDir, `.changeset/test-${new Date().toISOString()}.md`), changeset);
     // process.exit(0); // Remove this - it prevents changeset commands from running
-    console.log('Running pnpm changeset pre exit');
+    console.log('Running pnpm changeset-cli pre exit');
     await retryWithTimeout(
       async () => {
-        await execAsync('pnpm changeset pre exit', {
+        await execAsync('pnpm changeset-cli pre exit', {
           cwd: monorepoDir,
           stdio: ['inherit', 'inherit', 'inherit'],
         });
       },
       defaultTimeout,
-      'pnpm changeset pre exit',
+      'pnpm changeset-cli pre exit',
     );
 
-    console.log(`Running pnpm changeset version --snapshot ${tag}`);
+    console.log(`Running pnpm changeset-cli version --snapshot ${tag}`);
     await retryWithTimeout(
       async () => {
-        await execAsync(`pnpm changeset version --snapshot ${tag}`, {
+        await execAsync(`pnpm changeset-cli version --snapshot ${tag}`, {
           cwd: monorepoDir,
           stdio: ['inherit', 'inherit', 'inherit'],
         });
       },
       defaultTimeout,
-      `pnpm changeset version --snapshot ${tag}`,
+      `pnpm changeset-cli version --snapshot ${tag}`,
     );
   } catch (error) {
     cleanup(monorepoDir, false);

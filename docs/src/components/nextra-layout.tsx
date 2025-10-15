@@ -65,7 +65,7 @@ export const NextraLayout = ({
         footer={footer}
         sidebar={{
           autoCollapse: true,
-          defaultMenuCollapseLevel: isReference ? 1 : 3,
+          defaultMenuCollapseLevel: pathname.includes("/getting-started") ? 3 : 1,
         }}
         i18n={[
           { locale: "en", name: "English" },
