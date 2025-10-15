@@ -144,7 +144,7 @@ const result = await agent.stream(messages, {
 ```
 
 - `structuredOutput` - Enhanced structured output with model override and custom options.
-  - `jsonPromptInjection` - Used to override the default behaviour of pass response_format to the model. This will inject context into the prompt to coerce the model into returning structured outputs.
+  - `jsonPromptInjection` - Used to override the default behaviour of passing response_format to the model. This will inject context into the prompt to coerce the model into returning structured outputs.
   - `model` - If a model is added this will create a sub agent to structure the response from the main agent. The main agent will call tools and return text, and the sub agent will return an object that conforms to your schema provided. This is a replacement for `experimental_output`.
   - `errorStrategy` - Determines what happens when the output doesn’t match the schema:
       - warn' - log a warning
