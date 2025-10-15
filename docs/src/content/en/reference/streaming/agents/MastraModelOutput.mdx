@@ -1,5 +1,5 @@
 ---
-title: "Reference: MastraModelOutput (Experimental) | Agents | Mastra Docs"
+title: "Reference: MastraModelOutput | Agents | Mastra Docs"
 description: "Complete reference for MastraModelOutput - the stream object returned by agent.stream() with streaming and promise-based access to model outputs."
 ---
 
@@ -225,7 +225,6 @@ const stream = await agent.stream("Generate user data", {
       email: z.string()
     })
   },
-  maxSteps: 1
 });
 
 // Stream partial objects
