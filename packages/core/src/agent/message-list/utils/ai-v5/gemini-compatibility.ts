@@ -1,4 +1,8 @@
+import type { CoreMessage } from 'ai';
 import type { ModelMessage } from 'ai-v5';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../../error';
+
+type GeminiCompatibleMessage = ModelMessage | CoreMessage;
 
 /**
  * Ensures message array is compatible with Gemini API requirements.
@@ -16,23 +20,25 @@ import type { ModelMessage } from 'ai-v5';
  * @see https://github.com/mastra-ai/mastra/issues/7287 - Tool call ordering
  * @see https://github.com/mastra-ai/mastra/issues/8053 - Single turn validation
  */
-export function ensureGeminiCompatibleMessages(messages: ModelMessage[]): ModelMessage[] {
+export function ensureGeminiCompatibleMessages<T extends GeminiCompatibleMessage>(messages: T[]): T[] {
   const result = [...messages];
 
   // Ensure first non-system message is user
   const firstNonSystemIndex = result.findIndex(m => m.role !== 'system');
   if (firstNonSystemIndex === -1) {
-    // Only system messages or empty, add user message at end
-    result.push({
-      role: 'user',
-      content: '.',
+    // Only system messages or empty - this is an error condition
+    throw new MastraError({
+      id: 'INVALID_MESSAGE_LIST',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: 'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
     });
   } else if (result[firstNonSystemIndex]?.role === 'assistant') {
     // First non-system is assistant, insert user message before it
     result.splice(firstNonSystemIndex, 0, {
       role: 'user',
       content: '.',
-    });
+    } as T);
   }
 
   return result;

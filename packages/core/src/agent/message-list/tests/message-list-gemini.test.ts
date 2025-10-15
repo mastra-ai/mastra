@@ -94,15 +94,21 @@ describe('MessageList - Gemini Compatibility', () => {
       expect(prompt.filter(m => m.content === '.').length).toBe(0);
     });
 
-    it('should handle empty message list', () => {
+    it('should throw error for empty message list', () => {
       const list = new MessageList();
 
-      const prompt = list.get.all.aiV5.prompt();
+      expect(() => list.get.all.aiV5.prompt()).toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
+    });
 
-      // Should inject a single user message
-      expect(prompt).toHaveLength(1);
-      expect(prompt[0].role).toBe('user');
-      expect(prompt[0].content).toBe('.');
+    it('should throw error for system-only message list', () => {
+      const list = new MessageList();
+      list.addSystem('You are a helpful assistant');
+
+      expect(() => list.get.all.aiV5.prompt()).toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
     });
   });
 
@@ -136,6 +142,23 @@ describe('MessageList - Gemini Compatibility', () => {
       expect(llmPrompt[0].role).toBe('system');
       expect(llmPrompt[1].role).toBe('user'); // Injected after system
       expect(llmPrompt[2].role).toBe('assistant');
+    });
+
+    it('should throw error for empty message list in llmPrompt', async () => {
+      const list = new MessageList();
+
+      await expect(list.get.all.aiV5.llmPrompt()).rejects.toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
+    });
+
+    it('should throw error for system-only message list in llmPrompt', async () => {
+      const list = new MessageList();
+      list.addSystem('You are a helpful assistant');
+
+      await expect(list.get.all.aiV5.llmPrompt()).rejects.toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
     });
   });
 

@@ -308,16 +308,7 @@ export class MessageList {
         const coreMessages = this.all.aiV4.core();
         const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
 
-        const needsDefaultUserMessage = !messages.length || messages[0]?.role === 'assistant';
-        if (needsDefaultUserMessage) {
-          const defaultMessage: AIV4Type.CoreMessage = {
-            role: 'user',
-            content: '.',
-          };
-          messages.unshift(defaultMessage);
-        }
-
-        return messages;
+        return ensureGeminiCompatibleMessages(messages);
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
@@ -325,18 +316,9 @@ export class MessageList {
         const coreMessages = this.all.aiV4.core();
 
         const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
-        const messages = [...systemMessages, ...coreMessages];
+        let messages = [...systemMessages, ...coreMessages];
 
-        // Ensure we have at least one user message
-        const needsDefaultUserMessage = !messages.length || messages[0]?.role === 'assistant';
-
-        if (needsDefaultUserMessage) {
-          const defaultMessage: AIV4Type.CoreMessage = {
-            role: 'user',
-            content: '.',
-          };
-          messages.unshift(defaultMessage);
-        }
+        messages = ensureGeminiCompatibleMessages(messages);
 
         return messages.map(MessageList.aiV4CoreMessageToV1PromptMessage);
       },
