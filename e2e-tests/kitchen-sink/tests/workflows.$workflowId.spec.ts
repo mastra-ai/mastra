@@ -35,3 +35,9 @@ test('overall layout information', async ({ page }) => {
   await expect(codeEditor).toHaveText('{}');
   await expect(codeEditor).toHaveAttribute('data-language', 'json');
 });
+
+test('running the workflow (form)', async ({ page }) => {
+  await page.goto('http://localhost:4111/workflows/complexWorkflow/graph');
+  await page.getByRole('textbox', { name: 'Text' }).fill('Hello World');
+  await page.getByRole('button', { name: 'Run' }).click();
+});
