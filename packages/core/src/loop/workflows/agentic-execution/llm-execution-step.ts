@@ -57,17 +57,8 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
     }
 
     if ('type' in chunk && chunk.type === 'validation-retry') {
-      // Pass through the validation-retry chunk and mark for retry
+      // Store validation retry data and pass through the chunk
       runState.setState({
-        stepResult: {
-          reason: 'other',
-          isContinued: true,
-          warnings: responseFromModel.warnings,
-          totalUsage: (chunk as any).payload.totalUsage,
-          headers: responseFromModel.rawResponse?.headers,
-          messageId,
-          request: responseFromModel.request,
-        },
         validationRetry: (chunk as any).payload,
       });
       controller.enqueue(chunk);
@@ -320,19 +311,6 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         break;
 
       case 'finish':
-        // Don't overwrite isContinued if validation-retry already set it
-        const currentStepResult = runState.state.stepResult;
-        const shouldPreserveIsContinued = runState.state.validationRetry && currentStepResult?.isContinued === true;
-
-        // Debug logging to understand the finish chunk structure
-        console.log('[FINISH CHUNK DEBUG] Received finish chunk:');
-        console.log('  chunk.payload keys:', Object.keys(chunk.payload));
-        console.log('  chunk.payload.stepResult:', chunk.payload.stepResult);
-        console.log('  chunk.payload.output:', chunk.payload.output);
-        console.log('  currentStepResult:', currentStepResult);
-        console.log('  shouldPreserveIsContinued:', shouldPreserveIsContinued);
-        console.log('  validationRetry present:', !!runState.state.validationRetry);
-
         runState.setState({
           providerOptions: chunk.payload.metadata.providerMetadata,
           stepResult: {
@@ -342,17 +320,10 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
             totalUsage: chunk.payload.output.usage,
             headers: responseFromModel.rawResponse?.headers,
             messageId,
-            isContinued: shouldPreserveIsContinued
-              ? true
-              : !['stop', 'error'].includes(chunk.payload.stepResult.reason),
+            isContinued: !['stop', 'error'].includes(chunk.payload.stepResult.reason),
             request: responseFromModel.request,
           },
         });
-
-        // Log the state after setting it
-        console.log('[FINISH CHUNK DEBUG] After setState:');
-        console.log('  stepResult.isContinued:', runState.state.stepResult?.isContinued);
-        console.log('  stepResult.reason:', runState.state.stepResult?.reason);
         break;
 
       case 'error':
@@ -800,23 +771,6 @@ Please try again and ensure your response matches the required schema format.`,
 
       // Use isContinued from state if it's been explicitly set (e.g., by validation-retry)
       const isContinuedFromState = runState.state.stepResult?.isContinued;
-
-      // Debug log to see if validation retry is set
-      if (validationRetry) {
-        console.log('[DEBUG] validationRetry is set:', validationRetry);
-        console.log('[DEBUG] stepResult from state:', runState.state.stepResult);
-        console.log('[DEBUG] isContinuedFromState:', isContinuedFromState);
-        console.log('[DEBUG] finishReason:', finishReason);
-        console.log('[DEBUG] tripwireTriggered:', tripwireTriggered);
-        console.log(
-          '[DEBUG] Final isContinued value:',
-          tripwireTriggered
-            ? false
-            : isContinuedFromState !== undefined
-              ? isContinuedFromState
-              : !['stop', 'error'].includes(finishReason),
-        );
-      }
 
       const steps = inputData.output?.steps || [];
 
