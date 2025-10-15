@@ -203,6 +203,10 @@ div .copilotKitInputContainer {
   border-bottom-right-radius: 0;
 }
 
+.grecaptcha-badge {
+  visibility: hidden;
+}
+
 /* Navbar */
 .nextra-navbar-blur {
   display: none;
