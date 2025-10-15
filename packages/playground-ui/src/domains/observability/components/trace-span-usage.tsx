@@ -155,13 +155,11 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
     },
   };
 
-  let tokenPresentations: Record<string, { label: string; icon: React.ReactNode }> = {};
-
-  if (hasV5Format) {
-    tokenPresentations = { ...commonTokenPresentations, ...v5TokenPresentations };
-  } else {
-    tokenPresentations = { ...commonTokenPresentations, ...legacyTokenPresentations };
-  }
+  let tokenPresentations = {
+    ...commonTokenPresentations,
+    ...v5TokenPresentations,
+    ...legacyTokenPresentations,
+  };
 
   let usageKeyOrder = [];
   if (hasV5Format) {
@@ -175,19 +173,10 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
     .sort((a, b) => usageKeyOrder.indexOf(a.key) - usageKeyOrder.indexOf(b.key));
 
   return (
-    <div
-      className={cn(
-        'grid gap-[1.5rem]',
-        {
-          'xl:grid-cols-3': usageAsArray.length === 3,
-          'xl:grid-cols-2': usageAsArray.length === 2,
-        },
-        className,
-      )}
-    >
+    <div className={cn('flex gap-[1.5rem] flex-wrap', className)}>
       {usageAsArray.map(({ key, value }) => (
         <div
-          className={cn('bg-white/5 p-[1rem] px-[1.25rem] rounded-lg text-[0.875rem]', {
+          className={cn('bg-white/5 p-[.75rem] px-[1rem] rounded-lg text-[0.875rem] flex-grow', {
             'min-h-[5.5rem]': traceUsage,
           })}
           key={key}
@@ -203,7 +192,7 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
             <b className="text-[1rem]">{value}</b>
           </div>
           {tokensByProviderValid && (
-            <div className="text-[0.875rem] mt-[0.5rem] pl-[2rem] ">
+            <div className="text-[0.875rem] mt-[0.5rem] pl-[2rem]">
               {Object.entries(tokensByProvider).map(([provider, providerTokens]) => (
                 <dl
                   key={provider}

@@ -1,3 +1,4 @@
+import type { LLMStepResult } from '@mastra/core/agent';
 import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '@mastra/core/workflows';
 import type { ZodType } from 'zod';
@@ -7,11 +8,11 @@ type StepResult = {
   name: string;
   status: WorkflowStepStatus;
   input: Record<string, unknown> | null;
-  output: Record<string, unknown> | null;
+  output: unknown | null;
 };
 
-export type WorkflowAiSDKType = {
-  type: 'data-workflow';
+export type WorkflowDataPart = {
+  type: 'data-workflow' | 'data-tool-workflow';
   id: string;
   data: {
     name: string;
@@ -27,6 +28,23 @@ export type WorkflowAiSDKType = {
   };
 };
 
+export type NetworkDataPart = {
+  type: 'data-network' | 'data-tool-network';
+  id: string;
+  data: {
+    name: string;
+    status: 'running' | 'finished';
+    steps: StepResult[];
+    output: unknown | null;
+  };
+};
+
+export type AgentDataPart = {
+  type: 'data-tool-agent';
+  id: string;
+  data: LLMStepResult;
+};
+
 export function WorkflowStreamToAISDKTransformer() {
   const bufferedWorkflows = new Map<
     string,
@@ -38,31 +56,53 @@ export function WorkflowStreamToAISDKTransformer() {
   return new TransformStream<
     ChunkType,
     | {
-        data: string;
+        data?: string;
+        type?: 'start' | 'finish';
       }
-    | WorkflowAiSDKType
+    | WorkflowDataPart
+    | ChunkType
   >({
     start(controller) {
       controller.enqueue({
-        data: JSON.stringify({
-          type: 'start',
-          messageId: '1',
-        }),
+        type: 'start',
       });
     },
     flush(controller) {
       controller.enqueue({
-        data: JSON.stringify({
-          type: 'finish',
-        }),
-      });
-      controller.enqueue({
-        data: '[DONE]',
+        type: 'finish',
       });
     },
     transform(chunk, controller) {
       const transformed = transformWorkflow<any>(chunk, bufferedWorkflows);
 
+      if (transformed) controller.enqueue(transformed);
+    },
+  });
+}
+
+export function AgentNetworkToAISDKTransformer() {
+  const bufferedNetworks = new Map<string, { name: string; steps: StepResult[] }>();
+
+  return new TransformStream<
+    NetworkChunkType,
+    | {
+        data?: string;
+        type?: 'start' | 'finish';
+      }
+    | NetworkDataPart
+  >({
+    start(controller) {
+      controller.enqueue({
+        type: 'start',
+      });
+    },
+    flush(controller) {
+      controller.enqueue({
+        type: 'finish',
+      });
+    },
+    transform(chunk, controller) {
+      const transformed = transformNetwork(chunk, bufferedNetworks);
       if (transformed) controller.enqueue(transformed);
     },
   });
@@ -94,11 +134,11 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>() {
           if (agentTransformed) controller.enqueue(agentTransformed);
         } else if (transformedChunk.type === 'tool-workflow') {
           const payload = transformedChunk.payload;
-          const workflowChunk = transformWorkflow(payload, bufferedSteps);
+          const workflowChunk = transformWorkflow(payload, bufferedSteps, true);
           if (workflowChunk) controller.enqueue(workflowChunk);
         } else if (transformedChunk.type === 'tool-network') {
           const payload = transformedChunk.payload;
-          const networkChunk = transformNetwork(payload, bufferedSteps);
+          const networkChunk = transformNetwork(payload, bufferedSteps, true);
           if (networkChunk) controller.enqueue(networkChunk);
         } else {
           controller.enqueue(transformedChunk);
@@ -255,7 +295,7 @@ export function transformAgent<TOutput extends ZodType<any>>(
       type: 'data-tool-agent',
       id: payload.runId!,
       data: bufferedSteps.get(payload.runId!),
-    } as const;
+    } satisfies AgentDataPart;
   }
   return null;
 }
@@ -269,6 +309,7 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
       steps: Record<string, StepResult>;
     }
   >,
+  isNested?: boolean,
 ) {
   switch (payload.type) {
     case 'workflow-start':
@@ -277,7 +318,7 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
         steps: {},
       });
       return {
-        type: 'data-workflow',
+        type: isNested ? 'data-tool-workflow' : 'data-workflow',
         id: payload.runId,
         data: {
           name: bufferedWorkflows.get(payload.runId!)!.name,
@@ -296,7 +337,7 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
       } satisfies StepResult;
       bufferedWorkflows.set(payload.runId!, current);
       return {
-        type: 'data-workflow',
+        type: isNested ? 'data-tool-workflow' : 'data-workflow',
         id: payload.runId,
         data: {
           name: current.name,
@@ -315,7 +356,7 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
         output: payload.payload.output ?? null,
       } satisfies StepResult;
       return {
-        type: 'data-workflow',
+        type: isNested ? 'data-tool-workflow' : 'data-workflow',
         id: payload.runId,
         data: {
           name: current.name,
@@ -329,7 +370,7 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
       const current = bufferedWorkflows.get(payload.runId!);
       if (!current) return null;
       return {
-        type: 'data-workflow',
+        type: isNested ? 'data-tool-workflow' : 'data-workflow',
         id: payload.runId,
         data: {
           name: current.name,
@@ -347,15 +388,18 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
 export function transformNetwork(
   payload: NetworkChunkType,
   bufferedNetworks: Map<string, { name: string; steps: StepResult[] }>,
+  isNested?: boolean,
 ) {
   switch (payload.type) {
     case 'routing-agent-start': {
-      bufferedNetworks.set(payload.payload.runId, {
-        name: payload.payload.agentId,
-        steps: [],
-      });
+      if (!bufferedNetworks.has(payload.payload.runId)) {
+        bufferedNetworks.set(payload.payload.runId, {
+          name: payload.payload.agentId,
+          steps: [],
+        });
+      }
       return {
-        type: 'data-network',
+        type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.payload.runId,
         data: {
           name: bufferedNetworks.get(payload.payload.runId)!.name,
@@ -375,7 +419,7 @@ export function transformNetwork(
       } satisfies StepResult);
       bufferedNetworks.set(payload.payload.runId, current);
       return {
-        type: 'data-network',
+        type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.payload.runId,
         data: {
           name: current.name,
@@ -395,7 +439,7 @@ export function transformNetwork(
       } satisfies StepResult);
       bufferedNetworks.set(payload.payload.runId, current);
       return {
-        type: 'data-network',
+        type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.payload.runId,
         data: {
           name: current.name,
@@ -415,7 +459,7 @@ export function transformNetwork(
       } satisfies StepResult);
       bufferedNetworks.set(payload.payload.runId, current);
       return {
-        type: 'data-network',
+        type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.payload.runId,
         data: {
           name: current.name,
@@ -425,32 +469,63 @@ export function transformNetwork(
         },
       } as const;
     }
-    case 'agent-execution-end':
-    case 'tool-execution-end': {
+    case 'agent-execution-end': {
       const current = bufferedNetworks.get(payload.runId!);
       if (!current) return null;
+      current.steps.push({
+        name: payload.payload.agentId,
+        status: 'success',
+        input: null,
+        output: payload.payload.result,
+      } satisfies StepResult);
       return {
-        type: 'data-network',
+        type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.runId!,
         data: {
           name: current.name,
           status: 'running',
           steps: current.steps,
-          output: null,
+          output: payload.payload.result ?? null,
+        },
+      } as const;
+    }
+    case 'tool-execution-end': {
+      const current = bufferedNetworks.get(payload.runId!);
+      if (!current) return null;
+      current.steps.push({
+        name: payload.payload.toolName,
+        status: 'success',
+        input: null,
+        output: payload.payload.result,
+      } satisfies StepResult);
+      return {
+        type: isNested ? 'data-tool-network' : 'data-network',
+        id: payload.runId!,
+        data: {
+          name: current.name,
+          status: 'running',
+          steps: current.steps,
+          output: payload.payload.result ?? null,
         },
       } as const;
     }
     case 'workflow-execution-end': {
       const current = bufferedNetworks.get(payload.runId!);
       if (!current) return null;
+      current.steps.push({
+        name: payload.payload.name,
+        status: 'success',
+        input: null,
+        output: payload.payload.result,
+      } satisfies StepResult);
       return {
-        type: 'data-network',
+        type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.runId!,
         data: {
           name: current.name,
           status: 'running',
           steps: current.steps,
-          output: null,
+          output: payload.payload.result ?? null,
         },
       } as const;
     }
@@ -458,7 +533,7 @@ export function transformNetwork(
       const current = bufferedNetworks.get(payload.payload.runId);
       if (!current) return null;
       return {
-        type: 'data-network',
+        type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.payload.runId,
         data: {
           name: current.name,
@@ -472,7 +547,7 @@ export function transformNetwork(
       const current = bufferedNetworks.get(payload.payload.runId);
       if (!current) return null;
       return {
-        type: 'data-network',
+        type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.payload.runId,
         data: {
           name: current.name,
@@ -486,7 +561,7 @@ export function transformNetwork(
       const current = bufferedNetworks.get(payload.runId!);
       if (!current) return null;
       return {
-        type: 'data-network',
+        type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.runId!,
         data: {
           name: current.name,

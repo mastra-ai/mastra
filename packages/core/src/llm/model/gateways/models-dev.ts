@@ -1,10 +1,10 @@
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { createOpenAI } from '@ai-sdk/openai';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import type { LanguageModelV2 } from '@ai-sdk/provider';
-import { createXai } from '@ai-sdk/xai';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { createAnthropic } from '@ai-sdk/anthropic-v5';
+import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+import { createOpenAI } from '@ai-sdk/openai-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { createXai } from '@ai-sdk/xai-v5';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
@@ -67,8 +67,6 @@ export class ModelsDevGateway extends MastraModelGateway {
   }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
-    console.info('Fetching providers from models.dev API...');
-
     const response = await fetch('https://models.dev/api.json');
     if (!response.ok) {
       throw new Error(`Failed to fetch from models.dev: ${response.statusText}`);
@@ -108,7 +106,6 @@ export class ModelsDevGateway extends MastraModelGateway {
 
         // Skip if we don't have a URL
         if (!hasInstalledPackage && !url) {
-          console.info(`Skipping ${normalizedId}: No API URL available`);
           continue;
         }
 
@@ -130,16 +127,12 @@ export class ModelsDevGateway extends MastraModelGateway {
           docUrl: providerInfo.doc, // Include documentation URL if available
           gateway: `models.dev`,
         };
-      } else {
-        console.info(`Skipped provider ${providerInfo.name}`);
       }
     }
 
     // Store for later use in buildUrl and buildHeaders
     this.providerConfigs = providerConfigs;
 
-    console.info(`Found ${Object.keys(providerConfigs).length} OpenAI-compatible providers`);
-    console.info('Providers:', Object.keys(providerConfigs).sort());
     return providerConfigs;
   }
 

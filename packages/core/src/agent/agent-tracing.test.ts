@@ -1,6 +1,6 @@
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-import { MockLanguageModelV1 } from 'ai-v4/test';
+import { MockLanguageModelV1 } from 'ai/test';
 import { config } from 'dotenv';
 import { describe, expect, it } from 'vitest';
 

@@ -5,3 +5,6 @@ export * from './shared';
 export * from './trace-dialog';
 export * from './traces-tools';
 export * from './traces-list';
+export * from './span-score-list';
+export * from './span-scoring';
+export * from './span-tabs';

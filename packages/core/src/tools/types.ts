@@ -1,5 +1,5 @@
-import type { ToolCallOptions, Tool as ToolV5 } from 'ai';
-import type { ToolExecutionOptions, Tool, Schema } from 'ai-v4';
+import type { ToolExecutionOptions, Tool, Schema } from 'ai';
+import type { ToolCallOptions, Tool as ToolV5 } from 'ai-v5';
 import type { JSONSchema7Type } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
