@@ -2,7 +2,7 @@ import { Tag } from "@/components/tag";
 
 const meta = {
   index: "Introduction",
-  "getting-started": { title: "Getting Started" },
+  "getting-started": { title: "Getting Started", theme: { collapsed: false } },
   agents: { title: "Agents" },
   workflows: { title: "Workflows" },
   "workflows-legacy": {
@@ -11,8 +11,8 @@ const meta = {
     display: "hidden",
   },
   streaming: <Tag text="experimental">Streaming</Tag>,
-  "tools-mcp": { title: "Tools & MCP", theme: { collapsed: true } },
-  memory: { title: "Memory", theme: { collapsed: true } },
+  "tools-mcp": { title: "Tools & MCP" },
+  memory: { title: "Memory" },
   rag: { title: "RAG" },
   "server-db": {
     title: "Server & DB",
