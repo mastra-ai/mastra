@@ -125,6 +125,20 @@ const longTextStep = createStep({
   },
 });
 
+const finalStep = createStep({
+  id: 'final-step',
+  inputSchema: z.object({
+    text: z.string(),
+  }),
+  outputSchema: z.object({
+    text: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    const { text } = inputData;
+    return { text: text + '-ENDED' };
+  },
+});
+
 // Nested workflow that processes text
 export const nestedTextProcessor = createWorkflow({
   id: 'nested-text-processor',
@@ -184,5 +198,5 @@ export const complexWorkflow = createWorkflow({
   .then(suspendResumeStep)
 
   // Final step
-  .then(addLetterStep)
+  .then(finalStep)
   .commit();
