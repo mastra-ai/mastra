@@ -228,7 +228,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(0);
+      expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
 
     it('should handle empty user message with system context in network', async () => {
@@ -258,7 +258,8 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-    }, 15000);
+      expect(chunks.length).toBeGreaterThan(1);
+    }, 30000);
 
     it('should handle single turn with maxSteps=1 and messages ending with assistant in network', async () => {
       const helperAgent = new Agent({
@@ -294,6 +295,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
+      expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
 
     it('should handle conversation ending with tool result in network', async () => {
@@ -353,6 +355,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
+      expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
 
     it('should handle messages starting with assistant-with-tool-call in network', async () => {
@@ -411,6 +414,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
+      expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
 
     it('should handle network with workflow execution', async () => {
@@ -463,6 +467,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
+      expect(chunks.length).toBeGreaterThan(1);
     }, 20000);
 
     it('should handle messages with only assistant role in network', async () => {
@@ -481,7 +486,7 @@ describe('Gemini Model Compatibility Tests', () => {
         memory,
       });
 
-      const stream = await agent.network([{ role: 'assistant', content: 'I can help coordinate this task.' }], {
+      const stream = await agent.network([{ role: 'assistant', content: 'This is a system message' }], {
         runtimeContext,
         maxSteps: 1,
       });
@@ -492,6 +497,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
+      expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
   });
 });
