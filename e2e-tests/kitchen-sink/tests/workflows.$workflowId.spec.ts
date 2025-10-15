@@ -21,4 +21,17 @@ test('overall layout information', async ({ page }) => {
   // Information side panel
   await expect(page.locator('h2:has-text("complex-workflow")')).toBeVisible();
   await expect(page.locator('button:has-text("complexWorkflow")')).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Form' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: 'JSON' })).not.toBeChecked();
+
+  // Shows the dynamic form when FORM is selected (default)
+  await expect(page.getByRole('textbox', { name: 'Text' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Run' })).toBeVisible();
+
+  // Shows the JSON input when JSON is selected
+  await page.getByRole('radio', { name: 'JSON' }).click();
+  const codeEditor = await page.locator('[contenteditable="true"]');
+  await expect(codeEditor).toBeVisible();
+  await expect(codeEditor).toHaveText('{}');
+  await expect(codeEditor).toHaveAttribute('data-language', 'json');
 });
