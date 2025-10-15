@@ -27,7 +27,6 @@ export const NextraLayout = ({
   isKapaChatbotEnabled: boolean;
 }) => {
   const pathname = usePathname();
-  const isReference = pathname.includes("/reference");
   const searchParams = useSearchParams();
 
   // Check if vnext_search URL param is set to override the server-side flag
