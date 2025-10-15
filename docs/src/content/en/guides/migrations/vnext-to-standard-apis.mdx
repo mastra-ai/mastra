@@ -294,8 +294,8 @@ const result = await agent.generate(messages, {
   structuredOutput: {
     schema: z.object({
       summary: z.string(),
-      model: "openai/gpt-4o"
-    })
+    }),
+    model: "openai/gpt-4o"
   }
 });
 ```
