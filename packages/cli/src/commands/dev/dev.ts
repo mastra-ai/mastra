@@ -305,7 +305,7 @@ export async function dev({
   inspectBrk?: boolean;
   customArgs?: string[];
   https?: boolean;
-  debug?: boolean;
+  debug: boolean;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');

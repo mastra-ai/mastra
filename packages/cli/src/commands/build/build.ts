@@ -16,7 +16,7 @@ export async function build({
   dir?: string;
   tools?: string[];
   root?: string;
-  debug?: boolean;
+  debug: boolean;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');

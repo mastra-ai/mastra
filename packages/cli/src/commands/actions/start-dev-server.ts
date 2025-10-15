@@ -11,6 +11,7 @@ interface DevArgs {
   inspectBrk?: boolean;
   customArgs?: string;
   https?: boolean;
+  debug: boolean;
 }
 
 export const startDevServer = async (args: DevArgs) => {
@@ -28,7 +29,7 @@ export const startDevServer = async (args: DevArgs) => {
     inspectBrk: args?.inspectBrk,
     customArgs: args?.customArgs ? args.customArgs.split(',') : [],
     https: args?.https,
-    debug: args?.debug || false,
+    debug: args.debug,
   }).catch(err => {
     logger.error(err.message);
   });
