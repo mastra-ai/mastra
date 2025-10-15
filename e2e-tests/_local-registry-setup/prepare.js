@@ -9,8 +9,9 @@ const defaultTimeout = 3 * 60 * 1000;
 
 let maxRetries = 5;
 function retryWithTimeout(fn, timeout, name, retryCount = 0) {
+  let timeoutHandle;
   const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(
+    timeoutHandle = setTimeout(
       () => reject(new Error(`Command "${name}" timed out after ${timeout}ms in ${retryCount} retries`)),
       timeout,
     );
@@ -18,13 +19,18 @@ function retryWithTimeout(fn, timeout, name, retryCount = 0) {
 
   const callbackPromise = fn();
 
-  return Promise.race([callbackPromise, timeoutPromise]).catch(err => {
-    if (retryCount < maxRetries) {
-      return retryWithTimeout(fn, timeout, name, retryCount + 1);
-    }
-
-    throw err;
-  });
+  return Promise.race([callbackPromise, timeoutPromise])
+    .then(result => {
+      clearTimeout(timeoutHandle);
+      return result;
+    })
+    .catch(err => {
+      clearTimeout(timeoutHandle);
+      if (retryCount < maxRetries) {
+        return retryWithTimeout(fn, timeout, name, retryCount + 1);
+      }
+      throw err;
+    });
 }
 
 function cleanup(monorepoDir, resetChanges = false) {
