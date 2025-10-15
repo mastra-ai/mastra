@@ -60,7 +60,7 @@ export function KapaChat({
   return (
     <div className={cn("flex relative flex-col w-full h-[700px]", className)}>
       {/* Chat header */}
-      <div className="flex absolute top-0 right-0 left-0 z-20 justify-between px-5 py-3 w-full border-b backdrop-blur-md dark:border-neutral-700 dark:bg-surface-6">
+      <div className="flex absolute top-0 right-0 left-0 z-20 justify-between items-center px-5 py-3 w-full border-b backdrop-blur-md dark:border-neutral-700 border-neutral-200 dark:bg-surface-6">
         <span className="dark:text-icons-5">Ask mastra ai</span>
         <Button
           onClick={() => close()}

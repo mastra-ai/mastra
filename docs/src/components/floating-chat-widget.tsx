@@ -84,7 +84,7 @@ export const FloatingChatWidget = ({
         className="relative z-1000 focus:outline-none"
         onClose={close}
       >
-        <DialogBackdrop className="fixed inset-0 transition duration-150 ease-out data-closed:opacity-0 bg-black/70" />
+        <DialogBackdrop className="fixed inset-0 transition duration-150 ease-out data-closed:opacity-0 bg-white/70 dark:bg-black/70" />
         <div className="overflow-y-auto fixed inset-0 z-10 w-screen">
           <div className="flex items-start pt-[100px] justify-center min-h-full p-4">
             <DialogPanel
