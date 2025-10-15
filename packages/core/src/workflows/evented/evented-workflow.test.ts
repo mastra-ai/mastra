@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { simulateReadableStream } from 'ai-v4';
-import { MockLanguageModelV1 } from 'ai-v4/test';
+import { simulateReadableStream } from 'ai';
+import { MockLanguageModelV1 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createTool, Mastra, Telemetry } from '../..';
