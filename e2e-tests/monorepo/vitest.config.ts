@@ -5,5 +5,6 @@ export default defineConfig({
     environment: 'node',
     include: ['monorepo.test.ts'],
     globalSetup: './setup.ts',
+    reporters: ['default', 'hanging-process']
   },
 });
