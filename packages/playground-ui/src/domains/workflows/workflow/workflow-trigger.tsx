@@ -265,7 +265,7 @@ export function WorkflowTrigger({
                 <WorkflowInputData
                   schema={stepSchema}
                   isSubmitLoading={isStreamingWorkflow}
-                  submitButtonLabel="Resume"
+                  submitButtonLabel="Resume workflow"
                   onSubmit={data => {
                     const stepIds = step.stepId?.split('.');
                     handleResumeWorkflow({

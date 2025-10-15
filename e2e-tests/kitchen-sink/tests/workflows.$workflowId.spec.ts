@@ -125,7 +125,8 @@ test.describe('workflow run', () => {
     await page.getByRole('button', { name: 'Run' }).click();
     await runWorkflow(page);
 
-    await page.getByRole('button', { name: 'Suspend' }).click();
+    await page.getByRole('textbox').fill('Hello');
+    await page.getByRole('button', { name: 'Resume workflow' }).click();
     const nodes = await page.locator('[data-workflow-node]');
 
     await expect(nodes.nth(12)).toHaveAttribute('data-workflow-step-status', 'success');
