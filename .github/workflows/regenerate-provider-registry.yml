@@ -72,8 +72,8 @@ jobs:
 
       - name: Format generated files with Prettier
         run: |
-          prettier --write packages/core/src/llm/model/provider-registry.json
-          prettier --write packages/core/src/llm/model/provider-types.generated.d.ts
+          pnpm prettier --write packages/core/src/llm/model/provider-registry.json
+          pnpm prettier --write packages/core/src/llm/model/provider-types.generated.d.ts
 
       - name: Check for changes
         id: git-check
