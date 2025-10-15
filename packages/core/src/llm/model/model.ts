@@ -8,14 +8,8 @@ import {
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import type {
-  CoreMessage,
-  LanguageModel,
-  Schema,
-  StreamObjectOnFinishCallback,
-  StreamTextOnFinishCallback,
-} from 'ai-v4';
-import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai-v4';
+import type { CoreMessage, LanguageModel, Schema, StreamObjectOnFinishCallback, StreamTextOnFinishCallback } from 'ai';
+import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';

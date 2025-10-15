@@ -1,9 +1,9 @@
-import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai';
-import { openai } from '@ai-sdk/openai-v4';
-import type { LanguageModelV2 } from '@ai-sdk/provider';
-import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider-v4';
-import type { LanguageModel } from 'ai-v4';
+import { openai } from '@ai-sdk/openai';
+import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
+import type { LanguageModel } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';

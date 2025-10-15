@@ -11,7 +11,7 @@ type WorkflowRouteBody = {
 };
 
 export type WorkflowRouteOptions =
-  | { path: `${string}:workflowId${string}`; workflow?: undefined }
+  | { path: `${string}:workflowId${string}`; workflow?: never }
   | { path: string; workflow: string };
 
 export function workflowRoute({

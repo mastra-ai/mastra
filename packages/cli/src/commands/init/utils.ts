@@ -16,11 +16,29 @@ import {
   globalMCPIsAlreadyInstalled,
   windsurfGlobalMCPConfigPath,
 } from './mcp-docs-server-install';
+import type { Editor } from './mcp-docs-server-install';
 
 const exec = util.promisify(child_process.exec);
 
-export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google' | 'cerebras' | 'mistral';
-export type Components = 'agents' | 'workflows' | 'tools';
+export const LLMProvider = ['openai', 'anthropic', 'groq', 'google', 'cerebras', 'mistral'] as const;
+export const COMPONENTS = ['agents', 'workflows', 'tools'] as const;
+
+export type LLMProvider = (typeof LLMProvider)[number];
+export type Components = (typeof COMPONENTS)[number];
+
+/**
+ * Type-guard to check if a value is a valid LLMProvider
+ */
+export function isValidLLMProvider(value: string): value is LLMProvider {
+  return LLMProvider.includes(value as LLMProvider);
+}
+
+/**
+ * Type-guard to check if a value contains only valid Components
+ */
+export function areValidComponents(values: string[]): values is Components[] {
+  return values.every(value => COMPONENTS.includes(value as Components));
+}
 
 export const getModelIdentifier = (llmProvider: LLMProvider) => {
   if (llmProvider === 'openai') {
@@ -392,8 +410,7 @@ export const checkAndInstallCoreDeps = async (addExample: boolean) => {
   }
 
   if (needsZod) {
-    // TODO: Once the switch to AI SDK v5 is complete, this needs to be updated
-    await installCoreDeps('zod', '^3');
+    await installCoreDeps('zod', '^4');
   }
 
   if (addExample) {
@@ -593,7 +610,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
               label: 'VSCode',
               hint: vscodeIsAlreadyInstalled ? `Already installed` : undefined,
             },
-          ],
+          ] satisfies { value: Editor | 'skip'; label: string; hint?: string }[],
         });
 
         if (editor === `skip`) return undefined;
