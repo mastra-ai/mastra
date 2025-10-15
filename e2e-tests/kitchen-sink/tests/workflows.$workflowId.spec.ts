@@ -67,13 +67,7 @@ test.describe('workflow run', () => {
     await page.getByRole('button', { name: 'Run' }).click();
 
     await runWorkflow(page);
-    const nodes = await page.locator('[data-workflow-node]');
-
-    await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'success');
-    await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'idle');
-    await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
-      `1{2  \"text\": \"AABAACSABDDDDDDDDDDD\",3  \"iterationCount\": 114}`,
-    );
+    await checkShortPath(page);
   });
 
   test('running the workflow (form) - long condition', async ({ page }) => {
@@ -81,13 +75,7 @@ test.describe('workflow run', () => {
     await page.getByRole('button', { name: 'Run' }).click();
 
     await runWorkflow(page);
-    const nodes = await page.locator('[data-workflow-node]');
-
-    await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
-    await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
-    await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
-      `1{2  \"text\": \"SuperLongTextToStartWithABSuperLongTextToStartWithACLABD\",3  \"iterationCount\": 14}`,
-    );
+    await checkLongPath(page);
   });
 
   test('running the workflow (json) - short condition', async ({ page }) => {
@@ -96,13 +84,7 @@ test.describe('workflow run', () => {
     await page.getByRole('button', { name: 'Run' }).click();
 
     await runWorkflow(page);
-    const nodes = await page.locator('[data-workflow-node]');
-
-    await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'success');
-    await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'idle');
-    await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
-      `1{2  \"text\": \"AABAACSABDDDDDDDDDDD\",3  \"iterationCount\": 114}`,
-    );
+    await checkShortPath(page);
   });
 
   test('running the workflow (json) - long condition', async ({ page }) => {
@@ -111,13 +93,7 @@ test.describe('workflow run', () => {
     await page.getByRole('button', { name: 'Run' }).click();
 
     await runWorkflow(page);
-    const nodes = await page.locator('[data-workflow-node]');
-
-    await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
-    await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
-    await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
-      `1{2  \"text\": \"SuperLongTextToStartWithABSuperLongTextToStartWithACLABD\",3  \"iterationCount\": 14}`,
-    );
+    await checkLongPath(page);
   });
 
   test('resuming a workflow', async ({ page }) => {
@@ -133,6 +109,26 @@ test.describe('workflow run', () => {
     await expect(nodes.nth(13)).toHaveAttribute('data-workflow-step-status', 'success');
   });
 });
+
+async function checkShortPath(page: Page) {
+  const nodes = await page.locator('[data-workflow-node]');
+
+  await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'idle');
+  await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
+    `1{2  \"text\": \"AABAACSABDDDDDDDDDDD\",3  \"iterationCount\": 114}`,
+  );
+}
+
+async function checkLongPath(page: Page) {
+  const nodes = await page.locator('[data-workflow-node]');
+
+  await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
+  await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
+    `1{2  \"text\": \"SuperLongTextToStartWithABSuperLongTextToStartWithACLABD\",3  \"iterationCount\": 14}`,
+  );
+}
 
 async function runWorkflow(page: Page) {
   const nodes = await page.locator('[data-workflow-node]');
