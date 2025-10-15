@@ -10,7 +10,6 @@ import shellQuote from 'shell-quote';
 import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
-import { FileService } from '../../services/service.file';
 import {
   cursorGlobalMCPConfigPath,
   globalMCPIsAlreadyInstalled,
@@ -38,249 +37,84 @@ export const getModelIdentifier = (llmProvider: LLMProvider) => {
   }
 };
 
+// Resolve a template file from templates/weather-agent/src/mastra
+const readWeatherTemplateFile = async (subpath: string): Promise<string> => {
+  // Use import.meta.url so this works in ESM
+  const __filename = (await import('url')).fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const templateRoot = path.resolve(__dirname, '../../../../../templates/weather-agent/src/mastra');
+  const sourcePath = path.join(templateRoot, subpath);
+  return await fs.readFile(sourcePath, 'utf8');
+};
+
+const formatTypescript = async (content: string) =>
+  prettier.format(content, { parser: 'typescript', singleQuote: true, semi: true });
+
 export async function writeAgentSample(llmProvider: LLMProvider, destPath: string, addExampleTool: boolean) {
   const modelString = getModelIdentifier(llmProvider);
 
-  const instructions = `
-      You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
+  // Start from the weather-agent template and transform
+  let content = await readWeatherTemplateFile('agents/index.ts');
 
-      Your primary function is to help users get weather details for specific locations. When responding:
-      - Always ask for a location if none is provided
-      - If the location name isn't in English, please translate it
-      - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
-      - Include relevant details like humidity, wind conditions, and precipitation
-      - Keep responses concise but informative
-      - If the user asks for activities and provides the weather forecast, suggest activities based on the weather forecast.
-      - If the user asks for activities, respond in the format they request.
+  // Remove ai-sdk provider imports (we will use string model identifiers)
+  content = content.replace(/\n?import\s*\{\s*openai\s*\}\s*from\s*['"]@ai-sdk\/openai['"];?\n?/g, '\n');
+  content = content.replace(/\n?import\s*\{\s*anthropic\s*\}\s*from\s*['"]@ai-sdk\/anthropic['"];?\n?/g, '\n');
 
-      ${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}
-`;
-  const content = `
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-import { LibSQLStore } from '@mastra/libsql';
-${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
+  // Keep scorers import and property (we will generate scorers file separately)
 
-export const weatherAgent = new Agent({
-  name: 'Weather Agent',
-  instructions: \`${instructions}\`,
-  model: ${modelString},
-  ${addExampleTool ? 'tools: { weatherTool },' : ''}
-  memory: new Memory({
-    storage: new LibSQLStore({
-      url: "file:../mastra.db", // path is relative to the .mastra/output directory
-    })
-  })
-});
-    `;
-  const formattedContent = await prettier.format(content, {
-    parser: 'typescript',
-    singleQuote: true,
-  });
+  // Tools: adjust import path or remove if not requested
+  if (addExampleTool) {
+    // Ensure import points to the specific file we create
+    content = content.replace(/from\s*['"]\.\.\/tools['"]/g, "from '../tools/weather-tool'");
+  } else {
+    // Remove weatherTool import and tools property
+    content = content.replace(/\n?import\s*\{\s*weatherTool\s*\}\s*from\s*['"][^'"]+['"];?\n?/g, '\n');
+    content = content.replace(/\n\s*tools:\s*\{\s*weatherTool\s*\}\s*,?/g, '\n');
+  }
 
-  await fs.writeFile(destPath, '');
+  // Replace model array/object with single model string identifier
+  // Replace arrays like: model: [ ... ],
+  content = content.replace(/model:\s*\[[\s\S]*?\],?/m, `model: ${modelString},`);
+  // Also cover a possible single provider call: model: openai('...'),
+  content = content.replace(/model:\s*[^,]+,/m, `model: ${modelString},`);
+
+  const formattedContent = await formatTypescript(content);
+
   await fs.writeFile(destPath, formattedContent);
 }
 
 export async function writeWorkflowSample(destPath: string) {
-  const content = `import { createStep, createWorkflow } from '@mastra/core/workflows';
-import { z } from 'zod';
+  // Start from template then transform to use the initialized agent via mastra
+  let content = await readWeatherTemplateFile('workflows/index.ts');
 
-const forecastSchema = z.object({
-  date: z.string(),
-  maxTemp: z.number(),
-  minTemp: z.number(),
-  precipitationChance: z.number(),
-  condition: z.string(),
-  location: z.string(),
-})
+  // Remove ai sdk openai import and Agent import
+  content = content.replace(/\n?import\s*\{\s*openai\s*\}\s*from\s*['"]@ai-sdk\/openai['"];?\n?/g, '\n');
+  content = content.replace(/\n?import\s*\{\s*Agent\s*\}\s*from\s*['"]@mastra\/core\/agent['"];?\n?/g, '\n');
 
-function getWeatherCondition(code: number): string {
-  const conditions: Record<number, string> = {
-    0: 'Clear sky',
-    1: 'Mainly clear',
-    2: 'Partly cloudy',
-    3: 'Overcast',
-    45: 'Foggy',
-    48: 'Depositing rime fog',
-    51: 'Light drizzle',
-    53: 'Moderate drizzle',
-    55: 'Dense drizzle',
-    61: 'Slight rain',
-    63: 'Moderate rain',
-    65: 'Heavy rain',
-    71: 'Slight snow fall',
-    73: 'Moderate snow fall',
-    75: 'Heavy snow fall',
-    95: 'Thunderstorm',
-  }
-  return conditions[code] || 'Unknown'
-}
+  // Remove inline agent definition
+  content = content.replace(/\n?const\s+agent\s*=\s*new\s+Agent\s*\([\s\S]*?\);\n?/m, '\n');
 
-const fetchWeather = createStep({
-  id: 'fetch-weather',
-  description: 'Fetches weather forecast for a given city',
-  inputSchema: z.object({
-    city: z.string().describe('The city to get the weather for'),
-  }),
-  outputSchema: forecastSchema,
-  execute: async ({ inputData }) => {
-    if (!inputData) {
-      throw new Error('Input data not found');
-    }
+  // Ensure we get the agent from mastra in the plan-activities step
+  // Update execute signature to include mastra
+  content = content.replace(
+    /execute:\s*async\s*\(\{\s*inputData\s*\}\)\s*=>\s*\{/m,
+    'execute: async ({ inputData, mastra }) => {',
+  );
 
-    const geocodingUrl = \`https://geocoding-api.open-meteo.com/v1/search?name=\${encodeURIComponent(inputData.city)}&count=1\`;
-    const geocodingResponse = await fetch(geocodingUrl);
-    const geocodingData = (await geocodingResponse.json()) as {
-      results: { latitude: number; longitude: number; name: string }[];
-    };
+  // Insert agent retrieval before streaming
+  content = content.replace(
+    /const\s+response\s*=\s*await\s+agent\.stream\(/m,
+    "const agent = mastra?.getAgent('weatherAgent');\n    if (!agent) {\n      throw new Error('Weather agent not found');\n    }\n    const response = await agent.stream(",
+  );
 
-    if (!geocodingData.results?.[0]) {
-      throw new Error(\`Location '\${inputData.city}' not found\`);
-    }
-
-    const { latitude, longitude, name } = geocodingData.results[0];
-
-    const weatherUrl = \`https://api.open-meteo.com/v1/forecast?latitude=\${latitude}&longitude=\${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m\`;
-    const response = await fetch(weatherUrl);
-    const data = (await response.json()) as {
-      current: {
-        time: string
-        precipitation: number
-        weathercode: number
-      }
-      hourly: {
-        precipitation_probability: number[]
-        temperature_2m: number[]
-      }
-    }
-
-    const forecast = {
-      date: new Date().toISOString(),
-      maxTemp: Math.max(...data.hourly.temperature_2m),
-      minTemp: Math.min(...data.hourly.temperature_2m),
-      condition: getWeatherCondition(data.current.weathercode),
-      precipitationChance: data.hourly.precipitation_probability.reduce(
-        (acc, curr) => Math.max(acc, curr),
-        0
-      ),
-      location: name
-    }
-
-    return forecast;
-  },
-});
-
-
-const planActivities = createStep({
-  id: 'plan-activities',
-  description: 'Suggests activities based on weather conditions',
-  inputSchema: forecastSchema,
-  outputSchema: z.object({
-    activities: z.string(),
-  }),
-  execute: async ({ inputData, mastra }) => {
-    const forecast = inputData
-
-    if (!forecast) {
-      throw new Error('Forecast data not found')
-    }
-
-    const agent = mastra?.getAgent('weatherAgent');
-    if (!agent) {
-      throw new Error('Weather agent not found');
-    }
-
-    const prompt = \`Based on the following weather forecast for \${forecast.location}, suggest appropriate activities:
-      \${JSON.stringify(forecast, null, 2)}
-      For each day in the forecast, structure your response exactly as follows:
-
-      📅 [Day, Month Date, Year]
-      ═══════════════════════════
-
-      🌡️ WEATHER SUMMARY
-      • Conditions: [brief description]
-      • Temperature: [X°C/Y°F to A°C/B°F]
-      • Precipitation: [X% chance]
-
-      🌅 MORNING ACTIVITIES
-      Outdoor:
-      • [Activity Name] - [Brief description including specific location/route]
-        Best timing: [specific time range]
-        Note: [relevant weather consideration]
-
-      🌞 AFTERNOON ACTIVITIES
-      Outdoor:
-      • [Activity Name] - [Brief description including specific location/route]
-        Best timing: [specific time range]
-        Note: [relevant weather consideration]
-
-      🏠 INDOOR ALTERNATIVES
-      • [Activity Name] - [Brief description including specific venue]
-        Ideal for: [weather condition that would trigger this alternative]
-
-      ⚠️ SPECIAL CONSIDERATIONS
-      • [Any relevant weather warnings, UV index, wind conditions, etc.]
-
-      Guidelines:
-      - Suggest 2-3 time-specific outdoor activities per day
-      - Include 1-2 indoor backup options
-      - For precipitation >50%, lead with indoor activities
-      - All activities must be specific to the location
-      - Include specific venues, trails, or locations
-      - Consider activity intensity based on temperature
-      - Keep descriptions concise but informative
-
-      Maintain this exact formatting for consistency, using the emoji and section headers as shown.\`;
-
-    const response = await agent.stream([
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ]);
-
-    let activitiesText = '';
-
-    for await (const chunk of response.textStream) {
-      process.stdout.write(chunk);
-      activitiesText += chunk;
-    }
-
-    return {
-      activities: activitiesText,
-    };
-  },
-});
-
-const weatherWorkflow = createWorkflow({
-  id: 'weather-workflow',
-  inputSchema: z.object({
-    city: z.string().describe('The city to get the weather for'),
-  }),
-  outputSchema: z.object({
-    activities: z.string(),
-  })
-})
-  .then(fetchWeather)
-  .then(planActivities);
-
-weatherWorkflow.commit();
-
-export { weatherWorkflow };`;
-
-  const formattedContent = await prettier.format(content, {
-    parser: 'typescript',
-    semi: true,
-    singleQuote: true,
-  });
-
+  const formattedContent = await formatTypescript(content);
   await fs.writeFile(destPath, formattedContent);
 }
 
 export async function writeToolSample(destPath: string) {
-  const fileService = new FileService();
-  await fileService.copyStarterFile('tools.ts', destPath);
+  const template = await readWeatherTemplateFile('tools/index.ts');
+  const formattedContent = await formatTypescript(template);
+  await fs.writeFile(destPath, formattedContent);
 }
 
 export async function writeCodeSampleForComponents(
@@ -291,7 +125,12 @@ export async function writeCodeSampleForComponents(
 ) {
   switch (component) {
     case 'agents':
-      return writeAgentSample(llmprovider, destPath, importComponents.includes('tools'));
+      await writeAgentSample(llmprovider, destPath, importComponents.includes('tools'));
+      // Also write scorers alongside agents
+      const scorersPath = path.join(path.dirname(path.dirname(destPath)), 'scorers', 'index.ts');
+      await fsExtra.ensureDir(path.dirname(scorersPath));
+      await writeScorersSample(scorersPath);
+      return;
     case 'tools':
       return writeToolSample(destPath);
     case 'workflows':
@@ -305,6 +144,12 @@ export const createComponentsDir = async (dirPath: string, component: string) =>
   const componentPath = dirPath + `/${component}`;
 
   await fsExtra.ensureDir(componentPath);
+};
+
+export const writeScorersSample = async (destPath: string) => {
+  const template = await readWeatherTemplateFile('scorers/index.ts');
+  const formattedContent = await formatTypescript(template);
+  await fs.writeFile(destPath, formattedContent);
 };
 
 export const writeIndexFile = async ({
@@ -322,52 +167,37 @@ export const writeIndexFile = async ({
   const destPath = path.join(indexPath);
   try {
     await fs.writeFile(destPath, '');
-    const filteredExports = [
-      addWorkflow ? `workflows: { weatherWorkflow },` : '',
-      addAgent ? `agents: { weatherAgent },` : '',
-    ].filter(Boolean);
     if (!addExample) {
       await fs.writeFile(
         destPath,
-        `
-import { Mastra } from '@mastra/core';
-
-export const mastra = new Mastra()
-        `,
+        `\nimport { Mastra } from '@mastra/core';\n\nexport const mastra = new Mastra()\n        `,
       );
-
       return;
     }
-    await fs.writeFile(
-      destPath,
-      `
-import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
-import { LibSQLStore } from '@mastra/libsql';
-${addWorkflow ? `import { weatherWorkflow } from './workflows/weather-workflow';` : ''}
-${addAgent ? `import { weatherAgent } from './agents/weather-agent';` : ''}
 
-export const mastra = new Mastra({
-  ${filteredExports.join('\n  ')}
-  storage: new LibSQLStore({
-    // stores observability, scores, ... into memory storage, if it needs to persist, change to file:../mastra.db
-    url: ":memory:",
-  }),
-  logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
-  }),
-  telemetry: {
-    // Telemetry is deprecated and will be removed in the Nov 4th release
-    enabled: false, 
-  },
-  observability: {
-    // Enables DefaultExporter and CloudExporter for AI tracing
-    default: { enabled: true }, 
-  },
-});
-`,
-    );
+    // Start from the weather-agent template index and transform
+    let idx = await readWeatherTemplateFile('index.ts');
+
+    // Point imports to specific files we generate
+    idx = idx.replace(/from\s*['"]\.\/agents['"]/g, "from './agents/weather-agent'");
+    idx = idx.replace(/from\s*['"]\.\/workflows['"]/g, "from './workflows/weather-workflow'");
+
+    if (!addAgent) {
+      idx = idx.replace(/\n?import\s*\{\s*weatherAgent\s*\}\s*from\s*['"][^'"]+['"];?\n?/g, '\n');
+      idx = idx.replace(/\n\s*agents:\s*\{\s*weatherAgent\s*\}\s*,?/g, '\n');
+      // Keep scorers only if we have an agent; otherwise remove import & property
+
+      idx = idx.replace(/\n?import\s*\{\s*scorers\s*\}\s*from\s*['"]\.\/scorers['"];?\n?/g, '\n');
+      idx = idx.replace(/\n\s*scorers\s*,?/g, '\n');
+    }
+
+    if (!addWorkflow) {
+      idx = idx.replace(/\n?import\s*\{\s*weatherWorkflow\s*\}\s*from\s*['"][^'"]+['"];?\n?/g, '\n');
+      idx = idx.replace(/\n\s*workflows:\s*\{\s*weatherWorkflow\s*\}\s*,?/g, '\n');
+    }
+
+    const formattedIndex = await formatTypescript(idx);
+    await fs.writeFile(destPath, formattedIndex);
   } catch (err) {
     throw err;
   }

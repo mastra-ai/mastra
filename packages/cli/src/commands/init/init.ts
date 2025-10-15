@@ -49,11 +49,11 @@ export const init = async ({
     ]);
 
     if (addExample) {
-      await Promise.all([
-        ...components.map(component =>
+      await Promise.all(
+        components.map(component =>
           writeCodeSample(dirPath, component as Components, llmProvider, components as Components[]),
         ),
-      ]);
+      );
 
       const depService = new DepsService();
       const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
@@ -69,6 +69,17 @@ export const init = async ({
       const needsLoggers = (await depService.checkDependencies(['@mastra/loggers'])) !== `ok`;
       if (needsLoggers) {
         await depService.installPackages(['@mastra/loggers']);
+      }
+      // Scorers require evals dependencies; install when agent is added
+      if (components.includes('agents')) {
+        const needsEvals = (await depService.checkDependencies(['@mastra/evals'])) !== `ok`;
+        if (needsEvals) {
+          await depService.installPackages(['@mastra/evals']);
+        }
+        const needsAiSdk = (await depService.checkDependencies(['@ai-sdk/openai'])) !== `ok`;
+        if (needsAiSdk) {
+          await depService.installPackages(['@ai-sdk/openai']);
+        }
       }
     }
 
