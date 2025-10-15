@@ -112,6 +112,7 @@ jobs:
           git add packages/core/src/llm/model/provider-types.generated.d.ts
           git add "${CHANGESET_FILE}"
           git commit -m "chore: regenerate provider registry [skip ci]"
+          git pull --rebase
           git push
 
       - name: Log summary
