@@ -42,77 +42,19 @@ describe('MessageList - Gemini Compatibility', () => {
       expect(prompt[3].role).toBe('user');
     });
 
-    it('should ensure last message is user when ending with assistant', () => {
-      const list = new MessageList();
-
-      list.add({ role: 'user', content: 'Hello' }, 'input');
-      list.add({ role: 'assistant', content: 'Hi there' }, 'response');
-
-      const prompt = list.get.all.aiV5.prompt();
-
-      // Last message should be user
-      const lastMessage = prompt[prompt.length - 1];
-      expect(lastMessage.role).toBe('user');
-      expect(lastMessage.content).toBe('.');
-    });
-
-    it('should ensure last message is user when ending with tool', () => {
-      const list = new MessageList();
-
-      list.add({ role: 'user', content: 'What is the weather?' }, 'input');
-      list.add(
-        {
-          role: 'assistant',
-          content: [
-            {
-              type: 'tool-call',
-              toolCallId: 'call-1',
-              toolName: 'get_weather',
-              args: { location: 'London' },
-            },
-          ],
-        },
-        'response',
-      );
-      list.add(
-        {
-          role: 'tool',
-          content: [
-            {
-              type: 'tool-result',
-              toolCallId: 'call-1',
-              toolName: 'get_weather',
-              result: 'Sunny',
-            },
-          ],
-        },
-        'response',
-      );
-
-      const prompt = list.get.all.aiV5.prompt();
-
-      // Last message should be user
-      const lastMessage = prompt[prompt.length - 1];
-      expect(lastMessage.role).toBe('user');
-      expect(lastMessage.content).toBe('.');
-    });
-
-    it('should handle both first and last message requirements', () => {
+    it('should inject user when starting with assistant after system', () => {
       const list = new MessageList();
 
       list.addSystem('You are helpful');
-      // Starts with assistant (needs user injection at start)
       list.add({ role: 'assistant', content: 'Previous response' }, 'memory');
-      // Ends with assistant (needs user injection at end)
 
       const prompt = list.get.all.aiV5.prompt();
 
+      expect(prompt).toHaveLength(3);
       expect(prompt[0].role).toBe('system');
-      expect(prompt[1].role).toBe('user'); // Injected at start
+      expect(prompt[1].role).toBe('user'); // Injected after system
       expect(prompt[1].content).toBe('.');
       expect(prompt[2].role).toBe('assistant');
-      expect(prompt[3].role).toBe('user'); // Injected at end
-      expect(prompt[3].content).toBe('.');
     });
 
     it('should handle multiple system messages followed by assistant', () => {
@@ -124,12 +66,11 @@ describe('MessageList - Gemini Compatibility', () => {
 
       const prompt = list.get.all.aiV5.prompt();
 
-      // Should have: system, system, user (injected), assistant, user (injected)
+      expect(prompt).toHaveLength(4);
       expect(prompt[0].role).toBe('system');
       expect(prompt[1].role).toBe('system');
       expect(prompt[2].role).toBe('user'); // Injected after systems
       expect(prompt[3].role).toBe('assistant');
-      expect(prompt[4].role).toBe('user'); // Injected at end
     });
 
     it('should not inject when already properly formatted', () => {
@@ -183,21 +124,7 @@ describe('MessageList - Gemini Compatibility', () => {
       expect(llmPrompt[3].role).toBe('user');
     });
 
-    it('should ensure last message is user in llmPrompt', async () => {
-      const list = new MessageList();
-
-      list.add({ role: 'user', content: 'Hello' }, 'input');
-      list.add({ role: 'assistant', content: 'Hi there' }, 'response');
-
-      const llmPrompt = await list.get.all.aiV5.llmPrompt();
-
-      // Last message should be user
-      const lastMessage = llmPrompt[llmPrompt.length - 1];
-      expect(lastMessage.role).toBe('user');
-      expect(lastMessage.content).toEqual([{ type: 'text', text: '.' }]);
-    });
-
-    it('should handle both requirements in llmPrompt', async () => {
+    it('should inject user after system when starting with assistant in llmPrompt', async () => {
       const list = new MessageList();
 
       list.addSystem('You are helpful');
@@ -205,10 +132,10 @@ describe('MessageList - Gemini Compatibility', () => {
 
       const llmPrompt = await list.get.all.aiV5.llmPrompt();
 
+      expect(llmPrompt).toHaveLength(3);
       expect(llmPrompt[0].role).toBe('system');
       expect(llmPrompt[1].role).toBe('user'); // Injected after system
       expect(llmPrompt[2].role).toBe('assistant');
-      expect(llmPrompt[3].role).toBe('user'); // Injected at end
     });
   });
 

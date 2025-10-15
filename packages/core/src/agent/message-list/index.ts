@@ -19,6 +19,7 @@ import {
   parseDataUri,
 } from './prompt/image-utils';
 import type { AIV4Type, AIV5Type } from './types';
+import { ensureGeminiCompatibleMessages } from './utils/ai-v5/gemini-compatibility';
 import { getToolName } from './utils/ai-v5/tool';
 
 type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
@@ -224,33 +225,9 @@ export class MessageList {
         );
         const modelMessages = this.all.aiV5.model();
 
-        let messages = [...systemMessages, ...modelMessages];
+        const messages = [...systemMessages, ...modelMessages];
 
-        // Check 1: Ensure first non-system message is user
-        const firstNonSystemIndex = messages.findIndex(m => m.role !== 'system');
-        if (firstNonSystemIndex === -1) {
-          // Only system messages or empty, add user message at end
-          messages.push({
-            role: 'user',
-            content: '.',
-          });
-        } else if (messages[firstNonSystemIndex]?.role === 'assistant') {
-          // First non-system is assistant, insert user message before it
-          messages.splice(firstNonSystemIndex, 0, {
-            role: 'user',
-            content: '.',
-          });
-        }
-
-        // Check 2: Ensure last message is user
-        if (messages.length > 0 && messages[messages.length - 1]?.role !== 'user') {
-          messages.push({
-            role: 'user',
-            content: '.',
-          });
-        }
-
-        return messages;
+        return ensureGeminiCompatibleMessages(messages);
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
@@ -310,29 +287,7 @@ export class MessageList {
           });
         }
 
-        // Check 1: Ensure first non-system message is user
-        const firstNonSystemIndex = messages.findIndex(m => m.role !== 'system');
-        if (firstNonSystemIndex === -1) {
-          // Only system messages or empty, add user message at end
-          messages.push({
-            role: 'user',
-            content: '.',
-          });
-        } else if (messages[firstNonSystemIndex]?.role === 'assistant') {
-          // First non-system is assistant, insert user message before it
-          messages.splice(firstNonSystemIndex, 0, {
-            role: 'user',
-            content: '.',
-          });
-        }
-
-        // Check 2: Ensure last message is user
-        if (messages.length > 0 && messages[messages.length - 1]?.role !== 'user') {
-          messages.push({
-            role: 'user',
-            content: '.',
-          });
-        }
+        messages = ensureGeminiCompatibleMessages(messages);
 
         return messages.map(MessageList.aiV5ModelMessageToV2PromptMessage);
       },

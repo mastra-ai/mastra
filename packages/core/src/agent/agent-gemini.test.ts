@@ -281,7 +281,6 @@ describe('Gemini Model Compatibility Tests', () => {
         [
           { role: 'user', content: 'What is 5 plus 3?' },
           { role: 'assistant', content: 'Let me calculate that for you.' },
-          { role: 'user', content: 'Please provide the answer now.' },
         ],
         {
           runtimeContext,
@@ -298,7 +297,7 @@ describe('Gemini Model Compatibility Tests', () => {
       expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
 
-    it('should handle conversation ending with tool result in network', async () => {
+    it('should handle conversation ending with tool result in network (with follow-up user message)', async () => {
       const testTool = createTool({
         id: 'weather-tool',
         description: 'Gets weather information',
@@ -342,6 +341,65 @@ describe('Gemini Model Compatibility Tests', () => {
             ],
           },
           { role: 'user', content: 'Is that good weather for a picnic?' },
+        ],
+        {
+          runtimeContext,
+          maxSteps: 1,
+        },
+      );
+
+      const chunks: ChunkType[] = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks).toBeDefined();
+      expect(chunks.length).toBeGreaterThan(1);
+    }, 15000);
+
+    it('should handle conversation ending with tool result in network (agentic loop pattern)', async () => {
+      const testTool = createTool({
+        id: 'weather-tool',
+        description: 'Gets weather information',
+        inputSchema: z.object({ location: z.string() }),
+        outputSchema: z.object({ weather: z.string() }),
+        execute: async () => ({ weather: 'Sunny, 72°F' }),
+      });
+
+      const agent = new Agent({
+        id: 'network-agentic-tool-result-agent',
+        name: 'Network Agentic Tool Result Agent',
+        instructions: 'You help with weather queries. Summarize weather results.',
+        model: google('gemini-2.5-flash-lite'),
+        tools: { testTool },
+        memory,
+      });
+
+      const stream = await agent.network(
+        [
+          { role: 'user', content: 'What is the weather?' },
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'call_1',
+                toolName: 'weather-tool',
+                args: { location: 'San Francisco' },
+              },
+            ],
+          },
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'call_1',
+                toolName: 'weather-tool',
+                result: 'Sunny, 72°F',
+              },
+            ],
+          },
         ],
         {
           runtimeContext,
@@ -469,6 +527,35 @@ describe('Gemini Model Compatibility Tests', () => {
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
     }, 20000);
+
+    it('should handle simple conversation ending with assistant in network', async () => {
+      const agent = new Agent({
+        id: 'network-simple-ending-agent',
+        name: 'Network Simple Ending Agent',
+        instructions: 'You help users with their queries',
+        model: google('gemini-2.5-flash-lite'),
+        memory,
+      });
+
+      const stream = await agent.network(
+        [
+          { role: 'user', content: 'Hello, how are you?' },
+          { role: 'assistant', content: 'I am doing well, thank you!' },
+        ],
+        {
+          runtimeContext,
+          maxSteps: 1,
+        },
+      );
+
+      const chunks: ChunkType[] = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks).toBeDefined();
+      expect(chunks.length).toBeGreaterThan(1);
+    }, 15000);
 
     it('should handle messages with only assistant role in network', async () => {
       const helperAgent = new Agent({
