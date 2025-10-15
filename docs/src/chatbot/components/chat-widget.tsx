@@ -101,7 +101,7 @@ export function KapaChat({
                               variant="ghost"
                               size="icon-sm"
                               onClick={() => handleFeedback(id, "upvote")}
-                              className={`p-1 hover:bg-surface-4 cursor-pointer ${
+                              className={`p-1 cursor-pointer ${
                                 reaction === "upvote"
                                   ? "dark:text-accent-green text-[var(--light-green-accent)]"
                                   : "dark:text-icons-3 text-[var(--light-color-text-4)]"
@@ -113,7 +113,7 @@ export function KapaChat({
                               variant="ghost"
                               size="icon-sm"
                               onClick={() => handleFeedback(id, "downvote")}
-                              className={`p-1 hover:bg-surface-4 cursor-pointer ${
+                              className={`p-1 cursor-pointer ${
                                 reaction === "downvote"
                                   ? "dark:text-red-500 text-red-600"
                                   : "dark:text-icons-3 text-[var(--light-color-text-4)]"
