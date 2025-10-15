@@ -314,10 +314,10 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         runState.setState({
           providerOptions: chunk.payload.metadata.providerMetadata,
           stepResult: {
-            reason: chunk.payload.stepResult.reason,
-            logprobs: chunk.payload.stepResult.logprobs,
+            reason: chunk.payload.reason,
+            logprobs: chunk.payload.logprobs,
             warnings: responseFromModel.warnings,
-            totalUsage: chunk.payload.output.usage,
+            totalUsage: chunk.payload.totalUsage,
             headers: responseFromModel.rawResponse?.headers,
             messageId,
             isContinued: !['stop', 'error'].includes(chunk.payload.stepResult.reason),
