@@ -33,14 +33,21 @@ process.once('SIGTERM', async () => {
 describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
   let fixturePath: string;
 
+  async function runBuild(path: string) {
+    await execa(pkgManager, ['build'], {
+      cwd: join(path, 'apps', 'custom'),
+      stdio: 'inherit',
+      env: process.env,
+    });
+  }
+
   beforeAll(
     async () => {
-      const tag = inject('tag');
       const registry = inject('registry');
 
       fixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-test-${pkgManager}-`));
       process.env.npm_config_registry = registry;
-      await setupMonorepo(fixturePath, tag, pkgManager);
+      await setupMonorepo(fixturePath, pkgManager);
     },
     10 * 60 * 1000,
   );
@@ -51,17 +58,6 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         force: true,
       });
     } catch {}
-  });
-
-  describe('tsconfig paths', { timeout: 60 * 1000 }, () => {
-    it('should resolve paths', async () => {
-      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
-      const content = await readFile(inputFile, 'utf-8');
-
-      const hasMappedPkg = content.includes('@/agents');
-
-      expect(hasMappedPkg).toBeFalsy();
-    });
   });
 
   function runApiTests(port: number) {
@@ -93,7 +89,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     });
   }
 
-  describe('dev', async () => {
+  describe.sequential('dev', async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
@@ -113,7 +109,10 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       activeProcesses.push({ controller, proc });
 
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve, reject) => {
+        proc!.stderr?.on('data', data => {
+          reject(new Error('failed to start dev: ' + data?.toString()));
+        });
         proc!.stdout?.on('data', data => {
           process.stdout.write(data?.toString());
           if (data?.toString()?.includes(`http://localhost:${port}`)) {
@@ -139,13 +138,15 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     runApiTests(port);
   });
 
-  describe('build', async () => {
+  describe.sequential('build', async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
     const cancelSignal = controller.signal;
 
     beforeAll(async () => {
+      await runBuild(fixturePath);
+
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
       proc = execaNode('index.mjs', {
         cwd: inputFile,
@@ -158,7 +159,10 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       activeProcesses.push({ controller, proc });
 
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve, reject) => {
+        proc!.stderr?.on('data', data => {
+          reject(new Error('failed to start: ' + data?.toString()));
+        });
         proc!.stdout?.on('data', data => {
           console.log(data?.toString());
           if (data?.toString()?.includes(`http://localhost:${port}`)) {
@@ -167,6 +171,15 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         });
       });
     }, timeout);
+
+    it('should resolve tsconfig paths', async () => {
+      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
+      const content = await readFile(inputFile, 'utf-8');
+
+      const hasMappedPkg = content.includes('@/agents');
+
+      expect(hasMappedPkg).toBeFalsy();
+    });
 
     afterAll(async () => {
       if (proc) {
@@ -185,13 +198,15 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     runApiTests(port);
   });
 
-  describe.skip('start', async () => {
+  describe.sequential('start', async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
     const cancelSignal = controller.signal;
 
     beforeAll(async () => {
+      await runBuild(fixturePath);
+
       const inputFile = join(fixturePath, 'apps', 'custom');
 
       console.log('started proc', port);
@@ -207,21 +222,32 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       activeProcesses.push({ controller, proc });
 
-      await new Promise<void>(resolve => {
-        proc!.stdout?.on('data', data => {
-          console.log(data?.toString());
-          if (data?.toString()?.includes(`http://localhost:${port}`)) {
-            resolve();
+      // Poll the server until it's ready
+      const maxAttempts = 60;
+      const delayMs = 1000;
+      for (let i = 0; i < maxAttempts; i++) {
+        try {
+          const res = await fetch(`http://localhost:${port}/api/tools`);
+          if (res.ok) {
+            console.log('Server is ready');
+            break;
           }
-        });
-      });
+        } catch {
+          // Server not ready yet
+        }
+
+        if (i === maxAttempts - 1) {
+          throw new Error('Server failed to start within timeout');
+        }
+
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
     }, timeout);
 
     afterAll(async () => {
       if (proc) {
         try {
-          setImmediate(() => controller.abort());
-          await proc;
+          proc.kill('SIGKILL');
         } catch (err) {
           // @ts-expect-error - isCanceled is not typed
           if (!err.isCanceled) {

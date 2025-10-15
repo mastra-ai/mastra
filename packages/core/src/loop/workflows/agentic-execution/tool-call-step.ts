@@ -1,4 +1,4 @@
-import type { ToolCallOptions, ToolSet } from 'ai';
+import type { ToolCallOptions, ToolSet } from 'ai-v5';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';

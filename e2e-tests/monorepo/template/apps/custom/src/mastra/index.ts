@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core/mastra';
+import { ConsoleLogger } from '@mastra/core/logger';
 import { innerAgent } from '@/agents';
 import { testRoute } from '@/api/route/test';
 import { allRoute } from '@/api/route/all';
@@ -10,4 +11,8 @@ export const mastra = new Mastra({
     port: process.env.MASTRA_PORT ? parseInt(process.env.MASTRA_PORT) : 3000,
     apiRoutes: [testRoute, allRoute, streamingRoute],
   },
+  bundler: {
+    externals: ['bcrypt'],
+  },
+  logger: new ConsoleLogger({ level: 'info' }),
 });

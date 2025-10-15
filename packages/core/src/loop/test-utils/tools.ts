@@ -1,12 +1,12 @@
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v4/test';
-import { dynamicTool, jsonSchema, stepCountIs } from 'ai';
+import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
+import { dynamicTool, jsonSchema, stepCountIs } from 'ai-v5';
 import {
   convertArrayToReadableStream,
   convertReadableStreamToArray,
   MockLanguageModelV2,
   mockValues,
   mockId,
-} from 'ai/test';
+} from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
