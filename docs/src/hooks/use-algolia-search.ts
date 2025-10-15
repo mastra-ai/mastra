@@ -334,13 +334,13 @@ export function useAlgoliaSearch(
 
                 // If we have multiple levels, format as "h1: h2" or "h1: h3" (showing first and last)
                 if (highlightedLevels.length > 1) {
-                  return `${highlightedLevels[0]}: ${highlightedLevels[highlightedLevels.length - 1]}`;
+                  return stripColon(`${highlightedLevels[0]}: ${highlightedLevels[highlightedLevels.length - 1]}`);
                 } else if (highlightedLevels.length === 1) {
-                  return highlightedLevels[0];
+                  return stripColon(highlightedLevels[0]);
                 } else if (typedHit.hierarchy?.lvl0) {
                   return (
-                    typedHit._highlightResult?.hierarchy?.lvl0?.value ||
-                    typedHit.hierarchy.lvl0
+                    stripColon(typedHit._highlightResult?.hierarchy?.lvl0?.value || "") ||
+                    stripColon(typedHit.hierarchy.lvl0)
                   );
                 }
 
@@ -518,13 +518,20 @@ export function useAlgoliaSearch(
               }
 
               if (highlightedLevels.length > 1) {
-                return `${highlightedLevels[0]}: ${highlightedLevels[highlightedLevels.length - 1]}`;
+                const nextLevel =
+                  highlightedLevels[highlightedLevels.length - 1];
+                if (nextLevel) {
+                  return stripColon(`${highlightedLevels[0]}: ${nextLevel}`);
+                } else {
+                  return stripColon(highlightedLevels[0]);
+                }
               } else if (highlightedLevels.length === 1) {
-                return highlightedLevels[0];
+                return stripColon(highlightedLevels[0]);
               } else if (typedHit.hierarchy?.lvl0) {
                 return (
-                  typedHit._highlightResult?.hierarchy?.lvl0?.value ||
-                  typedHit.hierarchy.lvl0
+                  stripColon(
+                    typedHit._highlightResult?.hierarchy?.lvl0?.value || "",
+                  ) || stripColon(typedHit.hierarchy.lvl0)
                 );
               }
               return "Untitled";
@@ -580,4 +587,8 @@ export function useAlgoliaSearch(
     loadMore,
     isLoadingMore,
   };
+}
+
+function stripColon(title: string) {
+  return title.charAt(title.length - 1) === ":" ? title.slice(0, -1) : title;
 }
