@@ -15,6 +15,8 @@ jobs:
     # Only run on the main repository, not on forks
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     runs-on: ubuntu-latest
+    env:
+      HUSKY: 0
 
     steps:
       - name: Get Github App Token
