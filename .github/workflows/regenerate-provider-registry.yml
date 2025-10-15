@@ -10,6 +10,10 @@ on:
   # Allow manual triggering for testing
   workflow_dispatch:
 
+concurrency:
+  group: regenerate-provider-registry
+  cancel-in-progress: false
+
 jobs:
   regenerate:
     # Only run on the main repository, not on forks
