@@ -1,5 +1,62 @@
 # @mastra/react-hooks
 
+## 0.0.6
+
+### Patch Changes
+
+- Gracefully fix errors in react-sdk when error is an object ([#8703](https://github.com/mastra-ai/mastra/pull/8703))
+
+- Prepares some basic set of homemade components ([#8619](https://github.com/mastra-ai/mastra/pull/8619))
+
+- Improve the surface API of the react sdk ([#8715](https://github.com/mastra-ai/mastra/pull/8715))
+
+- Move react and react-dom deps to peer and dev deps ([#8698](https://github.com/mastra-ai/mastra/pull/8698))
+
+- Fix back the tripwire verification inside the new react system ([#8674](https://github.com/mastra-ai/mastra/pull/8674))
+
+- handle error case in react sdk ([#8676](https://github.com/mastra-ai/mastra/pull/8676))
+
+- fix maxSteps model settings not being passed to generate and stream endpoints ([#8627](https://github.com/mastra-ai/mastra/pull/8627))
+
+- Stream finalResult from network loop ([#8795](https://github.com/mastra-ai/mastra/pull/8795))
+
+- Updated dependencies [[`7b1ef57`](https://github.com/mastra-ai/mastra/commit/7b1ef57fc071c2aa2a2e32905b18cd88719c5a39), [`78cfb6b`](https://github.com/mastra-ai/mastra/commit/78cfb6b66fe88bc848105fccb6459fd75413ec87)]:
+  - @mastra/client-js@0.16.0
+
+## 0.0.6-alpha.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@0.16.0-alpha.4
+
+## 0.0.6-alpha.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@0.16.0-alpha.3
+
+## 0.0.6-alpha.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@0.16.0-alpha.2
+
+## 0.0.6-alpha.1
+
+### Patch Changes
+
+- Improve the surface API of the react sdk ([#8715](https://github.com/mastra-ai/mastra/pull/8715))
+
+- Move react and react-dom deps to peer and dev deps ([#8698](https://github.com/mastra-ai/mastra/pull/8698))
+
+- Stream finalResult from network loop ([#8795](https://github.com/mastra-ai/mastra/pull/8795))
+
+- Updated dependencies []:
+  - @mastra/client-js@0.16.0-alpha.1
+
 ## 0.0.6-alpha.0
 
 ### Patch Changes

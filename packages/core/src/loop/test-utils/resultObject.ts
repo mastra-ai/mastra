@@ -1,5 +1,5 @@
-import { tool } from 'ai';
-import { convertArrayToReadableStream } from 'ai/test';
+import { tool } from 'ai-v5';
+import { convertArrayToReadableStream } from 'ai-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { MessageList } from '../../agent/message-list';

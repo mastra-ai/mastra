@@ -7,48 +7,19 @@ import { Callout } from "nextra/components";
 
 # Scorers overview
 
-**Scorers** are evaluation tools that measure the quality, accuracy, or performance of AI-generated outputs. Scorers provide an automated way to assess whether your agents, workflows, or language models are producing the desired results by analyzing their responses against specific criteria.
+While traditional software tests have clear pass/fail conditions, AI outputs are non-deterministic — they can vary with the same input. **Scorers** help bridge this gap by providing quantifiable metrics for measuring agent quality.
 
-**Scores** are numerical values (typically between 0 and 1) that quantify how well an output meets your evaluation criteria. These scores enable you to objectively track performance, compare different approaches, and identify areas for improvement in your AI systems.
+Scorers are automated tests that evaluate Agents outputs using model-graded, rule-based, and statistical methods. Scorers return **scores**: numerical values (typically between 0 and 1) that quantify how well an output meets your evaluation criteria. These scores enable you to objectively track performance, compare different approaches, and identify areas for improvement in your AI systems. Scorers can be customized with your own prompts and scoring functions.
 
-## Evaluation pipeline
+Scorers can be run in the cloud, capturing real-time results. But scorers can also be part of your CI/CD pipeline, allowing you to test and monitor your agents over time.
 
-Mastra scorers follow a flexible four-step pipeline that allows for simple to complex evaluation workflows:
+## Types of Scorers
 
-1. **preprocess** (Optional): Prepare or transform input/output data for evaluation
-2. **analyze** (Optional): Perform evaluation analysis and gather insights
-3. **generateScore** (Required): Convert analysis into a numerical score
-4. **generateReason** (Optional): Generate explanations or justifications for the score
+There are different kinds of scorers, each serving a specific purpose. Here are some common types:
 
-This modular structure enables both simple single-step evaluations and complex multi-stage analysis workflows, allowing you to build evaluations that match your specific needs.
-
-### When to use each step
-
-**preprocess step** - Use when your content is complex or needs preprocessing:
-- Extracting specific elements from complex data structures
-- Cleaning or normalizing text before analysis
-- Parsing multiple claims that need individual evaluation
-- Filtering content to focus evaluation on relevant sections
-
-**analyze step** - Use when you need structured evaluation analysis:
-- Gathering insights that inform the scoring decision
-- Breaking down complex evaluation criteria into components
-- Performing detailed analysis that generateScore will use
-- Collecting evidence or reasoning data for transparency
-
-**generateScore step** - Always required for converting analysis to scores:
-- Simple scenarios: Direct scoring of input/output pairs
-- Complex scenarios: Converting detailed analysis results into numerical scores
-- Applying business logic and weighting to analysis results
-- The only step that produces the final numerical score
-
-**generateReason step** - Use when explanations are important:
-- Users need to understand why a score was assigned
-- Debugging and transparency are critical
-- Compliance or auditing requires explanations
-- Providing actionable feedback for improvement
-
-To learn how to create your own Scorers, see [Creating Custom Scorers](/docs/scorers/custom-scorers).
+1. **Textual Scorers**: Evaluate accuracy, reliability, and context understanding of agent responses
+2. **Classification Scorers**: Measure accuracy in categorizing data based on predefined categories
+3. **Prompt Engineering Scorers**: Explore impact of different instructions and input formats
 
 ## Installation
 
@@ -165,4 +136,3 @@ For more details, see the [Local Dev Playground](/docs/server-db/local-dev-playg
 - Learn how to create your own scorers in the [Creating Custom Scorers](/docs/scorers/custom-scorers) guide
 - Explore built-in scorers in the [Off-the-shelf Scorers](/docs/scorers/off-the-shelf-scorers) section
 - Test scorers with the [Local Dev Playground](/docs/server-db/local-dev-playground)
-- See example scorers in the [Examples Overview](/examples) section
