@@ -71,7 +71,9 @@ test.describe('workflow run', () => {
 
     await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'success');
     await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'idle');
-    await expect(page.locator('[data-testid="suspended-payload"]')).toHaveText('');
+    await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
+      `1{2  \"text\": \"AABAACSABDDDDDDDDDDD\",3  \"iterationCount\": 114}`,
+    );
   });
 
   test('running the workflow (form) - long condition', async ({ page }) => {
@@ -83,6 +85,9 @@ test.describe('workflow run', () => {
 
     await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
     await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
+    await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
+      `1{2  \"text\": \"SuperLongTextToStartWithABSuperLongTextToStartWithACLABD\",3  \"iterationCount\": 14}`,
+    );
   });
 
   test('running the workflow (json) - short condition', async ({ page }) => {
@@ -95,6 +100,9 @@ test.describe('workflow run', () => {
 
     await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'success');
     await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'idle');
+    await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
+      `1{2  \"text\": \"AABAACSABDDDDDDDDDDD\",3  \"iterationCount\": 114}`,
+    );
   });
 
   test('running the workflow (json) - long condition', async ({ page }) => {
@@ -107,6 +115,9 @@ test.describe('workflow run', () => {
 
     await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
     await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
+    await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
+      `1{2  \"text\": \"SuperLongTextToStartWithABSuperLongTextToStartWithACLABD\",3  \"iterationCount\": 14}`,
+    );
   });
 
   test('resuming a workflow', async ({ page }) => {
