@@ -71,6 +71,7 @@ test.describe('workflow run', () => {
 
     await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'success');
     await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'idle');
+    await expect(page.locator('[data-testid="suspended-payload"]')).toHaveText('');
   });
 
   test('running the workflow (form) - long condition', async ({ page }) => {

@@ -254,7 +254,7 @@ export function WorkflowTrigger({
                   {step.stepId}
                 </Text>
                 {step.suspendPayload && (
-                  <div>
+                  <div data-testid="suspended-payload">
                     <CodeBlockDemo
                       className="w-full overflow-x-auto p-2"
                       code={JSON.stringify(step.suspendPayload, null, 2)}
