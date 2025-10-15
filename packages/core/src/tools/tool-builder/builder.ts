@@ -263,7 +263,7 @@ export class CoreToolBuilder extends MastraBase {
       onInputStart: 'onInputStart' in this.originalTool ? this.originalTool.onInputStart : undefined,
       onInputDelta: 'onInputDelta' in this.originalTool ? this.originalTool.onInputDelta : undefined,
       onInputAvailable: 'onInputAvailable' in this.originalTool ? this.originalTool.onInputAvailable : undefined,
-    } as VercelToolV5;
+    } satisfies VercelToolV5;
   }
 
   build(): CoreTool {

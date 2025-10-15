@@ -1,7 +1,5 @@
-import type { ToolExecutionOptions, Tool, Schema } from 'ai';
-import type { ToolCallOptions, Tool as ToolV5 } from 'ai-v5';
-import type { JSONSchema7Type } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { Tool, ToolV5, FlexibleSchema, ToolCallOptions, ToolExecutionOptions } from '@internal/external-types';
+import type { Schema } from 'ai';
 
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
 import type { TracingContext } from '../ai-tracing';
@@ -19,8 +17,8 @@ export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 export type CoreTool = {
   id?: string;
   description?: string;
-  parameters: ZodSchema | JSONSchema7Type | Schema;
-  outputSchema?: ZodSchema | JSONSchema7Type | Schema;
+  parameters: FlexibleSchema<any>;
+  outputSchema?: FlexibleSchema<any>;
   execute?: (params: any, options: ToolInvocationOptions) => Promise<any>;
 } & (
   | {
