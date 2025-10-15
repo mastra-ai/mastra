@@ -6,10 +6,9 @@ import { execa } from 'execa';
 /**
  *
  * @param {string} pathToStoreFiles
- * @param {string} tag
  * @param {'pnpm' | 'npm' | 'yarn'} pkgManager
  */
-export async function setupMonorepo(pathToStoreFiles, tag, pkgManager) {
+export async function setupMonorepo(pathToStoreFiles, pkgManager) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
 
   const monorepoPath = join(__dirname, 'template');
@@ -23,12 +22,6 @@ export async function setupMonorepo(pathToStoreFiles, tag, pkgManager) {
   console.log('Installing dependencies...');
   await execa(pkgManager, ['install'], {
     cwd: newPath,
-    stdio: 'inherit',
-    env: process.env,
-  });
-
-  await execa(pkgManager, ['build'], {
-    cwd: join(newPath, 'apps', 'custom'),
     stdio: 'inherit',
     env: process.env,
   });
