@@ -1,5 +1,5 @@
 import { ReadableStream } from 'stream/web';
-import type { ToolSet } from 'ai';
+import type { ToolSet } from 'ai-v5';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';

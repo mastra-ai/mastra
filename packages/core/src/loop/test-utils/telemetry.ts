@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, mockValues } from 'ai/test';
+import { convertArrayToReadableStream, mockValues } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';

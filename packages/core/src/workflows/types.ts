@@ -1,4 +1,4 @@
-import type { TextStreamPart } from 'ai-v4';
+import type { TextStreamPart } from 'ai';
 import type { z } from 'zod';
 import type { TracingPolicy, TracingProperties } from '../ai-tracing';
 import type { Mastra } from '../mastra';

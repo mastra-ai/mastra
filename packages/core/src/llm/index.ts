@@ -1,4 +1,3 @@
-import type { SystemModelMessage } from 'ai';
 import type {
   CoreAssistantMessage as AiCoreAssistantMessage,
   CoreMessage as AiCoreMessage,
@@ -15,7 +14,8 @@ import type {
   UIMessage,
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
-} from 'ai-v4';
+} from 'ai';
+import type { SystemModelMessage } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 

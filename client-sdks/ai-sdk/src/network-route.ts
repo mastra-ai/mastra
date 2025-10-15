@@ -5,7 +5,7 @@ import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import { toAISdkFormat } from './to-ai-sdk-format';
 
 export type NetworkRouteOptions<OUTPUT extends OutputSchema = undefined> =
-  | { path: `${string}:agentId${string}`; agent?: undefined; defaultOptions?: AgentExecutionOptions<OUTPUT, 'aisdk'> }
+  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: AgentExecutionOptions<OUTPUT, 'aisdk'> }
   | { path: string; agent: string; defaultOptions?: AgentExecutionOptions<OUTPUT, 'aisdk'> };
 
 export function networkRoute<OUTPUT extends OutputSchema = undefined>({

@@ -1,5 +1,5 @@
-import type { EmbeddingModelV2 } from '@ai-sdk/provider';
-import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai-v4';
+import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
+import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 
 export type { MastraMessageV2 } from '../agent';
@@ -10,7 +10,7 @@ import type { DynamicArgument } from '../types';
 import type { MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
 
-export type { Message as AiMessageType } from 'ai-v4';
+export type { Message as AiMessageType } from 'ai';
 export type { MastraLanguageModel };
 
 // Types for the memory system

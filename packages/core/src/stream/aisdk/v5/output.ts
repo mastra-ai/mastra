@@ -1,8 +1,8 @@
 import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
-import { getErrorMessage } from '@ai-sdk/provider';
-import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse, generateId } from 'ai';
-import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai';
+import { getErrorMessage } from '@ai-sdk/provider-v5';
+import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse, generateId } from 'ai-v5';
+import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
 import type z from 'zod';
 import type { MessageList } from '../../../agent/message-list';
 import type { StructuredOutputOptions } from '../../../agent/types';

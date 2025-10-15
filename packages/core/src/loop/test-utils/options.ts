@@ -1,18 +1,18 @@
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils/test';
+import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import type {
   LanguageModelV2CallOptions,
   LanguageModelV2FunctionTool,
   LanguageModelV2ProviderDefinedTool,
-} from '@ai-sdk/provider';
-import { stepCountIs, tool } from 'ai';
-import type { TextStreamPart } from 'ai';
+} from '@ai-sdk/provider-v5';
+import { stepCountIs, tool } from 'ai-v5';
+import type { TextStreamPart } from 'ai-v5';
 import {
   convertArrayToReadableStream,
   convertReadableStreamToArray,
   mockId,
   MockLanguageModelV2,
   mockValues,
-} from 'ai/test';
+} from 'ai-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';

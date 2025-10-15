@@ -3,4 +3,4 @@
 '@mastra/react': patch
 ---
 
-Prepares some basic set of homemade components
+Add @mastra/react to peer deps

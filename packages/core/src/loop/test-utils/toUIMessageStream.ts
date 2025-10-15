@@ -4,8 +4,8 @@ import {
   convertReadableStreamToArray,
   convertResponseStreamToArray,
   mockId,
-} from '@ai-sdk/provider-utils-v4/test';
-import { mockValues } from 'ai/test';
+} from '@ai-sdk/provider-utils-v5/test';
+import { mockValues } from 'ai-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';

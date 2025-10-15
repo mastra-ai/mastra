@@ -17,7 +17,7 @@ import type {
   StreamTextOnFinishCallback as OriginalStreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
   GenerateTextOnStepFinishCallback as OriginalGenerateTextOnStepFinishCallback,
-} from 'ai-v4';
+} from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent/types';
@@ -27,7 +27,7 @@ import type { RuntimeContext } from '../../runtime-context';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
 import type { inferOutput, ScoringProperties, TripwireProperties } from './shared.types';
 
-export type { ToolSet } from 'ai-v4';
+export type { ToolSet } from 'ai';
 
 type MastraCustomLLMOptions = {
   tools?: Record<string, Tool>;

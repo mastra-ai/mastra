@@ -1,4 +1,4 @@
-import * as AIV4 from 'ai-v4';
+import * as AIV4 from 'ai';
 import { describe, it, expect } from 'vitest';
 import type { MastraMessageV2 } from '../../types';
 import { MessageList } from '../index';

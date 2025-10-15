@@ -1,4 +1,4 @@
-import type { ToolSet } from 'ai';
+import type { ToolSet } from 'ai-v5';
 import z from 'zod';
 import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import type { OutputSchema } from '../../../stream/base/schema';
