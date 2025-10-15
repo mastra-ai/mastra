@@ -107,6 +107,18 @@ test.describe('workflow run', () => {
     await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
     await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
   });
+
+  test('resuming a workflow', async ({ page }) => {
+    await page.getByRole('textbox', { name: 'Text' }).fill('A');
+    await page.getByRole('button', { name: 'Run' }).click();
+    await runWorkflow(page);
+
+    await page.getByRole('button', { name: 'Suspend' }).click();
+    const nodes = await page.locator('[data-workflow-node]');
+
+    await expect(nodes.nth(12)).toHaveAttribute('data-workflow-step-status', 'success');
+    await expect(nodes.nth(13)).toHaveAttribute('data-workflow-step-status', 'success');
+  });
 });
 
 async function runWorkflow(page: Page) {
