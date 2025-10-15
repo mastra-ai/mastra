@@ -1,26 +1,17 @@
 "use client";
 import { PulsingDots } from "@/components/loading";
 import { Clippy } from "@/components/svgs/clippy";
-import { ArrowLeftIcon } from "@/components/svgs/Icons";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@copilotkit/react-ui";
 import "@copilotkit/react-ui/styles.css";
 import { useChat } from "@kapaai/react-sdk";
-import { ArrowUp, ThumbsUp, ThumbsDown, Square } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import { ArrowUp, Square, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import React, { useState } from "react";
 import { useStickToBottom } from "use-stick-to-bottom";
 
-export function KapaChat({
-  setIsAgentMode,
-  searchQuery,
-  show,
-}: {
-  setIsAgentMode: (isAgentMode: boolean) => void;
-  searchQuery: string;
-  show?: boolean;
-}) {
+export function KapaChat({ className }: { className?: string }) {
   const {
     conversation,
     submitQuery,
@@ -31,14 +22,6 @@ export function KapaChat({
   } = useChat();
   const [inputValue, setInputValue] = useState("");
 
-  useEffect(() => {
-    if (searchQuery) {
-      if (searchQuery.trim()) {
-        submitQuery(searchQuery);
-      }
-    }
-  }, [searchQuery]);
-
   const isLoading = isGeneratingAnswer || isPreparingAnswer;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -47,10 +30,6 @@ export function KapaChat({
       submitQuery(inputValue);
       setInputValue("");
     }
-  };
-
-  const handleBackToSearch = () => {
-    setIsAgentMode(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -73,29 +52,25 @@ export function KapaChat({
   const { scrollRef, contentRef } = useStickToBottom();
 
   return (
-    <div
-      className={cn(
-        "flex relative flex-col w-full h-[700px]",
-        !show && "hidden",
-      )}
-    >
+    <div className={cn("flex relative flex-col w-full h-[700px]", className)}>
       {/* Chat header */}
-      <div className="flex absolute top-0 right-0 left-0 z-20 px-5 py-3 w-full backdrop-blur-md dark:bg-surface-6">
+      <div className="flex absolute top-0 right-0 left-0 z-20 justify-between px-5 py-3 w-full border-b backdrop-blur-md dark:border-neutral-700 dark:bg-surface-6">
+        <span className="dark:text-icons-5">Ask mastra ai</span>
         <Button
+          onClick={close}
           variant="ghost"
-          className="cursor-pointer group dark:text-icons-3 text-[var(--light-color-text-4)] dark:bg-surface-5 bg-[var(--light-color-surface-4)]"
-          size="slim"
-          onClick={handleBackToSearch}
+          size="sm"
+          className="self-end p-0 w-8 h-8 cursor-pointer"
+          aria-label="Close chat"
         >
-          <ArrowLeftIcon className="w-2 h-2 transition-transform duration-300 group-hover:-translate-x-1" />
-          Back to search
+          <X className="w-4 h-4 dark:text-icons-5" />
         </Button>
       </div>
 
       <div className="overflow-y-auto px-5 h-full" ref={scrollRef}>
         <div ref={contentRef} className="flex flex-col gap-8">
           {/* spacer */}
-          <div className="h-20" />
+          <div className="h-12" />
           {conversation.length > 0
             ? conversation.map(({ answer: a, question: q, id, reaction }) => {
                 return (

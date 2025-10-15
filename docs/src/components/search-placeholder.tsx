@@ -1,8 +1,8 @@
 export function getSearchPlaceholder(locale: string) {
   switch (locale) {
     case "ja":
-      return "検索するかAIに尋ねる...";
+      return "何を探していますか?";
     default:
-      return "Search or ask AI...";
+      return "What are you searching for?";
   }
 }
