@@ -49,7 +49,7 @@ export function cloneWorkflow<
   });
 
   wf.setStepFlow(workflow.stepGraph);
-  wf.commit();
+  (wf as any).commit();
   return wf;
 }
 
