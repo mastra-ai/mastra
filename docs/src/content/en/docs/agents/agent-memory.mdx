@@ -80,7 +80,7 @@ export const memoryAgent = new Agent({
   // ...
   memory: new Memory({
     storage: new LibSQLStore({
-      url: "file:../../memory-agent.db"
+      url: ":memory:"
     })
   })
 });
