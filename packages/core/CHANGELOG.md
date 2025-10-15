@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.21.0-alpha.3
+
+### Patch Changes
+
+- prevent duplicate deprecation warning logs and deprecate modelSettings.abortSignal in favor of top-level abortSignal ([#8840](https://github.com/mastra-ai/mastra/pull/8840))
+
+- Removed logging of massive model objects in tool failures ([#8839](https://github.com/mastra-ai/mastra/pull/8839))
+
 ## 0.21.0-alpha.2
 
 ### Patch Changes
