@@ -46,6 +46,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
 
       <div
         data-workflow-node
+        data-workflow-step-status={nextStep?.status}
         data-testid="workflow-condition-node"
         className={cn(
           'bg-surface3 rounded-lg w-[300px] border-sm border-border1',

@@ -53,6 +53,7 @@ export function WorkflowNestedNode({
       <div
         data-testid="workflow-nested-node"
         data-workflow-node
+        data-workflow-step-status={step?.status}
         className={cn(
           'bg-surface3 rounded-lg w-[274px] border-sm border-border1 pt-2',
           step?.status === 'success' && 'bg-accent1Darker',
@@ -64,12 +65,12 @@ export function WorkflowNestedNode({
       >
         <div className={cn('flex items-center gap-2 px-3', !description && 'pb-2')}>
           <Icon>
-            {step?.status === 'failed' && <CrossIcon className="text-accent2" aria-label="Failed" />}
-            {step?.status === 'success' && <CheckIcon className="text-accent1" aria-label="Success" />}
-            {step?.status === 'suspended' && <PauseIcon className="text-accent3" aria-label="Suspended" />}
-            {step?.status === 'waiting' && <HourglassIcon className="text-accent5" aria-label="Waiting" />}
-            {step?.status === 'running' && <Loader2 className="text-accent6 animate-spin" aria-label="Running" />}
-            {!step && <CircleDashed className="text-icon2" aria-label="Idle" />}
+            {step?.status === 'failed' && <CrossIcon className="text-accent2" />}
+            {step?.status === 'success' && <CheckIcon className="text-accent1" />}
+            {step?.status === 'suspended' && <PauseIcon className="text-accent3" />}
+            {step?.status === 'waiting' && <HourglassIcon className="text-accent5" />}
+            {step?.status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
+            {!step && <CircleDashed className="text-icon2" />}
           </Icon>
 
           <Txt variant="ui-lg" className="text-icon6 font-medium inline-flex items-center gap-1 justify-between w-full">

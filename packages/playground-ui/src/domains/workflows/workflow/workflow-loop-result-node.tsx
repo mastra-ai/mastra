@@ -18,6 +18,7 @@ export function WorkflowLoopResultNode({ data }: NodeProps<LoopResultNode>) {
   return (
     <div
       data-testid="workflow-loop-result-node"
+      data-workflow-step-status={result ? 'success' : 'failed'}
       className={cn('bg-mastra-bg-8 rounded-md w-[274px]')}
       data-workflow-node
     >
