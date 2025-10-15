@@ -361,6 +361,7 @@ export const AgentMetadataModelSwitcher = ({
                 </>
               )}
               <Input
+                aria-label="Search providers"
                 spellCheck="false"
                 ref={providerInputRef}
                 className={`w-full ${!isSearchingProvider && currentModelProvider ? 'pl-8 pr-8' : ''}`}
@@ -513,6 +514,7 @@ export const AgentMetadataModelSwitcher = ({
         >
           <PopoverTrigger asChild>
             <Input
+              aria-label="Search models"
               spellCheck="false"
               ref={modelInputRef}
               className="w-full xl:w-3/5"

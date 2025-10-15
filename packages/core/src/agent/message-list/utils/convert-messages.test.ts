@@ -1,5 +1,5 @@
-import type * as AIV5 from 'ai';
-import type * as AIV4 from 'ai-v4';
+import type * as AIV4 from 'ai';
+import type * as AIV5 from 'ai-v5';
 import { describe, it, expect } from 'vitest';
 import type { MastraMessageV2 } from '../index';
 import { convertMessages } from './convert-messages';
