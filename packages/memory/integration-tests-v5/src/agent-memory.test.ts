@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
-import { Agent } from '@mastra/core/agent';
+import { Agent, MessageList } from '@mastra/core/agent';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { UIMessageWithMetadata } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 import { RuntimeContext } from '@mastra/core/runtime-context';
@@ -706,5 +707,365 @@ describe('Agent memory test gemini', () => {
         memory: { resource, thread },
       }),
     ).resolves.not.toThrow();
+  });
+});
+
+describe('Reasoning message consolidation', () => {
+  it('should consolidate reasoning details into single part for prompt generation', async () => {
+    // Test that reasoning details are consolidated to prevent fragmentation when generating prompts
+    const storage = new LibSQLStore({
+      url: 'file:reasoning-consolidation-test.db',
+    });
+
+    const memory = new Memory({
+      storage: storage,
+    });
+
+    const threadId = 'ui-test-thread';
+    const resourceId = 'ui-test-resource';
+
+    // Initialize storage
+    await storage.init();
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId: resourceId,
+        title: 'UI Test Thread',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    // Create a message with reasoning parts containing multiple details
+    const messageWithReasoning: MastraMessageV2 = {
+      id: 'reasoning-msg',
+      role: 'assistant',
+      createdAt: new Date(),
+      threadId,
+      resourceId,
+      type: 'v2',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'reasoning',
+            reasoning: 'I need to analyze this request step by step.',
+            details: [
+              { type: 'text', text: 'Step 1: Parse the user input' },
+              { type: 'text', text: 'Step 2: Identify the required action' },
+              { type: 'text', text: 'Step 3: Execute the appropriate tool' },
+            ],
+            providerMetadata: {
+              reasoningId: 'rs_TEST123',
+            },
+          },
+          {
+            type: 'text',
+            text: 'I understand your request. Let me help you with that.',
+          },
+        ],
+        content: 'I understand your request. Let me help you with that.',
+      },
+    };
+
+    // Save the message
+    await memory.saveMessages({
+      messages: [messageWithReasoning],
+      format: 'v2',
+    });
+
+    // Retrieve messages to simulate conversation reload
+    const retrieved = await memory.query({
+      threadId,
+      resourceId,
+      format: 'v2',
+    });
+
+    // Verify UI messages maintain reasoning structure
+    const uiMessages = retrieved.uiMessages;
+    const firstUiMessageWithReasoning = uiMessages?.find(
+      (m: any) => Array.isArray(m.parts) && m.parts.some((p: any) => p?.type === 'reasoning'),
+    );
+
+    expect(firstUiMessageWithReasoning).toBeDefined();
+    expect(firstUiMessageWithReasoning?.parts.filter((p: any) => p?.type === 'reasoning')).toHaveLength(1);
+
+    // Simulate prompt generation for next API call
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(retrieved.messagesV2, 'memory');
+    const promptMessages = messageList.get.all.aiV4.prompt();
+
+    // Verify reasoning parts are consolidated in the prompt
+    let reasoningCount = 0;
+    for (const msg of promptMessages) {
+      if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+        const reasoningParts = msg.content.filter((p: any) => p.type === 'reasoning');
+        reasoningCount += reasoningParts.length;
+      }
+    }
+
+    // Reasoning should be consolidated into single part
+    expect(reasoningCount).toBe(1);
+  });
+
+  it('should preserve reasoning metadata and consolidate details in V1 format', async () => {
+    // Test that reasoning metadata is preserved when converting to V1 format
+    const storage = new LibSQLStore({
+      url: 'file:reasoning-v1-format-test.db',
+    });
+
+    const memory = new Memory({
+      storage: storage,
+    });
+
+    const threadId = 'test-thread-123';
+    const resourceId = 'test-resource-123';
+
+    // Initialize storage to create tables
+    await storage.init();
+
+    // Create the thread first
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId: resourceId,
+        title: 'Test Thread',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    // Create a V2 message with reasoning parts and tool invocation
+    const messageWithReasoning: MastraMessageV2 = {
+      id: 'msg-1',
+      role: 'assistant',
+      createdAt: new Date(),
+      threadId,
+      resourceId,
+      type: 'v2',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'reasoning',
+            reasoning: 'Let me analyze this step by step.',
+            details: [
+              {
+                type: 'text',
+                text: 'First, I need to understand the requirements.',
+              },
+              {
+                type: 'text',
+                text: 'Second, I should check the available tools.',
+              },
+              {
+                type: 'text',
+                text: 'Finally, I will make the appropriate tool call.',
+              },
+            ],
+            providerMetadata: {
+              reasoningId: 'rs_abc123',
+            },
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolCallId: 'fc_xyz789',
+              toolName: 'analyzeData',
+              state: 'call',
+              args: { query: 'test query' },
+            },
+            providerMetadata: {
+              functionCallId: 'fc_xyz789',
+            },
+          },
+        ],
+        toolInvocations: [
+          {
+            toolCallId: 'fc_xyz789',
+            toolName: 'analyzeData',
+            state: 'call',
+            args: { query: 'test query' },
+          },
+        ],
+      },
+    };
+
+    // Save the message
+    await memory.saveMessages({
+      messages: [messageWithReasoning],
+      format: 'v2',
+    });
+
+    // Retrieve the messages
+    const retrieved = await memory.query({
+      threadId,
+      resourceId,
+      format: 'v2',
+    });
+
+    // Verify V2 messages preserve reasoning structure
+    expect(retrieved.messagesV2).toHaveLength(1);
+    const retrievedV2 = retrieved.messagesV2[0];
+    expect(retrievedV2.content.parts).toHaveLength(2);
+
+    const reasoningPart = retrievedV2.content.parts.find(p => p.type === 'reasoning');
+    expect(reasoningPart).toBeDefined();
+    expect(reasoningPart?.providerMetadata?.reasoningId).toBe('rs_abc123');
+
+    // Verify V1 format consolidates reasoning details
+    const v1Messages = retrieved.messages;
+    let reasoningPartsCount = 0;
+    for (const msg of v1Messages) {
+      if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+        const reasoningParts = msg.content.filter(p => p.type === 'reasoning');
+        reasoningPartsCount += reasoningParts.length;
+      }
+    }
+    expect(reasoningPartsCount).toBe(1);
+
+    // Verify pairing information is preserved (tool calls may be in separate messages)
+    const hasToolCall = v1Messages.some(
+      m =>
+        m.role === 'assistant' &&
+        Array.isArray(m.content) &&
+        m.content.some(p => p.type === 'tool-call' && p.toolCallId === 'fc_xyz789'),
+    );
+    expect(hasToolCall).toBe(true);
+
+    // Verify UI messages format
+
+    const uiMessage = retrieved.uiMessages[0];
+    if (uiMessage && 'parts' in uiMessage) {
+      const uiReasoningParts = uiMessage.parts.filter(p => p.type === 'reasoning');
+      expect(uiReasoningParts).toHaveLength(1);
+    }
+  });
+
+  it('should maintain reasoning and tool call pairing through message conversions', async () => {
+    // Verify that reasoning IDs remain paired with their corresponding tool calls
+    const storage = new LibSQLStore({
+      url: 'file:reasoning-pairing-test.db',
+    });
+
+    const threadId = 'pairing-test-thread';
+    const resourceId = 'pairing-test-resource';
+
+    // Initialize the storage to create tables
+    await storage.init();
+
+    // Create the thread
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId: resourceId,
+        title: 'Pairing Test Thread',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    // Create a message with paired reasoning and tool call
+    const list = new MessageList({ threadId, resourceId });
+
+    const messageWithPairedElements: MastraMessageV2 = {
+      id: 'msg-with-pairing',
+      role: 'assistant',
+      createdAt: new Date(),
+      threadId,
+      resourceId,
+      type: 'v2',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'reasoning',
+            reasoning: 'Analyzing the request to determine the best approach.',
+            details: [
+              { type: 'text', text: 'The user needs help with X' },
+              { type: 'text', text: 'I should use tool Y to accomplish this' },
+            ],
+            providerMetadata: {
+              reasoningId: 'rs_PAIRED_123',
+              signature: 'sig_ABC',
+            },
+          },
+          {
+            type: 'text',
+            text: "I'll help you with that. Let me gather the information.",
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolCallId: 'fc_PAIRED_123',
+              toolName: 'getData',
+              state: 'call',
+              args: { id: 'test' },
+            },
+            providerMetadata: {
+              functionCallId: 'fc_PAIRED_123',
+            },
+          },
+        ],
+        content: "I'll help you with that. Let me gather the information.",
+      },
+    };
+
+    list.add(messageWithPairedElements, 'response');
+
+    // Verify conversions maintain pairing
+    const v1Messages = list.get.all.v1();
+    const v2Messages = list.get.all.v2();
+
+    // Verify reasoning is consolidated in V1
+    const v1AssistantMessages = v1Messages.filter(m => m.role === 'assistant');
+    let totalReasoningParts = 0;
+
+    for (const msg of v1AssistantMessages) {
+      if (Array.isArray(msg.content)) {
+        const reasoningParts = msg.content.filter(p => p.type === 'reasoning');
+        totalReasoningParts += reasoningParts.length;
+
+        // Verify metadata preservation
+        for (const part of reasoningParts) {
+          expect(part.signature).toBeDefined();
+        }
+      }
+    }
+
+    expect(totalReasoningParts).toBe(1);
+
+    // Verify tool call pairing is preserved
+    const hasMatchingToolCall = v1Messages.some(
+      msg =>
+        Array.isArray(msg.content) && msg.content.some(p => p.type === 'tool-call' && p.toolCallId === 'fc_PAIRED_123'),
+    );
+
+    expect(hasMatchingToolCall).toBe(true);
+
+    // Test full storage and retrieval cycle
+    const memory = new Memory({ storage });
+
+    await memory.saveMessages({
+      messages: v2Messages,
+      format: 'v2',
+    });
+
+    const retrieved = await memory.query({
+      threadId,
+      resourceId,
+      format: 'v2',
+    });
+
+    // Verify pairing is maintained after storage retrieval
+    const retrievedV1 = retrieved.messages;
+    let retrievedReasoningCount = 0;
+    for (const msg of retrievedV1) {
+      if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+        retrievedReasoningCount += msg.content.filter(p => p.type === 'reasoning').length;
+      }
+    }
+
+    expect(retrievedReasoningCount).toBe(1);
   });
 });

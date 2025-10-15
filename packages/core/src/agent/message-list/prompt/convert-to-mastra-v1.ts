@@ -143,22 +143,52 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
                   break;
                 }
                 case 'reasoning': {
-                  for (const detail of part.details) {
-                    switch (detail.type) {
-                      case 'text':
-                        content.push({
-                          type: 'reasoning' as const,
-                          text: detail.text,
-                          signature: detail.signature,
-                        });
-                        break;
-                      case 'redacted':
-                        content.push({
-                          type: 'redacted-reasoning' as const,
-                          data: detail.data,
-                        });
-                        break;
+                  // Preserve reasoning as a single part instead of splitting into details
+                  // This is critical for O3 models that require reasoning to stay paired with function calls
+                  const reasoningTexts: string[] = [];
+                  let signature: string | undefined;
+                  let hasRedacted = false;
+                  let redactedData: any;
+
+                  // Collect all text details into one reasoning part
+                  if (part.details && part.details.length > 0) {
+                    for (const detail of part.details) {
+                      switch (detail.type) {
+                        case 'text':
+                          reasoningTexts.push(detail.text);
+                          // Preserve the signature from any detail that has it
+                          if (detail.signature) {
+                            signature = detail.signature;
+                          }
+                          break;
+                        case 'redacted':
+                          hasRedacted = true;
+                          redactedData = detail.data;
+                          break;
+                      }
                     }
+                  }
+
+                  // Add the overall reasoning text if present
+                  if (part.reasoning) {
+                    reasoningTexts.unshift(part.reasoning);
+                  }
+
+                  // Create a single consolidated reasoning part
+                  if (reasoningTexts.length > 0) {
+                    content.push({
+                      type: 'reasoning' as const,
+                      text: reasoningTexts.join('\n'),
+                      signature: signature || (part.providerMetadata as any)?.signature,
+                    });
+                  }
+
+                  // Add redacted reasoning separately if present
+                  if (hasRedacted) {
+                    content.push({
+                      type: 'redacted-reasoning' as const,
+                      data: redactedData,
+                    });
                   }
                   break;
                 }
