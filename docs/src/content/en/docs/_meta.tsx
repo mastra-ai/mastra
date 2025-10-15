@@ -20,7 +20,6 @@ const meta = {
   deployment: { title: "Deployment" },
   "mastra-cloud": { title: "Mastra Cloud" },
   observability: { title: "Observability" },
-  evals: { title: "Evals" },
   scorers: <Tag text="experimental">Scorers</Tag>,
   auth: <Tag text="experimental">Auth</Tag>,
   voice: { title: "Voice" },

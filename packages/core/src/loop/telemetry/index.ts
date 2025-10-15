@@ -1,6 +1,6 @@
 import type { Attributes, Tracer } from '@opentelemetry/api';
 import { trace } from '@opentelemetry/api';
-import type { CallSettings, TelemetrySettings } from 'ai';
+import type { CallSettings, TelemetrySettings } from 'ai-v5';
 import { noopTracer } from './noop';
 
 export function getTracer({

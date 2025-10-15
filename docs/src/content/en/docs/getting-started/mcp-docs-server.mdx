@@ -7,7 +7,7 @@ import YouTube from "@/components/youtube";
 
 # Mastra Docs Server
 
-The `@mastra/mcp-docs-server` package provides direct access to Mastra’s full knowledge base, including documentation, code examples, blog posts, and changelogs, via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). It works with Cursor, Windsurf, Cline, Claude Code, or any tool that supports MCP.
+The `@mastra/mcp-docs-server` package provides direct access to Mastra’s full knowledge base, including documentation, code examples, blog posts, and changelogs, via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). It works with Cursor, Windsurf, Cline, Claude Code, Codex or any tool that supports MCP.
 
 These tools are designed to help agents retrieve precise, task-specific information — whether you're adding a feature to an agent, scaffolding a new project, or exploring how something works.
 
@@ -46,6 +46,18 @@ claude mcp add mastra -- npx -y @mastra/mcp-docs-server
 ```
 
 [More info on using MCP servers with Claude Code](https://docs.claude.com/en/docs/claude-code/mcp)
+
+### OpenAI Codex CLI
+
+1. Register it from the terminal:
+
+    ```bash copy
+    codex mcp add mastra-docs -- npx -y @mastra/mcp-docs-server
+    ```
+
+2. Run `codex mcp list` to confirm the server shows as `enabled`.
+
+[More info on using MCP servers with OpenAI Codex](https://developers.openai.com/codex/mcp)
 
 ### Cursor
 

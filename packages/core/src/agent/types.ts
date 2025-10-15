@@ -1,4 +1,4 @@
-import type { GenerateTextOnStepFinishCallback, TelemetrySettings, ToolSet } from 'ai-v4';
+import type { GenerateTextOnStepFinishCallback, TelemetrySettings, ToolSet } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
@@ -40,7 +40,7 @@ import type { SaveQueueManager } from './save-queue';
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
-export type { Message as AiMessageType } from 'ai-v4';
+export type { Message as AiMessageType } from 'ai';
 export type { LLMStepResult } from '../stream/types';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;

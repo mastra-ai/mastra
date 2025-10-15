@@ -36,6 +36,7 @@ export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming, metada
 
   return (
     <BadgeWrapper
+      data-testid="workflow-badge"
       icon={<WorkflowIcon className="text-accent3" />}
       title={workflow.name}
       initialCollapsed={false}
