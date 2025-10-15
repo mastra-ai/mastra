@@ -65,7 +65,6 @@ const agentStep1 = createStep({
           text: z.string(),
         })
       },
-      maxSteps: 1
     });
 
     return { text: resp.object.text };
@@ -88,7 +87,6 @@ const agentStep2 = createStep({
           text: z.string(),
         })
       },
-      maxSteps: 1
     });
 
     return { text: resp.object.text };

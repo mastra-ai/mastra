@@ -37,7 +37,7 @@ const aiSdkResult = await agent.generate("message for agent", {
     },
     {
       name: "options",
-      type: "AgentExecutionOptions<Output, StructuredOutput, Format>",
+      type: "AgentExecutionOptions<Output, Format>",
       isOptional: true,
       description: "Optional configuration for the generation process.",
     },
@@ -163,7 +163,7 @@ const aiSdkResult = await agent.generate("message for agent", {
       name: "structuredOutput",
       type: "StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny>",
       isOptional: true,
-      description: "Enables structured output generation with better developer experience. Automatically creates and uses a StructuredOutputProcessor internally.",
+      description: "Options to fine tune your structured output generation.",
       properties: [
         {
           parameters: [{
@@ -178,7 +178,7 @@ const aiSdkResult = await agent.generate("message for agent", {
             name: "model",
             type: "MastraLanguageModel",
             isOptional: true,
-            description: "Language model to use for structured output generation. If not provided, uses the agent's default model."
+            description: "Language model to use for structured output generation. If provided, enables the agent to respond in multi step with tool calls, text, and structured output"
           }]
         },
         {
@@ -202,7 +202,15 @@ const aiSdkResult = await agent.generate("message for agent", {
             name: "instructions",
             type: "string",
             isOptional: true,
-            description: "Additional instructions for structured output generation."
+            description: "Additional instructions for the structured output model."
+          }]
+        },
+        {
+          parameters: [{
+            name: "jsonPromptInjection",
+            type: "boolean",
+            isOptional: true,
+            description: "Injects system prompt into the main agent instructing it to return structured output, useful for when a model does not natively support structured outputs."
           }]
         }
       ]
@@ -235,7 +243,7 @@ const aiSdkResult = await agent.generate("message for agent", {
       name: "output",
       type: "Zod schema | JsonSchema7",
       isOptional: true,
-      description: "**Deprecated.** Use structuredOutput with maxSteps:1 to achieve the same thing. Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
+      description: "**Deprecated.** Use structuredOutput without a model to achieve the same thing. Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
     },
     {
       name: "memory",
