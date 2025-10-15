@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@headlessui/react";
 import { KapaProvider } from "@kapaai/react-sdk";
-import { MessageCircle, X } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 import { usePostHog } from "posthog-js/react";
 import { useState } from "react";
 import { Button } from "./ui/button";
