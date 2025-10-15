@@ -210,23 +210,24 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const inputFile = join(fixturePath, 'apps', 'custom');
 
       console.log('started proc', port);
-      proc = execa('npm', ['run', 'start'], {
-        cwd: inputFile,
-        cancelSignal,
-        gracefulCancel: true,
-        env: {
-          OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-          MASTRA_PORT: port.toString(),
-        },
-      });
-
-      activeProcesses.push({ controller, proc });
 
       await new Promise<void>((resolve, reject) => {
-        proc!.stderr?.on('data', data => {
+        proc = execa('npm', ['run', 'start'], {
+          cwd: inputFile,
+          cancelSignal,
+          gracefulCancel: true,
+          env: {
+            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+            MASTRA_PORT: port.toString(),
+          },
+        });
+
+        activeProcesses.push({ controller, proc });
+
+        proc.stderr?.on('data', data => {
           reject(new Error('failed to start: ' + data?.toString()));
         });
-        proc!.stdout?.on('data', data => {
+        proc.stdout?.on('data', data => {
           console.log(data?.toString());
           if (data?.toString()?.includes(`http://localhost:${port}`)) {
             resolve();
