@@ -162,10 +162,10 @@ export const agent = new Agent({
       description: "Default options used when calling `stream()`.",
     },
     {
-      name: "defaultStreamOptions",
+      name: "defaultVNextStreamOptions",
       type: "AgentExecutionOptions | ({ runtimeContext: RuntimeContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
       isOptional: true,
-      description: "Default options used when calling `stream()` in vNext mode.",
+      description: "Default options used when calling `generate()` and `stream()`.",
     },
     {
       name: "mastra",
@@ -211,6 +211,135 @@ export const agent = new Agent({
     },
   ]}
 />
+
+## Default options examples
+
+### Static model settings
+
+Set default model parameters (temperature, topP, etc.) that apply to all agent calls:
+
+```typescript filename="src/mastra/agents/creative-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+
+export const creativeAgent = new Agent({
+  name: "creative-agent",
+  instructions: "You are a creative writing assistant.",
+  model: "openai/gpt-4o",
+  
+  // For generate() and stream() methods
+  defaultVNextStreamOptions: {
+    modelSettings: {
+      temperature: 0.9,
+      topP: 0.95,
+      maxTokens: 2000,
+      frequencyPenalty: 0.5,
+      presencePenalty: 0.3,
+    }
+  }
+});
+
+// All calls now use these settings by default
+const response = await creativeAgent.generate("Write a creative story");
+```
+
+For legacy methods (AI SDK v4):
+
+```typescript filename="src/mastra/agents/precise-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+
+export const preciseAgent = new Agent({
+  name: "precise-agent",
+  instructions: "You are a precise and factual assistant.",
+  model: "openai/gpt-4o",
+  
+  // For generateLegacy() method
+  defaultGenerateOptions: {
+    temperature: 0.3,
+    topP: 0.8,
+    maxTokens: 1000,
+  },
+  
+  // For streamLegacy() method  
+  defaultStreamOptions: {
+    temperature: 0.3,
+    topP: 0.8,
+    maxTokens: 1000,
+  }
+});
+```
+
+### Dynamic model settings
+
+Adjust settings based on runtime context:
+
+```typescript filename="src/mastra/agents/adaptive-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { RuntimeContext } from "@mastra/core";
+
+type UserMode = "creative" | "balanced" | "precise";
+
+export const adaptiveAgent = new Agent({
+  name: "adaptive-agent",
+  instructions: "You are an adaptive assistant.",
+  model: "openai/gpt-4o",
+  
+  defaultVNextStreamOptions: ({ runtimeContext }) => {
+    const mode = runtimeContext.get("mode") as UserMode;
+    
+    const settingsMap: Record<UserMode, any> = {
+      creative: {
+        modelSettings: { temperature: 0.9, topP: 0.95, maxTokens: 2000 }
+      },
+      balanced: {
+        modelSettings: { temperature: 0.7, topP: 0.9, maxTokens: 1500 }
+      },
+      precise: {
+        modelSettings: { temperature: 0.3, topP: 0.8, maxTokens: 1000 }
+      },
+    };
+    
+    return settingsMap[mode] || settingsMap.balanced;
+  }
+});
+
+// Usage with runtime context
+const ctx = new RuntimeContext({ mode: "creative" });
+const response = await adaptiveAgent.generate("Write a story", { 
+  runtimeContext: ctx 
+});
+```
+
+### Common model settings
+
+| Setting | Type | Range | Description |
+|---------|------|-------|-------------|
+| `temperature` | `number` | 0-2 | Controls randomness. Lower = more focused, higher = more creative |
+| `topP` | `number` | 0-1 | Nucleus sampling. Lower = more focused, higher = more diverse |
+| `maxTokens` | `number` | - | Maximum tokens to generate |
+| `frequencyPenalty` | `number` | -2 to 2 | Reduce repetition based on frequency |
+| `presencePenalty` | `number` | -2 to 2 | Encourage new topics |
+| `seed` | `number` | - | For deterministic sampling |
+
+### Per-call overrides
+
+Default settings can be overridden on individual calls:
+
+```typescript showLineNumbers copy
+// Agent has temperature: 0.7 by default
+const agent = new Agent({
+  name: "test-agent",
+  instructions: "You are a helpful assistant.",
+  model: "openai/gpt-4o",
+  defaultVNextStreamOptions: {
+    modelSettings: { temperature: 0.7 }
+  }
+});
+
+// Override for this specific call
+const response = await agent.generate("Be very creative", {
+  modelSettings: { temperature: 1.2 }  // Override default
+});
+```
 
 ## Returns
 
