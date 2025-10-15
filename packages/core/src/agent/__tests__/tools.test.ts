@@ -383,6 +383,132 @@ function toolsTest(version: 'v1' | 'v2') {
 
       expect(result.toolCalls.length).toBeGreaterThan(0);
     });
+
+    it('should call client side tools in stream', async () => {
+      // Reuse the same mock model for streaming
+      let clientToolModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        clientToolModel = new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: undefined,
+            toolCalls: [
+              {
+                toolCallType: 'function',
+                toolCallId: 'call-color-stream-1',
+                toolName: 'changeColor',
+                args: JSON.stringify({ color: 'green' }),
+              },
+            ],
+          }),
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                {
+                  type: 'tool-call',
+                  toolCallType: 'function',
+                  toolCallId: 'call-color-stream-1',
+                  toolName: 'changeColor',
+                  args: JSON.stringify({ color: 'green' }),
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        });
+      } else {
+        clientToolModel = new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [],
+            toolCalls: [
+              {
+                toolCallType: 'function',
+                toolCallId: 'call-color-stream-1',
+                toolName: 'changeColor',
+                args: { color: 'green' },
+              },
+            ],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-color-stream-1',
+                toolName: 'changeColor',
+                input: '{"color":"green"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }),
+        });
+      }
+
+      const userAgent = new Agent({
+        name: 'User agent',
+        instructions: 'You are an agent that can get list of users using client side tools.',
+        model: clientToolModel,
+      });
+
+      let result;
+
+      if (version === 'v1') {
+        result = await userAgent.streamLegacy('Make it green', {
+          clientTools: {
+            changeColor: {
+              id: 'changeColor',
+              description: 'This is a test tool that returns the name and email',
+              inputSchema: z.object({
+                color: z.string(),
+              }),
+              execute: async () => {},
+            },
+          },
+          onFinish: props => {
+            expect(props.toolCalls.length).toBeGreaterThan(0);
+          },
+        });
+      } else {
+        result = await userAgent.stream('Make it green', {
+          clientTools: {
+            changeColor: {
+              id: 'changeColor',
+              description: 'This is a test tool that returns the name and email',
+              inputSchema: z.object({
+                color: z.string(),
+              }),
+              execute: async () => {},
+            },
+          },
+        });
+      }
+
+      for await (const _ of result.fullStream) {
+      }
+
+      expect(await result.finishReason).toBe('tool-calls');
+    });
   });
 }
 

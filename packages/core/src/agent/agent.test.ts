@@ -794,52 +794,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
     });
 
-    it('stream - should pass and call client side tools', async () => {
-      const userAgent = new Agent({
-        name: 'User agent',
-        instructions: 'You are an agent that can get list of users using client side tools.',
-        model: openaiModel,
-      });
-
-      let result;
-
-      if (version === 'v1') {
-        result = await userAgent.streamLegacy('Make it green', {
-          clientTools: {
-            changeColor: {
-              id: 'changeColor',
-              description: 'This is a test tool that returns the name and email',
-              inputSchema: z.object({
-                color: z.string(),
-              }),
-              execute: async () => {},
-            },
-          },
-          onFinish: props => {
-            expect(props.toolCalls.length).toBeGreaterThan(0);
-          },
-        });
-      } else {
-        result = await userAgent.stream('Make it green', {
-          clientTools: {
-            changeColor: {
-              id: 'changeColor',
-              description: 'This is a test tool that returns the name and email',
-              inputSchema: z.object({
-                color: z.string(),
-              }),
-              execute: async () => {},
-            },
-          },
-        });
-      }
-
-      for await (const _ of result.fullStream) {
-      }
-
-      expect(await result.finishReason).toBe('tool-calls');
-    });
-
     it('should generate with default max steps', { timeout: 10000 }, async () => {
       const findUserTool = createTool({
         id: 'Find user tool',
