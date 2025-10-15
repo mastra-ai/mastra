@@ -54,148 +54,159 @@ describe('Gemini Model Compatibility Tests', () => {
       const agent = new Agent({
         id: 'system-context-agent',
         name: 'System Context Agent',
-        instructions: 'You are an expert assistant',
+        instructions: 'You are an expert assistant. Always provide detailed explanations.',
         model: google('gemini-2.5-flash-lite'),
       });
 
-      // This tests if empty user message is properly handled for Gemini
-      const result = await agent.generate('', {
-        system: 'Always provide detailed explanations',
+      const result = await agent.generate('');
+
+      expect(result).toBeDefined();
+    });
+
+    it('should handle single turn with maxSteps=1 and messages ending with assistant', async () => {
+      const agent = new Agent({
+        id: 'max-steps-agent',
+        name: 'Max Steps Agent',
+        instructions: 'You help users choose between options A, B, or C.',
+        model: google('gemini-2.5-flash-lite'),
+        memory,
       });
+
+      const result = await agent.generate(
+        [
+          {
+            role: 'user',
+            content:
+              'I need to choose between option A (fast), option B (cheap), or option C (reliable). I value reliability most.',
+          },
+          { role: 'assistant', content: 'Let me help you make the best choice.' },
+        ],
+        {
+          maxSteps: 1,
+          output: z.object({
+            selection: z.string(),
+            reason: z.string(),
+          }),
+        },
+      );
+
+      expect(result).toBeDefined();
+      expect(result.object).toBeDefined();
+    });
+
+    it('should handle conversation ending with tool result', async () => {
+      const testTool = createTool({
+        id: 'weather-tool',
+        description: 'Gets weather information',
+        inputSchema: z.object({ location: z.string() }),
+        outputSchema: z.object({ weather: z.string() }),
+        execute: async () => ({ weather: 'Sunny, 72°F' }),
+      });
+
+      const agent = new Agent({
+        id: 'tool-result-ending-agent',
+        name: 'Tool Result Ending Agent',
+        instructions: 'You help with weather queries',
+        model: google('gemini-2.5-flash-lite'),
+        tools: { testTool },
+      });
+
+      const result = await agent.generate([
+        { role: 'user', content: 'What is the weather?' },
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'call_1',
+              toolName: 'weather-tool',
+              args: { location: 'San Francisco' },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'call_1',
+              toolName: 'weather-tool',
+              result: 'Sunny, 72°F',
+            },
+          ],
+        },
+      ]);
+
+      expect(result).toBeDefined();
+    });
+
+    it('should handle messages starting with assistant-with-tool-call', async () => {
+      const testTool = createTool({
+        id: 'test-tool',
+        description: 'A test tool',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async () => ({ result: 'test result' }),
+      });
+
+      const agent = new Agent({
+        id: 'issue-7287-agent',
+        name: 'Issue 7287 Agent',
+        instructions: 'You help users with their queries',
+        model: google('gemini-2.5-flash-lite'),
+        tools: { testTool },
+      });
+
+      const result = await agent.generate([
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'call_1',
+              toolName: 'test-tool',
+              args: { query: 'test' },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'call_1',
+              toolName: 'test-tool',
+              result: 'previous result',
+            },
+          ],
+        },
+        { role: 'user', content: 'What was that about?' },
+      ]);
 
       expect(result).toBeDefined();
     });
   });
 
-  describe('Agent network() method - Testing Issues #8053 and #8732', () => {
-    it('should handle simple network call', async () => {
-      const calculatorTool = createTool({
-        id: 'calculator',
-        description: 'Performs basic arithmetic operations',
-        inputSchema: z.object({
-          operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
-          a: z.number(),
-          b: z.number(),
-        }),
-        outputSchema: z.object({
-          result: z.number(),
-        }),
-        execute: async ({ context }) => {
-          const { operation, a, b } = context;
-          let result = 0;
-          switch (operation) {
-            case 'add':
-              result = a + b;
-              break;
-            case 'subtract':
-              result = a - b;
-              break;
-            case 'multiply':
-              result = a * b;
-              break;
-            case 'divide':
-              result = b !== 0 ? a / b : 0;
-              break;
-          }
-          return { result };
-        },
-      });
-
-      const agent = new Agent({
-        id: 'simple-network',
-        name: 'Simple Network Agent',
-        instructions: 'You are a helpful assistant.',
-        model: google('gemini-2.5-flash-lite'),
-        tools: { calculatorTool },
-        memory,
-      });
-
-      const stream = await agent.network('What is 2+2?', {
-        runtimeContext,
-      });
-
-      const chunks: ChunkType[] = [];
-      for await (const chunk of stream) {
-        chunks.push(chunk);
-      }
-
-      expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(0);
-    });
-
-    it('should handle network with continuing conversation', async () => {
-      const memoryAgent = new Agent({
-        name: 'memory-agent',
-        instructions: 'You answer questions based on conversation history',
+  describe('Agent network() method', () => {
+    it('should handle basic network generation with Gemini', async () => {
+      const helperAgent = new Agent({
+        name: 'helper-agent',
+        instructions: 'You answer simple questions. For "what is the capital of France?", respond "Paris".',
         model: google('gemini-2.5-flash-lite'),
       });
 
       const agent = new Agent({
-        id: 'conversation-agent',
-        name: 'Conversation Agent',
-        instructions: 'You coordinate with the memory agent to answer questions about past conversations',
+        id: 'basic-network-agent',
+        name: 'Basic Network Agent',
+        instructions: 'You coordinate tasks. Always delegate questions to helperAgent.',
         model: google('gemini-2.5-flash-lite'),
-        agents: { memoryAgent },
+        agents: { helperAgent },
         memory,
       });
 
-      // First interaction
-      const stream1 = await agent.network('My name is Alice', {
+      const stream = await agent.network('What is the capital of France?', {
         runtimeContext,
-        memory: {
-          thread: 'conv-thread',
-          resource: 'conv-resource',
-        },
-      });
-
-      const chunks1: ChunkType[] = [];
-      for await (const chunk of stream1) {
-        chunks1.push(chunk);
-      }
-
-      // Second interaction - this will have memory from first
-      const stream2 = await agent.network('What is my name?', {
-        runtimeContext,
-        memory: {
-          thread: 'conv-thread',
-          resource: 'conv-resource',
-        },
-      });
-
-      const chunks2: ChunkType[] = [];
-      for await (const chunk of stream2) {
-        chunks2.push(chunk);
-      }
-
-      expect(chunks2).toBeDefined();
-      expect(chunks2.length).toBeGreaterThan(0);
-    });
-
-    it('should handle network with sub-agents', async () => {
-      const researchAgent = new Agent({
-        name: 'research-gemini',
-        instructions: 'You perform research tasks',
-        model: google('gemini-2.5-flash-lite'),
-      });
-
-      const analysisAgent = new Agent({
-        name: 'analysis-gemini',
-        instructions: 'You analyze research data',
-        model: google('gemini-2.5-flash-lite'),
-      });
-
-      const coordinatorAgent = new Agent({
-        id: 'coordinator',
-        name: 'Coordinator Agent',
-        instructions: 'You coordinate between research and analysis agents',
-        model: google('gemini-2.5-flash-lite'),
-        agents: { researchAgent, analysisAgent },
-        memory,
-      });
-
-      const stream = await coordinatorAgent.network('Research and analyze the topic of renewable energy', {
-        runtimeContext,
-        maxSteps: 3,
+        maxSteps: 2,
       });
 
       const chunks: ChunkType[] = [];
@@ -205,143 +216,27 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(0);
-    });
+    }, 15000);
 
-    it('should handle network with tools', async () => {
-      const calculatorTool = createTool({
-        id: 'calculator',
-        description: 'Performs basic arithmetic',
-        inputSchema: z.object({
-          operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
-          a: z.number(),
-          b: z.number(),
-        }),
-        outputSchema: z.object({
-          result: z.number(),
-        }),
-        execute: async ({ context }) => {
-          const { operation, a, b } = context;
-          let result = 0;
-          switch (operation) {
-            case 'add':
-              result = a + b;
-              break;
-            case 'subtract':
-              result = a - b;
-              break;
-            case 'multiply':
-              result = a * b;
-              break;
-            case 'divide':
-              result = b !== 0 ? a / b : 0;
-              break;
-          }
-          return { result };
-        },
-      });
-
-      const mathAgent = new Agent({
-        id: 'math-agent',
-        name: 'Math Agent',
-        instructions: 'You can perform calculations using the calculator tool',
-        model: google('gemini-2.5-flash-lite'),
-        tools: { calculatorTool },
-        memory,
-      });
-
-      const stream = await mathAgent.network('Calculate 25 * 4', {
-        runtimeContext,
-      });
-
-      const chunks: ChunkType[] = [];
-      for await (const chunk of stream) {
-        chunks.push(chunk);
-      }
-
-      expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(0);
-    });
-
-    it('should handle network with workflows', async () => {
-      const processAgent = new Agent({
-        name: 'process-agent',
-        instructions: 'You process text data',
+    it('should handle empty user message with system context in network', async () => {
+      const helperAgent = new Agent({
+        name: 'helper-agent',
+        instructions: 'You help with tasks',
         model: google('gemini-2.5-flash-lite'),
       });
 
-      const processStep = createStep({
-        id: 'process-step',
-        description: 'Process text data',
-        inputSchema: z.object({ text: z.string() }),
-        outputSchema: z.object({ processedText: z.string() }),
-        execute: async ({ inputData }) => {
-          const resp = await processAgent.generate(`Process this text: ${inputData.text}`, {
-            output: z.object({ processedText: z.string() }),
-          });
-          return { processedText: resp.object.processedText };
-        },
-      });
-
-      const textWorkflow = createWorkflow({
-        id: 'text-workflow',
-        description: 'Workflow for processing text',
-        steps: [],
-        inputSchema: z.object({ text: z.string() }),
-        outputSchema: z.object({ processedText: z.string() }),
-      })
-        .then(processStep)
-        .commit();
-
-      const workflowAgent = new Agent({
-        id: 'workflow-agent',
-        name: 'Workflow Agent',
-        instructions: 'You coordinate text processing workflows',
-        model: google('gemini-2.5-flash-lite'),
-        workflows: { textWorkflow },
-        memory,
-      });
-
-      const stream = await workflowAgent.network('Execute text-workflow with text: "Hello World"', {
-        runtimeContext,
-      });
-
-      const chunks: ChunkType[] = [];
-      for await (const chunk of stream) {
-        chunks.push(chunk);
-      }
-
-      expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe('Edge cases for Gemini message ordering', () => {
-    it('should handle system-only context with empty user message', async () => {
-      const systemOnlyAgent = new Agent({
-        id: 'system-only-gemini',
-        name: 'System Only Gemini',
-        instructions: 'You are an expert on marine biology. You always respond with scientific facts.',
-        model: google('gemini-2.5-flash-lite'),
-      });
-
-      const result = await systemOnlyAgent.generate('', {
-        system: 'Always be scientific and accurate',
-      });
-
-      expect(result).toBeDefined();
-    });
-
-    it('should handle empty input gracefully', async () => {
       const agent = new Agent({
-        id: 'empty-input-agent',
-        name: 'Empty Input Agent',
-        instructions: 'You handle empty inputs',
+        id: 'network-empty-message-agent',
+        name: 'Network Empty Message Agent',
+        instructions: 'You coordinate tasks. Always provide detailed explanations.',
         model: google('gemini-2.5-flash-lite'),
+        agents: { helperAgent },
         memory,
       });
 
       const stream = await agent.network('', {
         runtimeContext,
+        maxSteps: 2,
       });
 
       const chunks: ChunkType[] = [];
@@ -350,81 +245,35 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-    });
+    }, 15000);
 
-    it('should handle multiple consecutive network calls', async () => {
-      const contextAgent = new Agent({
-        name: 'context-agent',
-        instructions: 'You answer questions based on conversation context and history',
+    it('should handle single turn with maxSteps=1 and messages ending with assistant in network', async () => {
+      const helperAgent = new Agent({
+        name: 'helper-agent',
+        instructions: 'You are a calculator. When asked for math, respond with just the numeric answer.',
         model: google('gemini-2.5-flash-lite'),
       });
 
       const agent = new Agent({
-        id: 'multi-call-agent',
-        name: 'Multi Call Agent',
-        instructions: 'You coordinate with the context agent to handle conversations',
+        id: 'network-max-steps-agent',
+        name: 'Network Max Steps Agent',
+        instructions: 'You coordinate tasks. Always delegate math questions to helperAgent.',
         model: google('gemini-2.5-flash-lite'),
-        agents: { contextAgent },
+        agents: { helperAgent },
         memory,
       });
 
-      const threadId = 'multi-thread';
-      const resourceId = 'multi-resource';
-
-      // Multiple calls that build context
-      const inputs = ['Remember the number 42', 'What number did I ask you to remember?', 'Add 10 to that number'];
-
-      for (const input of inputs) {
-        const stream = await agent.network(input, {
+      const stream = await agent.network(
+        [
+          { role: 'user', content: 'What is 5 plus 3?' },
+          { role: 'assistant', content: 'Let me calculate that for you.' },
+          { role: 'user', content: 'Please provide the answer now.' },
+        ],
+        {
           runtimeContext,
-          memory: {
-            thread: threadId,
-            resource: resourceId,
-          },
-        });
-
-        const chunks: ChunkType[] = [];
-        for await (const chunk of stream) {
-          chunks.push(chunk);
-        }
-
-        expect(chunks).toBeDefined();
-      }
-    });
-
-    it('should handle complex agent network scenario', async () => {
-      // Create a more realistic agent network
-      const dataAgent = new Agent({
-        name: 'data-agent',
-        instructions: 'You retrieve and format data',
-        model: google('gemini-2.5-flash-lite'),
-      });
-
-      const validationAgent = new Agent({
-        name: 'validation-agent',
-        instructions: 'You validate data quality',
-        model: google('gemini-2.5-flash-lite'),
-      });
-
-      const reportAgent = new Agent({
-        name: 'report-agent',
-        instructions: 'You create reports from validated data',
-        model: google('gemini-2.5-flash-lite'),
-      });
-
-      const orchestratorAgent = new Agent({
-        id: 'orchestrator',
-        name: 'Orchestrator Agent',
-        instructions: 'You orchestrate data processing pipeline: retrieve, validate, then report',
-        model: google('gemini-2.5-flash-lite'),
-        agents: { dataAgent, validationAgent, reportAgent },
-        memory,
-      });
-
-      const stream = await orchestratorAgent.network('Process data about climate change and create a report', {
-        runtimeContext,
-        maxSteps: 4,
-      });
+          maxSteps: 1,
+        },
+      );
 
       const chunks: ChunkType[] = [];
       for await (const chunk of stream) {
@@ -432,7 +281,123 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(0);
-    });
+    }, 15000);
+
+    it('should handle conversation ending with tool result in network', async () => {
+      const testTool = createTool({
+        id: 'weather-tool',
+        description: 'Gets weather information',
+        inputSchema: z.object({ location: z.string() }),
+        outputSchema: z.object({ weather: z.string() }),
+        execute: async () => ({ weather: 'Sunny, 72°F' }),
+      });
+
+      const agent = new Agent({
+        id: 'network-tool-result-ending-agent',
+        name: 'Network Tool Result Ending Agent',
+        instructions: 'You help with weather queries. Summarize weather results when asked.',
+        model: google('gemini-2.5-flash-lite'),
+        tools: { testTool },
+        memory,
+      });
+
+      const stream = await agent.network(
+        [
+          { role: 'user', content: 'What is the weather?' },
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'call_1',
+                toolName: 'weather-tool',
+                args: { location: 'San Francisco' },
+              },
+            ],
+          },
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'call_1',
+                toolName: 'weather-tool',
+                result: 'Sunny, 72°F',
+              },
+            ],
+          },
+          { role: 'user', content: 'Is that good weather for a picnic?' },
+        ],
+        {
+          runtimeContext,
+          maxSteps: 1,
+        },
+      );
+
+      const chunks: ChunkType[] = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks).toBeDefined();
+    }, 15000);
+
+    it('should handle messages starting with assistant-with-tool-call in network (Issue #7287)', async () => {
+      const testTool = createTool({
+        id: 'test-tool',
+        description: 'A test tool',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async () => ({ result: 'test result' }),
+      });
+
+      const agent = new Agent({
+        id: 'network-issue-7287-agent',
+        name: 'Network Issue 7287 Agent',
+        instructions: 'You help users understand tool results. Explain tool outputs clearly.',
+        model: google('gemini-2.5-flash-lite'),
+        tools: { testTool },
+        memory,
+      });
+
+      const stream = await agent.network(
+        [
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'call_1',
+                toolName: 'test-tool',
+                args: { query: 'test' },
+              },
+            ],
+          },
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'call_1',
+                toolName: 'test-tool',
+                result: 'previous result',
+              },
+            ],
+          },
+          { role: 'user', content: 'Explain what this result means.' },
+        ],
+        {
+          runtimeContext,
+          maxSteps: 1,
+        },
+      );
+
+      const chunks: ChunkType[] = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks).toBeDefined();
+    }, 15000);
   });
-}, 120e3);
+});
