@@ -1,10 +1,25 @@
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { TestIntegration } from '../../integration/openapi-toolset.mock';
 import { Mastra } from '../../mastra';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
+
+const mockFindUser = vi.fn().mockImplementation(async data => {
+  const list = [
+    { name: 'Dero Israel', email: 'dero@mail.com' },
+    { name: 'Ife Dayo', email: 'dayo@mail.com' },
+    { name: 'Tao Feeq', email: 'feeq@mail.com' },
+    { name: 'Joe', email: 'joe@mail.com' },
+  ];
+
+  const userInfo = list?.find(({ name }) => name === (data as { name: string }).name);
+  if (!userInfo) return { message: 'User not found' };
+  return userInfo;
+});
 
 function toolsTest(version: 'v1' | 'v2') {
   const integration = new TestIntegration();
@@ -123,6 +138,131 @@ function toolsTest(version: 'v1' | 'v2') {
       const message = toolCall?.result?.message;
 
       expect(message).toBe('Executed successfully');
+    });
+
+    it('should call findUserTool with parameters', async () => {
+      // Create a new mock model for this test that calls findUserTool
+      let findUserToolModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        findUserToolModel = new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: undefined,
+            toolCalls: [
+              {
+                toolCallType: 'function',
+                toolCallId: 'call-finduser-1',
+                toolName: 'findUserTool',
+                args: JSON.stringify({ name: 'Dero Israel' }),
+              },
+            ],
+          }),
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                {
+                  type: 'tool-call',
+                  toolCallType: 'function',
+                  toolCallId: 'call-finduser-1',
+                  toolName: 'findUserTool',
+                  args: JSON.stringify({ name: 'Dero Israel' }),
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        });
+      } else {
+        findUserToolModel = new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [],
+            toolCalls: [
+              {
+                toolCallType: 'function',
+                toolCallId: 'call-finduser-1',
+                toolName: 'findUserTool',
+                args: { name: 'Dero Israel' },
+              },
+            ],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-finduser-1',
+                toolName: 'findUserTool',
+                input: '{"name":"Dero Israel"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }),
+        });
+      }
+
+      const findUserTool = createTool({
+        id: 'Find user tool',
+        description: 'This is a test tool that returns the name and email',
+        inputSchema: z.object({
+          name: z.string(),
+        }),
+        execute: ({ context }) => {
+          return mockFindUser(context) as Promise<Record<string, any>>;
+        },
+      });
+
+      const userAgent = new Agent({
+        name: 'User agent',
+        instructions: 'You are an agent that can get list of users using findUserTool.',
+        model: findUserToolModel,
+        tools: { findUserTool },
+      });
+
+      const mastra = new Mastra({
+        agents: { userAgent },
+        logger: false,
+      });
+
+      const agentOne = mastra.getAgent('userAgent');
+
+      let toolCall;
+      let response;
+      if (version === 'v1') {
+        response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
+          maxSteps: 2,
+          toolChoice: 'required',
+        });
+        toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
+      } else {
+        response = await agentOne.generate('Find the user with name - Dero Israel');
+        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
+      }
+
+      const name = toolCall?.result?.name;
+
+      expect(mockFindUser).toHaveBeenCalled();
+      expect(name).toBe('Dero Israel');
     });
   });
 }

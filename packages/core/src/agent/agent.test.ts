@@ -495,51 +495,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
     });
 
-    it('should call findUserTool', async () => {
-      const findUserTool = createTool({
-        id: 'Find user tool',
-        description: 'This is a test tool that returns the name and email',
-        inputSchema: z.object({
-          name: z.string(),
-        }),
-        execute: ({ context }) => {
-          return mockFindUser(context) as Promise<Record<string, any>>;
-        },
-      });
-
-      const userAgent = new Agent({
-        name: 'User agent',
-        instructions: 'You are an agent that can get list of users using findUserTool.',
-        model: openaiModel,
-        tools: { findUserTool },
-      });
-
-      const mastra = new Mastra({
-        agents: { userAgent },
-        logger: false,
-      });
-
-      const agentOne = mastra.getAgent('userAgent');
-
-      let toolCall;
-      let response;
-      if (version === 'v1') {
-        response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
-          maxSteps: 2,
-          toolChoice: 'required',
-        });
-        toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
-      } else {
-        response = await agentOne.generate('Find the user with name - Dero Israel');
-        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
-      }
-
-      const name = toolCall?.result?.name;
-
-      expect(mockFindUser).toHaveBeenCalled();
-      expect(name).toBe('Dero Israel');
-    }, 500000);
-
     describe('tool approval and suspension', () => {
       describe.skipIf(version === 'v1')('suspension', () => {
         it('should call findUserTool with suspend and resume', async () => {
