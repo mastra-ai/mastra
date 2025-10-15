@@ -1,4 +1,5 @@
 import { convertGenAISpanAttributesToOpenInferenceSpanAttributes } from '@arizeai/openinference-genai';
+import type { Mutable } from '@arizeai/openinference-genai/types';
 import { ReadableSpanConverterInterface } from '@mastra/otel-exporter';
 import type { Resource } from '@opentelemetry/resources';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
@@ -14,17 +15,11 @@ export class ArizeSpanConverter extends ReadableSpanConverterInterface {
   }
 
   convertSpan(span: ReadableSpan): ReadableSpan {
-    // slight hacks until otel-exporter adheres to modern genai spec
-    if (span.attributes['input']) {
-      span.attributes['gen_ai.input.messages'] = span.attributes['input'];
-    }
     if (span.attributes['agent.id']) {
       span.attributes['gen_ai.agent.id'] = span.attributes['agent.id'];
     }
     const attributes = convertGenAISpanAttributesToOpenInferenceSpanAttributes(span.attributes);
-    return {
-      ...span,
-      attributes,
-    };
+    (span as Mutable<ReadableSpan>).attributes = attributes;
+    return span;
   }
 }
