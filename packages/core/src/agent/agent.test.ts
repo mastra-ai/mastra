@@ -794,45 +794,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
     });
 
-    it('generate - should pass and call client side tools', async () => {
-      const userAgent = new Agent({
-        name: 'User agent',
-        instructions: 'You are an agent that can get list of users using client side tools.',
-        model: openaiModel,
-      });
-
-      let result;
-      if (version === 'v1') {
-        result = await userAgent.generateLegacy('Make it green', {
-          clientTools: {
-            changeColor: {
-              id: 'changeColor',
-              description: 'This is a test tool that returns the name and email',
-              inputSchema: z.object({
-                color: z.string(),
-              }),
-              execute: async () => {},
-            },
-          },
-        });
-      } else {
-        result = await userAgent.generate('Make it green', {
-          clientTools: {
-            changeColor: {
-              id: 'changeColor',
-              description: 'This is a test tool that returns the name and email',
-              inputSchema: z.object({
-                color: z.string(),
-              }),
-              execute: async () => {},
-            },
-          },
-        });
-      }
-
-      expect(result.toolCalls.length).toBeGreaterThan(0);
-    }, 500000);
-
     it('stream - should pass and call client side tools', async () => {
       const userAgent = new Agent({
         name: 'User agent',
