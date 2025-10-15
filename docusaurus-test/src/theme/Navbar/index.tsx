@@ -46,7 +46,7 @@ export const Logo = () => {
 export default function Navbar(): ReactNode {
   return (
     <NavbarLayout>
-      <div className="flex border-b-[0.5px] h-(--ifm-navbar-height) border-(--border-subtle) max-w-(--ifm-container-width) mx-auto w-full items-center justify-between">
+      <div className="flex border-b-[0.5px] h-[60px] border-(--border-subtle) max-w-(--ifm-container-width) mx-auto w-full items-center justify-between">
         <Link href="/docs">
           <div className="flex items-center gap-2">
             <Logo />
