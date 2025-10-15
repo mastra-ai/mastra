@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 0.21.0-alpha.4
+
+### Patch Changes
+
+- Include span id and trace id when running live scorers ([#8842](https://github.com/mastra-ai/mastra/pull/8842))
+
+- Updated dependencies [[`1908ca0`](https://github.com/mastra-ai/mastra/commit/1908ca0521f90e43779cc29ab590173ca560443c)]:
+  - @mastra/core@0.21.0-alpha.4
+
 ## 0.21.0-alpha.3
 
 ### Patch Changes
