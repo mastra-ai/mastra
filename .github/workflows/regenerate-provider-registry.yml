@@ -51,6 +51,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
+          ref: main
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
 
