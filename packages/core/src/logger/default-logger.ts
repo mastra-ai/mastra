@@ -38,7 +38,7 @@ export class ConsoleLogger extends MastraLogger {
 
   warn(message: string, ...args: any[]): void {
     if (this.level === LogLevel.WARN || this.level === LogLevel.INFO || this.level === LogLevel.DEBUG) {
-      console.warn(message, ...args);
+      console.info(message, ...args);
     }
   }
 
