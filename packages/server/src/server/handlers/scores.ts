@@ -195,7 +195,11 @@ function getTraceDetails(traceIdWithSpanId?: string) {
   }
 
   const [traceId, spanId] = traceIdWithSpanId.split('-');
-  return { traceId, spanId };
+
+  return {
+    ...(traceId ? { traceId } : {}),
+    ...(spanId ? { spanId } : {}),
+  };
 }
 
 export async function saveScoreHandler({ mastra, score }: Context & { score: ScoreRowData }) {

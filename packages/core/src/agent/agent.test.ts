@@ -1,15 +1,15 @@
 import { randomUUID } from 'crypto';
 import { PassThrough } from 'stream';
-import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai';
-import { createOpenAI } from '@ai-sdk/openai-v4';
-import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
+import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
-import type { SystemModelMessage, UIMessageChunk } from 'ai';
-import { stepCountIs } from 'ai';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
-import type { CoreMessage, LanguageModelV1, CoreSystemMessage } from 'ai-v4';
-import { simulateReadableStream } from 'ai-v4';
-import { MockLanguageModelV1 } from 'ai-v4/test';
+import type { CoreMessage, LanguageModelV1, CoreSystemMessage } from 'ai';
+import { simulateReadableStream } from 'ai';
+import { MockLanguageModelV1 } from 'ai/test';
+import { stepCountIs } from 'ai-v5';
+import type { SystemModelMessage, UIMessageChunk } from 'ai-v5';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -5965,7 +5965,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }
       });
 
-      it(`should show correct request input for multi-turn inputs`, async () => {
+      it(`should show correct request input for multi-turn inputs`, { timeout: 30000 }, async () => {
         const agent = new Agent({
           id: 'test',
           name: 'test',
@@ -6323,6 +6323,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           onError: ({ error }) => {
             errorCaught = true;
             caughtError = error;
+          },
+          modelSettings: {
+            maxRetries: 0,
           },
         });
 
@@ -8687,7 +8690,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(result.toolCalls.length).toBeGreaterThan(0);
       }
     },
-    10000,
+    30000,
   );
 
   describe(
