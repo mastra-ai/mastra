@@ -1,7 +1,7 @@
 import type { ReadableStream } from 'stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider-v5';
-import type { StepResult, ToolSet } from 'ai-v5';
+import type { ToolSet } from 'ai-v5';
 import { MessageList } from '../../../agent/message-list';
 import { safeParseErrorObject } from '../../../error/utils.js';
 import { execute } from '../../../stream/aisdk/v5/execute';
