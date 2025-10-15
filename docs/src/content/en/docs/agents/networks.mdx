@@ -141,8 +141,7 @@ Call a Mastra agent network using `.network()` with a user message. The method r
 In this example, the network interprets the message and would route the request to both the `researchAgent` and `writingAgent` to generate a complete response.
 
 ```typescript showLineNumbers copy
-const agent = mastra.getAgent("routingAgent");
-const result = await agent.network("Tell me three cool ways to use Mastra");
+const result = await routingAgent.network("Tell me three cool ways to use Mastra");
 
 for await (const chunk of result) {
   console.log(chunk.type);
@@ -176,8 +175,7 @@ network-execution-event-step-finish
 In this example, the routing agent recognizes the city name in the message and runs the `cityWorkflow`. The workflow defines steps that call the `researchAgent` to gather facts, then the `writingAgent` to generate the final text.
 
 ```typescript showLineNumbers copy
-const agent = mastra.getAgent("routingAgent");
-const result = await agent.network("Tell me some historical facts about London");
+const result = await routingAgent.network("Tell me some historical facts about London");
 
 for await (const chunk of result) {
   console.log(chunk.type);
@@ -208,8 +206,7 @@ network-execution-event-step-finish
 In this example, the routing agent skips the `researchAgent`, `writingAgent`, and `cityWorkflow`, and calls the `weatherTool` directly to complete the task.
 
 ```typescript showLineNumbers copy
-const agent = mastra.getAgent("routingAgent");
-const result = await agent.network("What's the weather in London?");
+const result = await routingAgent.network("What's the weather in London?");
 
 for await (const chunk of result) {
   console.log(chunk.type);
