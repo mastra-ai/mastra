@@ -302,7 +302,7 @@ const result = await agent.generate(messages, {
 
 - `output`
 
-The `output` property is deprecated in favor of `structuredOutput`, to achieve the same results, omit the model and only pass `structuredOutput.schema`, optionally add `jsonPromptInjection: true` if you model does not natively support `response_format`.
+The `output` property is deprecated in favor of `structuredOutput`, to achieve the same results, omit the model and only pass `structuredOutput.schema`, optionally add `jsonPromptInjection: true` if your model does not natively support `response_format`.
 
 ```typescript showLineNumbers copy
 const result = await agent.generate(messages, {
