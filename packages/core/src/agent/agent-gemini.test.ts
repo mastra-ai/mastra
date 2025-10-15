@@ -2,11 +2,11 @@ import { google } from '@ai-sdk/google-v5';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { RuntimeContext } from '../runtime-context';
+import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { MockMemory } from './test-utils';
 import { Agent } from './index';
-import type { ChunkType } from '../stream/types';
 
 describe('Gemini Model Compatibility Tests', () => {
   let memory: MockMemory;
