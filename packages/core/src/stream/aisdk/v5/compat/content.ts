@@ -1,5 +1,5 @@
-import type { LanguageModelV2DataContent } from '@ai-sdk/provider';
-import type { DataContent } from 'ai';
+import type { LanguageModelV2DataContent } from '@ai-sdk/provider-v5';
+import type { DataContent } from 'ai-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../../error';
 
 function splitDataUrl(dataUrl: string): {

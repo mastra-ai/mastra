@@ -1,6 +1,6 @@
-import type { LanguageModelV2StreamPart, SharedV2ProviderMetadata } from '@ai-sdk/provider';
-import type { generateText as generateText5 } from 'ai';
-import { convertArrayToReadableStream, mockId, MockLanguageModelV2 } from 'ai/test';
+import type { LanguageModelV2StreamPart, SharedV2ProviderMetadata } from '@ai-sdk/provider-v5';
+import type { generateText as generateText5 } from 'ai-v5';
+import { convertArrayToReadableStream, mockId, MockLanguageModelV2 } from 'ai-v5/test';
 import { assertType, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';

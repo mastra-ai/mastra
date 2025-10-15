@@ -83,7 +83,11 @@ export const testWorkflow = createWorkflow({
   }),
   outputSchema: z.object({
     output: z.string()
-  })
+  }),
+  options: {
+    // enables runtime validation of inputs and applies zod default values.
+    validateInputs: true, 
+  }
 })
   .then(step1)
   .commit();

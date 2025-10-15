@@ -5,7 +5,6 @@ const meta = {
   "runtime-context": "Runtime Context",
   "custom-api-routes": "Custom API Routes",
   storage: "Storage",
-  snapshots: "Snapshots",
   "mastra-client": "Mastra Client",
 };
 

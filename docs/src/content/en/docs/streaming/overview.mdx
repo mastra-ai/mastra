@@ -49,7 +49,7 @@ Here are some questions to consider:
 ...
 ```
 
-## Agent stream properties
+### Agent stream properties
 
 An agent stream provides access to various response properties:
 
@@ -76,6 +76,46 @@ const stream = await testAgent.stream(
 for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
 }
+```
+
+### Using `Agent.network()`
+
+The `network()` method enables multi-agent collaboration by executing a network loop where multiple agents can work together to handle complex tasks. The routing agent delegates tasks to appropriate sub-agents, workflows, and tools based on the conversation context.
+
+> **Note**: This method is experimental and requires memory to be configured on the agent.
+
+```typescript {3,5-7} showLineNumbers copy
+const testAgent = mastra.getAgent("testAgent");
+
+const networkStream = await testAgent.network("Help me organize my day");
+
+for await (const chunk of networkStream) {
+  console.log(chunk);
+}
+```
+
+> See [Agent.network()](../../reference/agents/network.mdx) for more information.
+
+#### Network stream properties
+
+The network stream provides access to execution information:
+
+- **`networkStream.status`**: Promise resolving to the workflow execution status
+- **`networkStream.result`**: Promise resolving to the complete execution results
+- **`networkStream.usage`**: Promise resolving to token usage information
+
+```typescript {9-11} showLineNumbers copy
+const testAgent = mastra.getAgent("testAgent");
+
+const networkStream = await testAgent.network("Research dolphins then write a report");
+
+for await (const chunk of networkStream) {
+  console.log(chunk);
+}
+
+console.log('Final status:', await networkStream.status);
+console.log('Final result:', await networkStream.result);
+console.log('Token usage:', await networkStream.usage);
 ```
 
 ## Streaming with workflows

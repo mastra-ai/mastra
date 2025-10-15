@@ -3,7 +3,7 @@
  * Gateways fetch provider configurations and build URLs for model access
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 
 export interface ProviderConfig {
   url?: string;

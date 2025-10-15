@@ -18,6 +18,7 @@
     "@ai-sdk/openai": "^2.0.44",
     "@mastra/core": "kitchen-sink-e2e-test",
     "@mastra/loggers": "kitchen-sink-e2e-test",
+    "@mastra/memory": "kitchen-sink-e2e-test",
     "zod": "^3.25.76"
   },
   "devDependencies": {

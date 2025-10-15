@@ -175,29 +175,33 @@ describe('ModelRouter Integration Tests', () => {
       expect(hasPirateWord).toBe(true);
     });
 
-    it('should support streaming', async () => {
-      if (!process.env[envVar]) {
-        throw new Error(`${envVar} not set - required for ${provider} integration tests`);
-      }
+    it(
+      'should support streaming',
+      async () => {
+        if (!process.env[envVar]) {
+          throw new Error(`${envVar} not set - required for ${provider} integration tests`);
+        }
 
-      const agent = new Agent({
-        name: 'test-agent',
-        instructions: 'You are a helpful assistant.',
-        model: modelId,
-      });
+        const agent = new Agent({
+          name: 'test-agent',
+          instructions: 'You are a helpful assistant.',
+          model: modelId,
+        });
 
-      const { textStream } = await agent.stream('Count from 1 to 3');
+        const { textStream } = await agent.stream('Count from 1 to 3');
 
-      const chunks: string[] = [];
-      for await (const chunk of textStream) {
-        chunks.push(chunk);
-      }
+        const chunks: string[] = [];
+        for await (const chunk of textStream) {
+          chunks.push(chunk);
+        }
 
-      expect(chunks.length).toBeGreaterThan(0);
-      const fullText = chunks.join('');
-      expect(fullText).toBeDefined();
-      expect(typeof fullText).toBe('string');
-    });
+        expect(chunks.length).toBeGreaterThan(0);
+        const fullText = chunks.join('');
+        expect(fullText).toBeDefined();
+        expect(typeof fullText).toBe('string');
+      },
+      { timeout: 30000 },
+    );
   });
 
   describe('Model ID Validation', () => {

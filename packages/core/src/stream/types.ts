@@ -1,3 +1,4 @@
+import type { LanguageModelV1LogProbs } from '@ai-sdk/provider';
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
@@ -6,11 +7,10 @@ import type {
   LanguageModelV2ResponseMetadata,
   LanguageModelV2,
   LanguageModelV2StreamPart,
-} from '@ai-sdk/provider';
-import type { LanguageModelV1LogProbs } from '@ai-sdk/provider-v4';
+} from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
-import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai';
-import type { FinishReason, LanguageModelRequestMetadata, TelemetrySettings } from 'ai-v4';
+import type { FinishReason, LanguageModelRequestMetadata, TelemetrySettings } from 'ai';
+import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';

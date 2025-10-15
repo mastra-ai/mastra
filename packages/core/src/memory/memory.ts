@@ -1,5 +1,5 @@
-import type { EmbeddingModelV2 } from '@ai-sdk/provider';
-import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai-v4';
+import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
+import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai';
 import { MessageList } from '../agent/message-list';
 import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
 import { MastraBase } from '../base';
@@ -42,7 +42,7 @@ export const memoryDefaultOptions = {
   lastMessages: 10,
   semanticRecall: false,
   threads: {
-    generateTitle: false,
+    generateTitle: true,
   },
   workingMemory: {
     enabled: false,
@@ -212,12 +212,6 @@ export abstract class MastraMemory extends MastraBase {
         mergedConfig.workingMemory.schema = config.workingMemory.schema;
       }
     }
-
-    if (!mergedConfig?.threads) {
-      mergedConfig.threads = {};
-    }
-
-    mergedConfig.threads.generateTitle = config?.threads?.generateTitle !== false;
 
     return mergedConfig;
   }

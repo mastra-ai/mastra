@@ -1,4 +1,4 @@
-import { openai } from '@ai-sdk/openai';
+import { openai } from '@ai-sdk/openai-v5';
 import { describe, it, expect } from 'vitest';
 import { RuntimeContext } from '../../runtime-context';
 import { resolveModelConfig } from './resolve-model';
