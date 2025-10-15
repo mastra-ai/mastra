@@ -150,8 +150,8 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       const agent = new Agent({
-        id: 'issue-7287-agent',
-        name: 'Issue 7287 Agent',
+        id: 'tool-call-agent',
+        name: 'Tool Call Agent',
         instructions: 'You help users with their queries',
         model: google('gemini-2.5-flash-lite'),
         tools: { testTool },
@@ -182,6 +182,19 @@ describe('Gemini Model Compatibility Tests', () => {
         },
         { role: 'user', content: 'What was that about?' },
       ]);
+
+      expect(result).toBeDefined();
+    });
+
+    it('should handle messages with only assistant role', async () => {
+      const agent = new Agent({
+        id: 'assistant-only-agent',
+        name: 'Assistant Only Agent',
+        instructions: 'You help users with their queries',
+        model: google('gemini-2.5-flash-lite'),
+      });
+
+      const result = await agent.generate([{ role: 'assistant', content: 'I can help you with that task.' }]);
 
       expect(result).toBeDefined();
     });
@@ -342,7 +355,7 @@ describe('Gemini Model Compatibility Tests', () => {
       expect(chunks).toBeDefined();
     }, 15000);
 
-    it('should handle messages starting with assistant-with-tool-call in network (Issue #7287)', async () => {
+    it('should handle messages starting with assistant-with-tool-call in network', async () => {
       const testTool = createTool({
         id: 'test-tool',
         description: 'A test tool',
@@ -352,8 +365,8 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       const agent = new Agent({
-        id: 'network-issue-7287-agent',
-        name: 'Network Issue 7287 Agent',
+        id: 'network-tool-call-agent',
+        name: 'Network Tool Call Agent',
         instructions: 'You help users understand tool results. Explain tool outputs clearly.',
         model: google('gemini-2.5-flash-lite'),
         tools: { testTool },
@@ -391,6 +404,87 @@ describe('Gemini Model Compatibility Tests', () => {
           maxSteps: 1,
         },
       );
+
+      const chunks: ChunkType[] = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks).toBeDefined();
+    }, 15000);
+
+    it('should handle network with workflow execution', async () => {
+      const researchAgent = new Agent({
+        name: 'research-agent',
+        instructions: 'You research topics and provide brief summaries.',
+        model: google('gemini-2.5-flash-lite'),
+      });
+
+      const researchStep = createStep({
+        id: 'research-step',
+        description: 'Research a topic',
+        inputSchema: z.object({ topic: z.string() }),
+        outputSchema: z.object({ summary: z.string() }),
+        execute: async ({ inputData }) => {
+          const resp = await researchAgent.generate(`Research: ${inputData.topic}`, {
+            output: z.object({ summary: z.string() }),
+          });
+          return { summary: resp.object.summary };
+        },
+      });
+
+      const researchWorkflow = createWorkflow({
+        id: 'research-workflow',
+        description: 'Workflow for researching topics',
+        steps: [],
+        inputSchema: z.object({ topic: z.string() }),
+        outputSchema: z.object({ summary: z.string() }),
+      })
+        .then(researchStep)
+        .commit();
+
+      const agent = new Agent({
+        id: 'network-workflow-agent',
+        name: 'Network Workflow Agent',
+        instructions: 'You coordinate research workflows.',
+        model: google('gemini-2.5-flash-lite'),
+        workflows: { researchWorkflow },
+        memory,
+      });
+
+      const stream = await agent.network('Execute research-workflow on machine learning', {
+        runtimeContext,
+        maxSteps: 2,
+      });
+
+      const chunks: ChunkType[] = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks).toBeDefined();
+    }, 20000);
+
+    it('should handle messages with only assistant role in network', async () => {
+      const helperAgent = new Agent({
+        name: 'helper-agent',
+        instructions: 'You help with tasks',
+        model: google('gemini-2.5-flash-lite'),
+      });
+
+      const agent = new Agent({
+        id: 'network-assistant-only-agent',
+        name: 'Network Assistant Only Agent',
+        instructions: 'You coordinate tasks',
+        model: google('gemini-2.5-flash-lite'),
+        agents: { helperAgent },
+        memory,
+      });
+
+      const stream = await agent.network([{ role: 'assistant', content: 'I can help coordinate this task.' }], {
+        runtimeContext,
+        maxSteps: 1,
+      });
 
       const chunks: ChunkType[] = [];
       for await (const chunk of stream) {
