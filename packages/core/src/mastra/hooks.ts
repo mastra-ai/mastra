@@ -40,27 +40,35 @@ export function createOnScorerHook(mastra: Mastra) {
         output,
       });
 
+      let spanId;
+      let traceId;
+      const currentSpan = hookData.tracingContext?.currentSpan;
+      if (currentSpan && currentSpan.isValid) {
+        spanId = currentSpan.id;
+        traceId = currentSpan.traceId;
+      }
+
       const payload = {
         ...rest,
         ...runResult,
         entityId,
         scorerId: hookData.scorer.name,
+        spanId,
+        traceId,
         metadata: {
           structuredOutput: !!structuredOutput,
         },
       };
-
       await validateAndSaveScore(storage, payload);
 
-      const currentSpan = hookData.tracingContext?.currentSpan;
-      if (currentSpan && currentSpan.isValid) {
+      if (currentSpan && spanId && traceId) {
         await pMap(
           currentSpan.aiTracing.getExporters(),
           async exporter => {
             if (exporter.addScoreToTrace) {
               await exporter.addScoreToTrace({
-                traceId: currentSpan.traceId,
-                spanId: currentSpan.id,
+                traceId: traceId,
+                spanId: spanId,
                 score: runResult.score,
                 reason: runResult.reason,
                 scorerName: scorerToUse.scorer.name,
