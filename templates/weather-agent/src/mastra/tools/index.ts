@@ -8,7 +8,7 @@ interface GeocodingResponse {
     name: string;
   }[];
 }
-interface WeatherResponse {
+interface CombinedWeatherResponse {
   current: {
     time: string;
     temperature_2m: number;
@@ -18,22 +18,41 @@ interface WeatherResponse {
     wind_gusts_10m: number;
     weather_code: number;
   };
+  daily: {
+    time: string[];
+    temperature_2m_max: number[];
+    temperature_2m_min: number[];
+    precipitation_probability_mean: number[];
+    weathercode: number[];
+  };
 }
 
 export const weatherTool = createTool({
   id: 'get-weather',
-  description: 'Get current weather for a location',
+  description: 'Get current weather and daily forecast for a location',
   inputSchema: z.object({
     location: z.string().describe('City name'),
   }),
   outputSchema: z.object({
-    temperature: z.number(),
-    feelsLike: z.number(),
-    humidity: z.number(),
-    windSpeed: z.number(),
-    windGust: z.number(),
-    conditions: z.string(),
-    location: z.string(),
+    current: z.object({
+      temperature: z.number(),
+      feelsLike: z.number(),
+      humidity: z.number(),
+      windSpeed: z.number(),
+      windGust: z.number(),
+      conditions: z.string(),
+      location: z.string(),
+    }),
+    forecast: z.array(
+      z.object({
+        date: z.string(),
+        maxTemp: z.number(),
+        minTemp: z.number(),
+        precipitationChance: z.number(),
+        condition: z.string(),
+        location: z.string(),
+      }),
+    ),
   }),
   execute: async ({ context }) => {
     return await getWeather(context.location);
@@ -51,19 +70,31 @@ const getWeather = async (location: string) => {
 
   const { latitude, longitude, name } = geocodingData.results[0];
 
-  const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code`;
+  const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_mean,weathercode&timezone=auto`;
 
   const response = await fetch(weatherUrl);
-  const data: WeatherResponse = await response.json();
+  const data: CombinedWeatherResponse = await response.json();
+
+  const forecast = data.daily.time.map((date: string, index: number) => ({
+    date,
+    maxTemp: data.daily.temperature_2m_max[index],
+    minTemp: data.daily.temperature_2m_min[index],
+    precipitationChance: data.daily.precipitation_probability_mean[index],
+    condition: getWeatherCondition(data.daily.weathercode[index]),
+    location: name,
+  }));
 
   return {
-    temperature: data.current.temperature_2m,
-    feelsLike: data.current.apparent_temperature,
-    humidity: data.current.relative_humidity_2m,
-    windSpeed: data.current.wind_speed_10m,
-    windGust: data.current.wind_gusts_10m,
-    conditions: getWeatherCondition(data.current.weather_code),
-    location: name,
+    current: {
+      temperature: data.current.temperature_2m,
+      feelsLike: data.current.apparent_temperature,
+      humidity: data.current.relative_humidity_2m,
+      windSpeed: data.current.wind_speed_10m,
+      windGust: data.current.wind_gusts_10m,
+      conditions: getWeatherCondition(data.current.weather_code),
+      location: name,
+    },
+    forecast,
   };
 };
 

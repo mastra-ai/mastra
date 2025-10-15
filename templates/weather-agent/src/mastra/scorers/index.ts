@@ -11,7 +11,7 @@ export const promptAlignmentScorer = createPromptAlignmentScorerLLM({
 });
 
 export const toolCallAppropriatenessScorer = createToolCallAccuracyScorerCode({
-  expectedTool: 'weather-tool',
+  expectedTool: 'weatherTool',
   strictMode: false,
 });
 

@@ -60,17 +60,17 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
   content = content.replace(/\n?import\s*\{\s*openai\s*\}\s*from\s*['"]@ai-sdk\/openai['"];?\n?/g, '\n');
   content = content.replace(/\n?import\s*\{\s*anthropic\s*\}\s*from\s*['"]@ai-sdk\/anthropic['"];?\n?/g, '\n');
 
-  // Keep scorers import and property (we will generate scorers file separately)
-
-  // Tools: adjust import path or remove if not requested
   if (addExampleTool) {
-    // Ensure import points to the specific file we create
     content = content.replace(/from\s*['"]\.\.\/tools['"]/g, "from '../tools/weather-tool'");
   } else {
     // Remove weatherTool import and tools property
     content = content.replace(/\n?import\s*\{\s*weatherTool\s*\}\s*from\s*['"][^'"]+['"];?\n?/g, '\n');
     content = content.replace(/\n\s*tools:\s*\{\s*weatherTool\s*\}\s*,?/g, '\n');
   }
+
+  // Remove any workflow import/property from agent (agent no longer configures workflows)
+  content = content.replace(/\n?import\s*\{\s*weatherWorkflow\s*\}\s*from\s*['"][^'"]+['"];?\n?/g, '\n');
+  content = content.replace(/\n\s*workflows:\s*\{\s*weatherWorkflow\s*\}\s*,?/g, '\n');
 
   // Replace model array/object with single model string identifier
   // Replace arrays like: model: [ ... ],
@@ -84,28 +84,12 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
 }
 
 export async function writeWorkflowSample(destPath: string) {
-  // Start from template then transform to use the initialized agent via mastra
+  // Start from template then transform import paths to generated files
   let content = await readWeatherTemplateFile('workflows/index.ts');
 
-  // Remove ai sdk openai import and Agent import
-  content = content.replace(/\n?import\s*\{\s*openai\s*\}\s*from\s*['"]@ai-sdk\/openai['"];?\n?/g, '\n');
-  content = content.replace(/\n?import\s*\{\s*Agent\s*\}\s*from\s*['"]@mastra\/core\/agent['"];?\n?/g, '\n');
-
-  // Remove inline agent definition
-  content = content.replace(/\n?const\s+agent\s*=\s*new\s+Agent\s*\([\s\S]*?\);\n?/m, '\n');
-
-  // Ensure we get the agent from mastra in the plan-activities step
-  // Update execute signature to include mastra
-  content = content.replace(
-    /execute:\s*async\s*\(\{\s*inputData\s*\}\)\s*=>\s*\{/m,
-    'execute: async ({ inputData, mastra }) => {',
-  );
-
-  // Insert agent retrieval before streaming
-  content = content.replace(
-    /const\s+response\s*=\s*await\s+agent\.stream\(/m,
-    "const agent = mastra?.getAgent('weatherAgent');\n    if (!agent) {\n      throw new Error('Weather agent not found');\n    }\n    const response = await agent.stream(",
-  );
+  // Point imports to specific files we generate
+  content = content.replace(/from\s*['"]\.\.\/agents['"]/g, "from '../agents/weather-agent'");
+  content = content.replace(/from\s*['"]\.\.\/tools['"]/g, "from '../tools/weather-tool'");
 
   const formattedContent = await formatTypescript(content);
   await fs.writeFile(destPath, formattedContent);

@@ -49,11 +49,11 @@ export const init = async ({
     ]);
 
     if (addExample) {
-      await Promise.all(
-        components.map(component =>
+      await Promise.all([
+        ...components.map(component =>
           writeCodeSample(dirPath, component as Components, llmProvider, components as Components[]),
         ),
-      );
+      ]);
 
       const depService = new DepsService();
       const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
