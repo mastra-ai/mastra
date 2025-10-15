@@ -7,8 +7,8 @@ import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
-import { stepCountIs } from 'ai';
-import type { Schema, ModelMessage, ToolSet } from 'ai';
+import { stepCountIs } from 'ai-v5';
+import type { Schema, ModelMessage, ToolSet } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives } from '../../action';

@@ -1,5 +1,5 @@
-import type * as AIV5 from 'ai';
-import type * as AIV4 from 'ai-v4';
+import type * as AIV4 from 'ai';
+import type * as AIV5 from 'ai-v5';
 import { MessageList } from '../index';
 import type { MastraMessageV2, UIMessageWithMetadata, MessageListInput } from '../index';
 
