@@ -42,6 +42,8 @@ const addLetterCStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { text } = inputData;
+    // Make sure it runs after the other branch
+    await new Promise(resolve => setTimeout(resolve, 100));
     return { text: text + 'C' };
   },
 });
