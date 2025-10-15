@@ -11,7 +11,13 @@ import { ArrowUp, Square, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import React, { useState } from "react";
 import { useStickToBottom } from "use-stick-to-bottom";
 
-export function KapaChat({ className, close }: { className?: string, close: () => void }) {
+export function KapaChat({
+  className,
+  close,
+}: {
+  className?: string;
+  close: () => void;
+}) {
   const {
     conversation,
     submitQuery,
