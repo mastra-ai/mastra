@@ -247,8 +247,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     afterAll(async () => {
       if (proc) {
         try {
-          setImmediate(() => controller.abort());
-          await proc;
+          proc.kill('SIGKILL');
         } catch (err) {
           // @ts-expect-error - isCanceled is not typed
           if (!err.isCanceled) {
