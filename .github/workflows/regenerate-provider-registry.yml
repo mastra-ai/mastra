@@ -77,15 +77,19 @@ jobs:
       - name: Generate provider registry
         run: pnpm --filter @mastra/core generate:providers
 
+      - name: Generate model documentation
+        run: pnpx tsx packages/core/scripts/generate-model-docs.ts
+
       - name: Format generated files with Prettier
         run: |
           pnpm prettier --write packages/core/src/llm/model/provider-registry.json
           pnpm prettier --write packages/core/src/llm/model/provider-types.generated.d.ts
+          pnpm prettier --write docs/src/content/en/models/**/*.{mdx,ts}
 
       - name: Check for changes
         id: git-check
         run: |
-          git diff --exit-code packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts || echo "changed=true" >> $GITHUB_OUTPUT
+          git diff --exit-code packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts docs/src/content/en/models/ || echo "changed=true" >> $GITHUB_OUTPUT
 
       - name: Create changeset
         if: steps.git-check.outputs.changed == 'true'
@@ -100,7 +104,7 @@ jobs:
           '@mastra/core': patch
           ---
 
-          Update provider registry with latest models and providers
+          Update provider registry and model documentation with latest models and providers
           EOF
 
           echo "Created changeset: ${CHANGESET_FILE}"
@@ -111,15 +115,16 @@ jobs:
         run: |
           git add packages/core/src/llm/model/provider-registry.json
           git add packages/core/src/llm/model/provider-types.generated.d.ts
+          git add docs/src/content/en/models/
           git add "${CHANGESET_FILE}"
-          git commit -m "chore: regenerate provider registry [skip ci]"
+          git commit -m "chore: regenerate provider registry and model documentation [skip ci]"
           git pull --rebase
           git push
 
       - name: Log summary
         if: steps.git-check.outputs.changed == 'true'
-        run: echo "✅ Provider registry updated with changeset and committed to main"
+        run: echo "✅ Provider registry and model documentation updated with changeset and committed to main"
 
       - name: Log no changes
         if: steps.git-check.outputs.changed != 'true'
-        run: echo "ℹ️ No changes detected in provider registry"
+        run: echo "ℹ️ No changes detected in provider registry or model documentation"
