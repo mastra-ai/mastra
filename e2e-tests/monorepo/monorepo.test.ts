@@ -210,30 +210,38 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const inputFile = join(fixturePath, 'apps', 'custom');
 
       console.log('started proc', port);
-
-      await new Promise<void>((resolve, reject) => {
-        proc = execa('npm', ['run', 'start'], {
-          cwd: inputFile,
-          cancelSignal,
-          gracefulCancel: true,
-          env: {
-            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-            MASTRA_PORT: port.toString(),
-          },
-        });
-
-        activeProcesses.push({ controller, proc });
-
-        proc.stderr?.on('data', data => {
-          reject(new Error('failed to start: ' + data?.toString()));
-        });
-        proc.stdout?.on('data', data => {
-          console.log(data?.toString());
-          if (data?.toString()?.includes(`http://localhost:${port}`)) {
-            resolve();
-          }
-        });
+      proc = execa('npm', ['run', 'start'], {
+        cwd: inputFile,
+        cancelSignal,
+        gracefulCancel: true,
+        env: {
+          OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+          MASTRA_PORT: port.toString(),
+        },
       });
+
+      activeProcesses.push({ controller, proc });
+
+      // Poll the server until it's ready
+      const maxAttempts = 60;
+      const delayMs = 1000;
+      for (let i = 0; i < maxAttempts; i++) {
+        try {
+          const res = await fetch(`http://localhost:${port}/api/tools`);
+          if (res.ok) {
+            console.log('Server is ready');
+            break;
+          }
+        } catch {
+          // Server not ready yet
+        }
+
+        if (i === maxAttempts - 1) {
+          throw new Error('Server failed to start within timeout');
+        }
+
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
     }, timeout);
 
     afterAll(async () => {
