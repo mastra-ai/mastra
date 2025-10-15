@@ -97,7 +97,7 @@ export const FloatingChatWidget = ({
 
               {/* Chat content */}
               <div className="w-full">
-                <KapaChat />
+                <KapaChat close={close} />
               </div>
             </DialogPanel>
           </div>

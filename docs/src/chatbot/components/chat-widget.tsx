@@ -11,7 +11,7 @@ import { ArrowUp, Square, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import React, { useState } from "react";
 import { useStickToBottom } from "use-stick-to-bottom";
 
-export function KapaChat({ className }: { className?: string }) {
+export function KapaChat({ className, close }: { className?: string, close: () => void }) {
   const {
     conversation,
     submitQuery,
@@ -57,7 +57,7 @@ export function KapaChat({ className }: { className?: string }) {
       <div className="flex absolute top-0 right-0 left-0 z-20 justify-between px-5 py-3 w-full border-b backdrop-blur-md dark:border-neutral-700 dark:bg-surface-6">
         <span className="dark:text-icons-5">Ask mastra ai</span>
         <Button
-          onClick={close}
+          onClick={() => close()}
           variant="ghost"
           size="sm"
           className="self-end p-0 w-8 h-8 cursor-pointer"
