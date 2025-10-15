@@ -113,6 +113,10 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
             value: result.data as InferSchemaOutput<OUTPUT>,
           };
         } else {
+          // Extract the generated value and validation errors for retry context
+          const generatedValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+          const validationErrors = z4.prettifyError(result.error);
+
           return {
             success: false,
             error: new MastraError(
@@ -120,9 +124,12 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
                 domain: ErrorDomain.AGENT,
                 category: ErrorCategory.SYSTEM,
                 id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
-                text: `Structured output validation failed\n${z4.prettifyError(result.error)}\n`,
+                text: `Structured output validation failed\n${validationErrors}\n\nGenerated value:\n${generatedValue}\n\nTo fix this, ensure all required fields are present with correct types. Consider retrying with more specific instructions.`,
                 details: {
-                  value: typeof value === 'object' ? JSON.stringify(value) : String(value),
+                  value: generatedValue,
+                  validationErrors,
+                  retryHint:
+                    'Include the validation errors in your next prompt to help the model understand what needs to be fixed.',
                 },
               },
               result.error,
@@ -508,6 +515,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
   let previousObject: any = undefined;
   let finishReason: string | undefined;
   let currentRunId: string | undefined;
+  let validationRetryCount = 0;
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
@@ -591,14 +599,45 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
           return;
         }
 
-        controller.enqueue({
-          from: ChunkFrom.AGENT,
-          runId: currentRunId ?? '',
-          type: 'error',
-          payload: {
-            error: finalResult.error,
-          },
-        });
+        // Check if we should retry validation
+        const shouldRetry =
+          structuredOutput?.retryOnValidationError !== false && // Default to true
+          validationRetryCount < (structuredOutput?.maxValidationRetries ?? 1);
+
+        if (shouldRetry) {
+          // Emit validation-retry chunk for the workflow to handle
+          const errorMessage = finalResult.error.message || '';
+          const validationErrors = errorMessage
+            .split('\n')
+            .filter(line => line.startsWith('✖'))
+            .join('\n');
+          const generatedValue = (finalResult.error as any)?.details?.value || JSON.stringify(accumulatedText);
+
+          controller.enqueue({
+            from: ChunkFrom.AGENT,
+            runId: currentRunId ?? '',
+            type: 'validation-retry',
+            payload: {
+              error: finalResult.error,
+              validationErrors,
+              generatedValue,
+              retryCount: validationRetryCount,
+              maxRetries: structuredOutput?.maxValidationRetries ?? 1,
+              accumulatedText,
+            },
+          });
+          validationRetryCount++;
+        } else {
+          // Max retries reached or retry disabled - emit error chunk
+          controller.enqueue({
+            from: ChunkFrom.AGENT,
+            runId: currentRunId ?? '',
+            type: 'error',
+            payload: {
+              error: finalResult.error,
+            },
+          });
+        }
         return;
       }
 

@@ -197,6 +197,15 @@ interface ErrorPayload {
   [key: string]: unknown;
 }
 
+interface ValidationRetryPayload {
+  error: unknown;
+  validationErrors: string;
+  generatedValue: string;
+  retryCount: number;
+  maxRetries: number;
+  accumulatedText: string;
+}
+
 interface RawPayload {
   [key: string]: unknown;
 }
@@ -483,6 +492,7 @@ export type TypedChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'tool-call-input-streaming-end'; payload: ToolCallInputStreamingEndPayload })
   | (BaseChunkType & { type: 'finish'; payload: FinishPayload })
   | (BaseChunkType & { type: 'error'; payload: ErrorPayload })
+  | (BaseChunkType & { type: 'validation-retry'; payload: ValidationRetryPayload })
   | (BaseChunkType & { type: 'raw'; payload: RawPayload })
   | (BaseChunkType & { type: 'start'; payload: StartPayload })
   | (BaseChunkType & { type: 'step-start'; payload: StepStartPayload })

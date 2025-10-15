@@ -1,7 +1,7 @@
 import type { ReadableStream } from 'stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider-v5';
-import type { ToolSet } from 'ai-v5';
+import type { StepResult, ToolSet } from 'ai-v5';
 import { MessageList } from '../../../agent/message-list';
 import { safeParseErrorObject } from '../../../error/utils.js';
 import { execute } from '../../../stream/aisdk/v5/execute';
@@ -53,6 +53,24 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
 }: ProcessOutputStreamOptions<OUTPUT>) {
   for await (const chunk of outputStream._getBaseStream()) {
     if (!chunk) {
+      continue;
+    }
+
+    if ('type' in chunk && chunk.type === 'validation-retry') {
+      // Pass through the validation-retry chunk and mark for retry
+      runState.setState({
+        stepResult: {
+          reason: 'other',
+          isContinued: true,
+          warnings: responseFromModel.warnings,
+          totalUsage: (chunk as any).payload.totalUsage,
+          headers: responseFromModel.rawResponse?.headers,
+          messageId,
+          request: responseFromModel.request,
+        },
+        validationRetry: (chunk as any).payload,
+      });
+      controller.enqueue(chunk);
       continue;
     }
 
@@ -302,19 +320,39 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         break;
 
       case 'finish':
+        // Don't overwrite isContinued if validation-retry already set it
+        const currentStepResult = runState.state.stepResult;
+        const shouldPreserveIsContinued = runState.state.validationRetry && currentStepResult?.isContinued === true;
+
+        // Debug logging to understand the finish chunk structure
+        console.log('[FINISH CHUNK DEBUG] Received finish chunk:');
+        console.log('  chunk.payload keys:', Object.keys(chunk.payload));
+        console.log('  chunk.payload.stepResult:', chunk.payload.stepResult);
+        console.log('  chunk.payload.output:', chunk.payload.output);
+        console.log('  currentStepResult:', currentStepResult);
+        console.log('  shouldPreserveIsContinued:', shouldPreserveIsContinued);
+        console.log('  validationRetry present:', !!runState.state.validationRetry);
+
         runState.setState({
           providerOptions: chunk.payload.metadata.providerMetadata,
           stepResult: {
-            reason: chunk.payload.reason,
-            logprobs: chunk.payload.logprobs,
+            reason: chunk.payload.stepResult.reason,
+            logprobs: chunk.payload.stepResult.logprobs,
             warnings: responseFromModel.warnings,
-            totalUsage: chunk.payload.totalUsage,
+            totalUsage: chunk.payload.output.usage,
             headers: responseFromModel.rawResponse?.headers,
             messageId,
-            isContinued: !['stop', 'error'].includes(chunk.payload.stepResult.reason),
+            isContinued: shouldPreserveIsContinued
+              ? true
+              : !['stop', 'error'].includes(chunk.payload.stepResult.reason),
             request: responseFromModel.request,
           },
         });
+
+        // Log the state after setting it
+        console.log('[FINISH CHUNK DEBUG] After setState:');
+        console.log('  stepResult.isContinued:', runState.state.stepResult?.isContinued);
+        console.log('  stepResult.reason:', runState.state.stepResult?.reason);
         break;
 
       case 'error':
@@ -471,6 +509,34 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               supportedUrls: model?.supportedUrls as Record<string, RegExp[]>,
             };
             let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+
+            // If there's a validation retry from the previous iteration, add it to the messages
+            if (inputData.output?.validationRetry) {
+              const retryInfo = inputData.output.validationRetry as {
+                error: unknown;
+                validationErrors: string;
+                generatedValue: string;
+                retryCount: number;
+                maxRetries: number;
+                accumulatedText: string;
+              };
+
+              // Add a user message with the validation error context
+              messageList.add(
+                {
+                  id: _internal?.generateId?.(),
+                  role: 'user',
+                  content: `The previous response failed validation with the following errors:\n
+${retryInfo.validationErrors}\n
+Generated value that failed:\n${retryInfo.generatedValue}\n
+Please try again and ensure your response matches the required schema format.`,
+                },
+                'input',
+              );
+
+              // Re-fetch the messages with the added validation error
+              inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+            }
 
             // Call prepareStep callback if provided
             let stepModel = model;
@@ -728,8 +794,29 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
       const responseMetadata = runState.state.responseMetadata;
       const text = outputStream._getImmediateText();
       const object = outputStream._getImmediateObject();
+      const validationRetry = runState.state.validationRetry;
       // Check if tripwire was triggered
       const tripwireTriggered = outputStream.tripwire;
+
+      // Use isContinued from state if it's been explicitly set (e.g., by validation-retry)
+      const isContinuedFromState = runState.state.stepResult?.isContinued;
+
+      // Debug log to see if validation retry is set
+      if (validationRetry) {
+        console.log('[DEBUG] validationRetry is set:', validationRetry);
+        console.log('[DEBUG] stepResult from state:', runState.state.stepResult);
+        console.log('[DEBUG] isContinuedFromState:', isContinuedFromState);
+        console.log('[DEBUG] finishReason:', finishReason);
+        console.log('[DEBUG] tripwireTriggered:', tripwireTriggered);
+        console.log(
+          '[DEBUG] Final isContinued value:',
+          tripwireTriggered
+            ? false
+            : isContinuedFromState !== undefined
+              ? isContinuedFromState
+              : !['stop', 'error'].includes(finishReason),
+        );
+      }
 
       const steps = inputData.output?.steps || [];
 
@@ -764,7 +851,11 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
         stepResult: {
           reason: tripwireTriggered ? 'abort' : hasErrored ? 'error' : finishReason,
           warnings,
-          isContinued: tripwireTriggered ? false : !['stop', 'error'].includes(finishReason),
+          isContinued: tripwireTriggered
+            ? false
+            : isContinuedFromState !== undefined
+              ? isContinuedFromState
+              : !['stop', 'error'].includes(finishReason),
         },
         metadata: {
           providerMetadata: runState.state.providerOptions,
@@ -780,6 +871,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
           usage: usage ?? inputData.output?.usage,
           steps,
           ...(object ? { object } : {}),
+          ...(validationRetry ? { validationRetry } : {}),
         },
         messages,
       };

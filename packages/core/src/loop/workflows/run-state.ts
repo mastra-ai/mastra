@@ -16,6 +16,14 @@ type State = {
   isReasoning: boolean;
   isStreaming: boolean;
   providerOptions: Record<string, any> | undefined;
+  validationRetry?: {
+    error: unknown;
+    validationErrors: string;
+    generatedValue: string;
+    retryCount: number;
+    maxRetries: number;
+    accumulatedText: string;
+  };
 };
 
 export class AgenticRunState {

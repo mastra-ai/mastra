@@ -123,8 +123,21 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         hasFinishedSteps = hasStopped;
       }
 
+      // Debug logging to understand the flow
+      if (typedInputData.output?.validationRetry) {
+        console.log('[AGENTIC-LOOP DEBUG] Before modification:');
+        console.log('  isContinued:', typedInputData.stepResult?.isContinued);
+        console.log('  hasFinishedSteps:', hasFinishedSteps);
+        console.log('  validationRetry present:', !!typedInputData.output?.validationRetry);
+      }
+
       if (typedInputData.stepResult) {
         typedInputData.stepResult.isContinued = hasFinishedSteps ? false : typedInputData.stepResult.isContinued;
+      }
+
+      if (typedInputData.output?.validationRetry) {
+        console.log('[AGENTIC-LOOP DEBUG] After modification:');
+        console.log('  isContinued:', typedInputData.stepResult?.isContinued);
       }
 
       if (typedInputData.stepResult?.reason !== 'abort') {
@@ -166,7 +179,18 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         return false;
       }
 
-      return typedInputData.stepResult?.isContinued ?? false;
+      // Check if we should continue - either due to isContinued or validation retry
+      const hasContinuation = typedInputData.stepResult?.isContinued ?? false;
+      const hasValidationRetry = !!typedInputData.output?.validationRetry;
+
+      const shouldContinue = hasContinuation || hasValidationRetry;
+
+      if (typedInputData.output?.validationRetry) {
+        console.log('[AGENTIC-LOOP DEBUG] dowhile return value:', shouldContinue);
+        console.log('  hasContinuation:', hasContinuation);
+        console.log('  hasValidationRetry:', hasValidationRetry);
+      }
+      return shouldContinue;
     })
     .commit();
 }
