@@ -1,11 +1,11 @@
 ---
-title: "Handling Complex LLM Operations | Networks | Mastra"
-description: "Networks in Mastra help you execute individual or multiple Mastra primitives in a non-deterministic way using a single API."
+title: "Agent Networks | Agents | Mastra Docs"
+description: Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
 ---
 
-# Networks
+# Agent Networks
 
-Networks coordinate multiple agents, workflows, and tools to handle tasks that aren't clearly defined upfront but can be inferred from the user's message or context. A top-level **routing agent** uses an LLM to interpret the request and decide which primitives to call, in what order, and with what data.
+Agent networks in Mastra coordinate multiple agents, workflows, and tools to handle tasks that aren't clearly defined upfront but can be inferred from the user's message or context. A top-level **routing agent** (a Mastra agent with other agents, workflows, and tools configured) uses an LLM to interpret the request and decide which primitives (sub-agents, workflows, or tools) to call, in what order, and with what data.
 
 ## When to use networks
 
@@ -13,14 +13,16 @@ Use networks for complex tasks that require coordination across multiple primiti
 
 ## Core principles
 
+Mastra agent networks operate using these principles:
+
 - Memory is required when using `.network()` and is used to store task history and determine when a task is complete.
-- Primitives are selected based on their descriptions. Clear, specific descriptions improve routing. For workflows, the input schema helps determine the right inputs at runtime.
+- Primitives are selected based on their descriptions. Clear, specific descriptions improve routing. For workflows and tools, the input schema helps determine the right inputs at runtime.
 - If multiple primitives have overlapping functionality, the agent favors the more specific one, using a combination of schema and descriptions to decide which to run.
 
 
 ## Creating an agent network
 
-An agent network is built around a top-level routing agent that delegates tasks to agents, workflows, and tools defined in its configuration. Memory is set using the `memory` option, and `instructions` define its role and behavior.
+An agent network is built around a top-level routing agent that delegates tasks to agents, workflows, and tools defined in its configuration. Memory is configured on the routing agent using the `memory` option, and `instructions` define the agent's routing behavior.
 
 ```typescript {22-23,26,29} filename="src/mastra/agents/routing-agent.ts" showLineNumbers copy
   import { openai } from "@ai-sdk/openai";
@@ -61,13 +63,13 @@ An agent network is built around a top-level routing agent that delegates tasks 
   });
   ```
 
-### Descriptions and schema
+### Writing descriptions for network primitives
 
-The routing agent uses each primitive’s description and schema to decide what it does and how to use it. Clear descriptions and well-defined input and output schemas improve routing and primitive selection.
+When configuring a Mastra agent network, each primitive (agent, workflow, or tool) needs a clear description to help the routing agent decide which to use. The routing agent uses each primitive's description and schema to determine what it does and how to use it. Clear descriptions and well-defined input and output schemas improve routing accuracy.
 
-#### Agents
+#### Agent descriptions
 
-Each agent should include a clear `description` that explains what the agent does.
+Each agent in a network should include a clear `description` that explains what the agent does.
 
 ```typescript filename="src/mastra/agents/research-agent.ts" showLineNumbers
 export const researchAgent = new Agent({
@@ -87,9 +89,10 @@ export const writingAgent = new Agent({
   // ...
 });
 ```
-#### Workflows
 
-Workflows should include a `description` to explain their purpose, along with `inputSchema` and `outputSchema` to describe the expected data.
+#### Workflow descriptions
+
+Workflows in a network should include a `description` to explain their purpose, along with `inputSchema` and `outputSchema` to describe the expected data.
 
 ```typescript filename="src/mastra/workflows/city-workflow.ts" showLineNumbers
 export const cityWorkflow = createWorkflow({
@@ -108,9 +111,9 @@ export const cityWorkflow = createWorkflow({
 })
 ```
 
-#### Tools
+#### Tool descriptions
 
-Tools should include a `description` to explain their purpose, along with `inputSchema` and `outputSchema` to describe the expected data.
+Tools in a network should include a `description` to explain their purpose, along with `inputSchema` and `outputSchema` to describe the expected data.
 
 ```typescript filename="src/mastra/tools/weather-tool.ts" showLineNumbers
 export const weatherTool = createTool({
@@ -129,9 +132,9 @@ export const weatherTool = createTool({
 });
 ```
 
-## Generating responses
+## Calling agent networks
 
-Call an agent network using `.network()` and pass a user message as input to stream the result.
+Call a Mastra agent network using `.network()` with a user message. The method returns a stream of events that you can iterate over to track execution progress and retrieve the final result.
 
 ### Agent example
 
