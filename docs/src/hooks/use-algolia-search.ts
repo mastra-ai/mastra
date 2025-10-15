@@ -334,13 +334,16 @@ export function useAlgoliaSearch(
 
                 // If we have multiple levels, format as "h1: h2" or "h1: h3" (showing first and last)
                 if (highlightedLevels.length > 1) {
-                  return stripColon(`${highlightedLevels[0]}: ${highlightedLevels[highlightedLevels.length - 1]}`);
+                  return stripColon(
+                    `${highlightedLevels[0]}: ${highlightedLevels[highlightedLevels.length - 1]}`,
+                  );
                 } else if (highlightedLevels.length === 1) {
                   return stripColon(highlightedLevels[0]);
                 } else if (typedHit.hierarchy?.lvl0) {
                   return (
-                    stripColon(typedHit._highlightResult?.hierarchy?.lvl0?.value || "") ||
-                    stripColon(typedHit.hierarchy.lvl0)
+                    stripColon(
+                      typedHit._highlightResult?.hierarchy?.lvl0?.value || "",
+                    ) || stripColon(typedHit.hierarchy.lvl0)
                   );
                 }
 
