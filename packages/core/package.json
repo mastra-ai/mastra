@@ -182,7 +182,7 @@
     "pre-build": "tsup --silent --config tsup.config.ts --no-dts",
     "build": "node ./tools/commonjs-tsc-fixer.js",
     "build:watch": "pnpm build --watch",
-    "generate:providers": "tsx scripts/generate-providers.ts",
+    "generate:providers": "pnpx tsx scripts/generate-providers.ts",
     "test:unit": "vitest run --exclude '**/tool-builder/**'",
     "test:types:zod": "node test-zod-compat.mjs",
     "test": "npm run test:types:zod && npm run test:unit"
