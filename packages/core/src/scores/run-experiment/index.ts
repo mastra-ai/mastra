@@ -2,7 +2,6 @@ import type { CoreMessage } from 'ai';
 import type { Agent, AiMessageType, UIMessageWithMetadata } from '../../agent';
 import type { TracingContext } from '../../ai-tracing';
 import { MastraError } from '../../error';
-import type { CoreMessage } from '../../llm';
 import type { RuntimeContext } from '../../runtime-context';
 import { Workflow } from '../../workflows';
 import type { WorkflowResult, StepResult } from '../../workflows';
