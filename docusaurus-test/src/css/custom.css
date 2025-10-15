@@ -632,23 +632,12 @@ div[class*="codeBlockLines"] {
 
 /* ==================== FOOTER ==================== */
 .footer {
-  background-color: #050505;
-  border-top: 0.5px solid var(--mastra-border);
+  background-color: var(--ifm-navbar-background-color);
+  border-top: 0.5px solid var(--border);
   color: var(--mastra-text-secondary);
   padding: 2rem 0;
 }
 
-.footer__title {
-  color: var(--mastra-text-primary);
-  font-weight: 600;
-  font-size: 0.875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.footer__item {
-  font-size: 0.875rem;
-}
 
 .footer__link-item {
   color: var(--mastra-text-tertiary);
@@ -656,14 +645,13 @@ div[class*="codeBlockLines"] {
 }
 
 .footer__link-item:hover {
-  color: var(--mastra-green-accent);
+  color: var(--mastra-text-primary);
   text-decoration: none;
 }
 
 .footer__copyright {
-  color: var(--mastra-text-quaternary);
+  color: var(--mastra-text-tertiary);
   font-size: 0.8125rem;
-  margin-top: 2rem;
 }
 
 /* ==================== LINKS ==================== */

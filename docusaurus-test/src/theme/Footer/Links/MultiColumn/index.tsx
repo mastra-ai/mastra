@@ -16,7 +16,7 @@ function ColumnLinkItem({ item }: { item: ColumnItemType }) {
       dangerouslySetInnerHTML={{ __html: item.html }}
     />
   ) : (
-    <li key={item.href ?? item.to} className="footer__item">
+    <li key={item.href ?? item.to} className="text-sm [&_svg]:hidden">
       <LinkItem item={item} />
     </li>
   );
@@ -25,7 +25,7 @@ function ColumnLinkItem({ item }: { item: ColumnItemType }) {
 function Column({ column }: { column: ColumnType }) {
   return (
     <div className={clsx(ThemeClassNames.layout.footer.column, 'col footer__col', column.className)}>
-      <div className="footer__title">{column.title}</div>
+      <div className="mb-4  font-medium  text-sm capitalize">{column.title}</div>
       <ul className="footer__items clean-list">
         {column.items.map((item, i) => (
           <ColumnLinkItem key={i} item={item} />

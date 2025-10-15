@@ -14,7 +14,7 @@ export const Logo = () => {
       viewBox="0 0 114 34"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className="w-[5.5rem] md:w-[7.5rem] md:h-[2rem]"
+      className="w-[5.5rem] shrink-0 md:w-[7.5rem] md:h-[2rem]"
     >
       <circle cx="16.6532" cy="16.9999" r="14.0966" stroke="currentColor" strokeWidth="1.16026" />
       <ellipse
