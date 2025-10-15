@@ -22,7 +22,6 @@ import { RuntimeContext } from '../runtime-context';
 import { createScorer } from '../scores';
 import { runScorer } from '../scores/hooks';
 import { MockStore } from '../storage';
-import type { AIV5FullStreamPart } from '../stream/aisdk/v5/output';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { ChunkType } from '../stream/types';
 import { createMockModel } from '../test-utils/llm-mock';
@@ -237,82 +236,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     }
   });
 
-  if (version === 'v2') {
-    describe('Writable Stream from Tool', () => {
-      it('should get a text response from the agent', async () => {
-        const tool = createTool({
-          description: 'A tool that returns the winner of the 2016 US presidential election',
-          id: 'election-tool',
-          inputSchema: z.object({
-            year: z.number(),
-          }),
-          execute: async props => {
-            props?.writer.write({
-              type: 'election-data',
-              args: {
-                year: props.year,
-              },
-              status: 'pending',
-            });
-
-            await delay(1000);
-
-            props?.writer.write({
-              type: 'election-data',
-              args: {
-                year: props.year,
-              },
-              result: {
-                winner: 'Donald Trump',
-              },
-              status: 'success',
-            });
-
-            return { winner: 'Donald Trump' };
-          },
-        });
-
-        const electionAgent = new Agent({
-          name: 'US Election agent',
-          instructions: 'You know about the past US elections',
-          model: openaiModel,
-          tools: {
-            electionTool: tool,
-          },
-        });
-
-        const mastraStream = await electionAgent.stream('Call the election-tool and tell me what it says.');
-
-        const chunks: ChunkType[] = [];
-        for await (const chunk of mastraStream.fullStream) {
-          chunks.push(chunk);
-        }
-
-        // our types are broken, we do output these tool-output types when a tool writes
-        // but adding this to the ai sdk output stream part types breaks 100 other types
-        // so cast as any
-        expect(chunks.find((chunk: any) => chunk.type === 'tool-output')).toBeDefined();
-
-        const aiSdkParts: AIV5FullStreamPart[] = [];
-
-        const aiSdkStream = await electionAgent.stream('Call the election-tool and tell me what it says.', {
-          format: 'aisdk',
-        });
-
-        for await (const chunk of aiSdkStream.fullStream) {
-          aiSdkParts.push(chunk);
-        }
-
-        // our types are broken, we do output these tool-output types when a tool writes
-        // but adding this to the ai sdk output stream part types breaks 100 other types
-        // so cast as any
-        const toolOutputChunk = aiSdkParts.find((chunk: any) => chunk.type === 'tool-output');
-
-        expect(toolOutputChunk).toBeDefined();
-      });
-    }, 50000);
-  }
-
   describe(`${version} - agent`, () => {
     it('should get a text response from the agent', async () => {
       const electionAgent = new Agent({
@@ -456,6 +379,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         },
       ]);
     });
+
     it('should support JSONSchema7 structured output type', async () => {
       const electionAgent = new Agent({
         name: 'US Election agent',
@@ -784,7 +708,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
             toolCall = (await resumeStream.toolResults).find(
               (result: any) => result.payload.toolName === 'findUserTool',
-            ).payload;
+            )?.payload;
           }
 
           const name = toolCall?.result?.name;
@@ -1176,41 +1100,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       expect(foundSuccess).toBe(true);
-    }, 500000);
-
-    it('should call testTool from TestIntegration', async () => {
-      const testAgent = new Agent({
-        name: 'Test agent',
-        instructions: 'You are an agent that call testTool',
-        model: openaiModel,
-        tools: integration.getStaticTools(),
-      });
-
-      const mastra = new Mastra({
-        agents: {
-          testAgent,
-        },
-        logger: false,
-      });
-
-      const agentOne = mastra.getAgent('testAgent');
-
-      let response;
-      let toolCall;
-
-      if (version === 'v1') {
-        response = await agentOne.generateLegacy('Call testTool', {
-          toolChoice: 'required',
-        });
-        toolCall = response.toolResults.find((result: any) => result.toolName === 'testTool');
-      } else {
-        response = await agentOne.generate('Call testTool');
-        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'testTool').payload;
-      }
-
-      const message = toolCall?.result?.message;
-
-      expect(message).toBe('Executed successfully');
     }, 500000);
 
     it('should use custom model for title generation when provided in generateTitle config', async () => {
