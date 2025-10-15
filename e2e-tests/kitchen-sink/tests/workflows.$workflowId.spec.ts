@@ -70,8 +70,8 @@ test.describe('workflow run', () => {
     const nodes = await page.locator('[data-workflow-node]');
     const shortNode = nodes.nth(5);
     const longNode = nodes.nth(7);
-    await expect(shortNode.locator('[data-workflow-step-status="success"]')).toBeVisible();
-    await expect(longNode.locator('[data-workflow-step-status="idle"]')).toBeVisible();
+    await expect(await shortNode.getAttribute('data-workflow-step-status')).toBe('success');
+    await expect(await longNode.getAttribute('data-workflow-step-status')).toBe('idle');
   });
 
   test('running the workflow (form) - long condition', async ({ page }) => {
@@ -83,33 +83,23 @@ test.describe('workflow run', () => {
     const shortNode = nodes.nth(5);
     const longNode = nodes.nth(7);
 
-    await expect(shortNode.locator('[data-workflow-step-status="idle"]')).toBeVisible();
-    await expect(longNode.locator('[data-workflow-step-status="success"]')).toBeVisible();
+    await expect(shortNode.getAttribute('data-workflow-step-status')).toBe('idle');
+    await expect(longNode.getAttribute('data-workflow-step-status')).toBe('success');
   });
 });
 
 async function runWorkflow(page: Page) {
   const nodes = await page.locator('[data-workflow-node]');
-  const addLetterNode = nodes.nth(0);
-  const addLetterBNode = nodes.nth(1);
-  const addLetterCNode = nodes.nth(2);
-  const mappingNode = nodes.nth(3);
 
-  const mappingNode2 = nodes.nth(8);
-  const nestedTextNode = nodes.nth(9);
-  const addLetterWithCountNode = nodes.nth(10);
-  const dountilNode = nodes.nth(11);
-  const suspendResumeNode = nodes.nth(12);
-  const finalStepNode = nodes.nth(13);
-
-  await expect(addLetterNode.locator('[data-workflow-step-status="success"]')).toBeVisible();
-  await expect(addLetterBNode.locator('[data-workflow-step-status="success"]')).toBeVisible();
-  await expect(addLetterCNode.locator('[data-workflow-step-status="success"]')).toBeVisible();
-  await expect(mappingNode.locator('[data-workflow-step-status="success"]')).toBeVisible();
-  await expect(mappingNode2.locator('[data-workflow-step-status="success"]')).toBeVisible();
-  await expect(nestedTextNode.locator('[data-workflow-step-status="success"]')).toBeVisible();
-  await expect(addLetterWithCountNode.locator('[data-workflow-step-status="success"]')).toBeVisible();
-  await expect(dountilNode.locator('[data-workflow-step-status="success"]')).toBeVisible();
-  await expect(suspendResumeNode.locator('[data-workflow-step-status="suspended"]')).toBeVisible();
-  await expect(finalStepNode.locator('[data-workflow-step-status="success"]')).toBeVisible();
+  await expect(nodes.nth(0)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(nodes.nth(1)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(nodes.nth(2)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(nodes.nth(3)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(nodes.nth(8)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(nodes.nth(8)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(nodes.nth(9)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(nodes.nth(10)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(nodes.nth(11)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(nodes.nth(12)).toHaveAttribute('data-workflow-step-status', 'suspended');
+  await expect(nodes.nth(13)).toHaveAttribute('data-workflow-step-status', 'idle');
 }

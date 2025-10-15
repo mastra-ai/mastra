@@ -49,7 +49,7 @@ export function WorkflowDefaultNode({
 
       <div
         data-workflow-node
-        data-workflow-step-status={step?.status}
+        data-workflow-step-status={step?.status ?? 'idle'}
         data-testid="workflow-default-node"
         className={cn(
           'bg-surface3 rounded-lg w-[274px] border-sm border-border1 pt-2',
