@@ -32,7 +32,12 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   modelStreamSpan: Span;
   telemetry_settings?: TelemetrySettings;
   includeRawChunks?: boolean;
-  modelSettings?: CallSettings;
+  modelSettings?: Omit<CallSettings, 'abortSignal'> & {
+    /**
+     * @deprecated Use top-level `abortSignal` instead.
+     */
+    abortSignal?: AbortSignal;
+  };
   onResult: OnResult;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   /**
@@ -42,6 +47,8 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   headers?: Record<string, string | undefined>;
   shouldThrowError?: boolean;
 };
+
+let hasLoggedModelSettingsAbortSignalDeprecation = false;
 
 export function execute<OUTPUT extends OutputSchema = undefined>({
   runId,
@@ -60,13 +67,14 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   headers,
   shouldThrowError,
 }: ExecutionProps<OUTPUT>) {
-  // Deprecation warning for top-level abortSignal
-  if (options?.abortSignal && !modelSettings?.abortSignal) {
+  // Deprecation warning for modelSettings.abortSignal
+  if (modelSettings?.abortSignal && !hasLoggedModelSettingsAbortSignalDeprecation) {
     console.warn(
-      '[Deprecation Warning] Using top-level `abortSignal` is deprecated. ' +
-        'Please use `modelSettings.abortSignal` instead. ' +
-        'The top-level `abortSignal` option will be removed in a future version.',
+      '[Deprecation Warning] Using `modelSettings.abortSignal` is deprecated. ' +
+        'Please use top-level `abortSignal` instead. ' +
+        'The `modelSettings.abortSignal` option will be removed in a future version.',
     );
+    hasLoggedModelSettingsAbortSignalDeprecation = true;
   }
 
   const v5 = new AISDKV5InputStream({
@@ -107,7 +115,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
     createStream: async () => {
       try {
         const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers', 'abortSignal']);
-        const abortSignal = modelSettings?.abortSignal || options?.abortSignal;
+        const abortSignal = options?.abortSignal || modelSettings?.abortSignal;
 
         return await pRetry(
           async () => {
@@ -135,7 +143,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
         );
       } catch (error) {
         console.error('Error creating stream', error);
-        const abortSignal = modelSettings?.abortSignal || options?.abortSignal;
+        const abortSignal = options?.abortSignal || modelSettings?.abortSignal;
         if (isAbortError(error) && abortSignal?.aborted) {
           console.error('Abort error', error);
         }
