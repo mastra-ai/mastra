@@ -8,7 +8,7 @@ interface GeocodingResponse {
     name: string;
   }[];
 }
-interface CombinedWeatherResponse {
+interface WeatherResponse {
   current: {
     time: string;
     temperature_2m: number;
@@ -73,7 +73,7 @@ const getWeather = async (location: string) => {
   const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_mean,weathercode&timezone=auto`;
 
   const response = await fetch(weatherUrl);
-  const data: CombinedWeatherResponse = await response.json();
+  const data: WeatherResponse = await response.json();
 
   const forecast = data.daily.time.map((date: string, index: number) => ({
     date,

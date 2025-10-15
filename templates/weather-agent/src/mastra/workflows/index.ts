@@ -3,8 +3,6 @@ import { z } from 'zod';
 import { weatherAgent } from '../agents';
 import { weatherTool } from '../tools';
 
-// Using the shared weatherAgent from ../agents
-
 const forecastSchema = z.object({
   date: z.string(),
   maxTemp: z.number(),
