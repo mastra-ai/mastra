@@ -109,7 +109,10 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       activeProcesses.push({ controller, proc });
 
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve, reject) => {
+        proc!.stderr?.on('data', data => {
+          reject(new Error('failed to start dev: ' + data?.toString()));
+        });
         proc!.stdout?.on('data', data => {
           process.stdout.write(data?.toString());
           if (data?.toString()?.includes(`http://localhost:${port}`)) {
@@ -144,7 +147,6 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     beforeAll(async () => {
       await runBuild(fixturePath);
 
-      console.log('build is done');
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
       proc = execaNode('index.mjs', {
         cwd: inputFile,
@@ -220,7 +222,10 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       activeProcesses.push({ controller, proc });
 
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve, reject) => {
+        proc!.stderr?.on('data', data => {
+          reject(new Error('failed to start: ' + data?.toString()));
+        });
         proc!.stdout?.on('data', data => {
           console.log(data?.toString());
           if (data?.toString()?.includes(`http://localhost:${port}`)) {
