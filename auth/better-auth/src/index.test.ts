@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 import { MastraAuthBetterAuth } from './index';
 
 /**

@@ -3,6 +3,7 @@ import type { MastraAuthProviderOptions } from '@mastra/core/server';
 
 import type { BetterAuthOptions, Session, User } from 'better-auth';
 import { betterAuth } from 'better-auth';
+import type { HonoRequest } from 'hono';
 
 type BetterAuthUser = User & {
   session: Session;
@@ -43,9 +44,10 @@ export class MastraAuthBetterAuth extends MastraAuthProvider<BetterAuthUser> {
   /**
    * Authenticates a session token from Better Auth
    * @param token - The session token (typically from cookies)
+   * @param request - The Hono request object (optional, can extract token from request headers if needed)
    * @returns User with session data if valid, null otherwise
    */
-  async authenticateToken(token: string): Promise<BetterAuthUser | null> {
+  async authenticateToken(token: string, _request?: HonoRequest): Promise<BetterAuthUser | null> {
     try {
       // Better Auth uses session tokens stored in cookies
       // We need to construct a minimal headers object with the session cookie
@@ -73,9 +75,10 @@ export class MastraAuthBetterAuth extends MastraAuthProvider<BetterAuthUser> {
   /**
    * Authorizes a user based on session data
    * @param user - The authenticated user with session
+   * @param request - The Hono request object (optional, can be used for path/method-based authorization)
    * @returns true if authorized, false otherwise
    */
-  async authorizeUser(user: BetterAuthUser): Promise<boolean> {
+  async authorizeUser(user: BetterAuthUser, _request?: HonoRequest): Promise<boolean> {
     if (!user || !user.session) {
       return false;
     }

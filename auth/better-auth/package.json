@@ -35,6 +35,7 @@
     "@types/node": "^20.19.0",
     "better-sqlite3": "^12.4.1",
     "eslint": "^9.29.0",
+    "hono": "^4.6.16",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^2.1.9"
