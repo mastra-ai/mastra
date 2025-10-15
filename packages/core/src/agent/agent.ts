@@ -1965,7 +1965,6 @@ export class Agent<
 
               return result;
             } catch (err) {
-              console.log('err', err);
               const mastraError = new MastraError(
                 {
                   id: 'AGENT_AGENT_TOOL_EXECUTION_FAILED',
