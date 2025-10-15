@@ -130,7 +130,8 @@
   --border-code: #b8b8b8;
   --border-secondary: hsla(0, 0%, 72%, 1);
 
-
+  /* Border width */
+  --border-sm: 0.5px
 
   /* Fonts */
   --ifm-font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
@@ -156,6 +157,8 @@
   --ifm-footer-background-color: #050505;
   --ifm-code-background: var(--mastra-surface-2);
 
+  --ifm-navbar-height: calc(60px + 50px);
+
   /* Code blocks */
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
 
@@ -174,7 +177,6 @@
   --ifm-container-width: 1400px;
   --ifm-container-width-xl: 1400px;
 
-  --ifm-navbar-height: 60px;
 
   /* Override Docusaurus text colors */
   --ifm-font-color-base: var(--mastra-text-secondary);
@@ -333,14 +335,16 @@ input[type="search"]::-ms-clear {
 @media (min-width: 997px) {
   .menu {
     padding-inline: 0 !important;
+    scrollbar-width: thin;
+    scrollbar-color: #eaeaea transparent;
   }
 
-  .theme-doc-sidebar-container {
-    --ifm-navbar-height: calc(60px + 50px);
+  .theme-doc-sidebar-container.theme-doc-sidebar-container {
+    border-right: var(--border-sm) solid var(--border);
   }
 
   .theme-doc-toc-desktop.theme-doc-toc-desktop{
-   top: calc(calc(var(--ifm-navbar-height) + 50px) + 1rem);
+   top: calc(var(--ifm-navbar-height) + 1rem);
   }
 }
 
@@ -633,7 +637,7 @@ div[class*="codeBlockLines"] {
 /* ==================== FOOTER ==================== */
 .footer {
   background-color: var(--ifm-navbar-background-color);
-  border-top: 0.5px solid var(--border);
+  border-top: var(--border-sm) solid var(--border);
   color: var(--mastra-text-secondary);
   padding: 2rem 0;
 }
@@ -751,7 +755,7 @@ table code {
 }
 
 .alert {
-  border: 0.5px solid var(--mastra-border);
+  border: var(--border-sm) solid var(--mastra-border);
 }
 
 [data-theme='dark'] .alert {
@@ -760,7 +764,7 @@ table code {
 
 /* ==================== TABS ==================== */
 .tabs {
-  border-bottom: 0.5px solid var(--border);
+  border-bottom: var(--border-sm) solid var(--border);
 }
 
 .tabs__item {
@@ -796,7 +800,7 @@ table code {
 
 /* ==================== PAGINATION ==================== */
 .pagination-nav__link {
-  border: 0.5px solid var(--mastra-border);
+  border: var(--border-sm) solid var(--mastra-border);
 }
 
 .pagination-nav__link:hover {
@@ -835,6 +839,10 @@ table code {
 
 
 /* ==================== DOC MAIN CONTAINER ==================== */
+.container {
+  padding-bottom: 5rem!important;
+}
+
 [class*='docItemContainer'] {
   padding-inline: 3rem;
 }
