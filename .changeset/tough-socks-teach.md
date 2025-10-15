@@ -2,4 +2,4 @@
 '@mastra/ai-sdk': patch
 ---
 
-Update package README.md documentation
+Update README to include more usage examples

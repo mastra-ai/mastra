@@ -1,28 +1,11 @@
 # @mastra/ai-sdk
 
-`@mastra/ai-sdk` provides custom API routes and utilities for streaming Mastra agents in AI SDK-compatible formats. Including chat, workflow, and network route handlers, along with utilities and exported types for UI integrations.
+The recommended way of using Mastra and AI SDK together is by installing the `@mastra/ai-sdk` package. `@mastra/ai-sdk` provides custom API routes and utilities for streaming Mastra agents in AI SDK-compatible formats. Including chat, workflow, and network route handlers, along with utilities and exported types for UI integrations.
 
 ## Installation
 
 ```bash
 npm install @mastra/ai-sdk
-```
-
-## Exports
-
-```ts
-import {
-  chatRoute,
-  workflowRoute,
-  networkRoute,
-  toAISdkFormat,
-  type chatRouteOptions,
-  type WorkflowRouteOptions,
-  type NetworkRouteOptions,
-  type WorkflowDataPart,
-  type NetworkDataPart,
-  type AgentDataPart,
-} from '@mastra/ai-sdk';
 ```
 
 ## Usage
@@ -64,6 +47,7 @@ After defining a dynamic route with `:agentId` you can use the `useChat()` hook 
 
 ```typescript
 type MyMessage = {};
+
 const { error, status, sendMessage, messages, regenerate, stop } = useChat<MyMessage>({
   transport: new DefaultChatTransport({
     api: 'http://localhost:4111/chat/weatherAgent',
@@ -71,9 +55,9 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat<MyMes
 });
 ```
 
-## Workflow route
+### Workflow route
 
-Stream a workflow in AI SDK compatible format.
+Stream a workflow in AI SDK-compatible format.
 
 ```typescript
 import { workflowRoute } from '@mastra/ai-sdk';
@@ -90,9 +74,9 @@ export const mastra = new Mastra({
 });
 ```
 
-## Network route
+### Network route
 
-Stream agent networks (routing + nested agent/workflow/tool executions) in AI SDK compatible format.
+Stream agent networks (routing + nested agent/workflow/tool executions) in AI SDK-compatible format.
 
 ```typescript
 import { networkRoute } from '@mastra/ai-sdk';
@@ -133,10 +117,3 @@ export async function POST(req: Request) {
   return createUIMessageStreamResponse({ stream: uiMessageStream });
 }
 ```
-
-## Types
-
-- `WorkflowDataPart`: Emitted for workflow runs and nested tool-workflows.
-- `NetworkDataPart`: Emitted for network runs and nested tool-networks.
-- `AgentDataPart`: Aggregated agent step data for nested agent progress.
-- `chatRouteOptions`, `WorkflowRouteOptions`, `NetworkRouteOptions`: Route configuration types.
