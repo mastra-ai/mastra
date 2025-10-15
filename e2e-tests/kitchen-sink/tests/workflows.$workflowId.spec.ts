@@ -51,9 +51,9 @@ test.describe('workflow run', () => {
     await expect(nodes.nth(2)).toContainText('add-letter-c');
     await expect(nodes.nth(3)).toContainText('mapping');
     await expect(nodes.nth(4)).toContainText('WHEN');
-    await expect(nodes.nth(5)).toContainText('short-text');
+    await expect(nodes.nth(5)).toContainText('short-text'); // condition short path
     await expect(nodes.nth(6)).toContainText('WHEN');
-    await expect(nodes.nth(7)).toContainText('long-text');
+    await expect(nodes.nth(7)).toContainText('long-text'); // condition long path
     await expect(nodes.nth(8)).toContainText('mapping');
     await expect(nodes.nth(9)).toContainText('nested-text-processor');
     await expect(nodes.nth(10)).toContainText('add-letter-with-count');
@@ -68,10 +68,9 @@ test.describe('workflow run', () => {
 
     await runWorkflow(page);
     const nodes = await page.locator('[data-workflow-node]');
-    const shortNode = nodes.nth(5);
-    const longNode = nodes.nth(7);
-    await expect(await shortNode.getAttribute('data-workflow-step-status')).toBe('success');
-    await expect(await longNode.getAttribute('data-workflow-step-status')).toBe('idle');
+
+    await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'success');
+    await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'idle');
   });
 
   test('running the workflow (form) - long condition', async ({ page }) => {
@@ -80,11 +79,33 @@ test.describe('workflow run', () => {
 
     await runWorkflow(page);
     const nodes = await page.locator('[data-workflow-node]');
-    const shortNode = nodes.nth(5);
-    const longNode = nodes.nth(7);
 
-    await expect(shortNode.getAttribute('data-workflow-step-status')).toBe('idle');
-    await expect(longNode.getAttribute('data-workflow-step-status')).toBe('success');
+    await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
+    await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
+  });
+
+  test('running the workflow (json) - short condition', async ({ page }) => {
+    await page.getByRole('radio', { name: 'JSON' }).click();
+    await page.getByRole('textbox').fill('{"text":"A"}');
+    await page.getByRole('button', { name: 'Run' }).click();
+
+    await runWorkflow(page);
+    const nodes = await page.locator('[data-workflow-node]');
+
+    await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'success');
+    await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'idle');
+  });
+
+  test('running the workflow (json) - long condition', async ({ page }) => {
+    await page.getByRole('radio', { name: 'JSON' }).click();
+    await page.getByRole('textbox').fill('{"text":"SuperLongTextToStartWith"}');
+    await page.getByRole('button', { name: 'Run' }).click();
+
+    await runWorkflow(page);
+    const nodes = await page.locator('[data-workflow-node]');
+
+    await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
+    await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
   });
 });
 
