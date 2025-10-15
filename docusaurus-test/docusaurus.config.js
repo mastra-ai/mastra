@@ -4,9 +4,8 @@
 // There are various equivalent ways to declare your Docusaurus config.
 // See: https://docusaurus.io/docs/api/docusaurus-config
 
-import { themes as prismThemes } from 'prism-react-renderer';
-import prismMastraLight from './src/theme/prism-mastra-light.js';
 import prismMastraDark from './src/theme/prism-mastra-dark.js';
+import prismMastraLight from './src/theme/prism-mastra-light.js';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -93,62 +92,70 @@ const config = {
       footer: {
         links: [
           {
-            title: 'Documentation',
+            title: 'Developer',
             items: [
               {
-                label: 'Introduction',
-                to: '/docs/intro',
+                label: 'Docs',
+                to: '/docs',
               },
               {
-                label: 'Getting Started',
-                to: '/docs/getting-started/installation',
+                label: 'Templates',
+                to: '/templates',
               },
               {
-                label: 'Examples',
-                to: '/docs/examples',
+                label: 'Principles of Building AI Agents',
+                to: '/book',
               },
               {
-                label: 'Guides',
-                to: '/docs/guides',
+                label: 'llms.txt',
+                to: '/llms.txt',
+              },
+              {
+                label: 'llms-full.txt',
+                to: '/llms-full.txt',
+              },
+              {
+                label: 'MCP Registry Registry',
+                to: '/mcp-registry-registry',
+              },
+              {
+                label: 'Mastra Cloud Status',
+                href: 'https://statuspage.incident.io/mastra-cloud',
               },
             ],
           },
           {
-            title: 'Resources',
+            title: 'Company',
             items: [
-              {
-                label: 'Reference',
-                to: '/docs/reference',
-              },
-              {
-                label: 'Models',
-                to: '/docs/models',
-              },
-              {
-                label: 'Showcase',
-                to: '/showcase',
-              },
-            ],
-          },
-          {
-            title: 'Community',
-            items: [
-              {
-                label: 'Discord',
-                href: 'https://discord.gg/mastra',
-              },
               {
                 label: 'GitHub',
                 href: 'https://github.com/mastra-ai/mastra',
               },
               {
-                label: 'Twitter',
-                href: 'https://twitter.com/mastra_ai',
+                label: 'Discord',
+                href: 'https://discord.gg/BTYqqHKUrf',
+              },
+              {
+                label: 'X',
+                href: 'https://x.com/mastra_ai',
+              },
+              {
+                label: 'YouTube',
+                href: 'https://www.youtube.com/@mastra-ai',
+              },
+            ],
+          },
+          {
+            title: 'Legal',
+            items: [
+              {
+                label: 'Privacy Policy',
+                to: '/privacy-policy',
               },
             ],
           },
         ],
-        copyright: `Copyright © ${new Date().getFullYear()} Mastra.`,
+        copyright: `© ${new Date().getFullYear()} Mastra.`,
       },
       prism: {
         theme: prismMastraLight,
