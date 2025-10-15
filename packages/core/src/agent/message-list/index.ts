@@ -803,6 +803,25 @@ export class MessageList {
               toolInvocation,
             });
           }
+        } else if (part.type === 'reasoning') {
+          // Consolidate reasoning parts to prevent fragmentation in AIV4.convertToCoreMessages
+          // The AI SDK's convertToCoreMessages will split reasoning details into separate parts
+          // which breaks O3's requirement that reasoning stays paired with function calls
+          const consolidatedText = [
+            part.reasoning,
+            ...(part.details?.filter(d => d.type === 'text').map(d => d.text) || []),
+          ]
+            .filter(Boolean)
+            .join('\n');
+
+          // Create a single consolidated detail instead of multiple
+          const consolidatedReasoning = {
+            ...part,
+            reasoning: consolidatedText,
+            // Replace multiple details with a single consolidated one
+            details: consolidatedText ? [{ type: 'text' as const, text: consolidatedText }] : [],
+          };
+          parts.push(consolidatedReasoning);
         } else {
           parts.push(part);
         }
