@@ -10,6 +10,7 @@ export const buildProject = async (args: { dir?: string; root?: string; tools?: 
         dir: args?.dir,
         root: args?.root,
         tools: args?.tools ? args.tools.split(',') : [],
+        debug: args?.debug || false,
       });
     },
     origin,

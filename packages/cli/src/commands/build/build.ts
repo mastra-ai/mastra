@@ -4,12 +4,24 @@ import { FileService } from '../../services/service.file';
 
 import { BuildBundler } from './BuildBundler';
 import { getDeployer } from '@mastra/deployer';
-import { logger } from '../../utils/logger';
+import { createLogger } from '../../utils/logger';
+import { MastraError } from '@mastra/core/error';
 
-export async function build({ dir, tools, root }: { dir?: string; tools?: string[]; root?: string }) {
+export async function build({
+  dir,
+  tools,
+  root,
+  debug,
+}: {
+  dir?: string;
+  tools?: string[];
+  root?: string;
+  debug?: boolean;
+}) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
   const outputDirectory = join(rootDir, '.mastra');
+  const logger = createLogger(debug);
 
   // You cannot express an "include all js/ts except these" in one single string glob pattern so by default an array is passed to negate test files.
   const normalizedMastraDir = mastraDir.replaceAll('\\', '/');
@@ -52,7 +64,10 @@ export async function build({ dir, tools, root }: { dir?: string; tools?: string
     });
     logger.info('You can now deploy the .mastra/output directory to your target platform.');
   } catch (error) {
-    if (error instanceof Error) {
+    if (error instanceof MastraError) {
+      const { message, ...details } = error.toJSONDetails();
+      logger.error(`${message}`, details);
+    } else if (error instanceof Error) {
       logger.error(`Mastra Build failed`, { error });
     }
     process.exit(1);
