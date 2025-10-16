@@ -285,10 +285,7 @@ describe('Input and Output Processors', () => {
           const systemMessage: MastraMessageV2 = {
             id: crypto.randomUUID(),
             role: 'system',
-            content: {
-              format: 2,
-              parts: [{ type: 'text', text: 'You are a helpful assistant.' }],
-            },
+            content: { content: 'You are a helpful assistant.', format: 2, parts: [] },
             createdAt: new Date(),
           };
 
