@@ -1,0 +1,542 @@
+# Example: Optimized CI Pipeline for Mastra
+# This consolidates multiple workflow_run patterns into a single efficient workflow
+
+name: Optimized CI Pipeline
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+# Cancel in-progress runs for the same PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ==============================================================================
+  # PHASE 1: Change Detection & Setup
+  # ==============================================================================
+
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    outputs:
+      # Package changes
+      core: ${{ steps.filter.outputs.core }}
+      memory: ${{ steps.filter.outputs.memory }}
+      stores: ${{ steps.filter.outputs.stores }}
+      cli: ${{ steps.filter.outputs.cli }}
+      deployer: ${{ steps.filter.outputs.deployer }}
+      server: ${{ steps.filter.outputs.server }}
+      mcp: ${{ steps.filter.outputs.mcp }}
+      rag: ${{ steps.filter.outputs.rag }}
+      auth: ${{ steps.filter.outputs.auth }}
+      agent-builder: ${{ steps.filter.outputs.agent-builder }}
+      e2e: ${{ steps.filter.outputs.e2e }}
+      # Utility changes
+      lint-needed: ${{ steps.filter.outputs.lint-needed }}
+      store-list: ${{ steps.set-stores.outputs.stores }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1 # Shallow clone for speed
+
+      - name: Check for changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            core:
+              - 'packages/core/**'
+              - '!**/*.md'
+            memory:
+              - 'packages/memory/**'
+              - 'packages/core/**'
+              - 'stores/**'
+              - 'client-sdks/client-js/**'
+              - '!**/*.md'
+            stores:
+              - 'stores/**'
+              - 'packages/core/**'
+            cli:
+              - 'packages/cli/**'
+              - '.github/workflows/test-cli.yml'
+            deployer:
+              - 'packages/deployer/**'
+            server:
+              - 'packages/server/**'
+            mcp:
+              - 'packages/mcp/**'
+            rag:
+              - 'packages/rag/**'
+            auth:
+              - 'auth/**'
+              - 'packages/auth/**'
+            agent-builder:
+              - 'packages/agent-builder/**'
+            e2e:
+              - 'packages/**'
+              - 'e2e-tests/**'
+              - '!**/*.md'
+            lint-needed:
+              - '**/*.ts'
+              - '**/*.tsx'
+              - '**/*.js'
+              - '**/*.mjs'
+
+      - name: Generate store list
+        id: set-stores
+        if: steps.filter.outputs.stores == 'true'
+        run: |
+          STORES=$(ls -d stores/*/ | grep -v '_test-utils' | cut -f2 -d'/' | jq -R -s -c 'split("\n")[:-1]')
+          echo "stores=$STORES" >> $GITHUB_OUTPUT
+
+  # ==============================================================================
+  # PHASE 2: Lint & Type Check (Fast, no dependencies)
+  # ==============================================================================
+
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.lint-needed == 'true'
+    timeout-minutes: 10
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:rw
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Configure npm registry
+        run: mkdir -p ~/setup-pnpm && echo "registry=https://registry.yarnpkg.com" > ~/setup-pnpm/.npmrc
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.2
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.1
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/**/*" lint
+
+      - name: Format check
+        run: pnpm prettier --check .
+
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.lint-needed == 'true'
+    timeout-minutes: 15
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:rw
+      NODE_OPTIONS: --max-old-space-size=4096
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Configure npm registry
+        run: mkdir -p ~/setup-pnpm && echo "registry=https://registry.yarnpkg.com" > ~/setup-pnpm/.npmrc
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.2
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.1
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build for type checking
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
+
+      - name: Type check
+        run: pnpm typecheck
+
+  # ==============================================================================
+  # PHASE 3: Build Common Packages (Shared Artifacts)
+  # ==============================================================================
+
+  build-packages:
+    name: Build ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [core, cli, server, deployer, mcp, rag, memory]
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:rw
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Configure npm registry
+        run: mkdir -p ~/setup-pnpm && echo "registry=https://registry.yarnpkg.com" > ~/setup-pnpm/.npmrc
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.2
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.1
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build package
+        run: pnpm turbo build --filter ./packages/${{ matrix.package }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-${{ matrix.package }}
+          path: packages/${{ matrix.package }}/dist
+          retention-days: 1
+
+  # ==============================================================================
+  # PHASE 4: Package Tests (Using Build Artifacts)
+  # ==============================================================================
+
+  test-core:
+    name: Test Core Package
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-packages]
+    if: needs.detect-changes.outputs.core == 'true'
+    timeout-minutes: 15
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:rw
+      NODE_OPTIONS: "--max_old_space_size=8096"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Configure npm registry
+        run: mkdir -p ~/setup-pnpm && echo "registry=https://registry.yarnpkg.com" > ~/setup-pnpm/.npmrc
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.2
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.1
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download core build
+        uses: actions/download-artifact@v3
+        with:
+          name: build-core
+          path: packages/core/dist
+
+      - name: Run core tests
+        run: pnpm test:core
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+
+  test-memory:
+    name: Memory Tests - ${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-packages]
+    if: needs.detect-changes.outputs.memory == 'true'
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [streaming, working-memory, agent-memory, processors]
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mastra
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:rw
+      NODE_OPTIONS: "--max_old_space_size=8096"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Configure npm registry
+        run: mkdir -p ~/setup-pnpm && echo "registry=https://registry.yarnpkg.com" > ~/setup-pnpm/.npmrc
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.2
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.1
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build dependencies
+        run: pnpm turbo build --filter "./stores/*" --filter "mastra" --filter "@mastra/memory" --filter "@mastra/fastembed"
+
+      - name: Install integration test dependencies
+        run: pnpm install --ignore-workspace
+        working-directory: packages/memory/integration-tests-v5
+
+      - name: Run Memory ${{ matrix.suite }} tests
+        run: pnpm run test:${{ matrix.suite }}
+        working-directory: packages/memory/integration-tests-v5
+        env:
+          DB_URL: "postgresql://postgres:postgres@localhost:5432/mastra"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
+          KV_REST_API_TOKEN: ${{ secrets.KV_REST_API_TOKEN }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+
+  test-stores:
+    name: Test Store - ${{ matrix.store }}
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-packages]
+    if: needs.detect-changes.outputs.stores == 'true'
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        store: ${{ fromJson(needs.detect-changes.outputs.store-list) }}
+
+    services:
+      qdrant:
+        image: ${{ matrix.store == 'qdrant' && 'qdrant/qdrant' || '' }}
+        ports:
+          - 6333:6333
+      chromadb:
+        image: ${{ matrix.store == 'chroma' && 'chromadb/chroma' || '' }}
+        ports:
+          - 8000:8000
+
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:rw
+      NODE_OPTIONS: "--max_old_space_size=8096"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Configure npm registry
+        run: mkdir -p ~/setup-pnpm && echo "registry=https://registry.yarnpkg.com" > ~/setup-pnpm/.npmrc
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.2
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.1
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build store package
+        run: pnpm turbo --filter "@mastra/${{ matrix.store }}" build
+
+      - name: Run ${{ matrix.store }} tests
+        run: pnpm test
+        working-directory: stores/${{ matrix.store }}
+        env:
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+          ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
+          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
+
+  # ==============================================================================
+  # PHASE 5: E2E Tests (Targeted Builds)
+  # ==============================================================================
+
+  e2e-monorepo:
+    name: E2E Monorepo
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-packages]
+    if: needs.detect-changes.outputs.e2e == 'true'
+    timeout-minutes: 15
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:rw
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.2
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.1
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: build-core
+          path: packages/core/dist
+
+      - name: Download CLI build
+        uses: actions/download-artifact@v3
+        with:
+          name: build-cli
+          path: packages/cli/dist
+
+      - name: Install e2e test dependencies
+        working-directory: ./e2e-tests/monorepo
+        run: pnpm install --ignore-workspace
+
+      - name: Test
+        working-directory: ./e2e-tests/monorepo
+        run: pnpm test
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+  e2e-deployers:
+    name: E2E Deployers
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-packages]
+    if: needs.detect-changes.outputs.e2e == 'true'
+    timeout-minutes: 20
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:rw
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.2
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.1
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Optimized: Only build what deployers need
+      - name: Build required packages
+        run: pnpm turbo build --filter "./packages/core" --filter "./packages/deployer" --filter "./deployers/*"
+
+      - name: Install e2e test dependencies
+        working-directory: ./e2e-tests/deployers
+        run: pnpm install --ignore-workspace
+
+      - name: Test
+        working-directory: ./e2e-tests/deployers
+        run: pnpm test
+
+  # ==============================================================================
+  # PHASE 6: Status Aggregation
+  # ==============================================================================
+
+  all-tests-complete:
+    name: All Tests Complete
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - detect-changes
+      - lint
+      - typecheck
+      - test-core
+      - test-memory
+      - test-stores
+      - e2e-monorepo
+      - e2e-deployers
+
+    steps:
+      - name: Check all tests passed
+        run: |
+          # This job will fail if any required test failed
+          if [[ "${{ needs.lint.result }}" == "failure" ]] || \
+             [[ "${{ needs.typecheck.result }}" == "failure" ]] || \
+             [[ "${{ needs.test-core.result }}" == "failure" ]] || \
+             [[ "${{ needs.test-memory.result }}" == "failure" ]] || \
+             [[ "${{ needs.test-stores.result }}" == "failure" ]] || \
+             [[ "${{ needs.e2e-monorepo.result }}" == "failure" ]] || \
+             [[ "${{ needs.e2e-deployers.result }}" == "failure" ]]; then
+            echo "One or more tests failed"
+            exit 1
+          fi
+          echo "All tests passed!"
