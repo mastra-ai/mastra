@@ -3509,6 +3509,8 @@ describe('MessageList', () => {
         };
 
         messageList.addSystem(systemMessage);
+        // Add a user message to avoid empty message list error
+        messageList.add({ role: 'user', content: 'Hello' }, 'input');
 
         const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
         const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'system');
@@ -3825,6 +3827,43 @@ describe('MessageList', () => {
           anthropic: { cacheControl: { type: 'ephemeral' } },
         });
       });
+    });
+  });
+
+  describe('Empty message list validation', () => {
+    it('should throw error when calling prompt() with empty message list', () => {
+      const list = new MessageList();
+
+      expect(() => list.get.all.aiV5.prompt()).toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
+    });
+
+    it('should throw error when calling prompt() with only system messages', () => {
+      const list = new MessageList();
+      list.addSystem('You are a helpful assistant');
+      list.addSystem('Follow these rules');
+
+      expect(() => list.get.all.aiV5.prompt()).toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
+    });
+
+    it('should throw error when calling llmPrompt() with empty message list', async () => {
+      const list = new MessageList();
+
+      await expect(list.get.all.aiV5.llmPrompt()).rejects.toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
+    });
+
+    it('should throw error when calling llmPrompt() with only system messages', async () => {
+      const list = new MessageList();
+      list.addSystem('You are a helpful assistant');
+
+      await expect(list.get.all.aiV5.llmPrompt()).rejects.toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
     });
   });
 });
