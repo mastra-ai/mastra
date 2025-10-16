@@ -4,7 +4,7 @@
 
 import type { AnyExportedAISpan } from '@mastra/core/ai-tracing';
 import type { DetectedResourceAttributes } from '@opentelemetry/resources';
-import type { ReadableSpanConverterInterface } from './span-converter';
+import type { SpanExporter } from '@opentelemetry/sdk-trace-base';
 
 export type ExportProtocol = 'http/json' | 'http/protobuf' | 'grpc' | 'zipkin';
 
@@ -70,8 +70,8 @@ export interface OtelExporterConfig {
   // Override or provide additional resource attributes
   resourceAttributes?: DetectedResourceAttributes;
 
-  // Provide one or more additional span converter classes that will be instantiated and run in series before a span is exported
-  spanConverters?: InstanceType<typeof ReadableSpanConverterInterface>[];
+  // Override or provide a custom span exporter
+  exporter?: SpanExporter;
 }
 
 export interface SpanData {
