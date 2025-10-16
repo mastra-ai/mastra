@@ -897,7 +897,7 @@ export class MessageList {
         id: 'INVALID_SYSTEM_MESSAGE_FORMAT',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `Invalid system message format. System messages must be CoreMessage format with 'role' and 'content' properties. The content should be a string.`,
+        text: `Invalid system message format. System messages must include 'role' and 'content' properties. The content should be a string.`,
         details: {
           receivedMessage: JSON.stringify(message, null, 2),
         },
