@@ -117,7 +117,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
    * @see https://ai-sdk.dev/docs/ai-sdk-core/generating-structured-data#accessing-reasoning
    */
   const providerOptionsToUse =
-    model.provider === 'openai' && responseFormat?.type === 'json' && !structuredOutput?.jsonPromptInjection
+    model.provider.startsWith('openai') && responseFormat?.type === 'json' && !structuredOutput?.jsonPromptInjection
       ? {
           ...(providerOptions ?? {}),
           openai: {
