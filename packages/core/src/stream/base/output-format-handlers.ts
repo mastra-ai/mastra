@@ -538,11 +538,6 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         // first enqueue the text-end chunk
         controller.enqueue(chunk);
 
-        // ?? idk maybe
-        // if (!accumulatedText) {
-        //   return;
-        // }
-
         const finalResult = await handler.validateAndTransformFinal(accumulatedText);
         if (finalResult.success) {
           controller.enqueue({
