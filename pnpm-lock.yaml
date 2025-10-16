@@ -11,6 +11,11 @@ overrides:
   tmp: '>=0.2.5'
   jsondiffpatch: '>=0.7.3'
 
+patchedDependencies:
+  '@changesets/get-dependents-graph':
+    hash: 1cae443604ba49c27339705c703329dfcd79f6acd7fc822b1257a7d7c9da9535
+    path: patches/@changesets__get-dependents-graph.patch
+
 importers:
 
   .:
@@ -19262,7 +19267,7 @@ snapshots:
   '@changesets/assemble-release-plan@6.0.9':
     dependencies:
       '@changesets/errors': 0.2.0
-      '@changesets/get-dependents-graph': 2.1.3
+      '@changesets/get-dependents-graph': 2.1.3(patch_hash=1cae443604ba49c27339705c703329dfcd79f6acd7fc822b1257a7d7c9da9535)
       '@changesets/should-skip-package': 0.1.2
       '@changesets/types': 6.1.0
       '@manypkg/get-packages': 1.1.3
@@ -19279,7 +19284,7 @@ snapshots:
       '@changesets/changelog-git': 0.2.1
       '@changesets/config': 3.1.1
       '@changesets/errors': 0.2.0
-      '@changesets/get-dependents-graph': 2.1.3
+      '@changesets/get-dependents-graph': 2.1.3(patch_hash=1cae443604ba49c27339705c703329dfcd79f6acd7fc822b1257a7d7c9da9535)
       '@changesets/get-release-plan': 4.0.13
       '@changesets/git': 3.0.4
       '@changesets/logger': 0.1.1
@@ -19308,7 +19313,7 @@ snapshots:
   '@changesets/config@3.1.1':
     dependencies:
       '@changesets/errors': 0.2.0
-      '@changesets/get-dependents-graph': 2.1.3
+      '@changesets/get-dependents-graph': 2.1.3(patch_hash=1cae443604ba49c27339705c703329dfcd79f6acd7fc822b1257a7d7c9da9535)
       '@changesets/logger': 0.1.1
       '@changesets/types': 6.1.0
       '@manypkg/get-packages': 1.1.3
@@ -19319,7 +19324,7 @@ snapshots:
     dependencies:
       extendable-error: 0.1.7
 
-  '@changesets/get-dependents-graph@2.1.3':
+  '@changesets/get-dependents-graph@2.1.3(patch_hash=1cae443604ba49c27339705c703329dfcd79f6acd7fc822b1257a7d7c9da9535)':
     dependencies:
       '@changesets/types': 6.1.0
       '@manypkg/get-packages': 1.1.3
