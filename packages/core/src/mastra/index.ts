@@ -224,25 +224,13 @@ export interface Config<
  * });
  * ```
  */
-export class Mastra<
-  TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
-  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
-    string,
-    Workflow<any, any, any, any, any, any>
-  >,
-  TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
-  TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
-  TLogger extends IMastraLogger = IMastraLogger,
-  TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
-  TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
-> {
-  #vectors?: TVectors;
-  #agents: TAgents;
+export class Mastra<TLogger extends IMastraLogger = IMastraLogger> {
+  #vectors: Record<string, MastraVector> = {};
+  #agents: Record<string, Agent> = {};
   #logger: TLogger;
-  #legacy_workflows: TLegacyWorkflows;
-  #workflows: TWorkflows;
-  #tts?: TTTS;
+  #legacy_workflows: Record<string, LegacyWorkflow> = {};
+  #workflows: Record<string, Workflow> = {};
+  #tts: Record<string, MastraTTS> = {};
   #deployer?: MastraDeployer;
   #serverMiddleware: Array<{
     handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
@@ -252,12 +240,12 @@ export class Mastra<
   /**
    * @deprecated Use {@link getAITracing()} instead.
    */
-  #telemetry?: Telemetry;
+  #telemetry: Telemetry;
   #storage?: MastraStorage;
   #memory?: MastraMemory;
-  #scorers?: TScorers;
+  #scorers: Record<string, MastraScorer> = {};
   #server?: ServerConfig;
-  #mcpServers?: TMCPServers;
+  #mcpServers: Record<string, MCPServerBase> = {};
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
   #pubsub: PubSub;
@@ -384,7 +372,7 @@ export class Mastra<
    * });
    * ```
    */
-  constructor(config?: Config<TAgents, TLegacyWorkflows, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers>) {
+  constructor(config?: Config) {
     // Store server middleware with default path
     if (config?.serverMiddleware) {
       this.#serverMiddleware = config.serverMiddleware.map(m => ({
@@ -441,7 +429,7 @@ export class Mastra<
       logger = noopLogger as unknown as TLogger;
     } else {
       if (config?.logger) {
-        logger = config.logger;
+        logger = config.logger as TLogger;
       } else {
         const levelOnEnv =
           process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
@@ -493,8 +481,9 @@ export class Mastra<
     }
 
     /*
-      Storage
+    Storage
     */
+
     if (this.#telemetry && storage) {
       this.#storage = this.#telemetry.traceClass(storage, {
         excludeMethods: ['__setTelemetry', '__getTelemetry', 'batchTraceInsert', 'getTraces', 'getEvalsByAgentName'],
@@ -507,20 +496,18 @@ export class Mastra<
     /*
     Vectors
     */
+
     if (config?.vectors) {
-      let vectors: Record<string, MastraVector> = {};
       Object.entries(config.vectors).forEach(([key, vector]) => {
         if (this.#telemetry) {
-          vectors[key] = this.#telemetry.traceClass(vector, {
+          this.#vectors[key] = this.#telemetry.traceClass(vector, {
             excludeMethods: ['__setTelemetry', '__getTelemetry'],
           });
-          vectors[key].__setTelemetry(this.#telemetry);
+          this.#vectors[key].__setTelemetry(this.#telemetry);
         } else {
-          vectors[key] = vector;
+          this.#vectors[key] = vector;
         }
       });
-
-      this.#vectors = vectors as TVectors;
     }
 
     if (config?.mcpServers) {
@@ -575,10 +562,10 @@ do:
     /*
     Agents
     */
-    const agents: Record<string, Agent> = {};
+
     if (config?.agents) {
       Object.entries(config.agents).forEach(([key, agent]) => {
-        if (agents[key]) {
+        if (this.#agents[key]) {
           const error = new MastraError({
             id: 'MASTRA_AGENT_REGISTRATION_DUPLICATE_ID',
             domain: ErrorDomain.MASTRA,
@@ -596,35 +583,25 @@ do:
         agent.__registerPrimitives({
           logger: this.getLogger(),
           telemetry: this.#telemetry,
-          storage: this.storage,
-          memory: this.memory,
-          agents: agents,
-          tts: this.#tts,
-          vectors: this.#vectors,
         });
 
-        agents[key] = agent;
+        this.#agents[key] = agent;
       });
     }
-
-    this.#agents = agents as TAgents;
 
     /**
      * Scorers
      */
 
-    const scorers = {} as Record<string, MastraScorer<any, any, any, any>>;
     if (config?.scorers) {
       Object.entries(config.scorers).forEach(([key, scorer]) => {
-        scorers[key] = scorer;
+        this.#scorers[key] = scorer;
       });
     }
-    this.#scorers = scorers as TScorers;
 
     /*
     Legacy Workflows
     */
-    this.#legacy_workflows = {} as TLegacyWorkflows;
 
     if (config?.legacy_workflows) {
       Object.entries(config.legacy_workflows).forEach(([key, workflow]) => {
@@ -632,11 +609,6 @@ do:
         workflow.__registerPrimitives({
           logger: this.getLogger(),
           telemetry: this.#telemetry,
-          storage: this.storage,
-          memory: this.memory,
-          agents: agents,
-          tts: this.#tts,
-          vectors: this.#vectors,
         });
         // @ts-ignore
         this.#legacy_workflows[key] = workflow;
@@ -651,18 +623,16 @@ do:
       });
     }
 
-    this.#workflows = {} as TWorkflows;
+    /*
+    Workflows
+    */
+  
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
         workflow.__registerMastra(this);
         workflow.__registerPrimitives({
           logger: this.getLogger(),
           telemetry: this.#telemetry,
-          storage: this.storage,
-          memory: this.memory,
-          agents: agents,
-          tts: this.#tts,
-          vectors: this.#vectors,
         });
         // @ts-ignore
         this.#workflows[key] = workflow;
@@ -748,7 +718,7 @@ do:
    * const response = await agent.generate('What is the weather?');
    * ```
    */
-  public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {
+  public getAgent<TAgent extends Agent>(name: string): TAgent {
     const agent = this.#agents?.[name];
     if (!agent) {
       const error = new MastraError({
@@ -765,7 +735,7 @@ do:
       this.#logger?.trackException(error);
       throw error;
     }
-    return this.#agents[name];
+    return this.#agents[name] as TAgent;
   }
 
   /**
@@ -884,7 +854,7 @@ do:
    * console.log('Relevant documents:', results);
    * ```
    */
-  public getVector<TVectorName extends keyof TVectors>(name: TVectorName): TVectors[TVectorName] {
+  public getVector<TVector extends MastraVector>(name: string): TVector {
     const vector = this.#vectors?.[name];
     if (!vector) {
       const error = new MastraError({
@@ -901,7 +871,7 @@ do:
       this.#logger?.trackException(error);
       throw error;
     }
-    return vector;
+    return vector as TVector;
   }
 
   /**
@@ -978,10 +948,10 @@ do:
    * const result = await workflow.execute({ input: 'data' });
    * ```
    */
-  public legacy_getWorkflow<TWorkflowId extends keyof TLegacyWorkflows>(
-    id: TWorkflowId,
+  public legacy_getWorkflow<TLegacyWorkflow extends LegacyWorkflow>(
+    id: string,
     { serialized }: { serialized?: boolean } = {},
-  ): TLegacyWorkflows[TWorkflowId] {
+  ): TLegacyWorkflow {
     const workflow = this.#legacy_workflows?.[id];
     if (!workflow) {
       const error = new MastraError({
@@ -1000,10 +970,10 @@ do:
     }
 
     if (serialized) {
-      return { name: workflow.name } as TLegacyWorkflows[TWorkflowId];
+      return { name: workflow.name } as TLegacyWorkflow;
     }
 
-    return workflow;
+    return workflow as TLegacyWorkflow;
   }
 
   /**
@@ -1033,10 +1003,10 @@ do:
    * });
    * ```
    */
-  public getWorkflow<TWorkflowId extends keyof TWorkflows>(
-    id: TWorkflowId,
+  public getWorkflow<TWorkflow extends Workflow>(
+    id: string,
     { serialized }: { serialized?: boolean } = {},
-  ): TWorkflows[TWorkflowId] {
+  ): TWorkflow {
     const workflow = this.#workflows?.[id];
     if (!workflow) {
       const error = new MastraError({
@@ -1055,10 +1025,10 @@ do:
     }
 
     if (serialized) {
-      return { name: workflow.name } as TWorkflows[TWorkflowId];
+      return { name: workflow.name } as TWorkflow;
     }
 
-    return workflow;
+    return workflow as TWorkflow;
   }
 
   __registerInternalWorkflow(workflow: Workflow) {
@@ -1250,7 +1220,7 @@ do:
    * console.log('Helpfulness score:', score);
    * ```
    */
-  public getScorer<TScorerKey extends keyof TScorers>(key: TScorerKey): TScorers[TScorerKey] {
+  public getScorer<TScorer extends MastraScorer>(key: string): TScorer {
     const scorer = this.#scorers?.[key];
     if (!scorer) {
       const error = new MastraError({
@@ -1262,7 +1232,7 @@ do:
       this.#logger?.trackException(error);
       throw error;
     }
-    return scorer;
+    return scorer as TScorer;
   }
 
   /**
@@ -1451,7 +1421,7 @@ do:
           tts[key].__setTelemetry(this.#telemetry);
         }
       });
-      this.#tts = tts as TTTS;
+      this.#tts = tts;
     }
 
     if (this.#storage) {
@@ -1471,7 +1441,7 @@ do:
           vectors[key].__setTelemetry(this.#telemetry);
         }
       });
-      this.#vectors = vectors as TVectors;
+      this.#vectors = vectors;
     }
   }
 
@@ -1517,8 +1487,8 @@ do:
    * logger.error('An error occurred', { error: 'details' });
    * ```
    */
-  public getLogger() {
-    return this.#logger;
+  public getLogger<TLogger extends IMastraLogger = IMastraLogger>() {
+    return this.#logger as unknown as TLogger;
   }
 
   /**
