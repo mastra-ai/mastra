@@ -1,5 +1,13 @@
 # create-mastra
 
+## 0.17.0
+
+### Patch Changes
+
+- Pin `@rollup/*` dependencies to fixed versions (instead of using `^`) to: ([#8900](https://github.com/mastra-ai/mastra/pull/8900))
+  - Hotfix a bug inside `@rollup/plugin-commonjs`
+  - Have more control over the versions in the future to not have breakages over night
+
 ## 0.17.0-alpha.0
 
 ### Patch Changes
