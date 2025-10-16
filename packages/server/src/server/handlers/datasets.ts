@@ -321,6 +321,66 @@ export async function getDatasetRowVersionsHandler({
 
 // Experiment Handlers
 
+export async function getDatasetExperimentsHandler({
+  mastra,
+  datasetId,
+  // filter,
+  pagination,
+}: Context & {
+  datasetId: string;
+  // filter?: {
+  //   targetType?: 'agent' | 'workflow';
+  //   targetId?: string;
+  //   status?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  // };
+  pagination?: StoragePagination;
+}) {
+  try {
+    const storage = mastra.getStorage();
+    if (!storage) {
+      throw new HTTPException(400, { message: 'Storage is not initialized' });
+    }
+
+    validateBody({ datasetId });
+
+    const result = await storage.getExperiments({
+      filter: { datasetId },
+      pagination,
+    });
+
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error getting experiments');
+  }
+}
+
+export async function getExperimentResultsHandler({
+  mastra,
+  experimentId,
+  pagination,
+}: Context & {
+  experimentId: string;
+  pagination?: StoragePagination;
+}) {
+  try {
+    const storage = mastra.getStorage();
+    if (!storage) {
+      throw new HTTPException(400, { message: 'Storage is not initialized' });
+    }
+
+    validateBody({ experimentId });
+
+    const result = await storage.getExperimentRowResults({
+      experimentId,
+      pagination,
+    });
+
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error getting experiment results');
+  }
+}
+
 export async function runExperimentHandler({
   mastra,
   datasetId,
@@ -368,6 +428,9 @@ export async function runExperimentHandler({
     });
 
     const datasetObj = new Dataset(datasetId, storage);
+    console.log('what are scorers', JSON.stringify(scorers, null, 2));
+    console.log('what are scorers config', JSON.stringify(scorersConfig, null, 2));
+    console.log('what are scorers names', JSON.stringify(body.scorerNames, null, 2));
 
     // Fire and forget - run experiment in background
     (async () => {

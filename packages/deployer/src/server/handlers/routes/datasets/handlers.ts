@@ -13,6 +13,8 @@ import {
   deleteDatasetRowsHandler as getOriginalDeleteDatasetRowsHandler,
   getDatasetRowByIdHandler as getOriginalGetDatasetRowByIdHandler,
   getDatasetRowVersionsHandler as getOriginalGetDatasetRowVersionsHandler,
+  getDatasetExperimentsHandler as getOriginalGetDatasetExperimentsHandler,
+  getExperimentResultsHandler as getOriginalGetExperimentResultsHandler,
   runExperimentHandler as getOriginalRunExperimentHandler,
 } from '@mastra/server/handlers/datasets';
 import type { Context } from 'hono';
@@ -279,6 +281,60 @@ export async function getDatasetRowVersionsHandler(c: Context) {
 }
 
 // Experiment Handlers
+
+export async function getDatasetExperimentsHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const datasetId = c.req.param('datasetId');
+    const page = c.req.query('page');
+    const perPage = c.req.query('perPage');
+
+    const pagination: StoragePagination | undefined =
+      page !== undefined || perPage !== undefined
+        ? {
+            page: page ? parseInt(page, 10) : 0,
+            perPage: perPage ? parseInt(perPage, 10) : 10,
+          }
+        : undefined;
+
+    const result = await getOriginalGetDatasetExperimentsHandler({
+      mastra,
+      datasetId,
+      pagination,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error getting experiments');
+  }
+}
+
+export async function getExperimentResultsHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const experimentId = c.req.param('experimentId');
+    const page = c.req.query('page');
+    const perPage = c.req.query('perPage');
+
+    const pagination: StoragePagination | undefined =
+      page !== undefined || perPage !== undefined
+        ? {
+            page: page ? parseInt(page, 10) : 0,
+            perPage: perPage ? parseInt(perPage, 10) : 10,
+          }
+        : undefined;
+
+    const result = await getOriginalGetExperimentResultsHandler({
+      mastra,
+      experimentId,
+      pagination,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error getting experiment results');
+  }
+}
 
 export async function runExperimentHandler(c: Context) {
   try {

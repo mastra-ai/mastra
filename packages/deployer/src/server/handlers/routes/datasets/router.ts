@@ -15,6 +15,8 @@ import {
   deleteDatasetRowsHandler,
   getDatasetRowByIdHandler,
   getDatasetRowVersionsHandler,
+  getDatasetExperimentsHandler,
+  getExperimentResultsHandler,
   runExperimentHandler,
 } from './handlers';
 
@@ -713,6 +715,86 @@ export function datasetsRoutes(bodyLimitOptions: BodyLimitOptions) {
 
   // Experiment Routes
 
+  router.get(
+    '/:datasetId/experiments',
+    describeRoute({
+      description: 'Get all experiments for a dataset',
+      tags: ['datasets', 'experiments'],
+      parameters: [
+        {
+          name: 'datasetId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'Dataset ID',
+        },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          schema: { type: 'number', default: 0 },
+          description: 'Page number (0-indexed)',
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          schema: { type: 'number', default: 10 },
+          description: 'Number of experiments per page',
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of experiments',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  experiments: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        datasetId: { type: 'string' },
+                        datasetVersionId: { type: 'string' },
+                        targetType: { type: 'string', enum: ['agent', 'workflow'] },
+                        targetId: { type: 'string' },
+                        status: {
+                          type: 'string',
+                          enum: ['pending', 'running', 'completed', 'failed', 'cancelled'],
+                        },
+                        concurrency: { type: 'number' },
+                        totalItems: { type: 'number' },
+                        averageScores: { type: 'object' },
+                        scorers: { type: 'object' },
+                        createdAt: { type: 'string', format: 'date-time' },
+                        completedAt: { type: 'string', format: 'date-time' },
+                      },
+                    },
+                  },
+                  pagination: {
+                    type: 'object',
+                    properties: {
+                      total: { type: 'number' },
+                      page: { type: 'number' },
+                      perPage: { type: 'number' },
+                      hasMore: { type: 'boolean' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        404: { description: 'Dataset not found' },
+        500: { description: 'Internal server error' },
+      },
+    }),
+    getDatasetExperimentsHandler,
+  );
+
   router.post(
     '/:datasetId/experiments',
     bodyLimit(bodyLimitOptions),
@@ -798,6 +880,101 @@ export function datasetsRoutes(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     runExperimentHandler,
+  );
+
+  router.get(
+    '/:datasetId/experiments/:experimentId/results',
+    describeRoute({
+      description: 'Get results for a specific experiment',
+      tags: ['datasets', 'experiments'],
+      parameters: [
+        {
+          name: 'datasetId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'Dataset ID',
+        },
+        {
+          name: 'experimentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'Experiment ID',
+        },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          schema: { type: 'number', default: 0 },
+          description: 'Page number (0-indexed)',
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          schema: { type: 'number', default: 10 },
+          description: 'Number of results per page',
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of experiment row results',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  results: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        experimentId: { type: 'string' },
+                        rowId: { type: 'string' },
+                        input: { description: 'Input data for the experiment row' },
+                        output: { description: 'Output data from the experiment' },
+                        groundTruth: { description: 'Expected output' },
+                        scores: {
+                          type: 'object',
+                          description: 'Scores for this row',
+                        },
+                        error: { type: 'string', description: 'Error message if execution failed' },
+                        createdAt: { type: 'string', format: 'date-time' },
+                        comments: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              id: { type: 'string' },
+                              text: { type: 'string' },
+                              createdAt: { type: 'string', format: 'date-time' },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  pagination: {
+                    type: 'object',
+                    properties: {
+                      total: { type: 'number' },
+                      page: { type: 'number' },
+                      perPage: { type: 'number' },
+                      hasMore: { type: 'boolean' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        404: { description: 'Experiment not found' },
+        500: { description: 'Internal server error' },
+      },
+    }),
+    getExperimentResultsHandler,
   );
 
   return router;

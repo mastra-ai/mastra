@@ -2970,14 +2970,15 @@ export class Agent<
       }
     }
 
-    if (Object.keys(result).length === 0) {
-      throw new MastraError({
-        id: 'AGENT_GENEREATE_SCORER_NOT_FOUND',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `No scorers found in overrideScorers`,
-      });
-    }
+    // TODO: Verify if this is needed
+    // if (Object.keys(result).length === 0) {
+    //   throw new MastraError({
+    //     id: 'AGENT_GENEREATE_SCORER_NOT_FOUND',
+    //     domain: ErrorDomain.AGENT,
+    //     category: ErrorCategory.USER,
+    //     text: `No scorers found in overrideScorers`,
+    //   });
+    // }
 
     return result;
   }
