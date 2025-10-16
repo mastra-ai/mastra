@@ -22,6 +22,7 @@ export const weatherAgent = new Agent({
 `,
   model: ({ runtimeContext }) => {
     const fixture = runtimeContext.get('fixture') as Fixtures;
+    console.log('fixture', fixture);
 
     return new aiTest.MockLanguageModelV2({
       doStream: async () => ({
