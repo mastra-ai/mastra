@@ -25,6 +25,7 @@ import type {
   StepFlowEntry,
   StepResult,
   StepSuccess,
+  StepSuspended,
 } from './types';
 import { validateStepInput } from './utils';
 
@@ -1744,13 +1745,23 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     const prevPayload = stepResults[step.id];
+    const foreachIndexObj: Record<number, any> = {};
     const resumeIndex =
       prevPayload?.status === 'suspended' ? prevPayload?.suspendPayload?.__workflow_meta?.foreachIndex || 0 : 0;
+
+    const resumeIndices =
+      prevPayload?.status === 'suspended' ? prevPayload?.suspendPayload?.__workflow_meta?.suspendedIndices || [] : [];
+
+    if (resumeIndex > 0) {
+      results.push(...(prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput || []));
+    }
 
     for (let i = resumeIndex; i < prevOutput.length; i += concurrency) {
       const items = prevOutput.slice(i, i + concurrency);
       const itemsResults = await Promise.all(
         items.map((item: any, j: number) => {
+          const k = i + j;
+          const isIndexSuspended = resumeIndices?.includes(k);
           return this.executeStep({
             workflowId,
             runId,
@@ -1758,7 +1769,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             step,
             stepResults,
             executionContext,
-            resume: resumeIndex === i + j ? resume : undefined,
+            resume: isIndexSuspended ? resume : undefined,
             prevOutput: item,
             tracingContext: { currentSpan: loopSpan },
             emitter,
@@ -1772,7 +1783,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         }),
       );
 
-      for (const result of itemsResults) {
+      for (const [resultIndex, result] of itemsResults.entries()) {
         if (result.status !== 'success') {
           const { status, error, suspendPayload, suspendedAt, endedAt, output } = result;
           const execResults = { status, error, suspendPayload, suspendedAt, endedAt, output };
@@ -1803,27 +1814,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           });
 
           if (execResults.status === 'suspended') {
-            await emitter.emit('watch-v2', {
-              type: 'workflow-step-suspended',
-              payload: {
-                id: step.id,
-                ...execResults,
-              },
-            });
-
-            return {
-              ...stepInfo,
-              status: 'suspended',
-              suspendPayload: {
-                ...execResults.suspendPayload,
-                __workflow_meta: {
-                  ...execResults.suspendPayload?.__workflow_meta,
-                  foreachIndex: i,
-                },
-              },
-              //@ts-ignore
-              endedAt: Date.now(),
-            };
+            foreachIndexObj[i + resultIndex] = execResults;
           } else {
             await emitter.emit('watch-v2', {
               type: 'workflow-step-result',
@@ -1845,7 +1836,36 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           }
         }
 
-        results.push(result?.output);
+        if (result?.output) {
+          results.push(result?.output);
+        }
+      }
+
+      if (Object.keys(foreachIndexObj).length > 0) {
+        const suspendedIndices = Object.keys(foreachIndexObj).map(Number);
+        const foreachIndex = suspendedIndices[0]!;
+        await emitter.emit('watch-v2', {
+          type: 'workflow-step-suspended',
+          payload: {
+            id: step.id,
+            ...foreachIndexObj[foreachIndex],
+          },
+        });
+
+        return {
+          ...stepInfo,
+          suspendedAt: Date.now(),
+          status: 'suspended',
+          suspendPayload: {
+            ...foreachIndexObj[foreachIndex].suspendPayload,
+            __workflow_meta: {
+              ...foreachIndexObj[foreachIndex].suspendPayload?.__workflow_meta,
+              foreachIndex,
+              foreachOutput: results,
+              suspendedIndices,
+            },
+          },
+        } as StepSuspended<any, any>;
       }
     }
 
