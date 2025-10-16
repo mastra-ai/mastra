@@ -105,7 +105,7 @@ function resolveMaybePromise<T, R = void>(
   value: T | Promise<T> | PromiseLike<T>, 
   cb: (value: T) => R
 ): R | Promise<R> {
-  // Check for both native Promises and Promise-like objects (thenables)
+  if (value instanceof Promise || (value != null && typeof (value as PromiseLike<T>).then === "function")) {
   if (value instanceof Promise || (value && typeof (value as any).then === "function")) {
     return Promise.resolve(value).then(cb);
   }
