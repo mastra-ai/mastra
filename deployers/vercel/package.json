@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "0.12.8",
+  "version": "0.12.9",
   "description": "",
   "type": "module",
   "files": [
@@ -33,7 +33,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/deployer": "workspace:^",
-    "@rollup/plugin-virtual": "^3.0.2",
+    "@rollup/plugin-virtual": "3.0.2",
     "fs-extra": "^11.3.2"
   },
   "devDependencies": {
