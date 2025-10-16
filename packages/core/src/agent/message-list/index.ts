@@ -892,20 +892,18 @@ export class MessageList {
    * @returns AIV4 CoreMessage with system role
    */
   private static mastraMessageV2SystemToV4Core(message: MastraMessageV2): AIV4Type.CoreMessage {
-    // Extract text content directly from the message
-    let content = '';
+    if (message.role !== `system` || !message.content.content)
+      throw new MastraError({
+        id: 'INVALID_SYSTEM_MESSAGE_FORMAT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Invalid system message format. System messages must be CoreMessage format with 'role' and 'content' properties. The content should be a string.`,
+        details: {
+          receivedMessage: JSON.stringify(message, null, 2),
+        },
+      });
 
-    if (typeof message.content.content === 'string') {
-      content = message.content.content;
-    } else if (message.content.parts) {
-      // Concatenate all text parts
-      content = message.content.parts
-        .filter(part => part.type === 'text')
-        .map(part => (part as any).text)
-        .join('');
-    }
-
-    return { role: 'system', content };
+    return { role: 'system', content: message.content.content };
   }
 
   private getMessageById(id: string) {
