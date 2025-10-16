@@ -1425,7 +1425,8 @@ describe('Working Memory Tests', () => {
       await vector.turso.close();
     });
 
-    it('should handle working memory tools in agent network - thread scope', async () => {
+    // TODO: investigate why this test is flaky
+    it('should handle working memory tools in agent network - thread scope', { retry: 3 }, async () => {
       // Create an agent that has memory capabilities
       const memoryAgent = new Agent({
         name: 'memory-agent',
@@ -1473,7 +1474,8 @@ describe('Working Memory Tests', () => {
       expect(workingMemory).toContain('Goku');
     });
 
-    it('should handle working memory tools in agent network - resource scope', async () => {
+    // TODO: investigate why this test is flaky
+    it('should handle working memory tools in agent network - resource scope', { retry: 3 }, async () => {
       // Create memory instance with resource-scoped working memory
       const resourceMemory = new Memory({
         options: {

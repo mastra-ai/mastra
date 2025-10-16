@@ -1,5 +1,5 @@
 import { Mastra } from '@mastra/core';
-import { PinoLogger } from '@mastra/loggers';
+// import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
@@ -8,6 +8,7 @@ import { myWorkflow } from './workflows';
 import { chefModelV2Agent, networkAgent } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/scores';
 import { myWorkflowX } from './workflows/other';
+import { helpfulAgent } from './agents/helpful-agent';
 
 const storage = new LibSQLStore({
   url: 'file:./mastra.db',
@@ -22,21 +23,22 @@ const testScorer = createScorer({
 
 export const mastra = new Mastra({
   agents: {
-    chefAgent,
-    chefAgentResponses,
-    dynamicAgent,
-    agentThatHarassesYou,
-    evalAgent,
-    chefModelV2Agent,
-    networkAgent,
+    // chefAgent,
+    // chefAgentResponses,
+    // dynamicAgent,
+    // agentThatHarassesYou,
+    // evalAgent,
+    // chefModelV2Agent,
+    // networkAgent,
+    helpfulAgent,
   },
-  logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
+  // logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
   storage,
-  mcpServers: {
-    myMcpServer,
-    myMcpServerTwo,
-  },
-  workflows: { myWorkflow, myWorkflowX },
+  // mcpServers: {
+  //   myMcpServer,
+  //   myMcpServerTwo,
+  // },
+  // workflows: { myWorkflow, myWorkflowX },
   bundler: {
     sourcemap: true,
   },
@@ -48,9 +50,9 @@ export const mastra = new Mastra({
       },
     },
   ],
-  scorers: {
-    testScorer,
-  },
+  // scorers: {
+  //   testScorer,
+  // },
   telemetry: {
     enabled: false,
   },

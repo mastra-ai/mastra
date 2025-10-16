@@ -123,6 +123,23 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
     });
   }
 
+  /**
+   * Enable OpenAI's strict JSON schema mode to ensure schema compliance.
+   * Without this, OpenAI may omit required fields or violate type constraints.
+   * @see https://platform.openai.com/docs/guides/structured-outputs#structured-outputs-vs-json-mode
+   * @see https://ai-sdk.dev/docs/ai-sdk-core/generating-structured-data#accessing-reasoning
+   */
+  const providerOptionsToUse =
+    model.provider.startsWith('openai') && responseFormat?.type === 'json' && !structuredOutput?.jsonPromptInjection
+      ? {
+          ...(providerOptions ?? {}),
+          openai: {
+            strictJsonSchema: true,
+            ...(providerOptions?.openai ?? {}),
+          },
+        }
+      : providerOptions;
+
   const stream = v5.initialize({
     runId,
     onResult,
@@ -136,7 +153,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
             const streamResult = await model.doStream({
               ...toolsAndToolChoice,
               prompt,
-              providerOptions,
+              providerOptions: providerOptionsToUse,
               abortSignal,
               includeRawChunks,
               responseFormat:

@@ -1,289 +1,72 @@
 import { z } from 'zod';
 import { mastra } from './mastra';
 
-const agent = mastra.getAgent('chefAgent');
-const responsesAgent = mastra.getAgent('chefAgentResponses');
-const agentThatHarassesYou = mastra.getAgent('agentThatHarassesYou');
+// Recursively check if any field at any level is optional
+type HasOptionalFieldsDeep<T> = T extends object
+  ? true extends {
+      [K in keyof T]-?: {} extends Pick<T, K>
+        ? true // This key is optional
+        : T[K] extends object
+          ? HasOptionalFieldsDeep<T[K]> // Recurse into nested objects
+          : false;
+    }[keyof T]
+    ? true
+    : false
+  : false;
 
-const stream = await agentThatHarassesYou.stream('I want to fight you');
+// Get all paths to optional fields (including nested)
+type OptionalPaths<T, Prefix extends string = ''> = T extends object
+  ? {
+      [K in keyof T]-?: {} extends Pick<T, K>
+        ? `${Prefix}${K & string}` // This key is optional
+        : T[K] extends object
+          ? OptionalPaths<T[K], `${Prefix}${K & string}.`> // Recurse with path
+          : never;
+    }[keyof T]
+  : never;
 
-for await (const chunk of stream.textStream) {
-  console.log(`frontend received chunk: ${chunk}`);
+const agent = mastra.getAgent('helpfulAgent');
+
+const schema = z.object({
+  title: z.string().describe('The title of the story'),
+  summary: z.string().describe('The summary of the story'),
+  author: z.string().describe('The author of the story').optional(),
+  readingTimeEstimate: z.number().describe('The reading time estimate of the story in minutes'),
+  readingLevel: z.enum(['easy', 'medium', 'hard']).describe('The reading level of the story'),
+  data: z.object({
+    somethingElse: z.string().optional(),
+  }),
+});
+
+type MySchema = z.infer<typeof schema>;
+type HasOptionals = HasOptionalFieldsDeep<MySchema>;
+type AllOptionalPaths = OptionalPaths<MySchema>;
+
+const result = await agent.stream(
+  'Write me an interesting short story. Leave the author blank. Do not include an author at all.',
+  {
+    structuredOutput: {
+      // model: 'openai/gpt-4o-mini',
+      schema,
+      // maxValidationRetries: 3,
+      // retryOnValidationError: false,
+      errorStrategy: 'strict' as const,
+    },
+  },
+);
+
+for await (const chunk of result.fullStream) {
+  if (chunk.type === 'object') {
+    console.log('object', chunk.object);
+  }
+  if (chunk.type === 'step-start') {
+    console.log('step-start', chunk);
+  }
+  // if (chunk.type === 'step-finish') {
+  // console.log('step-finish chunk.payload.output.validationRetry', chunk.payload.output.validationRetry);
+  // console.log('step-finish', chunk.payload.output.validationRetry);
+  // }
 }
 
-console.log('done');
-
-// async function text() {
-//   // Query 1: Basic pantry ingredients
-//   const query1 =
-//     'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?';
-//   console.log(`Query 1: ${query1}`);
-
-//   const pastaResponse = await agent.generate(query1);
-//   console.log('\n👨‍🍳 Chef Michel:', pastaResponse.text);
-//   console.log('\n-------------------\n');
-// }
-
-// async function generateText() {
-//   // Query 1: Basic pantry ingredients
-
-//   const query1 =
-//     'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?';
-//   console.log(`Query 1: ${query1}`);
-
-//   const pastaResponse = await agent.generate(query1);
-
-//   console.log('\n👨‍🍳 Chef Michel:', pastaResponse.text);
-//   console.log('\n-------------------\n');
-// }
-
-// async function textStream() {
-//   // Query 2: More ingredients
-//   const query2 =
-//     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
-//   console.log(`Query 2: ${query2}`);
-
-//   const curryResponse = await agent.stream(query2);
-
-//   console.log('\n👨‍🍳 Chef Michel: ');
-
-//   // Handle the stream
-//   for await (const chunk of curryResponse.textStream) {
-//     // Write each chunk without a newline to create a continuous stream
-//     process.stdout.write(chunk);
-//   }
-
-//   console.log('\n\n✅ Recipe complete!');
-// }
-
-// async function generateStream() {
-//   // Query 2: More ingredients
-//   const query2 =
-//     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
-//   console.log(`Query 2: ${query2}`);
-
-//   const curryResponse = await agent.stream([query2]);
-
-//   console.log('\n👨‍🍳 Chef Michel: ');
-
-//   // Handle the stream
-//   for await (const chunk of curryResponse.textStream) {
-//     // Write each chunk without a newline to create a continuous stream
-//     process.stdout.write(chunk);
-//   }
-
-//   console.log('\n\n✅ Recipe complete!');
-// }
-
-// async function textObject() {
-//   // Query 3: Generate a lasagna recipe
-//   const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-//   console.log(`Query 3: ${query3}`);
-
-//   const lasagnaResponse = await agent.generate(query3, {
-//     output: z.object({
-//       ingredients: z.array(
-//         z.object({
-//           name: z.string(),
-//           amount: z.number(),
-//         }),
-//       ),
-//       steps: z.array(z.string()),
-//     }),
-//   });
-//   console.log('\n👨‍🍳 Chef Michel:', lasagnaResponse.object);
-//   console.log('\n-------------------\n');
-// }
-
-// async function experimentalTextObject() {
-//   // Query 3: Generate a lasagna recipe
-//   const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-//   console.log(`Query 3: ${query3}`);
-
-//   const lasagnaResponse = await agent.generate(query3, {
-//     experimental_output: z.object({
-//       ingredients: z.array(
-//         z.object({
-//           name: z.string(),
-//           amount: z.number(),
-//         }),
-//       ),
-//       steps: z.array(z.string()),
-//     }),
-//   });
-//   console.log('\n👨‍🍳 Chef Michel:', lasagnaResponse.object);
-//   console.log('\n-------------------\n');
-// }
-
-// async function textObjectJsonSchema() {
-//   // Query 3: Generate a lasagna recipe
-//   const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-//   console.log(`Query 3: ${query3}`);
-
-//   const lasagnaResponse = await agent.generate(query3, {
-//     output: {
-//       type: 'object',
-//       additionalProperties: false,
-//       required: ['ingredients', 'steps'],
-//       properties: {
-//         ingredients: {
-//           type: 'array',
-//           items: {
-//             type: 'object',
-//             additionalProperties: false,
-//             properties: {
-//               name: { type: 'string' },
-//               amount: { type: 'number' },
-//             },
-//             required: ['name', 'amount'],
-//           },
-//         },
-//         steps: {
-//           type: 'array',
-//           items: { type: 'string' },
-//         },
-//       },
-//     },
-//   });
-
-//   console.log('\n👨‍🍳 Chef Michel:', lasagnaResponse.object);
-//   console.log('\n-------------------\n');
-// }
-
-// async function generateObject() {
-//   // Query 3: Generate a lasagna recipe
-//   const query3 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-//   console.log(`Query 3: ${query3}`);
-
-//   const lasagnaResponse = await agent.generate([query3], {
-//     output: z.object({
-//       ingredients: z.array(
-//         z.object({
-//           name: z.string(),
-//           amount: z.number(),
-//         }),
-//       ),
-//       steps: z.array(z.string()),
-//     }),
-//   });
-//   console.log('\n👨‍🍳 Chef Michel:', lasagnaResponse.object);
-//   console.log('\n-------------------\n');
-// }
-
-// async function streamObject() {
-//   // Query 8: Generate a lasagna recipe
-//   const query8 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-//   console.log(`Query 8: ${query8}`);
-
-//   const lasagnaStreamResponse = await agent.stream(query8, {
-//     output: z.object({
-//       ingredients: z.array(
-//         z.object({
-//           name: z.string(),
-//           amount: z.number(),
-//         }),
-//       ),
-//       steps: z.array(z.string()),
-//     }),
-//   });
-
-//   console.log('\n👨‍🍳 Chef Michel: ');
-
-//   // Handle the stream
-//   for await (const chunk of lasagnaStreamResponse.textStream) {
-//     // Write each chunk without a newline to create a continuous stream
-//     process.stdout.write(chunk);
-//   }
-
-//   console.log('\n\n✅ Recipe complete!');
-// }
-
-// async function generateStreamObject() {
-//   // Query 9: Generate a lasagna recipe
-//   const query9 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-//   console.log(`Query 9: ${query9}`);
-
-//   const lasagnaStreamResponse = await agent.stream([query9], {
-//     output: z.object({
-//       ingredients: z.array(
-//         z.object({
-//           name: z.string(),
-//           amount: z.number(),
-//         }),
-//       ),
-//       steps: z.array(z.string()),
-//     }),
-//   });
-
-//   console.log('\n👨‍🍳 Chef Michel: ');
-
-//   // Handle the stream
-//   for await (const chunk of lasagnaStreamResponse.textStream) {
-//     // Write each chunk without a newline to create a continuous stream
-//     process.stdout.write(chunk);
-//   }
-
-//   console.log('\n\n✅ Recipe complete!');
-// }
-
-// async function generateExperimentalStreamObject() {
-//   // Query 9: Generate a lasagna recipe
-//   const query9 = 'I want to make lasagna, can you generate a lasagna recipe for me?';
-//   console.log(`Query 9: ${query9}`);
-
-//   const lasagnaStreamResponse = await agent.stream([query9], {
-//     experimental_output: z.object({
-//       ingredients: z.array(
-//         z.object({
-//           name: z.string(),
-//           amount: z.number(),
-//         }),
-//       ),
-//       steps: z.array(z.string()),
-//     }),
-//   });
-
-//   console.log('\n👨‍🍳 Chef Michel: ');
-
-//   // Handle the stream
-//   for await (const chunk of lasagnaStreamResponse.textStream) {
-//     // Write each chunk without a newline to create a continuous stream
-//     process.stdout.write(chunk);
-//   }
-
-//   console.log('\n\n✅ Recipe complete!');
-// }
-
-// async function main() {
-//   // await text();
-
-//   // await experimentalTextObject();
-
-//   // await generateExperimentalStreamObject();
-
-//   // await generateText();
-
-//   // await textStream();
-
-//   // await generateStream();
-
-//   // await textObject();
-
-//   // await textObjectJsonSchema();
-
-//   // await generateObject();
-
-//   // await streamObject();
-
-//   // await generateStreamObject();
-
-//   const query1 = 'What happened in San Francisco last week?';
-
-//   const pastaResponse = await responsesAgent.generate(query1, {
-//     instructions: 'You take every recipe you get an exaggerate it and use weird ingredients.',
-//   });
-
-//   console.log(pastaResponse.text);
-// }
-
-// main();
+const finalObjectResult = await result.object;
+console.log('finalObjectResult', finalObjectResult);
