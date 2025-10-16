@@ -1,48 +1,5 @@
 # CI Quick Wins - Immediate Improvements
 
-This guide shows you **simple changes you can make RIGHT NOW** to speed up your CI by 5-10 minutes without a major refactor.
-
-## ⚡ Quick Win #1: Enable Turbo Remote Cache Everywhere (5 minutes)
-
-**Impact:** 2-5 minute savings per workflow
-**Difficulty:** Very Easy (find & replace)
-
-### What to change:
-
-In ALL workflow files that have this:
-
-```yaml
-env:
-  TURBO_CACHE: remote:r # ❌ Read-only
-```
-
-Change to:
-
-```yaml
-env:
-  TURBO_CACHE: remote:rw # ✅ Read-write
-```
-
-### Files to update:
-
-- `.github/workflows/secrets.test-core.yml`
-- `.github/workflows/secrets.test-memory-ai5.yml`
-- `.github/workflows/secrets.test-combined-stores.yml`
-- `.github/workflows/secrets.test-auth.yml`
-- `.github/workflows/secrets.test-deployer.yml`
-- `.github/workflows/secrets.test-server.yml`
-- `.github/workflows/secrets.test-mcp.yml`
-- `.github/workflows/secrets.test-rag.yml`
-- `.github/workflows/secrets.e2e.yml`
-- Any other test workflow files
-
-### Command to do it automatically:
-
-```bash
-# From repo root
-find .github/workflows -name "*.yml" -type f -exec sed -i '' 's/TURBO_CACHE: remote:r$/TURBO_CACHE: remote:rw/g' {} \;
-```
-
 ---
 
 ## ⚡ Quick Win #2: Optimize E2E Build Commands (10 minutes)

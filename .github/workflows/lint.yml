@@ -14,7 +14,7 @@ jobs:
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:rww
+      TURBO_CACHE: remote:rw
     permissions:
       pull-requests: read
 
@@ -53,7 +53,7 @@ jobs:
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:rww
+      TURBO_CACHE: remote:rw
       NODE_OPTIONS: --max-old-space-size=4096
     permissions:
       pull-requests: read
