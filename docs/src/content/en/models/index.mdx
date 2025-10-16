@@ -11,14 +11,28 @@ import { Callout } from "nextra/components";
 
 # Model Providers
 
-Mastra provides a unified interface for working with LLMs across multiple providers. You can access over 600 models from 40+ providers without managing separate integrations for each one
+Mastra gives you a unified interface for working with LLMs across multiple providers, giving you access to over 600 models from 40+ providers through a single API.
 
-Whether you're using OpenAI, Anthropic, Google, or a gateway like OpenRouter, specify the model as `"provider/model-name"` and Mastra handles the rest:
 
+## Features
+
+- **One API for any model** - Access any model without having to install and manage additional provider modules/dependencies.
+
+- **Access the newest AI** - Use new models the moment they're released, no matter which provider they come from. Avoid vendor lock-in with Mastra's provider-agnostic interface.  
+
+- **Mix and match models** - Use different models for different tasks. For example, run GPT-4o-mini for large-context processing, then switch to Claude Opus 4.1 for reasoning tasks.  
+
+- [**Model fallbacks**](#model-fallbacks) - If a provider experiences an outage, Mastra can automatically to another provider at the application level, minimizing latency and maintaining reliability.  
+
+## Basic usage
+
+Whether you're using OpenAI, Anthropic, Google, or a gateway like OpenRouter, specify the model as `"provider/model-name"` and Mastra handles the rest.
+
+Mastra automatically reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and routes to the appropiata provider. If an API key is missing, you'll get a clear runtime error showing exactly which variable to set.
 
 <Tabs items={["OpenAI", "Anthropic", "Google Gemini", "xAI", "OpenRouter"]}>
   <Tab>
-    ```typescript copy
+    ```typescript copy showLineNumbers
     import { Agent } from "@mastra/core";
 
     const agent = new Agent({
@@ -29,7 +43,7 @@ Whether you're using OpenAI, Anthropic, Google, or a gateway like OpenRouter, sp
     ```
   </Tab>
   <Tab>
-    ```typescript copy
+    ```typescript copy showLineNumbers
     import { Agent } from "@mastra/core";
 
     const agent = new Agent({
@@ -40,7 +54,7 @@ Whether you're using OpenAI, Anthropic, Google, or a gateway like OpenRouter, sp
     ```
   </Tab>
   <Tab>
-    ```typescript copy
+    ```typescript copy showLineNumbers
     import { Agent } from "@mastra/core";
 
     const agent = new Agent({
@@ -51,7 +65,7 @@ Whether you're using OpenAI, Anthropic, Google, or a gateway like OpenRouter, sp
     ```
   </Tab>
   <Tab>
-    ```typescript copy
+    ```typescript copy showLineNumbers
     import { Agent } from "@mastra/core";
 
     const agent = new Agent({
@@ -62,7 +76,7 @@ Whether you're using OpenAI, Anthropic, Google, or a gateway like OpenRouter, sp
     ```
   </Tab>
   <Tab>
-    ```typescript copy
+    ```typescript copy showLineNumbers
     import { Agent } from "@mastra/core";
 
     const agent = new Agent({
@@ -74,17 +88,6 @@ Whether you're using OpenAI, Anthropic, Google, or a gateway like OpenRouter, sp
   </Tab>
 </Tabs>
 
-Mastra automatically reads the appropriate environment variable (e.g. `ANTHROPIC_API_KEY`) and routes to the correct provider. If an API key is missing, you'll get a clear runtime error showing exactly which variable to set.
-
-## Features
-
-- **One API for any model** - Access any model without having to install and manage additional provider modules/dependencies.
-
-- **Access the newest AI** - Use new models the moment they're released, no matter which provider they come from. Avoid vendor lock-in with Mastra's provider-agnostic interface.  
-
-- **Mix and match models** - Use different models for different tasks. For example, run GPT-4o-mini for large-context processing, then switch to Claude Opus 4.1 for reasoning tasks.  
-
-- **Guaranteed uptime** - If a provider experiences an outage, Mastra can automatically [fall back](#model-fallbacks) to another provider at the application level, minimizing latency and maintaining reliability.  
 
 ## Model directory
 
@@ -139,10 +142,10 @@ Browse the directory of available models using the navigation on the left, or ex
 
 You can also explore models directly in your editor. Mastra provides full autocomplete for the `model` field - just start typing, and your IDE will show available options.
 
-Alternatively, browse and test models in the playground UI.
+Alternatively, browse and test models in the [Playground](/docs/server-db/local-dev-playground) UI.
 
-<Callout>
-The model list refreshes every hour, so you'll always have the latest available models without needing to update. To disable, set `MASTRA_AUTO_REFRESH_PROVIDERS=false`. Auto-refresh is disabled by default in production.
+<Callout type="info">
+In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Playground stay up-to-date with the latest models. To disable, set `MASTRA_AUTO_REFRESH_PROVIDERS=false`. Auto-refresh is disabled by default in production.
 </Callout>
 
 
@@ -150,7 +153,7 @@ The model list refreshes every hour, so you'll always have the latest available 
 
 Some models are faster but less capable, while others offer larger context windows or stronger reasoning skills. Use different models from the same provider, or mix and match across providers to fit each task.
 
-```typescript
+```typescript showLineNumbers
 import { Agent } from "@mastra/core";
 
 // Use a cost-effective model for document processing
@@ -167,12 +170,32 @@ const reasoningAgent = new Agent({
   model: "anthropic/claude-opus-4-1"
 })
 ```
+## Dynamic model selection
+
+Since models are just strings, you can select them dynamically based on [runtime context](/docs/server-db/runtime-context), variables, or any other logic:
+
+```typescript showLineNumbers
+const agent = new Agent({
+  name: "dynamic-assistant",
+  model: ({ runtimeContext }) => {
+    const provider = runtimeContext.get("provider-id");
+    const model = runtimeContext.get("model-id");
+    return `${provider}/${model}`;
+  },
+});
+```
+
+This enables powerful patterns:
+
+- A/B testing - Compare model performance in production.
+- User-selectable models - Let users choose their preferred model in your app.
+- Multi-tenant applications - Each customer can bring their own API keys and model preferences.
 
 ## Provider-specific options
 
 Different model providers expose their own configuration options. With OpenAI, you might adjust the `reasoning_effort` for tasks that need more or less reasoning. With Anthropic, you might tune `cacheControl` behavior for efficiency. Mastra lets you set these specific `providerOptions` either at the agent level or per message.
 
-```typescript
+```typescript showLineNumbers
 // Agent level (apply to all future messages)
 const planner = new Agent({
   instructions: {
@@ -192,25 +215,25 @@ const lowEffort =
 const highEffort = await planner.generate([
   {
     role: "user",
-    content: "Plan a simple 3 item dinner menu",
+    content: "Plan a simple 3 item dinner menu for a celiac",
     providerOptions: {
       openai: { reasoning_effort: "high" }
     }
   }
 ]);
 ```
-These options map directly to request body parameters under the hood. You can find the full list of supported options in the respective provider's documentation (e.g. [OpenAI API Reference](https://platform.openai.com/docs/api-reference)).
+Under the hood, these options map directly to request body parameters sent to the provider. You can find the full list of supported options in the respective provider's documentation (e.g. [OpenAI API Reference](https://platform.openai.com/docs/api-reference)).
 
 ## Custom headers
 
 If you need to specify custom headers, such as an organization ID or other provider-specific fields, use this syntax:
 
 
-```typescript
+```typescript showLineNumbers
 const agent = new Agent({
   name: "custom-agent",
   model: {
-    modelId: "gpt-4-turbo",
+    id: "openai/gpt-4-turbo",
     apiKey: process.env.OPENAI_API_KEY,
     headers: {
       "OpenAI-Organization": "org-abc123"
@@ -219,37 +242,16 @@ const agent = new Agent({
 });
 ```
 
-<Callout type="warning">
+<Callout type="info">
 Configuration differs by provider. See our provider pages in the left navigation for custom headers and configuration details.
 </Callout>
-
-## Dynamic model selection
-
-Since models are just strings, you can select them dynamically based on [runtime context](/docs/server-db/runtime-context), variables, or any other logic:
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-assistant",
-  model: ({ runtimeContext }) => {
-    const provider = runtimeContext.get("provider-id");
-    const model = runtimeContext.get("model-id");
-    return `${provider}/${model}`;
-  },
-});
-```
-
-This enables powerful patterns:
-
-- A/B testing - Compare model performance in production.
-- User-selectable models - Let users choose their preferred model in your app.
-- Multi-tenant applications - Each customer can bring their own API keys and model preferences.
 
 ## Model fallbacks
 
 Relying on a single model creates a single point of failure for your application. Model fallbacks provide automatic failover between models and providers. If the primary model becomes unavailable, requests are retried against the next configured fallback until one succeeds.
 
 
-```typescript
+```typescript showLineNumbers
 import { Agent } from '@mastra/core';
 
 const agent = new Agent({
@@ -275,14 +277,11 @@ Mastra tries your primary model first. If it encounters a 500 error, rate limit,
 
 Your users never experience the disruption - the response comes back with the same format, just from a different model. The error context is preserved as the system moves through your fallback chain, ensuring clean error propagation while maintaining streaming compatibility.
 
-## Extended support via Vercel AI SDK
+## Using AI SDK with Mastra
 
-Under the hood, Mastra uses official SDK clients for major providers like OpenAI, Anthropic, Google, XAI, and OpenRouter, so you get complete access to each provider's native features. For other providers, Mastra uses the OpenAI-compatible API standard, which covers most use cases. 
+Mastra uses AI SDK provider modules for OpenAI, Anthropic, Google, XAI, and OpenRouter, giving you full access to each provider’s native features—no need to use the AI SDK directly for these. For other providers, Mastra uses the OpenAI-compatible API standard by default. You typically won’t need to use the Vercel AI SDK provider module, but it’s fully supported if you want to or if your use case benefits from it.
 
-However, some providers offer features that require specific SDK client logic not compatible with the OpenAI-compatible interface. In these situations, we recommend using the Vercel AI SDK provider, which is supported in Mastra:
-
-
-```typescript
+```typescript showLineNumbers
 import { groq } from '@ai-sdk/groq';
 import { Agent } from "@mastra/core";
 
@@ -292,7 +291,3 @@ const agent = new Agent({
 })
 ```
 You can use an AI SDK model (e.g. `groq('gemma2-9b-it')`) anywhere that accepts a `"provider/model"` string, including within model router fallbacks.
-
-<Callout type="important">
-Start with Mastra's built-in model router ("provider/model" strings) for simplicity. Only switch to direct providers when you need a provider-specific feature not available through OpenAI-compatible API.
-</Callout>
