@@ -1,6 +1,6 @@
 import type { ChunkType } from '@mastra/core';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
-import type { PartialSchemaOutput, OutputSchema } from '@mastra/core/stream';
+import type { PartialSchemaOutput, OutputSchema, DataChunkType } from '@mastra/core/stream';
 
 import type { InferUIMessageChunk, ObjectStreamPart, TextStreamPart, ToolSet, UIMessage } from 'ai';
 
@@ -227,7 +227,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
           ...(chunk.payload || {}),
         } as OutputChunkType<OUTPUT>;
       }
-      if ('type' in chunk && (chunk as any).type?.startsWith('data-')) {
+      if ('type' in chunk && chunk.type?.startsWith('data-')) {
         return chunk as any;
       }
       return;
@@ -245,7 +245,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   responseMessageId,
 }: {
   // tool-output is a custom mastra chunk type used in ToolStream
-  part: TextStreamPart<ToolSet> | { type: 'tool-output'; toolCallId: string; output: any };
+  part: TextStreamPart<ToolSet> | DataChunkType | { type: 'tool-output'; toolCallId: string; output: any };
   messageMetadataValue?: unknown;
   sendReasoning?: boolean;
   sendSources?: boolean;
@@ -467,7 +467,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
 
     default: {
       // return the chunk as is if it's not a known type
-      if ('type' in part && (part as any).type?.startsWith('data-')) {
+      if ('type' in part && part.type?.startsWith('data-')) {
         if (!('data' in part)) {
           throw new Error(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(part)}`,
