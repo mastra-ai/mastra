@@ -89,7 +89,7 @@ export const FloatingChatWidget = ({
           <div className="flex items-start pt-[100px] justify-center min-h-full p-4">
             <DialogPanel
               transition
-              className="w-full overflow-hidden border-[0.5px] border-[var(--light-border-code)] dark:border-borders-2 max-w-[560px] mx-auto rounded-xl bg-[var(--light-color-surface-15)] dark:bg-surface-4 transition duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
+              className="w-full overflow-hidden ring ring-neutral-200 dark:ring-neutral-800 max-w-[560px] mx-auto rounded-xl bg-[var(--light-color-surface-15)] dark:bg-surface-4 transition duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
             >
               <DialogTitle as="h3" className="sr-only">
                 AI Chat Assistant

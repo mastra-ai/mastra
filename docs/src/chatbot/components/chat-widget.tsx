@@ -60,8 +60,8 @@ export function KapaChat({
   return (
     <div className={cn("flex relative flex-col w-full h-[700px]", className)}>
       {/* Chat header */}
-      <div className="flex absolute top-0 right-0 left-0 z-20 justify-between items-center px-5 py-3 w-full border-b backdrop-blur-md dark:border-neutral-700 border-neutral-200 dark:bg-surface-6">
-        <span className="dark:text-icons-5">Ask mastra ai</span>
+      <div className="flex absolute top-0 right-0 left-0 z-20 justify-between items-center px-5 py-3 w-full border-b backdrop-blur-md border-neutral-200 dark:border-neutral-800 dark:bg-surface-6">
+        <span className="text-sm dark:text-icons-5">Ask mastra docs</span>
         <Button
           onClick={() => close()}
           variant="ghost"
@@ -140,10 +140,10 @@ export function KapaChat({
       </div>
 
       {/* Input area */}
-      <div className="px-2 pb-4">
+      <div className="pb-4">
         <form
           onSubmit={handleSubmit}
-          className="border-t dark:border-borders-1 border-borders-3"
+          className="px-2 border-t border-neutral-200 dark:border-neutral-800"
         >
           <div className="flex items-center">
             <Textarea
