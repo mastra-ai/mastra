@@ -5,13 +5,15 @@ description: Learn how to add memory to agents to store conversation history and
 
 import { Steps } from "nextra/components";
 
-# Agent Memory
+## Agent memory
 
-Agents can use memory to store conversation history, recall relevant information, and maintain context across interactions. This enables more natural, stateful conversations throughout a user’s session.
+Agents use memory to maintain context across interactions. LLMs are stateless and don't retain information between calls, so agents need memory to track conversation history and recall relevant information.
+
+Mastra agents can be configured to store conversation history, with optional [working memory](./working-memory) to maintain recent context or [semantic recall](./semantic-recall) to retrieve past messages based on meaning.
 
 ## When to use memory
 
-Use memory when an agent needs to retain information across multiple interactions. This includes recalling user-specific details, facts, or the results of tool calls. Without memory, the agent handles each request in isolation, without awareness of earlier messages or responses.
+Use memory when your agent needs to maintain multi-turn conversations that reference prior exchanges, recall user preferences or facts from earlier in a session, or build context over time within a conversation thread. Skip memory for single-turn requests where each interaction is independent.
 
 ## Setting up memory
 
