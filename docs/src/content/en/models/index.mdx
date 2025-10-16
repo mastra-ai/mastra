@@ -27,7 +27,7 @@ Mastra provides a unified interface for working with LLMs across multiple provid
 
 Whether you're using OpenAI, Anthropic, Google, or a gateway like OpenRouter, specify the model as `"provider/model-name"` and Mastra handles the rest.
 
-Mastra automatically reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and routes to the appropriate provider. If an API key is missing, you'll get a clear runtime error showing exactly which variable to set.
+Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and routes requests to the provider. If an API key is missing, you'll get a clear runtime error showing exactly which variable to set.
 
 <Tabs items={["OpenAI", "Anthropic", "Google Gemini", "xAI", "OpenRouter"]}>
   <Tab>
@@ -81,7 +81,7 @@ Mastra automatically reads the relevant environment variable (e.g. `ANTHROPIC_AP
     const agent = new Agent({
       name: "assistant",
       instructions: "You are a helpful assistant", 
-      model: "openrouter/anthropic/claude-3.5-haiku"
+      model: "openrouter/anthropic/claude-4.5-haiku"
     })
     ```
   </Tab>
@@ -204,7 +204,7 @@ const planner = new Agent({
       openai: { reasoning_effort: "low" }
     }
   },
-  model: openai("o1-preview"),
+  model: "openai/o3-pro",
 });
 
 const lowEffort = 
