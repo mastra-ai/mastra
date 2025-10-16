@@ -101,12 +101,16 @@ type ModelFallbacks = {
   enabled: boolean;
 }[];
 
-function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
-  if (value instanceof Promise) {
-    return value.then(cb);
+function resolveMaybePromise<T, R = void>(
+  value: T | Promise<T> | PromiseLike<T>, 
+  cb: (value: T) => R
+): R | Promise<R> {
+  // Check for both native Promises and Promise-like objects (thenables)
+  if (value instanceof Promise || (value && typeof (value as any).then === "function")) {
+    return Promise.resolve(value).then(cb);
   }
 
-  return cb(value);
+  return cb(value as T);
 }
 
 // Helper to resolve threadId from args (supports both new and old API)
