@@ -1,5 +1,14 @@
 # @mastra/react-hooks
 
+## 0.0.7-alpha.0
+
+### Patch Changes
+
+- Add @mastra/react to peer deps ([#8857](https://github.com/mastra-ai/mastra/pull/8857))
+
+- Updated dependencies []:
+  - @mastra/client-js@0.16.1-alpha.0
+
 ## 0.0.6
 
 ### Patch Changes
