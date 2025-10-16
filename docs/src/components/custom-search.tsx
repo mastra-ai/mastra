@@ -355,7 +355,9 @@ export const CustomSearch: FC<SearchProps> = ({
                       onClick={() => handleSelect(subResult)}
                       onMouseEnter={() => setSelectedIndex(virtualItem.index)}
                     >
-                      <span className="pl-7 text-xs font-medium capitalize text-icons-3">{subResult.section}</span>
+                      <span className="pl-7 text-xs font-medium capitalize text-icons-3">
+                        {subResult.section}
+                      </span>
                       <div className="flex gap-2 items-center">
                         <IconComponent className="w-4 h-4 md:w-5 md:h-5 text-icons-3 shrink-0" />
                         <span
