@@ -5862,7 +5862,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should suspend and resume when running a single item concurrency (default) for loop', async () => {
+    it.only('should suspend and resume when running a single item concurrency (default) for loop', async () => {
       const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
         if (!resumeData) {
           return suspend({});
@@ -5915,16 +5915,20 @@ describe('Workflow', () => {
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+      console.log('result===', JSON.stringify(result, null, 2));
 
       expect(result.status).toBe('suspended');
 
       let resumedResult = await run.resume({ resumeData: { resumeValue: 0 } });
+      console.log('resumedResult1===', JSON.stringify(resumedResult, null, 2));
       expect(resumedResult.status).toBe('suspended');
 
       resumedResult = await run.resume({ resumeData: { resumeValue: 5 } });
+      console.log('resumedResult2===', JSON.stringify(resumedResult, null, 2));
       expect(resumedResult.status).toBe('suspended');
 
       resumedResult = await run.resume({ resumeData: { resumeValue: 0 } });
+      console.log('resumedResult3===', JSON.stringify(resumedResult, null, 2));
       expect(resumedResult.status).toBe('success');
 
       expect(map).toHaveBeenCalledTimes(6);
@@ -6098,6 +6102,96 @@ describe('Workflow', () => {
           status: 'success',
           output: { finalValue: 22 + 11 + 5 + 1 + 11 + (333 + 11 + 5) },
           payload: [{ value: 33 + 5 }, { value: 12 }, { value: 344 + 5 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should suspend and resume provided index when running a all items concurrency for loop', async () => {
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + resumeData.resumeValue };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { counterWorkflow },
+      });
+
+      const run = await counterWorkflow.createRunAsync();
+      const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 }, forEachIndex: 2 });
+
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 0 }, forEachIndex: 1 });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 3 }, forEachIndex: 0 });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(6);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 12 + 3 }, { value: 33 + 0 }, { value: 344 + 5 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          resumePayload: { resumeValue: 3 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + 3 + (22 + 11 + 0) + (333 + 11 + 5) },
+          payload: [{ value: 12 + 3 }, { value: 33 + 0 }, { value: 344 + 5 }],
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },

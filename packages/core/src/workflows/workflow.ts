@@ -2054,6 +2054,7 @@ export class Run<
     tracingContext,
     tracingOptions,
     onChunk,
+    forEachIndex,
   }: {
     resumeData?: z.input<TInput>;
     step?:
@@ -2065,6 +2066,7 @@ export class Run<
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     onChunk?: (chunk: ChunkType) => Promise<unknown>;
+    forEachIndex?: number;
   } = {}) {
     this.closeStreamAction = async () => {};
 
@@ -2141,6 +2143,7 @@ export class Run<
           tracingOptions,
           writableStream: writable,
           isVNext: true,
+          forEachIndex,
         }).then(result => {
           // always close stream, even if the workflow is suspended
           // this will trigger a finish event with workflow status set to suspended
@@ -2242,6 +2245,7 @@ export class Run<
     outputOptions?: {
       includeState?: boolean;
     };
+    forEachIndex?: number;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._resume(params);
   }
@@ -2266,6 +2270,7 @@ export class Run<
     outputOptions?: {
       includeState?: boolean;
     };
+    forEachIndex?: number;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -2285,6 +2290,8 @@ export class Run<
     } else {
       // Use suspendedPaths to detect suspended steps
       const suspendedStepPaths: string[][] = [];
+
+      console.log('snapshot?.suspendedPaths===', JSON.stringify(snapshot?.suspendedPaths, null, 2));
 
       Object.entries(snapshot?.suspendedPaths ?? {}).forEach(([stepId, _executionPath]) => {
         // Check if this step has nested workflow suspension data
@@ -2387,6 +2394,7 @@ export class Run<
           resumePayload: resumeDataToUse,
           // @ts-ignore
           resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
+          forEachIndex: params.forEachIndex,
         },
         format: params.format,
         emitter: {
