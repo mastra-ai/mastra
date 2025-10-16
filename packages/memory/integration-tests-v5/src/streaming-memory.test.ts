@@ -151,15 +151,13 @@ describe('Memory Streaming Tests', () => {
 
       mastraServer = spawn(
         'pnpm',
-        [
-          path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`),
-          'dev',
-          '--port',
-          port.toString(),
-        ],
+        [path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`), 'dev'],
         {
           stdio: 'pipe',
           detached: true, // Run in a new process group so we can kill it and children
+          env: {
+            PORT: port.toString(),
+          },
         },
       );
 
