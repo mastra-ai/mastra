@@ -31,7 +31,9 @@ Mastra workflows operate using these principles:
 
 Steps are the building blocks of workflows. Create a step using `createStep()` with `inputSchema` and `outputSchema` to define the data it accepts and returns.
 
-```typescript {6,9,14} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+The `execute` function defines what the step does. Use it to call functions in your codebase, external APIs, agents, or tools.
+
+```typescript {6,9,15} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createStep } from "@mastra/core/workflows";
 
 const step1 = createStep({
@@ -44,6 +46,7 @@ const step1 = createStep({
   }),
   execute: async ({ inputData }) => {
     const { message } = inputData;
+
     return {
       formatted: message.toUpperCase()
     };
@@ -52,6 +55,10 @@ const step1 = createStep({
 ```
 
 > See the [Step Class](../../reference/workflows/step.mdx) for a full list of configuration options.
+
+### Using agents and tools
+
+Workflow steps can also call registered agents or import and execute tools directly, visit the [Agents and Tools](./using-with-agents-and-tools.mdx) page for more information.
 
 ## Creating a workflow
 
@@ -81,11 +88,9 @@ export const testWorkflow = createWorkflow({
 
 ### Understanding control flow
 
-Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured.
+Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](./control-flow.mdx) page for more information.
 
-> See [Control Flow](./control-flow.mdx) for more information.
-
-#### Composing steps
+#### Composing workflow steps
 
 When using `.then()`, steps run sequentially. The `inputSchema` of each step must match the `outputSchema` of the step before it. The final step’s `outputSchema` doesn’t need to match the workflow’s `outputSchema`, which can be defined independently.
 
@@ -229,56 +234,6 @@ The workflow output includes the full execution lifecycle, showing the input and
 }
 ```
 
-## Calling agents from workflow steps
-
-You can call agents from within a step’s `execute` function to generate a response and pass the result to the next step in the sequence. Agents are called the same way from a step as they are from any other context.
-
-```typescript {7,10} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-const step1 = createStep({
-  // ...
-  execute: async ({ inputData, mastra }) => {
-    const { message } = inputData;
-
-    const testAgent = mastra.getAgent("testAgent");
-    const response = await testAgent.generate(`Convert this to uppercase: ${message}`);
-
-    return {
-      formatted: response.text
-    };
-  }
-});
-```
-
-> See [Calling Agents](../../examples/agents/calling-agents.mdx) for more information.
-
-## Using tools in workflow steps
-
-You can call tools from within a step’s `execute` function to produce a result and pass it to the next step in the sequence. Tools are called the same way from a step as they are from any other context.
-
-```typescript {8-13,16} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { testTool } from "../tools/test-tool";
-
-const step1 = createStep({
-  // ...
-  execute: async ({ inputData, runtimeContext }) => {
-    const { message } = inputData;
-
-    const response = await testTool.execute({
-      context: {
-        message
-      },
-      runtimeContext
-    });
-
-    return {
-      formatted: response.formatted
-    };
-  }
-});
-```
-
-> See [Calling Tools](../../examples/tools/calling-tools.mdx) for more information.
-
 ## Using `RuntimeContext`
 
 Use `RuntimeContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
@@ -307,7 +262,6 @@ const step1 = createStep({
 ## Testing with Mastra Playground
 
 Use the Mastra [Playground](../server-db/local-dev-playground.mdx) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
-
 
 ## Related
 
