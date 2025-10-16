@@ -138,7 +138,6 @@ async function runWorkflow(page: Page) {
   await expect(nodes.nth(2)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(nodes.nth(3)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(nodes.nth(8)).toHaveAttribute('data-workflow-step-status', 'success');
-  await expect(nodes.nth(8)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(nodes.nth(9)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(nodes.nth(10)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(nodes.nth(11)).toHaveAttribute('data-workflow-step-status', 'success');
