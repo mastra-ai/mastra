@@ -51,6 +51,9 @@ export function WorkflowNestedNode({
     <>
       {!withoutTopHandle && <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />}
       <div
+        data-testid="workflow-nested-node"
+        data-workflow-node
+        data-workflow-step-status={step?.status}
         className={cn(
           'bg-surface3 rounded-lg w-[274px] border-sm border-border1 pt-2',
           step?.status === 'success' && 'bg-accent1Darker',

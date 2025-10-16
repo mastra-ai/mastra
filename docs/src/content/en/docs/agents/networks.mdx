@@ -1,168 +1,235 @@
 ---
-title: "Handling Complex LLM Operations | Networks | Mastra"
-description: "Networks in Mastra help you execute individual or multiple Mastra primitives in a non-deterministic way using a single API."
+title: "Agent Networks | Agents | Mastra Docs"
+description: Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
 ---
 
-# Agent.network()
+# Agent Networks
 
-`Agent.network()` introduces a flexible, composable and non-deterministic way to orchestrate multiple specialized agents and workflows, enabling complex, reasoning and task completion.
+Agent networks in Mastra coordinate multiple agents, workflows, and tools to handle tasks that aren't clearly defined upfront but can be inferred from the user's message or context. A top-level **routing agent** (a Mastra agent with other agents, workflows, and tools configured) uses an LLM to interpret the request and decide which primitives (sub-agents, workflows, or tools) to call, in what order, and with what data.
 
-There are two main problem areas that this system is designed to solve:
+## When to use networks
 
-- Scenarios where a single agent is insufficient, and tasks require collaboration, routing, or sequential/parallel execution across multiple agents and workflows.
-- Scenarios where the task is not fully defined and is initiated with unstructured input. A network allows your Agent to figure out which primitive to call and turn unstructured input into a structured task.
+Use networks for complex tasks that require coordination across multiple primitives. Unlike workflows, which follow a predefined sequence, networks rely on LLM reasoning to interpret the request and decide what to run.
 
-## Differences from Workflows
+## Core principles
 
-- Workflows are linear or branched sequences of steps. This creates a deterministic flow of execution.
-- `Agent.network()` adds a layer of non-deterministic LLM-based orchestration, allowing dynamic, multi-agent collaboration and routing. This creates a non-deterministic flow of execution.
+Mastra agent networks operate using these principles:
 
-## Important details
+- Memory is required when using `.network()` and is used to store task history and determine when a task is complete.
+- Primitives are selected based on their descriptions. Clear, specific descriptions improve routing. For workflows and tools, the input schema helps determine the right inputs at runtime.
+- If multiple primitives have overlapping functionality, the agent favors the more specific one, using a combination of schema and descriptions to decide which to run.
 
-- Providing memory to the Agent when using `network()` is _not_ optional, as it is required to store the task history. Memory is the core primitive used for any decisions on which primitives to run, as well as determine task completion.
-- Any available primitives (agents, workflows) are used based on their descriptions. The better the description, the better the routing agent will be able to select the right primitive. For workflows, the input schema is also used to determine which inputs to use when calling the workflow. More descriptive naming yields better results.
-- When primitives with overlapping capabilities are available, the agent will use the most specific primitive. For example, if both an agent and a workflow can do research, it will use the input schema of the workflow to determine which primitive to select.
+## Creating an agent network
 
-## Turning an Agent into a Network
+An agent network is built around a top-level routing agent that delegates tasks to agents, workflows, and tools defined in its configuration. Memory is configured on the routing agent using the `memory` option, and `instructions` define the agent's routing behavior.
 
-As an example, we have an Agent with 3 primitives at its disposal:
+```typescript {22-23,26,29} filename="src/mastra/agents/routing-agent.ts" showLineNumbers copy
+  import { openai } from "@ai-sdk/openai";
+  import { Agent } from "@mastra/core/agent";
+  import { Memory } from "@mastra/memory";
+  import { LibSQLStore } from "@mastra/libsql";
 
-- `agent1`: A general research agent that can do research on a given topic.
-- `agent2`: A general writing agent that can write a full report based on the researched material.
-- `workflow1`: A workflow that can research a given city and write a full report based on the researched material (using both agent1 and agent2).
+  import { researchAgent } from "./research-agent";
+  import { writingAgent } from "./writing-agent";
 
-We use the `network` method to create a task that requires multiple primitives. The Agent will, using memory, figure out which primitives to call and in which order, as well as when the task is complete.
+  import { cityWorkflow } from "../workflows/city-workflow";
+  import { weatherTool } from "../tools/weather-tool";
 
+  export const routingAgent = new Agent({
+    name: "routing-agent",
+    instructions: `
+      You are a network of writers and researchers.
+      The user will ask you to research a topic.
+      Always respond with a complete report—no bullet points.
+      Write in full paragraphs, like a blog post.
+      Do not answer with incomplete or uncertain information.`,
+    model: openai("gpt-4o-mini"),
+    agents: {
+      researchAgent,
+      writingAgent
+    },
+    workflows: {
+      cityWorkflow
+    },
+    tools: {
+      weatherTool
+    },
+    memory: new Memory({
+      storage: new LibSQLStore({
+        url: "file:../mastra.db"
+      })
+    })
+  });
+  ```
 
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { createStep, createWorkflow } from '@mastra/core/workflows';
-import { RuntimeContext } from '@mastra/core/runtime-context';
-import { Memory } from '@mastra/memory';
-import { openai } from '@ai-sdk/openai';
-import { LibSQLStore } from '@mastra/libsql';
-import { z } from 'zod';
+### Writing descriptions for network primitives
 
-const memory = new Memory({
-  storage: new LibSQLStore({
-    url: 'file:../mastra.db', // Or your database URL
-  }),
+When configuring a Mastra agent network, each primitive (agent, workflow, or tool) needs a clear description to help the routing agent decide which to use. The routing agent uses each primitive's description and schema to determine what it does and how to use it. Clear descriptions and well-defined input and output schemas improve routing accuracy.
+
+#### Agent descriptions
+
+Each agent in a network should include a clear `description` that explains what the agent does.
+
+```typescript filename="src/mastra/agents/research-agent.ts" showLineNumbers
+export const researchAgent = new Agent({
+  name: "research-agent",
+  description: `This agent gathers concise research insights in bullet-point form.
+    It's designed to extract key facts without generating full
+    responses or narrative content.`,
+  // ...
 });
-
-const agentStep1 = createStep({
-  id: 'agent-step',
-  description: 'This step is used to do research and text synthesis.',
-  inputSchema: z.object({
-    city: z.string().describe('The city to research'),
-  }),
-  outputSchema: z.object({
-    text: z.string(),
-  }),
-  execute: async ({ inputData }) => {
-    const resp = await agent1.generate(inputData.city, {
-      structuredOutput: {
-        schema: z.object({
-          text: z.string(),
-        })
-      },
-      maxSteps: 1
-    });
-
-    return { text: resp.object.text };
-  },
+```
+```typescript filename="src/mastra/agents/writing-agent.ts" showLineNumbers
+export const writingAgent = new Agent({
+  name: "writing-agent",
+  description: `This agent turns researched material into well-structured
+    written content. It produces full-paragraph reports with no bullet points,
+    suitable for use in articles, summaries, or blog posts.`,
+  // ...
 });
-
-const agentStep2 = createStep({
-  id: 'agent-step-two',
-  description: 'This step is used to do research and text synthesis.',
-  inputSchema: z.object({
-    text: z.string().describe('The city to research'),
-  }),
-  outputSchema: z.object({
-    text: z.string(),
-  }),
-  execute: async ({ inputData }) => {
-    const resp = await agent2.generate(inputData.text, {
-      structuredOutput: {
-        schema: z.object({
-          text: z.string(),
-        })
-      },
-      maxSteps: 1
-    });
-
-    return { text: resp.object.text };
-  },
-});
-
-const workflow1 = createWorkflow({
-  id: 'workflow1',
-  description:
-    'This workflow is perfect for researching a specific city. It should be used when you have a city in mind to research.',
-  steps: [],
-  inputSchema: z.object({
-    city: z.string(),
-  }),
-  outputSchema: z.object({
-    text: z.string(),
-  }),
-})
-  .then(agentStep1)
-  .then(agentStep2)
-  .commit();
-
-const agent1 = new Agent({
-  name: 'agent1',
-  instructions:
-    'This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.',
-  description:
-    'This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.',
-  model: openai('gpt-4o'),
-});
-
-const agent2 = new Agent({
-  name: 'agent2',
-  description:
-    'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Writes reports in full paragraphs. Should be used to synthesize text from different sources together as a final report.',
-  instructions:
-    'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report.',
-  model: openai('gpt-4o'),
-});
-
-const routingAgent = new Agent({
-  id: 'test-network',
-  name: 'Test Network',
-  instructions:
-    'You are a network of writers and researchers. The user will ask you to research a topic. You always need to answer with a full report. Bullet points are NOT a full report. WRITE FULL PARAGRAPHS like this is a blog post or something similar. You should not rely on partial information.',
-  model: openai('gpt-4o'),
-  agents: {
-    agent1,
-    agent2,
-  },
-  workflows: {
-    workflow1,
-  },
-  memory: memory,
-});
-
-const runtimeContext = new RuntimeContext();
-
-console.log(
-  // specifying the task, note that there is a mention here about using an agent for synthesis. This is because the routing agent can actually do some synthesis on results on its own, so this will force it to use agent2 instead
-  await routingAgent.network(
-    'What are the biggest cities in France? Give me 3. How are they like? Find cities, then do thorough research on each city, and give me a final full report synthesizing all that information. Make sure to use an agent for synthesis.',
-    { runtimeContext },
-  ),
-);
 ```
 
-For the given task (research 3 biggest cities in France and write a full report), the AgentNetwork will call the following primitives:
+#### Workflow descriptions
 
-1. `agent1` to find the 3 biggest cities in France.
-2. `workflow1` to research each city one by one. The workflow uses `memory` to figure out which cities have already been researched and makes sure it has researched all of them before proceeding.
-3. `agent2` to synthesize the final report.
+Workflows in a network should include a `description` to explain their purpose, along with `inputSchema` and `outputSchema` to describe the expected data.
 
-### How It Works
+```typescript filename="src/mastra/workflows/city-workflow.ts" showLineNumbers
+export const cityWorkflow = createWorkflow({
+  id: "city-workflow",
+  description: `This workflow handles city-specific research tasks.
+    It first gathers factual information about the city, then synthesizes
+    that research into a full written report. Use it when the user input
+    includes a city to be researched.`,
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    text: z.string()
+  })
+  //...
+})
+```
 
-- The underlying engine is a Mastra workflow that wraps the single call `generate` workflow.
-- The workflow will repeatedly call the network execution workflow with a `dountil` structure, until the routing model determines the task is complete. This check is used as the `dountil` condition.
+#### Tool descriptions
+
+Tools in a network should include a `description` to explain their purpose, along with `inputSchema` and `outputSchema` to describe the expected data.
+
+```typescript filename="src/mastra/tools/weather-tool.ts" showLineNumbers
+export const weatherTool = createTool({
+  id: "weather-tool",
+  description: ` Retrieves current weather information using the wttr.in API.
+    Accepts a city or location name as input and returns a short weather summary.
+    Use this tool whenever up-to-date weather data is requested.
+  `,
+  inputSchema: z.object({
+    location: z.string()
+  }),
+  outputSchema: z.object({
+    weather: z.string()
+  }),
+  // ...
+});
+```
+
+## Calling agent networks
+
+Call a Mastra agent network using `.network()` with a user message. The method returns a stream of events that you can iterate over to track execution progress and retrieve the final result.
+
+### Agent example
+
+In this example, the network interprets the message and would route the request to both the `researchAgent` and `writingAgent` to generate a complete response.
+
+```typescript showLineNumbers copy
+const result = await routingAgent.network("Tell me three cool ways to use Mastra");
+
+for await (const chunk of result) {
+  console.log(chunk.type);
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+#### Agent output
+
+The following `chunk.type` events are emitted during this request:
+
+```text
+routing-agent-start
+routing-agent-end
+agent-execution-start
+agent-execution-event-start
+agent-execution-event-step-start
+agent-execution-event-text-start
+agent-execution-event-text-delta
+agent-execution-event-text-end
+agent-execution-event-step-finish
+agent-execution-event-finish
+agent-execution-end
+network-execution-event-step-finish
+```
+
+## Workflow example
+
+In this example, the routing agent recognizes the city name in the message and runs the `cityWorkflow`. The workflow defines steps that call the `researchAgent` to gather facts, then the `writingAgent` to generate the final text.
+
+```typescript showLineNumbers copy
+const result = await routingAgent.network("Tell me some historical facts about London");
+
+for await (const chunk of result) {
+  console.log(chunk.type);
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+#### Workflow output
+
+The following `chunk.type` events are emitted during this request:
+
+```text
+routing-agent-end
+workflow-execution-start
+workflow-execution-event-workflow-start
+workflow-execution-event-workflow-step-start
+workflow-execution-event-workflow-step-result
+workflow-execution-event-workflow-finish
+workflow-execution-end
+routing-agent-start
+network-execution-event-step-finish
+```
+
+### Tool example
+
+In this example, the routing agent skips the `researchAgent`, `writingAgent`, and `cityWorkflow`, and calls the `weatherTool` directly to complete the task.
+
+```typescript showLineNumbers copy
+const result = await routingAgent.network("What's the weather in London?");
+
+for await (const chunk of result) {
+  console.log(chunk.type);
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+#### Tool output
+
+The following `chunk.type` events are emitted during this request:
+
+```text
+routing-agent-start
+routing-agent-end
+tool-execution-start
+tool-execution-end
+network-execution-event-step-finish
+```
+
+## Related
+
+- [Agent Memory](./agent-memory.mdx)
+- [Workflows Overview](../workflows/overview.mdx)
+- [Runtime Context](../server-db/runtime-context.mdx)
+
