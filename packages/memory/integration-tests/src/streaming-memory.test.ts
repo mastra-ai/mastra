@@ -10,9 +10,11 @@ import { Agent } from '@mastra/core/agent';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
 import { JSDOM } from 'jsdom';
-import { describe, expect, it, beforeAll, afterAll } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll, vi } from 'vitest';
 import { memory, weatherAgent } from './mastra/agents/weather';
 import { weatherTool } from './mastra/tools/weather';
+
+vi.setConfig({ testTimeout: 50000, hookTimeout: 50000 });
 
 // Helper to find an available port
 async function getAvailablePort(): Promise<number> {
@@ -133,7 +135,7 @@ describe('Memory Streaming Tests', () => {
     }
   });
 
-  describe('should stream via useChat after tool call', { timeout: 50000 }, () => {
+  describe('should stream via useChat after tool call', () => {
     let mastraServer: ReturnType<typeof spawn>;
     let port: number;
     const threadId = randomUUID();
