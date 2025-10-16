@@ -36,11 +36,11 @@ test.describe('agent panels', () => {
 
       const searchProviderInput = await page.locator('input[aria-label="Search providers"]');
       await expect(searchProviderInput).toBeVisible();
-      await expect(searchProviderInput).toHaveAttribute('value', 'OpenAI');
+      await expect(searchProviderInput).toHaveAttribute('value', 'mock-provider');
 
       const searchModelInput = await page.locator('input[aria-label="Search models"]');
       await expect(searchModelInput).toBeVisible();
-      await expect(searchModelInput).toHaveAttribute('value', 'gpt-4o-mini');
+      await expect(searchModelInput).toHaveAttribute('value', 'mock-model-id');
 
       await expect(page.locator('text=Memory is enabled')).toBeDefined();
 

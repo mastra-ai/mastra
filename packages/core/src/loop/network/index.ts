@@ -517,6 +517,7 @@ export async function createNetworkLoop({
         await writer.write({
           type: `agent-execution-event-${chunk.type}`,
           payload: chunk,
+          runId: chunk.runId,
           from: ChunkFrom.NETWORK,
         });
       }
@@ -671,6 +672,7 @@ export async function createNetworkLoop({
         await writer?.write({
           type: `workflow-execution-event-${chunk.type}`,
           payload: chunk,
+          runId: chunk.runId,
           from: ChunkFrom.NETWORK,
         });
       }

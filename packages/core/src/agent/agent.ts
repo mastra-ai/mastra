@@ -2440,7 +2440,7 @@ export class Agent<
             messageList,
           });
           return {
-            messageObjects: messageList.get.all.prompt(),
+            messageObjects: tripwireTriggered ? [] : messageList.get.all.prompt(),
             convertedTools,
             threadExists: false,
             thread: undefined,

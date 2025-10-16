@@ -151,6 +151,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-4-opus',
     'anthropic/claude-4-sonnet',
     'anthropic/claude-4.5-sonnet',
+    'anthropic/claude-haiku-4.5',
     'cerebras/qwen3-coder',
     'deepseek/deepseek-r1',
     'deepseek/deepseek-r1-distill-llama-70b',
@@ -442,6 +443,7 @@ export type ProviderModelsMap = {
   ];
   readonly opencode: readonly [
     'an-g8x',
+    'an-gbt',
     'claude-3-5-haiku',
     'claude-haiku-4-5',
     'claude-opus-4-1',
@@ -543,6 +545,7 @@ export type ProviderModelsMap = {
   readonly openrouter: readonly [
     'anthropic/claude-3.5-haiku',
     'anthropic/claude-3.7-sonnet',
+    'anthropic/claude-4.5-haiku',
     'anthropic/claude-opus-4',
     'anthropic/claude-opus-4.1',
     'anthropic/claude-sonnet-4',
@@ -602,6 +605,7 @@ export type ProviderModelsMap = {
     'openai/gpt-5',
     'openai/gpt-5-chat',
     'openai/gpt-5-codex',
+    'openai/gpt-5-image',
     'openai/gpt-5-mini',
     'openai/gpt-5-nano',
     'openai/gpt-oss-120b',
@@ -722,16 +726,23 @@ export type ProviderModelsMap = {
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
   readonly anthropic: readonly [
     'claude-3-5-haiku-20241022',
+    'claude-3-5-haiku-latest',
     'claude-3-5-sonnet-20240620',
     'claude-3-5-sonnet-20241022',
     'claude-3-7-sonnet-20250219',
+    'claude-3-7-sonnet-latest',
     'claude-3-haiku-20240307',
     'claude-3-opus-20240229',
     'claude-3-sonnet-20240229',
+    'claude-haiku-4-5',
     'claude-haiku-4-5-20251001',
+    'claude-opus-4-0',
+    'claude-opus-4-1',
     'claude-opus-4-1-20250805',
     'claude-opus-4-20250514',
+    'claude-sonnet-4-0',
     'claude-sonnet-4-20250514',
+    'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
   ];
   readonly 'fireworks-ai': readonly [
@@ -770,6 +781,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-3-7-sonnet-20250219',
     'anthropic/claude-3-7-sonnet-latest',
     'anthropic/claude-3-haiku-20240307',
+    'anthropic/claude-haiku-4-5-20251001',
     'anthropic/claude-opus-4-1-20250805',
     'anthropic/claude-opus-4-20250514',
     'anthropic/claude-sonnet-4-20250514',
