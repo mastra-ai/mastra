@@ -156,6 +156,7 @@ describe('Memory Streaming Tests', () => {
           stdio: 'pipe',
           detached: true, // Run in a new process group so we can kill it and children
           env: {
+            ...process.env,
             PORT: port.toString(),
           },
         },
