@@ -1,6 +1,7 @@
-import { OtelExporter, type OtelExporterConfig } from '@mastra/otel-exporter';
-import { ArizeSpanConverter } from './span-converter.js';
 import { SEMRESATTRS_PROJECT_NAME } from '@arizeai/openinference-semantic-conventions';
+import { OtelExporter } from '@mastra/otel-exporter';
+import type { OtelExporterConfig } from '@mastra/otel-exporter';
+import { OpenInferenceOTLPTraceExporter } from './openInferenceOTLPExporter.js';
 
 export type ArizeExporterConfig = Omit<OtelExporterConfig, 'provider'> & {
   /**
@@ -37,7 +38,10 @@ export class ArizeExporter extends OtelExporter {
       headers['Authorization'] = `Bearer ${config.apiKey}`;
     }
     super({
-      spanConverters: [new ArizeSpanConverter()],
+      exporter: new OpenInferenceOTLPTraceExporter({
+        url: config.endpoint,
+        headers,
+      }),
       ...config,
       resourceAttributes: {
         [SEMRESATTRS_PROJECT_NAME]: config.projectName,

@@ -776,6 +776,9 @@ importers:
       '@mastra/otel-exporter':
         specifier: workspace:*
         version: link:../otel-exporter
+      '@opentelemetry/core':
+        specifier: ^2.1.0
+        version: 2.1.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-proto':
         specifier: ^0.205.0
         version: 0.205.0(@opentelemetry/api@1.9.0)
