@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 0.21.1
+
+### Patch Changes
+
+- Update provider registry with latest models and providers ([`ca85c93`](https://github.com/mastra-ai/mastra/commit/ca85c932b232e6ad820c811ec176d98e68c59b0a))
+
+- Update provider registry and model documentation with latest models and providers ([`a1d40f8`](https://github.com/mastra-ai/mastra/commit/a1d40f88d4ce42c4508774ad22e38ac582157af2))
+
+- Ability to call agents as tools with .generate()/.stream() ([#8863](https://github.com/mastra-ai/mastra/pull/8863))
+
+- Add runId to `agent-execution-event-{string}` and `workflow-execution-event-{string}` event streamed in network ([#8862](https://github.com/mastra-ai/mastra/pull/8862))
+
 ## 0.21.1-alpha.0
 
 ### Patch Changes
