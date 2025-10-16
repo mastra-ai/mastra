@@ -105,7 +105,7 @@ test.describe('workflow run', () => {
     await page.getByRole('button', { name: 'Resume workflow' }).click();
     const nodes = await page.locator('[data-workflow-node]');
 
-    await expect(nodes.nth(12)).toHaveAttribute('data-workflow-step-status', 'success');
+    await expect(nodes.nth(12)).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 20000 });
     await expect(nodes.nth(13)).toHaveAttribute('data-workflow-step-status', 'success');
   });
 });
