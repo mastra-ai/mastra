@@ -562,6 +562,25 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
       }
 
       if (['tool-calls'].includes(finishReason ?? '')) {
+        // When finishReason is 'tool-calls', we still need to check if there's
+        // valid structured output in the accumulated text (e.g., Bedrock with isJsonResponseFromTool)
+        if (accumulatedText && accumulatedText.trim()) {
+          // Try to parse and validate the accumulated text
+          const finalResult = await handler.validateAndTransformFinal(accumulatedText);
+
+          if (finalResult.success) {
+            // Successfully parsed structured output from text
+            controller.enqueue({
+              from: ChunkFrom.AGENT,
+              runId: currentRunId ?? '',
+              type: 'object-result',
+              object: finalResult.value,
+            });
+          }
+        }
+        // No valid structured output - return without emitting object-result
+        // This preserves the original behavior for actual tool calls
+
         // TODO: this breaks object output when tools are called.
         // The reason we did this was to be able to work with client-side tool calls. We need the object to resolve in that case
         // but this will
@@ -574,7 +593,15 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         return;
       }
 
-      const finalResult = await handler.validateAndTransformFinal(accumulatedText);
+      // Try to extract JSON from accumulated text if it contains special tokens (e.g., LMStudio with jsonPromptInjection)
+      // LMStudio format: '<|channel|>final <|constrain|>JSON<|message|>{"key":"value"}'
+      let textToValidate = accumulatedText;
+      const messageTokenMatch = accumulatedText.match(/<\|message\|>(.+)$/);
+      if (messageTokenMatch && messageTokenMatch[1]) {
+        textToValidate = messageTokenMatch[1];
+      }
+
+      const finalResult = await handler.validateAndTransformFinal(textToValidate);
 
       if (!finalResult.success) {
         if (structuredOutput?.errorStrategy === 'warn') {
