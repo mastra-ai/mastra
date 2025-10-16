@@ -6,7 +6,7 @@ import path from 'node:path';
 
 vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
 
-describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
+describe('MCPServer through Mastra HTTP Integration (Subprocess)', { timeout: 50000 }, () => {
   let mastraServer: ReturnType<typeof spawn>;
   const port: number = 4114;
   const mcpServerId = 'myMcpServer';

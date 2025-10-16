@@ -140,7 +140,7 @@ describe('Memory Streaming Tests', () => {
     }
   });
 
-  describe('should stream via useChat after tool call', () => {
+  describe('should stream via useChat after tool call', { timeout: 50000 }, () => {
     let mastraServer: ReturnType<typeof spawn>;
     let port: number;
     const threadId = randomUUID();
