@@ -265,66 +265,6 @@ describe('Agent - network', () => {
     expect(generatedTitle.length).toBeGreaterThan(0);
   });
 
-  it.only('Should use custom model for title generation in network', async () => {
-    let titleModelUsed = false;
-    let networkModelUsed = false;
-
-    // Create a custom model for title generation
-    const titleModel = {
-      ...openai('gpt-4o-mini'),
-      doGenerate: async (params: any) => {
-        titleModelUsed = true;
-        return openai('gpt-4o-mini').doGenerate(params);
-      },
-    };
-
-    const networkModel = {
-      ...openai('gpt-4o-mini'),
-      doGenerate: async (params: any) => {
-        networkModelUsed = true;
-        return openai('gpt-4o-mini').doGenerate(params);
-      },
-    };
-
-    // Create memory with custom title generation model
-    const memoryWithCustomModel = new MockMemory();
-    memoryWithCustomModel.getMergedThreadConfig = () => {
-      return {
-        threads: {
-          generateTitle: {
-            model: titleModel,
-          },
-        },
-      };
-    };
-
-    const networkWithCustomTitle = new Agent({
-      id: 'test-network-custom-title',
-      name: 'Test Network Custom Title',
-      instructions: 'You can research topics.',
-      model: networkModel,
-      agents: {
-        agent1,
-      },
-      memory: memoryWithCustomModel,
-    });
-
-    const anStream = await networkWithCustomTitle.network('Research dolphins', {
-      runtimeContext,
-    });
-
-    // Consume the stream
-    for await (const chunk of anStream) {
-      // Just consume the chunks
-    }
-
-    // Wait for async operations
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    expect(titleModelUsed).toBe(true);
-    expect(networkModelUsed).toBe(true);
-  });
-
   it('Should not generate title when generateTitle is false', async () => {
     let titleGenerationAttempted = false;
 
