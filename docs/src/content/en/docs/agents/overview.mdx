@@ -251,12 +251,78 @@ const response = await testAgent.generate(
         keywords: z.array(z.string())
       })
     },
-    maxSteps: 1
   }
 );
 
 console.log(response.object);
 ```
+
+### With Tool Calling
+
+Use the `model` property to ensure that your agent can execute multi-step LLM calls with tool calling.
+
+```typescript showLineNumbers copy
+import { z } from "zod";
+
+const response = await testAgentWithTools.generate(
+  [
+    {
+      role: "system",
+      content: "Provide a summary and keywords for the following text:"
+    },
+    {
+      role: "user",
+      content: "Please use your test tool and let me know the results"
+    }
+  ],
+  {
+    structuredOutput: {
+      schema: z.object({
+        summary: z.string(),
+        keywords: z.array(z.string())
+      }),
+      model: "openai/gpt-4o"
+    },
+  }
+);
+
+console.log(response.object);
+console.log(response.toolResults)
+```
+
+### Response format
+
+By default `structuredOutput` will use `response_format` to pass the schema to the model provider. If the model provider does not natively support `response_format` it's possible that this will error or not give the desired results. To keep using the same model use `jsonPromptInjection` to bypass response format and inject a system prompt message to coerce the model to return structured output.
+
+```typescript showLineNumbers copy
+import { z } from "zod";
+
+const response = await testAgentThatDoesntSupportStructuredOutput.generate(
+  [
+    {
+      role: "system",
+      content: "Provide a summary and keywords for the following text:"
+    },
+    {
+      role: "user",
+      content: "Monkey, Ice Cream, Boat"
+    }
+  ],
+  {
+    structuredOutput: {
+      schema: z.object({
+        summary: z.string(),
+        keywords: z.array(z.string())
+      }),
+      jsonPromptInjection: true
+    },
+  }
+);
+
+console.log(response.object);
+```
+
+
 ## Working with images
 
 Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the `content` array. You can combine image content with text prompts to guide the agent's analysis.

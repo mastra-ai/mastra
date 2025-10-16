@@ -24,6 +24,7 @@ const meta = {
   moonshotai: "Moonshot AI",
   "moonshotai-cn": "Moonshot AI (China)",
   morph: "Morph",
+  nebius: "Nebius AI Studio",
   nvidia: "Nvidia",
   opencode: "OpenCode Zen",
   perplexity: "Perplexity",

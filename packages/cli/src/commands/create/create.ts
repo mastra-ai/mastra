@@ -7,6 +7,7 @@ import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { loadTemplates, selectTemplate, findTemplateByName, getDefaultProjectName } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
 import { init } from '../init/init';
+import type { Editor } from '../init/mcp-docs-server-install';
 import type { LLMProvider } from '../init/utils';
 import { getPackageManager } from '../utils.js';
 
@@ -21,7 +22,7 @@ export const create = async (args: {
   createVersionTag?: string;
   timeout?: number;
   directory?: string;
-  mcpServer?: 'windsurf' | 'cursor' | 'cursor-global';
+  mcpServer?: Editor;
   template?: string | boolean;
   analytics?: PosthogAnalytics;
 }) => {

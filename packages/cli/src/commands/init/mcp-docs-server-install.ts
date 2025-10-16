@@ -76,7 +76,25 @@ export const vscodeGlobalMCPConfigPath = path.join(
       : path.join('.config', 'Code', 'User', 'settings.json'),
 );
 
-export type Editor = 'cursor' | 'cursor-global' | 'windsurf' | 'vscode';
+export const EDITOR = ['cursor', 'cursor-global', 'windsurf', 'vscode'] as const;
+export type Editor = (typeof EDITOR)[number];
+
+export const MCP_SERVER = ['cursor', 'cursor-global', 'windsurf'] as const;
+export type MCPServer = (typeof MCP_SERVER)[number];
+
+/**
+ * Type-guard to check if a string is a valid MCPServer
+ */
+export function isValidMCPServer(value: string): value is MCPServer {
+  return MCP_SERVER.includes(value as MCPServer);
+}
+
+/**
+ * Type-guard to check if a string is a valid Editor
+ */
+export function isValidEditor(value: string): value is Editor {
+  return EDITOR.includes(value as Editor);
+}
 
 export async function installMastraDocsMCPServer({ editor, directory }: { editor?: Editor; directory: string }) {
   if (editor === `cursor`) {
