@@ -403,6 +403,72 @@ export function pgTests() {
         });
       });
 
+      describe('SSL Configuration', () => {
+        it('accepts connectionString with ssl: true', () => {
+          expect(() => new PostgresStore({ connectionString, ssl: true })).not.toThrow();
+        });
+
+        it('accepts connectionString with ssl object', () => {
+          expect(
+            () =>
+              new PostgresStore({
+                connectionString,
+                ssl: { rejectUnauthorized: false },
+              }),
+          ).not.toThrow();
+        });
+
+        it('accepts host config with ssl: true', () => {
+          const config = {
+            ...validConfig,
+            ssl: true,
+          };
+          expect(() => new PostgresStore(config)).not.toThrow();
+        });
+
+        it('accepts host config with ssl object', () => {
+          const config = {
+            ...validConfig,
+            ssl: { rejectUnauthorized: false },
+          };
+          expect(() => new PostgresStore(config)).not.toThrow();
+        });
+      });
+
+      describe('Pool Options', () => {
+        it('accepts max and idleTimeoutMillis with connectionString', () => {
+          const config = {
+            connectionString,
+            max: 30,
+            idleTimeoutMillis: 60000,
+          };
+          expect(() => new PostgresStore(config)).not.toThrow();
+        });
+
+        it('accepts max and idleTimeoutMillis with host config', () => {
+          const config = {
+            ...validConfig,
+            max: 30,
+            idleTimeoutMillis: 60000,
+          };
+          expect(() => new PostgresStore(config)).not.toThrow();
+        });
+      });
+
+      describe('Schema Configuration', () => {
+        it('accepts schemaName with connectionString', () => {
+          expect(() => new PostgresStore({ connectionString, schemaName: 'custom_schema' })).not.toThrow();
+        });
+
+        it('accepts schemaName with host config', () => {
+          const config = {
+            ...validConfig,
+            schemaName: 'custom_schema',
+          };
+          expect(() => new PostgresStore(config)).not.toThrow();
+        });
+      });
+
       describe('Invalid Config', () => {
         it('throws on invalid config (missing required fields)', () => {
           expect(() => new PostgresStore({ user: 'test' } as any)).toThrow(

@@ -144,9 +144,10 @@ const result = await agent.stream(messages, {
 ```
 
 - `structuredOutput` - Enhanced structured output with model override and custom options.
-  - `model` - If no model is added it will use the agent's default model.
-  -  `errorStrategy` - Determines what happens when the output doesn’t match the schema:
-      - warn' - log a warning
+  - `jsonPromptInjection` - Used to override the default behaviour of passing response_format to the model. This will inject context into the prompt to coerce the model into returning structured outputs.
+  - `model` - If a model is added this will create a sub agent to structure the response from the main agent. The main agent will call tools and return text, and the sub agent will return an object that conforms to your schema provided. This is a replacement for `experimental_output`.
+  - `errorStrategy` - Determines what happens when the output doesn’t match the schema:
+      - 'warn' - log a warning
       - 'error' - throw an error
       - 'fallback' - return a fallback value you provide
 
@@ -157,7 +158,7 @@ const result = await agent.generate(messages, {
       name: z.string(),
       age: z.number()
     }),
-    model: openai('gpt-4o-mini'), // Optional model override for structuring
+    model: "openai/gpt-4o-mini", // Optional model override for structuring
     errorStrategy: 'fallback',
     fallbackValue: { name: 'unknown', age: 0 },
     instructions: 'Extract user information' // Override default structuring instructions
@@ -292,15 +293,16 @@ Use `structuredOutput` instead to allow for tool calls and an object return.
 const result = await agent.generate(messages, {
   structuredOutput: {
     schema: z.object({
-      summary: z.string()
-    })
+      summary: z.string(),
+    }),
+    model: "openai/gpt-4o"
   }
 });
 ```
 
 - `output`
 
-The `output` property is deprecated in favor of `structuredOutput`, to achieve the same results use maxSteps 1 with `structuredOutput`.
+The `output` property is deprecated in favor of `structuredOutput`, to achieve the same results, omit the model and only pass `structuredOutput.schema`, optionally add `jsonPromptInjection: true` if your model does not natively support `response_format`.
 
 ```typescript showLineNumbers copy
 const result = await agent.generate(messages, {
@@ -311,7 +313,6 @@ const result = await agent.generate(messages, {
       })
     }
   },
-  maxSteps: 1
 });
 ```
 
