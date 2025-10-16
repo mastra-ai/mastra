@@ -5793,7 +5793,7 @@ describe('Workflow', () => {
     });
   });
 
-  describe('foreach', () => {
+  describe.only('foreach', () => {
     it('should run a single item concurrency (default) for loop', async () => {
       const startTime = Date.now();
       const map = vi.fn().mockImplementation(async ({ inputData }) => {
@@ -5862,7 +5862,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should suspend and resume when running a single item concurrency (default) for loop', async () => {
+    it('should suspend and resume when running a single item concurrency (default) for loop', async () => {
       const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
         if (!resumeData) {
           return suspend({});
@@ -5915,20 +5915,16 @@ describe('Workflow', () => {
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
-      console.log('result===', JSON.stringify(result, null, 2));
 
       expect(result.status).toBe('suspended');
 
       let resumedResult = await run.resume({ resumeData: { resumeValue: 0 } });
-      console.log('resumedResult1===', JSON.stringify(resumedResult, null, 2));
       expect(resumedResult.status).toBe('suspended');
 
       resumedResult = await run.resume({ resumeData: { resumeValue: 5 } });
-      console.log('resumedResult2===', JSON.stringify(resumedResult, null, 2));
       expect(resumedResult.status).toBe('suspended');
 
       resumedResult = await run.resume({ resumeData: { resumeValue: 0 } });
-      console.log('resumedResult3===', JSON.stringify(resumedResult, null, 2));
       expect(resumedResult.status).toBe('success');
 
       expect(map).toHaveBeenCalledTimes(6);
@@ -6025,7 +6021,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should suspend and resume when running a all items concurrency for loop', async () => {
+    it('should suspend and resume when running all items concurrency for loop', async () => {
       const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
         if (!resumeData && inputData.value > 5) {
           return suspend({});
@@ -6084,7 +6080,7 @@ describe('Workflow', () => {
       let resumedResult = await run.resume({ resumeData: { resumeValue: 5 } });
       expect(resumedResult.status).toBe('success');
 
-      expect(map).toHaveBeenCalledTimes(6);
+      expect(map).toHaveBeenCalledTimes(5);
       expect(resumedResult.steps).toEqual({
         input: [{ value: 22 }, { value: 1 }, { value: 333 }],
         map: {
@@ -6108,7 +6104,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should suspend and resume provided index when running a all items concurrency for loop', async () => {
+    it('should suspend and resume provided index when running all items concurrency for loop', async () => {
       const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
         if (!resumeData) {
           return suspend({});
@@ -6161,11 +6157,9 @@ describe('Workflow', () => {
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
-
       expect(result.status).toBe('suspended');
 
       let resumedResult = await run.resume({ resumeData: { resumeValue: 5 }, forEachIndex: 2 });
-
       expect(resumedResult.status).toBe('suspended');
 
       resumedResult = await run.resume({ resumeData: { resumeValue: 0 }, forEachIndex: 1 });

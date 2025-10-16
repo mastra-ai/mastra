@@ -2291,8 +2291,6 @@ export class Run<
       // Use suspendedPaths to detect suspended steps
       const suspendedStepPaths: string[][] = [];
 
-      console.log('snapshot?.suspendedPaths===', JSON.stringify(snapshot?.suspendedPaths, null, 2));
-
       Object.entries(snapshot?.suspendedPaths ?? {}).forEach(([stepId, _executionPath]) => {
         // Check if this step has nested workflow suspension data
         const stepResult = snapshot?.context?.[stepId];
