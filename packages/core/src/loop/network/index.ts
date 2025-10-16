@@ -1063,12 +1063,14 @@ export async function networkLoop<
     });
   }
 
+  const { memory: routingAgentMemoryOptions, ...routingAgentOptionsWithoutMemory } = routingAgentOptions || {};
+
   const { networkWorkflow } = await createNetworkLoop({
     networkName,
     runtimeContext,
     runId,
     agent: routingAgent,
-    routingAgentOptions,
+    routingAgentOptions: routingAgentOptionsWithoutMemory,
     generateId,
   });
 
@@ -1140,7 +1142,7 @@ export async function networkLoop<
     routingAgent,
     generateId,
     tracingContext: routingAgentOptions?.tracingContext,
-    memoryConfig: routingAgentOptions?.memory?.options,
+    memoryConfig: routingAgentMemoryOptions?.options,
   });
 
   const task = getLastMessage(messages);
