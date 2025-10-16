@@ -495,7 +495,7 @@ import { Callout } from "nextra/components";
 
 # Model Providers
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to over ${totalModels} models from ${totalProviders}+ providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to over ${totalModels} models from ${totalProviders} providers through a single API.
 
 ## Features
 
