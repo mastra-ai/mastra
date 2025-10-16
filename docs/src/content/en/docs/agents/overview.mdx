@@ -137,7 +137,7 @@ instructions: {
 
 Register your agent in the Mastra instance to make it available throughout your application. Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features:
 
-```typescript showLineNumbers filename="src/mastra/index.ts" copy
+```typescript {6} showLineNumbers filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core/mastra";
 import { testAgent } from './agents/test-agent';
 
@@ -156,7 +156,7 @@ const testAgent = mastra.getAgent("testAgent");
 ```
 <Callout type="info">
   <p>
-    `mastra.getAgent()` is preferred over a direct import, since it preserves the Mastra instance configuration (tools registered, telemetry, vector stores configuration for agent memory, etc.)
+    `mastra.getAgent()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
   </p>
 </Callout>
 
@@ -412,42 +412,9 @@ export const testAgent = new Agent({
 
 > See [Runtime Context](../server-db/runtime-context.mdx) for more information.
 
-## Testing agents locally
-There are two ways to run and test agents.
+## Testing with Mastra Playground
 
-<Steps>
-
-### Mastra Playground
-
-With the Mastra Dev Server running you can test an agent from the Mastra Playground by visiting [http://localhost:4111/agents](http://localhost:4111/agents) in your browser.
-
-> For more information, see the [Local Dev Playground](/docs/server-db/local-dev-playground) documentation.
-
-### Command line
-
-Create an agent response using `.generate()` or `.stream()`.
-
-```typescript {7} filename="src/test-agent.ts" showLineNumbers copy
-import "dotenv/config";
-
-import { mastra } from "./mastra";
-
-const agent = mastra.getAgent("testAgent");
-
-const response = await agent.generate("Help me organize my day");
-
-console.log(response.text);
-```
-
-> See [.generate()](../../reference/agents/generate.mdx) or [.stream()](../../reference/agents/stream.mdx) for more information.
-
-To test this agent, run the following:
-
-```bash copy
-npx tsx src/test-agent.ts
-```
-
-</Steps>
+Use the Mastra [Playground](../server-db/local-dev-playground.mdx) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
 
 ## Related
 
