@@ -31,7 +31,7 @@ Use when optimizing for:
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
+      type: "MastraModelConfig",
       description: "The language model to use for evaluating context relevance",
       required: true,
     },
@@ -185,12 +185,11 @@ Use results to improve your system:
 Control how penalties are applied for unused and missing context:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
 import { createContextRelevanceScorerLLM } from '@mastra/evals';
 
 // Stricter penalty configuration
 const strictScorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: {
     context: [
       'Einstein won the Nobel Prize for photoelectric effect',
@@ -208,7 +207,7 @@ const strictScorer = createContextRelevanceScorerLLM({
 
 // Lenient penalty configuration
 const lenientScorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: {
     context: [
       'Einstein won the Nobel Prize for photoelectric effect',
@@ -254,7 +253,7 @@ console.log('Lenient penalties:', lenientResult.score); // Higher score, less pe
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
   options: {
     contextExtractor: (input, output) => {
       // Extract context based on the query
@@ -278,7 +277,7 @@ const scorer = createContextRelevanceScorerLLM({
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: {
     context: [
       'Relevant information...',
@@ -295,7 +294,7 @@ const scorer = createContextRelevanceScorerLLM({
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: {
     contextExtractor: (input, output) => {
       const query = input?.inputMessages?.[0]?.content || '';
@@ -323,11 +322,10 @@ const scorer = createContextRelevanceScorerLLM({
 This example shows excellent context relevance where all context directly supports the response:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
 import { createContextRelevanceScorerLLM } from '@mastra/evals';
 
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: {
     context: [
       'Einstein won the Nobel Prize for his discovery of the photoelectric effect in 1921.',
@@ -370,11 +368,10 @@ console.log(result);
 This example shows moderate relevance with some context being irrelevant or unused:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
 import { createContextRelevanceScorerLLM } from '@mastra/evals';
 
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: {
     context: [
       'Solar eclipses occur when the Moon blocks the Sun.',
@@ -415,7 +412,7 @@ console.log(result);
 
 // With custom penalty configuration
 const customScorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: {
     context: [
       'Solar eclipses occur when the Moon blocks the Sun.',
@@ -450,11 +447,10 @@ console.log(customResult);
 This example shows poor context relevance with mostly irrelevant information:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
 import { createContextRelevanceScorerLLM } from '@mastra/evals';
 
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: {
     context: [
       'The Great Barrier Reef is located in Australia.',
@@ -499,11 +495,10 @@ console.log(result);
 Extract context dynamically based on the run input:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
 import { createContextRelevanceScorerLLM } from '@mastra/evals';
 
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: {
     contextExtractor: (input, output) => {
       // Extract query from input
@@ -543,11 +538,10 @@ const scorer = createContextRelevanceScorerLLM({
 Integrate with RAG pipelines to evaluate retrieved context:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
 import { createContextRelevanceScorerLLM } from '@mastra/evals';
 
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: {
     contextExtractor: (input, output) => {
       // Extract from RAG retrieval results

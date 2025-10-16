@@ -1,4 +1,4 @@
-import type { MastraLanguageModel } from '@mastra/core/agent';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
 import { z } from 'zod';
 import { roundToTwoDecimals } from '../../../metrics/llm/utils';
@@ -65,7 +65,7 @@ export function createAnswerSimilarityScorer({
   model,
   options = ANSWER_SIMILARITY_DEFAULT_OPTIONS,
 }: {
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   options?: AnswerSimilarityOptions;
 }) {
   const mergedOptions = { ...ANSWER_SIMILARITY_DEFAULT_OPTIONS, ...options };
