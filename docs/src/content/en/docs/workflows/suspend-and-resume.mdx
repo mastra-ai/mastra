@@ -5,7 +5,7 @@ description: "Suspend and resume in Mastra workflows allows you to pause executi
 
 # Suspend & Resume
 
-Workflows can be paused at any step, with their current state persisted as a snapshot in storage. Execution can then be resumed from this saved snapshot when ready. Persisting the snapshot ensures the workflow state is maintained across sessions, deployments, and server restarts, essential for workflows that may remain suspended while awaiting external input or resources.
+Workflows can be paused at any step, with their current state persisted as a [snapshot](./snapshots.mdx) in storage. Execution can then be resumed from this saved snapshot when ready. Persisting the snapshot ensures the workflow state is maintained across sessions, deployments, and server restarts, essential for workflows that may remain suspended while awaiting external input or resources.
 
 Common scenarios for suspending workflows include:
 
@@ -260,28 +260,13 @@ if (result.status === "suspended") {
 }
 ```
 
-## Using `RuntimeContext` with suspend/resume
+## Sleep & Events
 
-When using suspend/resume with `RuntimeContext`, you can create the instance yourself, and pass it to the `start` and `resume` functions.
-`RuntimeContext` is not automatically shared on a workflow run.
+Workflows can also pause execution for timed delays or external events. These methods set the workflow status to `waiting` rather than `suspended`, and are useful for polling, delayed retries, or event-driven processes.
 
-```typescript {1,4,9,16} filename="src/mastra/workflows/test-workflow.tss" showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/di";
-import { mastra } from "./mastra";
+**Available methods:**
 
-const runtimeContext = new RuntimeContext();
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
-
-const result = await run.start({
-  inputData: { suggestions: ["London", "Paris", "New York"] },
-  runtimeContext
-});
-
-if (result.status === "suspended") {
-  const resumedResult = await run.resume({
-    step: 'step-1',
-    resumeData: { city: "New York" },
-    runtimeContext
-  });
-}
-```
+- [`.sleep()`](../../reference/workflows/workflow-methods/sleep.mdx): Pause for a specified number of milliseconds
+- [`.sleepUntil()`](../../reference/workflows/workflow-methods/sleepUntil.mdx) : Pause until a specific date
+- [`.waitForEvent()`](../../reference/workflows/workflow-methods/waitForEvent.mdx): Pause until an external event is received
+- [`.sendEvent()`](../../reference/workflows/workflow-methods/sendEvent.mdx) : Send an event to resume a waiting workflow

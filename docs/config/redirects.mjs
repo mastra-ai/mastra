@@ -1258,4 +1258,9 @@ export const redirectList = [
     destination: "/:locale/docs/workflows/snapshots",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/workflows/pausing-execution",
+    destination: "/:locale/docs/workflows/suspend-and-resume",
+    permanent: true,
+  },
 ];
