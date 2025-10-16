@@ -10,7 +10,7 @@ const model = new MastraLLMVNext({
   models: [{ model: openai('gpt-4o-mini'), maxRetries: 0, id: 'test-model' }],
 });
 
-describe('MastraLLMVNext', () => {
+describe.concurrent('MastraLLMVNext', () => {
   it('should generate text - mastra', async () => {
     const result = model.stream({
       runtimeContext: new RuntimeContext(),
@@ -119,11 +119,47 @@ describe('MastraLLMVNext', () => {
       agentId: 'test-agent',
     });
 
-    for await (const chunk of result.objectStream) {
-      console.log(chunk);
-    }
+    const objectStreamChunks = await convertAsyncIterableToArray(result.objectStream);
+    expect(objectStreamChunks).toBeDefined();
+    expect(objectStreamChunks.length).toBeGreaterThan(0);
+    objectStreamChunks.forEach(chunk => {
+      expect(chunk).toBeTypeOf('object');
+    });
 
-    console.log(await result.object);
+    const lastChunk = objectStreamChunks[objectStreamChunks.length - 1];
+    expect(lastChunk).toBeDefined();
+    expect(lastChunk.name).toBeDefined();
+    expect(lastChunk.name).toBeTypeOf('string');
+    expect(lastChunk.age).toBeDefined();
+    expect(lastChunk.age).toBeTypeOf('number');
+
+    const object = await result.object;
+    expect(object).toBeDefined();
+    expect(object.name).toBeDefined();
+    expect(object.name).toBeTypeOf('string');
+    expect(object.age).toBeDefined();
+    expect(object.age).toBeTypeOf('number');
+
+    const aisdkObjectStreamChunks = await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+    expect(aisdkObjectStreamChunks).toBeDefined();
+    expect(aisdkObjectStreamChunks.length).toBeGreaterThan(0);
+    aisdkObjectStreamChunks.forEach(chunk => {
+      expect(chunk).toBeTypeOf('object');
+    });
+
+    const aisdkLastChunk = aisdkObjectStreamChunks[aisdkObjectStreamChunks.length - 1];
+    expect(aisdkLastChunk).toBeDefined();
+    expect(aisdkLastChunk.name).toBeDefined();
+    expect(aisdkLastChunk.name).toBeTypeOf('string');
+    expect(aisdkLastChunk.age).toBeDefined();
+    expect(aisdkLastChunk.age).toBeTypeOf('number');
+
+    const aisdkObject = await result.aisdk.v5.object;
+    expect(aisdkObject).toBeDefined();
+    expect(aisdkObject.name).toBeDefined();
+    expect(aisdkObject.name).toBeTypeOf('string');
+    expect(aisdkObject.age).toBeDefined();
+    expect(aisdkObject.age).toBeTypeOf('number');
   }, 20000);
 
   it('should generate object - mastra', async () => {
