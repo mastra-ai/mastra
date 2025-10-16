@@ -13,8 +13,6 @@
   "description": "One Agent, one Workflow and one Tool to bring you the weather in your city.",
   "type": "module",
   "dependencies": {
-    "@ai-sdk/anthropic": "^2.0.9",
-    "@ai-sdk/openai": "^2.0.23",
     "@mastra/core": "latest",
     "@mastra/evals": "latest",
     "@mastra/libsql": "latest",

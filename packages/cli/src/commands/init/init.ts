@@ -76,10 +76,6 @@ export const init = async ({
         if (needsEvals) {
           await depService.installPackages(['@mastra/evals']);
         }
-        const needsAiSdk = (await depService.checkDependencies(['@ai-sdk/openai'])) !== `ok`;
-        if (needsAiSdk) {
-          await depService.installPackages(['@ai-sdk/openai']);
-        }
       }
     }
 

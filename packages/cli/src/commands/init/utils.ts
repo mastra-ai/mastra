@@ -74,10 +74,6 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
   // Start from the weather-agent template and transform
   let content = await readWeatherTemplateFile('agents/index.ts');
 
-  // Remove ai-sdk provider imports (we will use string model identifiers)
-  content = content.replace(/\n?import\s*\{\s*openai\s*\}\s*from\s*['"]@ai-sdk\/openai['"];?\n?/g, '\n');
-  content = content.replace(/\n?import\s*\{\s*anthropic\s*\}\s*from\s*['"]@ai-sdk\/anthropic['"];?\n?/g, '\n');
-
   if (addExampleTool) {
     content = content.replace(/from\s*['"]\.\.\/tools['"]/g, "from '../tools/weather-tool'");
   } else {
@@ -86,14 +82,7 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
     content = content.replace(/\n\s*tools:\s*\{\s*weatherTool\s*\}\s*,?/g, '\n');
   }
 
-  // Remove any workflow import/property from agent (agent no longer configures workflows)
-  content = content.replace(/\n?import\s*\{\s*weatherWorkflow\s*\}\s*from\s*['"][^'"]+['"];?\n?/g, '\n');
-  content = content.replace(/\n\s*workflows:\s*\{\s*weatherWorkflow\s*\}\s*,?/g, '\n');
-
-  // Replace model array/object with single model string identifier
-  // Replace arrays like: model: [ ... ],
-  content = content.replace(/model:\s*\[[\s\S]*?\],?/m, `model: ${modelString},`);
-  // Also cover a possible single provider call: model: openai('...'),
+  // Ensure model is set to the selected provider string
   content = content.replace(/model:\s*[^,]+,/m, `model: ${modelString},`);
 
   const formattedContent = await formatTypescript(content);

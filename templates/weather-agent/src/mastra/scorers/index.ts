@@ -1,14 +1,7 @@
-import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
-import { createPromptAlignmentScorerLLM } from '@mastra/evals/scorers/llm';
 import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
 import { createCompletenessScorer } from '@mastra/evals/scorers/code';
 import { createScorer } from '@mastra/core/scores';
-
-// Requested scorers for the weather agent
-export const promptAlignmentScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
-});
 
 export const toolCallAppropriatenessScorer = createToolCallAccuracyScorerCode({
   expectedTool: 'weatherTool',
@@ -23,7 +16,7 @@ export const translationScorer = createScorer({
   description: 'Checks that non-English location names are translated and used correctly',
   type: 'agent',
   judge: {
-    model: openai('gpt-4o-mini'),
+    model: 'openai/gpt-4o-mini',
     instructions:
       'You are an expert evaluator of translation quality for geographic locations. ' +
       'Determine whether the user text mentions a non-English location and whether the assistant correctly uses an English translation of that location. ' +
@@ -84,7 +77,6 @@ export const translationScorer = createScorer({
 
 export const scorers = {
   toolCallAppropriatenessScorer,
-  promptAlignmentScorer,
   completenessScorer,
   translationScorer,
 };

@@ -1,16 +1,9 @@
-import { openai } from '@ai-sdk/openai';
-import { anthropic } from '@ai-sdk/anthropic';
 import { Agent } from '@mastra/core/agent';
 // import { Memory } from '@mastra/memory';
 // import { OpenAIVoice } from '@mastra/voice-openai';
 
 import { weatherTool } from '../tools';
-import {
-  toolCallAppropriatenessScorer,
-  promptAlignmentScorer,
-  completenessScorer,
-  translationScorer,
-} from '../scorers';
+import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } from '../scorers';
 
 // const voice = new OpenAIVoice();
 
@@ -32,17 +25,10 @@ Your primary function is to help users get weather details for specific location
 - Keep responses concise but informative
 
 Use the weatherTool to fetch current weather data.`,
-  model: [
-    { model: anthropic('claude-3-5-sonnet-20241022') },
-    { model: openai('gpt-4o') },
-    { model: openai('gpt-4o-mini') },
-  ],
+  model: 'openai/gpt-4o-mini',
   maxRetries: 3,
   tools: { weatherTool },
   scorers: {
-    promptAlignment: {
-      scorer: promptAlignmentScorer,
-    },
     translation: {
       scorer: translationScorer,
     },
