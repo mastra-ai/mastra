@@ -16,6 +16,7 @@
     "@mastra/core": "latest",
     "@mastra/evals": "latest",
     "@mastra/libsql": "latest",
+    "@mastra/memory": "latest",
     "mastra": "^0.16.0",
     "zod": "^3.25.76"
   },

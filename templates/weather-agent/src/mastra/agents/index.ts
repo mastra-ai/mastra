@@ -1,17 +1,17 @@
 import { Agent } from '@mastra/core/agent';
-// import { Memory } from '@mastra/memory';
+import { Memory } from '@mastra/memory';
 // import { OpenAIVoice } from '@mastra/voice-openai';
-
 import { weatherTool } from '../tools';
 import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } from '../scorers';
+import { LibSQLStore } from '@mastra/libsql';
 
 // const voice = new OpenAIVoice();
 
-// const memory = new Memory({
-//   storage: new LibSQLStore({
-//     url: 'file:../mastra.db', // Or your database URL
-//   }),
-// });
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: 'file:../mastra.db', // Or your database URL
+  }),
+});
 
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
@@ -39,6 +39,6 @@ Use the weatherTool to fetch current weather data.`,
       scorer: toolCallAppropriatenessScorer,
     },
   },
-  // memory,
+  memory,
   // voice,
 });
