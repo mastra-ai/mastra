@@ -204,7 +204,7 @@ describe('Agent - network', () => {
     expect(orchestratorAgent.network([{ role: 'user', content: prompt }])).rejects.toThrow();
   });
 
-  it.only('Should generate title for network thread when generateTitle is enabled', async () => {
+  it('Should generate title for network thread when generateTitle is enabled', async () => {
     let titleGenerated = false;
     let generatedTitle = '';
 
@@ -265,7 +265,7 @@ describe('Agent - network', () => {
     expect(generatedTitle.length).toBeGreaterThan(0);
   });
 
-  it('Should use custom model for title generation in network', async () => {
+  it.only('Should use custom model for title generation in network', async () => {
     let titleModelUsed = false;
     let networkModelUsed = false;
 
