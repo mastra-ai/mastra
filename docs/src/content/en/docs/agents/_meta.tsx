@@ -2,8 +2,8 @@ const meta = {
   overview: "Overview",
   "using-tools": "Using Tools",
   "agent-memory": "Agent Memory",
-  guardrails: "Guardrails",
   networks: "Networks",
+  guardrails: "Guardrails",
   "adding-voice": "Adding Voice",
 };
 
