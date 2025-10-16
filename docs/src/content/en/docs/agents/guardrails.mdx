@@ -325,11 +325,18 @@ for await (const chunk of stream.fullStream) {
   }
 }
 ```
-
 In this case, the `tripwireReason` indicates that a credit card number was detected:
 
 ```text
 PII detected. Types: credit-card
 ```
 
+## Custom processors
 
+If the built-in processors don’t cover your needs, you can create your own by extending the `Processor` class.
+
+Available examples:
+
+- [Message Length Limiter](https://mastra.ai/en/examples/processors/message-length-limiter)
+- [Response Length Limiter](https://mastra.ai/en/examples/processors/response-length-limiter)
+- [Response Validator](https://mastra.ai/en/examples/processors/response-validator)
