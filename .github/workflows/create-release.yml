@@ -96,6 +96,7 @@ jobs:
           git push
           echo "executed=true" >> "$GITHUB_OUTPUT"
           pnpm install
+          pnpm build
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
