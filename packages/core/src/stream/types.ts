@@ -446,6 +446,12 @@ interface ToolCallSuspendedPayload {
   suspendPayload: any;
 }
 
+export type DataChunkType = {
+  type: `data-${string}`;
+  data: any;
+  id?: string;
+};
+
 export type NetworkChunkType =
   | (BaseChunkType & { type: 'routing-agent-start'; payload: RoutingAgentStartPayload })
   | (BaseChunkType & { type: 'routing-agent-text-delta'; payload: RoutingAgentTextDeltaPayload })
@@ -506,7 +512,8 @@ export type TypedChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
   | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
   | (BaseChunkType & WorkflowStreamEvent)
-  | NetworkChunkType;
+  | NetworkChunkType
+  | (DataChunkType & { from: never; runId: never; metadata?: BaseChunkType['metadata']; payload: never });
 
 // Default ChunkType for backward compatibility using dynamic (any) tool types
 export type ChunkType<OUTPUT extends OutputSchema = undefined> = TypedChunkType<OUTPUT>;

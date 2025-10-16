@@ -227,6 +227,9 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
           ...(chunk.payload || {}),
         } as OutputChunkType<OUTPUT>;
       }
+      if ('type' in chunk && (chunk as any).type?.startsWith('data-')) {
+        return chunk as any;
+      }
       return;
   }
 }
@@ -251,7 +254,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   sendFinish?: boolean;
   responseMessageId?: string;
 }): InferUIMessageChunk<UI_MESSAGE> | ToolAgentChunkType | ToolWorkflowChunkType | ToolNetworkChunkType | undefined {
-  const partType = part.type;
+  const partType = part?.type;
 
   switch (partType) {
     case 'text-start': {
@@ -463,8 +466,16 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     default: {
-      const exhaustiveCheck: never = partType;
-      throw new Error(`Unknown chunk type: ${exhaustiveCheck}`);
+      // return the chunk as is if it's not a known type
+      if ('type' in part && (part as any).type?.startsWith('data-')) {
+        if (!('data' in part)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(part)}`,
+          );
+        }
+        return part;
+      }
+      return;
     }
   }
 }
