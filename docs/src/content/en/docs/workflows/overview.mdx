@@ -7,13 +7,15 @@ import { Steps, Callout, Tabs } from "nextra/components";
 
 # Workflows overview
 
-Workflows let you define complex sequences of tasks using clear, structured steps. Rather than relying on the reasoning of a single agent, workflows give you full control over how tasks are broken down, how data moves between them, and what gets executed when. This approach provides more control and predictability, making workflows ideal for building repeatable systems with reliable results.
+Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down, how data moves between them, and what gets executed when.
 
 ![Workflows overview](/image/workflows/workflows-overview.jpg)
 
 ## When to use workflows
 
-Use workflows when a task involves multiple steps that must run in a specific order. They’re best suited to processes that require structure, branching logic, or transformation of data between steps. Each task is defined as a **step**, giving you precise control over execution order, data flow, and side effects.
+Use workflows for tasks that are clearly defined upfront and involve multiple steps with a specific execution order. They give you fine-grained control over how data flows and transforms between steps, and which primitives are called at each stage.
+
+
 
 > **📹 Watch**:  → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
 
@@ -25,14 +27,11 @@ Mastra workflows operate using these principles:
 - Composing **steps** with `createWorkflow` to define the execution flow.
 - Running **workflows** to execute the entire sequence, with built-in support for suspension, resumption, and streaming results.
 
-This structure provides full type safety and runtime validation, ensuring data integrity across the entire workflow.
-
-
 ## Creating a workflow step
 
 Steps are the building blocks of workflows. Create a step using `createStep()` with `inputSchema` and `outputSchema` to define the data it accepts and returns.
 
-```typescript {6,9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {6,9,14} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createStep } from "@mastra/core/workflows";
 
 const step1 = createStep({
@@ -80,13 +79,17 @@ export const testWorkflow = createWorkflow({
 
 > See the [Workflow Class](../../reference/workflows/workflow.mdx) for a full list of configuration options.
 
-### Understanding workflow steps
+### Understanding control flow
 
-Each step has an `inputSchema` and `outputSchema` that define the data it receives and returns. For steps to run in sequence, the output of one must match the input of the next.
+Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured.
 
-The workflow’s `outputSchema` can differ from the final step’s output, allowing you to shape the final result independently.
+> See [Control Flow](./control-flow.mdx) for more information.
 
-```typescript {16,17} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+#### Composing steps
+
+When using `.then()`, steps run sequentially. The `inputSchema` of each step must match the `outputSchema` of the step before it. The final step’s `outputSchema` doesn’t need to match the workflow’s `outputSchema`, which can be defined independently.
+
+```typescript {4,7,14,17,24,27} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
   //...
   inputSchema: z.object({
@@ -121,11 +124,9 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> Steps can be composed using a number of different methods. See [Control Flow](./control-flow.mdx)  for more information.
-
 ### Registering a workflow
 
-Register a workflow using `workflows` in the main Mastra instance:
+Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
 
 ```typescript {6} filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -154,7 +155,7 @@ const testWorkflow = mastra.getWorkflow("testWorkflow");
 
 ## Running workflows
 
-Workflows can run in two modes: `.start()` returns the final result after all steps complete, while `.stream()` emits events as each step runs. Use `.start()` for batch jobs or when only the final output matters, and `.stream()` when you want to track progress or trigger actions during execution.
+Workflows can be run in two modes: start waits for all steps to complete before returning, and stream emits events during execution. Choose the approach that fits your use case: start when you only need the final result, and stream when you want to monitor progress or trigger actions as steps complete.
 
 <Tabs items={["Start", "Stream"]}>
   <Tabs.Tab>
@@ -165,7 +166,7 @@ const run = await testWorkflow.createRunAsync();
 
 const result = await run.start({
   inputData: {
-    input: "initial data"
+    message: "Hello world"
   }
 });
 
@@ -180,7 +181,7 @@ const run = await testWorkflow.createRunAsync();
 
 const result = await run.stream({
   inputData: {
-    input: "initial data"
+    message: "Hello world"
   }
 });
 
@@ -190,6 +191,45 @@ for await (const chunk of result.stream) {
 ```
   </Tabs.Tab>
 </Tabs>
+
+## Workflow output
+
+The workflow output includes the full execution lifecycle, showing the input and output for each step. It also includes the status of each step, the overall workflow status, and the final result. This gives you clear insight into how data moved through the workflow, what each step produced, and how the workflow completed.
+
+```json
+{
+  "status": "success",
+  "steps": {
+    "input": {
+      "message": "Hello world"
+    },
+    "step-1": {
+      "payload": {
+        "message": "Hello world"
+      },
+      "status": "success",
+      "output": {
+        "formatted": "HELLO WORLD"
+      },
+    },
+    "step-2": {
+      "payload": {
+        "formatted": "HELLO WORLD"
+      },
+      "status": "success",
+      "output": {
+        "emphasized": "HELLO WORLD!!!"
+      },
+    }
+  },
+  "input": {
+    "message": "Hello world"
+  },
+  "result": {
+    "emphasized": "HELLO WORLD!!!"
+  }
+}
+```
 
 ## Using `RuntimeContext`
 
@@ -214,13 +254,17 @@ const step1 = createStep({
 });
 ```
 
-## Testing workflows locally
+> See [Runtime Contextwe](../server-db/runtime-context.mdx) for more information.
 
-TODO: Replace with sentence about [Playground](../server-db/local-dev-playground.mdx).
+## Testing with Mastra Playground
+
+Use the Mastra [Playground](../server-db/local-dev-playground.mdx) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
+
 
 ## Related
 
-- The [Workflow Guide](../../guides/guide/ai-recruiter.mdx) in the Guides section is a tutorial that covers the main concepts.
+For a closer look at workflows, see our [Workflow Guide](../../guides/guide/ai-recruiter.mdx), which walks through the core concepts with a practical example.
+
 - [Parallel Steps workflow example](../../examples/workflows/parallel-steps.mdx)
 - [Conditional Branching workflow example](../../examples/workflows/conditional-branching.mdx)
 - [Inngest workflow example](../../examples/workflows/inngest-workflow.mdx)
