@@ -73,8 +73,8 @@ interface AlgoliaHit {
   type?: string;
   lang?: string;
   section?: string;
-  priority?: string;
-  depth?: string;
+  priority?: number;
+  depth?: number;
   _highlightResult?: {
     hierarchy?: {
       lvl0?: { value: string; matchLevel: string };
@@ -98,8 +98,8 @@ export type AlgoliaResult = {
   url: string;
   objectID: string;
   section?: string; // Section type: docs, guides, reference, examples
-  priority?: string; // Priority score for ranking
-  depth?: string; // URL path depth for ranking
+  priority?: number; // Priority score for ranking
+  depth?: number; // URL path depth for ranking
   _highlightResult?: {
     hierarchy?: {
       lvl0?: { value: string; matchLevel: string };
