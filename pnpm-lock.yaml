@@ -460,7 +460,7 @@ importers:
         specifier: workspace:^
         version: link:../../packages/deployer
       '@rollup/plugin-virtual':
-        specifier: ^3.0.2
+        specifier: 3.0.2
         version: 3.0.2(rollup@4.50.2)
       cloudflare:
         specifier: ^4.5.0
@@ -515,7 +515,7 @@ importers:
         specifier: workspace:^
         version: link:../../packages/deployer
       '@rollup/plugin-virtual':
-        specifier: ^3.0.2
+        specifier: 3.0.2
         version: 3.0.2(rollup@4.50.2)
       date-fns:
         specifier: ^4.1.0
@@ -567,7 +567,7 @@ importers:
         specifier: workspace:^
         version: link:../../packages/deployer
       '@rollup/plugin-virtual':
-        specifier: ^3.0.2
+        specifier: 3.0.2
         version: 3.0.2(rollup@4.50.2)
       fs-extra:
         specifier: ^11.3.2
@@ -1572,13 +1572,13 @@ importers:
         specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.14)
       '@rollup/plugin-commonjs':
-        specifier: ^28.0.6
+        specifier: 28.0.6
         version: 28.0.6(rollup@4.50.2)
       '@rollup/plugin-json':
-        specifier: ^6.1.0
+        specifier: 6.1.0
         version: 6.1.0(rollup@4.50.2)
       '@rollup/plugin-node-resolve':
-        specifier: ^16.0.2
+        specifier: 16.0.2
         version: 16.0.2(rollup@4.50.2)
       '@types/fs-extra':
         specifier: ^11.0.4
@@ -1629,22 +1629,22 @@ importers:
         specifier: ^5.0.2
         version: 5.0.2(rollup@4.50.2)
       '@rollup/plugin-alias':
-        specifier: ^5.1.1
+        specifier: 5.1.1
         version: 5.1.1(rollup@4.50.2)
       '@rollup/plugin-commonjs':
-        specifier: ^28.0.6
+        specifier: 28.0.6
         version: 28.0.6(rollup@4.50.2)
       '@rollup/plugin-esm-shim':
-        specifier: ^0.1.8
+        specifier: 0.1.8
         version: 0.1.8(rollup@4.50.2)
       '@rollup/plugin-json':
-        specifier: ^6.1.0
+        specifier: 6.1.0
         version: 6.1.0(rollup@4.50.2)
       '@rollup/plugin-node-resolve':
-        specifier: ^16.0.2
+        specifier: 16.0.2
         version: 16.0.2(rollup@4.50.2)
       '@rollup/plugin-virtual':
-        specifier: ^3.0.2
+        specifier: 3.0.2
         version: 3.0.2(rollup@4.50.2)
       '@sindresorhus/slugify':
         specifier: ^2.2.1
@@ -22653,7 +22653,7 @@ snapshots:
   '@optimize-lodash/transform@3.0.6':
     dependencies:
       estree-walker: 2.0.2
-      magic-string: 0.30.17
+      magic-string: 0.30.19
 
   '@paralleldrive/cuid2@2.2.2':
     dependencies:
@@ -23412,14 +23412,14 @@ snapshots:
       estree-walker: 2.0.2
       fdir: 6.5.0(picomatch@4.0.3)
       is-reference: 1.2.1
-      magic-string: 0.30.17
+      magic-string: 0.30.19
       picomatch: 4.0.3
     optionalDependencies:
       rollup: 4.50.2
 
   '@rollup/plugin-esm-shim@0.1.8(rollup@4.50.2)':
     dependencies:
-      magic-string: 0.30.17
+      magic-string: 0.30.19
       mlly: 1.7.4
     optionalDependencies:
       rollup: 4.50.2

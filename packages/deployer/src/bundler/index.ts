@@ -381,7 +381,7 @@ export abstract class Bundler extends MastraBundler {
         mastraEntryFile,
         analyzedBundleInfo,
         toolsPaths,
-        { enableSourcemap: sourcemap, enableEsmShim: false },
+        { enableSourcemap: sourcemap, enableEsmShim },
       );
 
       const bundler = await this.createBundler(

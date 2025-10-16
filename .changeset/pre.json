@@ -78,5 +78,17 @@
     "@mastra/voice-speechify": "0.11.9",
     "@mastra/inngest": "0.16.1"
   },
-  "changesets": []
+  "changesets": [
+    "afraid-melons-pay",
+    "automated-provider-registry-20251015-183950",
+    "automated-provider-registry-20251015-184723",
+    "beige-cougars-serve",
+    "busy-geckos-carry",
+    "heavy-rules-enter",
+    "hungry-places-sin",
+    "sour-cases-give",
+    "tough-socks-teach",
+    "true-pots-listen",
+    "two-icons-argue"
+  ]
 }
