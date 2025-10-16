@@ -40,8 +40,6 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
   const previousStep = steps[previousStepId];
   const nextStep = steps[nextStepId];
 
-  console.log('loool', previousStep?.status, nextStep?.status);
-
   return (
     <>
       {!withoutTopHandle && <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />}
