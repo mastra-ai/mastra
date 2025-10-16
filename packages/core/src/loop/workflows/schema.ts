@@ -51,12 +51,9 @@ export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT exte
   steps: StepResult<Tools>[];
   object?: InferSchemaOutput<OUTPUT>;
   validationRetry?: {
-    error: unknown;
     validationErrors: string;
     generatedValue: string;
     retryCount: number;
-    maxRetries: number;
-    accumulatedText: string;
   };
 }
 
@@ -132,12 +129,9 @@ export const llmIterationOutputSchema = z.object({
     steps: z.array(z.any()), // StepResult[]
     validationRetry: z
       .object({
-        error: z.any(),
         validationErrors: z.string(),
         generatedValue: z.string(),
         retryCount: z.number(),
-        maxRetries: z.number(),
-        accumulatedText: z.string(),
       })
       .optional(),
   }),

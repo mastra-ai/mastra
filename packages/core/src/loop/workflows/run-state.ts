@@ -17,12 +17,9 @@ type State = {
   isStreaming: boolean;
   providerOptions: Record<string, any> | undefined;
   validationRetry?: {
-    error: unknown;
     validationErrors: string;
     generatedValue: string;
     retryCount: number;
-    maxRetries: number;
-    accumulatedText: string;
   };
 };
 

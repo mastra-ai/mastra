@@ -198,12 +198,9 @@ interface ErrorPayload {
 }
 
 interface ValidationRetryPayload {
-  error: unknown;
   validationErrors: string;
   generatedValue: string;
   retryCount: number;
-  maxRetries: number;
-  accumulatedText: string;
 }
 
 interface RawPayload {
@@ -242,6 +239,7 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT exten
     usage: LanguageModelV2Usage;
     steps?: StepResult<Tools>[];
     object?: OUTPUT extends undefined ? unknown : InferSchemaOutput<OUTPUT>;
+    validationRetry?: ValidationRetryPayload;
   };
   metadata: {
     request?: LanguageModelRequestMetadata;
@@ -591,6 +589,7 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   returnScorerData?: boolean;
   tracingContext?: TracingContext;
   processorStates?: Map<string, any>;
+  structuredOutputValidationRetryCount?: number;
 };
 
 export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {

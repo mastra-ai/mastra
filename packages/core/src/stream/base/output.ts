@@ -290,6 +290,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
           isLLMExecutionStep: self.#options.isLLMExecutionStep,
           structuredOutput: self.#options.structuredOutput,
           logger: self.logger,
+          previousRetryCount: self.#options.structuredOutputValidationRetryCount,
         }),
       );
     }

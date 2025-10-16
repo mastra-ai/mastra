@@ -504,10 +504,12 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
   isLLMExecutionStep,
   structuredOutput,
   logger,
+  previousRetryCount,
 }: {
   isLLMExecutionStep?: boolean;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   logger?: IMastraLogger;
+  previousRetryCount?: number;
 }) {
   const handler = createOutputHandler({ schema: structuredOutput?.schema });
 
@@ -515,7 +517,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
   let previousObject: any = undefined;
   let finishReason: string | undefined;
   let currentRunId: string | undefined;
-  let validationRetryCount = 0;
+  let validationRetryCount = previousRetryCount ?? 0;
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
@@ -618,15 +620,11 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
             runId: currentRunId ?? '',
             type: 'validation-retry',
             payload: {
-              error: finalResult.error,
               validationErrors,
               generatedValue,
-              retryCount: validationRetryCount,
-              maxRetries: structuredOutput?.maxValidationRetries ?? 1,
-              accumulatedText,
+              retryCount: validationRetryCount + 1, // Increment for the next iteration
             },
           });
-          validationRetryCount++;
         } else {
           // Max retries reached or retry disabled - emit error chunk
           controller.enqueue({

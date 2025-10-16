@@ -61,7 +61,6 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       runState.setState({
         validationRetry: (chunk as any).payload,
       });
-      controller.enqueue(chunk);
       continue;
     }
 
@@ -483,14 +482,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
 
             // If there's a validation retry from the previous iteration, add it to the messages
             if (inputData.output?.validationRetry) {
-              const retryInfo = inputData.output.validationRetry as {
-                error: unknown;
-                validationErrors: string;
-                generatedValue: string;
-                retryCount: number;
-                maxRetries: number;
-                accumulatedText: string;
-              };
+              const retryInfo = inputData.output.validationRetry;
 
               // Add a user message with the validation error context
               messageList.add(
@@ -627,6 +619,7 @@ Please try again and ensure your response matches the required schema format.`,
             isLLMExecutionStep: true,
             tracingContext,
             processorStates,
+            structuredOutputValidationRetryCount: inputData.output?.validationRetry?.retryCount,
           },
         });
 
