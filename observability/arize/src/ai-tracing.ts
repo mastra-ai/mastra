@@ -1,7 +1,13 @@
 import { SEMRESATTRS_PROJECT_NAME } from '@arizeai/openinference-semantic-conventions';
+import { ConsoleLogger } from '@mastra/core/logger';
 import { OtelExporter } from '@mastra/otel-exporter';
 import type { OtelExporterConfig } from '@mastra/otel-exporter';
+
 import { OpenInferenceOTLPTraceExporter } from './openInferenceOTLPExporter.js';
+
+const LOG_PREFIX = '[ArizeExporter]';
+
+export const ARIZE_AX_ENDPOINT = 'https://otlp.arize.com/v1/traces';
 
 export type ArizeExporterConfig = Omit<OtelExporterConfig, 'provider'> & {
   /**
@@ -14,32 +20,48 @@ export type ArizeExporterConfig = Omit<OtelExporterConfig, 'provider'> & {
    */
   apiKey?: string;
   /**
-   * Required collector endpoint destination for trace exports
+   * Collector endpoint destination for trace exports.
+   * Required when sending traces to Phoenix, Phoenix Cloud, or other collectors.
+   * Optional when sending traces to Arize AX.
    */
-  endpoint: string;
+  endpoint?: string;
   /**
    * Optional project name to be added as a resource attribute using
    * OpenInference Semantic Conventions
    */
   projectName?: string;
+  /**
+   * Optional headers to be added to each OTLP request
+   */
+  headers?: Record<string, string>;
 };
 
 export class ArizeExporter extends OtelExporter {
   name = 'arize';
 
   constructor(config: ArizeExporterConfig) {
-    const headers: Record<string, string> = {};
+    const logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
+    let endpoint: string | undefined;
+    const headers: Record<string, string> = {
+      ...config.headers,
+    };
     if (config.spaceId) {
       // arize ax header configuration
       headers['space_id'] = config.spaceId;
       headers['api_key'] = config.apiKey ?? '';
+      endpoint = config.endpoint || ARIZE_AX_ENDPOINT;
     } else if (config.apiKey) {
       // standard otel header configuration
       headers['Authorization'] = `Bearer ${config.apiKey}`;
+      endpoint = config.endpoint;
+    }
+    if (!endpoint) {
+      logger.error(`${LOG_PREFIX} Endpoint is required in configuration. Disabling exporter.`);
+      return;
     }
     super({
       exporter: new OpenInferenceOTLPTraceExporter({
-        url: config.endpoint,
+        url: endpoint,
         headers,
       }),
       ...config,
