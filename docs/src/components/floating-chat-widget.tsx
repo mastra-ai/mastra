@@ -76,12 +76,12 @@ export const FloatingChatWidget = () => {
         className="relative z-1000 focus:outline-none"
         onClose={close}
       >
-        <DialogBackdrop className="fixed inset-0 transition duration-150 ease-out data-closed:opacity-0 bg-white/70 dark:bg-black/70" />
+        <DialogBackdrop className="fixed inset-0 transition duration-150 ease-out data-closed:opacity-0 bg-black/40 dark:bg-black/70" />
         <div className="overflow-y-auto fixed inset-0 z-10 w-screen">
           <div className="flex items-start pt-[100px] justify-center min-h-full p-4">
             <DialogPanel
               transition
-              className="w-full overflow-hidden ring ring-neutral-200 dark:ring-neutral-800 max-w-[560px] mx-auto rounded-xl bg-[var(--light-color-surface-15)] dark:bg-surface-4 transition duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
+              className="w-full shadow-2xl overflow-hidden ring ring-neutral-200 dark:ring-neutral-800 max-w-[560px] mx-auto rounded-xl bg-[var(--light-color-surface-15)] dark:bg-surface-4 transition duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
             >
               <DialogTitle as="h3" className="sr-only">
                 AI Chat Assistant
