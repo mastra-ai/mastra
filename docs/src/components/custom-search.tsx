@@ -192,7 +192,7 @@ export const CustomSearch: FC<SearchProps> = ({
       case "ArrowDown":
         event.preventDefault();
         setSelectedIndex((prev) => {
-          const newIndex = prev < totalItems - 1 ? prev + 1 : 0;
+          const newIndex = prev < totalItems - 1 ? prev + 1 : prev;
           // Scroll to the selected item
           requestAnimationFrame(() => {
             virtualizer.scrollToIndex(newIndex, { align: "auto" });
@@ -210,7 +210,7 @@ export const CustomSearch: FC<SearchProps> = ({
       case "ArrowUp":
         event.preventDefault();
         setSelectedIndex((prev) => {
-          const newIndex = prev > 0 ? prev - 1 : totalItems - 1;
+          const newIndex = prev > 0 ? prev - 1 : prev;
           // Scroll to the selected item
           requestAnimationFrame(() => {
             virtualizer.scrollToIndex(newIndex, { align: "auto" });
