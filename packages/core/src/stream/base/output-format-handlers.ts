@@ -494,11 +494,9 @@ function createOutputHandler<OUTPUT extends OutputSchema = undefined>({ schema }
  * - Always passes through original chunks for downstream processing
  */
 export function createObjectStreamTransformer<OUTPUT extends OutputSchema = undefined>({
-  isLLMExecutionStep,
   structuredOutput,
   logger,
 }: {
-  isLLMExecutionStep?: boolean;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   logger?: IMastraLogger;
 }) {
@@ -506,27 +504,13 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
 
   let accumulatedText = '';
   let previousObject: any = undefined;
-  let finishReason: string | undefined;
   let currentRunId: string | undefined;
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
-      if (!isLLMExecutionStep) {
-        // Bypassing processing if we are not in the LLM execution step (inner stream)
-        // OR if there is no output schema provided
-        controller.enqueue(chunk);
-        return;
-      }
-
       if (chunk.runId) {
         // save runId to use in error chunks
         currentRunId = chunk.runId;
-      }
-
-      if (chunk.type === 'finish') {
-        finishReason = chunk.payload.stepResult.reason;
-        controller.enqueue(chunk);
-        return;
       }
 
       if (chunk.type === 'text-delta' && typeof chunk.payload?.text === 'string') {
@@ -550,65 +534,54 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         }
       }
 
-      // Always pass through the original chunk for downstream processing
-      controller.enqueue(chunk);
-    },
+      if (chunk.type === 'text-end') {
+        // first enqueue the text-end chunk
+        controller.enqueue(chunk);
 
-    async flush(controller) {
-      // Bypass final validation if there is no output schema provided
-      // or if we are not in the LLM execution step (inner stream)
-      if (!isLLMExecutionStep) {
-        return;
-      }
+        // ?? idk maybe
+        // if (!accumulatedText) {
+        //   return;
+        // }
 
-      if (['tool-calls'].includes(finishReason ?? '')) {
-        // TODO: this breaks object output when tools are called.
-        // The reason we did this was to be able to work with client-side tool calls. We need the object to resolve in that case
-        // but this will
-        // controller.enqueue({
-        //   from: ChunkFrom.AGENT,
-        //   runId: currentRunId ?? '',
-        //   type: 'object-result',
-        //   object: undefined as InferSchemaOutput<OUTPUT>,
-        // });
-        return;
-      }
-
-      const finalResult = await handler.validateAndTransformFinal(accumulatedText);
-
-      if (!finalResult.success) {
-        if (structuredOutput?.errorStrategy === 'warn') {
-          logger?.warn(finalResult.error.message);
-          return;
-        }
-        if (structuredOutput?.errorStrategy === 'fallback') {
+        const finalResult = await handler.validateAndTransformFinal(accumulatedText);
+        if (finalResult.success) {
           controller.enqueue({
             from: ChunkFrom.AGENT,
             runId: currentRunId ?? '',
             type: 'object-result',
-            object: structuredOutput?.fallbackValue,
+            object: finalResult.value,
+          });
+        } else {
+          if (structuredOutput?.errorStrategy === 'warn') {
+            logger?.warn(finalResult.error.message);
+            return;
+          }
+          if (structuredOutput?.errorStrategy === 'fallback') {
+            controller.enqueue({
+              from: ChunkFrom.AGENT,
+              runId: currentRunId ?? '',
+              type: 'object-result',
+              object: structuredOutput?.fallbackValue,
+            });
+            return;
+          }
+
+          controller.enqueue({
+            from: ChunkFrom.AGENT,
+            runId: currentRunId ?? '',
+            type: 'error',
+            payload: {
+              error: finalResult.error,
+            },
           });
           return;
         }
 
-        controller.enqueue({
-          from: ChunkFrom.AGENT,
-          runId: currentRunId ?? '',
-          type: 'error',
-          payload: {
-            error: finalResult.error,
-          },
-        });
         return;
       }
 
-      controller.enqueue({
-        from: ChunkFrom.AGENT,
-        runId: currentRunId ?? '',
-        type: 'object-result',
-        object: finalResult.value,
-      });
-      return;
+      // Always pass through the original chunk for downstream processing
+      controller.enqueue(chunk);
     },
   });
 }
