@@ -19,12 +19,6 @@ const workflows = await mastraClient.getWorkflows();
 
 Get an instance of a specific workflow as defined by the const name:
 
-```typescript filename="src/mastra/workflows/test-workflow.ts"
-export const testWorkflow = createWorkflow({
-  id: 'city-workflow'
-})
-```
-
 ```typescript
 const workflow = mastraClient.getWorkflow("testWorkflow");
 ```
@@ -44,9 +38,12 @@ const details = await workflow.details();
 Start a workflow run with inputData and await full run results:
 
 ```typescript
+const workflow = mastraClient.getWorkflow("testWorkflow");
+
 const run = await workflow.createRunAsync();
 
-const result = await run.startAsync({
+const result = await workflow.startAsync({
+  runId: run.runId,
   inputData: {
     city: "New York",
   },
@@ -60,7 +57,8 @@ Resume a suspended workflow step and await full run result:
 ```typescript
 const run = await workflow.createRunAsync();
 
-const result = await run.resumeAsync({
+const result = await workflow.resumeAsync({
+  runId: run.runId,
   step: "step-id",
   resumeData: { key: "value" },
 });
@@ -71,23 +69,24 @@ const result = await run.resumeAsync({
 Watch workflow transitions:
 
 ```typescript
-try {
-  const workflow = mastraClient.getWorkflow("testWorkflow");
+import type { WorkflowWatchResult } from "@mastra/client-js";
 
-  const run = await workflow.createRunAsync();
+const workflow = mastraClient.getWorkflow("testWorkflow");
 
-  run.watch((record) => {
-    console.log(record);
-  });
+const run = await workflow.createRunAsync();
 
-  const result = await run.start({
-    inputData: {
-      city: "New York",
-    },
-  });
-} catch (e) {
-  console.error(e);
-}
+workflow.watch({ runId: run.runId }, (event: WorkflowWatchResult) => {
+  console.log(event);
+});
+
+const result = await workflow.start({
+  runId: run.runId,
+  inputData: {
+    city: "New York"
+  }
+});
+
+console.log(result);
 ```
 
 ### Resume Workflow
@@ -95,22 +94,22 @@ try {
 Resume workflow run and watch workflow step transitions:
 
 ```typescript
-try {
-  const workflow = mastraClient.getWorkflow("testWorkflow");
+import type { WorkflowWatchResult } from "@mastra/client-js";
 
-  const run = await workflow.createRunAsync({ runId: prevRunId });
+const workflow = mastraClient.getWorkflow("testWorkflow");
 
-  run.watch((record) => {
-    console.log(record);
-  });
+const run = await workflow.createRunAsync();
 
-  run.resume({
-    step: "step-id",
-    resumeData: { key: "value" },
-  });
-} catch (e) {
-  console.error(e);
-}
+workflow.watch({ runId: run.runId }, (event: WorkflowWatchResult) => {
+  console.log(event);
+});
+
+workflow.resume({
+  runId: run.runId,
+  step: "step-id",
+  resumeData: { key: "value" }
+});
+
 ```
 
 ### Stream Workflow
@@ -118,22 +117,19 @@ try {
 Stream workflow execution for real-time updates:
 
 ```typescript
-try {
-  const workflow = mastraClient.getWorkflow("testWorkflow");
+const workflow = mastraClient.getWorkflow("testWorkflow");
 
-  const run = await workflow.createRunAsync();
+const run = await workflow.createRunAsync();
 
-  const stream = await run.stream({
-    inputData: {
-      city: 'New York',
-    },
-  });
-
-  for await (const chunk of stream) {
-    console.log(JSON.stringify(chunk, null, 2));
+const stream = await workflow.stream({
+  runId: run.runId,
+  inputData: {
+    city: "New York"
   }
-} catch (e) {
-  console.error('Workflow error:', e);
+});
+
+for await (const chunk of stream) {
+  console.log(JSON.stringify(chunk, null, 2));
 }
 ```
 
@@ -142,24 +138,20 @@ try {
 Get the result of a workflow run:
 
 ```typescript
-try  {
-  const workflow = mastraClient.getWorkflow("testWorkflow");
+const workflow = mastraClient.getWorkflow("testWorkflow");
 
-  const run = await workflow.createRunAsync();
+const run = await workflow.createRunAsync();
 
-  // start the workflow run
-  const startResult = await run.start({
-    inputData: {
-      city: "New York",
-    },
-  });
+await workflow.start({
+  runId: run.runId,
+  inputData: {
+    city: "New York"
+  }
+});
 
-  const result = await workflow.runExecutionResult(run.runId);
+const result = await workflow.runExecutionResult(run.runId);
 
-  console.log(result);
-} catch (e) {
-  console.error(e);
-}
+console.log(result);
 ```
 
 This is useful when dealing with long running workflows. You can use this to poll the result of the workflow run.
@@ -168,8 +160,17 @@ This is useful when dealing with long running workflows. You can use this to pol
 
 A workflow run result yields the following:
 
-| Field            | Type                                                                                                                                                                                                                                               | Description                                      |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `payload`        | `{currentStep?: {id: string, status: string, output?: Record<string, any>, payload?: Record<string, any>}, workflowState: {status: string, steps: Record<string, {status: string, output?: Record<string, any>, payload?: Record<string, any>}>}}` | The current step and workflow state of the run   |
-| `eventTimestamp` | `Date`                                                                                                                                                                                                                                             | The timestamp of the event                       |
-| `runId`          | `string`                                                                                                                                                                                                                                           | Unique identifier for this workflow run instance |
+| Field            | Type                                                                                                     | Description                                      |
+| ---------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `status`         | `"success" \| "failed" \| "suspended"`                                                                  | Current status of the workflow run.              |
+| `result`         | `Record<string, any>`                                                                                    | Final output of the workflow.                    |
+| `payload`        | `Record<string, any>`                                                                                    | Input or intermediate values used in execution.  |
+| `steps`          | `Record<string, { status: string, output?: Record<string, any>, payload?: Record<string, any> }>`       | Status and data for each step in the workflow.   |
+| `eventTimestamp` | `Date`                                                                                                   | The timestamp of the event.                      |
+| `runId`          | `string`                                                                                                 | Unique identifier for this workflow run instance |
+
+
+## Related
+
+- [Workflows](../../docs/workflows/overview.mdx)
+- [Control Flow](../../docs/workflows/control-flow.mdx)
