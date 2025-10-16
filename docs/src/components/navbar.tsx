@@ -140,7 +140,7 @@ export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
               className="w-full border-[0.5px] border-[var(--light-border-code)] dark:border-borders-2 h-fit max-w-[660px] mx-auto rounded-xl bg-[var(--light-color-surface-15)] dark:bg-surface-4 duration-300 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
             >
               <DialogTitle as="h3" className="sr-only">
-                Search
+                Search docs...
               </DialogTitle>
               <div className="w-full">
                 <div className="p-2.5">

@@ -121,7 +121,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
           variant="ghost"
           className="flex items-center pr-[0.38rem] text-sm font-normal justify-between w-full gap-6 cursor-pointer border-[0.5px] bg-[var(--light-color-surface-4)] dark:bg-[var(--light-color-text-5)] border-[var(--light-border-muted)] dark:border-borders-1 text-icons-3"
         >
-          <span className="text-sm">Search..</span>
+          <span className="text-sm">Search docs...</span>
           <Shortcut />
         </Button>
       </div>
@@ -136,10 +136,10 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
           <div className="flex items-start pt-[100px] justify-center min-h-full p-4">
             <DialogPanel
               transition
-              className="w-full overflow-hidden ring ring-neutral-200 dark:ring-neutral-800 h-fit max-w-[660px] mx-auto rounded-xl bg-[var(--light-color-surface-15)] dark:bg-surface-4 transition duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
+              className="w-full overflow-hidden ring ring-neutral-200 dark:ring-neutral-800 h-fit max-w-[600px] mx-auto rounded-xl bg-[var(--light-color-surface-15)] dark:bg-surface-4 transition duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
             >
               <DialogTitle as="h3" className="sr-only">
-                Search
+                Search docs...
               </DialogTitle>
               <div className="w-full">
                 <CustomSearch

@@ -89,7 +89,7 @@ const getSectionIcon = (section?: string) => {
  */
 export const CustomSearch: FC<SearchProps> = ({
   className,
-  placeholder = "What are you searching for?",
+  placeholder = "Search docs...",
   searchOptions,
   closeModal,
 }) => {
@@ -292,8 +292,8 @@ export const CustomSearch: FC<SearchProps> = ({
 
       <div
         className={cn(
-          "relative overflow-hidden p-3",
-          !search || !results.length ? "h-fit" : "h-[450px]",
+          "relative overflow-hidden p-1.5",
+          !search || !results.length ? "h-fit" : "h-[400px]",
         )}
       >
         <div
@@ -344,7 +344,7 @@ export const CustomSearch: FC<SearchProps> = ({
                   >
                     <div
                       className={cn(
-                        "flex flex-col gap-1 p-2 rounded-md cursor-pointer md:p-4",
+                        "flex flex-col gap-1 p-2 rounded-md cursor-pointer",
                         isSelected
                           ? "dark:bg-surface-5 bg-[var(--light-color-surface-2)]"
                           : "bg-[var(--light-color-surface-15)] dark:bg-surface-4",
@@ -352,19 +352,20 @@ export const CustomSearch: FC<SearchProps> = ({
                       onClick={() => handleSelect(subResult)}
                       onMouseEnter={() => setSelectedIndex(virtualItem.index)}
                     >
-                      <div className="flex gap-2 md:gap-[14px] items-center">
+                      <span className="pl-7 text-xs font-medium capitalize text-icons-3">{subResult.section}</span>
+                      <div className="flex gap-2 items-center">
                         <IconComponent className="w-4 h-4 md:w-5 md:h-5 text-icons-3 shrink-0" />
                         <span
-                          className="text-small font-medium truncate md:text-base dark:text-icons-6 text-[var(--light-color-text-4)] [&_mark]:text-accent-green-2 dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
+                          className="text-sm font-medium truncate dark:text-icons-6 text-[var(--light-color-text-4)] [&_mark]:text-accent-green-2 dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
                           dangerouslySetInnerHTML={{
                             __html: subResult.title,
                           }}
                         />
                       </div>
-                      <div className="ml-2 flex items-center gap-2 truncate border-l-2 dark:border-borders-2 border-[var(--light-border-code)] pl-2 md:pl-6">
+                      <div className="ml-2 flex items-center gap-2 truncate border-l-2 dark:border-borders-2 border-[var(--light-border-code)] pl-4">
                         <BurgerIcon className="w-3 h-3 md:w-3.5 md:h-3.5 shrink-0 text-icons-3" />
                         <div
-                          className="text-sm md:text-base font-normal truncate text-icons-3 [&_mark]:text-accent-green-2 dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
+                          className="text-sm font-normal truncate text-icons-3 [&_mark]:text-accent-green-2 dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
                           dangerouslySetInnerHTML={{
                             __html: subResult.excerpt,
                           }}
