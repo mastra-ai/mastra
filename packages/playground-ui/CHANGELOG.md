@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 6.5.1-alpha.0
+
+### Patch Changes
+
+- Add @mastra/react to peer deps ([#8857](https://github.com/mastra-ai/mastra/pull/8857))
+
+- Updated dependencies [[`ca85c93`](https://github.com/mastra-ai/mastra/commit/ca85c932b232e6ad820c811ec176d98e68c59b0a), [`a1d40f8`](https://github.com/mastra-ai/mastra/commit/a1d40f88d4ce42c4508774ad22e38ac582157af2), [`01c4a25`](https://github.com/mastra-ai/mastra/commit/01c4a2506c514d5e861c004d3d2fb3791c6391f3), [`9ba695e`](https://github.com/mastra-ai/mastra/commit/9ba695e9ff977b8f13cc71df3b452775757361e5), [`cce8aad`](https://github.com/mastra-ai/mastra/commit/cce8aad878a0dd98e5647680f3765caba0b1701c)]:
+  - @mastra/core@0.21.1-alpha.0
+  - @mastra/react@0.0.7-alpha.0
+  - @mastra/client-js@0.16.1-alpha.0
+
 ## 6.5.0
 
 ### Minor Changes
