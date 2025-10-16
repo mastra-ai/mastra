@@ -583,6 +583,142 @@ describe('output-format-handlers', () => {
     });
   });
 
+  describe('token extraction (preprocessText)', () => {
+    it('should extract JSON from LMStudio <|message|> token wrapper', async () => {
+      const schema = z.object({
+        primitiveId: z.string(),
+        primitiveType: z.string(),
+        prompt: z.string(),
+      });
+
+      const transformer = createObjectStreamTransformer({
+        isLLMExecutionStep: true,
+        structuredOutput: { schema },
+      });
+
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            id: '1',
+            text: '<|channel|>final <|constrain|>JSON<|message|>{"primitiveId":"weatherAgent","primitiveType":"agent","prompt":"What is the weather?"}',
+          },
+        },
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
+
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
+      expect(objectResultChunk).toBeDefined();
+      expect(objectResultChunk?.object).toEqual({
+        primitiveId: 'weatherAgent',
+        primitiveType: 'agent',
+        prompt: 'What is the weather?',
+      });
+    });
+
+    it('should extract JSON from multiline content in <|message|> wrapper', async () => {
+      const schema = z.object({
+        name: z.string(),
+        value: z.number(),
+      });
+
+      const transformer = createObjectStreamTransformer({
+        isLLMExecutionStep: true,
+        structuredOutput: { schema },
+      });
+
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            id: '1',
+            text: '<|channel|>final <|message|>{\n  "name": "test",\n  "value": 42\n}',
+          },
+        },
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
+
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
+      expect(objectResultChunk).toBeDefined();
+      expect(objectResultChunk?.object).toEqual({ name: 'test', value: 42 });
+    });
+
+    it('should handle JSON wrapped in ```json code blocks', async () => {
+      const schema = z.object({
+        title: z.string(),
+        count: z.number(),
+      });
+
+      const transformer = createObjectStreamTransformer({
+        isLLMExecutionStep: true,
+        structuredOutput: { schema },
+      });
+
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            id: '1',
+            text: '```json\n{"title":"Test","count":5}\n```',
+          },
+        },
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
+
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
+      expect(objectResultChunk).toBeDefined();
+      expect(objectResultChunk?.object).toEqual({ title: 'Test', count: 5 });
+    });
+  });
+
   describe('errorStrategy', () => {
     it('should emit error chunk when errorStrategy is not set', async () => {
       const schema = z.object({

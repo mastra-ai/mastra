@@ -190,6 +190,15 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
   protected preprocessText(accumulatedText: string): string {
     let processedText = accumulatedText;
 
+    // Some LLMs (e.g., LMStudio with jsonPromptInjection) wrap JSON in special tokens
+    // Format: '<|channel|>final <|constrain|>JSON<|message|>{"key":"value"}'
+    if (processedText.includes('<|message|>')) {
+      const match = processedText.match(/<\|message\|>([\s\S]+)$/);
+      if (match && match[1]) {
+        processedText = match[1];
+      }
+    }
+
     // Some LLMs wrap the JSON response in code blocks.
     // In that case, first try to extract content from complete code blocks
     if (processedText.includes('```json')) {
@@ -577,31 +586,15 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
               object: finalResult.value,
             });
           }
+          // If parsing failed, this is likely a legitimate tool call (not Bedrock structured output)
+          // Fall through to return without emitting anything
         }
         // No valid structured output - return without emitting object-result
         // This preserves the original behavior for actual tool calls
-
-        // TODO: this breaks object output when tools are called.
-        // The reason we did this was to be able to work with client-side tool calls. We need the object to resolve in that case
-        // but this will
-        // controller.enqueue({
-        //   from: ChunkFrom.AGENT,
-        //   runId: currentRunId ?? '',
-        //   type: 'object-result',
-        //   object: undefined as InferSchemaOutput<OUTPUT>,
-        // });
         return;
       }
 
-      // Try to extract JSON from accumulated text if it contains special tokens (e.g., LMStudio with jsonPromptInjection)
-      // LMStudio format: '<|channel|>final <|constrain|>JSON<|message|>{"key":"value"}'
-      let textToValidate = accumulatedText;
-      const messageTokenMatch = accumulatedText.match(/<\|message\|>(.+)$/);
-      if (messageTokenMatch && messageTokenMatch[1]) {
-        textToValidate = messageTokenMatch[1];
-      }
-
-      const finalResult = await handler.validateAndTransformFinal(textToValidate);
+      const finalResult = await handler.validateAndTransformFinal(accumulatedText);
 
       if (!finalResult.success) {
         if (structuredOutput?.errorStrategy === 'warn') {
