@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { ServerInfo } from '@mastra/core/mcp';
 import path from 'node:path';
 
-vi.setConfig({ testTimeout: 50000, hookTimeout: 50000 });
+vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
 
 describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
   let mastraServer: ReturnType<typeof spawn>;
