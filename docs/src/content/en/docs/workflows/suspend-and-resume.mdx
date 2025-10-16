@@ -215,6 +215,32 @@ const resumedResult = await run.resume({
 });
 ```
 
+You can pass `runtimeContext` as an argument to both the `start` and `resume` commands.
+
+```typescript filename="src/mastra/workflows/test-workflow.ts"
+import { RuntimeContext } from "@mastra/core/runtime-context";
+
+const runtimeContext = new RuntimeContext();
+
+const result = await run.start({
+  step: 'step-1',
+  inputData: {
+    city: "London"
+  },
+  runtimeContext
+});
+
+const resumedResult = await run.resume({
+  step: 'step-1',
+  resumeData: {
+    city: "New York"
+  },
+  runtimeContext
+});
+```
+
+> See [Runtime Context](../server-db/runtime-context.mdx) for more information.
+
 ### Resuming nested workflows
 
 To resume a suspended nested workflow pass the workflow instance to the `step` parameter of the `resume` function.
