@@ -443,6 +443,7 @@ export type ProviderModelsMap = {
   ];
   readonly opencode: readonly [
     'an-g8x',
+    'an-gbt',
     'claude-3-5-haiku',
     'claude-haiku-4-5',
     'claude-opus-4-1',
@@ -725,16 +726,23 @@ export type ProviderModelsMap = {
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
   readonly anthropic: readonly [
     'claude-3-5-haiku-20241022',
+    'claude-3-5-haiku-latest',
     'claude-3-5-sonnet-20240620',
     'claude-3-5-sonnet-20241022',
     'claude-3-7-sonnet-20250219',
+    'claude-3-7-sonnet-latest',
     'claude-3-haiku-20240307',
     'claude-3-opus-20240229',
     'claude-3-sonnet-20240229',
+    'claude-haiku-4-5',
     'claude-haiku-4-5-20251001',
+    'claude-opus-4-0',
+    'claude-opus-4-1',
     'claude-opus-4-1-20250805',
     'claude-opus-4-20250514',
+    'claude-sonnet-4-0',
     'claude-sonnet-4-20250514',
+    'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
   ];
   readonly 'fireworks-ai': readonly [
