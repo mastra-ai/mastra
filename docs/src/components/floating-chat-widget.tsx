@@ -13,17 +13,9 @@ import { usePostHog } from "posthog-js/react";
 import { useState } from "react";
 import { Button } from "./ui/button";
 
-export const FloatingChatWidget = ({
-  isKapaChatbotEnabled,
-}: {
-  isKapaChatbotEnabled: boolean;
-}) => {
+export const FloatingChatWidget = () => {
   const [isOpen, setIsOpen] = useState(false);
   const posthog = usePostHog();
-
-  if (!isKapaChatbotEnabled) {
-    return null;
-  }
 
   function open() {
     setIsOpen(true);

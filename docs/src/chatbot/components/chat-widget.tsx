@@ -140,10 +140,10 @@ export function KapaChat({
       </div>
 
       {/* Input area */}
-      <div className="pb-4">
+      <div className="">
         <form
           onSubmit={handleSubmit}
-          className="px-2 border-t border-neutral-200 dark:border-neutral-800"
+          className="p-2 border-t border-neutral-200 dark:border-neutral-800"
         >
           <div className="flex items-center">
             <Textarea
@@ -179,14 +179,14 @@ export function KapaChat({
         </form>
 
         {/* Compliance text */}
-        <div className="px-2 mt-2 text-center">
+        <div className="p-2 mt-2 text-center bg-surface-2 dark:bg-surface-5">
           <p className="text-[10px] text-icons-2 dark:text-icons-2">
             Powered by{" "}
             <a
               href="https://kapa.ai"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-accent-green dark:hover:text-accent-green"
+              className="underline text-accent-green-2 dark:text-accent-green"
             >
               kapa.ai
             </a>
@@ -198,7 +198,7 @@ export function KapaChat({
               href="https://policies.google.com/privacy"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-accent-green dark:hover:text-accent-green"
+              className="underline text-accent-green-2 dark:text-accent-green"
             >
               Privacy Policy
             </a>{" "}
@@ -207,7 +207,7 @@ export function KapaChat({
               href="https://policies.google.com/terms"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-accent-green dark:hover:text-accent-green"
+              className="underline text-accent-green-2 dark:text-accent-green"
             >
               Terms of Service
             </a>{" "}

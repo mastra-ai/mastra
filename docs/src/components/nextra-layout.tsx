@@ -1,6 +1,6 @@
 "use client";
 import { T } from "gt-next/client";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { PageMapItem } from "nextra";
 import { Layout } from "nextra-theme-docs";
 import { FeedbackTrigger } from "./feedback-trigger";
@@ -18,21 +18,13 @@ export const NextraLayout = ({
   children,
   locale,
   stars,
-  isKapaChatbotEnabled: serverIsKapaChatbotEnabled,
 }: {
   pageMap: PageMapItem[];
   children: React.ReactNode;
   locale: string;
   stars: number;
-  isKapaChatbotEnabled: boolean;
 }) => {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  // Check if vnext_search URL param is set to override the server-side flag
-  const vnextSearch = searchParams.get("vnext_search");
-  const isKapaChatbotEnabled =
-    vnextSearch === "true" ? true : serverIsKapaChatbotEnabled;
 
   return (
     <>
@@ -83,7 +75,7 @@ export const NextraLayout = ({
       </Layout>
 
       {/* Floating chat widget */}
-      <FloatingChatWidget isKapaChatbotEnabled={isKapaChatbotEnabled} />
+      <FloatingChatWidget />
     </>
   );
 };
