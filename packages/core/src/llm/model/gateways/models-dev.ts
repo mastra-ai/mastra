@@ -201,7 +201,9 @@ export class ModelsDevGateway extends MastraModelGateway {
         })(modelId);
       default:
         if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-        return createOpenAICompatible({ name: providerId, apiKey, baseURL }).chatModel(modelId);
+        return createOpenAICompatible({ name: providerId, apiKey, baseURL, supportsStructuredOutputs: true }).chatModel(
+          modelId,
+        );
     }
   }
 }
