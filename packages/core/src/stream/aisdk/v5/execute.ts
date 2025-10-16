@@ -109,6 +109,18 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
       schema: responseFormat.schema,
     });
   }
+
+  const providerOptionsToUse =
+    model.provider === 'openai' && responseFormat?.type === 'json' && !structuredOutput?.jsonPromptInjection
+      ? {
+          ...(providerOptions ?? {}),
+          openai: {
+            strictJsonSchema: true,
+            ...(providerOptions?.openai ?? {}),
+          },
+        }
+      : providerOptions;
+
   const stream = v5.initialize({
     runId,
     onResult,
@@ -122,7 +134,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
             const streamResult = await model.doStream({
               ...toolsAndToolChoice,
               prompt,
-              providerOptions,
+              providerOptions: providerOptionsToUse,
               abortSignal,
               includeRawChunks,
               responseFormat:
