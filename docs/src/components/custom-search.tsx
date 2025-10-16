@@ -189,6 +189,7 @@ export const CustomSearch: FC<SearchProps> = ({
 
     switch (event.key) {
       case "Tab":
+      case "ArrowRight":
       case "ArrowDown":
         event.preventDefault();
         setSelectedIndex((prev) => {
@@ -207,6 +208,7 @@ export const CustomSearch: FC<SearchProps> = ({
           return newIndex;
         });
         break;
+      case "ArrowLeft":
       case "ArrowUp":
         event.preventDefault();
         setSelectedIndex((prev) => {
