@@ -4,10 +4,10 @@ const meta = {
   overview: <Tag text="new">Overview</Tag>,
   "control-flow": "Control Flow",
   "suspend-and-resume": "Suspend & Resume",
+  "using-with-agents-and-tools": "Agents and Tools",
   "pausing-execution": "Sleep & Events",
   "error-handling": "Error Handling",
   "input-data-mapping": "Input Data Mapping",
-  "using-with-agents-and-tools": "Agents and Tools",
   snapshots: "Snapshots",
   "inngest-workflow": <Tag text="experimental">Inngest Workflow</Tag>,
 };
