@@ -3,6 +3,7 @@ import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 
 import { MessageList } from '../agent/message-list';
 import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
 import { MastraBase } from '../base';
+import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
 import type { MastraStorage, PaginationInfo, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -103,7 +104,13 @@ export abstract class MastraMemory extends MastraBase {
           `Semantic recall requires an embedder to be configured.\n\nhttps://mastra.ai/en/docs/memory/semantic-recall`,
         );
       }
-      this.embedder = config.embedder;
+
+      // Convert string embedder to ModelRouterEmbeddingModel
+      if (typeof config.embedder === 'string') {
+        this.embedder = new ModelRouterEmbeddingModel(config.embedder);
+      } else {
+        this.embedder = config.embedder;
+      }
     }
   }
 
