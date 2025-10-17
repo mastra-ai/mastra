@@ -47,6 +47,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
+    "model": "nvidia/moonshotai/kimi-k2-instruct-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/moonshotai/kimi-k2-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "nvidia/nvidia/cosmos-nemotron-34b",
     "imageInput": true,
     "audioInput": false,
@@ -95,44 +119,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "nvidia/black-forest-labs/flux.1-dev",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 4096,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "nvidia/deepseek-ai/deepseek-v3.1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "nvidia/qwen/qwen3-coder-480b-a35b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 66536,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "nvidia/qwen/qwen3-235b-a22b",
-    "imageInput": false,
+    "model": "nvidia/google/gemma-3-27b-it",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
@@ -143,9 +131,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "nvidia/google/gemma-3-27b-it",
+    "model": "nvidia/microsoft/phi-4-mini-instruct",
     "imageInput": true,
-    "audioInput": false,
+    "audioInput": true,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
@@ -179,7 +167,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "nvidia/moonshotai/kimi-k2-instruct",
+    "model": "nvidia/qwen/qwen3-235b-a22b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/qwen/qwen3-coder-480b-a35b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/deepseek-ai/deepseek-v3.1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -191,26 +203,14 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "nvidia/moonshotai/kimi-k2-instruct-0905",
+    "model": "nvidia/black-forest-labs/flux.1-dev",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "nvidia/microsoft/phi-4-mini-instruct",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
+    "contextWindow": 4096,
+    "maxOutput": null,
     "inputCost": null,
     "outputCost": null
   }
