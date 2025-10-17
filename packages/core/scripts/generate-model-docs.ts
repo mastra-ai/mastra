@@ -499,11 +499,11 @@ Mastra provides a unified interface for working with LLMs across multiple provid
 
 ## Features
 
-- **One API for any model** - Access any model without having to install and manage additional provider modules/dependencies.
+- **One API for any model** - Access any model without having to install and manage additional provider dependencies.
 
 - **Access the newest AI** - Use new models the moment they're released, no matter which provider they come from. Avoid vendor lock-in with Mastra's provider-agnostic interface.  
 
-- **Mix and match models** - Use different models for different tasks. For example, run GPT-4o-mini for large-context processing, then switch to Claude Opus 4.1 for reasoning tasks.  
+- [**Mix and match models**](#mix-and-match-models) - Use different models for different tasks. For example, run GPT-4o-mini for large-context processing, then switch to Claude Opus 4.1 for reasoning tasks.  
 
 - [**Model fallbacks**](#model-fallbacks) - If a provider experiences an outage, Mastra can automatically switch to another provider at the application level, minimizing latency compared to API gateways.
 
@@ -563,7 +563,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
     import { Agent } from "@mastra/core";
 
     const agent = new Agent({
-      name: "assistant",
+      name: "my-agent",
       instructions: "You are a helpful assistant", 
       model: "openrouter/anthropic/claude-haiku-4-5"
     })
@@ -574,7 +574,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
 
 ## Model directory
 
-Browse the directory of available models using the navigation on the left, or explore the models below.
+Browse the directory of available models using the navigation on the left, or explore below.
 
 <CardGrid>
     <CardGridItem
@@ -623,7 +623,7 @@ Browse the directory of available models using the navigation on the left, or ex
     </CardGridItem>
 </CardGrid>
 
-You can also explore models directly in your editor. Mastra provides full autocomplete for the \`model\` field - just start typing, and your IDE will show available options.
+You can also discover models directly in your editor. Mastra provides full autocomplete for the \`model\` field - just start typing, and your IDE will show available options.
 
 Alternatively, browse and test models in the [Playground](/docs/server-db/local-dev-playground) UI.
 
@@ -748,7 +748,7 @@ const agent = new Agent({
       maxRetries: 2,
     },
     {
-      model: "google/gemini-2.5-flash",
+      model: "google/gemini-2.5-pro",
       maxRetries: 2,
     },
   ],
@@ -758,9 +758,9 @@ Mastra tries your primary model first. If it encounters a 500 error, rate limit,
 
 Your users never experience the disruption - the response comes back with the same format, just from a different model. The error context is preserved as the system moves through your fallback chain, ensuring clean error propagation while maintaining streaming compatibility.
 
-## Using AI SDK with Mastra
+## Use AI SDK with Mastra
 
-Mastra fully supports AI SDK provider modules, should you need to use them directly.
+Mastra supports AI SDK provider modules, should you need to use them directly.
 
 
 \`\`\`typescript showLineNumbers
