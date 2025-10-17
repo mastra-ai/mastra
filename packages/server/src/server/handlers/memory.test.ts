@@ -810,6 +810,71 @@ describe('Memory Handlers', () => {
       ]);
       expect(result.legacyMessages).toEqual(expectedResult.legacyMessages);
     });
+
+    it('should preserve custom metadata in uiMessages when loading messages with metadata', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+      });
+
+      // Create a V2 message with custom metadata (simulating what the client sends)
+      const messagesV2: MastraMessageV2[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          createdAt: new Date(),
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Hello with custom metadata' }],
+            content: 'Hello with custom metadata',
+            metadata: {
+              files: [
+                {
+                  id: 'file-1',
+                  mediaType: 'image/png',
+                  name: 'test.png',
+                  access_token: '',
+                },
+              ],
+            },
+          },
+        },
+      ];
+
+      // Mock the memory query to return our V2 messages
+      const expectedResult = {
+        messages: [] as CoreMessage[], // V1 format (legacy)
+        uiMessages: [], // AIV4 UI format (legacy)
+        messagesV2, // V2 format with metadata
+      };
+
+      mockMemory.getThreadById.mockResolvedValue(createThread({}));
+      mockMemory.query.mockResolvedValue(expectedResult);
+
+      const result = await getMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'test-agent' });
+
+      // Verify that uiMessages contains the custom metadata
+      expect(result.uiMessages).toHaveLength(1);
+      expect(result.uiMessages[0]?.metadata).toMatchObject({
+        files: [
+          {
+            id: 'file-1',
+            mediaType: 'image/png',
+            name: 'test.png',
+            access_token: '',
+          },
+        ],
+      });
+
+      // Should also have system metadata
+      expect(result.uiMessages[0]?.metadata).toHaveProperty('createdAt');
+      expect(result.uiMessages[0]?.metadata).toHaveProperty('threadId', 'test-thread');
+      expect(result.uiMessages[0]?.metadata).toHaveProperty('resourceId', 'test-resource');
+    });
   });
 
   describe('getMessagesPaginatedHandler', () => {
