@@ -523,11 +523,6 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         currentRunId = chunk.runId;
       }
 
-      if (chunk.type === 'finish') {
-        controller.enqueue(chunk);
-        return;
-      }
-
       if (chunk.type === 'text-delta' && typeof chunk.payload?.text === 'string') {
         accumulatedText += chunk.payload.text;
 
