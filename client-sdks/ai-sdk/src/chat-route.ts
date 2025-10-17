@@ -161,6 +161,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
       });
 
       const uiMessageStream = createUIMessageStream({
+        originalMessages: messages,
         execute: async ({ writer }) => {
           for await (const part of toAISdkFormat(result, { from: 'agent' })!) {
             writer.write(part);
