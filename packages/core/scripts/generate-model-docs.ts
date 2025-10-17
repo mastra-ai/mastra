@@ -511,7 +511,7 @@ Mastra provides a unified interface for working with LLMs across multiple provid
 
 Whether you're using OpenAI, Anthropic, Google, or a gateway like OpenRouter, specify the model as \`"provider/model-name"\` and Mastra handles the rest.
 
-Mastra automatically reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and routes to the appropriate provider. If an API key is missing, you'll get a clear runtime error showing exactly which variable to set.
+Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and routes requests to the provider. If an API key is missing, you'll get a clear runtime error showing exactly which variable to set.
 
 <Tabs items={["OpenAI", "Anthropic", "Google Gemini", "xAI", "OpenRouter"]}>
   <Tab>
@@ -521,7 +521,7 @@ Mastra automatically reads the relevant environment variable (e.g. \`ANTHROPIC_A
     const agent = new Agent({
       name: "my-agent",
       instructions: "You are a helpful assistant",
-      model: "openai/gpt-4o"
+      model: "openai/gpt-5"
     })
     \`\`\`
   </Tab>
@@ -532,7 +532,7 @@ Mastra automatically reads the relevant environment variable (e.g. \`ANTHROPIC_A
     const agent = new Agent({
       name: "my-agent", 
       instructions: "You are a helpful assistant",
-      model: "anthropic/claude-3-5-sonnet"
+      model: "anthropic/claude-4-5-sonnet"
     })
     \`\`\`
   </Tab>
@@ -565,7 +565,7 @@ Mastra automatically reads the relevant environment variable (e.g. \`ANTHROPIC_A
     const agent = new Agent({
       name: "assistant",
       instructions: "You are a helpful assistant", 
-      model: "openrouter/anthropic/claude-3.5-haiku"
+      model: "openrouter/anthropic/claude-haiku-4-5"
     })
     \`\`\`
   </Tab>
@@ -676,7 +676,7 @@ This enables powerful patterns:
 
 ## Provider-specific options
 
-Different model providers expose their own configuration options. With OpenAI, you might adjust the \`reasoning_effort\`. With Anthropic, you might tune \`cacheControl\`. Mastra lets you set these specific \`providerOptions\` either at the agent level or per message.
+Different model providers expose their own configuration options. With OpenAI, you might adjust the \`reasoningEffort\`. With Anthropic, you might tune \`cacheControl\`. Mastra lets you set these specific \`providerOptions\` either at the agent level or per message.
 
 \`\`\`typescript showLineNumbers
 // Agent level (apply to all future messages)
@@ -685,10 +685,10 @@ const planner = new Agent({
     role: "system",
     content: "You are a helpful assistant.",
     providerOptions: {
-      openai: { reasoning_effort: "low" }
+      openai: { reasoningEffort: "low" }
     }
   },
-  model: openai("o1-preview"),
+  model: "openai/o3-pro",
 });
 
 const lowEffort = 
@@ -700,12 +700,11 @@ const highEffort = await planner.generate([
     role: "user",
     content: "Plan a simple 3 item dinner menu for a celiac",
     providerOptions: {
-      openai: { reasoning_effort: "high" }
+      openai: { reasoningEffort: "high" }
     }
   }
 ]);
 \`\`\`
-Under the hood, these options map directly to request body parameters sent to the provider. You can find the full list of supported options in the respective provider's documentation (e.g. [OpenAI API Reference](https://platform.openai.com/docs/api-reference)).
 
 ## Custom headers
 
@@ -741,15 +740,15 @@ const agent = new Agent({
   instructions: 'You are a helpful assistant.',
   model: [
     {
-      model: "openai/gpt-4o-mini",
+      model: "openai/gpt-5",
       maxRetries: 3,
     },
     {
-      model: "anthropic/claude-3-5-sonnet",
+      model: "anthropic/claude-4-5-sonnet",
       maxRetries: 2,
     },
     {
-      model: "google/gemini-pro",
+      model: "google/gemini-2.5-flash",
       maxRetries: 2,
     },
   ],
