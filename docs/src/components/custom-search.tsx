@@ -11,8 +11,8 @@ import {
   AlgoliaSearchOptions,
   useAlgoliaSearch,
 } from "../hooks/use-algolia-search";
-import { BurgerIcon } from "./svgs/Icons";
 import { EmptySearch } from "./empty-search";
+import { BurgerIcon } from "./svgs/Icons";
 // Custom hook for responsive design
 const useMediaQuery = (query: string): boolean => {
   const [matches, setMatches] = useState(false);
@@ -179,7 +179,9 @@ export const CustomSearch: FC<SearchProps> = ({
       case "ArrowDown":
         event.preventDefault();
         setSelectedIndex((prev) => {
-          const maxIndex = isEmptyState ? emptyStateItemCount - 1 : totalItems - 1;
+          const maxIndex = isEmptyState
+            ? emptyStateItemCount - 1
+            : totalItems - 1;
           const newIndex = prev < maxIndex ? prev + 1 : prev;
 
           // Scroll to the selected item (only for search results with virtualizer)
@@ -429,4 +431,3 @@ export const CustomSearch: FC<SearchProps> = ({
     </div>
   );
 };
-
