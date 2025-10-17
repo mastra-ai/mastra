@@ -32,6 +32,7 @@
     "@tailwindcss/postcss": "^4.0.17",
     "@tanstack/react-virtual": "^3.13.8",
     "@vercel/analytics": "^1.5.0",
+    "@vercel/toolbar": "^0.1.41",
     "algoliasearch": "5.25.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
