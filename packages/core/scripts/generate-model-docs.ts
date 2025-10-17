@@ -1,8 +1,9 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { z } from 'zod';
 import type { ProviderConfig } from '../src/index.js';
-import { PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants.js';
+import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants.js';
 
 /**
  * Generate a comment indicating the file was auto-generated
@@ -95,6 +96,28 @@ interface ProviderInfo {
   baseProvider?: string; // For gateway providers like netlify/openai -> openai
   packageName?: string; // Vercel AI SDK package name from models.dev
 }
+
+// Zod schema for models.dev API response
+const ModelsDevModelSchema = z
+  .object({
+    id: z.string(),
+    context_window: z.number().optional(),
+  })
+  .passthrough();
+
+const ModelsDevProviderSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    url: z.string().optional(),
+    npm: z.string().optional(),
+    models: z.record(ModelsDevModelSchema),
+  })
+  .passthrough();
+
+const ModelsDevResponseSchema = z.record(ModelsDevProviderSchema);
+
+type ModelsDevProvider = z.infer<typeof ModelsDevProviderSchema>;
 
 interface GroupedProviders {
   gateways: Map<string, ProviderInfo[]>; // gateway -> providers
@@ -205,7 +228,9 @@ async function generateProviderPage(
 
   // Create intro with optional documentation link
   const introText = docUrl
-    ? `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the \`${provider.apiKeyEnvVar}\` environment variable.\n\nLearn more in the [${provider.name} documentation](${docUrl}).`
+    ? `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the \`${provider.apiKeyEnvVar}\` environment variable.
+
+Learn more in the [${provider.name} documentation](${docUrl}).`
     : `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the \`${provider.apiKeyEnvVar}\` environment variable.`;
 
   // Fetch model capabilities from models.dev
@@ -275,7 +300,12 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 \`\`\`typescript
 const agent = new Agent({
   name: "custom-agent",
-  model: {${provider.url ? `\n    url: "${provider.url}",` : ''}
+  model: {${
+    provider.url
+      ? `
+    url: "${provider.url}",`
+      : ''
+  }
     modelId: "${provider.models[0]}",
     apiKey: process.env.${provider.apiKeyEnvVar},
     headers: {
@@ -330,6 +360,26 @@ This provider can also be installed directly as a standalone package, which can 
 `
     : ''
 }`;
+}
+
+async function checkAiSdkDocsLink(providerId: string): Promise<string | null> {
+  const paths = [
+    `https://ai-sdk.dev/providers/ai-sdk-providers/${providerId}`,
+    `https://ai-sdk.dev/providers/community-providers/${providerId}`,
+  ];
+
+  for (const url of paths) {
+    try {
+      const response = await fetch(url, { method: 'HEAD' });
+      if (response.ok) {
+        return url;
+      }
+    } catch {
+      // Continue to next URL
+    }
+  }
+
+  return null;
 }
 
 function getLogoUrl(providerId: string): string {
@@ -408,7 +458,9 @@ function generateGatewayPage(
       : `${displayName} aggregates models from multiple providers with enhanced features like rate limiting and failover.`;
 
   const introText = docUrl
-    ? `${gatewayDescription} Access ${totalModels} models through Mastra's model router.\n\nLearn more in the [${displayName} documentation](${docUrl}).`
+    ? `${gatewayDescription} Access ${totalModels} models through Mastra's model router.
+
+Learn more in the [${displayName} documentation](${docUrl}).`
     : `${gatewayDescription} Access ${totalModels} models through Mastra's model router.`;
 
   // Create model table for all models
@@ -420,12 +472,20 @@ function generateGatewayPage(
 
 | Model |
 |-------|
-${allModels.map(m => `| \`${m}\` |`).join('\n')}
+${allModels
+  .map(m => `| \`${m}\` |`)
+  .join(
+    '\
+',
+  )}
 `
       : '';
 
   // Generate logo markup - use component if available, otherwise use img tag
-  const logoImport = hasLogoComponent(gatewayName) ? `${getLogoComponentImport(gatewayName)}\n` : '';
+  const logoImport = hasLogoComponent(gatewayName)
+    ? `${getLogoComponentImport(gatewayName)}
+`
+    : '';
   const logoMarkup = hasLogoComponent(gatewayName)
     ? getLogoComponentJSX(gatewayName)
     : `<img src="${getLogoUrl(gatewayName)}" alt="${displayName} logo" className="${getLogoClass(gatewayName)}" />`;
@@ -780,7 +840,10 @@ function generateGatewaysIndexPage(grouped: GroupedProviders): string {
   const gatewaysList = orderedGateways.filter(g => grouped.gateways.has(g));
 
   const hasNetlify = gatewaysList.includes('netlify');
-  const logoImport = hasNetlify ? '\nimport { NetlifyLogo } from "@/components/logos/NetlifyLogo";' : '';
+  const logoImport = hasNetlify
+    ? '\
+import { NetlifyLogo } from "@/components/logos/NetlifyLogo";'
+    : '';
 
   return `---
 title: "Gateways"
@@ -814,7 +877,10 @@ ${gatewaysList
       
     />`;
   })
-  .join('\n')}
+  .join(
+    '\
+',
+  )}
 </CardGrid>`;
 }
 
@@ -844,24 +910,124 @@ ${allProviders
       logo="${getLogoUrl(p.id)}"
     />`,
   )
-  .join('\n')}
+  .join(
+    '\
+',
+  )}
 </CardGrid>`;
 }
 
-function generateProvidersMeta(grouped: GroupedProviders): string {
+function generateProvidersMeta(grouped: GroupedProviders, aiSdkProviders: ModelsDevProvider[] = []): string {
   const allProviders = [...grouped.popular, ...grouped.other];
 
-  // Build the meta object with index first, then all providers in order
+  // Combine all providers with AI SDK providers and sort alphabetically
+  const combinedProviders: Array<{ id: string; name: string }> = [
+    ...allProviders.map(p => ({ id: p.id, name: p.name })),
+    ...aiSdkProviders.map(p => {
+      let displayName = p.name;
+      if (p.id === 'google-vertex') {
+        displayName = 'Google Vertex AI';
+      } else if (p.id === 'google-vertex-anthropic') {
+        displayName = 'Vertex AI (Anthropic)';
+      }
+      return { id: p.id, name: displayName };
+    }),
+  ].sort((a, b) => a.name.localeCompare(b.name));
+
+  // Build the meta object with index first, then all providers alphabetically
   const metaEntries = ['  index: "Overview"'];
 
-  for (const provider of allProviders) {
+  for (const provider of combinedProviders) {
     // Quote keys that contain dashes or other special characters
     const key = provider.id.includes('-') ? `"${provider.id}"` : provider.id;
     metaEntries.push(`  ${key}: "${provider.name}"`);
   }
 
   return `const meta = {
-${metaEntries.join(',\n')},
+${metaEntries.join(
+  ',\
+',
+)},
+};
+
+export default meta;
+`;
+}
+
+async function generateAiSdkProviderPage(provider: any, aiSdkDocsUrl: string | null): Promise<string> {
+  const packageName = provider.npm;
+
+  const aiSdkDocsSection = aiSdkDocsUrl
+    ? `
+## AI SDK Documentation
+
+For detailed provider-specific documentation, see the [AI SDK ${provider.name} provider docs](${aiSdkDocsUrl}).`
+    : '';
+
+  return `---
+title: "${provider.name}"
+description: "Use ${provider.name} models via the AI SDK."
+---
+
+${getGeneratedComment()}
+
+# ${provider.name}
+
+${provider.name} is available through the AI SDK. Install the provider package to use their models with Mastra.
+
+## Installation
+
+\`\`\`bash
+npm install ${packageName}
+\`\`\`
+${aiSdkDocsSection}
+`;
+}
+
+async function generateAiSdkProvidersIndexPage(aiSdkProviders: any[]): Promise<string> {
+  return `---
+title: "AI SDK Providers"
+description: "Install additional AI providers via the AI SDK."
+---
+
+${getGeneratedComment()}
+
+import { CardGrid, CardGridItem } from "@/components/cards/card-grid";
+
+# AI SDK Providers
+
+These providers are available through the AI SDK. Install the provider package to use their models with Mastra.
+
+<CardGrid>
+${aiSdkProviders
+  .map(
+    p => `    <CardGridItem
+      title="${p.name.replace(/&/g, '&amp;')}"
+      description="${p.models ? Object.keys(p.models).length : 0} models"
+      href="./ai-sdk-providers/${p.id}"
+      logo="${getLogoUrl(p.id)}"
+    />`,
+  )
+  .join(
+    '\
+',
+  )}
+</CardGrid>`;
+}
+
+function generateAiSdkProvidersMeta(aiSdkProviders: any[]): string {
+  const metaEntries = ['  index: "Overview"'];
+
+  for (const provider of aiSdkProviders) {
+    const key = provider.id.includes('-') ? `"${provider.id}"` : provider.id;
+    metaEntries.push(`  ${key}: "${provider.name}"`);
+  }
+
+  return `const meta = {
+${metaEntries.join(
+  ',\
+',
+)},
 };
 
 export default meta;
@@ -886,7 +1052,10 @@ function generateGatewaysMeta(grouped: GroupedProviders): string {
   }
 
   return `const meta = {
-${metaEntries.join(',\n')},
+${metaEntries.join(
+  ',\
+',
+)},
 };
 
 export default meta;
@@ -911,6 +1080,13 @@ async function generateDocs() {
 
   const grouped = await parseProviders();
 
+  // Fetch all providers from models.dev for AI SDK provider filtering
+  console.info('🔍 Fetching provider data from models.dev...');
+  const modelsDevResponse = await fetch('https://models.dev/api.json');
+  const modelsDevData = ModelsDevResponseSchema.parse(await modelsDevResponse.json());
+  // Convert object to array of providers
+  const allModelsDevProviders: ModelsDevProvider[] = Object.values(modelsDevData);
+
   // Generate index page
   const indexContent = generateIndexPage(grouped);
   await fs.writeFile(path.join(docsDir, 'index.mdx'), indexContent);
@@ -926,13 +1102,36 @@ async function generateDocs() {
   await fs.writeFile(path.join(gatewaysDir, '_meta.ts'), gatewaysMetaContent);
   console.info('✅ Generated gateways/_meta.ts');
 
+  // Generate AI SDK provider documentation
+  console.info('\\n🔍 Filtering AI SDK providers...');
+  const supportedProviderIds = new Set(Object.keys(providerRegistry));
+  const aiSdkProviders = allModelsDevProviders
+    .filter(p => {
+      return (
+        p.npm && // Has an npm package
+        !supportedProviderIds.has(p.id) && // Not in our model router
+        !EXCLUDED_PROVIDERS.includes(p.id) // Not excluded
+      );
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  // Add Ollama as a custom AI SDK provider
+  aiSdkProviders.push({
+    id: 'ollama',
+    name: 'Ollama',
+    npm: 'ollama-ai-provider',
+    models: {},
+  });
+
+  console.info(`Found ${aiSdkProviders.length} AI SDK providers`);
+
   // Generate providers overview page
   const providersIndexContent = generateProvidersIndexPage(grouped);
   await fs.writeFile(path.join(providersDir, 'index.mdx'), providersIndexContent);
   console.info('✅ Generated providers/index.mdx');
 
-  // Generate providers _meta.ts
-  const providersMetaContent = generateProvidersMeta(grouped);
+  // Generate providers _meta.ts (including AI SDK providers)
+  const providersMetaContent = generateProvidersMeta(grouped, aiSdkProviders);
   await fs.writeFile(path.join(providersDir, '_meta.ts'), providersMetaContent);
   console.info('✅ Generated providers/_meta.ts');
 
@@ -941,6 +1140,14 @@ async function generateDocs() {
     const content = await generateProviderPage(provider, providerRegistry);
     await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
     console.info(`✅ Generated providers/${provider.id}.mdx`);
+  }
+
+  // Generate individual AI SDK provider pages
+  for (const provider of aiSdkProviders) {
+    const aiSdkDocsUrl = await checkAiSdkDocsLink(provider.id);
+    const content = await generateAiSdkProviderPage(provider, aiSdkDocsUrl);
+    await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
+    console.info(`✅ Generated providers/${provider.id}.mdx (AI SDK)`);
   }
 
   // Generate individual gateway pages
@@ -952,11 +1159,11 @@ async function generateDocs() {
 
   console.info(`
 📚 Documentation generated successfully!
-   - ${grouped.popular.length + grouped.other.length} provider pages + 1 overview
+   - ${grouped.popular.length + grouped.other.length + aiSdkProviders.length} provider pages + 1 overview
    - ${grouped.gateways.size} gateway pages + 1 overview
    - 1 main index page
    
-   Total: ${grouped.popular.length + grouped.other.length + grouped.gateways.size + 3} pages generated
+   Total: ${grouped.popular.length + grouped.other.length + aiSdkProviders.length + grouped.gateways.size + 3} pages generated
   `);
 }
 
