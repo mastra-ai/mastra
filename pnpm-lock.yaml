@@ -1578,8 +1578,8 @@ importers:
         specifier: 6.1.0
         version: 6.1.0(rollup@4.50.2)
       '@rollup/plugin-node-resolve':
-        specifier: 16.0.2
-        version: 16.0.2(rollup@4.50.2)
+        specifier: 16.0.3
+        version: 16.0.3(rollup@4.50.2)
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
@@ -1641,8 +1641,8 @@ importers:
         specifier: 6.1.0
         version: 6.1.0(rollup@4.50.2)
       '@rollup/plugin-node-resolve':
-        specifier: 16.0.2
-        version: 16.0.2(rollup@4.50.2)
+        specifier: 16.0.3
+        version: 16.0.3(rollup@4.50.2)
       '@rollup/plugin-virtual':
         specifier: 3.0.2
         version: 3.0.2(rollup@4.50.2)
@@ -9278,8 +9278,8 @@ packages:
       rollup:
         optional: true
 
-  '@rollup/plugin-node-resolve@16.0.2':
-    resolution: {integrity: sha512-tCtHJ2BlhSoK4cCs25NMXfV7EALKr0jyasmqVCq3y9cBrKdmJhtsy1iTz36Xhk/O+pDJbzawxF4K6ZblqCnITQ==}
+  '@rollup/plugin-node-resolve@16.0.3':
+    resolution: {integrity: sha512-lUYM3UBGuM93CnMPG1YocWu7X802BrNF3jW2zny5gQyLQgRFJhV1Sq0Zi74+dh/6NBx1DxFC4b4GXg9wUCG5Qg==}
     engines: {node: '>=14.0.0'}
     peerDependencies:
       rollup: ^2.78.0||^3.0.0||^4.0.0
@@ -23383,7 +23383,7 @@ snapshots:
     optionalDependencies:
       rollup: 4.50.2
 
-  '@rollup/plugin-node-resolve@16.0.2(rollup@4.50.2)':
+  '@rollup/plugin-node-resolve@16.0.3(rollup@4.50.2)':
     dependencies:
       '@rollup/pluginutils': 5.2.0(rollup@4.50.2)
       '@types/resolve': 1.20.2
