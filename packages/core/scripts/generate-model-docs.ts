@@ -1065,11 +1065,6 @@ async function generateDocs() {
   await fs.writeFile(path.join(providersDir, 'index.mdx'), providersIndexContent);
   console.info('✅ Generated providers/index.mdx');
 
-  // Generate providers _meta.ts (including AI SDK providers)
-  const providersMetaContent = generateProvidersMeta(grouped, aiSdkProviders);
-  await fs.writeFile(path.join(providersDir, '_meta.ts'), providersMetaContent);
-  console.info('✅ Generated providers/_meta.ts');
-
   // Generate individual provider pages
   for (const provider of [...grouped.popular, ...grouped.other]) {
     const content = await generateProviderPage(provider, providerRegistry);
@@ -1077,13 +1072,24 @@ async function generateDocs() {
     console.info(`✅ Generated providers/${provider.id}.mdx`);
   }
 
-  // Generate individual AI SDK provider pages
+  // Generate individual AI SDK provider pages (only if they have AI SDK docs)
+  const aiSdkProvidersWithDocs: ModelsDevProvider[] = [];
   for (const provider of aiSdkProviders) {
     const aiSdkDocsUrl = await checkAiSdkDocsLink(provider.id);
+    if (!aiSdkDocsUrl) {
+      console.info(`⏭️  Skipping providers/${provider.id}.mdx (no AI SDK docs found)`);
+      continue;
+    }
+    aiSdkProvidersWithDocs.push(provider);
     const content = await generateAiSdkProviderPage(provider, aiSdkDocsUrl);
     await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
     console.info(`✅ Generated providers/${provider.id}.mdx (AI SDK)`);
   }
+
+  // Generate providers _meta.ts (including AI SDK providers with docs)
+  const providersMetaContent = generateProvidersMeta(grouped, aiSdkProvidersWithDocs);
+  await fs.writeFile(path.join(providersDir, '_meta.ts'), providersMetaContent);
+  console.info('✅ Generated providers/_meta.ts');
 
   // Generate individual gateway pages
   for (const [gatewayName, providers] of grouped.gateways) {
