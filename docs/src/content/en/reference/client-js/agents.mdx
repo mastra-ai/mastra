@@ -67,27 +67,11 @@ const response = await agent.stream({
 
 // Process data stream with the processDataStream util
 response.processDataStream({
-  onTextPart: (text) => {
-    process.stdout.write(text);
-  },
-  onFilePart: (file) => {
-    console.log(file);
-  },
-  onDataPart: (data) => {
-    console.log(data);
-  },
-  onErrorPart: (error) => {
-    console.error(error);
+  onChunk: async(chunk) => {
+    console.log(chunk);
   },
 });
 
-// Process text stream with the processTextStream util
-// (used with structured output)
- response.processTextStream({
-      onTextPart: text => {
-        process.stdout.write(text);
-      },
-});
 
 // You can also read from response body directly
 const reader = response.body.getReader();
@@ -134,8 +118,13 @@ const response = await agent.stream({
 });
 
 response.processDataStream({
-  onTextPart: (text) => console.log(text),
-  onToolCallPart: (toolCall) => console.log('Tool called:', toolCall.toolName),
+  onChunk: async (chunk) => {
+    if (chunk.type === 'text-delta') {
+      console.log(chunk.payload.text);
+    } else if (chunk.type === 'tool-call') {
+      console.log(`calling tool ${chunk.payload.toolName} with args ${JSON.stringify(chunk.payload.args, null, 2)}`);
+    }
+  },
 });
 ```
 
@@ -176,15 +165,45 @@ const response = await agent.stream(
 
 // Process the stream
 response.processDataStream({
-  onChunk: (chunk) => {
-    console.log(chunk);
+  onChunk: async (chunk) => {
+    if (chunk.type === 'text-delta') {
+      console.log(chunk.payload.text);
+    }
   },
 });
 ```
 
-Currently, AI SDK V5 format is not supported in the client SDK.
-For AI SDK v5 compatible format, leverage the `@mastra/ai-sdk` package
-[AI SDK v5 Stream Compatibility](/docs/frameworks/agentic-uis/ai-sdk#enabling-stream-compatibility)
+#### AI SDK compatible format
+
+To stream AI SDK-formatted parts on the client from an `agent.stream(...)` response, wrap `response.processDataStream` into a `ReadableStream<ChunkType>` and use `toAISdkFormat`:
+
+```typescript filename="client-ai-sdk-transform.ts" copy
+import { createUIMessageStream } from 'ai';
+import { toAISdkFormat } from '@mastra/ai-sdk';
+import type { ChunkType } from '@mastra/core/stream';
+
+const response = await agent.stream({ messages: 'Tell me a story' });
+
+const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
+  start(controller) {
+    response.processDataStream({
+      onChunk: async (chunk) => controller.enqueue(chunk as ChunkType),
+    }).finally(() => controller.close());
+  },
+});
+
+const uiMessageStream = createUIMessageStream({
+  execute: async ({ writer }) => {
+    for await (const part of toAISdkFormat(chunkStream as unknown as any, { from: 'agent' })) {
+      writer.write(part);
+    }
+  },
+});
+
+for await (const part of uiMessageStream) {
+  console.log(part);
+}
+```
 
 ### Generate
 
