@@ -515,7 +515,6 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
 
   let accumulatedText = '';
   let previousObject: any = undefined;
-  let finishReason: string | undefined;
   let currentRunId: string | undefined;
   let objectResolved = false;
 
@@ -534,7 +533,6 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
       }
 
       if (chunk.type === 'finish') {
-        finishReason = chunk.payload.stepResult.reason;
         controller.enqueue(chunk);
         return;
       }
