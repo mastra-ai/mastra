@@ -2284,7 +2284,8 @@ export class Run<
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
     }
 
-    const stepParam = params.label ? snapshot?.resumeLabels?.[params.label] : params.step;
+    const snapshotResumeLabel = params.label ? snapshot?.resumeLabels?.[params.label] : undefined;
+    const stepParam = snapshotResumeLabel?.stepId ?? params.step;
 
     // Auto-detect suspended steps if no step is provided
     let steps: string[];
@@ -2397,7 +2398,7 @@ export class Run<
           resumePayload: resumeDataToUse,
           // @ts-ignore
           resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
-          forEachIndex: params.forEachIndex,
+          forEachIndex: params.forEachIndex ?? snapshotResumeLabel?.foreachIndex,
         },
         format: params.format,
         emitter: {

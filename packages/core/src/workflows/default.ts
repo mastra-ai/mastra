@@ -27,14 +27,21 @@ import type {
   StepSuccess,
   StepSuspended,
 } from './types';
-import { validateStepInput } from './utils';
+import { getResumeLabelsByStepId, validateStepInput } from './utils';
 
 export type ExecutionContext = {
   workflowId: string;
   runId: string;
   executionPath: number[];
+  foreachIndex?: number;
   suspendedPaths: Record<string, number[]>;
-  resumeLabels: Record<string, string>;
+  resumeLabels: Record<
+    string,
+    {
+      stepId: string;
+      foreachIndex?: number;
+    }
+  >;
   waitingPaths?: Record<string, number[]>;
   retryConfig: {
     attempts: number;
@@ -893,7 +900,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions): Promise<any> => {
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
             if (suspendOptions?.resumeLabel) {
-              executionContext.resumeLabels[suspendOptions.resumeLabel] = step.id;
+              executionContext.resumeLabels[suspendOptions.resumeLabel] = {
+                stepId: step.id,
+                foreachIndex: executionContext.foreachIndex,
+              };
             }
 
             suspended = { payload: suspendPayload };
@@ -1764,6 +1774,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       any,
       any
     >[];
+    const prevResumeLabels = prevPayload?.suspendPayload?.__workflow_meta?.resumeLabels || {};
+    const resumeLabels = getResumeLabelsByStepId(prevResumeLabels, step.id);
 
     for (let i = 0; i < prevOutput.length; i += concurrency) {
       const items = prevOutput.slice(i, i + concurrency);
@@ -1793,7 +1805,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             resourceId,
             step,
             stepResults,
-            executionContext,
+            executionContext: { ...executionContext, foreachIndex: k },
             resume: resumeToUse,
             prevOutput: item,
             tracingContext: { currentSpan: loopSpan },
@@ -1859,6 +1871,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
             return result;
           }
+        } else {
+          const indexResumeLabel = Object.keys(resumeLabels).find(
+            key => resumeLabels[key]?.foreachIndex === i + resultIndex,
+          )!;
+          delete resumeLabels[indexResumeLabel];
         }
 
         if (result?.output) {
@@ -1880,6 +1897,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         });
 
         executionContext.suspendedPaths[step.id] = executionContext.executionPath;
+        executionContext.resumeLabels = { ...resumeLabels, ...executionContext.resumeLabels };
 
         return {
           ...stepInfo,
@@ -1891,6 +1909,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               ...foreachIndexObj[foreachIndex].suspendPayload?.__workflow_meta,
               foreachIndex,
               foreachOutput: prevForeachOutput,
+              resumeLabels: executionContext.resumeLabels,
             },
           },
         } as StepSuspended<any, any>;
