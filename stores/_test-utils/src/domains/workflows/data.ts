@@ -29,6 +29,7 @@ export const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) =
     serializedStepGraph: [],
     activePaths: [],
     suspendedPaths: {},
+    resumeLabels: {},
     waitingPaths: {},
     runId,
     timestamp: timestamp.getTime(),
