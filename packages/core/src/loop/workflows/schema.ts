@@ -50,9 +50,8 @@ export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT exte
   usage: LanguageModelUsage;
   steps: StepResult<Tools>[];
   object?: InferSchemaOutput<OUTPUT>;
-  validationRetry?: {
-    validationErrors: string;
-    generatedValue: string;
+  llmIterationRetry?: {
+    prompt: string;
     retryCount: number;
   };
 }
@@ -127,10 +126,9 @@ export const llmIterationOutputSchema = z.object({
     dynamicToolResults: z.array(z.any()).optional(),
     usage: languageModelUsageSchema,
     steps: z.array(z.any()), // StepResult[]
-    validationRetry: z
+    llmIterationRetry: z
       .object({
-        validationErrors: z.string(),
-        generatedValue: z.string(),
+        prompt: z.string(),
         retryCount: z.number(),
       })
       .optional(),

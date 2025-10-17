@@ -56,10 +56,10 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       continue;
     }
 
-    if ('type' in chunk && chunk.type === 'validation-retry') {
-      // Store validation retry data and pass through the chunk
+    if ('type' in chunk && chunk.type === 'llm-retry') {
+      // Store llm iteration retry data in state and and omit the chunk from the stream
       runState.setState({
-        validationRetry: (chunk as any).payload,
+        llmIterationRetry: chunk.payload,
       });
       continue;
     }
@@ -480,24 +480,19 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             };
             let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
-            // If there's a validation retry from the previous iteration, add it to the messages
-            if (inputData.output?.validationRetry) {
-              const retryInfo = inputData.output.validationRetry;
-
-              // Add a user message with the validation error context
+            // If there's a llm iteration retry from the previous iteration, add it to the messages
+            if (inputData.output?.llmIterationRetry) {
+              // Add message with the llm iteration retry prompt
               messageList.add(
                 {
                   id: _internal?.generateId?.(),
                   role: 'user',
-                  content: `The previous response failed validation with the following errors:\n
-${retryInfo.validationErrors}\n
-Generated value that failed:\n${retryInfo.generatedValue}\n
-Please try again and ensure your response matches the required schema format.`,
+                  content: inputData.output.llmIterationRetry.prompt,
                 },
                 'input',
               );
 
-              // Re-fetch the messages with the added validation error
+              // Update the inputMessages
               inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
             }
 
@@ -619,7 +614,7 @@ Please try again and ensure your response matches the required schema format.`,
             isLLMExecutionStep: true,
             tracingContext,
             processorStates,
-            structuredOutputValidationRetryCount: inputData.output?.validationRetry?.retryCount,
+            llmIterationRetryCount: inputData.output?.llmIterationRetry?.retryCount,
           },
         });
 
@@ -758,11 +753,11 @@ Please try again and ensure your response matches the required schema format.`,
       const responseMetadata = runState.state.responseMetadata;
       const text = outputStream._getImmediateText();
       const object = outputStream._getImmediateObject();
-      const validationRetry = runState.state.validationRetry;
+      const llmIterationRetry = runState.state.llmIterationRetry;
       // Check if tripwire was triggered
       const tripwireTriggered = outputStream.tripwire;
 
-      // Use isContinued from state if it's been explicitly set (e.g., by validation-retry)
+      // Use isContinued from state if it's been explicitly set
       const isContinuedFromState = runState.state.stepResult?.isContinued;
 
       const steps = inputData.output?.steps || [];
@@ -818,7 +813,7 @@ Please try again and ensure your response matches the required schema format.`,
           usage: usage ?? inputData.output?.usage,
           steps,
           ...(object ? { object } : {}),
-          ...(validationRetry ? { validationRetry } : {}),
+          ...(llmIterationRetry ? { llmIterationRetry: llmIterationRetry } : {}),
         },
         messages,
       };

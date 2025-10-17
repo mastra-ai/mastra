@@ -124,7 +124,7 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
                 domain: ErrorDomain.AGENT,
                 category: ErrorCategory.SYSTEM,
                 id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
-                text: `Structured output validation failed\n${validationErrors}\n\nGenerated value:\n${generatedValue}\n\nTo fix this, ensure all required fields are present with correct types. Consider retrying with more specific instructions.`,
+                text: `Structured output validation failed:\n\n${validationErrors}\n\nGenerated output:\n${generatedValue}\n`,
                 details: {
                   value: generatedValue,
                   validationErrors,
@@ -608,20 +608,25 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
 
         if (shouldRetry) {
           // Emit validation-retry chunk for the workflow to handle
-          const errorMessage = finalResult.error.message || '';
-          const validationErrors = errorMessage
-            .split('\n')
-            .filter(line => line.startsWith('✖'))
-            .join('\n');
-          const generatedValue = (finalResult.error as any)?.details?.value || JSON.stringify(accumulatedText);
+
+          const validationErrors = (finalResult.error as any)?.details?.validationErrors ?? 'akshdkjahsdjk';
+          const generatedValue = (finalResult.error as any)?.details?.value ?? 'akshdkjahsdjk';
+
+          const retryPrompt = `The previous response failed validation with the following errors:\n
+${validationErrors}\n
+Generated value that failed:\n${generatedValue}\n
+Please try again and ensure your response matches the required schema format.`;
+
+          logger?.error(
+            `Structured output validation failed. Attempting retry (${validationRetryCount + 1}) with prompt:\n\n${retryPrompt}\n`,
+          );
 
           controller.enqueue({
             from: ChunkFrom.AGENT,
             runId: currentRunId ?? '',
-            type: 'validation-retry',
+            type: 'llm-retry',
             payload: {
-              validationErrors,
-              generatedValue,
+              prompt: retryPrompt,
               retryCount: validationRetryCount + 1, // Increment for the next iteration
             },
           });

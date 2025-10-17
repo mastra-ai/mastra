@@ -16,9 +16,8 @@ type State = {
   isReasoning: boolean;
   isStreaming: boolean;
   providerOptions: Record<string, any> | undefined;
-  validationRetry?: {
-    validationErrors: string;
-    generatedValue: string;
+  llmIterationRetry?: {
+    prompt: string;
     retryCount: number;
   };
 };
