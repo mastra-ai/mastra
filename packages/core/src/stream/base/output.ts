@@ -284,10 +284,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
     // Only apply object transformer in 'direct' mode (LLM generates JSON directly)
     // In 'processor' mode, the StructuredOutputProcessor handles object transformation
-    if (self.#structuredOutputMode === 'direct') {
+    if (self.#structuredOutputMode === 'direct' && self.#options.isLLMExecutionStep) {
       processedStream = processedStream.pipeThrough(
         createObjectStreamTransformer({
-          isLLMExecutionStep: self.#options.isLLMExecutionStep,
           structuredOutput: self.#options.structuredOutput,
           logger: self.logger,
         }),
