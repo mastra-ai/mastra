@@ -2,6 +2,6 @@
 '@mastra/core': patch
 ---
 
-fix(core): Parse structured output from text field when object is undefined
+fix(core): Validate structured output at text-end instead of flush
 
-Fixes agent network routing errors for models that return structured output in the text field but leave the object field undefined. Also handles models using `jsonPromptInjection` that wrap JSON responses in special tokens.
+Fixes structured output validation for Bedrock and LMStudio by moving validation from `flush()` to `text-end` chunk. Eliminates `finishReason` heuristics, adds special token extraction for LMStudio, and validates at the correct point in stream lifecycle.
