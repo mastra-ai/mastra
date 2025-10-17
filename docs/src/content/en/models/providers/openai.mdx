@@ -43,76 +43,16 @@ for await (const chunk of stream) {
 <ProviderModelsTable 
   models={[
   {
-    "model": "openai/gpt-5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
-  },
-  {
-    "model": "openai/gpt-4o-2024-11-20",
+    "model": "openai/gpt-4.1-nano",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 2.5,
-    "outputCost": 10
-  },
-  {
-    "model": "openai/o4-mini-deep-research",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 100000,
-    "inputCost": 2,
-    "outputCost": 8
-  },
-  {
-    "model": "openai/o3",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 100000,
-    "inputCost": 2,
-    "outputCost": 8
-  },
-  {
-    "model": "openai/gpt-5-nano",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 0.05,
+    "contextWindow": 1047576,
+    "maxOutput": 32768,
+    "inputCost": 0.1,
     "outputCost": 0.4
-  },
-  {
-    "model": "openai/o4-mini",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 100000,
-    "inputCost": 1.1,
-    "outputCost": 4.4
   },
   {
     "model": "openai/gpt-4",
@@ -127,19 +67,7 @@ for await (const chunk of stream) {
     "outputCost": 60
   },
   {
-    "model": "openai/gpt-5-codex",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
-  },
-  {
-    "model": "openai/o3-pro",
+    "model": "openai/o1-pro",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -147,8 +75,56 @@ for await (const chunk of stream) {
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 100000,
-    "inputCost": 20,
-    "outputCost": 80
+    "inputCost": 150,
+    "outputCost": 600
+  },
+  {
+    "model": "openai/gpt-4o-2024-05-13",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 5,
+    "outputCost": 15
+  },
+  {
+    "model": "openai/gpt-4o-2024-08-06",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 2.5,
+    "outputCost": 10
+  },
+  {
+    "model": "openai/gpt-4.1-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1047576,
+    "maxOutput": 32768,
+    "inputCost": 0.4,
+    "outputCost": 1.6
+  },
+  {
+    "model": "openai/o3-deep-research",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 10,
+    "outputCost": 40
   },
   {
     "model": "openai/gpt-3.5-turbo",
@@ -161,30 +137,6 @@ for await (const chunk of stream) {
     "maxOutput": 4096,
     "inputCost": 0.5,
     "outputCost": 1.5
-  },
-  {
-    "model": "openai/o1",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 100000,
-    "inputCost": 15,
-    "outputCost": 60
-  },
-  {
-    "model": "openai/gpt-4o-mini",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 0.15,
-    "outputCost": 0.6
   },
   {
     "model": "openai/gpt-4-turbo",
@@ -211,78 +163,6 @@ for await (const chunk of stream) {
     "outputCost": 60
   },
   {
-    "model": "openai/gpt-4.1",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 1047576,
-    "maxOutput": 32768,
-    "inputCost": 2,
-    "outputCost": 8
-  },
-  {
-    "model": "openai/gpt-4.1-mini",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 1047576,
-    "maxOutput": 32768,
-    "inputCost": 0.4,
-    "outputCost": 1.6
-  },
-  {
-    "model": "openai/gpt-4o-2024-05-13",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": 5,
-    "outputCost": 15
-  },
-  {
-    "model": "openai/o1-pro",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 100000,
-    "inputCost": 150,
-    "outputCost": 600
-  },
-  {
-    "model": "openai/gpt-4o",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 2.5,
-    "outputCost": 10
-  },
-  {
-    "model": "openai/o1-mini",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 65536,
-    "inputCost": 1.1,
-    "outputCost": 4.4
-  },
-  {
     "model": "openai/o3-mini",
     "imageInput": false,
     "audioInput": false,
@@ -293,30 +173,6 @@ for await (const chunk of stream) {
     "maxOutput": 100000,
     "inputCost": 1.1,
     "outputCost": 4.4
-  },
-  {
-    "model": "openai/gpt-5-mini",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 0.25,
-    "outputCost": 2
-  },
-  {
-    "model": "openai/gpt-5-chat-latest",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
   },
   {
     "model": "openai/codex-mini-latest",
@@ -331,31 +187,31 @@ for await (const chunk of stream) {
     "outputCost": 6
   },
   {
-    "model": "openai/o3-deep-research",
+    "model": "openai/gpt-5-nano",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 100000,
-    "inputCost": 10,
-    "outputCost": 40
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.05,
+    "outputCost": 0.4
   },
   {
-    "model": "openai/gpt-4.1-nano",
+    "model": "openai/gpt-5-codex",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 1047576,
-    "maxOutput": 32768,
-    "inputCost": 0.1,
-    "outputCost": 0.4
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
   },
   {
-    "model": "openai/gpt-4o-2024-08-06",
+    "model": "openai/gpt-4o",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -364,6 +220,150 @@ for await (const chunk of stream) {
     "contextWindow": 128000,
     "maxOutput": 16384,
     "inputCost": 2.5,
+    "outputCost": 10
+  },
+  {
+    "model": "openai/gpt-4.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1047576,
+    "maxOutput": 32768,
+    "inputCost": 2,
+    "outputCost": 8
+  },
+  {
+    "model": "openai/o4-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 1.1,
+    "outputCost": 4.4
+  },
+  {
+    "model": "openai/o1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 15,
+    "outputCost": 60
+  },
+  {
+    "model": "openai/gpt-5-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.25,
+    "outputCost": 2
+  },
+  {
+    "model": "openai/o1-mini",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 65536,
+    "inputCost": 1.1,
+    "outputCost": 4.4
+  },
+  {
+    "model": "openai/o3-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 20,
+    "outputCost": 80
+  },
+  {
+    "model": "openai/gpt-4o-2024-11-20",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 2.5,
+    "outputCost": 10
+  },
+  {
+    "model": "openai/o3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 2,
+    "outputCost": 8
+  },
+  {
+    "model": "openai/o4-mini-deep-research",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 2,
+    "outputCost": 8
+  },
+  {
+    "model": "openai/gpt-5-chat-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "openai/gpt-4o-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "openai/gpt-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
     "outputCost": 10
   }
 ]}
