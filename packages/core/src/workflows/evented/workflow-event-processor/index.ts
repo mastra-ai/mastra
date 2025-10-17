@@ -128,6 +128,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       snapshot: {
         activePaths: [],
         suspendedPaths: {},
+        resumeLabels: {},
         waitingPaths: {},
         serializedStepGraph: workflow.serializedStepGraph,
         timestamp: Date.now(),
