@@ -41,7 +41,7 @@ export class ArizeExporter extends OtelExporter {
 
   constructor(config: ArizeExporterConfig) {
     const logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
-    let endpoint: string | undefined;
+    let endpoint: string | undefined = config.endpoint;
     const headers: Record<string, string> = {
       ...config.headers,
     };
@@ -53,7 +53,6 @@ export class ArizeExporter extends OtelExporter {
     } else if (config.apiKey) {
       // standard otel header configuration
       headers['Authorization'] = `Bearer ${config.apiKey}`;
-      endpoint = config.endpoint;
     }
     if (!endpoint) {
       logger.error(`${LOG_PREFIX} Endpoint is required in configuration. Disabling exporter.`);
