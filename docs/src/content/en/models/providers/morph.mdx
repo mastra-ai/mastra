@@ -47,6 +47,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
+    "model": "morph/morph-v3-large",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 32000,
+    "inputCost": 0.9,
+    "outputCost": 1.9
+  },
+  {
     "model": "morph/auto",
     "imageInput": false,
     "audioInput": false,
@@ -69,18 +81,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 16000,
     "inputCost": 0.8,
     "outputCost": 1.2
-  },
-  {
-    "model": "morph/morph-v3-large",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 32000,
-    "maxOutput": 32000,
-    "inputCost": 0.9,
-    "outputCost": 1.9
   }
 ]}
 />

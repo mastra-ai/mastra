@@ -47,18 +47,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
-    "model": "lucidquery/lucidnova-rf1-100b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 120000,
-    "maxOutput": 8000,
-    "inputCost": 2,
-    "outputCost": 5
-  },
-  {
     "model": "lucidquery/lucidquery-nexus-coder",
     "imageInput": false,
     "audioInput": false,
@@ -67,6 +55,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 250000,
     "maxOutput": 60000,
+    "inputCost": 2,
+    "outputCost": 5
+  },
+  {
+    "model": "lucidquery/lucidnova-rf1-100b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 120000,
+    "maxOutput": 8000,
     "inputCost": 2,
     "outputCost": 5
   }
