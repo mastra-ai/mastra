@@ -514,7 +514,8 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
   let accumulatedText = '';
   let previousObject: any = undefined;
   let currentRunId: string | undefined;
-  let validationAttempted = false;
+  let validation: 'complete' | 'error' | 'pending' = 'pending';
+  let finalResult: ValidateAndTransformFinalResult<OUTPUT> | undefined;
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
@@ -548,42 +549,10 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
       if (chunk.type === 'text-end') {
         controller.enqueue(chunk);
 
-        if (accumulatedText?.trim() && !validationAttempted) {
-          const finalResult = await handler.validateAndTransformFinal(accumulatedText);
-
-          if (!finalResult.success) {
-            // Handle validation errors based on error strategy
-            if (structuredOutput?.errorStrategy === 'warn') {
-              logger?.warn(finalResult.error.message);
-              validationAttempted = true;
-            } else if (structuredOutput?.errorStrategy === 'fallback') {
-              controller.enqueue({
-                from: ChunkFrom.AGENT,
-                runId: currentRunId ?? '',
-                type: 'object-result',
-                object: structuredOutput?.fallbackValue,
-              });
-              validationAttempted = true;
-            } else {
-              // Error strategy is 'throw' (default)
-              controller.enqueue({
-                from: ChunkFrom.AGENT,
-                runId: currentRunId ?? '',
-                type: 'error',
-                payload: { error: finalResult.error },
-              });
-              validationAttempted = true;
-            }
-          } else {
-            // Success - emit final validated object
-            controller.enqueue({
-              from: ChunkFrom.AGENT,
-              runId: currentRunId ?? '',
-              type: 'object-result',
-              object: finalResult.value,
-            });
-            validationAttempted = true;
-          }
+        if (accumulatedText?.trim() && validation === 'pending') {
+          finalResult = await handler.validateAndTransformFinal(accumulatedText);
+          const { error } = handleValidationResult(finalResult, controller, { deferError: true });
+          validation = error ? 'error' : 'complete';
         }
         return; // Early return - text-end already enqueued above
       }
@@ -593,23 +562,60 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
     },
 
     async flush(controller) {
+      if (finalResult && !finalResult.success && validation === 'error') {
+        handleValidationResult(finalResult, controller, { deferError: false });
+      }
       // Safety net: If text-end was never emitted, validate now as fallback
       // This handles edge cases where providers might not emit text-end
-      if (accumulatedText?.trim() && !validationAttempted) {
-        const finalResult = await handler.validateAndTransformFinal(accumulatedText);
-
-        if (finalResult.success) {
-          controller.enqueue({
-            from: ChunkFrom.AGENT,
-            runId: currentRunId ?? '',
-            type: 'object-result',
-            object: finalResult.value,
-          });
-          validationAttempted = true;
-        }
+      if (accumulatedText?.trim() && !finalResult) {
+        finalResult = await handler.validateAndTransformFinal(accumulatedText);
+        handleValidationResult(finalResult, controller, { deferError: false });
       }
     },
   });
+
+  function handleValidationResult(
+    result: ValidateAndTransformFinalResult<OUTPUT>,
+    controller: TransformStreamDefaultController<ChunkType<OUTPUT>>,
+    options: {
+      deferError?: boolean;
+    },
+  ) {
+    let error: boolean = false;
+    if (!result.success) {
+      // Handle validation errors based on error strategy
+      if (structuredOutput?.errorStrategy === 'warn') {
+        logger?.warn(result.error.message);
+      } else if (structuredOutput?.errorStrategy === 'fallback') {
+        controller.enqueue({
+          from: ChunkFrom.AGENT,
+          runId: currentRunId ?? '',
+          type: 'object-result',
+          object: structuredOutput?.fallbackValue,
+        });
+      } else {
+        error = true;
+        if (!options.deferError) {
+          controller.enqueue({
+            from: ChunkFrom.AGENT,
+            runId: currentRunId ?? '',
+            type: 'error',
+            payload: {
+              error: result.error,
+            },
+          });
+        }
+      }
+    } else {
+      controller.enqueue({
+        from: ChunkFrom.AGENT,
+        runId: currentRunId ?? '',
+        type: 'object-result',
+        object: result.value,
+      });
+    }
+    return { error };
+  }
 }
 
 /**
