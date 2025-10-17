@@ -121,6 +121,7 @@
       "models": [
         "black-forest-labs/flux.1-dev",
         "deepseek-ai/deepseek-v3.1",
+        "deepseek-ai/deepseek-v3.1-terminus",
         "google/gemma-3-27b-it",
         "microsoft/phi-4-mini-instruct",
         "moonshotai/kimi-k2-instruct",
@@ -574,7 +575,7 @@
       "apiKeyEnvVar": "BASETEN_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Baseten",
-      "models": ["Qwen3/Qwen3-Coder-480B-A35B-Instruct", "moonshotai/Kimi-K2-Instruct-0905"],
+      "models": ["Qwen3/Qwen3-Coder-480B-A35B-Instruct", "moonshotai/Kimi-K2-Instruct-0905", "zai-org/GLM-4.6"],
       "docUrl": "https://docs.baseten.co/development/model-apis/overview",
       "gateway": "models.dev"
     },
@@ -1226,6 +1227,7 @@
     "nvidia": [
       "black-forest-labs/flux.1-dev",
       "deepseek-ai/deepseek-v3.1",
+      "deepseek-ai/deepseek-v3.1-terminus",
       "google/gemma-3-27b-it",
       "microsoft/phi-4-mini-instruct",
       "moonshotai/kimi-k2-instruct",
@@ -1575,7 +1577,7 @@
       "moonshotai/Kimi-K2-Instruct",
       "openai/gpt-oss-120b"
     ],
-    "baseten": ["Qwen3/Qwen3-Coder-480B-A35B-Instruct", "moonshotai/Kimi-K2-Instruct-0905"],
+    "baseten": ["Qwen3/Qwen3-Coder-480B-A35B-Instruct", "moonshotai/Kimi-K2-Instruct-0905", "zai-org/GLM-4.6"],
     "huggingface": [
       "Qwen/Qwen3-235B-A22B-Thinking-2507",
       "Qwen/Qwen3-Coder-480B-A35B-Instruct",
