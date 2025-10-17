@@ -259,6 +259,16 @@ export async function createNetworkLoop({
 
         let currentText = '';
         let currentTextIdx = 0;
+
+        await writer.write({
+          type: 'routing-agent-text-start',
+          payload: {
+            runId: runId,
+          },
+          from: ChunkFrom.NETWORK,
+          runId,
+        });
+
         for await (const chunk of completionStream.objectStream) {
           if (chunk?.finalResult) {
             currentText = chunk.finalResult;
@@ -272,6 +282,7 @@ export async function createNetworkLoop({
                 text: currentSlice,
               },
               from: ChunkFrom.NETWORK,
+              runId,
             });
             currentTextIdx = currentText.length;
           }

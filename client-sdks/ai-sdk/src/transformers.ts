@@ -81,7 +81,7 @@ export function WorkflowStreamToAISDKTransformer() {
 }
 
 export function AgentNetworkToAISDKTransformer() {
-  const bufferedNetworks = new Map<string, { name: string; steps: StepResult[] }>();
+  const bufferedNetworks = new Map<string, { name: string; steps: StepResult[]; text: string }>();
 
   return new TransformStream<
     NetworkChunkType,
@@ -90,6 +90,15 @@ export function AgentNetworkToAISDKTransformer() {
         type?: 'start' | 'finish';
       }
     | NetworkDataPart
+    | {
+        type: 'text-delta';
+        id: string;
+        delta: string;
+      }
+    | {
+        type: 'text-start';
+        id: string;
+      }
   >({
     start(controller) {
       controller.enqueue({
@@ -409,6 +418,23 @@ export function transformNetwork(
         },
       } as const;
     }
+    case 'routing-agent-text-start': {
+      const current = bufferedNetworks.get(payload.runId!);
+      if (!current) return null;
+      return {
+        type: 'text-start',
+        id: payload.runId!,
+      } as const;
+    }
+    case 'routing-agent-text-delta': {
+      const current = bufferedNetworks.get(payload.runId!);
+      if (!current) return null;
+      return {
+        type: 'text-delta',
+        id: payload.runId!,
+        delta: payload.payload.text,
+      } as const;
+    }
     case 'agent-execution-start': {
       const current = bufferedNetworks.get(payload.payload.runId) || { name: '', steps: [] };
       current.steps.push({
@@ -537,7 +563,7 @@ export function transformNetwork(
         id: payload.payload.runId,
         data: {
           name: current.name,
-          status: 'finished',
+          status: 'running',
           steps: current.steps,
           output: payload.payload?.result ?? null,
         },
@@ -551,7 +577,7 @@ export function transformNetwork(
         id: payload.payload.runId,
         data: {
           name: current.name,
-          status: 'finished',
+          status: 'running',
           steps: current.steps,
           output: payload.payload?.result ?? null,
         },
