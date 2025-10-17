@@ -19,6 +19,18 @@ import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName, getSchemaName } from '../utils';
 
+// Database row type that includes timezone-aware columns
+type MessageRowFromDB = {
+  id: string;
+  content: string | any;
+  role: string;
+  type?: string;
+  createdAt: Date | string;
+  createdAtZ?: Date | string;
+  threadId: string;
+  resourceId: string;
+};
+
 export class MemoryPG extends MemoryStorage {
   private client: IDatabase<{}>;
   private schema: string;
@@ -37,6 +49,21 @@ export class MemoryPG extends MemoryStorage {
     this.client = client;
     this.schema = schema;
     this.operations = operations;
+  }
+
+  /**
+   * Normalizes message row from database by applying createdAtZ fallback
+   */
+  private normalizeMessageRow(row: MessageRowFromDB): Omit<MessageRowFromDB, 'createdAtZ'> {
+    return {
+      id: row.id,
+      content: row.content,
+      role: row.role,
+      type: row.type,
+      createdAt: row.createdAtZ || row.createdAt,
+      threadId: row.threadId,
+      resourceId: row.resourceId,
+    };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -386,21 +413,22 @@ export class MemoryPG extends MemoryStorage {
     return dedupedRows;
   }
 
-  private parseRow(row: any): MastraMessageV2 {
-    let content = row.content;
+  private parseRow(row: MessageRowFromDB): MastraMessageV2 {
+    const normalized = this.normalizeMessageRow(row);
+    let content = normalized.content;
     try {
-      content = JSON.parse(row.content);
+      content = JSON.parse(normalized.content);
     } catch {
       // use content as is if it's not JSON
     }
     return {
-      id: row.id,
+      id: normalized.id,
       content,
-      role: row.role,
-      createdAt: new Date((row.createdAtZ || row.createdAt) as string),
-      threadId: row.threadId,
-      resourceId: row.resourceId,
-      ...(row.type && row.type !== 'v2' ? { type: row.type } : {}),
+      role: normalized.role,
+      createdAt: new Date(normalized.createdAt as string),
+      threadId: normalized.threadId,
+      resourceId: normalized.resourceId,
+      ...(normalized.type && normalized.type !== 'v2' ? { type: normalized.type } : {}),
     } satisfies MastraMessageV2;
   }
 
@@ -444,7 +472,8 @@ export class MemoryPG extends MemoryStorage {
       const remainingRows = await this.client.manyOrNone(query, queryParams);
       rows.push(...remainingRows);
 
-      const fetchedMessages = (rows || []).map(message => {
+      const fetchedMessages = (rows || []).map((row: MessageRowFromDB) => {
+        const message = this.normalizeMessageRow(row);
         if (typeof message.content === 'string') {
           try {
             message.content = JSON.parse(message.content);
@@ -453,8 +482,6 @@ export class MemoryPG extends MemoryStorage {
           }
         }
         if (message.type === 'v2') delete message.type;
-        // Use createdAtZ fallback pattern for consistency
-        message.createdAt = message.createdAtZ || message.createdAt;
         return message as MastraMessageV1;
       });
 
@@ -521,7 +548,10 @@ export class MemoryPG extends MemoryStorage {
       `;
       const resultRows = await this.client.manyOrNone(query, messageIds);
 
-      const list = new MessageList().add(resultRows.map(this.parseRow), 'memory');
+      const list = new MessageList().add(
+        resultRows.map(row => this.parseRow(row)),
+        'memory',
+      );
       if (format === `v1`) return list.get.all.v1();
       return list.get.all.v2();
     } catch (error) {
@@ -609,19 +639,17 @@ export class MemoryPG extends MemoryStorage {
       messages.push(...(rows || []));
 
       // Parse content back to objects if they were stringified during storage
-      const messagesWithParsedContent = messages.map(message => {
-        let parsedMessage = message;
+      const messagesWithParsedContent = messages.map((row: MessageRowFromDB) => {
+        const message = this.normalizeMessageRow(row);
         if (typeof message.content === 'string') {
           try {
-            parsedMessage = { ...message, content: JSON.parse(message.content) };
+            return { ...message, content: JSON.parse(message.content) };
           } catch {
             // If parsing fails, leave as string (V1 message)
-            parsedMessage = message;
+            return message;
           }
         }
-        // Use createdAtZ fallback pattern for consistency
-        const createdAt = (parsedMessage as any).createdAtZ || parsedMessage.createdAt;
-        return { ...parsedMessage, createdAt };
+        return message;
       });
 
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
@@ -883,21 +911,18 @@ export class MemoryPG extends MemoryStorage {
     });
 
     // Re-fetch to return the fully updated messages
-    const updatedMessages = await this.client.manyOrNone<MastraMessageV2 & { createdAtZ?: Date }>(selectQuery, [
-      messageIds,
-    ]);
+    const updatedMessages = await this.client.manyOrNone<MessageRowFromDB>(selectQuery, [messageIds]);
 
-    return (updatedMessages || []).map(message => {
+    return (updatedMessages || []).map((row: MessageRowFromDB) => {
+      const message = this.normalizeMessageRow(row);
       if (typeof message.content === 'string') {
         try {
-          message.content = JSON.parse(message.content);
+          return { ...message, content: JSON.parse(message.content) } as MastraMessageV2;
         } catch {
           /* ignore */
         }
       }
-      // Use createdAtZ fallback pattern for consistency
-      const createdAt = message.createdAtZ || message.createdAt;
-      return { ...message, createdAt };
+      return message as MastraMessageV2;
     });
   }
 
