@@ -124,6 +124,49 @@ describe('output-format-handlers', () => {
       expect(objectResultChunk?.object).toEqual({ name: 'John', age: 30 });
     });
 
+    it('should validate on text-end chunk', async () => {
+      const schema = z.object({
+        name: z.string(),
+      });
+
+      const transformer = createObjectStreamTransformer({
+        structuredOutput: { schema },
+      });
+
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1', text: '{"name":"John"}' },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
+        },
+      ];
+
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      // Verify text-end is emitted first
+      const textEndChunk = chunks.find(c => c?.type === 'text-end');
+      expect(textEndChunk).toBeDefined();
+
+      // Verify object-result is emitted after text-end
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
+      expect(objectResultChunk).toBeDefined();
+      expect(objectResultChunk?.object).toEqual({ name: 'John' });
+
+      // Verify ordering: text-end comes before object-result
+      const textEndIndex = chunks.findIndex(c => c?.type === 'text-end');
+      const objectResultIndex = chunks.findIndex(c => c?.type === 'object-result');
+      expect(textEndIndex).toBeLessThan(objectResultIndex);
+    });
+
     it('should use zod transform and default values', async () => {
       const schema = z.object({
         name: z.string().transform(s => s.toUpperCase()),
