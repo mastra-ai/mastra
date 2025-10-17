@@ -941,6 +941,8 @@ export default meta;
 
 async function generateAiSdkProviderPage(provider: any, aiSdkDocsUrl: string | null): Promise<string> {
   const packageName = provider.npm;
+  const logoUrl = getLogoUrl(provider.id);
+  const logoClass = getLogoClass(provider.id);
 
   const aiSdkDocsSection = aiSdkDocsUrl
     ? `
@@ -956,7 +958,7 @@ description: "Use ${provider.name} models via the AI SDK."
 
 ${getGeneratedComment()}
 
-# ${provider.name}
+# <img src="${logoUrl}" alt="${provider.name} logo" className="${logoClass}" />${provider.name}
 
 ${provider.name} is available through the AI SDK. Install the provider package to use their models with Mastra.
 
