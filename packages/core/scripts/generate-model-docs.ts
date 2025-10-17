@@ -81,7 +81,7 @@ const __dirname = path.dirname(__filename);
 const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 'mistral', 'xai'];
 
 // Providers that are actually gateways (aggregate multiple model providers)
-const GATEWAY_PROVIDERS = ['vercel', 'openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai', 'netlify'];
+const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel'];
 
 interface ProviderInfo {
   id: string;

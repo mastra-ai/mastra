@@ -47,7 +47,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
-    "model": "mistral/devstral-medium-2507",
+    "model": "mistral/mistral-medium-2505",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
+    "model": "mistral/mistral-large-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
+    "model": "mistral/mistral-nemo",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -55,23 +79,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 128000,
-    "inputCost": 0.4,
-    "outputCost": 2
+    "inputCost": 0.15,
+    "outputCost": 0.15
   },
   {
-    "model": "mistral/open-mixtral-8x22b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 64000,
-    "maxOutput": 64000,
-    "inputCost": 2,
-    "outputCost": 6
-  },
-  {
-    "model": "mistral/ministral-8b-latest",
+    "model": "mistral/devstral-small-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -80,7 +92,55 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 128000,
     "maxOutput": 128000,
     "inputCost": 0.1,
-    "outputCost": 0.1
+    "outputCost": 0.3
+  },
+  {
+    "model": "mistral/magistral-small",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "mistral/open-mixtral-8x7b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 32000,
+    "inputCost": 0.7,
+    "outputCost": 0.7
+  },
+  {
+    "model": "mistral/magistral-medium-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 2,
+    "outputCost": 5
+  },
+  {
+    "model": "mistral/codestral-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 4096,
+    "inputCost": 0.3,
+    "outputCost": 0.9
   },
   {
     "model": "mistral/pixtral-large-latest",
@@ -95,7 +155,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 6
   },
   {
-    "model": "mistral/ministral-3b-latest",
+    "model": "mistral/devstral-small-2505",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -103,8 +163,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 128000,
-    "inputCost": 0.04,
-    "outputCost": 0.04
+    "inputCost": 0.1,
+    "outputCost": 0.3
   },
   {
     "model": "mistral/pixtral-12b",
@@ -117,30 +177,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 0.15,
     "outputCost": 0.15
-  },
-  {
-    "model": "mistral/mistral-medium-2505",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 131072,
-    "inputCost": 0.4,
-    "outputCost": 2
-  },
-  {
-    "model": "mistral/devstral-small-2505",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 128000,
-    "inputCost": 0.1,
-    "outputCost": 0.3
   },
   {
     "model": "mistral/mistral-medium-2508",
@@ -167,19 +203,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.3
   },
   {
-    "model": "mistral/magistral-small",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 128000,
-    "inputCost": 0.5,
-    "outputCost": 1.5
-  },
-  {
-    "model": "mistral/devstral-small-2507",
+    "model": "mistral/devstral-medium-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -187,44 +211,20 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 128000,
-    "inputCost": 0.1,
-    "outputCost": 0.3
+    "inputCost": 0.4,
+    "outputCost": 2
   },
   {
-    "model": "mistral/codestral-latest",
+    "model": "mistral/open-mixtral-8x22b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 256000,
-    "maxOutput": 4096,
-    "inputCost": 0.3,
-    "outputCost": 0.9
-  },
-  {
-    "model": "mistral/open-mixtral-8x7b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 32000,
-    "maxOutput": 32000,
-    "inputCost": 0.7,
-    "outputCost": 0.7
-  },
-  {
-    "model": "mistral/mistral-nemo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 128000,
-    "inputCost": 0.15,
-    "outputCost": 0.15
+    "contextWindow": 64000,
+    "maxOutput": 64000,
+    "inputCost": 2,
+    "outputCost": 6
   },
   {
     "model": "mistral/open-mistral-7b",
@@ -239,18 +239,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.25
   },
   {
-    "model": "mistral/mistral-large-latest",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 16384,
-    "inputCost": 2,
-    "outputCost": 6
-  },
-  {
     "model": "mistral/mistral-medium-latest",
     "imageInput": true,
     "audioInput": false,
@@ -263,16 +251,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "mistral/magistral-medium-latest",
+    "model": "mistral/ministral-3b-latest",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 2,
-    "outputCost": 5
+    "maxOutput": 128000,
+    "inputCost": 0.04,
+    "outputCost": 0.04
+  },
+  {
+    "model": "mistral/ministral-8b-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.1
   }
 ]}
 />
