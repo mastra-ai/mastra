@@ -563,7 +563,7 @@ export function transformNetwork(
         id: payload.payload.runId,
         data: {
           name: current.name,
-          status: 'running',
+          status: 'finished',
           steps: current.steps,
           output: payload.payload?.result ?? null,
         },
