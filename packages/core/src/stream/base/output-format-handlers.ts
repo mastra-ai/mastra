@@ -514,7 +514,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
   let accumulatedText = '';
   let previousObject: any = undefined;
   let currentRunId: string | undefined;
-  let objectResolved = false;
+  let validationAttempted = false;
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
@@ -553,13 +553,14 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
       if (chunk.type === 'text-end') {
         controller.enqueue(chunk);
 
-        if (accumulatedText?.trim() && !objectResolved) {
+        if (accumulatedText?.trim() && !validationAttempted) {
           const finalResult = await handler.validateAndTransformFinal(accumulatedText);
 
           if (!finalResult.success) {
             // Handle validation errors based on error strategy
             if (structuredOutput?.errorStrategy === 'warn') {
               logger?.warn(finalResult.error.message);
+              validationAttempted = true;
             } else if (structuredOutput?.errorStrategy === 'fallback') {
               controller.enqueue({
                 from: ChunkFrom.AGENT,
@@ -567,7 +568,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
                 type: 'object-result',
                 object: structuredOutput?.fallbackValue,
               });
-              objectResolved = true;
+              validationAttempted = true;
             } else {
               // Error strategy is 'throw' (default)
               controller.enqueue({
@@ -576,6 +577,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
                 type: 'error',
                 payload: { error: finalResult.error },
               });
+              validationAttempted = true;
             }
           } else {
             // Success - emit final validated object
@@ -585,7 +587,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
               type: 'object-result',
               object: finalResult.value,
             });
-            objectResolved = true;
+            validationAttempted = true;
           }
         }
         return; // Early return - text-end already enqueued above
@@ -598,7 +600,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
     async flush(controller) {
       // Safety net: If text-end was never emitted, validate now as fallback
       // This handles edge cases where providers might not emit text-end
-      if (accumulatedText?.trim() && !objectResolved) {
+      if (accumulatedText?.trim() && !validationAttempted) {
         const finalResult = await handler.validateAndTransformFinal(accumulatedText);
 
         if (finalResult.success) {
@@ -608,7 +610,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
             type: 'object-result',
             object: finalResult.value,
           });
-          objectResolved = true;
+          validationAttempted = true;
         }
       }
     },
