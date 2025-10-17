@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { MastraMessageV2 } from '../../types';
+import type { MastraMessageContentV2, MastraMessageV2 } from '../../types';
 import { MessageList } from '../index';
 
 describe('MessageList AI SDK v5 URL handling', () => {
@@ -297,7 +297,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
       expect(v2Messages[0].role).toBe('user');
 
       // Find the file part (it might not be the first part)
-      const filePart = v2Messages[0].content.parts?.find((p: any) => p.type === 'file');
+      const filePart = (v2Messages[0].content as MastraMessageContentV2).parts?.find((p: any) => p.type === 'file');
 
       expect(filePart).toBeDefined();
       expect(filePart?.type).toBe('file');

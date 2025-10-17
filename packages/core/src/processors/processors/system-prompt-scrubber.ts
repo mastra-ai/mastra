@@ -332,7 +332,7 @@ export class SystemPromptScrubber implements Processor {
   /**
    * Create a redacted message with the given text
    */
-  private createRedactedMessage(originalMessage: MastraMessageV2, redactedText: string): MastraMessageV2 {
+  private createRedactedMessage(originalMessage: Exclude<MastraMessageV2, { role: 'system' }>, redactedText: string): MastraMessageV2 {
     return {
       ...originalMessage,
       content: {

@@ -31,7 +31,7 @@ export interface Processor {
    * Process the complete output result after streaming/generate is finished
    */
   processOutputResult?(args: {
-    messages: MastraMessageV2[];
+    messages: Exclude<MastraMessageV2, { role: 'system' }>[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
   }): Promise<MastraMessageV2[]> | MastraMessageV2[];

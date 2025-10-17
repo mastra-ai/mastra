@@ -4234,6 +4234,7 @@ export class Agent<
 
       const newText = outputProcessorResult.messageList.get.response
         .v2()
+        .filter(msg => msg.role !== 'system')
         .map(msg => msg.content.parts.map(part => (part.type === 'text' ? part.text : '')).join(''))
         .join('');
 
@@ -4243,7 +4244,7 @@ export class Agent<
       // If there are output processors, check for structured data in message metadata
       if (finalOutputProcessors && finalOutputProcessors.length > 0) {
         // First check if any output processor provided structured data via metadata
-        const messages = outputProcessorResult.messageList.get.response.v2();
+        const messages = outputProcessorResult.messageList.get.response.v2().filter(msg => msg.role !== 'system');
         this.logger.debug(
           'Checking messages for experimentalOutput metadata:',
           messages.map(m => ({
@@ -4354,6 +4355,7 @@ export class Agent<
 
     const newText = outputProcessorResult.messageList.get.response
       .v2()
+      .filter(msg => msg.role !== 'system')
       .map(msg => msg.content.parts.map(part => (part.type === 'text' ? part.text : '')).join(''))
       .join('');
 

@@ -126,7 +126,7 @@ export class ProcessorRunner {
 
       if (!telemetry) {
         processableMessages = await processMethod({
-          messages: processableMessages,
+          messages: processableMessages.filter(msg => msg.role !== 'system'),
           abort: ctx.abort,
           tracingContext: { currentSpan: processorSpan },
         });
@@ -134,7 +134,7 @@ export class ProcessorRunner {
         await telemetry.traceMethod(
           async () => {
             processableMessages = await processMethod({
-              messages: processableMessages,
+              messages: processableMessages.filter(msg => msg.role !== 'system'),
               abort: ctx.abort,
               tracingContext: { currentSpan: processorSpan },
             });

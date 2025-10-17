@@ -299,8 +299,12 @@ describe('MessageList', () => {
       const v2Messages = list.get.all.v2();
       expect(v2Messages).toHaveLength(1);
 
+      const message = v2Messages[0];
+      expect(message.role).not.toBe('system'); // Ensure it's not a system message
+      if (message.role === 'system') throw new Error('Expected non-system message');
+
       // Check parts array has correct args and no duplicate entries
-      expect(v2Messages[0].content.parts).toEqual([
+      expect(message.content.parts).toEqual([
         {
           type: 'tool-invocation',
           toolInvocation: {
@@ -314,7 +318,7 @@ describe('MessageList', () => {
       ]);
 
       // Check toolInvocations array has correct args (should be fixed by hydration)
-      expect(v2Messages[0].content.toolInvocations).toEqual([
+      expect(message.content.toolInvocations).toEqual([
         {
           state: 'result',
           toolCallId: 'call-123',
@@ -377,6 +381,7 @@ describe('MessageList', () => {
 
       const assistantV2Message = v2Messages[1];
       expect(assistantV2Message.role).toBe('assistant');
+      if (assistantV2Message.role === 'system') throw new Error('Expected non-system message');
 
       // Check parts array has correct args and only one tool-invocation (no duplicate call part)
       expect(assistantV2Message.content.parts).toEqual([
@@ -2179,7 +2184,9 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      expect(list.get.all.v2()[0].content.parts).toEqual([
+      const result = list.get.all.v2()[0];
+      if (result.role === 'system') throw new Error('Expected non-system message');
+      expect(result.content.parts).toEqual([
         { type: 'step-start' },
         {
           type: 'tool-invocation',
@@ -2224,7 +2231,9 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      expect(list.get.all.v2()[0].content.parts).toEqual([
+      const result = list.get.all.v2()[0];
+      if (result.role === 'system') throw new Error('Expected non-system message');
+      expect(result.content.parts).toEqual([
         { type: 'step-start' },
         { type: 'text', text: 'Let me do this.' },
         {
@@ -2270,7 +2279,9 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      expect(list.get.all.v2()[0].content.parts).toEqual([
+      const result = list.get.all.v2()[0];
+      if (result.role === 'system') throw new Error('Expected non-system message');
+      expect(result.content.parts).toEqual([
         { type: 'step-start' },
         { type: 'text', text: 'Doing it.' },
         {
@@ -2315,7 +2326,9 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      expect(list.get.all.v2()[0].content.parts).toEqual([
+      const result = list.get.all.v2()[0];
+      if (result.role === 'system') throw new Error('Expected non-system message');
+      expect(result.content.parts).toEqual([
         { type: 'step-start' },
         { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'A', toolName: 'foo', args: {} } },
         {
@@ -2362,7 +2375,9 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      expect(list.get.all.v2()[0].content.parts).toEqual([
+      const result = list.get.all.v2()[0];
+      if (result.role === 'system') throw new Error('Expected non-system message');
+      expect(result.content.parts).toEqual([
         { type: 'step-start' },
         { type: 'text', text: 'Old reasoning' },
         {
@@ -2388,7 +2403,9 @@ describe('MessageList', () => {
         content: { ...base.content, parts: [{ type: 'step-start' }, { type: 'text', text: 'First...' }] },
       } satisfies MastraMessageV2;
       list.add(msg1, 'memory');
-      expect(list.get.all.v2()[0].content.parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'First...' }]);
+      let result1 = list.get.all.v2()[0];
+      if (result1.role === 'system') throw new Error('Expected non-system message');
+      expect(result1.content.parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'First...' }]);
 
       // Step 2: Add tool-invocation (call)
       let msg2 = {
@@ -2406,7 +2423,9 @@ describe('MessageList', () => {
         },
       } satisfies MastraMessageV2;
       list.add(msg2, 'memory');
-      expect(list.get.all.v2()[0].content.parts).toEqual([
+      let result2 = list.get.all.v2()[0];
+      if (result2.role === 'system') throw new Error('Expected non-system message');
+      expect(result2.content.parts).toEqual([
         { type: 'step-start' },
         { type: 'text', text: 'First...' },
         { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'call-5', toolName: 'foo', args: {} } },
@@ -2428,7 +2447,9 @@ describe('MessageList', () => {
         },
       } satisfies MastraMessageV2;
       list.add(msg3, 'response');
-      expect(list.get.all.v2()[0].content.parts).toEqual([
+      let result3 = list.get.all.v2()[0];
+      if (result3.role === 'system') throw new Error('Expected non-system message');
+      expect(result3.content.parts).toEqual([
         { type: 'step-start' },
         { type: 'text', text: 'First...' },
         {
@@ -2533,9 +2554,11 @@ describe('MessageList', () => {
 
       // The content should stay as a string, not be parsed to an object
       const messages = list.get.all.v2();
-      expect(messages[0].content.content).toBe('{"data": "value", "number": 42}'); // Should stay as string
-      expect(typeof messages[0].content.content).toBe('string'); // Should be a string, not an object
-      expect(messages[0].content.parts).toEqual([
+      const msg = messages[0];
+      if (msg.role === 'system') throw new Error('Expected non-system message');
+      expect(msg.content.content).toBe('{"data": "value", "number": 42}'); // Should stay as string
+      expect(typeof msg.content.content).toBe('string'); // Should be a string, not an object
+      expect(msg.content.parts).toEqual([
         {
           type: 'text',
           text: '{"data": "value", "number": 42}',
@@ -2921,7 +2944,9 @@ describe('MessageList', () => {
         const messages = list.get.all.v2();
 
         expect(messages.length).toBe(1);
-        expect(messages[0].content.metadata).toEqual(metadata);
+        const msg = messages[0];
+        if (msg.role === 'system') throw new Error('Expected non-system message');
+        expect(msg.content.metadata).toEqual(metadata);
       });
 
       it('should preserve metadata through message transformations', () => {
@@ -2947,7 +2972,9 @@ describe('MessageList', () => {
         const newList = new MessageList({ threadId, resourceId }).add(uiMessages, 'response');
         const v2Messages = newList.get.all.v2();
 
-        expect(v2Messages[0].content.metadata).toEqual(metadata);
+        const msgResult = v2Messages[0];
+        if (msgResult.role === 'system') throw new Error('Expected non-system message');
+        expect(msgResult.content.metadata).toEqual(metadata);
       });
     });
 
@@ -2972,7 +2999,9 @@ describe('MessageList', () => {
         const v2Messages = list.get.all.v2();
 
         expect(v2Messages.length).toBe(1);
-        expect(v2Messages[0].content.metadata).toEqual(metadata);
+        const msgResult = v2Messages[0];
+        if (msgResult.role === 'system') throw new Error('Expected non-system message');
+        expect(msgResult.content.metadata).toEqual(metadata);
       });
 
       it('should ignore non-metadata custom fields on UIMessage', () => {
@@ -2993,10 +3022,12 @@ describe('MessageList', () => {
         const v2Messages = list.get.all.v2();
 
         expect(v2Messages.length).toBe(1);
-        expect(v2Messages[0].content.metadata).toEqual({ preserved: true });
+        const msgResult = v2Messages[0];
+        if (msgResult.role === 'system') throw new Error('Expected non-system message');
+        expect(msgResult.content.metadata).toEqual({ preserved: true });
         // Verify custom fields were not copied to metadata
-        expect(v2Messages[0].content.metadata).not.toHaveProperty('context');
-        expect(v2Messages[0].content.metadata).not.toHaveProperty('customField');
+        expect(msgResult.content.metadata).not.toHaveProperty('context');
+        expect(msgResult.content.metadata).not.toHaveProperty('customField');
       });
 
       it('should handle UIMessage with no metadata field', () => {
@@ -3012,7 +3043,9 @@ describe('MessageList', () => {
         const v2Messages = list.get.all.v2();
 
         expect(v2Messages.length).toBe(1);
-        expect(v2Messages[0].content.metadata).toBeUndefined();
+        const msgResult = v2Messages[0];
+        if (msgResult.role === 'system') throw new Error('Expected non-system message');
+        expect(msgResult.content.metadata).toBeUndefined();
       });
 
       it('should handle UIMessage with empty metadata object', () => {
@@ -3030,7 +3063,9 @@ describe('MessageList', () => {
         const v2Messages = list.get.all.v2();
 
         expect(v2Messages.length).toBe(1);
-        expect(v2Messages[0].content.metadata).toEqual({});
+        const msgResult = v2Messages[0];
+        if (msgResult.role === 'system') throw new Error('Expected non-system message');
+        expect(msgResult.content.metadata).toEqual({});
       });
 
       it('should handle UIMessage with null/undefined metadata', () => {
@@ -3055,8 +3090,12 @@ describe('MessageList', () => {
         const list1 = new MessageList({ threadId, resourceId }).add(uiMessageNull, 'input');
         const list2 = new MessageList({ threadId, resourceId }).add(uiMessageUndefined, 'input');
 
-        expect(list1.get.all.v2()[0].content.metadata).toBeUndefined();
-        expect(list2.get.all.v2()[0].content.metadata).toBeUndefined();
+        const msg1 = list1.get.all.v2()[0];
+        const msg2 = list2.get.all.v2()[0];
+        if (msg1.role === 'system') throw new Error('Expected non-system message');
+        if (msg2.role === 'system') throw new Error('Expected non-system message');
+        expect(msg1.content.metadata).toBeUndefined();
+        expect(msg2.content.metadata).toBeUndefined();
       });
 
       it('should preserve metadata for assistant UIMessage with tool invocations', () => {
@@ -3076,7 +3115,9 @@ describe('MessageList', () => {
         const v2Messages = list.get.all.v2();
 
         expect(v2Messages.length).toBe(1);
-        expect(v2Messages[0].content.metadata).toEqual(metadata);
+        const msgResult = v2Messages[0];
+        if (msgResult.role === 'system') throw new Error('Expected non-system message');
+        expect(msgResult.content.metadata).toEqual(metadata);
       });
     });
 
@@ -3118,6 +3159,7 @@ describe('MessageList', () => {
         // Verify user message metadata is preserved
         const savedUserMessage = v2Messages.find(m => m.id === 'user-msg-flow');
         expect(savedUserMessage).toBeDefined();
+        if (savedUserMessage && savedUserMessage.role === 'system') throw new Error('Expected non-system message');
         expect(savedUserMessage?.content.metadata).toEqual(userMetadata);
 
         // Convert back to UI messages (for client display)
@@ -3153,7 +3195,9 @@ describe('MessageList', () => {
 
         // Verify it's saved correctly as v2
         const v2Messages = list.get.all.v2();
-        expect(v2Messages[0].content.metadata).toEqual(onlookMessage.metadata);
+        const msgResult = v2Messages[0];
+        if (msgResult.role === 'system') throw new Error('Expected non-system message');
+        expect(msgResult.content.metadata).toEqual(onlookMessage.metadata);
 
         // Verify it roundtrips back to UI format
         const uiMessages = list.get.all.ui();
@@ -3201,12 +3245,16 @@ describe('MessageList', () => {
 
       // Verify metadata is preserved in v2 format
       expect(v2Messages.length).toBe(2);
-      expect(v2Messages[0].content.metadata).toEqual({
+      const msg0 = v2Messages[0];
+      const msg1 = v2Messages[1];
+      if (msg0.role === 'system') throw new Error('Expected non-system message');
+      if (msg1.role === 'system') throw new Error('Expected non-system message');
+      expect(msg0.content.metadata).toEqual({
         source: 'web-ui',
         timestamp: 1234567890,
         customField: 'custom-value',
       });
-      expect(v2Messages[1].content.metadata).toEqual({
+      expect(msg1.content.metadata).toEqual({
         model: 'gpt-4',
         processingTime: 250,
         tokens: 50,

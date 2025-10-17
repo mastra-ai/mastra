@@ -45,10 +45,13 @@ export type MastraMessageContentV2 = {
   metadata?: Record<string, unknown>;
 };
 
+export type MastraSystemMessageContentV2 = { content: string, format: 2 } & Partial<Omit<MastraMessageContentV2, 'content'>>;
 // maps to AI SDK V4 UIMessage
-export type MastraMessageV2 = MastraMessageShared & {
-  content: MastraMessageContentV2;
-};
+export type MastraMessageV2 = MastraMessageShared &
+  (
+    | { role: 'system'; content: MastraSystemMessageContentV2 }
+    | { role: 'user' | 'assistant'; content: MastraMessageContentV2 }
+  );
 
 export type MastraMessageContentV3 = {
   format: 3; // format 3 === UIMessage in AI SDK v5
@@ -706,6 +709,17 @@ export class MessageList {
   }
 
   private static mastraMessageV2ToAIV4UIMessage(m: MastraMessageV2): UIMessageWithMetadata {
+    if (m.role === `system`) {
+      return {
+        id: m.id,
+        role: m.role,
+        content: m.content.content,
+        createdAt: m.createdAt,
+        parts: m.content.parts || [],
+        experimental_attachments: m.content.experimental_attachments,
+        metadata: m.content.metadata,
+      }
+    }
     const experimentalAttachments: UIMessageWithMetadata['experimental_attachments'] = m.content
       .experimental_attachments
       ? [...m.content.experimental_attachments]
@@ -1052,6 +1066,10 @@ export class MessageList {
     part: MastraMessageContentV2['parts'][number];
     insertAt?: number;
   }) {
+    // System messages should not have parts added to them
+    if (latestMessage.role === `system` || newMessage.role === `system`) {
+      return;
+    }
     const partKey = MessageList.cacheKeyFromAIV4Parts([part]);
     const latestPartCount = latestMessage.content.parts.filter(
       p => MessageList.cacheKeyFromAIV4Parts([p]) === partKey,
@@ -1107,6 +1125,10 @@ export class MessageList {
     anchorMap: Map<number, number>;
     partsToAdd: Map<number, MastraMessageContentV2['parts'][number]>;
   }) {
+    // System messages should not have parts added to them
+    if (messageV2.role === `system` || latestMessage.role === `system`) {
+      return;
+    }
     // Walk through messageV2, inserting any part not present at the canonical position
     for (let i = 0; i < messageV2.content.parts.length; ++i) {
       const part = messageV2.content.parts[i];
@@ -1265,6 +1287,17 @@ export class MessageList {
       messageSource,
     );
 
+    if (coreV2.role === `system`) {
+      return {
+        id: message.id,
+        role: `system`,
+        createdAt: this.generateCreatedAt(messageSource, message.createdAt),
+        threadId: message.threadId,
+        resourceId: message.resourceId,
+        content: coreV2.content,
+      };
+    }
+
     return {
       id: message.id,
       role: coreV2.role,
@@ -1281,6 +1314,10 @@ export class MessageList {
   }
   private hydrateMastraMessageV2Fields(message: MastraMessageV2): MastraMessageV2 {
     if (!(message.createdAt instanceof Date)) message.createdAt = new Date(message.createdAt);
+
+    if (message.role === `system`) {
+      return message;
+    }
 
     // Fix toolInvocations with empty args by looking in the parts array
     // This handles messages restored from database where toolInvocations might have lost their args
@@ -1311,6 +1348,16 @@ export class MessageList {
     message: AIV4Type.UIMessage | UIMessageWithMetadata,
     messageSource: MessageSource,
   ): MastraMessageV2 {
+    if (message.role === `system`) {
+      return {
+        id: message.id || this.newMessageId(),
+        role: `system`,
+        createdAt: this.generateCreatedAt(messageSource, message.createdAt),
+        threadId: this.memoryInfo?.threadId,
+        resourceId: this.memoryInfo?.resourceId,
+        content: { format: 2, content: message.content },
+      };
+    }
     const content: MastraMessageContentV2 = {
       format: 2,
       parts: message.parts,
@@ -1327,14 +1374,15 @@ export class MessageList {
       content.metadata = message.metadata as Record<string, unknown>;
     }
 
+
     return {
       id: message.id || this.newMessageId(),
-      role: MessageList.getRole(message),
+      role: MessageList.getRole(message) as 'user' | 'assistant',
       createdAt: this.generateCreatedAt(messageSource, message.createdAt),
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,
-    } satisfies MastraMessageV2;
+    };
   }
   private aiV4CoreMessageToMastraMessageV2(
     coreMessage: AIV4Type.CoreMessage,
@@ -1344,6 +1392,17 @@ export class MessageList {
     const parts: AIV4Type.UIMessage['parts'] = [];
     const experimentalAttachments: AIV4Type.UIMessage['experimental_attachments'] = [];
     const toolInvocations: AIV4Type.ToolInvocation[] = [];
+
+    if (coreMessage.role === `system`) {
+      return {
+        id,
+        role: `system`,
+        createdAt: this.generateCreatedAt(messageSource),
+        threadId: this.memoryInfo?.threadId,
+        resourceId: this.memoryInfo?.resourceId,
+        content: { format: 2, content: coreMessage.content },
+      };
+    }
 
     const isSingleTextContent =
       messageSource === `response` &&
@@ -1529,7 +1588,7 @@ export class MessageList {
 
     return {
       id,
-      role: MessageList.getRole(coreMessage),
+      role: MessageList.getRole(coreMessage) as 'user' | 'assistant',
       createdAt: this.generateCreatedAt(messageSource),
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
@@ -1715,6 +1774,18 @@ export class MessageList {
     const twoMM2 = MessageList.isMastraMessageV2(two) && two;
     if (oneMM2 && !twoMM2) return false;
     if (oneMM2 && twoMM2) {
+      if (!oneMM2.content.parts && !twoMM2.content.parts) {
+        return oneMM2.content.content === twoMM2.content.content;
+      }
+      
+      if ((!oneMM2.content.parts && twoMM2.content.parts) || (oneMM2.content.parts && !twoMM2.content.parts)) {
+        return false;
+      }
+
+      if (!oneMM2.content.parts || !twoMM2.content.parts) {
+        return false;
+      }
+      
       return (
         oneMM2.id === twoMM2.id &&
         MessageList.cacheKeyFromAIV4Parts(oneMM2.content.parts) ===
@@ -2026,6 +2097,24 @@ export class MessageList {
   }
 
   private static mastraMessageV3ToV2(v3Msg: MastraMessageV3): MastraMessageV2 {
+    if (v3Msg.role === `system`) {
+
+      const content = v3Msg.content.parts.map(p => {
+        if (p.type === `text`) {
+          return p.text;
+        }
+        return null;
+      }).filter(p => p !== null).join(`\n`);
+
+      return {
+        id: v3Msg.id,
+        resourceId: v3Msg.resourceId,
+        threadId: v3Msg.threadId,
+        createdAt: v3Msg.createdAt,
+        role: `system`,
+        content: { format: 2, content },
+      };
+    }
     const toolInvocationParts = v3Msg.content.parts.filter(p => AIV5.isToolUIPart(p));
 
     // Check if the original V2 message had toolInvocations field
@@ -2257,6 +2346,17 @@ export class MessageList {
   }
 
   private mastraMessageV2ToMastraMessageV3(v2Msg: MastraMessageV2): MastraMessageV3 {
+    if (v2Msg.role === `system`) {
+      return {
+        id: v2Msg.id,
+        content: { format: 3, parts: [{ type: `text`, text: v2Msg.content.content }] },
+        role: v2Msg.role,
+        createdAt: v2Msg.createdAt,
+        resourceId: v2Msg.resourceId,
+        threadId: v2Msg.threadId,
+      };
+    }
+    
     const parts: MastraMessageContentV3['parts'] = [];
     const v3Msg: MastraMessageV3 = {
       id: v2Msg.id,

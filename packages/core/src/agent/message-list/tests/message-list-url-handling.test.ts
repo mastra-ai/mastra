@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { MastraMessageV2 } from '../../types';
+import type { MastraMessageContentV2, MastraMessageV2 } from '../../types';
 import { MessageList } from '../index';
 
 describe('MessageList - File URL Handling', () => {
@@ -39,7 +39,7 @@ describe('MessageList - File URL Handling', () => {
 
     // Get V2 messages back (used by InputProcessors)
     const v2MessagesBack = messageList.get.all.v2();
-    const v2FilePartBack = v2MessagesBack[0].content.parts?.find((p: any) => p.type === 'file');
+    const v2FilePartBack = (v2MessagesBack[0].content as MastraMessageContentV2).parts?.find((p: any) => p.type === 'file');
 
     // V2 should maintain the original URL
     expect(v2FilePartBack).toBeDefined();
@@ -74,7 +74,7 @@ describe('MessageList - File URL Handling', () => {
 
     // This is what InputProcessors would receive
     const v2Messages = messageList.get.all.v2();
-    const filePart = v2Messages[0].content.parts?.find(p => p.type === 'file');
+    const filePart = (v2Messages[0].content as MastraMessageContentV2).parts?.find(p => p.type === 'file');
 
     // The file part's data should be the original URL, not corrupted
     expect(filePart).toBeDefined();
@@ -140,7 +140,7 @@ describe('MessageList - File URL Handling', () => {
       const v3FilePart = v3Messages[0].content.parts.find((p: any) => p.type === 'file');
 
       const v2Messages = list.get.all.v2();
-      const v2FilePart = v2Messages[0].content.parts?.find((p: any) => p.type === 'file');
+      const v2FilePart = (v2Messages[0].content as MastraMessageContentV2).parts?.find((p: any) => p.type === 'file');
 
       if (msg.id === 'url-msg') {
         // URL should be preserved as-is

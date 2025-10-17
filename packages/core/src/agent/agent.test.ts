@@ -2485,6 +2485,282 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Verify that default instructions were used when null was returned
       expect(capturedPrompt).toContain('you will generate a short title');
     });
+
+    it('should call dynamic model function for title generation when memory itself is dynamic - REPRODUCES BUG #8867', async () => {
+      // This test more closely reproduces the user's issue where memory configuration is dynamic
+      // and contains a dynamic model selection function
+
+      let getTitleModelCalled = false;
+      let agentModelUsed = false;
+      let titleModelUsed = false;
+
+      let agentModel;
+      let titleModel;
+
+      if (version === 'v1') {
+        agentModel = new MockLanguageModelV1({
+          doGenerate: async () => {
+            agentModelUsed = true;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 5, completionTokens: 10 },
+              text: 'Agent response',
+            };
+          },
+        });
+
+        titleModel = new MockLanguageModelV1({
+          doGenerate: async () => {
+            titleModelUsed = true;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 5, completionTokens: 10 },
+              text: 'Custom Title',
+            };
+          },
+        });
+      } else {
+        agentModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            agentModelUsed = true;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: 'Agent response',
+              content: [{ type: 'text', text: 'Agent response' }],
+              warnings: [],
+            };
+          },
+          doStream: async () => {
+            agentModelUsed = true;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Agent response' },
+                { type: 'text-end', id: '1' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+              ]),
+            };
+          },
+        });
+
+        titleModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            titleModelUsed = true;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: 'Custom Title',
+              content: [{ type: 'text', text: 'Custom Title' }],
+              warnings: [],
+            };
+          },
+          doStream: async () => {
+            titleModelUsed = true;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Custom Title' },
+                { type: 'text-end', id: '1' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+              ]),
+            };
+          },
+        });
+      }
+
+      // Create a second title model to test dynamic switching
+      let cheapTitleModel;
+      let cheapModelUsed = false;
+      if (version === 'v1') {
+        cheapTitleModel = new MockLanguageModelV1({
+          doGenerate: async () => {
+            cheapModelUsed = true;
+            console.log('Cheap title model was used!');
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 5, completionTokens: 10 },
+              text: 'Cheap Title',
+            };
+          },
+        });
+      } else {
+        cheapTitleModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            cheapModelUsed = true;
+            console.log('Cheap title model was used!');
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: 'Cheap Title',
+              content: [{ type: 'text', text: 'Cheap Title' }],
+              warnings: [],
+            };
+          },
+          doStream: async () => {
+            cheapModelUsed = true;
+            console.log('Cheap title model was used (stream)!');
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Cheap Title' },
+                { type: 'text-end', id: '1' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+              ]),
+            };
+          },
+        });
+      }
+
+      // Helper function that simulates the user's `getTitleModel()` function
+      // This now uses runtime context to decide which model to return
+      const getTitleModel = (runtimeContext: RuntimeContext) => {
+        getTitleModelCalled = true;
+
+        // Check runtime context to determine which model to use
+        const useExpensiveModel = runtimeContext.get('useExpensiveModel');
+        console.log('getTitleModel was called with useExpensiveModel:', useExpensiveModel);
+
+        if (useExpensiveModel) {
+          console.log('Returning expensive title model');
+          return titleModel;
+        } else {
+          console.log('Returning cheap title model');
+          return cheapTitleModel;
+        }
+      };
+
+      // Create agent with dynamic memory that contains dynamic title model selection
+      // This matches the user's scenario more closely
+      const agent = new Agent({
+        name: 'bug-test-agent',
+        instructions: 'test agent',
+        model: agentModel,
+        memory: ({ runtimeContext: _runtimeContext }) => {
+          // Memory is created dynamically with runtime context
+          const mockMemory = new MockMemory();
+
+          // Configure memory with dynamic title generation config
+          mockMemory.getMergedThreadConfig = () => {
+            return {
+              threads: {
+                generateTitle: {
+                  // This function should be called when generating titles
+                  model: ({ runtimeContext }) => {
+                    // This simulates the user's getTitleModel() call
+                    // Now we actually use the runtime context to decide
+                    return getTitleModel(runtimeContext);
+                  },
+                  instructions: 'Generate a SHORT, punchy title for this chat',
+                },
+              },
+            };
+          };
+
+          return mockMemory;
+        },
+      });
+
+      // Test with expensive model
+      console.log('\n=== Testing with expensive model ===');
+      const expensiveContext = new RuntimeContext();
+      expensiveContext.set('useExpensiveModel', true);
+
+      if (version === 'v1') {
+        await agent.generateLegacy('Test message for expensive title', {
+          memory: {
+            resource: 'test-user',
+            thread: {
+              id: 'test-thread-expensive',
+              title: 'New Thread 2024-01-01T00:00:00.000Z',
+            },
+          },
+          runtimeContext: expensiveContext,
+        });
+      } else {
+        await agent.generate('Test message for expensive title', {
+          memory: {
+            resource: 'test-user',
+            thread: {
+              id: 'test-thread-expensive',
+              title: 'New Thread 2024-01-01T00:00:00.000Z',
+            },
+          },
+          runtimeContext: expensiveContext,
+        });
+      }
+
+      // Wait for async title generation
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Verify the expensive model was used
+      expect(getTitleModelCalled).toBe(true);
+      expect(titleModelUsed).toBe(true);
+      expect(cheapModelUsed).toBe(false);
+      expect(agentModelUsed).toBe(true);
+
+      // Reset flags for second test
+      getTitleModelCalled = false;
+      titleModelUsed = false;
+      cheapModelUsed = false;
+      agentModelUsed = false;
+
+      // Test with cheap model
+      console.log('\n=== Testing with cheap model ===');
+      const cheapContext = new RuntimeContext();
+      cheapContext.set('useExpensiveModel', false);
+
+      if (version === 'v1') {
+        await agent.generateLegacy('Test message for cheap title', {
+          memory: {
+            resource: 'test-user',
+            thread: {
+              id: 'test-thread-cheap',
+              title: 'New Thread 2024-01-01T00:00:00.000Z',
+            },
+          },
+          runtimeContext: cheapContext,
+        });
+      } else {
+        await agent.generate('Test message for cheap title', {
+          memory: {
+            resource: 'test-user',
+            thread: {
+              id: 'test-thread-cheap',
+              title: 'New Thread 2024-01-01T00:00:00.000Z',
+            },
+          },
+          runtimeContext: cheapContext,
+        });
+      }
+
+      // Wait for async title generation
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Verify the cheap model was used this time
+      expect(getTitleModelCalled).toBe(true);
+      expect(titleModelUsed).toBe(false);
+      expect(cheapModelUsed).toBe(true);
+      expect(agentModelUsed).toBe(true);
+    });
   });
 
   describe(`${version} - agent tool handling`, () => {

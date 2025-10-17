@@ -2,7 +2,7 @@ import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from 
 import { isToolUIPart } from 'ai-v5';
 import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from 'ai-v5';
 import { describe, expect, it } from 'vitest';
-import type { MastraMessageV2 } from '../index';
+import type { MastraMessageContentV2, MastraMessageV2 } from '../index';
 import { MessageList } from '../index';
 import { hasAIV5CoreMessageCharacteristics } from '../utils/ai-v4-v5/core-model-message';
 import { hasAIV5UIMessageCharacteristics } from '../utils/ai-v4-v5/ui-message';
@@ -970,7 +970,7 @@ describe('MessageList V5 Support', () => {
 
       // Get V2 messages back (this is what InputProcessors receive)
       const v2Messages = messageList.get.all.v2();
-      const v2FilePart = v2Messages[0].content.parts?.find((p: any) => p.type === 'file');
+      const v2FilePart = (v2Messages[0].content as MastraMessageContentV2).parts?.find((p: any) => p.type === 'file');
 
       // The URL should remain unchanged when converting back to V2
       if (v2FilePart?.type === 'file') {
@@ -1295,7 +1295,7 @@ describe('MessageList V5 Support', () => {
         // Get V2 messages and check providerMetadata was preserved
         const v2Messages = list.get.all.v2();
         expect(v2Messages).toHaveLength(1);
-        const filePart = v2Messages[0].content.parts.find(p => p.type === 'file');
+        const filePart = (v2Messages[0].content as MastraMessageContentV2).parts.find(p => p.type === 'file');
         expect(filePart).toBeDefined();
         expect(filePart?.providerMetadata).toEqual(providerMetadata);
 
@@ -1331,7 +1331,7 @@ describe('MessageList V5 Support', () => {
         // Get V2 messages and check providerMetadata was preserved
         const v2Messages = list.get.all.v2();
         expect(v2Messages).toHaveLength(1);
-        const textPart = v2Messages[0].content.parts.find(p => p.type === 'text');
+        const textPart = (v2Messages[0].content as MastraMessageContentV2).parts.find(p => p.type === 'text');
         expect(textPart).toBeDefined();
         expect(textPart?.providerMetadata).toEqual(providerMetadata);
 
@@ -1368,7 +1368,7 @@ describe('MessageList V5 Support', () => {
         // Get V2 messages and check providerMetadata was preserved
         const v2Messages = list.get.all.v2();
         expect(v2Messages).toHaveLength(1);
-        const reasoningPart = v2Messages[0].content.parts.find(p => p.type === 'reasoning');
+        const reasoningPart = (v2Messages[0].content as MastraMessageContentV2).parts.find(p => p.type === 'reasoning');
         expect(reasoningPart).toBeDefined();
         expect(reasoningPart?.providerMetadata).toEqual(providerMetadata);
 
@@ -1408,7 +1408,7 @@ describe('MessageList V5 Support', () => {
         // Get V2 messages and check callProviderMetadata was preserved on tool-invocation
         const v2Messages = list.get.all.v2();
         expect(v2Messages).toHaveLength(1);
-        const toolPart = v2Messages[0].content.parts.find(p => p.type === 'tool-invocation');
+        const toolPart = (v2Messages[0].content as MastraMessageContentV2).parts.find(p => p.type === 'tool-invocation');
         expect(toolPart).toBeDefined();
         expect(toolPart?.providerMetadata).toEqual(callProviderMetadata);
 
@@ -1450,7 +1450,7 @@ describe('MessageList V5 Support', () => {
         // Get V2 messages and check providerMetadata was preserved
         const v2Messages = list.get.all.v2();
         expect(v2Messages).toHaveLength(1);
-        const sourcePart = v2Messages[0].content.parts.find(p => p.type === 'source');
+        const sourcePart = (v2Messages[0].content as MastraMessageContentV2).parts.find(p => p.type === 'source');
         expect(sourcePart).toBeDefined();
         expect(sourcePart?.providerMetadata).toEqual(providerMetadata);
 
@@ -1496,7 +1496,7 @@ describe('MessageList V5 Support', () => {
 
         // Get V2 messages and verify all providerMetadata preserved
         const v2Messages = list.get.all.v2();
-        const parts = v2Messages[0].content.parts;
+        const parts = (v2Messages[0].content as MastraMessageContentV2).parts;
 
         const textPart = parts.find(p => p.type === 'text');
         expect(textPart?.providerMetadata).toEqual(textProviderMetadata);

@@ -32,8 +32,8 @@ describe('convertMessages', () => {
       expect(result[0].role).toBe('user');
       expect(result[0].content.format).toBe(2);
       expect(result[0].content.parts).toHaveLength(1);
-      expect(result[0].content.parts[0].type).toBe('text');
-      expect(result[0].content.parts[0].text).toBe('Hello world');
+      expect(result[0].content.parts?.[0]?.type).toBe('text');
+      expect((result[0].content.parts?.[0] as AIV5.TextPart).text).toBe('Hello world');
     });
   });
 
@@ -69,8 +69,8 @@ describe('convertMessages', () => {
       expect(result[0].content.format).toBe(2);
       // Check that parts are preserved
       expect(result[0].content.parts).toHaveLength(1);
-      expect(result[0].content.parts[0].type).toBe('text');
-      expect(result[0].content.parts[0].text).toBe('Hi there!');
+      expect(result[0].content.parts?.[0]?.type).toBe('text');
+      expect((result[0].content.parts?.[0] as AIV4.TextPart).text).toBe('Hi there!');
     });
   });
 
@@ -143,9 +143,9 @@ describe('convertMessages', () => {
       const result = convertMessages(messages).to('Mastra.V2');
       expect(result).toHaveLength(3);
       // Check that parts are preserved for each message
-      expect(result[0].content.parts[0].text).toBe('Hello');
-      expect(result[1].content.parts[0].text).toBe('Hi! How can I help?');
-      expect(result[2].content.parts[0].text).toBe('What is the weather?');
+      expect((result[0].content.parts?.[0] as AIV4.TextPart).text).toBe('Hello');
+      expect((result[1].content.parts?.[0] as AIV4.TextPart).text).toBe('Hi! How can I help?');
+      expect((result[2].content.parts?.[0] as AIV4.TextPart).text).toBe('What is the weather?');
       result.forEach(msg => {
         expect(msg.content.format).toBe(2);
       });
