@@ -71,16 +71,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 10
   },
   {
-    "model": "requesty/openai/gpt-5",
+    "model": "requesty/openai/gpt-4.1-mini",
     "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
+    "audioInput": false,
+    "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
+    "reasoning": false,
+    "contextWindow": 1047576,
+    "maxOutput": 32768,
+    "inputCost": 0.4,
+    "outputCost": 1.6
   },
   {
     "model": "requesty/openai/gpt-5-nano",
@@ -95,30 +95,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "requesty/openai/o4-mini",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 100000,
-    "inputCost": 1.1,
-    "outputCost": 4.4
-  },
-  {
-    "model": "requesty/openai/gpt-4o-mini",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 0.15,
-    "outputCost": 0.6
-  },
-  {
     "model": "requesty/openai/gpt-4.1",
     "imageInput": true,
     "audioInput": false,
@@ -131,16 +107,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 8
   },
   {
-    "model": "requesty/openai/gpt-4.1-mini",
+    "model": "requesty/openai/o4-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 1047576,
-    "maxOutput": 32768,
-    "inputCost": 0.4,
-    "outputCost": 1.6
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 1.1,
+    "outputCost": 4.4
   },
   {
     "model": "requesty/openai/gpt-5-mini",
@@ -155,16 +131,40 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "requesty/anthropic/claude-4-sonnet-20250522",
+    "model": "requesty/openai/gpt-4o-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "requesty/openai/gpt-5",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "requesty/anthropic/claude-opus-4",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 3,
-    "outputCost": 15
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
   },
   {
     "model": "requesty/anthropic/claude-3-7-sonnet",
@@ -179,16 +179,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
-    "model": "requesty/anthropic/claude-opus-4",
+    "model": "requesty/anthropic/claude-4-sonnet-20250522",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 200000,
-    "maxOutput": 32000,
-    "inputCost": 15,
-    "outputCost": 75
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
   },
   {
     "model": "requesty/anthropic/claude-opus-4-1-20250805",
