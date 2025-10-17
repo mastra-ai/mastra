@@ -24,52 +24,54 @@ const withNextra = nextra({
 
 const withGT = initGT();
 
-export default withGT(withVercelToolbar()(
-  withNextra({
-    assetPrefix: process.env.NODE_ENV === "production" ? "/docs" : "",
-    i18n: {
-      locales: ["en", "ja"],
-      defaultLocale: "en",
-    },
-    async rewrites() {
-      return {
-        beforeFiles: [
-          {
-            source: "/en/docs/api/copilotkit",
-            destination: "/api/copilotkit",
-          },
-          {
-            source: "/ja/docs/api/copilotkit",
-            destination: "/api/copilotkit",
-          },
-          {
-            source: "/docs/api/copilotkit",
-            destination: "/api/copilotkit",
-          },
-          {
-            source: "/en/docs/api/feedback",
-            destination: "/api/feedback",
-          },
-          {
-            source: "/ja/docs/api/feedback",
-            destination: "/api/feedback",
-          },
-          {
-            source: "/docs/api/feedback",
-            destination: "/api/feedback",
-          },
-          {
-            source: "/:locale/docs/_next/:path+",
-            destination: "/_next/:path+",
-          },
-          {
-            source: "/docs/_next/:path+",
-            destination: "/_next/:path+",
-          },
-        ],
-      };
-    },
-    redirects: () => redirectList,
-    trailingSlash: false,
-  }),
-));
+export default withGT(
+  withVercelToolbar()(
+    withNextra({
+      assetPrefix: process.env.NODE_ENV === "production" ? "/docs" : "",
+      i18n: {
+        locales: ["en", "ja"],
+        defaultLocale: "en",
+      },
+      async rewrites() {
+        return {
+          beforeFiles: [
+            {
+              source: "/en/docs/api/copilotkit",
+              destination: "/api/copilotkit",
+            },
+            {
+              source: "/ja/docs/api/copilotkit",
+              destination: "/api/copilotkit",
+            },
+            {
+              source: "/docs/api/copilotkit",
+              destination: "/api/copilotkit",
+            },
+            {
+              source: "/en/docs/api/feedback",
+              destination: "/api/feedback",
+            },
+            {
+              source: "/ja/docs/api/feedback",
+              destination: "/api/feedback",
+            },
+            {
+              source: "/docs/api/feedback",
+              destination: "/api/feedback",
+            },
+            {
+              source: "/:locale/docs/_next/:path+",
+              destination: "/_next/:path+",
+            },
+            {
+              source: "/docs/_next/:path+",
+              destination: "/_next/:path+",
+            },
+          ],
+        };
+      },
+      redirects: () => redirectList,
+      trailingSlash: false,
+    }),
+  ),
+);

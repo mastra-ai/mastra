@@ -82,7 +82,7 @@ export const NextraLayout = ({
         {children}
       </Layout>
       <KapaProvider
-        integrationId={process.env.NEXT_PUBLIC_KAPA_INTEGRATION_ID || ''}
+        integrationId={process.env.NEXT_PUBLIC_KAPA_INTEGRATION_ID || ""}
         callbacks={{
           askAI: {
             onQuerySubmit({ question, threadId, conversation }) {
