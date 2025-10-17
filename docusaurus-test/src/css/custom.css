@@ -159,7 +159,7 @@
   --ifm-navbar-height: calc(60px + 50px);
 
   /* Code blocks */
-  --docusaurus-highlighted-code-line-bg: color-mix(in oklab,#e0e0e0e6 90%, transparent);
+  --docusaurus-highlighted-code-line-bg: color-mix(in oklab, #e0e0e0e6 90%, transparent);
 
 
   /* Syntax highlighting colors - Light mode */
@@ -390,10 +390,17 @@ span[class*="categoryLinkLabel"] {
 
 
 @media (min-width: 997px) {
-  .menu {
+
+  /* Custom Scrollbars*/
+  .menu,
+  pre {
     padding-inline: 0 !important;
     scrollbar-width: thin;
-    scrollbar-color: #eaeaea transparent;
+    scrollbar-color: #dedede transparent;
+  }
+
+  pre {
+    scrollbar-color: #dedede transparent;
   }
 
   li:has(ul.menu__list) .menu__list {
@@ -499,6 +506,18 @@ span[class*="categoryLinkLabel"] {
 .markdown h1:first-child {
   --ifm-h1-font-size: 2.25rem;
   letter-spacing: -0.028em;
+}
+
+.markdown {
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    letter-spacing: -0.028em;
+  }
 }
 
 
@@ -613,9 +632,35 @@ div[class*="codeBlockTitle"]+div[class*="codeBlockContent"] pre {
 
 /* Highlighted lines in code blocks */
 .theme-code-block-highlighted-line {
-  /* border-left: 2px solid var(--mastra-green-accent-2); */
   box-shadow: 2px 0 var(--mastra-green-accent-2) inset;
 }
+
+.theme-code-block-highlighted-line.codeLine_lJS_ [class*="codeLineContent"] {
+  &:before {
+    content: "";
+    inset-block: 0;
+    left: 20px;
+    background: var(--docusaurus-highlighted-code-line-bg);
+    position: absolute;
+    z-index: -1;
+  }
+  position: relative;
+  background: transparent;
+}
+
+.theme-code-block-highlighted-line.codeLine_lJS_ [class*="codeLineNumber"] {
+  &:after {
+    content: "";
+    inset-block: 0;
+    left:0;
+    background: var(--docusaurus-highlighted-code-line-bg);
+    position: absolute;
+    z-index: -1;
+  }
+  position: relative;
+  background: transparent;
+}
+
 
 [data-theme='dark'] .theme-code-block-highlighted-line {
   background-color: var(--mastra-surface-5);
