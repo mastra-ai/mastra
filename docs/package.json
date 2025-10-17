@@ -22,6 +22,7 @@
     "@copilotkit/react-ui": "1.8.10",
     "@copilotkit/runtime": "1.8.10",
     "@hookform/resolvers": "^4.1.3",
+    "@kapaai/react-sdk": "^0.9.0",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
     "@mastra/loggers": "^0.10.7",
