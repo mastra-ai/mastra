@@ -47,28 +47,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
-    "model": "fastrouter/moonshotai/kimi-k2",
+    "model": "fastrouter/deepseek-ai/deepseek-r1-distill-llama-70b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.03,
+    "outputCost": 0.14
+  },
+  {
+    "model": "fastrouter/qwen/qwen3-coder",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.55,
-    "outputCost": 2.2
-  },
-  {
-    "model": "fastrouter/x-ai/grok-4",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 64000,
-    "inputCost": 3,
-    "outputCost": 15
+    "contextWindow": 262144,
+    "maxOutput": 66536,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "fastrouter/google/gemini-2.5-flash",
@@ -91,6 +91,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "fastrouter/x-ai/grok-4",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "fastrouter/openai/gpt-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
     "inputCost": 1.25,
     "outputCost": 10
   },
@@ -119,18 +143,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 8
   },
   {
-    "model": "fastrouter/openai/gpt-5-mini",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 0.25,
-    "outputCost": 2
-  },
-  {
     "model": "fastrouter/openai/gpt-oss-20b",
     "imageInput": false,
     "audioInput": false,
@@ -143,6 +155,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.2
   },
   {
+    "model": "fastrouter/openai/gpt-5-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.25,
+    "outputCost": 2
+  },
+  {
     "model": "fastrouter/openai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
@@ -153,30 +177,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.15,
     "outputCost": 0.6
-  },
-  {
-    "model": "fastrouter/openai/gpt-5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
-  },
-  {
-    "model": "fastrouter/qwen/qwen3-coder",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 66536,
-    "inputCost": 0.3,
-    "outputCost": 1.2
   },
   {
     "model": "fastrouter/anthropic/claude-opus-4.1",
@@ -203,16 +203,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
-    "model": "fastrouter/deepseek-ai/deepseek-r1-distill-llama-70b",
+    "model": "fastrouter/moonshotai/kimi-k2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
+    "toolUsage": true,
+    "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 131072,
-    "inputCost": 0.03,
-    "outputCost": 0.14
+    "maxOutput": 32768,
+    "inputCost": 0.55,
+    "outputCost": 2.2
   }
 ]}
 />
