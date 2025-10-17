@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { useEffect, useRef } from "react";
 
 export const searches = [
   {
@@ -67,6 +68,18 @@ export function EmptySearch({
   onSelect: (index: number) => void;
   onHover: (index: number) => void;
 }) {
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Scroll selected item into view when navigating with keyboard
+  useEffect(() => {
+    if (selectedIndex >= 0 && itemRefs.current[selectedIndex]) {
+      itemRefs.current[selectedIndex]?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }
+  }, [selectedIndex]);
+
   return (
     <div className="flex flex-col gap-1">
       {searches.map((search, index) => {
@@ -74,6 +87,9 @@ export function EmptySearch({
         return (
           <div
             key={search.link}
+            ref={(el) => {
+              itemRefs.current[index] = el;
+            }}
             className={cn(
               "flex flex-col gap-1 p-2 rounded-md cursor-pointer",
               isSelected
