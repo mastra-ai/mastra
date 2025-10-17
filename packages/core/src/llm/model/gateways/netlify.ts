@@ -205,7 +205,9 @@ export class NetlifyGateway extends MastraModelGateway {
           },
         })(modelId);
       default:
-        return createOpenAICompatible({ name: providerId, apiKey, baseURL }).chatModel(modelId);
+        return createOpenAICompatible({ name: providerId, apiKey, baseURL, supportsStructuredOutputs: true }).chatModel(
+          modelId,
+        );
     }
   }
 }

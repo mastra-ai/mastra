@@ -3,7 +3,8 @@ import type { WritableStream } from 'stream/web';
 import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
+import { z } from 'zod';
+import type { ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
 import type { AISpan, TracingContext, TracingOptions, TracingProperties } from '../ai-tracing';
@@ -1857,6 +1858,159 @@ export class Agent<
   }
 
   /**
+   * Retrieves and converts agent tools to CoreTool format.
+   * @internal
+   */
+  private async getAgentTools({
+    runId,
+    threadId,
+    resourceId,
+    runtimeContext,
+    tracingContext,
+    methodType,
+  }: {
+    runId?: string;
+    threadId?: string;
+    resourceId?: string;
+    runtimeContext: RuntimeContext;
+    tracingContext?: TracingContext;
+    methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+  }) {
+    const convertedAgentTools: Record<string, CoreTool> = {};
+    const agents = await this.listAgents({ runtimeContext });
+
+    if (Object.keys(agents).length > 0) {
+      for (const [agentName, agent] of Object.entries(agents)) {
+        const agentInputSchema = z.object({
+          prompt: z.string().describe('The prompt to send to the agent'),
+        });
+
+        const agentOutputSchema = z.object({
+          text: z.string().describe('The response from the agent'),
+        });
+
+        const modelVersion = (await agent.getModel()).specificationVersion;
+
+        const toolObj = createTool({
+          id: agentName,
+          description: `Agent: ${agentName}`,
+          inputSchema: agentInputSchema,
+          outputSchema: agentOutputSchema,
+          mastra: this.#mastra,
+          // manually wrap agent tools with ai tracing, so that we can pass the
+          // current tool span onto the agent to maintain continuity of the trace
+          execute: async ({ context, writer, tracingContext: innerTracingContext }) => {
+            try {
+              this.logger.debug(`[Agent:${this.name}] - Executing agent as tool ${agentName}`, {
+                name: agentName,
+                args: context,
+                runId,
+                threadId,
+                resourceId,
+              });
+
+              let result: any;
+
+              if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v2') {
+                const generateResult = await agent.generate((context as any).prompt, {
+                  runtimeContext,
+                  tracingContext: innerTracingContext,
+                });
+                result = { text: generateResult.text };
+              } else if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v1') {
+                const generateResult = await agent.generateLegacy((context as any).prompt, {
+                  runtimeContext,
+                  tracingContext: innerTracingContext,
+                });
+                result = { text: generateResult.text };
+              } else if ((methodType === 'stream' || methodType === 'streamLegacy') && modelVersion === 'v2') {
+                const streamResult = await agent.stream((context as any).prompt, {
+                  runtimeContext,
+                  tracingContext: innerTracingContext,
+                });
+
+                // Collect full text
+                let fullText = '';
+                for await (const chunk of streamResult.fullStream) {
+                  if (writer) {
+                    await writer.write(chunk);
+                  }
+
+                  if (chunk.type === 'text-delta') {
+                    fullText += chunk.payload.text;
+                  }
+                }
+
+                result = { text: fullText };
+              } else {
+                // streamLegacy
+                const streamResult = await agent.streamLegacy((context as any).prompt, {
+                  runtimeContext,
+                  tracingContext: innerTracingContext,
+                });
+
+                let fullText = '';
+                for await (const chunk of streamResult.fullStream) {
+                  if (writer) {
+                    await writer.write(chunk);
+                  }
+
+                  if (chunk.type === 'text-delta') {
+                    fullText += chunk.textDelta;
+                  }
+                }
+
+                result = { text: fullText };
+              }
+
+              return result;
+            } catch (err) {
+              const mastraError = new MastraError(
+                {
+                  id: 'AGENT_AGENT_TOOL_EXECUTION_FAILED',
+                  domain: ErrorDomain.AGENT,
+                  category: ErrorCategory.USER,
+                  details: {
+                    agentName: this.name,
+                    subAgentName: agentName,
+                    runId: runId || '',
+                    threadId: threadId || '',
+                    resourceId: resourceId || '',
+                  },
+                  text: `[Agent:${this.name}] - Failed agent tool execution for ${agentName}`,
+                },
+                err,
+              );
+              this.logger.trackException(mastraError);
+              this.logger.error(mastraError.toString());
+              throw mastraError;
+            }
+          },
+        });
+
+        const options: ToolOptions = {
+          name: agentName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: this.#mastra,
+          memory: await this.getMemory({ runtimeContext }),
+          agentName: this.name,
+          runtimeContext,
+          model: await this.getModel({ runtimeContext }),
+          tracingContext,
+          tracingPolicy: this.#options?.tracingPolicy,
+        };
+
+        convertedAgentTools[agentName] = makeCoreTool(toolObj, options);
+      }
+    }
+
+    return convertedAgentTools;
+  }
+
+  /**
    * Retrieves and converts workflow tools to CoreTool format.
    * @internal
    */
@@ -2055,6 +2209,15 @@ export class Agent<
       clientTools: clientTools!,
     });
 
+    const agentTools = await this.getAgentTools({
+      runId,
+      resourceId,
+      threadId,
+      runtimeContext,
+      methodType,
+      tracingContext,
+    });
+
     const workflowTools = await this.getWorkflowTools({
       runId,
       resourceId,
@@ -2069,6 +2232,7 @@ export class Agent<
       ...memoryTools,
       ...toolsetTools,
       ...clientSideTools,
+      ...agentTools,
       ...workflowTools,
     });
   }
@@ -2276,7 +2440,7 @@ export class Agent<
             messageList,
           });
           return {
-            messageObjects: messageList.get.all.prompt(),
+            messageObjects: tripwireTriggered ? [] : messageList.get.all.prompt(),
             convertedTools,
             threadExists: false,
             thread: undefined,
