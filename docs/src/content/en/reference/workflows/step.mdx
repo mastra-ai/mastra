@@ -120,7 +120,7 @@ const step1 = createStep({
     },
     {
       name: "suspend",
-      type: "() => Promise<void>",
+      type: "(suspendPayload: any, suspendOptions?: { resumeLabel?: string }) => Promise<void>",
       description: "Function to pause workflow execution",
     },
     {
