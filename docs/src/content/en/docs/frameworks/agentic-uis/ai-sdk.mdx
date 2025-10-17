@@ -267,7 +267,7 @@ const response = await agent.stream({ messages: 'What is the weather in Tokyo' }
 const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
   start(controller) {
     response.processDataStream({
-      onChunk: async (chunk: any) => {
+      onChunk: async (chunk) => {
         controller.enqueue(chunk as ChunkType);
       },
     }).finally(() => controller.close());
