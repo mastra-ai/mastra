@@ -1,4 +1,4 @@
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils/test';
+import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { dynamicTool, jsonSchema, stepCountIs } from 'ai-v5';
 import {
   convertArrayToReadableStream,
@@ -12,7 +12,7 @@ import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { loop } from '../loop';
-import { createTestModels, defaultSettings, testUsage } from './utils';
+import { createMessageListWithUserMessage, createTestModels, defaultSettings, testUsage } from './utils';
 
 export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe.skip('provider-executed tools', () => {
@@ -22,7 +22,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       beforeEach(async () => {
         result = await loopFn({
           runId,
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
           models: createTestModels({
             stream: convertArrayToReadableStream([
               {
@@ -314,7 +314,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       beforeEach(async () => {
         result = await loopFn({
           runId,
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
           models: createTestModels({
             stream: convertArrayToReadableStream([
               {
@@ -531,18 +531,12 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
   describe('tool callbacks', () => {
     it('should invoke callbacks in the correct order', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
       const recordedCalls: unknown[] = [];
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {
@@ -817,16 +811,10 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
   describe('tools with custom schema', () => {
     it('should send tool calls', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: [
           {
             maxRetries: 0,
@@ -911,7 +899,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
     beforeEach(async () => {
       result = await loopFn({
         runId,
-        messageList: new MessageList(),
+        messageList: createMessageListWithUserMessage(),
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {
@@ -1177,7 +1165,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       // This test simulates the exact scenario from issue #7558
       const result = loopFn({
         runId,
-        messageList: new MessageList(),
+        messageList: createMessageListWithUserMessage(),
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {

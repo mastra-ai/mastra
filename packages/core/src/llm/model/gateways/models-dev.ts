@@ -1,5 +1,14 @@
+import { createAnthropic } from '@ai-sdk/anthropic-v5';
+import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+import { createOpenAI } from '@ai-sdk/openai-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { createXai } from '@ai-sdk/xai-v5';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
+import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
+import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
 
 interface ModelsDevProviderInfo {
   id: string;
@@ -22,39 +31,26 @@ interface ModelsDevResponse {
 // which providers from models.dev should be included in the registry.
 // At runtime, buildUrl() and buildHeaders() use the pre-generated PROVIDER_REGISTRY instead.
 const OPENAI_COMPATIBLE_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
-  openai: {
-    url: 'https://api.openai.com/v1/chat/completions',
-  },
-  anthropic: {
-    url: 'https://api.anthropic.com/v1/chat/completions',
-    apiKeyHeader: 'x-api-key',
-  },
   cerebras: {
-    url: 'https://api.cerebras.ai/v1/chat/completions',
-  },
-  xai: {
-    url: 'https://api.x.ai/v1/chat/completions',
+    url: 'https://api.cerebras.ai/v1',
   },
   mistral: {
-    url: 'https://api.mistral.ai/v1/chat/completions',
-  },
-  google: {
-    url: 'https://generativelanguage.googleapis.com/v1beta/chat/completions',
+    url: 'https://api.mistral.ai/v1',
   },
   groq: {
-    url: 'https://api.groq.com/openai/v1/chat/completions',
+    url: 'https://api.groq.com/openai/v1',
   },
   togetherai: {
-    url: 'https://api.together.xyz/v1/chat/completions',
+    url: 'https://api.together.xyz/v1',
   },
   deepinfra: {
-    url: 'https://api.deepinfra.com/v1/openai/chat/completions',
+    url: 'https://api.deepinfra.com/v1/openai',
   },
   perplexity: {
-    url: 'https://api.perplexity.ai/chat/completions',
+    url: 'https://api.perplexity.ai',
   },
   vercel: {
-    url: 'https://ai-gateway.vercel.sh/v1/chat/completions',
+    url: 'https://ai-gateway.vercel.sh/v1',
     apiKeyEnvVar: 'AI_GATEWAY_API_KEY',
   },
 };
@@ -71,8 +67,6 @@ export class ModelsDevGateway extends MastraModelGateway {
   }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
-    console.info('Fetching providers from models.dev API...');
-
     const response = await fetch('https://models.dev/api.json');
     if (!response.ok) {
       throw new Error(`Failed to fetch from models.dev: ${response.statusText}`);
@@ -83,6 +77,8 @@ export class ModelsDevGateway extends MastraModelGateway {
     const providerConfigs: Record<string, ProviderConfig> = {};
 
     for (const [providerId, providerInfo] of Object.entries(data)) {
+      // Skip excluded providers
+      if (EXCLUDED_PROVIDERS.includes(providerId)) continue;
       // Skip non-provider entries (if any)
       if (!providerInfo || typeof providerInfo !== 'object' || !providerInfo.models) continue;
 
@@ -95,24 +91,21 @@ export class ModelsDevGateway extends MastraModelGateway {
         providerInfo.npm === '@ai-sdk/gateway' || // Vercel AI Gateway is OpenAI-compatible
         normalizedId in OPENAI_COMPATIBLE_OVERRIDES;
 
+      // these have their ai sdk provider package installed and don't use openai-compat
+      const hasInstalledPackage = PROVIDERS_WITH_INSTALLED_PACKAGES.includes(providerId);
+
       // Also include providers that have an API URL and env vars (likely OpenAI-compatible)
       const hasApiAndEnv = providerInfo.api && providerInfo.env && providerInfo.env.length > 0;
 
-      if (isOpenAICompatible || hasApiAndEnv) {
+      if (isOpenAICompatible || hasInstalledPackage || hasApiAndEnv) {
         // Get model IDs from the models object
         const modelIds = Object.keys(providerInfo.models).sort();
 
         // Get the API URL from the provider info or overrides
-        let url = providerInfo.api || OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.url;
-
-        // Ensure the URL ends with /chat/completions if it doesn't already
-        if (url && !url.includes('/chat/completions') && !url.includes('/messages')) {
-          url = url.replace(/\/$/, '') + '/chat/completions';
-        }
+        const url = providerInfo.api || OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.url;
 
         // Skip if we don't have a URL
-        if (!url) {
-          console.info(`Skipping ${normalizedId}: No API URL available`);
+        if (!hasInstalledPackage && !url) {
           continue;
         }
 
@@ -121,86 +114,96 @@ export class ModelsDevGateway extends MastraModelGateway {
         const apiKeyEnvVar = providerInfo.env?.[0] || `${normalizedId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
 
         // Determine the API key header (special case for Anthropic)
-        const apiKeyHeader = OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.apiKeyHeader || 'Authorization';
+        const apiKeyHeader = !hasInstalledPackage
+          ? OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.apiKeyHeader || 'Authorization'
+          : undefined;
 
         providerConfigs[normalizedId] = {
           url,
           apiKeyEnvVar,
           apiKeyHeader,
           name: providerInfo.name || providerId.charAt(0).toUpperCase() + providerId.slice(1),
-          models: modelIds.filter(id => !id.includes(`codex`)), // codex requires responses api
+          models: modelIds,
           docUrl: providerInfo.doc, // Include documentation URL if available
           gateway: `models.dev`,
         };
-      } else {
-        console.info(`Skipped provider ${providerInfo.name}`);
       }
     }
 
     // Store for later use in buildUrl and buildHeaders
     this.providerConfigs = providerConfigs;
 
-    console.info(`Found ${Object.keys(providerConfigs).length} OpenAI-compatible providers`);
-    console.info('Providers:', Object.keys(providerConfigs).sort());
     return providerConfigs;
   }
 
-  buildUrl(modelId: string, envVars: Record<string, string>): string | false | Promise<string | false> {
-    // Parse model ID to get provider
-    const [provider, ...modelParts] = modelId.split('/');
+  buildUrl(routerId: string, envVars?: typeof process.env): string | undefined {
+    const { providerId } = parseModelRouterId(routerId);
 
-    // This gateway only handles models without a prefix (since we have no prefix)
-    // and only if we know about the provider
-    if (!provider || !modelParts.length) {
-      return false; // Not a full model ID
-    }
-
-    const config = this.providerConfigs[provider];
+    const config = this.providerConfigs[providerId];
 
     if (!config?.url) {
-      return false; // We don't know how to handle this provider
+      return;
     }
 
     // Check for custom base URL from env vars
-    const baseUrlEnvVar = `${provider.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
-    const customBaseUrl = envVars[baseUrlEnvVar];
+    const baseUrlEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
+    const customBaseUrl = envVars?.[baseUrlEnvVar] || process.env[baseUrlEnvVar];
 
     return customBaseUrl || config.url;
   }
 
-  buildHeaders(
-    modelId: string,
-    envVars: Record<string, string>,
-  ): Record<string, string> | Promise<Record<string, string>> {
-    const [provider] = modelId.split('/');
-    if (!provider) {
-      return {};
+  getApiKey(modelId: string): Promise<string> {
+    const [provider, model] = modelId.split('/');
+    if (!provider || !model) {
+      throw new Error(`Could not identify provider from model id ${modelId}`);
     }
-
     const config = this.providerConfigs[provider];
 
     if (!config) {
-      return {};
+      throw new Error(`Could not find config for provider ${provider} with model id ${modelId}`);
     }
 
-    const apiKey = typeof config.apiKeyEnvVar === `string` ? envVars[config.apiKeyEnvVar] : undefined; // we only use single string env var for models.dev for now
+    const apiKey = typeof config.apiKeyEnvVar === `string` ? process.env[config.apiKeyEnvVar] : undefined; // we only use single string env var for models.dev for now
+
     if (!apiKey) {
-      return {};
+      throw new Error(`Could not find API key process.env.${config.apiKeyEnvVar} for model id ${modelId}`);
     }
 
-    const headers: Record<string, string> = {};
+    return Promise.resolve(apiKey);
+  }
 
-    if (config.apiKeyHeader === 'Authorization' || !config.apiKeyHeader) {
-      headers['Authorization'] = `Bearer ${apiKey}`;
-    } else {
-      headers[config.apiKeyHeader] = apiKey;
+  async resolveLanguageModel({
+    modelId,
+    providerId,
+    apiKey,
+  }: {
+    modelId: string;
+    providerId: string;
+    apiKey: string;
+  }): Promise<LanguageModelV2> {
+    const baseURL = this.buildUrl(`${providerId}/${modelId}`);
+
+    switch (providerId) {
+      case 'openai':
+        return createOpenAI({ apiKey }).responses(modelId);
+      case 'gemini':
+      case 'google':
+        return createGoogleGenerativeAI({
+          apiKey,
+        }).chat(modelId);
+      case 'anthropic':
+        return createAnthropic({ apiKey })(modelId);
+      case 'openrouter':
+        return createOpenRouter({ apiKey })(modelId);
+      case 'xai':
+        return createXai({
+          apiKey,
+        })(modelId);
+      default:
+        if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
+        return createOpenAICompatible({ name: providerId, apiKey, baseURL, supportsStructuredOutputs: true }).chatModel(
+          modelId,
+        );
     }
-
-    // Special handling for Anthropic
-    if (provider === 'anthropic') {
-      headers['anthropic-version'] = '2023-06-01';
-    }
-
-    return headers;
   }
 }

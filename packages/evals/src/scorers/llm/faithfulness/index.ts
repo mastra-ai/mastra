@@ -1,4 +1,4 @@
-import type { LanguageModel } from '@mastra/core/llm';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
 import { z } from 'zod';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
@@ -18,7 +18,7 @@ export function createFaithfulnessScorer({
   model,
   options,
 }: {
-  model: LanguageModel;
+  model: MastraModelConfig;
   options?: FaithfulnessMetricOptions;
 }) {
   return createScorer({

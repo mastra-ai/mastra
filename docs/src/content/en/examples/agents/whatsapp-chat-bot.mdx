@@ -189,7 +189,7 @@ const respondToMessage = createStep({
       throw new Error("Chat agent not found");
     }
 
-    const response = await agent.generateVNext(
+    const response = await agent.generate(
       [{ role: "user", content: inputData.userMessage }],
     );
 
@@ -208,7 +208,7 @@ const breakIntoMessages = createStep({
       throw new Error("Text Message agent not found");
     }
 
-    const response = await agent.generateVNext(
+    const response = await agent.generate(
       [{ role: "user", content: inputData.prompt }],
       {
         structuredOutput: {

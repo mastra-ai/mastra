@@ -16,68 +16,48 @@ import {
   globalMCPIsAlreadyInstalled,
   windsurfGlobalMCPConfigPath,
 } from './mcp-docs-server-install';
+import type { Editor } from './mcp-docs-server-install';
 
 const exec = util.promisify(child_process.exec);
 
-export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google' | 'cerebras' | 'mistral';
-export type Components = 'agents' | 'workflows' | 'tools';
+export const LLMProvider = ['openai', 'anthropic', 'groq', 'google', 'cerebras', 'mistral'] as const;
+export const COMPONENTS = ['agents', 'workflows', 'tools'] as const;
 
-// TODO: Once the switch to AI SDK v5 is complete, this needs to be updated
-export const getAISDKPackageVersion = (llmProvider: LLMProvider) => {
-  switch (llmProvider) {
-    case 'cerebras':
-      return '^0.2.14';
-    default:
-      return '^1.0.0';
-  }
-};
-export const getAISDKPackage = (llmProvider: LLMProvider) => {
-  switch (llmProvider) {
-    case 'openai':
-      return '@ai-sdk/openai';
-    case 'anthropic':
-      return '@ai-sdk/anthropic';
-    case 'groq':
-      return '@ai-sdk/groq';
-    case 'google':
-      return '@ai-sdk/google';
-    case 'cerebras':
-      return '@ai-sdk/cerebras';
-    case 'mistral':
-      return '@ai-sdk/mistral';
-    default:
-      return '@ai-sdk/openai';
-  }
-};
+export type LLMProvider = (typeof LLMProvider)[number];
+export type Components = (typeof COMPONENTS)[number];
 
-export const getProviderImportAndModelItem = (llmProvider: LLMProvider) => {
-  let providerImport = '';
-  let modelItem = '';
+/**
+ * Type-guard to check if a value is a valid LLMProvider
+ */
+export function isValidLLMProvider(value: string): value is LLMProvider {
+  return LLMProvider.includes(value as LLMProvider);
+}
 
+/**
+ * Type-guard to check if a value contains only valid Components
+ */
+export function areValidComponents(values: string[]): values is Components[] {
+  return values.every(value => COMPONENTS.includes(value as Components));
+}
+
+export const getModelIdentifier = (llmProvider: LLMProvider) => {
   if (llmProvider === 'openai') {
-    providerImport = `import { openai } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `openai('gpt-4o-mini')`;
+    return `'openai/gpt-4o-mini'`;
   } else if (llmProvider === 'anthropic') {
-    providerImport = `import { anthropic } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `anthropic('claude-3-5-sonnet-20241022')`;
+    return `'anthropic/claude-3-5-sonnet-20241022'`;
   } else if (llmProvider === 'groq') {
-    providerImport = `import { groq } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `groq('llama-3.3-70b-versatile')`;
+    return `'groq/llama-3.3-70b-versatile'`;
   } else if (llmProvider === 'google') {
-    providerImport = `import { google } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `google('gemini-2.5-pro')`;
+    return `'google/gemini-2.5-pro'`;
   } else if (llmProvider === 'cerebras') {
-    providerImport = `import { cerebras } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `cerebras('llama-3.3-70b')`;
+    return `'cerebras/llama-3.3-70b'`;
   } else if (llmProvider === 'mistral') {
-    providerImport = `import { mistral } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `mistral('mistral-medium-2508')`;
+    return `'mistral/mistral-medium-2508'`;
   }
-  return { providerImport, modelItem };
 };
 
 export async function writeAgentSample(llmProvider: LLMProvider, destPath: string, addExampleTool: boolean) {
-  const { providerImport, modelItem } = getProviderImportAndModelItem(llmProvider);
+  const modelString = getModelIdentifier(llmProvider);
 
   const instructions = `
       You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
@@ -94,7 +74,6 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
       ${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}
 `;
   const content = `
-${providerImport}
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
@@ -103,7 +82,7 @@ ${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
   instructions: \`${instructions}\`,
-  model: ${modelItem},
+  model: ${modelString},
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
   memory: new Memory({
     storage: new LibSQLStore({
@@ -389,13 +368,21 @@ ${addAgent ? `import { weatherAgent } from './agents/weather-agent';` : ''}
 export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
   storage: new LibSQLStore({
-    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    // stores observability, scores, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ":memory:",
   }),
   logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',
   }),
+  telemetry: {
+    // Telemetry is deprecated and will be removed in the Nov 4th release
+    enabled: false, 
+  },
+  observability: {
+    // Enables DefaultExporter and CloudExporter for AI tracing
+    default: { enabled: true }, 
+  },
 });
 `,
     );
@@ -423,8 +410,7 @@ export const checkAndInstallCoreDeps = async (addExample: boolean) => {
   }
 
   if (needsZod) {
-    // TODO: Once the switch to AI SDK v5 is complete, this needs to be updated
-    await installCoreDeps('zod', '^3');
+    await installCoreDeps('zod', '^4');
   }
 
   if (addExample) {
@@ -488,17 +474,16 @@ export const getAPIKey = async (provider: LLMProvider) => {
   }
 };
 
-export const writeAPIKey = async ({
-  provider,
-  apiKey = 'your-api-key',
-}: {
-  provider: LLMProvider;
-  apiKey?: string;
-}) => {
+export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider; apiKey?: string }) => {
+  /**
+   * If people skip entering an API key (because they e.g. have it in their environment already), we write to .env.example instead of .env so that they can immediately run Mastra without having to delete an .env file with an invalid key.
+   */
+  const envFileName = apiKey ? '.env' : '.env.example';
+
   const key = await getAPIKey(provider);
   const escapedKey = shellQuote.quote([key]);
-  const escapedApiKey = shellQuote.quote([apiKey]);
-  await exec(`echo ${escapedKey}=${escapedApiKey} >> .env`);
+  const escapedApiKey = shellQuote.quote([apiKey ? apiKey : 'your-api-key']);
+  await exec(`echo ${escapedKey}=${escapedApiKey} >> ${envFileName}`);
 };
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
   let dir = directory
@@ -532,8 +517,31 @@ export const writeCodeSample = async (
   }
 };
 
-export const interactivePrompt = async () => {
-  p.intro(color.inverse(' Mastra Init '));
+const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }[] = [
+  { value: 'openai', label: 'OpenAI', hint: 'recommended' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'groq', label: 'Groq' },
+  { value: 'google', label: 'Google' },
+  { value: 'cerebras', label: 'Cerebras' },
+  { value: 'mistral', label: 'Mistral' },
+];
+
+interface InteractivePromptArgs {
+  options?: {
+    showBanner?: boolean;
+  };
+  skip?: {
+    llmProvider?: boolean;
+    llmApiKey?: boolean;
+  };
+}
+
+export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
+  const { skip = {}, options: { showBanner = true } = {} } = args;
+
+  if (showBanner) {
+    p.intro(color.inverse(' Mastra Init '));
+  }
   const mastraProject = await p.group(
     {
       directory: () =>
@@ -543,20 +551,18 @@ export const interactivePrompt = async () => {
           defaultValue: 'src/',
         }),
       llmProvider: () =>
-        p.select({
-          message: 'Select default provider:',
-          options: [
-            { value: 'openai', label: 'OpenAI', hint: 'recommended' },
-            { value: 'anthropic', label: 'Anthropic' },
-            { value: 'groq', label: 'Groq' },
-            { value: 'google', label: 'Google' },
-            { value: 'cerebras', label: 'Cerebras' },
-            { value: 'mistral', label: 'Mistral' },
-          ] satisfies { value: LLMProvider; label: string; hint?: string }[],
-        }),
+        skip?.llmProvider
+          ? undefined
+          : p.select({
+              message: 'Select a default provider:',
+              options: LLM_PROVIDERS,
+            }),
       llmApiKey: async ({ results: { llmProvider } }) => {
+        if (skip?.llmApiKey) return undefined;
+
+        const llmName = LLM_PROVIDERS.find(p => p.value === llmProvider)?.label || 'provider';
         const keyChoice = await p.select({
-          message: `Enter your ${llmProvider} API key?`,
+          message: `Enter your ${llmName} API key?`,
           options: [
             { value: 'skip', label: 'Skip for now', hint: 'default' },
             { value: 'enter', label: 'Enter API key' },
@@ -568,6 +574,9 @@ export const interactivePrompt = async () => {
           return p.text({
             message: 'Enter your API key:',
             placeholder: 'sk-...',
+            validate: value => {
+              if (value.length === 0) return 'API key cannot be empty';
+            },
           });
         }
         return undefined;
@@ -578,7 +587,7 @@ export const interactivePrompt = async () => {
         const vscodeIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`vscode`);
 
         const editor = await p.select({
-          message: `Make your AI IDE into a Mastra expert? (installs Mastra docs MCP server)`,
+          message: `Make your IDE into a Mastra expert? (Installs Mastra's MCP server)`,
           options: [
             { value: 'skip', label: 'Skip for now', hint: 'default' },
             {
@@ -601,7 +610,7 @@ export const interactivePrompt = async () => {
               label: 'VSCode',
               hint: vscodeIsAlreadyInstalled ? `Already installed` : undefined,
             },
-          ],
+          ] satisfies { value: Editor | 'skip'; label: string; hint?: string }[],
         });
 
         if (editor === `skip`) return undefined;

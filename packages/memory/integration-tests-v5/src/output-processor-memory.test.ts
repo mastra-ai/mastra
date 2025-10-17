@@ -104,7 +104,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     }
   }
 
-  it('should persist PII-redacted messages to memory using generateVNext', async () => {
+  it('should persist PII-redacted messages to memory using generate', async () => {
     // Create a mock model that returns PII data
     const mockModel = new MockLanguageModelV2({
       doStream: async () => ({
@@ -135,8 +135,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     const threadId = `thread-pii-${Date.now()}`;
     const resourceId = 'test-resource-pii';
 
-    // Generate a response with memory enabled using generateVNext
-    const result = await agent.generateVNext('Share your contact info', {
+    // Generate a response with memory enabled using generate
+    const result = await agent.generate('Share your contact info', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -187,7 +187,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     expect(savedText).not.toContain('123-45-6789');
   });
 
-  it('should persist PII-redacted messages to memory using streamVNext', async () => {
+  it('should persist PII-redacted messages to memory using stream', async () => {
     // Create a mock model that returns PII data
     const mockModel = new MockLanguageModelV2({
       doStream: async () => ({
@@ -218,8 +218,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     const threadId = `thread-pii-streamvnext-${Date.now()}`;
     const resourceId = 'test-resource-pii';
 
-    // Generate a response with memory enabled using generateVNext
-    const result = await agent.streamVNext('Share your contact info', {
+    // Generate a response with memory enabled using generate
+    const result = await agent.stream('Share your contact info', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -401,8 +401,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     const threadId = `thread-chain-${Date.now()}`;
     const resourceId = 'test-resource-chain';
 
-    // Generate a response using generateVNext
-    const result = await agent.generateVNext('Say something', {
+    // Generate a response using generate
+    const result = await agent.generate('Say something', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -524,8 +524,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     const threadId = `thread-refresh-${Date.now()}`;
     const resourceId = 'test-resource-refresh';
 
-    // First interaction - generate response using generateVNext
-    const result = await agent.generateVNext('What is my card number?', {
+    // First interaction - generate response using generate
+    const result = await agent.generate('What is my card number?', {
       memory: {
         thread: threadId,
         resource: resourceId,

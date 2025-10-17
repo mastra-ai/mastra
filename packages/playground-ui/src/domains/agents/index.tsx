@@ -8,3 +8,4 @@ export * from './components/provider-map-icon';
 export * from './components/agent-metadata';
 export * from './components/agent-entity-header';
 export * from './components/chat-threads';
+export * from './utils/extractPrompt';

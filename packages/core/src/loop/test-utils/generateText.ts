@@ -7,7 +7,14 @@ import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import type { LoopOptions } from '../types';
 import { MockTracer } from './mockTracer';
-import { createTestModels, modelWithFiles, modelWithReasoning, modelWithSources, testUsage } from './utils';
+import {
+  createMessageListWithUserMessage,
+  createTestModels,
+  modelWithFiles,
+  modelWithReasoning,
+  modelWithSources,
+  testUsage,
+} from './utils';
 
 export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   const generateText = async (args: Omit<LoopOptions, 'runId'>): ReturnType<typeof generateText5> => {
@@ -35,16 +42,10 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.content', () => {
       // TODO: content is not in the correct shape. missing `source` chunks if tool calls are included in stream
       it.todo('should generate content', async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'prompt',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
 
         const result = await generateText({
+          agentId: 'agent-id',
           models: createTestModels({
             stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
               { type: 'text-start', id: '1' },
@@ -162,8 +163,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.text', () => {
       it('should generate text', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: createTestModels(),
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(modelWithSources.doGenerateCalls).toMatchSnapshot();
@@ -174,8 +176,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.reasoningText', () => {
       it('should contain reasoning string from model response', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(result.reasoningText).toStrictEqual(
@@ -187,8 +190,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.sources', () => {
       it('should contain sources', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(await result.sources).toMatchSnapshot();
@@ -198,8 +202,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.files', () => {
       it.todo('should contain files', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(await result.files).toMatchSnapshot();
@@ -290,8 +295,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
       it.todo('should add the reasoning from the model response to the step result', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
           _internal: {
             generateId: mockId({ prefix: 'id' }),
             currentDate: () => new Date(0),
@@ -303,8 +309,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
       it.todo('should contain sources', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
           _internal: {
             generateId: mockId({ prefix: 'id' }),
             currentDate: () => new Date(0),
@@ -318,8 +325,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
       // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
       it.todo('should contain files', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
           _internal: {
             generateId: mockId({ prefix: 'id' }),
             currentDate: () => new Date(0),
@@ -332,15 +340,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     describe.todo('result.toolCalls', () => {
       it('should contain tool calls', async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
         const result = await generateText({
+          agentId: 'agent-id',
           models: [
             {
               maxRetries: 0,
@@ -439,15 +441,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     describe.todo('result.toolResults', () => {
       it('should contain tool results', async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
         const result = await generateText({
+          agentId: 'agent-id',
           models: [
             {
               maxRetries: 0,
@@ -532,15 +528,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     describe.todo('result.providerMetadata', () => {
       it('should contain provider metadata', async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
         const result = await generateText({
+          agentId: 'agent-id',
           models: [
             {
               maxRetries: 0,
@@ -573,16 +563,10 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     describe.todo('result.response.messages', () => {
       it('should contain assistant response message when there are no tool calls', async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
 
         const result = await generateText({
+          agentId: 'agent-id',
           models: [
             {
               maxRetries: 0,
@@ -607,15 +591,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
       });
 
       it('should contain assistant response message and tool message when there are tool calls with results', async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
         const result = await generateText({
+          agentId: 'agent-id',
           models: [
             {
               maxRetries: 0,
@@ -654,15 +632,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
       });
 
       it('should contain reasoning', async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
         const result = await generateText({
+          agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
           messageList,
         });
@@ -674,6 +646,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.request', () => {
       it('should contain request body', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [
             {
               maxRetries: 0,
@@ -694,7 +667,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               }),
             },
           ],
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(await result.request).toStrictEqual({
@@ -706,6 +679,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.response', () => {
       it('should contain response body and headers', async () => {
         const result = await generateText({
+          agentId: 'agent-id',
           models: [
             {
               maxRetries: 0,
@@ -735,7 +709,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             },
           ],
           _internal: { generateId: () => '1234', currentDate: () => new Date(0), now: () => 0 },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(result.steps?.[0]?.response).toMatchInlineSnapshot(`
@@ -770,7 +744,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 "id": "1234",
                 "metadata": {
                   "__originalContent": "Hello, world!",
-                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "createdAt": 2024-01-01T00:00:00.001Z,
                 },
                 "parts": [
                   {
@@ -815,7 +789,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 "id": "1234",
                 "metadata": {
                   "__originalContent": "Hello, world!",
-                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "createdAt": 2024-01-01T00:00:00.001Z,
                 },
                 "parts": [
                   {
@@ -2072,15 +2046,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     it('should record successful tool call', async () => {
       const tracer = new MockTracer();
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'user',
-      );
+      const messageList = createMessageListWithUserMessage();
       await generateText({
+        agentId: 'agent-id',
         models: [
           {
             id: 'test-model',

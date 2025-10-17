@@ -33,8 +33,8 @@ await agent.getDefaultStreamOptions();
   content={[
     {
       name: "defaultOptions",
-      type: "AgentStreamOptions | Promise<AgentStreamOptions>",
-      description: "The default streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
+      type: "AgentExecutionOptions<Output> | Promise<AgentExecutionOptions<Output>>",
+      description: "The default vNext streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
     },
   ]}
 />
@@ -63,6 +63,5 @@ await agent.getDefaultStreamOptions({
 
 ## Related
 
-- [Generating responses](../../docs/agents/overview.mdx#generating-responses)
-- [Streaming responses](../../docs/agents/overview.mdx#streaming-responses)
-- [Agent Runtime Context](../../docs/agents/runtime-context.mdx)
+- [Streaming with agents](../../docs/streaming/overview.mdx#streaming-with-agents)
+- [Runtime Context](../../docs/server-db/runtime-context.mdx)

@@ -1,16 +1,12 @@
 ---
-title: "Reference: ChunkType (Experimental) | Agents | Mastra Docs"
+title: "Reference: ChunkType | Agents | Mastra Docs"
 description: "Documentation for the ChunkType type used in Mastra streaming responses, defining all possible chunk types and their payloads."
 ---
 
 import { Callout } from "nextra/components";
 import { PropertiesTable } from "@/components/properties-table";
 
-# ChunkType (Experimental)
-
-<Callout type="important">
-  <strong className="block">Experimental API: </strong>This type is part of the experimental `.streamVNext()` method. The API may change as we refine the feature based on feedback.
-</Callout>
+# ChunkType
 
 The `ChunkType` type defines the mastra format of stream chunks that can be emitted during streaming responses from agents.
 
@@ -766,7 +762,7 @@ Contains metadata about the LLM provider's response. Emitted by some providers a
 
 ### watch
 
-Contains monitoring and observability data from agent execution. Can include workflow state information, execution progress, or other runtime details depending on the context where `streamVNext()` is used.
+Contains monitoring and observability data from agent execution. Can include workflow state information, execution progress, or other runtime details depending on the context where `stream()` is used.
 
 <PropertiesTable
   content={[
@@ -819,7 +815,7 @@ Emitted when the stream is forcibly terminated due to content being blocked by o
 ## Usage Example
 
 ```typescript
-const stream = await agent.streamVNext("Hello");
+const stream = await agent.stream("Hello");
 
 for await (const chunk of stream.fullStream) {
   switch (chunk.type) {
@@ -853,6 +849,6 @@ for await (const chunk of stream.fullStream) {
 
 ## Related Types
 
+- [.stream()](./agents/stream.mdx) - Method that returns streams emitting these chunks
 - [MastraModelOutput](./agents/MastraModelOutput.mdx) - The stream object that emits these chunks
-- [agent.streamVNext()](./agents/streamVNext.mdx) - Method that returns streams emitting these chunks for agents
 - [workflow.streamVNext()](./workflows/streamVNext.mdx) - Method that returns streams emitting these chunks for workflows

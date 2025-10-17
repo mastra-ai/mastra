@@ -3,10 +3,10 @@ import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { PostgresStoreConfig } from '../shared/config';
 import { PostgresStore } from '.';
-import type { PostgresConfig } from '.';
 
-export const TEST_CONFIG: PostgresConfig = {
+export const TEST_CONFIG: PostgresStoreConfig = {
   host: process.env.POSTGRES_HOST || 'localhost',
   port: Number(process.env.POSTGRES_PORT) || 5434,
   database: process.env.POSTGRES_DB || 'postgres',
@@ -928,6 +928,213 @@ export function pgTests() {
       });
     });
 
+    describe('Timestamp Fallback Handling', () => {
+      let testThreadId: string;
+      let testResourceId: string;
+      let testMessageId: string;
+
+      beforeAll(async () => {
+        store = new PostgresStore(TEST_CONFIG);
+        await store.init();
+      });
+      afterAll(async () => {
+        try {
+          await store.close();
+        } catch {}
+      });
+
+      beforeEach(async () => {
+        testThreadId = `thread-${Date.now()}`;
+        testResourceId = `resource-${Date.now()}`;
+        testMessageId = `msg-${Date.now()}`;
+      });
+
+      it('should use createdAtZ over createdAt for messages when both exist', async () => {
+        // Create a thread first
+        const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
+        await store.saveThread({ thread });
+
+        // Directly insert a message with both createdAt and createdAtZ where they differ
+        const createdAtValue = new Date('2024-01-01T10:00:00Z');
+        const createdAtZValue = new Date('2024-01-01T15:00:00Z'); // 5 hours later - clearly different
+
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [testMessageId, testThreadId, 'Test message', 'user', 'v2', testResourceId, createdAtValue, createdAtZValue],
+        );
+
+        // Test getMessages
+        const messages = await store.getMessages({ threadId: testThreadId, format: 'v2' });
+        expect(messages.length).toBe(1);
+        expect(messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
+        expect(messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
+
+        // Test getMessagesById
+        const messagesById = await store.getMessagesById({ messageIds: [testMessageId], format: 'v2' });
+        expect(messagesById.length).toBe(1);
+        expect(messagesById[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesById[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
+        expect(messagesById[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
+
+        // Test getMessagesPaginated
+        const messagesPaginated = await store.getMessagesPaginated({
+          threadId: testThreadId,
+          format: 'v2',
+        });
+        expect(messagesPaginated.messages.length).toBe(1);
+        expect(messagesPaginated.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesPaginated.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
+        expect(messagesPaginated.messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
+      });
+
+      it('should fallback to createdAt when createdAtZ is null for legacy messages', async () => {
+        // Create a thread first
+        const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
+        await store.saveThread({ thread });
+
+        // Directly insert a message with only createdAt (simulating old records)
+        const createdAtValue = new Date('2024-01-01T10:00:00Z');
+
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)`,
+          [testMessageId, testThreadId, 'Legacy message', 'user', 'v2', testResourceId, createdAtValue],
+        );
+
+        // Test getMessages
+        const messages = await store.getMessages({ threadId: testThreadId, format: 'v2' });
+        expect(messages.length).toBe(1);
+        expect(messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
+
+        // Test getMessagesById
+        const messagesById = await store.getMessagesById({ messageIds: [testMessageId], format: 'v2' });
+        expect(messagesById.length).toBe(1);
+        expect(messagesById[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesById[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
+
+        // Test getMessagesPaginated
+        const messagesPaginated = await store.getMessagesPaginated({
+          threadId: testThreadId,
+          format: 'v2',
+        });
+        expect(messagesPaginated.messages.length).toBe(1);
+        expect(messagesPaginated.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesPaginated.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
+      });
+
+      it('should have consistent timestamp handling between threads and messages', async () => {
+        // Create a thread first with a known createdAt timestamp
+        const threadCreatedAt = new Date('2024-01-01T10:00:00Z');
+        const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
+        thread.createdAt = threadCreatedAt;
+        await store.saveThread({ thread });
+
+        // Save a message through the normal API with a different timestamp
+        const messageCreatedAt = new Date('2024-01-01T12:00:00Z');
+        await store.saveMessages({
+          messages: [
+            {
+              id: testMessageId,
+              threadId: testThreadId,
+              resourceId: testResourceId,
+              role: 'user',
+              content: { format: 2, parts: [{ type: 'text', text: 'Test' }], content: 'Test' },
+              createdAt: messageCreatedAt,
+            },
+          ],
+          format: 'v2',
+        });
+
+        // Get thread
+        const retrievedThread = await store.getThreadById({ threadId: testThreadId });
+        expect(retrievedThread).toBeTruthy();
+        expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
+        expect(retrievedThread?.createdAt.getTime()).toBe(threadCreatedAt.getTime());
+
+        // Get messages
+        const messages = await store.getMessages({ threadId: testThreadId, format: 'v2' });
+        expect(messages.length).toBe(1);
+        expect(messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messages[0]?.createdAt.getTime()).toBe(messageCreatedAt.getTime());
+      });
+
+      it('should handle included messages with correct timestamp fallback', async () => {
+        // Create a thread
+        const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
+        await store.saveThread({ thread });
+
+        // Create multiple messages
+        const msg1Id = `${testMessageId}-1`;
+        const msg2Id = `${testMessageId}-2`;
+        const msg3Id = `${testMessageId}-3`;
+
+        const date1 = new Date('2024-01-01T10:00:00Z');
+        const date2 = new Date('2024-01-01T11:00:00Z');
+        const date2Z = new Date('2024-01-01T16:00:00Z'); // Different from date2
+        const date3 = new Date('2024-01-01T12:00:00Z');
+
+        // Insert messages with different createdAt/createdAtZ combinations
+        // msg1: has createdAtZ (should use it)
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [msg1Id, testThreadId, 'Message 1', 'user', 'v2', testResourceId, date1, date1],
+        );
+
+        // msg2: has NULL createdAtZ (should fallback to createdAt)
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)`,
+          [msg2Id, testThreadId, 'Message 2', 'assistant', 'v2', testResourceId, date2],
+        );
+
+        // msg3: has both createdAt and createdAtZ with different values (should use createdAtZ)
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [msg3Id, testThreadId, 'Message 3', 'user', 'v2', testResourceId, date3, date2Z],
+        );
+
+        // Test getMessages with include
+        const messages = await store.getMessages({
+          threadId: testThreadId,
+          format: 'v2',
+          selectBy: {
+            include: [
+              {
+                id: msg2Id,
+                withPreviousMessages: 1,
+                withNextMessages: 1,
+              },
+            ],
+          },
+        });
+
+        expect(messages.length).toBe(3);
+
+        // Find each message and verify correct timestamps
+        const message1 = messages.find(m => m.id === msg1Id);
+        expect(message1).toBeDefined();
+        expect(message1?.createdAt).toBeInstanceOf(Date);
+        expect(message1?.createdAt.getTime()).toBe(date1.getTime());
+
+        const message2 = messages.find(m => m.id === msg2Id);
+        expect(message2).toBeDefined();
+        expect(message2?.createdAt).toBeInstanceOf(Date);
+        expect(message2?.createdAt.getTime()).toBe(date2.getTime());
+
+        const message3 = messages.find(m => m.id === msg3Id);
+        expect(message3).toBeDefined();
+        expect(message3?.createdAt).toBeInstanceOf(Date);
+        // Should use createdAtZ (date2Z), not createdAt (date3)
+        expect(message3?.createdAt.getTime()).toBe(date2Z.getTime());
+        expect(message3?.createdAt.getTime()).not.toBe(date3.getTime());
+      });
+    });
+
     describe('Validation', () => {
       const validConfig = TEST_CONFIG as any;
 
@@ -999,6 +1206,72 @@ export function pgTests() {
             stream: () => ({}), // Mock stream
           };
           expect(() => new PostgresStore(clientConfig as any)).not.toThrow();
+        });
+      });
+
+      describe('SSL Configuration', () => {
+        it('accepts connectionString with ssl: true', () => {
+          expect(() => new PostgresStore({ connectionString, ssl: true })).not.toThrow();
+        });
+
+        it('accepts connectionString with ssl object', () => {
+          expect(
+            () =>
+              new PostgresStore({
+                connectionString,
+                ssl: { rejectUnauthorized: false },
+              }),
+          ).not.toThrow();
+        });
+
+        it('accepts host config with ssl: true', () => {
+          const config = {
+            ...validConfig,
+            ssl: true,
+          };
+          expect(() => new PostgresStore(config)).not.toThrow();
+        });
+
+        it('accepts host config with ssl object', () => {
+          const config = {
+            ...validConfig,
+            ssl: { rejectUnauthorized: false },
+          };
+          expect(() => new PostgresStore(config)).not.toThrow();
+        });
+      });
+
+      describe('Pool Options', () => {
+        it('accepts max and idleTimeoutMillis with connectionString', () => {
+          const config = {
+            connectionString,
+            max: 30,
+            idleTimeoutMillis: 60000,
+          };
+          expect(() => new PostgresStore(config)).not.toThrow();
+        });
+
+        it('accepts max and idleTimeoutMillis with host config', () => {
+          const config = {
+            ...validConfig,
+            max: 30,
+            idleTimeoutMillis: 60000,
+          };
+          expect(() => new PostgresStore(config)).not.toThrow();
+        });
+      });
+
+      describe('Schema Configuration', () => {
+        it('accepts schemaName with connectionString', () => {
+          expect(() => new PostgresStore({ connectionString, schemaName: 'custom_schema' })).not.toThrow();
+        });
+
+        it('accepts schemaName with host config', () => {
+          const config = {
+            ...validConfig,
+            schemaName: 'custom_schema',
+          };
+          expect(() => new PostgresStore(config)).not.toThrow();
         });
       });
 

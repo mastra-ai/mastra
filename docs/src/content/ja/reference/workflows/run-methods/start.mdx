@@ -58,7 +58,7 @@ const result = await run.start({
   content={[
     {
       name: "result",
-      type: "Promise<WorkflowResult<TOutput, TSteps>>",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
       description: "ステップの出力とステータスを含むワークフロー実行結果で解決される Promise",
     },
   ]}

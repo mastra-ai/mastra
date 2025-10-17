@@ -4,12 +4,9 @@ import {
   Badge,
   WorkflowIcon,
   WorkflowTrigger,
-  PlaygroundTabs,
-  TabList,
-  Tab,
-  TabContent,
   EntityHeader,
   useWorkflow,
+  WorkflowRunDetail,
 } from '@mastra/playground-ui';
 
 import { useExecuteWorkflow, useStreamWorkflow, useCancelWorkflowRun } from '@/hooks/use-workflows';
@@ -17,12 +14,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 
 import { CopyIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { WorkflowRuns } from '@mastra/playground-ui';
-import { useNavigate, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
 export function WorkflowInformation({ workflowId }: { workflowId: string }) {
   const params = useParams();
-  const navigate = useNavigate();
   const { data: workflow, isLoading } = useWorkflow(workflowId);
 
   const { createWorkflowRun } = useExecuteWorkflow();
@@ -48,7 +43,7 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
   }, [runId, params]);
 
   return (
-    <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto">
+    <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto border-l-sm border-border1">
       <EntityHeader icon={<WorkflowIcon />} title={workflow?.name || ''} isLoading={isLoading}>
         <div className="flex items-center gap-2 pt-2">
           <Tooltip>
@@ -69,37 +64,11 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
       </EntityHeader>
 
       <div className="overflow-y-auto border-t-sm border-border1">
-        <PlaygroundTabs defaultTab="run" className="h-[unset]">
-          <TabList className="sticky top-0 bg-surface3 z-10">
-            <Tab value="run" onClick={() => navigate(`/workflows/${workflowId}/graph`)}>
-              Run
-            </Tab>
-            <Tab value="runs">Runs</Tab>
-          </TabList>
-
-          <TabContent value="run">
-            {workflowId ? (
-              <WorkflowTrigger
-                workflowId={workflowId}
-                setRunId={setRunId}
-                workflow={workflow ?? undefined}
-                isLoading={isLoading}
-                createWorkflowRun={createWorkflowRun.mutateAsync}
-                streamWorkflow={streamWorkflow.mutateAsync}
-                resumeWorkflow={resumeWorkflowStream.mutateAsync}
-                streamResult={streamResult}
-                isStreamingWorkflow={isStreaming}
-                isCancellingWorkflowRun={isCancellingWorkflowRun}
-                cancelWorkflowRun={cancelWorkflowRun}
-              />
-            ) : null}
-          </TabContent>
-          <TabContent value="runs">
-            <WorkflowRuns
+        {workflowId ? (
+          params?.runId ? (
+            <WorkflowRunDetail
               workflowId={workflowId}
               runId={params?.runId}
-              onPressRun={({ workflowId, runId }) => navigate(`/workflows/${workflowId}/graph/${runId}`)}
-              onPressBackToRuns={() => navigate(`/workflows/${workflowId}/graph`)}
               setRunId={setRunId}
               workflow={workflow ?? undefined}
               isLoading={isLoading}
@@ -112,8 +81,22 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
               cancelWorkflowRun={cancelWorkflowRun}
               observeWorkflowStream={observeWorkflowStream.mutate}
             />
-          </TabContent>
-        </PlaygroundTabs>
+          ) : (
+            <WorkflowTrigger
+              workflowId={workflowId}
+              setRunId={setRunId}
+              workflow={workflow ?? undefined}
+              isLoading={isLoading}
+              createWorkflowRun={createWorkflowRun.mutateAsync}
+              streamWorkflow={streamWorkflow.mutateAsync}
+              resumeWorkflow={resumeWorkflowStream.mutateAsync}
+              streamResult={streamResult}
+              isStreamingWorkflow={isStreaming}
+              isCancellingWorkflowRun={isCancellingWorkflowRun}
+              cancelWorkflowRun={cancelWorkflowRun}
+            />
+          )
+        ) : null}
       </div>
     </div>
   );

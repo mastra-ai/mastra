@@ -693,65 +693,73 @@ export class StoreOperationsPG extends StoreOperations {
   }
 
   /**
-   * Creates automatic indexes for optimal query performance
+   * Returns definitions for automatic performance indexes
    * These composite indexes cover both filtering and sorting in single index
+   */
+  protected getAutomaticIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.schemaName ? `${this.schemaName}_` : '';
+    return [
+      // Composite index for threads (filter + sort)
+      {
+        name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
+        table: TABLE_THREADS,
+        columns: ['resourceId', 'createdAt DESC'],
+      },
+      // Composite index for messages (filter + sort)
+      {
+        name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
+        table: TABLE_MESSAGES,
+        columns: ['thread_id', 'createdAt DESC'],
+      },
+      // Composite index for traces (filter + sort)
+      {
+        name: `${schemaPrefix}mastra_traces_name_starttime_idx`,
+        table: TABLE_TRACES,
+        columns: ['name', 'startTime DESC'],
+      },
+      // Composite index for evals (filter + sort)
+      {
+        name: `${schemaPrefix}mastra_evals_agent_name_created_at_idx`,
+        table: TABLE_EVALS,
+        columns: ['agent_name', 'created_at DESC'],
+      },
+      // Composite index for scores (filter + sort)
+      {
+        name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
+        table: TABLE_SCORERS,
+        columns: ['traceId', 'spanId', 'createdAt DESC'],
+      },
+      // AI Spans indexes for optimal trace querying
+      {
+        name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
+        table: TABLE_AI_SPANS,
+        columns: ['traceId', 'startedAt DESC'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
+        table: TABLE_AI_SPANS,
+        columns: ['parentSpanId', 'startedAt DESC'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_name_idx`,
+        table: TABLE_AI_SPANS,
+        columns: ['name'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
+        table: TABLE_AI_SPANS,
+        columns: ['spanType', 'startedAt DESC'],
+      },
+    ];
+  }
+
+  /**
+   * Creates automatic indexes for optimal query performance
+   * Uses getAutomaticIndexDefinitions() to determine which indexes to create
    */
   async createAutomaticIndexes(): Promise<void> {
     try {
-      const schemaPrefix = this.schemaName ? `${this.schemaName}_` : '';
-      const indexes: CreateIndexOptions[] = [
-        // Composite index for threads (filter + sort)
-        {
-          name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
-          table: TABLE_THREADS,
-          columns: ['resourceId', 'createdAt DESC'],
-        },
-        // Composite index for messages (filter + sort)
-        {
-          name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
-          table: TABLE_MESSAGES,
-          columns: ['thread_id', 'createdAt DESC'],
-        },
-        // Composite index for traces (filter + sort)
-        {
-          name: `${schemaPrefix}mastra_traces_name_starttime_idx`,
-          table: TABLE_TRACES,
-          columns: ['name', 'startTime DESC'],
-        },
-        // Composite index for evals (filter + sort)
-        {
-          name: `${schemaPrefix}mastra_evals_agent_name_created_at_idx`,
-          table: TABLE_EVALS,
-          columns: ['agent_name', 'created_at DESC'],
-        },
-        // Composite index for scores (filter + sort)
-        {
-          name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
-          table: TABLE_SCORERS,
-          columns: ['trace_id', 'span_id', 'created_at DESC'],
-        },
-        // AI Spans indexes for optimal trace querying
-        {
-          name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
-          table: TABLE_AI_SPANS,
-          columns: ['traceId', 'startedAt DESC'],
-        },
-        {
-          name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
-          table: TABLE_AI_SPANS,
-          columns: ['parentSpanId', 'startedAt DESC'],
-        },
-        {
-          name: `${schemaPrefix}mastra_ai_spans_name_idx`,
-          table: TABLE_AI_SPANS,
-          columns: ['name'],
-        },
-        {
-          name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
-          table: TABLE_AI_SPANS,
-          columns: ['spanType', 'startedAt DESC'],
-        },
-      ];
+      const indexes = this.getAutomaticIndexDefinitions();
 
       for (const indexOptions of indexes) {
         try {

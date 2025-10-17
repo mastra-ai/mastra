@@ -1,25 +1,21 @@
 ---
-title: "Reference: MastraModelOutput (Experimental) | Agents | Mastra Docs"
-description: "Complete reference for MastraModelOutput - the stream object returned by agent.streamVNext() with streaming and promise-based access to model outputs."
+title: "Reference: MastraModelOutput | Agents | Mastra Docs"
+description: "Complete reference for MastraModelOutput - the stream object returned by agent.stream() with streaming and promise-based access to model outputs."
 ---
 
 import { Callout } from "nextra/components";
 import { PropertiesTable } from "@/components/properties-table";
 
-# MastraModelOutput (Experimental)
+# MastraModelOutput
 
-<Callout type="important">
-  <strong className="block">Experimental API: </strong>This type is part of the experimental `.streamVNext()` method. The API may change as we refine the feature based on feedback.
-</Callout>
-
-The `MastraModelOutput` class is returned by [.streamVNext()](./streamVNext.mdx) and provides both streaming and promise-based access to model outputs. It supports structured output generation, tool calls, reasoning, and comprehensive usage tracking.
+The `MastraModelOutput` class is returned by [.stream()](./stream.mdx) and provides both streaming and promise-based access to model outputs. It supports structured output generation, tool calls, reasoning, and comprehensive usage tracking.
 
 ```typescript
-// MastraModelOutput is returned by agent.streamVNext()
-const stream = await agent.streamVNext("Hello world");
+// MastraModelOutput is returned by agent.stream()
+const stream = await agent.stream("Hello world");
 ```
 
-For setup and basic usage, see the [.streamVNext()](./streamVNext.mdx) method documentation.
+For setup and basic usage, see the [.stream()](./stream.mdx) method documentation.
 
 ## Streaming Properties
 
@@ -206,7 +202,7 @@ These properties resolve to final values after the stream completes:
 ### Basic Text Streaming
 
 ```typescript
-const stream = await agent.streamVNext("Write a haiku");
+const stream = await agent.stream("Write a haiku");
 
 // Stream text as it's generated
 for await (const text of stream.textStream) {
@@ -221,12 +217,14 @@ console.log(fullText);
 ### Structured Output Streaming
 
 ```typescript
-const stream = await agent.streamVNext("Generate user data", {
-  output: z.object({
-    name: z.string(),
-    age: z.number(),
-    email: z.string()
-  })
+const stream = await agent.stream("Generate user data", {
+  structuredOutput: {
+    schema: z.object({
+      name: z.string(),
+      age: z.number(),
+      email: z.string()
+    })
+  },
 });
 
 // Stream partial objects
@@ -238,11 +236,12 @@ for await (const partial of stream.objectStream) {
 const user = await stream.object;
 console.log("Final:", user); // { name: "John", age: 30, email: "john@example.com" }
 ```
+```
 
 ### Tool Calls and Results
 
 ```typescript
-const stream = await agent.streamVNext("What's the weather in NYC?", {
+const stream = await agent.stream("What's the weather in NYC?", {
   tools: { weather: weatherTool }
 });
 
@@ -257,7 +256,7 @@ console.log("Results:", toolResults);
 ### Complete Output Access
 
 ```typescript
-const stream = await agent.streamVNext("Analyze this data");
+const stream = await agent.stream("Analyze this data");
 
 const output = await stream.getFullOutput();
 console.log({
@@ -271,7 +270,7 @@ console.log({
 ### Full Stream Processing
 
 ```typescript
-const stream = await agent.streamVNext("Complex task");
+const stream = await agent.stream("Complex task");
 
 for await (const chunk of stream.fullStream) {
   switch (chunk.type) {
@@ -294,7 +293,7 @@ for await (const chunk of stream.fullStream) {
 ### Error Handling
 
 ```typescript
-const stream = await agent.streamVNext("Analyze this data");
+const stream = await agent.stream("Analyze this data");
 
 try {
   // Option 1: Handle errors in consumeStream
@@ -318,5 +317,5 @@ if (stream.error) {
 
 ## Related Types
 
+- [.stream()](./stream.mdx) - Method that returns MastraModelOutput
 - [ChunkType](../ChunkType.mdx) - All possible chunk types in the full stream
-- [.streamVNext()](./streamVNext.mdx) - Method that returns MastraModelOutput

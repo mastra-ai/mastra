@@ -46,7 +46,7 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
 
     // Semantic Recall section
     if (config.semanticRecall) {
-      const enabled = !Boolean(config.semanticRecall);
+      const enabled = Boolean(config.semanticRecall);
       const semanticRecall = typeof config.semanticRecall === 'object' ? config.semanticRecall : ({} as SemanticRecall);
 
       sections.push({
@@ -169,7 +169,7 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
             </button>
             {expandedSections.has(section.title) && (
               <div className="px-3 pb-2 space-y-1">
-                {section.items.map((item, index) => (
+                {section.items.map(item => (
                   <div key={`${section.title}-${item.label}`} className="flex items-center justify-between py-1">
                     <span className="text-xs text-icon3">{item.label}</span>
                     {renderValue(item.value || '', item.badge)}

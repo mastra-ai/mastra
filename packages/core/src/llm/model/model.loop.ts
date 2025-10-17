@@ -153,7 +153,7 @@ export class MastraLLMVNext extends MastraBase {
     telemetry_settings,
     threadId,
     resourceId,
-    output,
+    structuredOutput,
     options,
     outputProcessors,
     returnScorerData,
@@ -162,8 +162,8 @@ export class MastraLLMVNext extends MastraBase {
     messageList,
     requireToolApproval,
     _internal,
-    // ...rest
-  }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
+    agentId,
+  }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
     if (maxSteps && typeof maxSteps === 'number') {
@@ -220,11 +220,12 @@ export class MastraLLMVNext extends MastraBase {
           ...telemetry_settings,
         },
         _internal,
-        output,
+        structuredOutput,
         outputProcessors,
         returnScorerData,
         llmAISpan,
         requireToolApproval,
+        agentId,
         options: {
           ...options,
           onStepFinish: async props => {

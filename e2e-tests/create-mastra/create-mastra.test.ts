@@ -48,8 +48,11 @@ describe('create mastra', () => {
     beforeAll(
       async () => {
         port = await getPort();
-        proc = execa('pnpm', ['dev', '--port', port.toString()], {
+        proc = execa('pnpm', ['dev'], {
           cwd: projectPath,
+          env: {
+            PORT: port.toString(),
+          },
         });
         proc!.stderr?.on('data', data => {
           console.error(data?.toString());
@@ -98,6 +101,7 @@ describe('create mastra', () => {
               "agents": {},
               "defaultGenerateOptions": {},
               "defaultStreamOptions": {},
+              "inputProcessors": [],
               "instructions": "
                 You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
 
@@ -113,15 +117,16 @@ describe('create mastra', () => {
                 Use the weatherTool to fetch current weather data.
           ",
               "modelId": "gpt-4o-mini",
-              "modelVersion": "v1",
+              "modelVersion": "v2",
               "name": "Weather Agent",
-              "provider": "openai.chat",
+              "outputProcessors": [],
+              "provider": "openai",
               "tools": {
                 "weatherTool": {
                   "description": "Get current weather for a location",
                   "id": "get-weather",
-                  "inputSchema": "{"json":{"type":"object","properties":{"location":{"type":"string","description":"City name"}},"required":["location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}",
-                  "outputSchema": "{"json":{"type":"object","properties":{"temperature":{"type":"number"},"feelsLike":{"type":"number"},"humidity":{"type":"number"},"windSpeed":{"type":"number"},"windGust":{"type":"number"},"conditions":{"type":"string"},"location":{"type":"string"}},"required":["temperature","feelsLike","humidity","windSpeed","windGust","conditions","location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}",
+                  "inputSchema": "{"json":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"location":{"description":"City name","type":"string"}},"required":["location"],"additionalProperties":false}}",
+                  "outputSchema": "{"json":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"temperature":{"type":"number"},"feelsLike":{"type":"number"},"humidity":{"type":"number"},"windSpeed":{"type":"number"},"windGust":{"type":"number"},"conditions":{"type":"string"},"location":{"type":"string"}},"required":["temperature","feelsLike","humidity","windSpeed","windGust","conditions","location"],"additionalProperties":false}}",
                   "requireApproval": false,
                 },
               },

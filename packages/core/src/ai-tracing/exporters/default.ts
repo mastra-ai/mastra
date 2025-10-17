@@ -148,7 +148,7 @@ export class DefaultExporter implements AITracingExporter {
     this.resolvedStrategy = resolveStrategy(this.config, storage, this.logger);
     this.strategyInitialized = true;
 
-    this.logger.info('AI tracing exporter initialized', {
+    this.logger.debug('AI tracing exporter initialized', {
       strategy: this.resolvedStrategy,
       source: this.config.strategy !== 'auto' ? 'user' : 'auto',
       storageAdapter: storage.constructor.name,

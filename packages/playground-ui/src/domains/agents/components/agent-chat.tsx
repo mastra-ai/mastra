@@ -10,6 +10,7 @@ export const AgentChat = ({
   agentName,
   threadId,
   initialMessages,
+  initialLegacyMessages,
   memory,
   refreshThreadList,
   modelVersion,
@@ -25,6 +26,7 @@ export const AgentChat = ({
       modelVersion={modelVersion}
       threadId={threadId}
       initialMessages={initialMessages}
+      initialLegacyMessages={initialLegacyMessages}
       memory={memory}
       refreshThreadList={refreshThreadList}
       settings={settings}

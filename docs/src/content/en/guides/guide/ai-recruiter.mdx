@@ -14,7 +14,7 @@ You'll create a workflow that gathers information from a candidate's resume, the
 ## Prerequisites
 
 - Node.js `v20.0` or later installed
-- An API key from a supported [Model Provider](/docs/getting-started/model-providers)
+- An API key from a supported [Model Provider](/models)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
 ## Building the Workflow
@@ -81,12 +81,14 @@ const gatherCandidateInfo = createStep({
 "${resumeText}"`;
 
     const res = await recruiter.generate(prompt, {
-      output: z.object({
-        candidateName: z.string(),
-        isTechnical: z.boolean(),
-        specialty: z.string(),
-        resumeText: z.string(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          candidateName: z.string(),
+          isTechnical: z.boolean(),
+          specialty: z.string(),
+          resumeText: z.string(),
+        })
+      },
     });
 
     return res.object;

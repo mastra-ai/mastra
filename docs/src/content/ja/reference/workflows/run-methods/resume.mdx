@@ -63,7 +63,7 @@ if (result.status === "suspended") {
   content={[
     {
       name: "result",
-      type: "Promise<WorkflowResult<TOutput, TSteps>>",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
       description: "ステップの出力とステータスを含むワークフロー実行結果へと解決される Promise",
     },
   ]}

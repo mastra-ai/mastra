@@ -53,6 +53,34 @@ import { z } from 'zod';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
 import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MCPTool } from './types';
+/**
+ * MCPServer exposes Mastra tools, agents, and workflows as a Model Context Protocol (MCP) server.
+ *
+ * This class allows any MCP client (like Cursor, Windsurf, or Claude Desktop) to connect and use your
+ * Mastra capabilities. It supports both stdio (subprocess) and SSE (HTTP) MCP transports.
+ *
+ * @example
+ * ```typescript
+ * import { MCPServer } from '@mastra/mcp';
+ * import { createTool } from '@mastra/core/tools';
+ * import { z } from 'zod';
+ *
+ * const weatherTool = createTool({
+ *   id: 'getWeather',
+ *   description: 'Gets the current weather for a location.',
+ *   inputSchema: z.object({ location: z.string() }),
+ *   execute: async ({ context }) => `Weather in ${context.location} is sunny.`,
+ * });
+ *
+ * const server = new MCPServer({
+ *   name: 'My Weather Server',
+ *   version: '1.0.0',
+ *   tools: { weatherTool },
+ * });
+ *
+ * await server.startStdio();
+ * ```
+ */
 export class MCPServer extends MCPServerBase {
   private server: Server;
   private stdioTransport?: StdioServerTransport;
@@ -69,41 +97,142 @@ export class MCPServer extends MCPServerBase {
   private promptOptions?: MCPServerPrompts;
   private subscriptions: Set<string> = new Set();
   private currentLoggingLevel: LoggingLevel | undefined;
+
+  /**
+   * Provides methods to notify clients about resource changes.
+   *
+   * @example
+   * ```typescript
+   * // Notify that a specific resource was updated
+   * await server.resources.notifyUpdated({ uri: 'file://data.txt' });
+   *
+   * // Notify that the resource list changed
+   * await server.resources.notifyListChanged();
+   * ```
+   */
   public readonly resources: ServerResourceActions;
+
+  /**
+   * Provides methods to notify clients about prompt changes.
+   *
+   * @example
+   * ```typescript
+   * // Notify that the prompt list changed
+   * await server.prompts.notifyListChanged();
+   * ```
+   */
   public readonly prompts: ServerPromptActions;
+
+  /**
+   * Provides methods for interactive user input collection during tool execution.
+   *
+   * @example
+   * ```typescript
+   * // Within a tool's execute function
+   * const result = await options.elicitation.sendRequest({
+   *   message: 'Please provide your email address',
+   *   requestedSchema: {
+   *     type: 'object',
+   *     properties: {
+   *       email: { type: 'string', format: 'email' }
+   *     },
+   *     required: ['email']
+   *   }
+   * });
+   * ```
+   */
   public readonly elicitation: ElicitationActions;
 
   /**
-   * Get the current stdio transport.
+   * Gets the stdio transport instance if the server was started using stdio.
+   *
+   * This is primarily for internal checks or testing purposes.
+   *
+   * @returns The stdio transport instance, or undefined if not using stdio transport
    */
   public getStdioTransport(): StdioServerTransport | undefined {
     return this.stdioTransport;
   }
 
   /**
-   * Get the current SSE transport.
+   * Gets the SSE transport instance if the server was started using SSE.
+   *
+   * This is primarily for internal checks or testing purposes.
+   *
+   * @returns The SSE transport instance, or undefined if not using SSE transport
    */
   public getSseTransport(): SSEServerTransport | undefined {
     return this.sseTransport;
   }
 
   /**
-   * Get the current SSE Hono transport.
+   * Gets the Hono SSE transport instance for a specific session.
+   *
+   * This is primarily for internal checks or testing purposes.
+   *
+   * @param sessionId - The session identifier
+   * @returns The Hono SSE transport instance, or undefined if session not found
    */
   public getSseHonoTransport(sessionId: string): SSETransport | undefined {
     return this.sseHonoTransports.get(sessionId);
   }
 
   /**
-   * Get the current server instance.
+   * Gets the underlying MCP SDK Server instance.
+   *
+   * This provides access to the low-level server instance for advanced use cases.
+   *
+   * @returns The Server instance from @modelcontextprotocol/sdk
    */
   public getServer(): Server {
     return this.server;
   }
 
   /**
-   * Construct a new MCPServer instance.
-   * @param opts - Configuration options for the server, including registry metadata.
+   * Creates a new MCPServer instance.
+   *
+   * The server exposes tools, agents, and workflows to MCP clients. Agents are automatically
+   * converted to tools named `ask_<agentKey>`, and workflows become tools named `run_<workflowKey>`.
+   *
+   * @param opts - Configuration options for the server
+   * @param opts.name - Descriptive name for the server (e.g., 'My Weather Server')
+   * @param opts.version - Semantic version of the server (e.g., '1.0.0')
+   * @param opts.tools - Object mapping tool names to tool definitions
+   * @param opts.agents - Optional object mapping agent identifiers to Agent instances
+   * @param opts.workflows - Optional object mapping workflow identifiers to Workflow instances
+   * @param opts.resources - Optional resource configuration for exposing data and content
+   * @param opts.prompts - Optional prompt configuration for exposing reusable templates
+   * @param opts.id - Optional unique identifier (generated if not provided)
+   * @param opts.description - Optional description of what the server does
+   *
+   * @example
+   * ```typescript
+   * import { MCPServer } from '@mastra/mcp';
+   * import { Agent } from '@mastra/core/agent';
+   * import { createTool } from '@mastra/core/tools';
+   * import { z } from 'zod';
+   *
+   * const myAgent = new Agent({
+   *   name: 'Helper',
+   *   description: 'A helpful assistant',
+   *   instructions: 'You are helpful.',
+   *   model: openai('gpt-4o-mini'),
+   * });
+   *
+   * const server = new MCPServer({
+   *   name: 'My Server',
+   *   version: '1.0.0',
+   *   tools: {
+   *     weatherTool: createTool({
+   *       id: 'getWeather',
+   *       description: 'Gets weather',
+   *       inputSchema: z.object({ location: z.string() }),
+   *       execute: async ({ context }) => `Sunny in ${context.location}`,
+   *     })
+   *   },
+   *   agents: { myAgent },
+   * });
+   * ```
    */
   constructor(opts: MCPServerConfig & { resources?: MCPServerResources; prompts?: MCPServerPrompts }) {
     super(opts);
@@ -821,7 +950,23 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Start the MCP server using stdio transport (for Windsurf integration).
+   * Starts the MCP server using standard input/output (stdio) transport.
+   *
+   * This is typically used when running the server as a command-line program that MCP clients
+   * spawn as a subprocess (e.g., integration with Windsurf, Cursor, or Claude Desktop).
+   *
+   * @throws {MastraError} If the stdio connection fails
+   *
+   * @example
+   * ```typescript
+   * const server = new MCPServer({
+   *   name: 'My Server',
+   *   version: '1.0.0',
+   *   tools: { weatherTool },
+   * });
+   *
+   * await server.startStdio();
+   * ```
    */
   public async startStdio(): Promise<void> {
     this.stdioTransport = new StdioServerTransport();
@@ -846,14 +991,38 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Handles MCP-over-SSE protocol for user-provided HTTP servers.
-   * Call this from your HTTP server for both the SSE and message endpoints.
+   * Integrates the MCP server with an existing HTTP server using Server-Sent Events (SSE).
    *
-   * @param url Parsed URL of the incoming request
-   * @param ssePath Path for establishing the SSE connection (e.g. '/sse')
-   * @param messagePath Path for POSTing client messages (e.g. '/message')
-   * @param req Incoming HTTP request
-   * @param res HTTP response (must support .write/.end)
+   * Call this method from your web server's request handler for both the SSE and message paths.
+   * This enables web-based MCP clients to connect to your server.
+   *
+   * @param options - Configuration for SSE integration
+   * @param options.url - Parsed URL of the incoming request
+   * @param options.ssePath - Path for establishing SSE connection (e.g., '/sse')
+   * @param options.messagePath - Path for POSTing client messages (e.g., '/message')
+   * @param options.req - Incoming HTTP request object
+   * @param options.res - HTTP response object (must support .write/.end)
+   *
+   * @throws {MastraError} If SSE connection setup fails
+   *
+   * @example
+   * ```typescript
+   * import http from 'http';
+   *
+   * const httpServer = http.createServer(async (req, res) => {
+   *   await server.startSSE({
+   *     url: new URL(req.url || '', `http://localhost:1234`),
+   *     ssePath: '/sse',
+   *     messagePath: '/message',
+   *     req,
+   *     res,
+   *   });
+   * });
+   *
+   * httpServer.listen(1234, () => {
+   *   console.log('MCP server listening on http://localhost:1234/sse');
+   * });
+   * ```
    */
   public async startSSE({ url, ssePath, messagePath, req, res }: MCPServerSSEOptions): Promise<void> {
     try {
@@ -896,13 +1065,37 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Handles MCP-over-SSE protocol for user-provided HTTP servers.
-   * Call this from your HTTP server for both the SSE and message endpoints.
+   * Integrates the MCP server with a Hono web framework using Server-Sent Events (SSE).
    *
-   * @param url Parsed URL of the incoming request
-   * @param ssePath Path for establishing the SSE connection (e.g. '/sse')
-   * @param messagePath Path for POSTing client messages (e.g. '/message')
-   * @param context Incoming Hono context
+   * Call this method from your Hono server's request handler for both the SSE and message paths.
+   * This enables Hono-based web applications to expose MCP servers.
+   *
+   * @param options - Configuration for Hono SSE integration
+   * @param options.url - Parsed URL of the incoming request
+   * @param options.ssePath - Path for establishing SSE connection (e.g., '/hono-sse')
+   * @param options.messagePath - Path for POSTing client messages (e.g., '/message')
+   * @param options.context - Hono context object
+   *
+   * @throws {MastraError} If Hono SSE connection setup fails
+   *
+   * @example
+   * ```typescript
+   * import { Hono } from 'hono';
+   *
+   * const app = new Hono();
+   *
+   * app.all('*', async (c) => {
+   *   const url = new URL(c.req.url);
+   *   return await server.startHonoSSE({
+   *     url,
+   *     ssePath: '/hono-sse',
+   *     messagePath: '/message',
+   *     context: c,
+   *   });
+   * });
+   *
+   * export default app;
+   * ```
    */
   public async startHonoSSE({ url, ssePath, messagePath, context }: MCPServerHonoSSEOptions) {
     try {
@@ -953,14 +1146,46 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Handles MCP-over-StreamableHTTP protocol for user-provided HTTP servers.
-   * Call this from your HTTP server for the streamable HTTP endpoint.
+   * Integrates the MCP server with an existing HTTP server using streamable HTTP transport.
    *
-   * @param url Parsed URL of the incoming request
-   * @param httpPath Path for establishing the streamable HTTP connection (e.g. '/mcp')
-   * @param req Incoming HTTP request
-   * @param res HTTP response (must support .write/.end)
-   * @param options Optional options to pass to the transport (e.g. sessionIdGenerator)
+   * This is the recommended modern transport method, providing better session management and
+   * reliability compared to SSE. Call this from your HTTP server's request handler.
+   *
+   * @param options - Configuration for HTTP integration
+   * @param options.url - Parsed URL of the incoming request
+   * @param options.httpPath - Path for the MCP endpoint (e.g., '/mcp')
+   * @param options.req - Incoming HTTP request (http.IncomingMessage)
+   * @param options.res - HTTP response object (http.ServerResponse)
+   * @param options.options - Optional transport options
+   * @param options.options.sessionIdGenerator - Function to generate unique session IDs (defaults to randomUUID)
+   * @param options.options.onsessioninitialized - Callback when a new session is initialized
+   * @param options.options.enableJsonResponse - If true, return JSON instead of SSE streaming
+   * @param options.options.eventStore - Event store for message resumability
+   *
+   * @throws {MastraError} If HTTP connection setup fails
+   *
+   * @example
+   * ```typescript
+   * import http from 'http';
+   * import { randomUUID } from 'crypto';
+   *
+   * const httpServer = http.createServer(async (req, res) => {
+   *   await server.startHTTP({
+   *     url: new URL(req.url || '', 'http://localhost:1234'),
+   *     httpPath: '/mcp',
+   *     req,
+   *     res,
+   *     options: {
+   *       sessionIdGenerator: () => randomUUID(),
+   *       onsessioninitialized: (sessionId) => {
+   *         console.log(`New MCP session: ${sessionId}`);
+   *       },
+   *     },
+   *   });
+   * });
+   *
+   * httpServer.listen(1234);
+   * ```
    */
   public async startHTTP({
     url,
@@ -1151,6 +1376,27 @@ export class MCPServer extends MCPServerBase {
     }
   }
 
+  /**
+   * Establishes the SSE connection for the MCP server.
+   *
+   * This is a lower-level method called internally by `startSSE()`. In most cases,
+   * you should use `startSSE()` instead which handles both connection establishment
+   * and message routing.
+   *
+   * @param params - Connection parameters
+   * @param params.messagePath - Path for POST requests from the client
+   * @param params.res - HTTP response object for the SSE stream
+   * @throws {MastraError} If SSE connection establishment fails
+   *
+   * @example
+   * ```typescript
+   * // Usually called internally by startSSE()
+   * await server.connectSSE({
+   *   messagePath: '/message',
+   *   res: response
+   * });
+   * ```
+   */
   public async connectSSE({
     messagePath,
     res,
@@ -1189,6 +1435,27 @@ export class MCPServer extends MCPServerBase {
     }
   }
 
+  /**
+   * Establishes the Hono SSE connection for the MCP server.
+   *
+   * This is a lower-level method called internally by `startHonoSSE()`. In most cases,
+   * you should use `startHonoSSE()` instead which handles both connection establishment
+   * and message routing.
+   *
+   * @param params - Connection parameters
+   * @param params.messagePath - Path for POST requests from the client
+   * @param params.stream - Hono SSE streaming API object
+   * @throws {MastraError} If Hono SSE connection establishment fails
+   *
+   * @example
+   * ```typescript
+   * // Usually called internally by startHonoSSE()
+   * await server.connectHonoSSE({
+   *   messagePath: '/message',
+   *   stream: sseStream
+   * });
+   * ```
+   */
   public async connectHonoSSE({ messagePath, stream }: { messagePath: string; stream: SSEStreamingApi }) {
     this.logger.debug('Received SSE connection');
     const sseTransport = new SSETransport(messagePath, stream);
@@ -1235,7 +1502,21 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Close the MCP server and all its connections
+   * Closes the MCP server and releases all resources.
+   *
+   * This method cleanly shuts down all active transports (stdio, SSE, HTTP) and their
+   * associated connections. Call this when your application is shutting down.
+   *
+   * @throws {MastraError} If closing the server fails
+   *
+   * @example
+   * ```typescript
+   * // Graceful shutdown
+   * process.on('SIGTERM', async () => {
+   *   await server.close();
+   *   process.exit(0);
+   * });
+   * ```
    */
   async close() {
     try {
@@ -1285,8 +1566,19 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Gets the basic information about the server, conforming to the Server schema.
-   * @returns ServerInfo object.
+   * Gets basic information about the server.
+   *
+   * Returns metadata including server ID, name, description, repository, and version details.
+   * This information conforms to the MCP Server schema.
+   *
+   * @returns Server information object
+   *
+   * @example
+   * ```typescript
+   * const info = server.getServerInfo();
+   * console.log(`${info.name} v${info.version_detail.version}`);
+   * // Output: My Weather Server v1.0.0
+   * ```
    */
   public getServerInfo(): ServerInfo {
     return {
@@ -1303,8 +1595,19 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Gets detailed information about the server, conforming to the ServerDetail schema.
-   * @returns ServerDetailInfo object.
+   * Gets detailed information about the server including packaging and deployment metadata.
+   *
+   * Returns extended server information with package details, remotes, and deployment configurations.
+   * This information conforms to the MCP ServerDetail schema.
+   *
+   * @returns Detailed server information object
+   *
+   * @example
+   * ```typescript
+   * const detail = server.getServerDetail();
+   * console.log(detail.package_canonical); // 'npm'
+   * console.log(detail.packages); // Package installation info
+   * ```
    */
   public getServerDetail(): ServerDetailInfo {
     return {
@@ -1316,9 +1619,21 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Gets a list of tools provided by this MCP server, including their schemas.
-   * This leverages the same tool information used by the internal ListTools MCP request.
-   * @returns An object containing an array of tool information.
+   * Gets a list of all tools provided by this MCP server with their schemas.
+   *
+   * Returns information about all registered tools including explicit tools, agent-derived tools,
+   * and workflow-derived tools. Includes input/output schemas and tool types.
+   *
+   * @returns Object containing array of tool information
+   *
+   * @example
+   * ```typescript
+   * const toolList = server.getToolListInfo();
+   * toolList.tools.forEach(tool => {
+   *   console.log(`${tool.name}: ${tool.description}`);
+   *   console.log(`Type: ${tool.toolType || 'tool'}`);
+   * });
+   * ```
    */
   public getToolListInfo(): {
     tools: Array<{ name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType }>;
@@ -1338,8 +1653,21 @@ export class MCPServer extends MCPServerBase {
 
   /**
    * Gets information for a specific tool provided by this MCP server.
-   * @param toolId The ID/name of the tool to retrieve.
-   * @returns Tool information (name, description, inputSchema) or undefined if not found.
+   *
+   * Returns detailed information about a single tool including its name, description, schemas, and type.
+   * Returns undefined if the tool is not found.
+   *
+   * @param toolId - The ID/name of the tool to retrieve
+   * @returns Tool information object or undefined if not found
+   *
+   * @example
+   * ```typescript
+   * const toolInfo = server.getToolInfo('getWeather');
+   * if (toolInfo) {
+   *   console.log(toolInfo.description);
+   *   console.log(toolInfo.inputSchema);
+   * }
+   * ```
    */
   public getToolInfo(
     toolId: string,
@@ -1361,11 +1689,25 @@ export class MCPServer extends MCPServerBase {
 
   /**
    * Executes a specific tool provided by this MCP server.
-   * @param toolId The ID/name of the tool to execute.
-   * @param args The arguments to pass to the tool's execute function.
-   * @param executionContext Optional context for the tool execution.
-   * @returns A promise that resolves to the result of the tool execution.
-   * @throws Error if the tool is not found, validation fails, or execution fails.
+   *
+   * This method validates the tool arguments against the input schema and executes the tool.
+   * If validation fails, returns an error object instead of throwing.
+   *
+   * @param toolId - The ID/name of the tool to execute
+   * @param args - The arguments to pass to the tool's execute function
+   * @param executionContext - Optional context including messages and toolCallId
+   * @returns Promise resolving to the tool execution result
+   * @throws {MastraError} If the tool is not found or execution fails
+   *
+   * @example
+   * ```typescript
+   * const result = await server.executeTool(
+   *   'getWeather',
+   *   { location: 'London' },
+   *   { toolCallId: 'call_123' }
+   * );
+   * console.log(result);
+   * ```
    */
   public async executeTool(
     toolId: string,

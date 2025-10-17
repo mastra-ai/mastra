@@ -5,8 +5,8 @@ export const NetworkCallout = () => {
     <Callout type="important">
       <b>Experimental Feature</b>
       <p className="mt-1 mb-2">
-        .network() leverages the experimental feature `streamVNext()` and is
-        only compatible with AI SDK v5 models.
+        .network() is an experimental method and is only compatible with AI SDK
+        v5 models.
       </p>
       <p>.network() requires Mastra memory to be configured.</p>
     </Callout>

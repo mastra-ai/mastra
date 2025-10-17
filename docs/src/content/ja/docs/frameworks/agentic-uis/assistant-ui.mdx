@@ -99,9 +99,16 @@ npx assistant-ui@latest create
 
 `assistant-ui`プロジェクトの`useChatRuntime`フック（通常は`app/assistant.tsx`にあります）を見つけて、`api`プロパティをMastraエージェントのストリームエンドポイントの完全なURLに変更します：
 
-```typescript showLineNumbers copy filename="app/assistant.tsx" {2}
+```typescript showLineNumbers copy filename="app/assistant.tsx" {6}
+import {
+  useChatRuntime,
+  AssistantChatTransport,
+} from "@assistant-ui/react-ai-sdk";
+
 const runtime = useChatRuntime({
-    api: "http://localhost:4111/api/agents/weatherAgent/stream",
+  transport: new AssistantChatTransport({
+    api: "MASTRA_ENDPOINT",
+  }),
 });
 ```
 

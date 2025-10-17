@@ -18,15 +18,17 @@ const run = await workflow.createRunAsync();
 
 const stream = run.streamVNext({
   inputData: {
-    value: "initial data",
-  },
+    value: "initial data"
+  }
 });
 
-
 const result = await stream.result;
-if (result.status === "suspended") {
+
+if (result!.status === "suspended") {
   const resumedStream = await run.resumeStreamVNext({
-    resumeData: { value: "resume data" }
+    resumeData: {
+      value: "resume data"
+    }
   });
 }
 ```
@@ -88,7 +90,7 @@ if (result.status === "suspended") {
     },
     {
       name: "stream.result",
-      type: "Promise<WorkflowResult<TOutput, TSteps>>",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
       description: "A promise that resolves to the final workflow result",
     },
     {

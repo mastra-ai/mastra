@@ -95,7 +95,9 @@ export type AgentExecutionOptions<
   onAbort?: LoopConfig['onAbort'];
   /** Tools that are active for this execution */
   activeTools?: LoopConfig['activeTools'];
-  /** Signal to abort the streaming operation */
+  /**
+   * Signal to abort the streaming operation
+   */
   abortSignal?: LoopConfig['abortSignal'];
 
   /** Input processors to use for this execution (overrides agent's default) */
@@ -127,22 +129,17 @@ export type AgentExecutionOptions<
 
   /** Require approval for all tool calls */
   requireToolApproval?: boolean;
-} & OutputOptions<OUTPUT>;
 
-type OutputOptions<OUTPUT extends OutputSchema = undefined> =
-  | {
-      /**
-       * Schema for structured output generation (Zod schema or JSON Schema)
-       * @deprecated Use `structuredOutput` instead. The `output` property will be removed in a future version.
-       */
-      output?: OUTPUT;
-      structuredOutput?: never;
-    }
-  | {
-      /** Structured output generation with enhanced developer experience  */
-      structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
-      output?: never;
-    };
+  /** Structured output generation with enhanced developer experience  */
+  structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
+};
+
+export type DeprecatedOutputOptions<OUTPUT extends OutputSchema = undefined> = {
+  /** Schema for structured output generation (Zod schema or JSON Schema)
+   * @deprecated Use `structuredOutput.schema` instead. The `output` property will be removed in a future version.
+   */
+  output?: OUTPUT;
+};
 
 export type InnerAgentExecutionOptions<
   OUTPUT extends OutputSchema = undefined,
@@ -150,7 +147,7 @@ export type InnerAgentExecutionOptions<
 > = AgentExecutionOptions<OUTPUT, FORMAT> & {
   writableStream?: WritableStream<ChunkType>;
   messages: MessageListInput;
-  methodType: 'generate' | 'stream' | 'streamVNext';
+  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
   model?: MastraLanguageModel;
   /** Internal: Whether the execution is a resume */

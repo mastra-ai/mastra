@@ -9,7 +9,7 @@ import { execa } from 'execa';
 import getPort from 'get-port';
 
 import { devLogger } from '../../utils/dev-logger.js';
-import { logger } from '../../utils/logger.js';
+import { createLogger } from '../../utils/logger.js';
 
 import { DevBundler } from './DevBundler';
 
@@ -90,7 +90,6 @@ const startServer = async (
       },
       stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
       reject: false,
-      shell: process.platform !== 'win32',
     }) as any as ChildProcess;
 
     if (currentServerProcess?.exitCode && currentServerProcess?.exitCode !== 0) {
@@ -288,7 +287,6 @@ async function rebundleAndRestart(
 }
 
 export async function dev({
-  port,
   dir,
   root,
   tools,
@@ -297,16 +295,17 @@ export async function dev({
   inspectBrk,
   customArgs,
   https,
+  debug,
 }: {
   dir?: string;
   root?: string;
-  port: number | null;
   tools?: string[];
   env?: string;
   inspect?: boolean;
   inspectBrk?: boolean;
   customArgs?: string[];
   https?: boolean;
+  debug: boolean;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
@@ -327,7 +326,7 @@ export async function dev({
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
   const bundler = new DevBundler(env);
-  bundler.__setLogger(logger); // Keep Pino logger for internal bundler operations
+  bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
 
   const loadedEnv = await bundler.loadEnvVars();
 
@@ -337,7 +336,7 @@ export async function dev({
   }
 
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
-  let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
+  let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
   if (!portToUse || isNaN(Number(portToUse))) {
     const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);

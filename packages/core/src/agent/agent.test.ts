@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-import { PassThrough } from 'stream';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
@@ -8,7 +6,7 @@ import type { CoreMessage, LanguageModelV1, CoreSystemMessage } from 'ai';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { stepCountIs } from 'ai-v5';
-import type { SystemModelMessage, UIMessageChunk } from 'ai-v5';
+import type { SystemModelMessage } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,25 +15,18 @@ import { z } from 'zod';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../memory';
+import type { MastraMessageV2, StorageThreadType } from '../memory';
 import { RuntimeContext } from '../runtime-context';
 import { createScorer } from '../scores';
 import { runScorer } from '../scores/hooks';
-import { MockStore } from '../storage';
-import type { AIV5FullStreamPart } from '../stream/aisdk/v5/output';
 import type { MastraModelOutput } from '../stream/base/output';
-import type { ChunkType } from '../stream/types';
-import { createMockModel } from '../test-utils/llm-mock';
 import { createTool } from '../tools';
 import { delay } from '../utils';
-import { CompositeVoice, MastraVoice } from '../voice';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts, MockMemory } from './test-utils';
 import { Agent } from './index';
 
 config();
-
-const mockStorage = new MockStore();
 
 const mockFindUser = vi.fn().mockImplementation(async data => {
   const list = [
@@ -237,82 +228,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     }
   });
 
-  if (version === 'v2') {
-    describe('Writable Stream from Tool', () => {
-      it('should get a text response from the agent', async () => {
-        const tool = createTool({
-          description: 'A tool that returns the winner of the 2016 US presidential election',
-          id: 'election-tool',
-          inputSchema: z.object({
-            year: z.number(),
-          }),
-          execute: async props => {
-            props?.writer.write({
-              type: 'election-data',
-              args: {
-                year: props.year,
-              },
-              status: 'pending',
-            });
-
-            await delay(1000);
-
-            props?.writer.write({
-              type: 'election-data',
-              args: {
-                year: props.year,
-              },
-              result: {
-                winner: 'Donald Trump',
-              },
-              status: 'success',
-            });
-
-            return { winner: 'Donald Trump' };
-          },
-        });
-
-        const electionAgent = new Agent({
-          name: 'US Election agent',
-          instructions: 'You know about the past US elections',
-          model: openaiModel,
-          tools: {
-            electionTool: tool,
-          },
-        });
-
-        const mastraStream = await electionAgent.streamVNext('Call the election-tool and tell me what it says.');
-
-        const chunks: ChunkType[] = [];
-        for await (const chunk of mastraStream.fullStream) {
-          chunks.push(chunk);
-        }
-
-        // our types are broken, we do output these tool-output types when a tool writes
-        // but adding this to the ai sdk output stream part types breaks 100 other types
-        // so cast as any
-        expect(chunks.find((chunk: any) => chunk.type === 'tool-output')).toBeDefined();
-
-        const aiSdkParts: AIV5FullStreamPart[] = [];
-
-        const aiSdkStream = await electionAgent.streamVNext('Call the election-tool and tell me what it says.', {
-          format: 'aisdk',
-        });
-
-        for await (const chunk of aiSdkStream.fullStream) {
-          aiSdkParts.push(chunk);
-        }
-
-        // our types are broken, we do output these tool-output types when a tool writes
-        // but adding this to the ai sdk output stream part types breaks 100 other types
-        // so cast as any
-        const toolOutputChunk = aiSdkParts.find((chunk: any) => chunk.type === 'tool-output');
-
-        expect(toolOutputChunk).toBeDefined();
-      });
-    }, 50000);
-  }
-
   describe(`${version} - agent`, () => {
     it('should get a text response from the agent', async () => {
       const electionAgent = new Agent({
@@ -331,9 +246,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let response;
 
       if (version === 'v1') {
-        response = await agentOne.generate('Who won the 2016 US presidential election?');
+        response = await agentOne.generateLegacy('Who won the 2016 US presidential election?');
       } else {
-        response = await agentOne.generateVNext('Who won the 2016 US presidential election?');
+        response = await agentOne.generate('Who won the 2016 US presidential election?');
       }
 
       const { text, toolCalls } = response;
@@ -359,9 +274,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let response;
 
       if (version === 'v1') {
-        response = await agentOne.stream('Who won the 2016 US presidential election?');
+        response = await agentOne.streamLegacy('Who won the 2016 US presidential election?');
       } else {
-        response = await agentOne.streamVNext('Who won the 2016 US presidential election?');
+        response = await agentOne.stream('Who won the 2016 US presidential election?');
       }
 
       let previousText = '';
@@ -392,13 +307,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let response;
       if (version === 'v1') {
-        response = await agentOne.generate('Who won the 2012 US presidential election?', {
+        response = await agentOne.generateLegacy('Who won the 2012 US presidential election?', {
           output: z.object({
             winner: z.string(),
           }),
         });
       } else {
-        response = await agentOne.generateVNext('Who won the 2012 US presidential election?', {
+        response = await agentOne.generate('Who won the 2012 US presidential election?', {
           output: z.object({
             winner: z.string(),
           }),
@@ -407,117 +322,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const { object } = response;
       expect(object.winner).toContain('Barack Obama');
-    });
-
-    it('should support ZodSchema structured output type', async () => {
-      const electionAgent = new Agent({
-        name: 'US Election agent',
-        instructions: 'You know about the past US elections',
-        model: openaiModel,
-      });
-
-      const mastra = new Mastra({
-        agents: { electionAgent },
-        logger: false,
-      });
-
-      const agentOne = mastra.getAgent('electionAgent');
-
-      let response;
-      if (version === 'v1') {
-        response = await agentOne.generate('Give me the winners of 2012 and 2016 US presidential elections', {
-          output: z.array(
-            z.object({
-              winner: z.string(),
-              year: z.string(),
-            }),
-          ),
-        });
-      } else {
-        response = await agentOne.generateVNext('Give me the winners of 2012 and 2016 US presidential elections', {
-          output: z.array(
-            z.object({
-              winner: z.string(),
-              year: z.string(),
-            }),
-          ),
-        });
-      }
-
-      expect(response.object.length).toBeGreaterThan(1);
-      expect(response.object).toMatchObject([
-        {
-          year: '2012',
-          winner: 'Barack Obama',
-        },
-        {
-          year: '2016',
-          winner: 'Donald Trump',
-        },
-      ]);
-    });
-    it('should support JSONSchema7 structured output type', async () => {
-      const electionAgent = new Agent({
-        name: 'US Election agent',
-        instructions: 'You know about the past US elections',
-        model: openaiModel,
-      });
-
-      const mastra = new Mastra({
-        agents: { electionAgent },
-        logger: false,
-      });
-
-      const agentOne = mastra.getAgent('electionAgent');
-
-      let response;
-      if (version === 'v1') {
-        response = await agentOne.generate('Give me the winners of 2012 and 2016 US presidential elections', {
-          output: {
-            type: 'object',
-            properties: {
-              winners: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: { winner: { type: 'string' }, year: { type: 'string' } },
-                  required: ['winner', 'year'],
-                },
-              },
-            },
-            required: ['winners'],
-          },
-        });
-      } else {
-        response = await agentOne.generateVNext('Give me the winners of 2012 and 2016 US presidential elections', {
-          output: {
-            type: 'object',
-            properties: {
-              winners: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: { winner: { type: 'string' }, year: { type: 'string' } },
-                  required: ['winner', 'year'],
-                },
-              },
-            },
-            required: ['winners'],
-          },
-        });
-      }
-
-      expect(response.object.winners.length).toBeGreaterThan(1);
-      expect(response.object.winners).toMatchObject([
-        {
-          year: '2012',
-          winner: 'Barack Obama',
-        },
-        {
-          year: '2016',
-          winner: 'Donald Trump',
-        },
-      ]);
     });
 
     it('should get a streamed structured response from the agent', async () => {
@@ -536,7 +340,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let response;
       if (version === 'v1') {
-        response = await agentOne.stream('Who won the 2012 US presidential election?', {
+        response = await agentOne.streamLegacy('Who won the 2012 US presidential election?', {
           output: z.object({
             winner: z.string(),
           }),
@@ -554,7 +358,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         expect(previousPartialObject['winner']).toBe('Barack Obama');
       } else {
-        response = await agentOne.streamVNext('Who won the 2012 US presidential election?', {
+        response = await agentOne.stream('Who won the 2012 US presidential election?', {
           output: z.object({
             winner: z.string(),
           }),
@@ -569,435 +373,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         expect(previousPartialObject['winner']).toBe('Barack Obama');
       }
-    });
-
-    it('should call findUserTool', async () => {
-      const findUserTool = createTool({
-        id: 'Find user tool',
-        description: 'This is a test tool that returns the name and email',
-        inputSchema: z.object({
-          name: z.string(),
-        }),
-        execute: ({ context }) => {
-          return mockFindUser(context) as Promise<Record<string, any>>;
-        },
-      });
-
-      const userAgent = new Agent({
-        name: 'User agent',
-        instructions: 'You are an agent that can get list of users using findUserTool.',
-        model: openaiModel,
-        tools: { findUserTool },
-      });
-
-      const mastra = new Mastra({
-        agents: { userAgent },
-        logger: false,
-      });
-
-      const agentOne = mastra.getAgent('userAgent');
-
-      let toolCall;
-      let response;
-      if (version === 'v1') {
-        response = await agentOne.generate('Find the user with name - Dero Israel', {
-          maxSteps: 2,
-          toolChoice: 'required',
-        });
-        toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
-      } else {
-        response = await agentOne.generateVNext('Find the user with name - Dero Israel');
-        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
-      }
-
-      const name = toolCall?.result?.name;
-
-      expect(mockFindUser).toHaveBeenCalled();
-      expect(name).toBe('Dero Israel');
-    }, 500000);
-
-    describe('tool approval and suspension', () => {
-      describe.skipIf(version === 'v1')('suspension', () => {
-        it('should call findUserTool with suspend and resume', async () => {
-          const findUserTool = createTool({
-            id: 'Find user tool',
-            description: 'This is a test tool that returns the name and email',
-            inputSchema: z.object({
-              name: z.string(),
-            }),
-            suspendSchema: z.object({
-              message: z.string(),
-            }),
-            resumeSchema: z.object({
-              name: z.string(),
-            }),
-            execute: async ({ suspend, resumeData }) => {
-              if (!resumeData) {
-                return await suspend({ message: 'Please provide the name of the user' });
-              }
-
-              return {
-                name: resumeData?.name,
-                email: 'test@test.com',
-              };
-            },
-          });
-
-          const userAgent = new Agent({
-            name: 'User agent',
-            instructions: 'You are an agent that can get list of users using findUserTool.',
-            model: openaiModel,
-            tools: { findUserTool },
-          });
-
-          const mastra = new Mastra({
-            agents: { userAgent },
-            logger: false,
-            storage: mockStorage,
-          });
-
-          const agentOne = mastra.getAgent('userAgent');
-
-          let toolCall;
-          const stream = await agentOne.streamVNext('Find the user with name - Dero Israel');
-          for await (const _chunk of stream.fullStream) {
-          }
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          const resumeStream = await agentOne.resumeStreamVNext({ name: 'Dero Israel' }, { runId: stream.runId });
-          for await (const _chunk of resumeStream.fullStream) {
-          }
-
-          toolCall = (await resumeStream.toolResults).find(
-            (result: any) => result.payload.toolName === 'findUserTool',
-          ).payload;
-
-          const name = toolCall?.result?.name;
-          const email = toolCall?.result?.email;
-
-          expect(name).toBe('Dero Israel');
-          expect(email).toBe('test@test.com');
-        }, 500000);
-      });
-
-      describe.skipIf(version === 'v1')('requireToolApproval', () => {
-        it('should call findUserTool with requireToolApproval on agent', async () => {
-          const findUserTool = createTool({
-            id: 'Find user tool',
-            description: 'This is a test tool that returns the name and email',
-            inputSchema: z.object({
-              name: z.string(),
-            }),
-            execute: async ({ context }) => {
-              return mockFindUser(context) as Promise<Record<string, any>>;
-            },
-          });
-
-          const userAgent = new Agent({
-            name: 'User agent',
-            instructions: 'You are an agent that can get list of users using findUserTool.',
-            model: openaiModel,
-            tools: { findUserTool },
-          });
-
-          const mastra = new Mastra({
-            agents: { userAgent },
-            logger: false,
-            storage: mockStorage,
-          });
-
-          const agentOne = mastra.getAgent('userAgent');
-
-          let toolCall;
-          let response;
-          if (version === 'v1') {
-            response = await agentOne.generate('Find the user with name - Dero Israel', {
-              maxSteps: 2,
-              toolChoice: 'required',
-            });
-            toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
-          } else {
-            const stream = await agentOne.streamVNext('Find the user with name - Dero Israel', {
-              requireToolApproval: true,
-            });
-            for await (const _chunk of stream.fullStream) {
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const resumeStream = await agentOne.approveToolCall({ runId: stream.runId });
-            for await (const _chunk of resumeStream.fullStream) {
-            }
-
-            toolCall = (await resumeStream.toolResults).find(
-              (result: any) => result.payload.toolName === 'findUserTool',
-            ).payload;
-          }
-
-          const name = toolCall?.result?.name;
-
-          expect(mockFindUser).toHaveBeenCalled();
-          expect(name).toBe('Dero Israel');
-        }, 500000);
-
-        it('should call findUserTool with requireToolApproval on tool', async () => {
-          const findUserTool = createTool({
-            id: 'Find user tool',
-            description: 'This is a test tool that returns the name and email',
-            inputSchema: z.object({
-              name: z.string(),
-            }),
-            requireApproval: true,
-            execute: async ({ context }) => {
-              return mockFindUser(context) as Promise<Record<string, any>>;
-            },
-          });
-
-          const userAgent = new Agent({
-            name: 'User agent',
-            instructions: 'You are an agent that can get list of users using findUserTool.',
-            model: openaiModel,
-            tools: { findUserTool },
-          });
-
-          const mastra = new Mastra({
-            agents: { userAgent },
-            logger: false,
-            storage: mockStorage,
-          });
-
-          const agentOne = mastra.getAgent('userAgent');
-
-          let toolCall;
-          let response;
-          if (version === 'v1') {
-            response = await agentOne.generate('Find the user with name - Dero Israel', {
-              maxSteps: 2,
-              toolChoice: 'required',
-            });
-            toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
-          } else {
-            const stream = await agentOne.streamVNext('Find the user with name - Dero Israel');
-            for await (const _chunk of stream.fullStream) {
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const resumeStream = await agentOne.approveToolCall({ runId: stream.runId });
-            for await (const _chunk of resumeStream.fullStream) {
-            }
-
-            toolCall = (await resumeStream.toolResults).find(
-              (result: any) => result.payload.toolName === 'findUserTool',
-            ).payload;
-          }
-
-          const name = toolCall?.result?.name;
-
-          expect(mockFindUser).toHaveBeenCalled();
-          expect(name).toBe('Dero Israel');
-        }, 500000);
-
-        it('should call findUserTool with requireToolApproval on tool and be able to reject the tool call', async () => {
-          const findUserTool = createTool({
-            id: 'Find user tool',
-            description: 'This is a test tool that returns the name and email',
-            inputSchema: z.object({
-              name: z.string(),
-            }),
-            requireApproval: true,
-            execute: async ({ context }) => {
-              return mockFindUser(context) as Promise<Record<string, any>>;
-            },
-          });
-
-          const userAgent = new Agent({
-            name: 'User agent',
-            instructions: 'You are an agent that can get list of users using findUserTool.',
-            model: openaiModel,
-            tools: { findUserTool },
-          });
-
-          const mastra = new Mastra({
-            agents: { userAgent },
-            logger: false,
-            storage: mockStorage,
-          });
-
-          const agentOne = mastra.getAgent('userAgent');
-
-          const stream = await agentOne.streamVNext('Find the user with name - Dero Israel');
-          for await (const _chunk of stream.fullStream) {
-          }
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          const resumeStream = await agentOne.declineToolCall({ runId: stream.runId });
-          for await (const _chunk of resumeStream.fullStream) {
-            console.log(_chunk);
-          }
-
-          expect((await resumeStream.toolCalls).length).toBe(1);
-          expect((await resumeStream.toolResults).length).toBe(0);
-          expect(mockFindUser).toHaveBeenCalled();
-        }, 500000);
-      });
-
-      describe.skipIf(version === 'v1')('persist model output stream state', () => {
-        it('should persist text stream state', async () => {
-          const findUserTool = createTool({
-            id: 'Find user tool',
-            description: 'This is a test tool that returns the name and email',
-            inputSchema: z.object({
-              name: z.string(),
-            }),
-            execute: async ({ context }) => {
-              return mockFindUser(context) as Promise<Record<string, any>>;
-            },
-          });
-
-          const userAgent = new Agent({
-            name: 'User agent',
-            instructions: 'You are an agent that can get list of users using findUserTool.',
-            model: openaiModel,
-            tools: { findUserTool },
-          });
-
-          const mastra = new Mastra({
-            agents: { userAgent },
-            logger: false,
-            storage: mockStorage,
-          });
-
-          const agentOne = mastra.getAgent('userAgent');
-
-          let toolCall;
-          let response;
-          if (version === 'v1') {
-            response = await agentOne.generate('Find the user with name - Dero Israel', {
-              maxSteps: 2,
-              toolChoice: 'required',
-            });
-            toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
-          } else {
-            const stream = await agentOne.streamVNext(
-              'First tell me about what tools you have. Then call the user tool to find the user with name - Dero Israel. Then tell me about what format you received the data and tell me what it would look like in human readable form.',
-              {
-                requireToolApproval: true,
-              },
-            );
-            let firstText = '';
-            for await (const chunk of stream.fullStream) {
-              if (chunk.type === 'text-delta') {
-                firstText += chunk.payload.text;
-              }
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const resumeStream = await agentOne.resumeStreamVNext({ hello: 'world' }, { runId: stream.runId });
-            let secondText = '';
-            for await (const chunk of resumeStream.fullStream) {
-              if (chunk.type === 'text-delta') {
-                secondText += chunk.payload.text;
-              }
-            }
-
-            const finalText = await resumeStream.text;
-
-            const steps = await resumeStream.steps;
-            const textBySteps = steps.map(step => step.text);
-
-            expect(finalText).toBe(firstText + secondText);
-            expect(steps.length).toBe(2);
-            expect(textBySteps.join('')).toBe(firstText + secondText);
-            toolCall = (await resumeStream.toolResults).find(
-              (result: any) => result.payload.toolName === 'findUserTool',
-            ).payload;
-          }
-
-          const name = toolCall?.result?.name;
-
-          expect(mockFindUser).toHaveBeenCalled();
-          expect(name).toBe('Dero Israel');
-        }, 500000);
-      });
-    });
-
-    it('generate - should pass and call client side tools', async () => {
-      const userAgent = new Agent({
-        name: 'User agent',
-        instructions: 'You are an agent that can get list of users using client side tools.',
-        model: openaiModel,
-      });
-
-      let result;
-      if (version === 'v1') {
-        result = await userAgent.generate('Make it green', {
-          clientTools: {
-            changeColor: {
-              id: 'changeColor',
-              description: 'This is a test tool that returns the name and email',
-              inputSchema: z.object({
-                color: z.string(),
-              }),
-              execute: async () => {},
-            },
-          },
-        });
-      } else {
-        result = await userAgent.generateVNext('Make it green', {
-          clientTools: {
-            changeColor: {
-              id: 'changeColor',
-              description: 'This is a test tool that returns the name and email',
-              inputSchema: z.object({
-                color: z.string(),
-              }),
-              execute: async () => {},
-            },
-          },
-        });
-      }
-
-      expect(result.toolCalls.length).toBeGreaterThan(0);
-    }, 500000);
-
-    it('stream - should pass and call client side tools', async () => {
-      const userAgent = new Agent({
-        name: 'User agent',
-        instructions: 'You are an agent that can get list of users using client side tools.',
-        model: openaiModel,
-      });
-
-      let result;
-
-      if (version === 'v1') {
-        result = await userAgent.stream('Make it green', {
-          clientTools: {
-            changeColor: {
-              id: 'changeColor',
-              description: 'This is a test tool that returns the name and email',
-              inputSchema: z.object({
-                color: z.string(),
-              }),
-              execute: async () => {},
-            },
-          },
-          onFinish: props => {
-            expect(props.toolCalls.length).toBeGreaterThan(0);
-          },
-        });
-      } else {
-        result = await userAgent.streamVNext('Make it green', {
-          clientTools: {
-            changeColor: {
-              id: 'changeColor',
-              description: 'This is a test tool that returns the name and email',
-              inputSchema: z.object({
-                color: z.string(),
-              }),
-              execute: async () => {},
-            },
-          },
-        });
-      }
-
-      for await (const _ of result.fullStream) {
-      }
-
-      expect(await result.finishReason).toBe('tool-calls');
     });
 
     it('should generate with default max steps', { timeout: 10000 }, async () => {
@@ -1030,13 +405,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let toolCall;
 
       if (version === 'v1') {
-        res = await agentOne.generate(
-          'Use the "findUserTool" to Find the user with name - Joe and return the name and email',
+        res = await agentOne.generateLegacy(
+          'Use the \"findUserTool\" to Find the user with name - Joe and return the name and email',
         );
         toolCall = res.steps[0].toolResults.find((result: any) => result.toolName === 'findUserTool');
       } else {
-        res = await agentOne.generateVNext(
-          'Use the "findUserTool" to Find the user with name - Joe and return the name and email',
+        res = await agentOne.generate(
+          'Use the \"findUserTool\" to Find the user with name - Joe and return the name and email',
         );
         toolCall = res.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
       }
@@ -1064,11 +439,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let response;
 
       if (version === 'v1') {
-        response = await agent.generate('Call testTool 10 times.', {
+        response = await agent.generateLegacy('Call testTool 10 times.', {
           toolChoice: 'required',
         });
       } else {
-        response = await agent.generateVNext('Call testTool 10 times.', {
+        response = await agent.generate('Call testTool 10 times.', {
           toolChoice: 'required',
         });
       }
@@ -1087,12 +462,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let response;
 
       if (version === 'v1') {
-        response = await agent.generate('Call testTool 10 times.', {
+        response = await agent.generateLegacy('Call testTool 10 times.', {
           toolChoice: 'required',
           maxSteps: 7,
         });
       } else {
-        response = await agent.generateVNext('Call testTool 10 times.', {
+        response = await agent.generate('Call testTool 10 times.', {
           toolChoice: 'required',
           stopWhen: stepCountIs(7),
         });
@@ -1129,11 +504,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let response;
       if (version === 'v1') {
-        response = await agent.generate('Please call the flakey tool with input "test data"', {
+        response = await agent.generateLegacy('Please call the flakey tool with input "test data"', {
           maxSteps: 5,
         });
       } else {
-        response = await agent.generateVNext('Please call the flakey tool with input "test data"', {
+        response = await agent.generate('Please call the flakey tool with input "test data"', {
           maxSteps: 5,
         });
       }
@@ -1176,41 +551,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
 
       expect(foundSuccess).toBe(true);
-    }, 500000);
-
-    it('should call testTool from TestIntegration', async () => {
-      const testAgent = new Agent({
-        name: 'Test agent',
-        instructions: 'You are an agent that call testTool',
-        model: openaiModel,
-        tools: integration.getStaticTools(),
-      });
-
-      const mastra = new Mastra({
-        agents: {
-          testAgent,
-        },
-        logger: false,
-      });
-
-      const agentOne = mastra.getAgent('testAgent');
-
-      let response;
-      let toolCall;
-
-      if (version === 'v1') {
-        response = await agentOne.generate('Call testTool', {
-          toolChoice: 'required',
-        });
-        toolCall = response.toolResults.find((result: any) => result.toolName === 'testTool');
-      } else {
-        response = await agentOne.generateVNext('Call testTool');
-        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'testTool').payload;
-      }
-
-      const message = toolCall?.result?.message;
-
-      expect(message).toBe('Executed successfully');
     }, 500000);
 
     it('should use custom model for title generation when provided in generateTitle config', async () => {
@@ -1363,7 +703,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       if (version === 'v1') {
         // Generate a response that will trigger title generation
-        await agent.generate('What is the weather like today?', {
+        await agent.generateLegacy('What is the weather like today?', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -1373,7 +713,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generateVNext('What is the weather like today?', {
+        await agent.generate('What is the weather like today?', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -1553,7 +893,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       runtimeContext.set('userTier', 'premium');
 
       if (version === 'v1') {
-        await agent.generate('Test message', {
+        await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -1564,7 +904,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           runtimeContext,
         });
       } else {
-        await agent.generateVNext('Test message', {
+        await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -1585,7 +925,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       standardContext.set('userTier', 'standard');
 
       if (version === 'v1') {
-        await agent.generate('Test message', {
+        await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -1596,7 +936,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           runtimeContext: standardContext,
         });
       } else {
-        await agent.generateVNext('Test message', {
+        await agent.generate('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -1744,9 +1084,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       if (version === 'v1') {
-        await agent.generate('Test message');
+        await agent.generateLegacy('Test message');
       } else {
-        await agent.generateVNext('Test message');
+        await agent.generate('Test message');
       }
 
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -1756,9 +1096,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       usedModelName = '';
 
       if (version === 'v1') {
-        await agent.generate('Test message');
+        await agent.generateLegacy('Test message');
       } else {
-        await agent.generateVNext('Test message');
+        await agent.generate('Test message');
       }
 
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -1917,7 +1257,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       if (version === 'v1') {
-        await agent.generate('Test message', {
+        await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -1927,7 +1267,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generateVNext('Test message', {
+        await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -1953,7 +1293,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       if (version === 'v1') {
-        await agent.generate('Test message', {
+        await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -1963,7 +1303,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generateVNext('Test message', {
+        await agent.generate('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -2033,7 +1373,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // This should not throw, title generation happens async
       if (version === 'v1') {
-        await agent.generate('Test message', {
+        await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2043,7 +1383,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generateVNext('Test message', {
+        await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2210,7 +1550,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       if (version === 'v1') {
-        await agent.generate('Test message', {
+        await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2220,7 +1560,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generateVNext('Test message', {
+        await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2415,7 +1755,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       japaneseContext.set('language', 'ja');
 
       if (version === 'v1') {
-        await agent.generate('Test message', {
+        await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2426,7 +1766,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           runtimeContext: japaneseContext,
         });
       } else {
-        await agent.generateVNext('Test message', {
+        await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2449,7 +1789,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       englishContext.set('language', 'en');
 
       if (version === 'v1') {
-        await agent.generate('Test message', {
+        await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -2460,7 +1800,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           runtimeContext: englishContext,
         });
       } else {
-        await agent.generateVNext('Test message', {
+        await agent.generate('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -2589,7 +1929,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       if (version === 'v1') {
-        await agent.generate('What is the weather like today?', {
+        await agent.generateLegacy('What is the weather like today?', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2599,7 +1939,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generateVNext('What is the weather like today?', {
+        await agent.generate('What is the weather like today?', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2730,7 +2070,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       if (version === 'v1') {
-        await agent.generate('Test message', {
+        await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2740,7 +2080,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generateVNext('Test message', {
+        await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2859,7 +2199,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // This should not throw, title generation happens async
       if (version === 'v1') {
-        await agent.generate('Test message', {
+        await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2869,7 +2209,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generateVNext('Test message', {
+        await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -3079,7 +2419,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       agent.__setLogger(noopLogger);
 
       if (version === 'v1') {
-        await agent.generate('Test message', {
+        await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -3089,7 +2429,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generateVNext('Test message', {
+        await agent.generate('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -3119,7 +2459,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       if (version === 'v1') {
-        await agent.generate('Test message', {
+        await agent.generateLegacy('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -3129,7 +2469,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generateVNext('Test message', {
+        await agent.generate('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -3145,56 +2485,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Verify that default instructions were used when null was returned
       expect(capturedPrompt).toContain('you will generate a short title');
     });
-  });
-
-  describe(`${version} - agent llmPrompt`, () => {
-    it('should download assets from messages', async () => {
-      const agent = new Agent({
-        name: 'llmPrompt-agent',
-        instructions: 'test agent',
-        model: openaiModel,
-      });
-
-      let result;
-
-      if (version === 'v1') {
-        result = await agent.generate([
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                image: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png',
-                mimeType: 'image/png',
-              },
-              {
-                type: 'text',
-                text: 'What is the photo?',
-              },
-            ],
-          },
-        ]);
-      } else {
-        result = await agent.generateVNext([
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                image: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png',
-                mimeType: 'image/png',
-              },
-              {
-                type: 'text',
-                text: 'What is the photo?',
-              },
-            ],
-          },
-        ]);
-      }
-
-      expect(result.text.toLowerCase()).toContain('google');
-    }, 10000);
   });
 
   describe(`${version} - agent tool handling`, () => {
@@ -3500,124 +2790,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(Object.keys(tools).some(k => k.length === 63)).toBe(true);
       expect(Object.keys(tools)).not.toContain(longName);
     });
-
-    it('should make runtimeContext available to tools when injected in generate', async () => {
-      const testRuntimeContext = new RuntimeContext([['test-value', 'runtimeContext-value']]);
-      let capturedValue: string | null = null;
-
-      const testTool = createTool({
-        id: 'runtimeContext-test-tool',
-        description: 'A tool that verifies runtimeContext is available',
-        inputSchema: z.object({
-          query: z.string(),
-        }),
-        execute: ({ runtimeContext }) => {
-          capturedValue = runtimeContext.get('test-value')!;
-
-          return Promise.resolve({
-            success: true,
-            runtimeContextAvailable: !!runtimeContext,
-            runtimeContextValue: capturedValue,
-          });
-        },
-      });
-
-      const agent = new Agent({
-        name: 'runtimeContext-test-agent',
-        instructions: 'You are an agent that tests runtimeContext availability.',
-        model: openaiModel,
-        tools: { testTool },
-      });
-
-      const mastra = new Mastra({
-        agents: { agent },
-        logger: false,
-      });
-
-      const testAgent = mastra.getAgent('agent');
-
-      let response;
-      let toolCall;
-      if (version === 'v1') {
-        response = await testAgent.generate('Use the runtimeContext-test-tool with query "test"', {
-          toolChoice: 'required',
-          runtimeContext: testRuntimeContext,
-        });
-        toolCall = response.toolResults.find(result => result.toolName === 'testTool');
-      } else {
-        response = await testAgent.generateVNext('Use the runtimeContext-test-tool with query "test"', {
-          toolChoice: 'required',
-          runtimeContext: testRuntimeContext,
-        });
-        toolCall = response.toolResults.find(result => result.payload.toolName === 'testTool').payload;
-      }
-
-      expect(toolCall?.result?.runtimeContextAvailable).toBe(true);
-      expect(toolCall?.result?.runtimeContextValue).toBe('runtimeContext-value');
-      expect(capturedValue).toBe('runtimeContext-value');
-    }, 500000);
-
-    it('should make runtimeContext available to tools when injected in stream', async () => {
-      const testRuntimeContext = new RuntimeContext([['test-value', 'runtimeContext-value']]);
-      let capturedValue: string | null = null;
-
-      const testTool = createTool({
-        id: 'runtimeContext-test-tool',
-        description: 'A tool that verifies runtimeContext is available',
-        inputSchema: z.object({
-          query: z.string(),
-        }),
-        execute: ({ runtimeContext }) => {
-          capturedValue = runtimeContext.get('test-value')!;
-
-          return Promise.resolve({
-            success: true,
-            runtimeContextAvailable: !!runtimeContext,
-            runtimeContextValue: capturedValue,
-          });
-        },
-      });
-
-      const agent = new Agent({
-        name: 'runtimeContext-test-agent',
-        instructions: 'You are an agent that tests runtimeContext availability.',
-        model: openaiModel,
-        tools: { testTool },
-      });
-
-      const mastra = new Mastra({
-        agents: { agent },
-        logger: false,
-      });
-
-      const testAgent = mastra.getAgent('agent');
-
-      let stream;
-      let toolCall;
-      if (version === 'v1') {
-        stream = await testAgent.stream('Use the runtimeContext-test-tool with query "test"', {
-          toolChoice: 'required',
-          runtimeContext: testRuntimeContext,
-        });
-
-        await stream.consumeStream();
-
-        toolCall = (await stream.toolResults).find(result => result.toolName === 'testTool');
-      } else {
-        stream = await testAgent.streamVNext('Use the runtimeContext-test-tool with query "test"', {
-          toolChoice: 'required',
-          runtimeContext: testRuntimeContext,
-        });
-
-        await stream.consumeStream();
-
-        toolCall = (await stream.toolResults).find(result => result.payload.toolName === 'testTool').payload;
-      }
-
-      expect(toolCall?.result?.runtimeContextAvailable).toBe(true);
-      expect(toolCall?.result?.runtimeContextValue).toBe('runtimeContext-value');
-      expect(capturedValue).toBe('runtimeContext-value');
-    }, 500000);
   });
 
   describe(`${version} - context parameter handling`, () => {
@@ -3655,11 +2827,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agent.stream('Tell me about yourself', {
+          result = await agent.streamLegacy('Tell me about yourself', {
             context: [systemMessage, userMessage, complexSystemMessage],
           });
         } else {
-          result = await agent.streamVNext('Tell me about yourself', {
+          result = await agent.stream('Tell me about yourself', {
             context: [systemMessage, userMessage, complexSystemMessage],
             format,
           });
@@ -3752,11 +2924,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agent.stream('Current question', {
+          result = await agent.streamLegacy('Current question', {
             context: contextMessages,
           });
         } else {
-          result = await agent.streamVNext('Current question', {
+          result = await agent.stream('Current question', {
             context: contextMessages,
             format,
           });
@@ -3868,7 +3040,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       if (version === 'v1') {
-        await agent.generate('hello', {
+        await agent.generateLegacy('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -3878,7 +3050,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generateVNext('hello', {
+        await agent.generate('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -3916,7 +3088,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       if (version === 'v1') {
-        await agent.generate('hello', {
+        await agent.generateLegacy('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -3926,7 +3098,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generateVNext('hello', {
+        await agent.generate('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -3963,7 +3135,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       if (version === 'v1') {
-        await agent.generate('hello', {
+        await agent.generateLegacy('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -3973,7 +3145,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generateVNext('hello', {
+        await agent.generate('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -3998,7 +3170,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let res;
       if (version === 'v1') {
-        res = await agent.stream('hello', {
+        res = await agent.streamLegacy('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -4008,7 +3180,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        res = await agent.streamVNext('hello', {
+        res = await agent.stream('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -4037,12 +3209,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       if (version === 'v1') {
-        await agent.generate('hello', {
+        await agent.generateLegacy('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
         });
       } else {
-        await agent.generateVNext('hello', {
+        await agent.generate('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
         });
@@ -4065,12 +3237,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let stream;
       if (version === 'v1') {
-        stream = await agent.stream('hello', {
+        stream = await agent.streamLegacy('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
         });
       } else {
-        stream = await agent.streamVNext('hello', {
+        stream = await agent.stream('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
         });
@@ -4156,9 +3328,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let response;
       if (version === 'v1') {
-        response = await agent.generate('hello', { runtimeContext });
+        response = await agent.generateLegacy('hello', { runtimeContext });
       } else {
-        response = await agent.generateVNext('hello', { runtimeContext });
+        response = await agent.generate('hello', { runtimeContext });
       }
 
       expect(response.text).toBe('Logger test response');
@@ -4177,9 +3349,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let response;
       if (version === 'v1') {
-        response = await agent.generate('hello');
+        response = await agent.generateLegacy('hello');
       } else {
-        response = await agent.generateVNext('hello');
+        response = await agent.generate('hello');
       }
 
       expect(response.text).toBe('Logger test response');
@@ -4200,9 +3372,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let response;
       if (version === 'v1') {
-        response = await agent.generate('hello');
+        response = await agent.generateLegacy('hello');
       } else {
-        response = await agent.generateVNext('hello');
+        response = await agent.generate('hello');
       }
 
       expect(response.text).toBe('Logger test response');
@@ -4428,9 +3600,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
     });
 
-    it('should combine instructions with system option in generateVNext', async () => {
+    it('should combine instructions with system option in generate', async () => {
       // This test verifies that both agent instructions and user-provided system messages
-      // are properly combined when using generateVNext
+      // are properly combined when using generate
       // For now, we're just testing that the functionality doesn't break
       // Full integration testing would require checking the actual messages sent to the LLM
 
@@ -4447,9 +3619,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       if (version === 'v2') {
         // This test only applies to V2
-        // Simply verify that generateVNext works with the system option
+        // Simply verify that generate works with the system option
         // without throwing errors
-        const response = await agent.generateVNext('Hello', {
+        const response = await agent.generate('Hello', {
           system: additionalSystem,
         });
 
@@ -4463,7 +3635,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should combine array instructions with array system option', async () => {
       // This test verifies that array instructions and array system messages
-      // are properly combined when using generateVNext
+      // are properly combined when using generate
 
       // Use CoreSystemMessage array instead of mixed array
       const agentInstructions: CoreSystemMessage[] = [
@@ -4482,9 +3654,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       if (version === 'v2') {
         // This test only applies to V2
-        // Simply verify that generateVNext works with array system option
+        // Simply verify that generate works with array system option
         // without throwing errors
-        const response = await agent.generateVNext('Hello', {
+        const response = await agent.generate('Hello', {
           system: additionalSystem,
         });
 
@@ -4548,7 +3720,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       if (version === 'v1') {
-        const response = await agent.generate('Hello', {
+        const response = await agent.generateLegacy('Hello', {
           instructions: {
             role: 'system',
             content: 'Override instructions',
@@ -4556,8 +3728,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
         expect(response.text).toBe('Dummy response');
       } else {
-        // For v2, use generateVNext
-        const response = await agent.generateVNext('Hello', {
+        // For v2, use generate
+        const response = await agent.generate('Hello', {
           instructions: {
             role: 'system',
             content: 'Override instructions',
@@ -4632,7 +3804,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(instructions).toEqual(instructionsArray);
     });
 
-    it('should combine instructions with system option in streamVNext', async () => {
+    it('should combine instructions with system option in stream', async () => {
       if (version === 'v2') {
         const agent = new Agent({
           name: 'test-agent',
@@ -4645,7 +3817,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           content: 'Be concise in your responses.',
         };
 
-        const stream = await agent.streamVNext('Hello', {
+        const stream = await agent.stream('Hello', {
           system: additionalSystem,
         });
 
@@ -4665,13 +3837,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       if (version === 'v1') {
-        const response = await agent.generate('Hello', {
+        const response = await agent.generateLegacy('Hello', {
           instructions: ['Override instruction 1', 'Override instruction 2'],
         });
         expect(response.text).toBe('Dummy response');
       } else {
-        // For v2, use generateVNext
-        const response = await agent.generateVNext('Hello', {
+        // For v2, use generate
+        const response = await agent.generate('Hello', {
           instructions: ['Override instruction 1', 'Override instruction 2'],
         });
         expect(response.text).toBe('Dummy response');
@@ -4726,7 +3898,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       if (version === 'v2') {
         try {
           // This will trigger the message list building
-          await agent.generateVNext('Hello');
+          await agent.generate('Hello');
 
           // Check all addSystem calls
           const systemMessageCalls = addSystemSpy.mock.calls.filter(call => {
@@ -4957,27 +4129,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let caught = false;
         try {
           if (version === 'v1') {
-            await agent.generate('Please echo this and then use the error tool. Be verbose and take multiple steps.', {
-              threadId: 'thread-partial-rescue-generate',
-              resourceId: 'resource-partial-rescue-generate',
-              experimental_continueSteps: true,
-              savePerStep: true,
-              onStepFinish: (result: any) => {
-                if (result.toolCalls && result.toolCalls.length > 1) {
-                  throw new Error('Model attempted parallel tool calls; test requires sequential tool calls');
-                }
-                stepCount++;
-                if (stepCount === 2) {
-                  throw new Error('Simulated error in onStepFinish');
-                }
-              },
-            });
-          } else {
-            await agent.generateVNext(
+            await agent.generateLegacy(
               'Please echo this and then use the error tool. Be verbose and take multiple steps.',
               {
                 threadId: 'thread-partial-rescue-generate',
                 resourceId: 'resource-partial-rescue-generate',
+                experimental_continueSteps: true,
                 savePerStep: true,
                 onStepFinish: (result: any) => {
                   if (result.toolCalls && result.toolCalls.length > 1) {
@@ -4990,6 +4147,21 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                 },
               },
             );
+          } else {
+            await agent.generate('Please echo this and then use the error tool. Be verbose and take multiple steps.', {
+              threadId: 'thread-partial-rescue-generate',
+              resourceId: 'resource-partial-rescue-generate',
+              savePerStep: true,
+              onStepFinish: (result: any) => {
+                if (result.toolCalls && result.toolCalls.length > 1) {
+                  throw new Error('Model attempted parallel tool calls; test requires sequential tool calls');
+                }
+                stepCount++;
+                if (stepCount === 2) {
+                  throw new Error('Simulated error in onStepFinish');
+                }
+              },
+            });
           }
         } catch (err: any) {
           caught = true;
@@ -5052,13 +4224,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         if (version === 'v1') {
-          await agent.generate('Echo: Please echo this long message and explain why.', {
+          await agent.generateLegacy('Echo: Please echo this long message and explain why.', {
             threadId: 'thread-echo-generate',
             resourceId: 'resource-echo-generate',
             savePerStep: true,
           });
         } else {
-          await agent.generateVNext('Echo: Please echo this long message and explain why.', {
+          await agent.generate('Echo: Please echo this long message and explain why.', {
             threadId: 'thread-echo-generate',
             resourceId: 'resource-echo-generate',
             savePerStep: true,
@@ -5123,7 +4295,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         if (version === 'v1') {
-          await agent.generate(
+          await agent.generateLegacy(
             'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
             {
               threadId: 'thread-multi-generate',
@@ -5132,7 +4304,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             },
           );
         } else {
-          await agent.generateVNext(
+          await agent.generate(
             'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
             {
               threadId: 'thread-multi-generate',
@@ -5169,12 +4341,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           memory: mockMemory,
         });
         if (version === 'v1') {
-          await agent.generate('repeat tool calls', {
+          await agent.generateLegacy('repeat tool calls', {
             threadId: 'thread-1-generate',
             resourceId: 'resource-1-generate',
           });
         } else {
-          await agent.generateVNext('repeat tool calls', {
+          await agent.generate('repeat tool calls', {
             threadId: 'thread-1-generate',
             resourceId: 'resource-1-generate',
           });
@@ -5217,12 +4389,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
 
         if (version === 'v1') {
-          await agent.generate('no progress', {
+          await agent.generateLegacy('no progress', {
             threadId: `thread-2-${version}-generate`,
             resourceId: `resource-2-${version}-generate`,
           });
         } else {
-          await agent.generateVNext('no progress', {
+          await agent.generate('no progress', {
             threadId: `thread-2-${version}-generate`,
             resourceId: `resource-2-${version}-generate`,
           });
@@ -5260,12 +4432,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       try {
         if (version === 'v1') {
-          await agent.generate('interrupt before step', {
+          await agent.generateLegacy('interrupt before step', {
             threadId: 'thread-3-generate',
             resourceId: 'resource-3-generate',
           });
         } else {
-          await agent.generateVNext('interrupt before step', {
+          await agent.generate('interrupt before step', {
             threadId: 'thread-3-generate',
             resourceId: 'resource-3-generate',
           });
@@ -5316,7 +4488,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let errorCaught = false;
       try {
         if (version === 'v1') {
-          await agent.generate('trigger error', {
+          await agent.generateLegacy('trigger error', {
             memory: {
               resource: 'user-err',
               thread: {
@@ -5325,7 +4497,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             },
           });
         } else {
-          await agent.generateVNext('trigger error', {
+          await agent.generate('trigger error', {
             memory: {
               resource: 'user-err',
               thread: {
@@ -5344,965 +4516,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       const thread = await mockMemory.getThreadById({ threadId: 'thread-err' });
       expect(thread).toBeNull();
     });
-
-    describe(`${version} - stream`, () => {
-      it('should rescue partial messages (including tool calls) if stream is aborted/interrupted', async () => {
-        const mockMemory = new MockMemory();
-        let saveCallCount = 0;
-        let savedMessages: any[] = [];
-        mockMemory.saveMessages = async function (...args) {
-          saveCallCount++;
-          savedMessages.push(...args[0].messages);
-
-          return MockMemory.prototype.saveMessages.apply(this, args);
-        };
-
-        const errorTool = createTool({
-          id: 'errorTool',
-          description: 'Always throws an error.',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({ output: z.string() }),
-          execute: async () => {
-            throw new Error('Tool failed!');
-          },
-        });
-
-        const echoTool = createTool({
-          id: 'echoTool',
-          description: 'Echoes the input string.',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({ output: z.string() }),
-          execute: async ({ context }) => ({ output: context.input }),
-        });
-
-        const agent = new Agent({
-          name: 'partial-rescue-agent',
-          instructions:
-            'Call each tool in a separate step. Do not use parallel tool calls. Always wait for the result of one tool before calling the next.',
-          model: openaiModel,
-          memory: mockMemory,
-          tools: { errorTool, echoTool },
-        });
-
-        agent.__setLogger(noopLogger);
-
-        let stepCount = 0;
-
-        let stream;
-        if (version === 'v1') {
-          stream = await agent.stream(
-            'Please echo this and then use the error tool. Be verbose and take multiple steps.',
-            {
-              threadId: 'thread-partial-rescue',
-              resourceId: 'resource-partial-rescue',
-              experimental_continueSteps: true,
-              savePerStep: true,
-              onStepFinish: (result: any) => {
-                if (result.toolCalls && result.toolCalls.length > 1) {
-                  throw new Error('Model attempted parallel tool calls; test requires sequential tool calls');
-                }
-                stepCount++;
-                if (stepCount === 2) {
-                  throw new Error('Simulated error in onStepFinish');
-                }
-              },
-            },
-          );
-        } else {
-          stream = await agent.streamVNext(
-            'Please echo this and then use the error tool. Be verbose and you must take multiple steps. Call tools 2x in parallel.',
-            {
-              threadId: 'thread-partial-rescue',
-              resourceId: 'resource-partial-rescue',
-              savePerStep: true,
-              onStepFinish: (result: any) => {
-                if (result.toolCalls && result.toolCalls.length > 1) {
-                  throw new Error('Model attempted parallel tool calls; test requires sequential tool calls');
-                }
-                stepCount++;
-                if (stepCount === 2) {
-                  throw new Error('Simulated error in onStepFinish');
-                }
-              },
-            },
-          );
-        }
-
-        let caught = false;
-
-        await stream.consumeStream({
-          onError: err => {
-            caught = true;
-            expect(err.message).toMatch(/Simulated error in onStepFinish/i);
-          },
-        });
-
-        expect(caught).toBe(true);
-
-        // After interruption, check what was saved
-        let messages = await mockMemory.getMessages({
-          threadId: 'thread-partial-rescue',
-          resourceId: 'resource-partial-rescue',
-          format: 'v2',
-        });
-
-        // User message should be saved
-        expect(messages.find(m => m.role === 'user')).toBeTruthy();
-        // At least one assistant message (could be partial) should be saved
-        expect(messages.find(m => m.role === 'assistant')).toBeTruthy();
-        // At least one tool call (echoTool or errorTool) should be saved if the model got that far
-        const assistantWithToolInvocation = messages.find(
-          m =>
-            m.role === 'assistant' &&
-            m.content &&
-            Array.isArray(m.content.parts) &&
-            m.content.parts.some(
-              part =>
-                part.type === 'tool-invocation' &&
-                part.toolInvocation &&
-                (part.toolInvocation.toolName === 'echoTool' || part.toolInvocation.toolName === 'errorTool'),
-            ),
-        );
-        expect(assistantWithToolInvocation).toBeTruthy();
-        // There should be at least one save call (user and partial assistant/tool)
-        expect(saveCallCount).toBeGreaterThanOrEqual(1);
-      }, 500000);
-
-      it('should incrementally save messages across steps and tool calls', async () => {
-        const mockMemory = new MockMemory();
-        let saveCallCount = 0;
-        mockMemory.saveMessages = async function (...args) {
-          saveCallCount++;
-          return MockMemory.prototype.saveMessages.apply(this, args);
-        };
-
-        const echoTool = createTool({
-          id: 'echoTool',
-          description: 'Echoes the input string.',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({ output: z.string() }),
-          execute: async ({ context }) => ({ output: context.input }),
-        });
-
-        const agent = new Agent({
-          name: 'test-agent',
-          instructions: 'If the user prompt contains "Echo:", always call the echoTool. Be verbose in your response.',
-          model: openaiModel,
-          memory: mockMemory,
-          tools: { echoTool },
-        });
-
-        let stream;
-
-        if (version === 'v1') {
-          stream = await agent.stream('Echo: Please echo this long message and explain why.', {
-            threadId: 'thread-echo',
-            resourceId: 'resource-echo',
-            savePerStep: true,
-          });
-        } else {
-          stream = await agent.streamVNext('Echo: Please echo this long message and explain why.', {
-            threadId: 'thread-echo',
-            resourceId: 'resource-echo',
-            savePerStep: true,
-          });
-        }
-
-        await stream.consumeStream();
-
-        expect(saveCallCount).toBeGreaterThan(1);
-        const messages = await mockMemory.getMessages({
-          threadId: 'thread-echo',
-          resourceId: 'resource-echo',
-          format: 'v2',
-        });
-        expect(messages.length).toBeGreaterThan(0);
-        const assistantMsg = messages.find(m => m.role === 'assistant');
-        expect(assistantMsg).toBeDefined();
-        assertNoDuplicateParts(assistantMsg!.content.parts);
-
-        const toolResultIds = new Set(
-          assistantMsg!.content.parts
-            .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
-            .map(p => (p as ToolInvocationUIPart).toolInvocation.toolCallId),
-        );
-        expect(assistantMsg!.content?.toolInvocations?.length).toBe(toolResultIds.size);
-      }, 500000);
-
-      it('should incrementally save messages with multiple tools and multi-step streaming', async () => {
-        const mockMemory = new MockMemory();
-        let saveCallCount = 0;
-        mockMemory.saveMessages = async function (...args) {
-          saveCallCount++;
-          return MockMemory.prototype.saveMessages.apply(this, args);
-        };
-
-        const echoTool = createTool({
-          id: 'echoTool',
-          description: 'Echoes the input string.',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({ output: z.string() }),
-          execute: async ({ context }) => ({ output: context.input }),
-        });
-
-        const uppercaseTool = createTool({
-          id: 'uppercaseTool',
-          description: 'Converts input to uppercase.',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({ output: z.string() }),
-          execute: async ({ context }) => ({ output: context.input.toUpperCase() }),
-        });
-
-        const agent = new Agent({
-          name: 'test-agent-multi',
-          instructions: [
-            'If the user prompt contains "Echo:", call the echoTool.',
-            'If the user prompt contains "Uppercase:", call the uppercaseTool.',
-            'If both are present, call both tools and explain the results.',
-            'Be verbose in your response.',
-          ].join(' '),
-          model: openaiModel,
-          memory: mockMemory,
-          tools: { echoTool, uppercaseTool },
-        });
-
-        let stream;
-        if (version === 'v1') {
-          stream = await agent.stream(
-            'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
-            {
-              threadId: 'thread-multi',
-              resourceId: 'resource-multi',
-              savePerStep: true,
-            },
-          );
-        } else {
-          stream = await agent.streamVNext(
-            'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
-            {
-              threadId: 'thread-multi',
-              resourceId: 'resource-multi',
-              savePerStep: true,
-            },
-          );
-        }
-
-        await stream.consumeStream();
-
-        expect(saveCallCount).toBeGreaterThan(1);
-        const messages = await mockMemory.getMessages({
-          threadId: 'thread-multi',
-          resourceId: 'resource-multi',
-          format: 'v2',
-        });
-        expect(messages.length).toBeGreaterThan(0);
-        const assistantMsg = messages.find(m => m.role === 'assistant');
-        expect(assistantMsg).toBeDefined();
-        assertNoDuplicateParts(assistantMsg!.content.parts);
-
-        const toolResultIds = new Set(
-          assistantMsg!.content.parts
-            .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
-            .map(p => (p as ToolInvocationUIPart).toolInvocation.toolCallId),
-        );
-        expect(assistantMsg!.content?.toolInvocations?.length).toBe(toolResultIds.size);
-      }, 500000);
-
-      it('should persist the full message after a successful run', async () => {
-        const mockMemory = new MockMemory();
-        const agent = new Agent({
-          name: 'test-agent',
-          instructions: 'test',
-          model: dummyResponseModel,
-          memory: mockMemory,
-        });
-
-        let stream;
-        if (version === 'v1') {
-          stream = await agent.stream('repeat tool calls', {
-            threadId: 'thread-1',
-            resourceId: 'resource-1',
-          });
-        } else {
-          stream = await agent.streamVNext('repeat tool calls', {
-            threadId: 'thread-1',
-            resourceId: 'resource-1',
-          });
-        }
-
-        await stream.consumeStream();
-
-        const messages = await mockMemory.getMessages({ threadId: 'thread-1', resourceId: 'resource-1', format: 'v2' });
-        // Check that the last message matches the expected final output
-        expect(
-          messages[messages.length - 1]?.content?.parts?.some(
-            p => p.type === 'text' && p.text?.includes('Dummy response'),
-          ),
-        ).toBe(true);
-      });
-
-      it('should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)', async () => {
-        // This test reproduces the bug where real LLM providers (like OpenRouter)
-        // send multiple response-metadata chunks (after each text-delta)
-        // which causes the message to have multiple text parts, one for each chunks
-        // [{ type: 'text', text: 'Hello' }, { type: 'text', text: ' world' }]
-        // instead of properly formatted messages like:
-        // [{ role: 'assistant', content: [{ type: 'text', text: 'Hello world' }] }]
-        const mockModel =
-          version === 'v1'
-            ? new MockLanguageModelV1({
-                doStream: async () => ({
-                  rawCall: { rawPrompt: null, rawSettings: {} },
-                  finishReason: 'stop',
-                  usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
-                  stream: convertArrayToReadableStream([
-                    { type: 'text-delta', textDelta: 'Hello' },
-                    { type: 'text-delta', textDelta: ' world' },
-                    {
-                      type: 'finish',
-                      finishReason: 'stop',
-                      usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
-                    },
-                  ]),
-                }),
-              })
-            : new MockLanguageModelV2({
-                doStream: async () => ({
-                  rawCall: { rawPrompt: null, rawSettings: {} },
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                  stream: convertArrayToReadableStream([
-                    { type: 'stream-start', warnings: [] },
-                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello' },
-                    // add response-metadata in the middle to trigger bug where response metadata is added after each text-delta, splitting text into multiple parts, one per text delta chunk
-                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-                    { type: 'text-delta', id: '1', delta: ' world' },
-                    { type: 'text-end', id: '1' },
-                    {
-                      type: 'finish',
-                      finishReason: 'stop',
-                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                      // Real providers DON'T include formatted messages here
-                    },
-                  ]),
-                }),
-              });
-
-        const agent = new Agent({
-          name: 'test-agent-7050',
-          instructions: 'test',
-          model: mockModel,
-        });
-
-        let capturedStep: any = null;
-
-        if (version === 'v1') {
-          const stream = await agent.stream('test message', {
-            threadId: 'test-thread-7050',
-            resourceId: 'test-resource-7050',
-            savePerStep: true,
-            onStepFinish: async (step: any) => {
-              capturedStep = step;
-            },
-          });
-
-          // Consume the v1 stream (StreamTextResult has textStream property)
-          for await (const _chunk of stream.textStream) {
-            // Just consume the stream
-          }
-        } else {
-          const result = await agent.streamVNext('test message', {
-            format: 'aisdk',
-            memory: {
-              thread: 'test-thread-7050',
-              resource: 'test-resource-7050',
-            },
-            onStepFinish: async step => {
-              capturedStep = step;
-            },
-          });
-
-          // Consume the v2 stream
-          const reader = result.textStream.getReader();
-          while (true) {
-            const { done } = await reader.read();
-            if (done) break;
-          }
-        }
-
-        // Verify that onStepFinish was called with properly formatted messages
-        expect(capturedStep).toBeDefined();
-        expect(capturedStep.response).toBeDefined();
-        expect(capturedStep.response.messages).toBeDefined();
-        expect(Array.isArray(capturedStep.response.messages)).toBe(true);
-        expect(capturedStep.response.messages.length).toBeGreaterThan(0);
-
-        // Check that messages have the correct CoreMessage structure
-        const firstMessage = capturedStep.response.messages[0];
-        expect(firstMessage).toHaveProperty('role');
-        expect(firstMessage).toHaveProperty('content');
-        expect(typeof firstMessage.role).toBe('string');
-        expect(['assistant', 'system', 'user'].includes(firstMessage.role)).toBe(true);
-
-        if (version === `v2`) {
-          // The bug would cause messages to be multiple text parts for each chunk like;
-          // [{ type: 'text', text: 'Hello' }, { type: 'text', text: ' world' }]
-          // Instead of: [{ role: 'assistant', content: [{ type: 'text', text: 'Hello world' }] }]
-          // should only have a single text part of combined text delta chunks
-          expect(firstMessage.content?.filter(p => p.type === `text`)).toHaveLength(1);
-        }
-      });
-
-      it('should only call saveMessages for the user message when no assistant parts are generated', async () => {
-        const mockMemory = new MockMemory();
-        let saveCallCount = 0;
-
-        mockMemory.saveMessages = async function (...args) {
-          saveCallCount++;
-          return MockMemory.prototype.saveMessages.apply(this, args);
-        };
-
-        const agent = new Agent({
-          name: 'no-progress-agent',
-          instructions: 'test',
-          model: emptyResponseModel,
-          memory: mockMemory,
-        });
-
-        let stream;
-        if (version === 'v1') {
-          stream = await agent.stream('no progress', {
-            threadId: 'thread-2',
-            resourceId: 'resource-2',
-          });
-        } else {
-          stream = await agent.streamVNext('no progress', {
-            threadId: 'thread-2',
-            resourceId: 'resource-2',
-          });
-        }
-
-        await stream.consumeStream();
-
-        expect(saveCallCount).toBe(1);
-
-        const messages = await mockMemory.getMessages({ threadId: 'thread-2', resourceId: 'resource-2', format: 'v2' });
-        expect(messages.length).toBe(1);
-        expect(messages[0].role).toBe('user');
-        expect(messages[0].content.content).toBe('no progress');
-      });
-
-      it('should not save any message if interrupted before any part is emitted', async () => {
-        const mockMemory = new MockMemory();
-        let saveCallCount = 0;
-
-        mockMemory.saveMessages = async function (...args) {
-          saveCallCount++;
-          return MockMemory.prototype.saveMessages.apply(this, args);
-        };
-
-        const agent = new Agent({
-          name: 'immediate-interrupt-agent',
-          instructions: 'test',
-          model: errorResponseModel,
-          memory: mockMemory,
-        });
-
-        let stream;
-        if (version === 'v1') {
-          stream = await agent.stream('interrupt before step', {
-            threadId: 'thread-3',
-            resourceId: 'resource-3',
-          });
-        } else {
-          stream = await agent.streamVNext('interrupt before step', {
-            threadId: 'thread-3',
-            resourceId: 'resource-3',
-          });
-        }
-
-        await stream.consumeStream({
-          onError: err => {
-            expect(err.message).toBe('Immediate interruption');
-          },
-        });
-
-        expect(saveCallCount).toBe(0);
-        const messages = await mockMemory.getMessages({ threadId: 'thread-3', resourceId: 'resource-3' });
-        expect(messages.length).toBe(0);
-      });
-
-      it('should not save thread if error occurs after starting response but before completion', async () => {
-        const mockMemory = new MockMemory();
-        const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
-
-        let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
-        if (version === 'v1') {
-          errorModel = new MockLanguageModelV1({
-            doStream: async () => {
-              const stream = new ReadableStream({
-                pull() {
-                  throw new Error('Simulated stream error');
-                },
-              });
-              return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-            },
-          });
-        } else {
-          errorModel = new MockLanguageModelV2({
-            doStream: async () => {
-              const stream = new ReadableStream({
-                pull() {
-                  throw new Error('Simulated stream error');
-                },
-              });
-              return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-            },
-          });
-        }
-
-        const agent = new Agent({
-          name: 'error-agent-stream',
-          instructions: 'test',
-          model: errorModel,
-          memory: mockMemory,
-        });
-
-        let errorCaught = false;
-
-        let stream;
-        try {
-          if (version === 'v1') {
-            stream = await agent.stream('trigger error', {
-              memory: {
-                resource: 'user-err',
-                thread: {
-                  id: 'thread-err-stream',
-                },
-              },
-            });
-
-            for await (const _ of stream.textStream) {
-              // Should throw
-            }
-          } else {
-            stream = await agent.streamVNext('trigger error', {
-              memory: {
-                resource: 'user-err',
-                thread: {
-                  id: 'thread-err-stream',
-                },
-              },
-            });
-
-            await stream.consumeStream();
-            expect(stream.error).toBeDefined();
-            expect(stream.error.message).toMatch(/Simulated stream error/);
-            errorCaught = true;
-          }
-        } catch (err: any) {
-          errorCaught = true;
-          expect(err.message).toMatch(/Simulated stream error/);
-        }
-
-        expect(errorCaught).toBe(true);
-
-        expect(saveThreadSpy).not.toHaveBeenCalled();
-        const thread = await mockMemory.getThreadById({ threadId: 'thread-err-stream' });
-        expect(thread).toBeNull();
-      });
-    });
-
-    describe(`streamVNext`, () => {
-      it(`should stream from LLM`, async () => {
-        const agent = new Agent({
-          id: 'test',
-          name: 'test',
-          model: openaiModel,
-          instructions: `test!`,
-        });
-
-        let result;
-        let request;
-
-        if (version === 'v1') {
-          result = await agent.stream(`hello!`);
-        } else {
-          result = await agent.streamVNext(`hello!`);
-        }
-
-        const parts: any[] = [];
-        for await (const part of result.fullStream) {
-          parts.push(part);
-        }
-
-        if (version === 'v1') {
-          request = JSON.parse((await result.request).body).messages;
-          expect(request).toEqual([
-            {
-              role: 'system',
-              content: 'test!',
-            },
-            {
-              role: 'user',
-              content: 'hello!',
-            },
-          ]);
-        } else {
-          request = (await result.request).body.input;
-          expect(request).toEqual([
-            {
-              role: 'system',
-              content: 'test!',
-            },
-            {
-              role: 'user',
-              content: [{ type: 'input_text', text: 'hello!' }],
-            },
-          ]);
-        }
-      });
-
-      it(`should show correct request input for multi-turn inputs`, async () => {
-        const agent = new Agent({
-          id: 'test',
-          name: 'test',
-          model: openaiModel,
-          instructions: `test!`,
-        });
-
-        let result;
-        if (version === 'v1') {
-          result = await agent.stream([
-            { role: `user`, content: `hello!` },
-            { role: 'assistant', content: 'hi, how are you?' },
-            { role: 'user', content: "I'm good, how are you?" },
-          ]);
-        } else {
-          result = await agent.streamVNext([
-            { role: `user`, content: `hello!` },
-            { role: 'assistant', content: 'hi, how are you?' },
-            { role: 'user', content: "I'm good, how are you?" },
-          ]);
-        }
-
-        const parts: any[] = [];
-        for await (const part of result.fullStream) {
-          parts.push(part);
-        }
-
-        let request;
-        if (version === 'v1') {
-          request = JSON.parse((await result.request).body).messages;
-          expect(request).toEqual([
-            {
-              role: 'system',
-              content: 'test!',
-            },
-            {
-              role: 'user',
-              content: 'hello!',
-            },
-            { role: 'assistant', content: 'hi, how are you?' },
-            { role: 'user', content: "I'm good, how are you?" },
-          ]);
-        } else {
-          request = (await result.request).body.input;
-          expect(request).toEqual([
-            {
-              role: 'system',
-              content: 'test!',
-            },
-            {
-              role: 'user',
-              content: [{ type: 'input_text', text: 'hello!' }],
-            },
-            { role: 'assistant', content: [{ type: 'output_text', text: 'hi, how are you?' }] },
-            { role: 'user', content: [{ type: 'input_text', text: "I'm good, how are you?" }] },
-          ]);
-        }
-      });
-
-      it(`should show correct request input for multi-turn inputs with memory`, async () => {
-        const mockMemory = new MockMemory();
-        const threadId = '1';
-        const resourceId = '2';
-        // @ts-ignore
-        mockMemory.rememberMessages = async function rememberMessages() {
-          const list = new MessageList({ threadId, resourceId }).add(
-            [
-              { role: `user`, content: `hello!`, threadId, resourceId },
-              { role: 'assistant', content: 'hi, how are you?', threadId, resourceId },
-            ],
-            `memory`,
-          );
-          return { messages: list.get.remembered.aiV4.core(), messagesV2: list.get.remembered.v2() };
-        };
-
-        mockMemory.getThreadById = async function getThreadById() {
-          return { id: '1', createdAt: new Date(), resourceId: '2', updatedAt: new Date() } satisfies StorageThreadType;
-        };
-
-        const agent = new Agent({
-          id: 'test',
-          name: 'test',
-          model: openaiModel,
-          instructions: `test!`,
-          memory: mockMemory,
-        });
-
-        let result;
-        if (version === 'v1') {
-          result = await agent.stream([{ role: 'user', content: "I'm good, how are you?" }], {
-            memory: {
-              thread: '1',
-              resource: '2',
-              options: {
-                lastMessages: 10,
-              },
-            },
-          });
-        } else {
-          result = await agent.streamVNext([{ role: 'user', content: "I'm good, how are you?" }], {
-            memory: {
-              thread: '1',
-              resource: '2',
-              options: {
-                lastMessages: 10,
-              },
-            },
-          });
-        }
-
-        for await (const _part of result.fullStream) {
-        }
-
-        let request;
-        if (version === 'v1') {
-          request = JSON.parse((await result.request).body).messages;
-          expect(request).toEqual([
-            {
-              role: 'system',
-              content: 'test!',
-            },
-            {
-              role: 'user',
-              content: 'hello!',
-            },
-            { role: 'assistant', content: 'hi, how are you?' },
-            { role: 'user', content: "I'm good, how are you?" },
-          ]);
-        } else {
-          request = (await result.request).body.input;
-          expect(request).toEqual([
-            {
-              role: 'system',
-              content: 'test!',
-            },
-            {
-              role: 'user',
-              content: [{ type: 'input_text', text: 'hello!' }],
-            },
-            { role: 'assistant', content: [{ type: 'output_text', text: 'hi, how are you?' }] },
-            { role: 'user', content: [{ type: 'input_text', text: "I'm good, how are you?" }] },
-          ]);
-        }
-      });
-
-      it(`should order tool calls/results and response text properly`, async () => {
-        const mockMemory = new MockMemory();
-
-        const weatherTool = createTool({
-          id: 'get_weather',
-          description: 'Get the weather for a given location',
-          inputSchema: z.object({
-            postalCode: z.string().describe('The location to get the weather for'),
-          }),
-          execute: async ({ context: { postalCode } }) => {
-            return `The weather in ${postalCode} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
-          },
-        });
-
-        const threadId = randomUUID();
-        const resourceId = 'ordering';
-
-        const agent = new Agent({
-          id: 'test',
-          name: 'test',
-          model: openaiModel,
-          instructions: `Testing tool calls! Please respond in a pirate accent`,
-          tools: {
-            get_weather: weatherTool,
-          },
-          memory: mockMemory,
-        });
-
-        let firstResponse;
-        if (version === 'v1') {
-          firstResponse = await agent.generate('What is the weather in London?', {
-            threadId,
-            resourceId,
-            onStepFinish: args => {
-              args;
-            },
-          });
-          // The response should contain the weather.
-          expect(firstResponse.response.messages).toEqual([
-            expect.objectContaining({
-              role: 'assistant',
-              content: [expect.objectContaining({ type: 'tool-call' })],
-            }),
-            expect.objectContaining({
-              role: 'tool',
-              content: [expect.objectContaining({ type: 'tool-result' })],
-            }),
-            expect.objectContaining({
-              role: 'assistant',
-              content: expect.any(String),
-            }),
-          ]);
-        } else {
-          firstResponse = await agent.generateVNext('What is the weather in London?', {
-            threadId,
-            resourceId,
-            onStepFinish: args => {
-              args;
-            },
-          });
-
-          // The response should contain the weather.
-          expect(firstResponse.response.messages).toEqual([
-            expect.objectContaining({
-              role: 'assistant',
-              content: [expect.objectContaining({ type: 'tool-call' })],
-            }),
-            expect.objectContaining({
-              role: 'tool',
-              content: [expect.objectContaining({ type: 'tool-result' })],
-            }),
-            expect.objectContaining({
-              role: 'assistant',
-              content: [expect.objectContaining({ type: 'text' })],
-            }),
-          ]);
-        }
-
-        expect(firstResponse.text).toContain('65');
-
-        let secondResponse;
-        if (version === 'v1') {
-          secondResponse = await agent.generate('What was the tool you just used?', {
-            memory: {
-              thread: threadId,
-              resource: resourceId,
-              options: {
-                lastMessages: 10,
-              },
-            },
-          });
-        } else {
-          secondResponse = await agent.generateVNext('What was the tool you just used?', {
-            memory: {
-              thread: threadId,
-              resource: resourceId,
-              options: {
-                lastMessages: 10,
-              },
-            },
-          });
-
-          expect(secondResponse.request.body.input).toEqual([
-            expect.objectContaining({ role: 'system' }),
-            expect.objectContaining({ role: 'user' }),
-            expect.objectContaining({ type: 'function_call' }),
-            expect.objectContaining({ type: 'function_call_output' }),
-            expect.objectContaining({ role: 'assistant' }),
-            expect.objectContaining({ role: 'user' }),
-          ]);
-        }
-
-        expect(secondResponse.response.messages).toEqual([expect.objectContaining({ role: 'assistant' })]);
-      }, 30_000);
-
-      it('should include assistant messages in onFinish callback with aisdk format', async () => {
-        const mockModel = new MockLanguageModelV2({
-          doStream: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            stream: convertArrayToReadableStream([
-              { type: 'text-delta', id: '1', delta: 'Hello! ' },
-              { type: 'text-delta', id: '2', delta: 'Nice to meet you!' },
-              {
-                type: 'finish',
-                id: '3',
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-              },
-            ]),
-            warnings: [],
-          }),
-        });
-
-        const agent = new Agent({
-          id: 'test-aisdk-onfinish',
-          name: 'Test AISDK onFinish',
-          model: mockModel,
-          instructions: 'You are a helpful assistant.',
-        });
-
-        let messagesInOnFinish: any[] | undefined;
-        let hasUserMessage = false;
-        let hasAssistantMessage = false;
-
-        const result = await agent.streamVNext('Hello, please respond with a greeting.', {
-          format: 'aisdk',
-          onFinish: props => {
-            // Store the messages from onFinish
-            messagesInOnFinish = props.messages;
-
-            if (props.messages) {
-              props.messages.forEach((msg: any) => {
-                if (msg.role === 'user') hasUserMessage = true;
-                if (msg.role === 'assistant') hasAssistantMessage = true;
-              });
-            }
-          },
-        });
-
-        // Consume the stream
-        await result.consumeStream();
-
-        // Verify that messages were provided in onFinish
-        expect(messagesInOnFinish).toBeDefined();
-        expect(messagesInOnFinish).toBeInstanceOf(Array);
-
-        // response messages should not be user messages
-        expect(hasUserMessage).toBe(false);
-        // Verify that we have assistant messages
-        expect(hasAssistantMessage).toBe(true);
-
-        // Verify the assistant message content
-        const assistantMessage = messagesInOnFinish?.find((m: any) => m.role === 'assistant');
-        expect(assistantMessage).toBeDefined();
-        expect(assistantMessage?.content).toBeDefined();
-
-        // For the v2 model, the assistant message should contain the streamed text
-        if (typeof assistantMessage?.content === 'string') {
-          expect(assistantMessage.content).toContain('Hello!');
-        } else if (Array.isArray(assistantMessage?.content)) {
-          const textContent = assistantMessage.content.find((c: any) => c.type === 'text');
-          expect(textContent?.text).toContain('Hello!');
-        }
-      });
-    });
   });
 
   if (version === 'v2') {
-    describe('streamVNext options', () => {
-      it('should call options.onError when stream error occurs in streamVNext', async () => {
+    describe('stream options', () => {
+      it('should call options.onError when stream error occurs in stream', async () => {
         const errorModel = new MockLanguageModelV2({
           doStream: async () => {
             throw new Error('Simulated stream error');
@@ -6319,10 +4537,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let errorCaught = false;
         let caughtError: any = null;
 
-        const stream = await agent.streamVNext('Hello', {
+        const stream = await agent.stream('Hello', {
           onError: ({ error }) => {
             errorCaught = true;
             caughtError = error;
+          },
+          modelSettings: {
+            maxRetries: 0,
           },
         });
 
@@ -6336,7 +4557,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(caughtError.message).toMatch(/Simulated stream error/);
       });
 
-      it('should call options.onChunk when streaming in streamVNext', async () => {
+      it('should call options.onChunk when streaming in stream', async () => {
         const agent = new Agent({
           id: 'test-options-onchunk',
           name: 'Test Options OnChunk',
@@ -6346,7 +4567,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         const chunks: any[] = [];
 
-        const stream = await agent.streamVNext('Hello', {
+        const stream = await agent.stream('Hello', {
           onChunk: (event: any) => {
             chunks.push(event.chunk);
           },
@@ -6359,7 +4580,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(chunks[0]).toHaveProperty('type');
       });
 
-      it('should call options.onAbort when stream is aborted in streamVNext', async () => {
+      it('should call options.onAbort when stream is aborted in stream', async () => {
         const abortController = new AbortController();
         let pullCalls = 0;
 
@@ -6403,7 +4624,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let abortCalled = false;
         let abortEvent: any = null;
 
-        const stream = await agent.streamVNext('Hello', {
+        const stream = await agent.stream('Hello', {
           onAbort: event => {
             abortCalled = true;
             abortEvent = event;
@@ -6420,7 +4641,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(abortEvent).toBeDefined();
       });
     });
-    describe(`${version} - streamVNext destructuring support`, () => {
+    describe(`${version} - stream destructuring support`, () => {
       it('should support destructuring of stream properties and methods', async () => {
         const agent = new Agent({
           id: 'test-destructuring',
@@ -6429,7 +4650,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           instructions: 'You are a helpful assistant.',
         });
 
-        const result = await agent.streamVNext('Say hello');
+        const result = await agent.stream('Say hello');
 
         // Test destructuring of various properties
         const { fullStream, textStream, text, usage, consumeStream, toolCalls, finishReason, request } = result;
@@ -6600,7 +4821,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let response;
       if (version === 'v1') {
-        response = await agent.generate('test message', {
+        response = await agent.generateLegacy('test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -6610,7 +4831,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           runtimeContext,
         });
       } else {
-        response = await agent.generateVNext('test message', {
+        response = await agent.generate('test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -6699,7 +4920,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       let stream;
 
       if (version === 'v1') {
-        stream = await agent.stream('test message', {
+        stream = await agent.streamLegacy('test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -6709,7 +4930,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           runtimeContext,
         });
       } else {
-        stream = await agent.streamVNext('test message', {
+        stream = await agent.stream('test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -6813,13 +5034,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       if (version === 'v1') {
-        await agent.generate(testMessages, {
+        await agent.generateLegacy(testMessages, {
           threadId: 'test-thread',
           resourceId: 'test-resource',
           runId: 'test-run',
         });
       } else {
-        await agent.generateVNext(testMessages, {
+        await agent.generate(testMessages, {
           threadId: 'test-thread',
           resourceId: 'test-resource',
           runId: 'test-run',
@@ -6917,7 +5138,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       if (version === 'v1') {
-        const stream = await agent.stream(testMessages, {
+        const stream = await agent.streamLegacy(testMessages, {
           threadId: 'test-thread',
           resourceId: 'test-resource',
           runId: 'test-run',
@@ -6927,7 +5148,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           // Just consume the stream
         }
       } else {
-        const stream = await agent.streamVNext(testMessages, {
+        const stream = await agent.stream(testMessages, {
           threadId: 'test-thread',
           resourceId: 'test-resource',
           runId: 'test-run',
@@ -7026,13 +5247,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       if (version === 'v1') {
-        const stream = await agent.stream(testMessages);
+        const stream = await agent.streamLegacy(testMessages);
         // Consume the stream to trigger the model call
         for await (const _chunk of stream.textStream) {
           // Just consume the stream
         }
       } else {
-        const stream = await agent.streamVNext(testMessages);
+        const stream = await agent.stream(testMessages);
         // Consume the stream to trigger the model call
         for await (const _chunk of stream.fullStream) {
           // Just consume the stream
@@ -7127,9 +5348,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       if (version === 'v1') {
-        await agent.generate(testMessages);
+        await agent.generateLegacy(testMessages);
       } else {
-        await agent.generateVNext(testMessages);
+        await agent.generate(testMessages);
       }
 
       // Check if system message from user input is preserved in the final prompt
@@ -7208,11 +5429,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Test generate with system option
       if (version === 'v1') {
-        await agent.generate('Hello', {
+        await agent.generateLegacy('Hello', {
           system: 'You must respond in JSON format',
         });
       } else {
-        await agent.generateVNext('Hello', {
+        await agent.generate('Hello', {
           system: 'You must respond in JSON format',
         });
       }
@@ -7297,7 +5518,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Test stream with system option
       if (version === 'v1') {
-        const streamResult = await agent.stream('Hello', {
+        const streamResult = await agent.streamLegacy('Hello', {
           system: 'Always be concise',
         });
         // Properly consume the v1 stream
@@ -7305,7 +5526,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           // Just consume the stream
         }
       } else {
-        const streamResult = await agent.streamVNext('Hello', {
+        const streamResult = await agent.stream('Hello', {
           system: 'Always be concise',
         });
         await streamResult.getFullOutput(); // Consume the stream
@@ -7383,12 +5604,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       if (version === 'v1') {
-        await agent.generate('Hello', {
+        await agent.generateLegacy('Hello', {
           instructions: 'Override instructions',
           system: 'Additional system context',
         });
       } else {
-        await agent.generateVNext('Hello', {
+        await agent.generate('Hello', {
           instructions: 'Override instructions',
           system: 'Additional system context',
         });
@@ -7401,7 +5622,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(allSystemContent).toContain('Additional system context');
     });
 
-    it('should support CoreSystemMessage object in generateVNext method', async () => {
+    it('should support CoreSystemMessage object in generate method', async () => {
       // Skip this test for v1 as it only applies to VNext methods
       if (version === 'v1') {
         return;
@@ -7452,7 +5673,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       // Test with CoreSystemMessage object
-      await agent.generateVNext('Hello', {
+      await agent.generate('Hello', {
         system: {
           role: 'system',
           content: 'You are a helpful assistant that responds in JSON format',
@@ -7471,7 +5692,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(jsonSystemMessage?.content).toBe('You are a helpful assistant that responds in JSON format');
     });
 
-    it('should support SystemModelMessage object in streamVNext method', async () => {
+    it('should support SystemModelMessage object in stream method', async () => {
       // Skip this test for v1 as it only applies to VNext methods
       if (version === 'v1') {
         return;
@@ -7513,7 +5734,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       // Test with SystemModelMessage object (AI SDK v5 format)
-      const result = await agent.streamVNext('Hello', {
+      const result = await agent.stream('Hello', {
         system: {
           role: 'system',
           content: 'You are an expert programmer who provides detailed explanations',
@@ -7589,7 +5810,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Test 1: String system message
       capturedMessages = [];
-      await agent.generateVNext('Test 1', {
+      await agent.generate('Test 1', {
         system: 'String system message',
       });
       let systemMessages = capturedMessages.filter(m => m.role === 'system');
@@ -7600,7 +5821,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Test 2: CoreSystemMessage object
       capturedMessages = [];
-      await agent.generateVNext('Test 2', {
+      await agent.generate('Test 2', {
         system: {
           role: 'system',
           content: 'CoreSystemMessage content',
@@ -7614,7 +5835,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Test 3: SystemModelMessage with string content
       capturedMessages = [];
-      await agent.generateVNext('Test 3', {
+      await agent.generate('Test 3', {
         system: {
           role: 'system',
           content: 'SystemModelMessage with full string content',
@@ -7679,7 +5900,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Test 1: Array of strings
       capturedMessages = [];
-      await agent.generateVNext('Test string array', {
+      await agent.generate('Test string array', {
         system: ['First string message', 'Second string message', 'Third string message'],
       });
 
@@ -7700,7 +5921,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Test 2: Array of CoreSystemMessage objects
       capturedMessages = [];
-      await agent.generateVNext('Test object array', {
+      await agent.generate('Test object array', {
         system: [
           { role: 'system', content: 'First system message' },
           { role: 'system', content: 'Second system message' },
@@ -7853,9 +6074,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithProcessor.generate('Hello world');
+          result = await agentWithProcessor.generateLegacy('Hello world');
         } else {
-          result = await agentWithProcessor.generateVNext('Hello world');
+          result = await agentWithProcessor.generate('Hello world');
         }
 
         // The processor should have added a message
@@ -7889,9 +6110,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithProcessors.generate('Hello');
+          result = await agentWithProcessors.generateLegacy('Hello');
         } else {
-          result = await agentWithProcessors.generateVNext('Hello');
+          result = await agentWithProcessors.generate('Hello');
         }
 
         expect(result.text).toContain('First processor');
@@ -7925,9 +6146,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithAsyncProcessors.generate('Test async');
+          result = await agentWithAsyncProcessors.generateLegacy('Test async');
         } else {
-          result = await agentWithAsyncProcessors.generateVNext('Test async');
+          result = await agentWithAsyncProcessors.generate('Test async');
         }
 
         // Processors run sequentially, so "First processor" should appear before "Second processor"
@@ -7955,9 +6176,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithAbortProcessor.generate('This should be aborted');
+          result = await agentWithAbortProcessor.generateLegacy('This should be aborted');
         } else {
-          result = await agentWithAbortProcessor.generateVNext('This should be aborted');
+          result = await agentWithAbortProcessor.generate('This should be aborted');
         }
 
         expect(result.tripwire).toBe(true);
@@ -7984,9 +6205,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithCustomAbort.generate('Custom abort test');
+          result = await agentWithCustomAbort.generateLegacy('Custom abort test');
         } else {
-          result = await agentWithCustomAbort.generateVNext('Custom abort test');
+          result = await agentWithCustomAbort.generate('Custom abort test');
         }
 
         expect(result.tripwire).toBe(true);
@@ -8023,9 +6244,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithAbortSequence.generate('Abort sequence test');
+          result = await agentWithAbortSequence.generateLegacy('Abort sequence test');
         } else {
-          result = await agentWithAbortSequence.generateVNext('Abort sequence test');
+          result = await agentWithAbortSequence.generate('Abort sequence test');
         }
 
         expect(result.tripwire).toBe(true);
@@ -8052,9 +6273,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let stream;
         if (version === 'v1') {
-          stream = await agentWithStreamProcessor.stream('Stream test');
+          stream = await agentWithStreamProcessor.streamLegacy('Stream test');
         } else {
-          stream = await agentWithStreamProcessor.streamVNext('Stream test');
+          stream = await agentWithStreamProcessor.stream('Stream test');
         }
 
         let fullText = '';
@@ -8083,11 +6304,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let stream;
         if (version === 'v1') {
-          stream = await agentWithStreamAbort.stream('Stream abort test');
+          stream = await agentWithStreamAbort.streamLegacy('Stream abort test');
           expect(stream.tripwire).toBe(true);
           expect(stream.tripwireReason).toBe('Stream aborted');
         } else {
-          stream = await agentWithStreamAbort.streamVNext('Stream abort test');
+          stream = await agentWithStreamAbort.stream('Stream abort test');
 
           for await (const chunk of stream.fullStream) {
             expect(chunk.type).toBe('tripwire');
@@ -8124,9 +6345,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let stream;
         if (version === 'v1') {
-          stream = await agentWithDeployerAbort.stream('Deployer abort test');
+          stream = await agentWithDeployerAbort.streamLegacy('Deployer abort test');
         } else {
-          stream = await agentWithDeployerAbort.streamVNext('Deployer abort test');
+          stream = await agentWithDeployerAbort.stream('Deployer abort test');
         }
 
         if (version === 'v1') {
@@ -8182,11 +6403,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithDynamicProcessors.generate('Test dynamic', {
+          result = await agentWithDynamicProcessors.generateLegacy('Test dynamic', {
             runtimeContext,
           });
         } else {
-          result = await agentWithDynamicProcessors.generateVNext('Test dynamic', {
+          result = await agentWithDynamicProcessors.generate('Test dynamic', {
             runtimeContext,
           });
         }
@@ -8204,9 +6425,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithEmptyProcessors.generate('No processors test');
+          result = await agentWithEmptyProcessors.generateLegacy('No processors test');
         } else {
-          result = await agentWithEmptyProcessors.generateVNext('No processors test');
+          result = await agentWithEmptyProcessors.generate('No processors test');
         }
 
         expect(result.text).toContain('processed:');
@@ -8239,9 +6460,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let result;
         if (version === 'v1') {
-          result = await agentWithModifier.generate('Original user message');
+          result = await agentWithModifier.generateLegacy('Original user message');
         } else {
-          result = await agentWithModifier.generateVNext('Original user message');
+          result = await agentWithModifier.generate('Original user message');
         }
 
         expect(result.text).toContain('MODIFIED: Original message was received');
@@ -8283,18 +6504,18 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         // Test valid content
         let validResult;
         if (version === 'v1') {
-          validResult = await agentWithValidator.generate('This is appropriate content');
+          validResult = await agentWithValidator.generateLegacy('This is appropriate content');
         } else {
-          validResult = await agentWithValidator.generateVNext('This is appropriate content');
+          validResult = await agentWithValidator.generate('This is appropriate content');
         }
         expect(validResult.text).toContain('Content validated');
 
         // Test invalid content
         let invalidResult;
         if (version === 'v1') {
-          invalidResult = await agentWithValidator.generate('This contains inappropriate content');
+          invalidResult = await agentWithValidator.generateLegacy('This contains inappropriate content');
         } else {
-          invalidResult = await agentWithValidator.generateVNext('This contains inappropriate content');
+          invalidResult = await agentWithValidator.generate('This contains inappropriate content');
         }
         expect(invalidResult.tripwire).toBe(true);
         expect(invalidResult.tripwireReason).toBe('Content validation failed');
@@ -8374,7 +6595,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       if (version === 'v1') {
-        await agent.generate(messagesWithMetadata, {
+        await agent.generateLegacy(messagesWithMetadata, {
           memory: {
             resource: 'customer-12345',
             thread: {
@@ -8383,7 +6604,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generateVNext(messagesWithMetadata, {
+        await agent.generate(messagesWithMetadata, {
           memory: {
             resource: 'customer-12345',
             thread: {
@@ -8446,7 +6667,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let stream;
       if (version === 'v1') {
-        stream = await agent.stream(messagesWithMetadata, {
+        stream = await agent.streamLegacy(messagesWithMetadata, {
           memory: {
             resource: 'user-mobile',
             thread: {
@@ -8455,7 +6676,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        stream = await agent.streamVNext(messagesWithMetadata, {
+        stream = await agent.stream(messagesWithMetadata, {
           memory: {
             resource: 'user-mobile',
             thread: {
@@ -8536,7 +6757,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       ];
 
       if (version === 'v1') {
-        await agent.generate(mixedMessages, {
+        await agent.generateLegacy(mixedMessages, {
           memory: {
             resource: 'mixed-user',
             thread: {
@@ -8545,7 +6766,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generateVNext(mixedMessages, {
+        await agent.generate(mixedMessages, {
           memory: {
             resource: 'mixed-user',
             thread: {
@@ -8598,7 +6819,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     if (version === 'v1') {
-      const result = await userAgent.stream('Make it green', {
+      const result = await userAgent.streamLegacy('Make it green', {
         clientTools: {
           changeColor: {
             id: 'changeColor',
@@ -8619,7 +6840,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       for await (const _ of result.fullStream) {
       }
     } else {
-      const result = await userAgent.streamVNext('Make it green', {
+      const result = await userAgent.stream('Make it green', {
         clientTools: {
           changeColor: {
             id: 'changeColor',
@@ -8652,7 +6873,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       if (version === 'v1') {
-        const result = await userAgent.generate('Make it green', {
+        const result = await userAgent.generateLegacy('Make it green', {
           clientTools: {
             changeColor: {
               id: 'changeColor',
@@ -8669,7 +6890,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         expect(result.toolCalls.length).toBeGreaterThan(0);
       } else {
-        const result = await userAgent.generateVNext('Make it green', {
+        const result = await userAgent.generate('Make it green', {
           clientTools: {
             changeColor: {
               id: 'changeColor',
@@ -8687,824 +6908,57 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(result.toolCalls.length).toBeGreaterThan(0);
       }
     },
-    10000,
+    30000,
   );
 
-  describe(
-    'model list',
-    {
-      skip: version === 'v1',
-    },
-    () => {
-      it('should take and return model list', async () => {
-        const agent = new Agent({
-          name: 'test',
-          instructions: 'test agent instructions',
-          model: [
-            {
-              model: openai_v5('gpt-4o'),
-            },
-            {
-              model: openai_v5('gpt-4o-mini'),
-            },
-            {
-              model: openai_v5('gpt-4.1'),
-            },
-          ],
-        });
-
-        const modelList = await agent.getModelList();
-        if (!modelList) {
-          expect.fail('Model list should exist');
-        }
-        expect(modelList.length).toBe(3);
-        const model0 = modelList[0]?.model as LanguageModelV2;
-        expect(model0.modelId).toBe('gpt-4o');
-        const model1 = modelList[1]?.model as LanguageModelV2;
-        expect(model1.modelId).toBe('gpt-4o-mini');
-        const model2 = modelList[2]?.model as LanguageModelV2;
-        expect(model2.modelId).toBe('gpt-4.1');
+  describe('agents as tools', () => {
+    it('should expose sub-agents as tools when using generate/stream', async () => {
+      // Create a research agent that will be used as a tool
+      const researchAgent = new Agent({
+        name: 'research-agent',
+        instructions: 'You are a research agent. Provide concise, factual information.',
+        model: dummyModel,
       });
 
-      it('should reorder model list', async () => {
-        const agent = new Agent({
-          name: 'test',
-          instructions: 'test agent instructions',
-          model: [
-            {
-              model: openai_v5('gpt-4o'),
-            },
-            {
-              model: openai_v5('gpt-4o-mini'),
-            },
-            {
-              model: openai_v5('gpt-4.1'),
-            },
-          ],
-        });
-
-        const modelList = await agent.getModelList();
-
-        const modelIds = modelList?.map(m => m.id) || [];
-        const reversedModelIds = [...modelIds].reverse();
-
-        agent.reorderModels(reversedModelIds);
-
-        const reorderedModelList = await agent.getModelList();
-
-        if (!reorderedModelList) {
-          expect.fail('Reordered model list should exist');
-        }
-
-        expect(reorderedModelList.length).toBe(3);
-        expect(reorderedModelList[0]?.id).toBe(reversedModelIds[0]);
-        expect(reorderedModelList[1]?.id).toBe(reversedModelIds[1]);
-
-        const model0 = reorderedModelList[0]?.model as LanguageModelV2;
-        expect(model0.modelId).toBe('gpt-4.1');
-        const model1 = reorderedModelList[1]?.model as LanguageModelV2;
-        expect(model1.modelId).toBe('gpt-4o-mini');
+      // Create an orchestrator agent that has access to the research agent
+      const orchestratorAgent = new Agent({
+        name: 'orchestrator-agent',
+        instructions: 'You can delegate research tasks to specialized agents.',
+        model: openaiModel,
+        agents: {
+          researchAgent,
+        },
       });
 
-      it(`should update model list`, async () => {
-        const agent = new Agent({
-          name: 'test',
-          instructions: 'test agent instructions',
-          model: [
-            {
-              model: openai_v5('gpt-4o'),
-            },
-            {
-              model: openai_v5('gpt-4o-mini'),
-            },
-            {
-              model: openai_v5('gpt-4.1'),
-            },
-          ],
+      let result;
+      let toolCalls;
+
+      if (version === 'v1') {
+        result = await orchestratorAgent.generateLegacy('Use the research agent to find information about TypeScript', {
+          maxSteps: 2,
+          toolChoice: 'required',
         });
+        toolCalls = result.toolResults;
+      } else {
+        result = await orchestratorAgent.generate('Use the research agent to find information about TypeScript');
+        toolCalls = result.toolResults;
+      }
 
-        const modelList = await agent.getModelList();
-        if (!modelList) {
-          expect.fail('Model list should exist');
-        }
-        const model1Id = modelList[1]?.id || '';
+      // Verify that the research agent was called as a tool
+      expect(toolCalls.length).toBeGreaterThan(0);
 
-        agent.updateModelInModelList({
-          id: model1Id,
-          model: openai_v5('gpt-4'),
-          maxRetries: 5,
-        });
-        const updatedModelList = await agent.getModelList();
+      const agentToolCall =
+        version === 'v1'
+          ? toolCalls.find((tc: any) => tc.toolName === 'researchAgent')
+          : toolCalls.find((tc: any) => tc.payload?.toolName === 'researchAgent');
 
-        if (!updatedModelList) {
-          expect.fail('Updated model list should exist');
-        }
-        expect(updatedModelList.length).toBe(3);
-        const updatedModel1 = updatedModelList[1]?.model as LanguageModelV2;
-        expect(updatedModel1.modelId).toBe('gpt-4');
-        expect(updatedModelList[1]?.maxRetries).toBe(5);
-        const updatedModel2 = updatedModelList[2]?.model as LanguageModelV2;
-        expect(updatedModel2.modelId).toBe('gpt-4.1');
+      expect(version === 'v1' ? toolCalls[0]?.result : toolCalls[0]?.payload?.result).toStrictEqual({
+        text: 'Dummy response',
       });
 
-      it('should use model list', async () => {
-        let usedModelName = '';
-
-        // Create two different models
-        let premiumModel: MockLanguageModelV2;
-        let standardModel: MockLanguageModelV2;
-
-        premiumModel = new MockLanguageModelV2({
-          doGenerate: async () => {
-            usedModelName = 'premium';
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-              text: `Premium Title`,
-              content: [
-                {
-                  type: 'text',
-                  text: `Premium Title`,
-                },
-              ],
-              warnings: [],
-            };
-          },
-          doStream: async () => {
-            usedModelName = 'premium';
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-
-        standardModel = new MockLanguageModelV2({
-          doGenerate: async () => {
-            usedModelName = 'standard';
-            throw new Error('Simulated generate error');
-          },
-          doStream: async () => {
-            usedModelName = 'standard';
-            const stream = new ReadableStream({
-              pull() {
-                throw new Error('Simulated stream error');
-              },
-            });
-            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-          },
-        });
-
-        const agent = new Agent({
-          name: 'update-model-agent',
-          instructions: 'test agent',
-          model: [
-            {
-              model: standardModel,
-            },
-            {
-              model: premiumModel,
-            },
-          ],
-        });
-
-        const streamResult = await agent.streamVNext('Test message');
-
-        const fullText = await streamResult.text;
-        expect(fullText).toBe('Hello, Premium Title');
-
-        expect(usedModelName).toBe('premium');
-      });
-
-      it('should use maxRetries in model list', async () => {
-        let usedModelName = '';
-
-        // Create two different models
-        let premiumModel: MockLanguageModelV2;
-        let standardModel: MockLanguageModelV2;
-
-        const streamErrorFn = vi.fn(() => {
-          throw new Error('Simulated stream error');
-        });
-
-        premiumModel = new MockLanguageModelV2({
-          doGenerate: async () => {
-            usedModelName = 'premium';
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-              text: `Premium Title`,
-              content: [
-                {
-                  type: 'text',
-                  text: `Premium Title`,
-                },
-              ],
-              warnings: [],
-            };
-          },
-          doStream: async () => {
-            usedModelName = 'premium';
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-
-        standardModel = new MockLanguageModelV2({
-          doGenerate: async () => {
-            usedModelName = 'standard';
-            throw new Error('Simulated generate error');
-          },
-          doStream: async () => {
-            usedModelName = 'standard';
-            const stream = new ReadableStream({
-              pull() {
-                streamErrorFn();
-              },
-            });
-            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-          },
-        });
-
-        const agent = new Agent({
-          name: 'update-model-agent',
-          instructions: 'test agent',
-          model: [
-            {
-              model: standardModel,
-              maxRetries: 3,
-            },
-            {
-              model: premiumModel,
-            },
-          ],
-        });
-
-        const streamResult = await agent.streamVNext('Test message');
-
-        const fullText = await streamResult.text;
-        expect(fullText).toBe('Hello, Premium Title');
-        expect(streamErrorFn).toHaveBeenCalledTimes(4);
-        expect(usedModelName).toBe('premium');
-      });
-
-      it('should default to agent maxRetries when not provided in model list', async () => {
-        let usedModelName = '';
-
-        // Create two different models
-        let premiumModel: MockLanguageModelV2;
-        let standardModel: MockLanguageModelV2;
-        let standardModel2: MockLanguageModelV2;
-
-        const streamErrorFn = vi.fn(() => {
-          throw new Error('Simulated stream error');
-        });
-        const streamErrorFn2 = vi.fn(() => {
-          throw new Error('Simulated stream error');
-        });
-
-        premiumModel = new MockLanguageModelV2({
-          doGenerate: async () => {
-            usedModelName = 'premium';
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-              text: `Premium Title`,
-              content: [
-                {
-                  type: 'text',
-                  text: `Premium Title`,
-                },
-              ],
-              warnings: [],
-            };
-          },
-          doStream: async () => {
-            usedModelName = 'premium';
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-
-        standardModel = new MockLanguageModelV2({
-          doGenerate: async () => {
-            usedModelName = 'standard';
-            throw new Error('Simulated generate error');
-          },
-          doStream: async () => {
-            usedModelName = 'standard';
-            const stream = new ReadableStream({
-              pull() {
-                streamErrorFn();
-              },
-            });
-            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-          },
-        });
-
-        standardModel2 = new MockLanguageModelV2({
-          doGenerate: async () => {
-            usedModelName = 'standard2';
-            throw new Error('Simulated generate error');
-          },
-          doStream: async () => {
-            usedModelName = 'standard';
-            const stream = new ReadableStream({
-              pull() {
-                streamErrorFn2();
-              },
-            });
-            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-          },
-        });
-
-        const agent = new Agent({
-          name: 'update-model-agent',
-          instructions: 'test agent',
-          model: [
-            {
-              model: standardModel,
-              maxRetries: 3,
-            },
-            {
-              model: standardModel2,
-            },
-            {
-              model: premiumModel,
-            },
-          ],
-          maxRetries: 2,
-        });
-
-        const streamResult = await agent.streamVNext('Test message');
-
-        const fullText = await streamResult.text;
-        expect(fullText).toBe('Hello, Premium Title');
-        expect(streamErrorFn).toHaveBeenCalledTimes(4);
-        expect(streamErrorFn2).toHaveBeenCalledTimes(3);
-        expect(usedModelName).toBe('premium');
-      });
-
-      it('should skip models with enabled:false in model list', async () => {
-        let usedModelName = '';
-
-        // Create two different models
-        let premiumModel: MockLanguageModelV2;
-        let standardModel: MockLanguageModelV2;
-        let standardModel2: MockLanguageModelV2;
-
-        const streamErrorFn = vi.fn(() => {
-          throw new Error('Simulated stream error');
-        });
-        const streamErrorFn2 = vi.fn(() => {
-          throw new Error('Simulated stream error');
-        });
-
-        premiumModel = new MockLanguageModelV2({
-          doGenerate: async () => {
-            usedModelName = 'premium';
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-              text: `Premium Title`,
-              content: [
-                {
-                  type: 'text',
-                  text: `Premium Title`,
-                },
-              ],
-              warnings: [],
-            };
-          },
-          doStream: async () => {
-            usedModelName = 'premium';
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-
-        standardModel = new MockLanguageModelV2({
-          doGenerate: async () => {
-            usedModelName = 'standard';
-            throw new Error('Simulated generate error');
-          },
-          doStream: async () => {
-            usedModelName = 'standard';
-            const stream = new ReadableStream({
-              pull() {
-                streamErrorFn();
-              },
-            });
-            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-          },
-        });
-
-        standardModel2 = new MockLanguageModelV2({
-          doGenerate: async () => {
-            usedModelName = 'standard2';
-            throw new Error('Simulated generate error');
-          },
-          doStream: async () => {
-            usedModelName = 'standard';
-            const stream = new ReadableStream({
-              pull() {
-                streamErrorFn2();
-              },
-            });
-            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-          },
-        });
-
-        const agent = new Agent({
-          name: 'update-model-agent',
-          instructions: 'test agent',
-          model: [
-            {
-              model: standardModel,
-              maxRetries: 3,
-            },
-            {
-              model: standardModel2,
-              enabled: false,
-            },
-            {
-              model: premiumModel,
-            },
-          ],
-          maxRetries: 2,
-        });
-
-        const streamResult = await agent.streamVNext('Test message');
-
-        const fullText = await streamResult.text;
-        expect(fullText).toBe('Hello, Premium Title');
-        expect(streamErrorFn).toHaveBeenCalledTimes(4);
-        expect(streamErrorFn2).toHaveBeenCalledTimes(0);
-        expect(usedModelName).toBe('premium');
-      });
-
-      it('should skip rest of the models in the list after getting a successful stream', async () => {
-        let usedModelName = '';
-
-        // Create two different models
-        let premiumModel: MockLanguageModelV2;
-        let premiumModel2: MockLanguageModelV2;
-        let standardModel: MockLanguageModelV2;
-
-        const streamErrorFn = vi.fn(() => {
-          throw new Error('Simulated stream error');
-        });
-
-        const premiumModel2Fn = vi.fn(() => {
-          console.log('premium model 2 called');
-        });
-
-        premiumModel = new MockLanguageModelV2({
-          doGenerate: async () => {
-            usedModelName = 'premium';
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-              text: `Hello, Premium Title`,
-              content: [
-                {
-                  type: 'text',
-                  text: `Hello, Premium Title`,
-                },
-              ],
-              warnings: [],
-            };
-          },
-          doStream: async () => {
-            usedModelName = 'premium';
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-
-        premiumModel2 = new MockLanguageModelV2({
-          doGenerate: async () => {
-            usedModelName = 'premium';
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-              text: `Second Premium Title`,
-              content: [
-                {
-                  type: 'text',
-                  text: `Second Premium Title`,
-                },
-              ],
-              warnings: [],
-            };
-          },
-          doStream: async () => {
-            usedModelName = 'premium2';
-            premiumModel2Fn();
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', Second' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-
-        standardModel = new MockLanguageModelV2({
-          doGenerate: async () => {
-            usedModelName = 'standard';
-            throw new Error('Simulated generate error');
-          },
-          doStream: async () => {
-            usedModelName = 'standard';
-            const stream = new ReadableStream({
-              pull() {
-                streamErrorFn();
-              },
-            });
-            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-          },
-        });
-
-        const agent = new Agent({
-          name: 'update-model-agent',
-          instructions: 'test agent',
-          model: [
-            {
-              model: standardModel,
-              maxRetries: 3,
-            },
-            {
-              model: premiumModel,
-            },
-            {
-              model: premiumModel2,
-            },
-          ],
-          maxRetries: 2,
-        });
-
-        const streamResult = await agent.streamVNext('Test message');
-
-        const fullText = await streamResult.text;
-        expect(fullText).toBe('Hello, Premium Title');
-        expect(streamErrorFn).toHaveBeenCalledTimes(4);
-        expect(premiumModel2Fn).toHaveBeenCalledTimes(0);
-        expect(usedModelName).toBe('premium');
-      });
-
-      it('should throw an error if a v1 model is provided in an array of models', async () => {
-        const v1Model = new MockLanguageModelV1({
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              initialDelayInMs: 0,
-              chunkDelayInMs: 1,
-              chunks: [
-                { type: 'text-delta', textDelta: 'Hello! ' },
-                { type: 'text-delta', textDelta: 'I am ' },
-                { type: 'text-delta', textDelta: 'a helpful assistant.' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { promptTokens: 10, completionTokens: 20 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: [], rawSettings: {} },
-          }),
-        });
-        const v2Model = new MockLanguageModelV2({
-          doGenerate: async () => {
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-              text: `Hello, Premium Title`,
-              content: [
-                {
-                  type: 'text',
-                  text: `Hello, Premium Title`,
-                },
-              ],
-              warnings: [],
-            };
-          },
-          doStream: async () => {
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-                },
-              ]),
-            };
-          },
-        });
-        const agent = new Agent({
-          name: 'update-model-agent',
-          instructions: 'test agent',
-          model: [{ model: v2Model }, { model: v1Model }],
-        });
-
-        try {
-          await agent.getLLM();
-          expect.fail('Expected getLLM() to throw an error');
-        } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
-        }
-
-        try {
-          await agent.generate('Hello');
-          expect.fail('Expected getLLM() to throw an error');
-        } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
-        }
-
-        try {
-          await agent.stream('Hello');
-          expect.fail('Expected getLLM() to throw an error');
-        } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
-        }
-
-        try {
-          await agent.generateVNext('Hello');
-          expect.fail('Expected getLLM() to throw an error');
-        } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
-        }
-
-        try {
-          await agent.streamVNext('Hello');
-          expect.fail('Expected getLLM() to throw an error');
-        } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
-        }
-      });
-    },
-  );
+      expect(agentToolCall).toBeDefined();
+    }, 50000);
+  });
 
   describe('scorer output data', () => {
     it(`${version} - should return scoring data from generate when returnScorerData is true`, async () => {
@@ -9516,11 +6970,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let result;
       if (version === 'v1') {
-        result = await agent.generate('Make it green', {
+        result = await agent.generateLegacy('Make it green', {
           returnScorerData: true,
         });
       } else {
-        result = await agent.generateVNext('Make it green', {
+        result = await agent.generate('Make it green', {
           returnScorerData: true,
         });
       }
@@ -9544,11 +6998,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let result;
       if (version === 'v1') {
-        result = await agent.generate('Make it green', {
+        result = await agent.generateLegacy('Make it green', {
           returnScorerData: false,
         });
       } else {
-        result = await agent.generateVNext('Make it green', {
+        result = await agent.generate('Make it green', {
           returnScorerData: false,
         });
       }
@@ -9565,9 +7019,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let result;
       if (version === 'v1') {
-        result = await agent.generate('Make it green');
+        result = await agent.generateLegacy('Make it green');
       } else {
-        result = await agent.generateVNext('Make it green');
+        result = await agent.generate('Make it green');
       }
 
       expect(result.scoringData).toBeUndefined();
@@ -9612,9 +7066,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it(`${version} - should call scorerTest when no override is provided`, async () => {
       if (version === 'v1') {
-        await agent.generate('Hello world');
+        await agent.generateLegacy('Hello world');
       } else {
-        await agent.generateVNext('Hello world');
+        await agent.generate('Hello world');
       }
 
       expect(runScorer).toHaveBeenCalledWith(
@@ -9629,13 +7083,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it(`${version} - should use override scorers when provided in generate options`, async () => {
       if (version === 'v1') {
-        await agent.generate('Hello world', {
+        await agent.generateLegacy('Hello world', {
           scorers: {
             scorer1: { scorer: mastra.getScorer('scorer1') },
           },
         });
       } else {
-        await agent.generateVNext('Hello world', {
+        await agent.generate('Hello world', {
           scorers: {
             scorer1: { scorer: mastra.getScorer('scorer1') },
           },
@@ -9666,13 +7120,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     it(`${version} - should call scorers when provided in stream options`, async () => {
       let result: any;
       if (version === 'v1') {
-        result = await agent.stream('Hello world', {
+        result = await agent.streamLegacy('Hello world', {
           scorers: {
             scorer1: { scorer: mastra.getScorer('scorer1') },
           },
         });
       } else {
-        result = await agent.streamVNext('Hello world', {
+        result = await agent.stream('Hello world', {
           scorers: {
             scorer1: { scorer: mastra.getScorer('scorer1') },
           },
@@ -9692,13 +7146,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it(`${version} - can use scorer name for scorer config for generate`, async () => {
       if (version === 'v1') {
-        await agent.generate('Hello world', {
+        await agent.generateLegacy('Hello world', {
           scorers: {
             scorer1: { scorer: scorer1.name },
           },
         });
       } else {
-        await agent.generateVNext('Hello world', {
+        await agent.generate('Hello world', {
           scorers: {
             scorer1: { scorer: scorer1.name },
           },
@@ -9717,13 +7171,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it(`${version} - should call runScorer with correct parameters`, async () => {
       if (version === 'v1') {
-        await agent.generate('Hello world', {
+        await agent.generateLegacy('Hello world', {
           scorers: {
             scorer1: { scorer: scorer1.name },
           },
         });
       } else {
-        await agent.generateVNext('Hello world', {
+        await agent.generate('Hello world', {
           scorers: {
             scorer1: { scorer: scorer1.name },
           },
@@ -9782,7 +7236,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       // Call stream without passing any options - should use defaultStreamOptions
-      const result = version === 'v1' ? await agent.stream('How are you?') : await agent.streamVNext('How are you?');
+      const result = version === 'v1' ? await agent.streamLegacy('How are you?') : await agent.stream('How are you?');
 
       // Consume the stream to trigger onFinish
       if (version === 'v1') {
@@ -9829,7 +7283,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Call stream with empty options - should still use defaultStreamOptions
       const result =
-        version === 'v1' ? await agent.stream('How are you?', {}) : await agent.streamVNext('How are you?', {});
+        version === 'v1' ? await agent.streamLegacy('How are you?', {}) : await agent.stream('How are you?', {});
 
       // Consume the stream to trigger onFinish
       if (version === 'v1') {
@@ -9876,13 +7330,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Call stream with explicit onFinish - should override defaultStreamOptions
       const result =
         version === 'v1'
-          ? await agent.stream('How are you?', {
+          ? await agent.streamLegacy('How are you?', {
               onFinish: data => {
                 passedOnFinishCalled = true;
                 finishData = data;
               },
             })
-          : await agent.streamVNext('How are you?', {
+          : await agent.stream('How are you?', {
               onFinish: data => {
                 passedOnFinishCalled = true;
                 finishData = data;
@@ -9906,7 +7360,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
   });
 
-  describe(`${version} - streamVNext onFinish usage bug`, () => {
+  describe(`${version} - stream onFinish usage bug`, () => {
     it(`should include usage property in onFinish callback for ${version}`, async () => {
       let onFinishCalled = false;
       let finishData: any = null;
@@ -9926,11 +7380,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       };
 
       if (version === 'v1') {
-        result = await agent.stream('How are you?', {
+        result = await agent.streamLegacy('How are you?', {
           onFinish,
         });
       } else {
-        result = await agent.streamVNext('How are you?', {
+        result = await agent.stream('How are you?', {
           onFinish,
         });
       }
@@ -9954,123 +7408,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 }
 
 describe('Agent Tests', () => {
-  describe('voice capabilities', () => {
-    class MockVoice extends MastraVoice {
-      async speak(): Promise<NodeJS.ReadableStream> {
-        const stream = new PassThrough();
-        stream.end('mock audio');
-        return stream;
-      }
-
-      async listen(): Promise<string> {
-        return 'mock transcription';
-      }
-
-      async getSpeakers() {
-        return [{ voiceId: 'mock-voice' }];
-      }
-    }
-
-    let voiceAgent: Agent;
-    beforeEach(() => {
-      voiceAgent = new Agent({
-        name: 'Voice Agent',
-        instructions: 'You are an agent with voice capabilities',
-        model: openai_v5('gpt-4o'),
-        voice: new CompositeVoice({
-          output: new MockVoice({
-            speaker: 'mock-voice',
-          }),
-          input: new MockVoice({
-            speaker: 'mock-voice',
-          }),
-        }),
-      });
-    });
-
-    describe('getSpeakers', () => {
-      it('should list available voices', async () => {
-        const speakers = await voiceAgent.voice?.getSpeakers();
-        expect(speakers).toEqual([{ voiceId: 'mock-voice' }]);
-      });
-    });
-
-    describe('speak', () => {
-      it('should generate audio stream from text', async () => {
-        const audioStream = await voiceAgent.voice?.speak('Hello World', {
-          speaker: 'mock-voice',
-        });
-
-        if (!audioStream) {
-          expect(audioStream).toBeDefined();
-          return;
-        }
-
-        const chunks: Buffer[] = [];
-        for await (const chunk of audioStream) {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-        }
-        const audioBuffer = Buffer.concat(chunks);
-
-        expect(audioBuffer.toString()).toBe('mock audio');
-      });
-
-      it('should work with different parameters', async () => {
-        const audioStream = await voiceAgent.voice?.speak('Test with parameters', {
-          speaker: 'mock-voice',
-          speed: 0.5,
-        });
-
-        if (!audioStream) {
-          expect(audioStream).toBeDefined();
-          return;
-        }
-
-        const chunks: Buffer[] = [];
-        for await (const chunk of audioStream) {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-        }
-        const audioBuffer = Buffer.concat(chunks);
-
-        expect(audioBuffer.toString()).toBe('mock audio');
-      });
-    });
-
-    describe('listen', () => {
-      it('should transcribe audio', async () => {
-        const audioStream = new PassThrough();
-        audioStream.end('test audio data');
-
-        const text = await voiceAgent.voice?.listen(audioStream);
-        expect(text).toBe('mock transcription');
-      });
-
-      it('should accept options', async () => {
-        const audioStream = new PassThrough();
-        audioStream.end('test audio data');
-
-        const text = await voiceAgent.voice?.listen(audioStream, {
-          language: 'en',
-        });
-        expect(text).toBe('mock transcription');
-      });
-    });
-
-    describe('error handling', () => {
-      it('should throw error when no voice provider is configured', async () => {
-        const agentWithoutVoice = new Agent({
-          name: 'No Voice Agent',
-          instructions: 'You are an agent without voice capabilities',
-          model: openai_v5('gpt-4o'),
-        });
-
-        await expect(agentWithoutVoice.voice.getSpeakers()).rejects.toThrow('No voice provider configured');
-        await expect(agentWithoutVoice.voice.speak('Test')).rejects.toThrow('No voice provider configured');
-        await expect(agentWithoutVoice.voice.listen(new PassThrough())).rejects.toThrow('No voice provider configured');
-      });
-    });
-  });
-
   it('should preserve empty assistant messages after tool use', () => {
     const messageList = new MessageList();
 
@@ -10205,202 +7542,6 @@ describe('Agent Tests', () => {
 
   agentTests({ version: 'v1' });
   agentTests({ version: 'v2' });
-
-  describe('agent.stopWhen', () => {
-    const weatherTool = createTool({
-      id: 'weather-tool',
-      description: 'Get weather for a location',
-      inputSchema: z.object({
-        location: z.string(),
-      }),
-      execute: async context => {
-        const { location } = context;
-        return {
-          temperature: 70,
-          feelsLike: 65,
-          humidity: 50,
-          windSpeed: 10,
-          windGust: 15,
-          conditions: 'sunny',
-          location,
-        };
-      },
-    });
-
-    const planActivities = createTool({
-      id: 'plan-activities',
-      description: 'Plan activities based on the weather',
-      inputSchema: z.object({
-        temperature: z.string(),
-      }),
-      execute: async () => {
-        return { activities: 'Plan activities based on the weather' };
-      },
-    });
-
-    const agent = new Agent({
-      name: 'test-step-boundaries',
-      instructions:
-        'You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool',
-      model: openai_v5('gpt-4o-mini'),
-      tools: {
-        weatherTool,
-        planActivities,
-      },
-    });
-
-    it('should demonstrate that stopWhen gets the proper step results in the first step', async () => {
-      let stopWhenCallCount = 0;
-      const stopWhenCalls: { callNumber: number; steps: any[] }[] = [];
-
-      const stream = await agent.streamVNext('What should i be doing in Toronto today?', {
-        stopWhen: ({ steps }) => {
-          stopWhenCallCount++;
-          // Store the call details
-          stopWhenCalls.push({
-            callNumber: stopWhenCallCount,
-            steps: JSON.parse(JSON.stringify(steps)), // Deep copy to preserve state
-          });
-
-          // Check if any step has tool calls
-          const hasToolCalls = steps.some(step => {
-            return step.content && step.content.some(item => item.type === 'tool-call' || item.type === 'tool-result');
-          });
-
-          if (hasToolCalls) {
-            console.log(`Found tool calls in steps, attempting to stop...`);
-            // Try to stop immediately after finding tool calls
-            return true;
-          }
-
-          return false;
-        },
-      });
-
-      const chunks: ChunkType[] = [];
-      let stepStartCount = 0;
-      let foundToolCallChunk = false;
-      let foundTextChunk = false;
-      for await (const chunk of stream.fullStream) {
-        chunks.push(chunk);
-
-        if (chunk.type === 'step-start') {
-          stepStartCount++;
-        } else if (chunk.type === 'tool-call') {
-          foundToolCallChunk = true;
-        } else if (chunk.type === 'text-delta' && chunk.payload.text.trim()) {
-          foundTextChunk = true;
-        }
-      }
-
-      expect(foundToolCallChunk).toBe(true);
-
-      expect(stepStartCount).toBe(1);
-      expect(foundTextChunk).toBe(false);
-
-      expect(stopWhenCallCount).toBe(1);
-    }, 10000);
-
-    it('should not call stopWhen on the final step', async () => {
-      let stopWhenCallCount = 0;
-      const stopWhenCalls: { callNumber: number; stepCount: number }[] = [];
-
-      const trackStopWhenCalls = ({ steps }: { steps: any[] }) => {
-        stopWhenCallCount++;
-        stopWhenCalls.push({
-          callNumber: stopWhenCallCount,
-          stepCount: steps.length,
-        });
-
-        return false;
-      };
-
-      const stream = await agent.streamVNext('What should i be doing in Toronto today?', {
-        stopWhen: trackStopWhenCalls,
-      });
-
-      let stepStartCount = 0;
-      let stepFinishCount = 0;
-
-      for await (const chunk of stream.fullStream) {
-        if (chunk.type === 'step-start') {
-          stepStartCount++;
-          console.log(`Step ${stepStartCount} started`);
-        } else if (chunk.type === 'step-finish') {
-          stepFinishCount++;
-          console.log(`Step ${stepFinishCount} finished`);
-        }
-      }
-
-      await stream.consumeStream();
-
-      // Verify that stopWhen is called n-1 times for n steps
-      expect(stepStartCount).toBe(stepFinishCount);
-      expect(stepStartCount).toBeGreaterThanOrEqual(2);
-
-      expect(stopWhenCallCount).toBe(stepStartCount - 1);
-
-      stopWhenCalls.forEach((call, index) => {
-        expect(call.stepCount).toBe(index + 1);
-      });
-    }, 25000);
-
-    it('should contain the correct content in the step results for both stopWhen and stream.steps', async () => {
-      const stopWhenContent: any[] = [];
-      const stream = await agent.streamVNext('What should i be doing in Toronto today?', {
-        stopWhen: ({ steps }) => {
-          stopWhenContent.push(steps.at(-1)?.content);
-          return false;
-        },
-      });
-
-      await stream.consumeStream();
-
-      const steps = await stream.steps;
-
-      expect(stopWhenContent[0].length).toBe(2);
-      expect(stopWhenContent[1].length).toBe(2);
-
-      expect(steps[0].content.length).toBe(2);
-      expect(steps[1].content.length).toBe(2);
-      expect(steps[2].content.length).toBe(1);
-
-      expect(stopWhenContent[1]).not.toEqual(stopWhenContent[0]);
-    }, 20000);
-
-    it('should contain the correct content in the step results for both stopWhen and stream.steps with text and tool calls in the same step', async () => {
-      const agent = new Agent({
-        name: 'test-step-boundaries',
-        instructions:
-          'You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool. Every tool call you make IMMEDIATELY explain the tool results after executing the tool, before moving on to other steps or tool calls',
-        model: openai_v5('gpt-4o-mini'),
-        tools: {
-          weatherTool,
-          planActivities,
-        },
-      });
-
-      const stopWhenContent: any[] = [];
-      const stream = await agent.streamVNext('What should i be doing in Toronto today?', {
-        stopWhen: ({ steps }) => {
-          stopWhenContent.push(steps.at(-1)?.content);
-          return false;
-        },
-      });
-
-      await stream.consumeStream();
-      const steps = await stream.steps;
-
-      expect(stopWhenContent[0].length).toBe(2);
-      expect(stopWhenContent[1].length).toBe(3); // text explaining the previous tool-call-results, tool-call, tool-result
-
-      expect(steps[0].content.length).toBe(2);
-      expect(steps[1].content.length).toBe(3); // text explaining the previous tool-call-results, tool-call, tool-result
-      expect(steps[2].content.length).toBe(1);
-
-      expect(stopWhenContent[1]).not.toEqual(stopWhenContent[0]);
-    }, 20000);
-  });
 });
 
 //     it('should accept and execute both Mastra and Vercel tools in Agent constructor', async () => {
@@ -10444,983 +7585,4 @@ describe('Agent Tests', () => {
 //       expect(mastraExecute).toHaveBeenCalled();
 //       expect(vercelExecute).toHaveBeenCalled();
 //     });
-
 // });
-
-describe('Stream ID Consistency', () => {
-  /**
-   * Test to verify that stream response IDs match database-saved message IDs
-   */
-
-  let memory: MockMemory;
-  let mastra: Mastra;
-
-  beforeEach(() => {
-    memory = new MockMemory();
-    mastra = new Mastra();
-  });
-
-  it('should return stream response IDs that can fetch saved messages from database', async () => {
-    const model = new MockLanguageModelV1({
-      doStream: async () => ({
-        stream: simulateReadableStream({
-          initialDelayInMs: 0,
-          chunkDelayInMs: 1,
-          chunks: [
-            { type: 'text-delta', textDelta: 'Hello! ' },
-            { type: 'text-delta', textDelta: 'I am ' },
-            { type: 'text-delta', textDelta: 'a helpful assistant.' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-            },
-          ],
-        }),
-        rawCall: { rawPrompt: [], rawSettings: {} },
-      }),
-    });
-
-    const agent = new Agent({
-      name: 'test-agent',
-      instructions: 'You are a helpful assistant.',
-      model,
-      // model: openai('gpt-4o'),
-      memory,
-    });
-
-    agent.__registerMastra(mastra);
-
-    const threadId = randomUUID();
-    const resourceId = 'test-resource';
-
-    const streamResult = await agent.stream('Hello!', {
-      threadId,
-      resourceId,
-    });
-
-    let streamResponseId: string | undefined;
-    for await (const _chunk of streamResult.fullStream) {
-      console.log('DEBUG chunk', _chunk);
-    }
-    await streamResult.consumeStream();
-
-    const finishedResult = streamResult;
-    const response = await finishedResult.response;
-
-    streamResponseId = response?.messages?.[0]?.id;
-
-    console.log('DEBUG streamResponseId', streamResponseId);
-    expect(streamResponseId).toBeDefined();
-
-    const savedMessages = await memory.getMessages({ threadId });
-
-    const messageById = savedMessages.find(m => m.id === streamResponseId);
-
-    expect(messageById).toBeDefined();
-    expect(messageById!.id).toBe(streamResponseId);
-  });
-
-  it('should use custom ID generator for streaming and keep stream response IDs consistent with database', async () => {
-    let customIdCounter = 0;
-    const customIdGenerator = vi.fn(() => `custom-id-${++customIdCounter}`);
-
-    const model = new MockLanguageModelV1({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: 'Hello! I am a helpful assistant.',
-      }),
-      doStream: async () => ({
-        stream: simulateReadableStream({
-          initialDelayInMs: 0,
-          chunkDelayInMs: 1,
-          chunks: [
-            { type: 'text-delta', textDelta: 'Hello! ' },
-            { type: 'text-delta', textDelta: 'I am ' },
-            { type: 'text-delta', textDelta: 'a helpful assistant.' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-            },
-          ],
-        }),
-        rawCall: { rawPrompt: [], rawSettings: {} },
-      }),
-    });
-
-    const mastraWithCustomId = new Mastra({
-      idGenerator: customIdGenerator,
-      logger: false,
-    });
-
-    const agent = new Agent({
-      name: 'test-agent',
-      instructions: 'You are a helpful assistant.',
-      model,
-      memory,
-    });
-
-    agent.__registerMastra(mastraWithCustomId);
-
-    const threadId = randomUUID();
-    const resourceId = 'test-resource';
-
-    const stream = await agent.stream('Hello!', { threadId, resourceId });
-
-    await stream.consumeStream();
-    const res = await stream.response;
-    const messageId = res.messages[0].id;
-
-    const savedMessages = await memory.getMessages({ threadId, selectBy: { include: [{ id: messageId }] } });
-
-    expect(savedMessages).toHaveLength(1);
-    expect(savedMessages[0].id).toBe(messageId);
-    expect(customIdGenerator).toHaveBeenCalled();
-  });
-
-  it('should return streamVNext response IDs that can fetch saved messages from database', async () => {
-    const model = new MockLanguageModelV2({
-      doStream: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-        stream: convertArrayToReadableStream([
-          {
-            type: 'stream-start',
-            warnings: [],
-          },
-          {
-            type: 'response-metadata',
-            id: 'v2-msg-xyz123',
-            modelId: 'mock-model-id',
-            timestamp: new Date(0),
-          },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'Hello! ' },
-          { type: 'text-delta', id: '1', delta: 'I am a ' },
-          { type: 'text-delta', id: '1', delta: 'helpful assistant.' },
-          { type: 'text-end', id: '1' },
-          {
-            type: 'finish',
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          },
-        ]),
-      }),
-    });
-
-    const agent = new Agent({
-      name: 'test-agent',
-      instructions: 'You are a helpful assistant.',
-      model,
-      memory,
-    });
-
-    agent.__registerMastra(mastra);
-
-    const threadId = randomUUID();
-    const resourceId = 'test-resource';
-
-    const streamResult = await agent.streamVNext('Hello!', {
-      threadId,
-      resourceId,
-    });
-
-    await streamResult.consumeStream();
-
-    let streamResponseId: string | undefined;
-    const res = await streamResult.response;
-    streamResponseId = res.uiMessages[0].id;
-
-    expect(streamResponseId).toBeDefined();
-
-    const savedMessages = await memory.getMessages({ threadId, selectBy: { include: [{ id: streamResponseId! }] } });
-    const messageById = savedMessages.find(m => m.id === streamResponseId);
-
-    expect(messageById).toBeDefined();
-    expect(messageById!.id).toBe(streamResponseId);
-  });
-
-  it('should use custom ID generator for streamVNext and keep stream response IDs consistent with database', async () => {
-    let customIdCounter = 0;
-    const customIdGenerator = vi.fn(() => `custom-v2-id-${++customIdCounter}`);
-
-    const model = new MockLanguageModelV2({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        content: [
-          {
-            type: 'text',
-            text: 'Hello! I am a helpful assistant.',
-          },
-        ],
-        warnings: [],
-      }),
-      doStream: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-        stream: convertArrayToReadableStream([
-          {
-            type: 'stream-start',
-            warnings: [],
-          },
-          {
-            type: 'response-metadata',
-            id: 'custom-v2-msg-xyz123',
-            modelId: 'mock-model-id',
-            timestamp: new Date(0),
-          },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'Hello! ' },
-          { type: 'text-delta', id: '1', delta: 'I am a ' },
-          { type: 'text-delta', id: '1', delta: 'helpful assistant.' },
-          { type: 'text-end', id: '1' },
-          {
-            type: 'finish',
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          },
-        ]),
-      }),
-    });
-
-    const mastraWithCustomId = new Mastra({
-      idGenerator: customIdGenerator,
-      logger: false,
-    });
-
-    const agent = new Agent({
-      name: 'test-agent',
-      instructions: 'You are a helpful assistant.',
-      model,
-      memory,
-    });
-
-    agent.__registerMastra(mastraWithCustomId);
-
-    const threadId = randomUUID();
-    const resourceId = 'test-resource';
-
-    const stream = await agent.streamVNext('Hello!', { threadId, resourceId });
-
-    await stream.consumeStream();
-    const res = await stream.response;
-    const messageId = res.uiMessages[0].id;
-    const savedMessages = await memory.getMessages({ threadId, selectBy: { include: [{ id: messageId }] } });
-    expect(savedMessages).toHaveLength(1);
-    expect(savedMessages[0].id).toBe(messageId);
-    expect(customIdGenerator).toHaveBeenCalled();
-  });
-
-  describe('onFinish callback with structured output', () => {
-    it('should include object field in onFinish callback when using structured output', async () => {
-      const mockModel = new MockLanguageModelV2({
-        doStream: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{"name":"John","age":30}' },
-            { type: 'text-end', id: '1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-        }),
-      });
-
-      const agent = new Agent({
-        name: 'test-structured-output-onfinish',
-        instructions: 'You are a helpful assistant.',
-        model: mockModel,
-      });
-
-      let onFinishResult: any = null;
-      let onFinishCalled = false;
-
-      const outputSchema = z.object({
-        name: z.string(),
-        age: z.number(),
-      });
-
-      const response = await agent.generateVNext(
-        [
-          {
-            role: 'user',
-            content: 'Extract the person data',
-          },
-        ],
-        {
-          output: outputSchema,
-          onFinish: async result => {
-            onFinishCalled = true;
-            onFinishResult = result;
-          },
-        },
-      );
-
-      // Wait a bit to ensure onFinish is called
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // The main function should return the structured data correctly
-      expect(response.object).toBeDefined();
-      expect(response.object).toEqual({ name: 'John', age: 30 });
-
-      // onFinish should have been called
-      expect(onFinishCalled).toBe(true);
-      expect(onFinishResult).toBeDefined();
-
-      // The fix: onFinish result should now include the object field
-      expect(onFinishResult.object).toBeDefined();
-      expect(onFinishResult.object).toEqual({ name: 'John', age: 30 });
-    }, 10000); // Increase timeout to 10 seconds
-  });
-
-  it('should include object field in onFinish callback when using structuredOutput key', async () => {
-    const mockModel = new MockLanguageModelV2({
-      doStream: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'The person is John who is 30 years old' },
-          { type: 'text-end', id: '1' },
-          {
-            type: 'finish',
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          },
-        ]),
-      }),
-    });
-
-    const structuringModel = new MockLanguageModelV2({
-      doStream: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: '{"name":"John","age":30}' },
-          { type: 'text-end', id: '1' },
-          {
-            type: 'finish',
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          },
-        ]),
-      }),
-    });
-
-    const agent = new Agent({
-      name: 'test-structured-output-processor-onfinish',
-      instructions: 'You are a helpful assistant.',
-      model: mockModel,
-    });
-
-    let onFinishResult: any = null;
-    let onFinishCalled = false;
-
-    const outputSchema = z.object({
-      name: z.string(),
-      age: z.number(),
-    });
-
-    const response = await agent.generateVNext(
-      [
-        {
-          role: 'user',
-          content: 'Extract the person data',
-        },
-      ],
-      {
-        structuredOutput: {
-          schema: outputSchema,
-          model: structuringModel,
-        },
-        onFinish: async result => {
-          onFinishCalled = true;
-          onFinishResult = result;
-        },
-      },
-    );
-
-    // Wait a bit to ensure onFinish is called
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    // The main function should return the structured data correctly
-    expect(response.object).toBeDefined();
-    expect(response.object).toEqual({ name: 'John', age: 30 });
-
-    // onFinish should have been called
-    expect(onFinishCalled).toBe(true);
-    expect(onFinishResult).toBeDefined();
-
-    // The fix: onFinish result should now include the object field
-    expect(onFinishResult.object).toBeDefined();
-    expect(onFinishResult.object).toEqual({ name: 'John', age: 30 });
-  }, 10000); // Increase timeout to 10 seconds
-
-  it('should have messageIds when using toUIMessageStream', async () => {
-    const mockMemory = new MockMemory();
-    const threadId = randomUUID();
-    const resourceId = 'user-1';
-    const initialThread: StorageThreadType = {
-      id: threadId,
-      resourceId,
-      metadata: { client: 'initial' },
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    await mockMemory.saveThread({ thread: initialThread });
-
-    const agent = new Agent({
-      name: 'test-agent',
-      instructions: 'You are a helpful assistant.',
-      model: openai_v5('gpt-4o'),
-      memory: mockMemory,
-    });
-
-    const mastra = new Mastra({ agents: { test: agent } });
-    agent.__registerMastra(mastra);
-
-    const stream = await agent.streamVNext('Hello!', { threadId, resourceId, format: 'aisdk' });
-
-    // Get the UI message stream
-    const uiStream = stream.toUIMessageStream();
-
-    // Collect all chunks from the UI stream to verify message ID is present
-    const chunks: UIMessageChunk[] = [];
-    const reader = uiStream.getReader();
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-      }
-    } finally {
-      reader.releaseLock();
-    }
-
-    const messages = await mockMemory.getMessages({ threadId });
-    console.log('messages', messages);
-
-    const assistantMessage = messages.find((m: MastraMessageV1) => m.role === 'assistant');
-    console.log('assistantMessage', assistantMessage);
-    const startEvent = chunks.find(chunk => chunk.type === 'start');
-    console.log('startEvent', startEvent);
-
-    expect(assistantMessage?.id).toBe(startEvent?.messageId);
-  });
-});
-
-describe('Agent structuredOutput to output deprecation mapping', () => {
-  const structuredOutputPrompt = 'Extract and structure the key information';
-
-  it('should map structuredOutput to output when maxSteps is 1', async () => {
-    let structuredOutputProcessorGotCalled = false;
-    const mockModel = new MockLanguageModelV2({
-      doGenerate: async () => {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: '{"name": "John", "age": 30}',
-            },
-          ],
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          warnings: [],
-        };
-      },
-      doStream: async options => {
-        if (
-          options.prompt.some(
-            p =>
-              Array.isArray(p.content) &&
-              p.content.some(c => c.type === 'text' && c.text.includes(structuredOutputPrompt)),
-          )
-        ) {
-          structuredOutputProcessorGotCalled = true;
-        }
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{"name": "John", "age": 30}' },
-            { type: 'text-end', id: '1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-        };
-      },
-    });
-
-    const agent = new Agent({
-      name: 'test-structured-deprecation',
-      instructions: 'You are a helpful assistant.',
-      model: mockModel,
-    });
-
-    const outputSchema = z.object({
-      name: z.string(),
-      age: z.number(),
-    });
-
-    const result = await agent.streamVNext(
-      [
-        {
-          role: 'user',
-          content: 'Generate a person',
-        },
-      ],
-      {
-        structuredOutput: {
-          schema: outputSchema,
-        },
-        maxSteps: 1,
-      },
-    );
-
-    expect(structuredOutputProcessorGotCalled).toBe(false);
-    expect(await result.object).toEqual({ name: 'John', age: 30 });
-  });
-
-  it('should NOT map structuredOutput to output when maxSteps is not 1', async () => {
-    let structuredOutputProcessorGotCalled = false;
-
-    const structuringModel = new MockLanguageModelV2({
-      doGenerate: async options => {
-        if (
-          options.prompt.some(
-            p =>
-              Array.isArray(p.content) &&
-              p.content.some(c => c.type === 'text' && c.text.includes(structuredOutputPrompt)),
-          )
-        ) {
-          structuredOutputProcessorGotCalled = true;
-        }
-        return {
-          content: [
-            {
-              type: 'text',
-              text: '{"name": "John", "age": 30}',
-            },
-          ],
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          warnings: [],
-        };
-      },
-      doStream: async options => {
-        if (
-          options.prompt.some(
-            p =>
-              Array.isArray(p.content) &&
-              p.content.some(c => c.type === 'text' && c.text.includes(structuredOutputPrompt)),
-          )
-        ) {
-          structuredOutputProcessorGotCalled = true;
-        }
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{"name": "John", "age": 30}' },
-            { type: 'text-end', id: '1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-        };
-      },
-    });
-
-    const mockModel = new MockLanguageModelV2({
-      doGenerate: async () => {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: 'Response text',
-            },
-          ],
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          warnings: [],
-        };
-      },
-      doStream: async () => {
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Response text' },
-            { type: 'text-end', id: '1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-        };
-      },
-    });
-
-    const agent = new Agent({
-      name: 'test-structured-no-deprecation',
-      instructions: 'You are a helpful assistant.',
-      model: mockModel,
-    });
-
-    const outputSchema = z.object({
-      name: z.string(),
-      age: z.number(),
-    });
-
-    const result = await agent.streamVNext(
-      [
-        {
-          role: 'user',
-          content: 'Generate a person',
-        },
-      ],
-      {
-        structuredOutput: {
-          schema: outputSchema,
-          model: structuringModel,
-        },
-        maxSteps: 2,
-      },
-    );
-
-    await result.consumeStream();
-
-    expect(structuredOutputProcessorGotCalled).toBe(true);
-    expect(await result.object).toEqual({ name: 'John', age: 30 });
-  });
-
-  it('should use model override from structuredOutput when maxSteps is 1', async () => {
-    let defaultModelGotCalled = false;
-    let overrideModelGotCalled = false;
-    const defaultModel = new MockLanguageModelV2({
-      modelId: 'default-model',
-      doGenerate: async () => ({
-        content: [
-          {
-            type: 'text',
-            text: 'Default model response',
-          },
-        ],
-        finishReason: 'stop',
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        warnings: [],
-      }),
-
-      doStream: async () => {
-        defaultModelGotCalled = true;
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{"name": "Default", "age": 1}' },
-            { type: 'text-end', id: '1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-        };
-      },
-    });
-
-    const overrideModel = new MockLanguageModelV2({
-      modelId: 'override-model',
-      doGenerate: async () => ({
-        content: [
-          {
-            type: 'text',
-            text: 'Override model response',
-          },
-        ],
-        finishReason: 'stop',
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        warnings: [],
-      }),
-      doStream: async () => {
-        overrideModelGotCalled = true;
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{"name": "Override", "age": 99}' },
-            { type: 'text-end', id: '1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-        };
-      },
-    });
-
-    const agent = new Agent({
-      name: 'test-model-override',
-      instructions: 'You are a helpful assistant.',
-      model: defaultModel,
-    });
-
-    const outputSchema = z.object({
-      name: z.string(),
-      age: z.number(),
-    });
-
-    const result = await agent.streamVNext(
-      [
-        {
-          role: 'user',
-          content: 'Generate a person',
-        },
-      ],
-      {
-        structuredOutput: {
-          schema: outputSchema,
-          model: overrideModel,
-        },
-        maxSteps: 1,
-      },
-    );
-
-    await result.consumeStream();
-
-    expect(defaultModelGotCalled).toBe(false);
-    expect(overrideModelGotCalled).toBe(true);
-    expect(await result.object).toEqual({ name: 'Override', age: 99 });
-  });
-});
-
-describe('Agent usage tracking', () => {
-  describe('Agent usage tracking (VNext paths)', () => {
-    describe('generateVNext', () => {
-      it('should expose usage with inputTokens and outputTokens (AI SDK v5 format)', async () => {
-        // Create a V2 mock that returns usage in AI SDK v5 format
-        const model = new MockLanguageModelV2({
-          doGenerate: async () => ({
-            content: [{ type: 'text', text: 'Hello world!' }],
-            finishReason: 'stop',
-            usage: {
-              inputTokens: 10,
-              outputTokens: 20,
-              totalTokens: 30,
-            },
-            warnings: [],
-          }),
-          doStream: async () => {
-            return {
-              stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello world!' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                },
-              ]),
-            };
-          },
-        });
-
-        const agent = new Agent({
-          name: 'test-agent',
-          model,
-          instructions: 'You are a helpful assistant',
-        });
-
-        const result = await agent.generateVNext('Hello');
-
-        // Check that usage exists
-        expect(result.usage).toBeDefined();
-        console.log('generateVNext usage:', result.usage);
-
-        // Check v5 format keys
-        expect(result.usage.inputTokens).toBe(10);
-        expect(result.usage.outputTokens).toBe(20);
-        expect(result.usage.totalTokens).toBe(30);
-
-        // Ensure backward compatibility keys are NOT present
-        expect((result.usage as any).promptTokens).toBeUndefined();
-        expect((result.usage as any).completionTokens).toBeUndefined();
-      });
-    });
-
-    describe('streamVNext', () => {
-      it('should expose usage in stream with AI SDK v5 format', async () => {
-        const model = new MockLanguageModelV2({
-          doStream: async () => {
-            return {
-              stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello ' },
-                { type: 'text-delta', id: '1', delta: 'world!' },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                },
-              ]),
-            };
-          },
-        });
-
-        const agent = new Agent({
-          name: 'test-agent',
-          model,
-          instructions: 'You are a helpful assistant',
-        });
-
-        const stream = await agent.streamVNext('Hello');
-
-        // Consume stream to get usage
-        for await (const _ of stream.fullStream) {
-          // Just consume
-        }
-
-        const usage = await stream.usage;
-        console.log('streamVNext usage:', usage);
-
-        // Check that usage exists with v5 format
-        expect(usage).toBeDefined();
-        expect(usage.inputTokens).toBe(10);
-        expect(usage.outputTokens).toBe(20);
-        expect(usage.totalTokens).toBe(30);
-
-        // Ensure backward compatibility keys are NOT present
-        expect((usage as any).promptTokens).toBeUndefined();
-        expect((usage as any).completionTokens).toBeUndefined();
-      });
-    });
-  });
-
-  describe('Agent legacy usage tracking', () => {
-    describe('generateLegacy', () => {
-      it('should expose usage with promptTokens and completionTokens (legacy format)', async () => {
-        // Create a V1 mock that returns usage in legacy format
-        const model = createMockModel({
-          mockText: 'Hello world!',
-        });
-
-        const agent = new Agent({
-          name: 'test-agent',
-          model,
-          instructions: 'You are a helpful assistant',
-        });
-
-        const result = await agent.generateLegacy('Hello');
-
-        // Check that usage exists
-        expect(result.usage).toBeDefined();
-        console.log('generateLegacy usage:', result.usage);
-
-        // Check legacy format keys
-        expect(result.usage.promptTokens).toBe(10);
-        expect(result.usage.completionTokens).toBe(20);
-        expect(result.usage.totalTokens).toBeDefined();
-      });
-    });
-
-    describe('streamLegacy', () => {
-      it('should expose usage with promptTokens and completionTokens (legacy format)', async () => {
-        const model = createMockModel({
-          mockText: 'Hello world!',
-        });
-
-        const agent = new Agent({
-          name: 'test-agent',
-          model,
-          instructions: 'You are a helpful assistant',
-        });
-
-        const result = await agent.streamLegacy('Hello');
-
-        // Consume stream to get usage
-        for await (const _ of result.textStream) {
-          // Just consume
-        }
-
-        const usage = await result.usage;
-        console.log('streamLegacy usage:', usage);
-
-        // Check that usage exists with legacy format
-        expect(usage).toBeDefined();
-        expect(usage.promptTokens).toBeDefined();
-        expect(usage.completionTokens).toBeDefined();
-        expect(usage.totalTokens).toBeDefined();
-        // Legacy format should have promptTokens/completionTokens, not inputTokens/outputTokens
-        expect((usage as any).inputTokens).toBeUndefined();
-        expect((usage as any).outputTokens).toBeUndefined();
-      });
-    });
-
-    describe('generate/stream (currently using legacy implementation)', () => {
-      it('generate should use promptTokens/completionTokens until migration', async () => {
-        const model = createMockModel({
-          mockText: 'Hello world!',
-        });
-
-        const agent = new Agent({
-          name: 'test-agent',
-          model,
-          instructions: 'You are a helpful assistant',
-        });
-
-        const result = await agent.generate('Hello');
-
-        // Currently using legacy implementation, should have legacy format
-        expect(result.usage).toBeDefined();
-        expect(result.usage.promptTokens).toBe(10);
-        expect(result.usage.completionTokens).toBe(20);
-      });
-
-      it('stream should use promptTokens/completionTokens until migration', async () => {
-        const model = createMockModel({
-          mockText: 'Hello world!',
-        });
-
-        const agent = new Agent({
-          name: 'test-agent',
-          model,
-          instructions: 'You are a helpful assistant',
-        });
-
-        const result = await agent.stream('Hello');
-
-        // Consume stream
-        for await (const _ of result.textStream) {
-          // Just consume
-        }
-
-        // Currently using legacy implementation, should have legacy format
-        const usage = await result.usage;
-        expect(usage).toBeDefined();
-        expect(usage.promptTokens).toBeDefined();
-        expect(usage.completionTokens).toBeDefined();
-        // Legacy format should have promptTokens/completionTokens, not inputTokens/outputTokens
-        expect((usage as any).inputTokens).toBeUndefined();
-        expect((usage as any).outputTokens).toBeUndefined();
-      });
-    });
-  });
-});

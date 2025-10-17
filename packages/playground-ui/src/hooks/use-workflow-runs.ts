@@ -7,6 +7,7 @@ export const useWorkflowRuns = (workflowId: string, { enabled = true }: { enable
     queryKey: ['workflow-runs', workflowId],
     queryFn: () => client.getWorkflow(workflowId).runs({ limit: 50 }),
     enabled,
+    refetchInterval: 5000,
     gcTime: 0,
     staleTime: 0,
   });
