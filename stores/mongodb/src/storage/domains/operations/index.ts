@@ -41,19 +41,18 @@ export class StoreOperationsMongoDB extends StoreOperations {
       const collection = await this.getCollection(tableName);
       await collection.deleteMany({});
     } catch (error) {
-      if (error instanceof Error) {
-        const matstraError = new MastraError(
-          {
-            id: 'STORAGE_MONGODB_STORE_CLEAR_TABLE_FAILED',
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            details: { tableName },
-          },
-          error,
-        );
-        this.logger.error(matstraError.message);
-        this.logger?.trackException(matstraError);
-      }
+      const mastraError = new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_CLEAR_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+      this.logger.error(mastraError.message);
+      this.logger?.trackException(mastraError);
+      throw mastraError;
     }
   }
 
@@ -81,6 +80,11 @@ export class StoreOperationsMongoDB extends StoreOperations {
   private processJsonbFields(tableName: TABLE_NAMES, record: Record<string, any>): Record<string, any> {
     const schema = TABLE_SCHEMAS[tableName];
 
+    // If no schema is found, return the record as-is (MongoDB can handle dynamic schemas)
+    if (!schema) {
+      return record;
+    }
+
     return Object.fromEntries(
       Object.entries(schema).map(([key, value]) => {
         if (value.type === 'jsonb' && record[key] && typeof record[key] === 'string') {
@@ -97,19 +101,18 @@ export class StoreOperationsMongoDB extends StoreOperations {
       const recordToInsert = this.processJsonbFields(tableName, record);
       await collection.insertOne(recordToInsert);
     } catch (error) {
-      if (error instanceof Error) {
-        const matstraError = new MastraError(
-          {
-            id: 'STORAGE_MONGODB_STORE_INSERT_FAILED',
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            details: { tableName },
-          },
-          error,
-        );
-        this.logger.error(matstraError.message);
-        this.logger?.trackException(matstraError);
-      }
+      const mastraError = new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+      this.logger.error(mastraError.message);
+      this.logger?.trackException(mastraError);
+      throw mastraError;
     }
   }
 
@@ -144,6 +147,73 @@ export class StoreOperationsMongoDB extends StoreOperations {
       throw new MastraError(
         {
           id: 'STORAGE_MONGODB_STORE_LOAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
+  }
+
+  async update({ tableName, keys, data }: { tableName: TABLE_NAMES; keys: Record<string, any>; data: Record<string, any> }): Promise<void> {
+    try {
+      const collection = await this.getCollection(tableName);
+      const processedData = this.processJsonbFields(tableName, data);
+      
+      // Filter out undefined values to prevent MongoDB from removing fields
+      const cleanData = Object.fromEntries(
+        Object.entries(processedData).filter(([_, value]) => value !== undefined)
+      );
+      
+      await collection.updateOne(keys, { $set: cleanData });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_UPDATE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
+  }
+
+  async batchUpdate({ tableName, updates }: { 
+    tableName: TABLE_NAMES; 
+    updates: Array<{
+      keys: Record<string, any>;
+      data: Record<string, any>;
+    }>;
+  }): Promise<void> {
+    if (!updates.length) {
+      return;
+    }
+
+    try {
+      const collection = await this.getCollection(tableName);
+      const bulkOps = updates.map(({ keys, data }) => {
+        const processedData = this.processJsonbFields(tableName, data);
+        
+        // Filter out undefined values to prevent MongoDB from removing fields
+        const cleanData = Object.fromEntries(
+          Object.entries(processedData).filter(([_, value]) => value !== undefined)
+        );
+
+        return {
+          updateOne: {
+            filter: keys,
+            update: { $set: cleanData },
+          },
+        };
+      });
+
+      await collection.bulkWrite(bulkOps);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_BATCH_UPDATE_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
