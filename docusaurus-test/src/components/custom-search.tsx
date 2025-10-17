@@ -403,7 +403,6 @@ function EmptyState({ setSearch }: { setSearch: (search: string) => void }) {
               'bg-[var(--light-color-surface-15)] dark:bg-surface-4',
             )}
           >
-            <Zap className="w-4 h-4 md:w-5 md:h-5 shrink-0 text-accent-green" />
             <span className="text-sm font-normal truncate dark:text-icons-6 text-[var(--light-color-text-4)]">
               {search.label}
             </span>
