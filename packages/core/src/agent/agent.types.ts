@@ -152,4 +152,5 @@ export type InnerAgentExecutionOptions<
   model?: MastraLanguageModel;
   /** Internal: Whether the execution is a resume */
   resumeContext?: any;
+  toolCallId?: string;
 };

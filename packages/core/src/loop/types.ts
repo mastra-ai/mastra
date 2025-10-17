@@ -62,6 +62,7 @@ export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
 export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
   mastra?: Mastra;
   resumeContext?: any;
+  toolCallId?: string;
   models: ModelManagerModelConfig[];
   logger?: IMastraLogger;
   mode?: 'generate' | 'stream';

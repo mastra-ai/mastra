@@ -112,14 +112,19 @@ export function createToolCallStep<
                 args: inputData.args,
               },
             });
-            return suspend({
-              requireToolApproval: {
-                toolCallId: inputData.toolCallId,
-                toolName: inputData.toolName,
-                args: inputData.args,
+            return suspend(
+              {
+                requireToolApproval: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  args: inputData.args,
+                },
+                __streamState: streamState.serialize(),
               },
-              __streamState: streamState.serialize(),
-            });
+              {
+                resumeLabel: inputData.toolCallId,
+              },
+            );
           } else {
             if (!resumeData.approved) {
               const error = new Error(
@@ -152,10 +157,15 @@ export function createToolCallStep<
               payload: { toolCallId: inputData.toolCallId, toolName: inputData.toolName, suspendPayload },
             });
 
-            return await suspend({
-              toolCallSuspended: suspendPayload,
-              __streamState: streamState.serialize(),
-            });
+            return await suspend(
+              {
+                toolCallSuspended: suspendPayload,
+                __streamState: streamState.serialize(),
+              },
+              {
+                resumeLabel: inputData.toolCallId,
+              },
+            );
           },
           resumeData,
         } as ToolCallOptions);

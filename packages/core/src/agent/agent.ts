@@ -3960,7 +3960,7 @@ export class Agent<
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
     resumeContext: any,
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> & { toolCallId?: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
       runtimeContext: streamOptions?.runtimeContext,
@@ -4034,7 +4034,7 @@ export class Agent<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
-    options: AgentExecutionOptions<OUTPUT, FORMAT> & { runId: string },
+    options: AgentExecutionOptions<OUTPUT, FORMAT> & { runId: string; toolCallId?: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     return this.resumeStreamVNext({ approved: true }, options);
   }
@@ -4058,7 +4058,7 @@ export class Agent<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
-    options: AgentExecutionOptions<OUTPUT, FORMAT> & { runId: string },
+    options: AgentExecutionOptions<OUTPUT, FORMAT> & { runId: string; toolCallId?: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     return this.resumeStreamVNext({ approved: false }, options);
   }

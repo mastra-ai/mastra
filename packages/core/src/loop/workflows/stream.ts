@@ -42,6 +42,7 @@ export function workflowLoopStream<
   startTimestamp,
   streamState,
   agentId,
+  toolCallId,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
@@ -153,6 +154,7 @@ export function workflowLoopStream<
         ? await run.resume({
             resumeData: resumeContext,
             tracingContext: { currentSpan: llmAISpan },
+            label: toolCallId,
           })
         : await run.start({
             inputData: initialData,
