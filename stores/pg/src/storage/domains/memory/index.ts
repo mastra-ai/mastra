@@ -348,11 +348,12 @@ export class MemoryPG extends MemoryStorage {
                 WHERE thread_id = $${paramIdx}
               )
               SELECT
-                m.id, 
-                m.content, 
-                m.role, 
+                m.id,
+                m.content,
+                m.role,
                 m.type,
-                m."createdAt", 
+                m."createdAt",
+                m."createdAtZ",
                 m.thread_id AS "threadId",
                 m."resourceId"
               FROM ordered_messages m
@@ -396,7 +397,7 @@ export class MemoryPG extends MemoryStorage {
       id: row.id,
       content,
       role: row.role,
-      createdAt: new Date(row.createdAt as string),
+      createdAt: new Date((row.createdAtZ || row.createdAt) as string),
       threadId: row.threadId,
       resourceId: row.resourceId,
       ...(row.type && row.type !== 'v2' ? { type: row.type } : {}),
@@ -414,7 +415,7 @@ export class MemoryPG extends MemoryStorage {
     },
   ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const { threadId, resourceId, format, selectBy } = args;
-    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"`;
+    const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
     const orderByStatement = `ORDER BY "createdAt" DESC`;
     const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
 
@@ -452,6 +453,8 @@ export class MemoryPG extends MemoryStorage {
           }
         }
         if (message.type === 'v2') delete message.type;
+        // Use createdAtZ fallback pattern for consistency
+        message.createdAt = message.createdAtZ || message.createdAt;
         return message as MastraMessageV1;
       });
 
@@ -507,7 +510,7 @@ export class MemoryPG extends MemoryStorage {
     format?: 'v1' | 'v2';
   }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     if (messageIds.length === 0) return [];
-    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"`;
+    const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
 
     try {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
@@ -549,7 +552,7 @@ export class MemoryPG extends MemoryStorage {
     const fromDate = dateRange?.start;
     const toDate = dateRange?.end;
 
-    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"`;
+    const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
     const orderByStatement = `ORDER BY "createdAt" DESC`;
 
     const messages: MastraMessageV2[] = [];
@@ -607,15 +610,18 @@ export class MemoryPG extends MemoryStorage {
 
       // Parse content back to objects if they were stringified during storage
       const messagesWithParsedContent = messages.map(message => {
+        let parsedMessage = message;
         if (typeof message.content === 'string') {
           try {
-            return { ...message, content: JSON.parse(message.content) };
+            parsedMessage = { ...message, content: JSON.parse(message.content) };
           } catch {
             // If parsing fails, leave as string (V1 message)
-            return message;
+            parsedMessage = message;
           }
         }
-        return message;
+        // Use createdAtZ fallback pattern for consistency
+        const createdAt = (parsedMessage as any).createdAtZ || parsedMessage.createdAt;
+        return { ...parsedMessage, createdAt };
       });
 
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
@@ -781,7 +787,7 @@ export class MemoryPG extends MemoryStorage {
 
     const messageIds = messages.map(m => m.id);
 
-    const selectQuery = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} WHERE id IN ($1:list)`;
+    const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} WHERE id IN ($1:list)`;
 
     const existingMessagesDb = await this.client.manyOrNone(selectQuery, [messageIds]);
 
@@ -877,7 +883,9 @@ export class MemoryPG extends MemoryStorage {
     });
 
     // Re-fetch to return the fully updated messages
-    const updatedMessages = await this.client.manyOrNone<MastraMessageV2>(selectQuery, [messageIds]);
+    const updatedMessages = await this.client.manyOrNone<MastraMessageV2 & { createdAtZ?: Date }>(selectQuery, [
+      messageIds,
+    ]);
 
     return (updatedMessages || []).map(message => {
       if (typeof message.content === 'string') {
@@ -887,7 +895,9 @@ export class MemoryPG extends MemoryStorage {
           /* ignore */
         }
       }
-      return message;
+      // Use createdAtZ fallback pattern for consistency
+      const createdAt = message.createdAtZ || message.createdAt;
+      return { ...message, createdAt };
     });
   }
 

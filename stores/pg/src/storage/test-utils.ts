@@ -329,6 +329,188 @@ export function pgTests() {
       });
     });
 
+    describe('Timestamp Fallback Handling', () => {
+      let testThreadId: string;
+      let testResourceId: string;
+      let testMessageId: string;
+
+      beforeAll(async () => {
+        store = new PostgresStore(TEST_CONFIG);
+        await store.init();
+      });
+      afterAll(async () => {
+        try {
+          await store.close();
+        } catch {}
+      });
+
+      beforeEach(async () => {
+        testThreadId = `thread-${Date.now()}`;
+        testResourceId = `resource-${Date.now()}`;
+        testMessageId = `msg-${Date.now()}`;
+      });
+
+      it('should use createdAtZ over createdAt for messages when both exist', async () => {
+        // Create a thread first
+        const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
+        await store.saveThread({ thread });
+
+        // Directly insert a message with both createdAt and createdAtZ where they differ
+        const createdAtValue = new Date('2024-01-01T10:00:00Z');
+        const createdAtZValue = new Date('2024-01-01T10:00:00-05:00'); // Different timezone representation
+
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [testMessageId, testThreadId, 'Test message', 'user', 'v2', testResourceId, createdAtValue, createdAtZValue],
+        );
+
+        // Test getMessages
+        const messages = await store.getMessages({ threadId: testThreadId, format: 'v2' });
+        expect(messages.length).toBe(1);
+        expect(messages[0]?.createdAt).toEqual(createdAtZValue);
+
+        // Test getMessagesById
+        const messagesById = await store.getMessagesById({ messageIds: [testMessageId], format: 'v2' });
+        expect(messagesById.length).toBe(1);
+        expect(messagesById[0]?.createdAt).toEqual(createdAtZValue);
+
+        // Test getMessagesPaginated
+        const messagesPaginated = await store.getMessagesPaginated({
+          threadId: testThreadId,
+          format: 'v2',
+        });
+        expect(messagesPaginated.messages.length).toBe(1);
+        expect(messagesPaginated.messages[0]?.createdAt).toEqual(createdAtZValue);
+      });
+
+      it('should fallback to createdAt when createdAtZ is null for legacy messages', async () => {
+        // Create a thread first
+        const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
+        await store.saveThread({ thread });
+
+        // Directly insert a message with only createdAt (simulating old records)
+        const createdAtValue = new Date('2024-01-01T10:00:00Z');
+
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)`,
+          [testMessageId, testThreadId, 'Legacy message', 'user', 'v2', testResourceId, createdAtValue],
+        );
+
+        // Test getMessages
+        const messages = await store.getMessages({ threadId: testThreadId, format: 'v2' });
+        expect(messages.length).toBe(1);
+        expect(messages[0]?.createdAt).toEqual(createdAtValue);
+
+        // Test getMessagesById
+        const messagesById = await store.getMessagesById({ messageIds: [testMessageId], format: 'v2' });
+        expect(messagesById.length).toBe(1);
+        expect(messagesById[0]?.createdAt).toEqual(createdAtValue);
+
+        // Test getMessagesPaginated
+        const messagesPaginated = await store.getMessagesPaginated({
+          threadId: testThreadId,
+          format: 'v2',
+        });
+        expect(messagesPaginated.messages.length).toBe(1);
+        expect(messagesPaginated.messages[0]?.createdAt).toEqual(createdAtValue);
+      });
+
+      it('should have consistent timestamp handling between threads and messages', async () => {
+        // Create a thread first
+        const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
+        await store.saveThread({ thread });
+
+        // Save a message through the normal API
+        const testDate = new Date('2024-01-01T12:00:00Z');
+        await store.saveMessages({
+          messages: [
+            {
+              id: testMessageId,
+              threadId: testThreadId,
+              resourceId: testResourceId,
+              role: 'user',
+              content: { format: 2, parts: [{ type: 'text', text: 'Test' }], content: 'Test' },
+              createdAt: testDate,
+            },
+          ],
+          format: 'v2',
+        });
+
+        // Get thread
+        const retrievedThread = await store.getThreadById({ threadId: testThreadId });
+        expect(retrievedThread).toBeTruthy();
+
+        // Get messages
+        const messages = await store.getMessages({ threadId: testThreadId, format: 'v2' });
+        expect(messages.length).toBe(1);
+
+        // Both should return Date objects
+        expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
+        expect(messages[0]?.createdAt).toBeInstanceOf(Date);
+
+        // Both should use the same fallback pattern (createdAtZ || createdAt)
+        // This ensures consistency across the storage layer
+      });
+
+      it('should handle included messages with correct timestamp fallback', async () => {
+        // Create a thread
+        const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
+        await store.saveThread({ thread });
+
+        // Create multiple messages
+        const msg1Id = `${testMessageId}-1`;
+        const msg2Id = `${testMessageId}-2`;
+        const msg3Id = `${testMessageId}-3`;
+
+        const date1 = new Date('2024-01-01T10:00:00Z');
+        const date2 = new Date('2024-01-01T11:00:00Z');
+        const date3 = new Date('2024-01-01T12:00:00Z');
+
+        // Insert messages with different createdAt/createdAtZ combinations
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [msg1Id, testThreadId, 'Message 1', 'user', 'v2', testResourceId, date1, date1],
+        );
+
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)`,
+          [msg2Id, testThreadId, 'Message 2', 'assistant', 'v2', testResourceId, date2],
+        );
+
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [msg3Id, testThreadId, 'Message 3', 'user', 'v2', testResourceId, date3, date3],
+        );
+
+        // Test getMessages with include
+        const messages = await store.getMessages({
+          threadId: testThreadId,
+          format: 'v2',
+          selectBy: {
+            include: [
+              {
+                id: msg2Id,
+                withPreviousMessages: 1,
+                withNextMessages: 1,
+              },
+            ],
+          },
+        });
+
+        expect(messages.length).toBeGreaterThan(0);
+        // All messages should have proper timestamps, whether from createdAtZ or createdAt
+        messages.forEach(msg => {
+          expect(msg.createdAt).toBeDefined();
+          expect(msg.createdAt).toBeInstanceOf(Date);
+        });
+      });
+    });
+
     describe('Validation', () => {
       const validConfig = TEST_CONFIG as any;
 
