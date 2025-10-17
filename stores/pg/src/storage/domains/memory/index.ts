@@ -424,7 +424,7 @@ export class MemoryPG extends MemoryStorage {
     return {
       id: normalized.id,
       content,
-      role: normalized.role,
+      role: normalized.role as MastraMessageV2['role'],
       createdAt: new Date(normalized.createdAt as string),
       threadId: normalized.threadId,
       resourceId: normalized.resourceId,
@@ -585,7 +585,7 @@ export class MemoryPG extends MemoryStorage {
     const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
     const orderByStatement = `ORDER BY "createdAt" DESC`;
 
-    const messages: MastraMessageV2[] = [];
+    const messages: MessageRowFromDB[] = [];
 
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
@@ -639,17 +639,17 @@ export class MemoryPG extends MemoryStorage {
       messages.push(...(rows || []));
 
       // Parse content back to objects if they were stringified during storage
-      const messagesWithParsedContent = messages.map((row: MessageRowFromDB) => {
+      const messagesWithParsedContent: MastraMessageV2[] = messages.map((row: MessageRowFromDB) => {
         const message = this.normalizeMessageRow(row);
         if (typeof message.content === 'string') {
           try {
-            return { ...message, content: JSON.parse(message.content) };
+            return { ...message, content: JSON.parse(message.content) } as MastraMessageV2;
           } catch {
             // If parsing fails, leave as string (V1 message)
-            return message;
+            return message as MastraMessageV2;
           }
         }
-        return message;
+        return message as MastraMessageV2;
       });
 
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
