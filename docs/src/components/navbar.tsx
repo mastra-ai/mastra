@@ -95,7 +95,7 @@ export const Nav = ({ stars, locale }: { stars: number; locale: string }) => {
 
 export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [_, setSearchQuery] = useState("");
+  const [, setSearchQuery] = useState("");
 
   function open() {
     setIsOpen(true);
