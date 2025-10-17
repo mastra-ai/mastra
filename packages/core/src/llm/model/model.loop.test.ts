@@ -1,5 +1,6 @@
-import { openai } from '@ai-sdk/openai';
-import { describe, it } from 'vitest';
+import { openai } from '@ai-sdk/openai-v5';
+import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
+import { describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import { RuntimeContext } from '../../runtime-context';
@@ -9,7 +10,7 @@ const model = new MastraLLMVNext({
   models: [{ model: openai('gpt-4o-mini'), maxRetries: 0, id: 'test-model' }],
 });
 
-describe('MastraLLMVNext', () => {
+describe.concurrent('MastraLLMVNext', () => {
   it('should generate text - mastra', async () => {
     const result = model.stream({
       runtimeContext: new RuntimeContext(),
@@ -23,10 +24,14 @@ describe('MastraLLMVNext', () => {
         'input',
       ),
       tracingContext: {},
+      agentId: 'test-agent',
     });
 
-    console.log(await result.getFullOutput());
-  }, 10000);
+    const res = await result.getFullOutput();
+    expect(res).toBeDefined();
+    expect(res.text).toBeDefined();
+    expect(res.text).toBeTypeOf('string');
+  }, 20000);
 
   it('should generate text - aisdk', async () => {
     const result = model.stream({
@@ -41,10 +46,14 @@ describe('MastraLLMVNext', () => {
       ),
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      agentId: 'test-agent',
     });
 
-    console.log(await result.aisdk.v5.getFullOutput());
-  }, 10000);
+    const res = await result.aisdk.v5.getFullOutput();
+    expect(res).toBeDefined();
+    expect(res.text).toBeDefined();
+    expect(res.text).toBeTypeOf('string');
+  }, 20000);
 
   it('should stream text - mastra', async () => {
     const result = model.stream({
@@ -59,15 +68,13 @@ describe('MastraLLMVNext', () => {
       ),
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      agentId: 'test-agent',
     });
 
-    for await (const chunk of result.fullStream) {
-      console.log(chunk.type);
-      if ('payload' in chunk) {
-        console.log(chunk.payload);
-      }
-    }
-  }, 10000);
+    const chunks = await convertAsyncIterableToArray(result.fullStream);
+    expect(chunks).toBeDefined();
+    expect(chunks.length).toBeGreaterThan(0);
+  }, 20000);
 
   it('should stream text - aisdk', async () => {
     const result = model.stream({
@@ -82,12 +89,13 @@ describe('MastraLLMVNext', () => {
       ),
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
+      agentId: 'test-agent',
     });
 
-    for await (const chunk of result.aisdk.v5.fullStream) {
-      console.log(chunk.type);
-    }
-  }, 10000);
+    const chunks = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+    expect(chunks).toBeDefined();
+    expect(chunks.length).toBeGreaterThan(0);
+  }, 20000);
 
   it('should stream object - mastra/aisdk', async () => {
     const result = model.stream({
@@ -102,18 +110,57 @@ describe('MastraLLMVNext', () => {
       ),
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
-      output: z.object({
-        name: z.string(),
-        age: z.number(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          name: z.string(),
+          age: z.number(),
+        }),
+      },
+      agentId: 'test-agent',
     });
 
-    for await (const chunk of result.objectStream) {
-      console.log(chunk);
-    }
+    const objectStreamChunks = await convertAsyncIterableToArray(result.objectStream);
+    expect(objectStreamChunks).toBeDefined();
+    expect(objectStreamChunks.length).toBeGreaterThan(0);
+    objectStreamChunks.forEach(chunk => {
+      expect(chunk).toBeTypeOf('object');
+    });
 
-    console.log(await result.object);
-  }, 10000);
+    const lastChunk = objectStreamChunks[objectStreamChunks.length - 1];
+    expect(lastChunk).toBeDefined();
+    expect(lastChunk.name).toBeDefined();
+    expect(lastChunk.name).toBeTypeOf('string');
+    expect(lastChunk.age).toBeDefined();
+    expect(lastChunk.age).toBeTypeOf('number');
+
+    const object = await result.object;
+    expect(object).toBeDefined();
+    expect(object.name).toBeDefined();
+    expect(object.name).toBeTypeOf('string');
+    expect(object.age).toBeDefined();
+    expect(object.age).toBeTypeOf('number');
+
+    const aisdkObjectStreamChunks = await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+    expect(aisdkObjectStreamChunks).toBeDefined();
+    expect(aisdkObjectStreamChunks.length).toBeGreaterThan(0);
+    aisdkObjectStreamChunks.forEach(chunk => {
+      expect(chunk).toBeTypeOf('object');
+    });
+
+    const aisdkLastChunk = aisdkObjectStreamChunks[aisdkObjectStreamChunks.length - 1];
+    expect(aisdkLastChunk).toBeDefined();
+    expect(aisdkLastChunk.name).toBeDefined();
+    expect(aisdkLastChunk.name).toBeTypeOf('string');
+    expect(aisdkLastChunk.age).toBeDefined();
+    expect(aisdkLastChunk.age).toBeTypeOf('number');
+
+    const aisdkObject = await result.aisdk.v5.object;
+    expect(aisdkObject).toBeDefined();
+    expect(aisdkObject.name).toBeDefined();
+    expect(aisdkObject.name).toBeTypeOf('string');
+    expect(aisdkObject.age).toBeDefined();
+    expect(aisdkObject.age).toBeTypeOf('number');
+  }, 20000);
 
   it('should generate object - mastra', async () => {
     const result = model.stream({
@@ -128,16 +175,23 @@ describe('MastraLLMVNext', () => {
       ),
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
-      output: z.object({
-        name: z.string(),
-        age: z.number(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          name: z.string(),
+          age: z.number(),
+        }),
+      },
+      agentId: 'test-agent',
     });
 
     const res = await result.getFullOutput();
 
-    console.log(res.object);
-  }, 10000);
+    expect(res.object).toBeDefined();
+    expect(res.object.name).toBeDefined();
+    expect(res.object.name).toBeTypeOf('string');
+    expect(res.object.age).toBeDefined();
+    expect(res.object.age).toBeTypeOf('number');
+  }, 20000);
 
   it('should generate object - aisdk', async () => {
     const result = model.stream({
@@ -152,15 +206,22 @@ describe('MastraLLMVNext', () => {
       ),
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
-      output: z.object({
-        name: z.string(),
-        age: z.number(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          name: z.string(),
+          age: z.number(),
+        }),
+      },
+      agentId: 'test-agent',
     });
 
     const res = await result.aisdk.v5.getFullOutput();
 
-    console.log(res.object);
+    expect(res.object).toBeDefined();
+    expect(res.object?.name).toBeDefined();
+    expect(res.object?.name).toBeTypeOf('string');
+    expect(res.object?.age).toBeDefined();
+    expect(res.object?.age).toBeTypeOf('number');
   }, 20000);
 
   it('full stream object - mastra', async () => {
@@ -176,20 +237,28 @@ describe('MastraLLMVNext', () => {
       ),
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
-      output: z.object({
-        name: z.string(),
-        age: z.number(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          name: z.string(),
+          age: z.number(),
+        }),
+      },
+      agentId: 'test-agent',
     });
 
     for await (const chunk of result.fullStream) {
       if (chunk.type === 'object') {
-        console.log(chunk);
+        expect(chunk.object).toBeDefined();
       }
     }
 
-    console.log(await result.object);
-  }, 10000);
+    const object = await result.object;
+    expect(object).toBeDefined();
+    expect(object.name).toBeDefined();
+    expect(object.name).toBeTypeOf('string');
+    expect(object.age).toBeDefined();
+    expect(object.age).toBeTypeOf('number');
+  }, 20000);
 
   it('full stream object - aisdk', async () => {
     const result = model.stream({
@@ -204,19 +273,26 @@ describe('MastraLLMVNext', () => {
       ),
       runtimeContext: new RuntimeContext(),
       tracingContext: {},
-      output: z.object({
-        name: z.string(),
-        age: z.number(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          name: z.string(),
+          age: z.number(),
+        }),
+      },
+      agentId: 'test-agent',
     });
 
     for await (const chunk of result.aisdk.v5.fullStream) {
       if (chunk.type === 'object') {
-        console.log(chunk);
+        expect(chunk.object).toBeDefined();
       }
-      console.log(chunk);
     }
 
-    console.log(await result.aisdk.v5.object);
-  });
+    const object = await result.aisdk.v5.object;
+    expect(object).toBeDefined();
+    expect(object.name).toBeDefined();
+    expect(object.name).toBeTypeOf('string');
+    expect(object.age).toBeDefined();
+    expect(object.age).toBeTypeOf('number');
+  }, 20000);
 });

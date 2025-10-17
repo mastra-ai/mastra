@@ -4,6 +4,7 @@
  */
 
 import fs from 'fs/promises';
+import path from 'path';
 import type { MastraModelGateway, ProviderConfig } from './gateways/base.js';
 
 /**
@@ -139,6 +140,12 @@ export async function writeRegistryFiles(
   providers: Record<string, ProviderConfig>,
   models: Record<string, string[]>,
 ): Promise<void> {
+  // 0. Ensure directories exist
+  const jsonDir = path.dirname(jsonPath);
+  const typesDir = path.dirname(typesPath);
+  await fs.mkdir(jsonDir, { recursive: true });
+  await fs.mkdir(typesDir, { recursive: true });
+
   // 1. Write JSON file
   const registryData = {
     providers,

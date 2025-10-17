@@ -34,6 +34,7 @@ export const ToolBadge = ({ toolName, args, result, metadata, toolOutput }: Tool
 
   return (
     <BadgeWrapper
+      data-testid="tool-badge"
       icon={<ToolsIcon className="text-[#ECB047]" />}
       title={toolName}
       extraInfo={

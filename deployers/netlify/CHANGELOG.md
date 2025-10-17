@@ -1,5 +1,45 @@
 # @mastra/deployer-netlify
 
+## 0.13.9
+
+### Patch Changes
+
+- Pin `@rollup/*` dependencies to fixed versions (instead of using `^`) to: ([#8900](https://github.com/mastra-ai/mastra/pull/8900))
+  - Hotfix a bug inside `@rollup/plugin-commonjs`
+  - Have more control over the versions in the future to not have breakages over night
+
+- Updated dependencies [[`5253cd2`](https://github.com/mastra-ai/mastra/commit/5253cd2d5b2cf4558963fa73c6a6b36c72f8875f), [`ca85c93`](https://github.com/mastra-ai/mastra/commit/ca85c932b232e6ad820c811ec176d98e68c59b0a), [`a1d40f8`](https://github.com/mastra-ai/mastra/commit/a1d40f88d4ce42c4508774ad22e38ac582157af2), [`11e9e8f`](https://github.com/mastra-ai/mastra/commit/11e9e8f4fb09a493ea00deda49081788f16e753b), [`00bf52b`](https://github.com/mastra-ai/mastra/commit/00bf52b89a93e6bffaaaf1714316870ad8af6572), [`01c4a25`](https://github.com/mastra-ai/mastra/commit/01c4a2506c514d5e861c004d3d2fb3791c6391f3), [`cce8aad`](https://github.com/mastra-ai/mastra/commit/cce8aad878a0dd98e5647680f3765caba0b1701c)]:
+  - @mastra/deployer@0.21.1
+  - @mastra/core@0.21.1
+
+## 0.13.9-alpha.0
+
+### Patch Changes
+
+- Pin `@rollup/*` dependencies to fixed versions (instead of using `^`) to: ([#8900](https://github.com/mastra-ai/mastra/pull/8900))
+  - Hotfix a bug inside `@rollup/plugin-commonjs`
+  - Have more control over the versions in the future to not have breakages over night
+
+- Updated dependencies [[`5253cd2`](https://github.com/mastra-ai/mastra/commit/5253cd2d5b2cf4558963fa73c6a6b36c72f8875f), [`ca85c93`](https://github.com/mastra-ai/mastra/commit/ca85c932b232e6ad820c811ec176d98e68c59b0a), [`a1d40f8`](https://github.com/mastra-ai/mastra/commit/a1d40f88d4ce42c4508774ad22e38ac582157af2), [`11e9e8f`](https://github.com/mastra-ai/mastra/commit/11e9e8f4fb09a493ea00deda49081788f16e753b), [`00bf52b`](https://github.com/mastra-ai/mastra/commit/00bf52b89a93e6bffaaaf1714316870ad8af6572), [`01c4a25`](https://github.com/mastra-ai/mastra/commit/01c4a2506c514d5e861c004d3d2fb3791c6391f3), [`cce8aad`](https://github.com/mastra-ai/mastra/commit/cce8aad878a0dd98e5647680f3765caba0b1701c)]:
+  - @mastra/deployer@0.21.1-alpha.0
+  - @mastra/core@0.21.1-alpha.0
+
+## 0.13.8
+
+### Patch Changes
+
+- Update peer dependencies to match core package version bump (0.21.0) ([#8619](https://github.com/mastra-ai/mastra/pull/8619))
+
+- Update peer dependencies to match core package version bump (0.21.0) ([#8557](https://github.com/mastra-ai/mastra/pull/8557))
+
+- Update peer dependencies to match core package version bump (0.21.0) ([#8626](https://github.com/mastra-ai/mastra/pull/8626))
+
+- Update peer dependencies to match core package version bump (0.21.0) ([#8686](https://github.com/mastra-ai/mastra/pull/8686))
+
+- Updated dependencies [[`0fb6616`](https://github.com/mastra-ai/mastra/commit/0fb66169600ed2a3dc1297b1bfa8a7693ebb6e3c), [`1ed9670`](https://github.com/mastra-ai/mastra/commit/1ed9670d3ca50cb60dc2e517738c5eef3968ed27), [`b5a66b7`](https://github.com/mastra-ai/mastra/commit/b5a66b748a14fc8b3f63b04642ddb9621fbcc9e0), [`1dbd76a`](https://github.com/mastra-ai/mastra/commit/1dbd76aff29cc764d3a1ac7bb01172fe59cb5992), [`f59fc1e`](https://github.com/mastra-ai/mastra/commit/f59fc1e406b8912e692f6bff6cfd4754cc8d165c), [`ca5a01f`](https://github.com/mastra-ai/mastra/commit/ca5a01f0dd4dabdbfde3beeaf92c7333e0f9bb39), [`158381d`](https://github.com/mastra-ai/mastra/commit/158381d39335be934b81ef8a1947bccace492c25), [`a1799bc`](https://github.com/mastra-ai/mastra/commit/a1799bcc1b5a1cdc188f2ac0165f17a1c4ac6f7b), [`6ff6094`](https://github.com/mastra-ai/mastra/commit/6ff60946f4ecfebdeef6e21d2b230c2204f2c9b8), [`2ddb851`](https://github.com/mastra-ai/mastra/commit/2ddb8519c4b6f1d31be10ffd33b41d2b649a04ff), [`fb703b9`](https://github.com/mastra-ai/mastra/commit/fb703b9634eeaff1a6eb2b5531ce0f9e8fb04727), [`dfe856f`](https://github.com/mastra-ai/mastra/commit/dfe856f7f60ff4765b75930e7b5d82dd0f0f7d89), [`37a2314`](https://github.com/mastra-ai/mastra/commit/37a23148e0e5a3b40d4f9f098b194671a8a49faf), [`7b1ef57`](https://github.com/mastra-ai/mastra/commit/7b1ef57fc071c2aa2a2e32905b18cd88719c5a39), [`7b1ef57`](https://github.com/mastra-ai/mastra/commit/7b1ef57fc071c2aa2a2e32905b18cd88719c5a39), [`05a9dee`](https://github.com/mastra-ai/mastra/commit/05a9dee3d355694d28847bfffb6289657fcf7dfa), [`e3c1077`](https://github.com/mastra-ai/mastra/commit/e3c107763aedd1643d3def5df450c235da9ff76c), [`1908ca0`](https://github.com/mastra-ai/mastra/commit/1908ca0521f90e43779cc29ab590173ca560443c), [`1bccdb3`](https://github.com/mastra-ai/mastra/commit/1bccdb33eb90cbeba2dc5ece1c2561fb774b26b6), [`5ef944a`](https://github.com/mastra-ai/mastra/commit/5ef944a3721d93105675cac2b2311432ff8cc393), [`228228b`](https://github.com/mastra-ai/mastra/commit/228228b0b1de9291cb8887587f5cea1a8757ebad), [`b5a66b7`](https://github.com/mastra-ai/mastra/commit/b5a66b748a14fc8b3f63b04642ddb9621fbcc9e0), [`d6b186f`](https://github.com/mastra-ai/mastra/commit/d6b186fb08f1caf1b86f73d3a5ee88fb999ca3be), [`ee68e82`](https://github.com/mastra-ai/mastra/commit/ee68e8289ea4408d29849e899bc6e78b3bd4e843), [`228228b`](https://github.com/mastra-ai/mastra/commit/228228b0b1de9291cb8887587f5cea1a8757ebad), [`ea33930`](https://github.com/mastra-ai/mastra/commit/ea339301e82d6318257720d811b043014ee44064), [`65493b3`](https://github.com/mastra-ai/mastra/commit/65493b31c36f6fdb78f9679f7e1ecf0c250aa5ee), [`a998b8f`](https://github.com/mastra-ai/mastra/commit/a998b8f858091c2ec47683e60766cf12d03001e4), [`b5a66b7`](https://github.com/mastra-ai/mastra/commit/b5a66b748a14fc8b3f63b04642ddb9621fbcc9e0), [`8a37bdd`](https://github.com/mastra-ai/mastra/commit/8a37bddb6d8614a32c5b70303d583d80c620ea61), [`e0e1cf1`](https://github.com/mastra-ai/mastra/commit/e0e1cf1e37b9dc61099ab331a6d386e44b816310), [`135d6f2`](https://github.com/mastra-ai/mastra/commit/135d6f22a326ed1dffff858700669dff09d2c9eb)]:
+  - @mastra/deployer@0.21.0
+  - @mastra/core@0.21.0
+
 ## 0.13.8-alpha.0
 
 ### Patch Changes

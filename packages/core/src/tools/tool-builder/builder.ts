@@ -1,4 +1,4 @@
-import type { ToolCallOptions } from '@ai-sdk/provider-utils';
+import type { ToolCallOptions } from '@ai-sdk/provider-utils-v5';
 import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
@@ -9,7 +9,7 @@ import {
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
 } from '@mastra/schema-compat';
-import type { ToolExecutionOptions } from 'ai-v4';
+import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
 import { AISpanType, wrapMastra } from '../../ai-tracing';
 import { MastraBase } from '../../base';
@@ -112,7 +112,12 @@ export class CoreToolBuilder extends MastraBase {
 
   private createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset' | 'client-tool') {
     // dont't add memory or mastra to logging
-    const { logger, mastra: _mastra, memory: _memory, runtimeContext, ...rest } = options;
+    const { logger, mastra: _mastra, memory: _memory, runtimeContext, model, ...rest } = options;
+    const logModelObject = {
+      modelId: model?.modelId,
+      provider: model?.provider,
+      specificationVersion: model?.specificationVersion,
+    };
 
     const { start, error } = this.createLogMessageOptions({
       agentName: options.agentName,
@@ -197,7 +202,7 @@ export class CoreToolBuilder extends MastraBase {
     return async (args: unknown, execOptions?: ToolInvocationOptions) => {
       let logger = options.logger || this.logger;
       try {
-        logger.debug(start, { ...rest, args });
+        logger.debug(start, { ...rest, model: logModelObject, args });
 
         // Validate input parameters if schema exists
         const parameters = this.getParameters();
@@ -233,13 +238,13 @@ export class CoreToolBuilder extends MastraBase {
             details: {
               errorMessage: String(error),
               argsJson: JSON.stringify(args),
-              model: rest.model?.modelId ?? '',
+              model: model?.modelId ?? '',
             },
           },
           err,
         );
         logger.trackException(mastraError);
-        logger.error(error, { ...rest, error: mastraError, args });
+        logger.error(error, { ...rest, model: logModelObject, error: mastraError, args });
         return mastraError;
       }
     };

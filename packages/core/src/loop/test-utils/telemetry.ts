@@ -1,10 +1,10 @@
-import { convertArrayToReadableStream, mockValues } from 'ai/test';
+import { convertArrayToReadableStream, mockValues } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import { MockTracer } from './mockTracer';
-import { createTestModels, testUsage } from './utils';
+import { createMessageListWithUserMessage, createTestModels, testUsage } from './utils';
 
 export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('telemetry', () => {
@@ -15,14 +15,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
     });
 
     it('should not record any telemetry data when not explicitly enabled', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,
@@ -40,14 +33,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
     });
 
     it('should record telemetry data when enabled', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,
@@ -85,14 +71,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
     });
 
     it('should record successful tool call', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,
@@ -135,14 +114,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
     });
 
     it('should record error on tool call', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,
@@ -210,14 +182,8 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
     });
 
     it('should not record telemetry inputs / outputs when disabled', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
+
       const result = await loopFn({
         runId,
         models: createTestModels({

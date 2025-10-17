@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { parseModelRouterId } from './gateway-resolver.js';
 import type { MastraModelGateway } from './gateways/base.js';
 import { findGatewayForModel } from './gateways/index.js';
@@ -140,6 +140,7 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
         apiKey,
         baseURL: this.config.url,
         headers: this.config.headers,
+        supportsStructuredOutputs: true,
       }).chatModel(modelId);
       ModelRouterLanguageModel.modelInstances.set(key, modelInstance);
       return modelInstance;
