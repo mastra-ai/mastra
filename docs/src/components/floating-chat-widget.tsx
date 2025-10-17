@@ -11,7 +11,7 @@ import { MessageCircle } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./ui/button";
 
-export const FloatingChatWidget = ({}: {}) => {
+export const FloatingChatWidget = () => {
   const [isOpen, setIsOpen] = useState(false);
 
   function open() {
