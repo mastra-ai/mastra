@@ -146,6 +146,7 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
         apiKey,
         baseURL: this.config.url,
         headers: this.config.headers,
+        supportsStructuredOutputs: true,
       }).chatModel(modelId);
       ModelRouterLanguageModel.modelInstances.set(key, modelInstance);
       return modelInstance;

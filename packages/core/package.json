@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.21.0",
+  "version": "0.21.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -250,7 +250,7 @@
     "@types/node": "^20.19.0",
     "@types/pino": "^7.0.5",
     "@types/qs": "^6.14.0",
-    "eslint": "^9.36.0",
+    "eslint": "^9.37.0",
     "fast-deep-equal": "^3.1.3",
     "globby": "^14.1.0",
     "msw": "^2.11.3",
