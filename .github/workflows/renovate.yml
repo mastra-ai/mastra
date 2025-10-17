@@ -44,6 +44,7 @@ jobs:
         with:
           app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          minutes: 120
           #permission-pull-requests: write
           #permission-issues: write
           #permission-security-events: write

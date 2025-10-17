@@ -1,7 +1,7 @@
 const meta = {
   overview: "Overview",
   "using-tools": "Using Tools",
-  "agent-memory": "Agent Memory",
+  "agent-memory": "Memory",
   networks: "Networks",
   guardrails: "Guardrails",
   "adding-voice": "Adding Voice",
