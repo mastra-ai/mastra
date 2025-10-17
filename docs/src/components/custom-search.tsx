@@ -54,7 +54,7 @@ type FlattenedResult = {
 };
 
 // Union type for search results
-type SearchResult = AlgoliaResult | FlattenedResult | { url: "use-ai" };
+type SearchResult = AlgoliaResult | FlattenedResult;
 
 // Helper function to get icon based on section
 const getSectionIcon = (section?: string) => {
