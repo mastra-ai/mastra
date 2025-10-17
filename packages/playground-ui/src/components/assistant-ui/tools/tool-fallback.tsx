@@ -25,15 +25,19 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, ...props }: ToolF
   // The response from the fetch request resolving the workflow might theoretically
   // be resolved after we receive the first stream event
 
-  useWorkflowStream(result);
-  const { data: workflow, isLoading } = useWorkflow(toolName);
+  const isAgent = (metadata?.mode === 'network' && metadata.from === 'AGENT') || toolName.startsWith('agent-');
+  const isWorkflow = (metadata?.mode === 'network' && metadata.from === 'WORKFLOW') || toolName.startsWith('workflow-');
 
-  const isAgent = metadata?.mode === 'network' && metadata.from === 'AGENT';
+  const agentToolName = toolName.startsWith('agent-') ? toolName?.split('agent-')[1] : toolName;
+  const workflowToolName = toolName.startsWith('workflow-') ? toolName?.split('workflow-')[1] : toolName;
+
+  useWorkflowStream(result);
+  const { data: workflow, isLoading } = useWorkflow(workflowToolName, isWorkflow);
 
   if (isAgent) {
     const messages = result?.childMessages ?? [];
 
-    return <AgentBadge agentId={toolName} messages={messages} metadata={metadata} />;
+    return <AgentBadge agentId={agentToolName} messages={messages} metadata={metadata} />;
   }
 
   if (isLoading) return <LoadingBadge />;
@@ -43,7 +47,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, ...props }: ToolF
 
     return (
       <WorkflowBadge
-        workflowId={toolName}
+        workflowId={workflowToolName}
         workflow={workflow}
         isStreaming={isStreaming}
         runId={result?.runId}

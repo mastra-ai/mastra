@@ -1892,7 +1892,7 @@ export class Agent<
         const modelVersion = (await agent.getModel()).specificationVersion;
 
         const toolObj = createTool({
-          id: agentName,
+          id: `agent-${agentName}`,
           description: `Agent: ${agentName}`,
           inputSchema: agentInputSchema,
           outputSchema: agentOutputSchema,
@@ -1989,7 +1989,7 @@ export class Agent<
         });
 
         const options: ToolOptions = {
-          name: agentName,
+          name: `agent-${agentName}`,
           runId,
           threadId,
           resourceId,
@@ -2003,7 +2003,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
         };
 
-        convertedAgentTools[agentName] = makeCoreTool(toolObj, options);
+        convertedAgentTools[`agent-${agentName}`] = makeCoreTool(toolObj, options);
       }
     }
 
@@ -2034,7 +2034,7 @@ export class Agent<
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const toolObj = createTool({
-          id: workflowName,
+          id: `workflow-${workflowName}`,
           description: workflow.description || `Workflow: ${workflowName}`,
           inputSchema: workflow.inputSchema,
           outputSchema: workflow.outputSchema,
@@ -2117,7 +2117,7 @@ export class Agent<
         });
 
         const options: ToolOptions = {
-          name: workflowName,
+          name: `workflow-${workflowName}`,
           runId,
           threadId,
           resourceId,
@@ -2131,7 +2131,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
         };
 
-        convertedWorkflowTools[workflowName] = makeCoreTool(toolObj, options);
+        convertedWorkflowTools[`workflow-${workflowName}`] = makeCoreTool(toolObj, options);
       }
     }
 
