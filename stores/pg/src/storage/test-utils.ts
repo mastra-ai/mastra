@@ -357,7 +357,7 @@ export function pgTests() {
 
         // Directly insert a message with both createdAt and createdAtZ where they differ
         const createdAtValue = new Date('2024-01-01T10:00:00Z');
-        const createdAtZValue = new Date('2024-01-01T10:00:00-05:00'); // Different timezone representation
+        const createdAtZValue = new Date('2024-01-01T15:00:00Z'); // 5 hours later - clearly different
 
         await store.db.none(
           `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
@@ -368,12 +368,16 @@ export function pgTests() {
         // Test getMessages
         const messages = await store.getMessages({ threadId: testThreadId, format: 'v2' });
         expect(messages.length).toBe(1);
-        expect(messages[0]?.createdAt).toEqual(createdAtZValue);
+        expect(messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
+        expect(messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
 
         // Test getMessagesById
         const messagesById = await store.getMessagesById({ messageIds: [testMessageId], format: 'v2' });
         expect(messagesById.length).toBe(1);
-        expect(messagesById[0]?.createdAt).toEqual(createdAtZValue);
+        expect(messagesById[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesById[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
+        expect(messagesById[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
 
         // Test getMessagesPaginated
         const messagesPaginated = await store.getMessagesPaginated({
@@ -381,7 +385,9 @@ export function pgTests() {
           format: 'v2',
         });
         expect(messagesPaginated.messages.length).toBe(1);
-        expect(messagesPaginated.messages[0]?.createdAt).toEqual(createdAtZValue);
+        expect(messagesPaginated.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesPaginated.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
+        expect(messagesPaginated.messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
       });
 
       it('should fallback to createdAt when createdAtZ is null for legacy messages', async () => {
@@ -401,12 +407,14 @@ export function pgTests() {
         // Test getMessages
         const messages = await store.getMessages({ threadId: testThreadId, format: 'v2' });
         expect(messages.length).toBe(1);
-        expect(messages[0]?.createdAt).toEqual(createdAtValue);
+        expect(messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
 
         // Test getMessagesById
         const messagesById = await store.getMessagesById({ messageIds: [testMessageId], format: 'v2' });
         expect(messagesById.length).toBe(1);
-        expect(messagesById[0]?.createdAt).toEqual(createdAtValue);
+        expect(messagesById[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesById[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
 
         // Test getMessagesPaginated
         const messagesPaginated = await store.getMessagesPaginated({
@@ -414,16 +422,19 @@ export function pgTests() {
           format: 'v2',
         });
         expect(messagesPaginated.messages.length).toBe(1);
-        expect(messagesPaginated.messages[0]?.createdAt).toEqual(createdAtValue);
+        expect(messagesPaginated.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesPaginated.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
       });
 
       it('should have consistent timestamp handling between threads and messages', async () => {
-        // Create a thread first
+        // Create a thread first with a known createdAt timestamp
+        const threadCreatedAt = new Date('2024-01-01T10:00:00Z');
         const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
+        thread.createdAt = threadCreatedAt;
         await store.saveThread({ thread });
 
-        // Save a message through the normal API
-        const testDate = new Date('2024-01-01T12:00:00Z');
+        // Save a message through the normal API with a different timestamp
+        const messageCreatedAt = new Date('2024-01-01T12:00:00Z');
         await store.saveMessages({
           messages: [
             {
@@ -432,7 +443,7 @@ export function pgTests() {
               resourceId: testResourceId,
               role: 'user',
               content: { format: 2, parts: [{ type: 'text', text: 'Test' }], content: 'Test' },
-              createdAt: testDate,
+              createdAt: messageCreatedAt,
             },
           ],
           format: 'v2',
@@ -441,17 +452,14 @@ export function pgTests() {
         // Get thread
         const retrievedThread = await store.getThreadById({ threadId: testThreadId });
         expect(retrievedThread).toBeTruthy();
+        expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
+        expect(retrievedThread?.createdAt.getTime()).toBe(threadCreatedAt.getTime());
 
         // Get messages
         const messages = await store.getMessages({ threadId: testThreadId, format: 'v2' });
         expect(messages.length).toBe(1);
-
-        // Both should return Date objects
-        expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
         expect(messages[0]?.createdAt).toBeInstanceOf(Date);
-
-        // Both should use the same fallback pattern (createdAtZ || createdAt)
-        // This ensures consistency across the storage layer
+        expect(messages[0]?.createdAt.getTime()).toBe(messageCreatedAt.getTime());
       });
 
       it('should handle included messages with correct timestamp fallback', async () => {
@@ -466,25 +474,29 @@ export function pgTests() {
 
         const date1 = new Date('2024-01-01T10:00:00Z');
         const date2 = new Date('2024-01-01T11:00:00Z');
+        const date2Z = new Date('2024-01-01T16:00:00Z'); // Different from date2
         const date3 = new Date('2024-01-01T12:00:00Z');
 
         // Insert messages with different createdAt/createdAtZ combinations
+        // msg1: has createdAtZ (should use it)
         await store.db.none(
           `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
           [msg1Id, testThreadId, 'Message 1', 'user', 'v2', testResourceId, date1, date1],
         );
 
+        // msg2: has NULL createdAtZ (should fallback to createdAt)
         await store.db.none(
           `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
            VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)`,
           [msg2Id, testThreadId, 'Message 2', 'assistant', 'v2', testResourceId, date2],
         );
 
+        // msg3: has both createdAt and createdAtZ with different values (should use createdAtZ)
         await store.db.none(
           `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [msg3Id, testThreadId, 'Message 3', 'user', 'v2', testResourceId, date3, date3],
+          [msg3Id, testThreadId, 'Message 3', 'user', 'v2', testResourceId, date3, date2Z],
         );
 
         // Test getMessages with include
@@ -502,12 +514,25 @@ export function pgTests() {
           },
         });
 
-        expect(messages.length).toBeGreaterThan(0);
-        // All messages should have proper timestamps, whether from createdAtZ or createdAt
-        messages.forEach(msg => {
-          expect(msg.createdAt).toBeDefined();
-          expect(msg.createdAt).toBeInstanceOf(Date);
-        });
+        expect(messages.length).toBe(3);
+
+        // Find each message and verify correct timestamps
+        const message1 = messages.find(m => m.id === msg1Id);
+        expect(message1).toBeDefined();
+        expect(message1?.createdAt).toBeInstanceOf(Date);
+        expect(message1?.createdAt.getTime()).toBe(date1.getTime());
+
+        const message2 = messages.find(m => m.id === msg2Id);
+        expect(message2).toBeDefined();
+        expect(message2?.createdAt).toBeInstanceOf(Date);
+        expect(message2?.createdAt.getTime()).toBe(date2.getTime());
+
+        const message3 = messages.find(m => m.id === msg3Id);
+        expect(message3).toBeDefined();
+        expect(message3?.createdAt).toBeInstanceOf(Date);
+        // Should use createdAtZ (date2Z), not createdAt (date3)
+        expect(message3?.createdAt.getTime()).toBe(date2Z.getTime());
+        expect(message3?.createdAt.getTime()).not.toBe(date3.getTime());
       });
     });
 
