@@ -50,6 +50,7 @@ describe('ModelRouter - Custom Provider Support', () => {
         apiKey: 'test-key',
         baseURL: 'http://fake-test-server-that-does-not-exist.local:9999/v1',
         headers: undefined,
+        supportsStructuredOutputs: true,
       });
 
       // Verify chatModel was called with the modelId
