@@ -1,5 +1,11 @@
-import type { Tool, ToolV5, FlexibleSchema, ToolCallOptions, ToolExecutionOptions } from '@internal/external-types';
-import type { Schema } from 'ai';
+import type {
+  Tool,
+  ToolV5,
+  FlexibleSchema,
+  ToolCallOptions,
+  ToolExecutionOptions,
+  Schema,
+} from '@internal/external-types';
 
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
 import type { TracingContext } from '../ai-tracing';
@@ -15,10 +21,9 @@ export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 
 // Define CoreTool as a discriminated union to match the AI SDK's Tool type
 export type CoreTool = {
-  id?: string;
   description?: string;
-  parameters: FlexibleSchema<any>;
-  outputSchema?: FlexibleSchema<any>;
+  parameters: FlexibleSchema<any> | Schema;
+  outputSchema?: FlexibleSchema<any> | Schema;
   execute?: (params: any, options: ToolInvocationOptions) => Promise<any>;
 } & (
   | {
@@ -34,7 +39,6 @@ export type CoreTool = {
 
 // Duplicate of CoreTool but with parameters as Schema to make it easier to work with internally
 export type InternalCoreTool = {
-  id?: string;
   description?: string;
   parameters: Schema;
   outputSchema?: Schema;

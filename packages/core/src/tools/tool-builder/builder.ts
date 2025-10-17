@@ -257,13 +257,28 @@ export class CoreToolBuilder extends MastraBase {
       throw new Error('Tool parameters are required');
     }
 
-    return {
+    const base = {
       ...builtTool,
       inputSchema: builtTool.parameters,
       onInputStart: 'onInputStart' in this.originalTool ? this.originalTool.onInputStart : undefined,
       onInputDelta: 'onInputDelta' in this.originalTool ? this.originalTool.onInputDelta : undefined,
       onInputAvailable: 'onInputAvailable' in this.originalTool ? this.originalTool.onInputAvailable : undefined,
-    } satisfies VercelToolV5;
+    };
+
+    // For provider-defined tools, exclude execute and add name as per v5 spec
+    if (builtTool.type === 'provider-defined') {
+      const { execute, parameters, ...rest } = base;
+      const name = builtTool.id.split('.')[1] || builtTool.id;
+      return {
+        ...rest,
+        type: builtTool.type,
+        id: builtTool.id,
+        name,
+        args: builtTool.args,
+      } satisfies VercelToolV5;
+    }
+
+    return base as VercelToolV5;
   }
 
   build(): CoreTool {
