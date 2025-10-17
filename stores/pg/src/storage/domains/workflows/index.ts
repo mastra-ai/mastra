@@ -45,22 +45,97 @@ export class WorkflowsPG extends WorkflowsStorage {
     this.schema = schema;
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // runtimeContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    runtimeContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    runtimeContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema });
+      const now = new Date().toISOString();
+
+      let resultString: string;
+      try {
+        resultString = JSON.stringify(result);
+      } catch (error) {
+        throw new MastraError(
+          {
+            id: 'MASTRA_STORAGE_JSON_STRINGIFY_FAILED',
+            text: 'JSON.stringify failed for step result',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { workflowName, runId, stepId },
+          },
+          error,
+        );
+      }
+
+      await this.client.none(
+        `UPDATE ${tableName}
+         SET snapshot = jsonb_set(
+           snapshot::jsonb,
+           $1,
+           $2::jsonb,
+           true
+         ),
+         "updatedAt" = $3
+         WHERE workflow_name = $4 AND run_id = $5`,
+        [`{context,${stepId}}`, resultString, now, workflowName, runId],
+      );
+
+      if (runtimeContext && Object.keys(runtimeContext).length > 0) {
+        for (const [key, value] of Object.entries(runtimeContext)) {
+          const valueString = JSON.stringify(value);
+          await this.client.none(
+            `UPDATE ${tableName}
+             SET snapshot = jsonb_set(
+               snapshot::jsonb,
+               $1,
+               $2::jsonb,
+               true
+             ),
+             "updatedAt" = $3
+             WHERE workflow_name = $4 AND run_id = $5`,
+            [`{runtimeContext,${key}}`, valueString, now, workflowName, runId],
+          );
+        }
+      }
+
+      const updatedSnapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
+      if (!updatedSnapshot) {
+        throw new MastraError({
+          id: 'MASTRA_STORAGE_PG_STORE_UPDATE_WORKFLOW_RESULTS_SNAPSHOT_NOT_FOUND',
+          text: `Workflow snapshot not found after update for ${workflowName}:${runId}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { workflowName, runId },
+        });
+      }
+
+      return updatedSnapshot.context;
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_UPDATE_WORKFLOW_RESULTS_FAILED',
+          text: 'Failed to update workflow results',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId, stepId },
+        },
+        error,
+      );
+    }
   }
   updateWorkflowState(
     {
