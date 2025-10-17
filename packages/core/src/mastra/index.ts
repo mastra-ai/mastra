@@ -499,29 +499,17 @@ export class Mastra<TLogger extends IMastraLogger = IMastraLogger> {
 
     if (config?.vectors) {
       Object.entries(config.vectors).forEach(([key, vector]) => {
-        if (this.#telemetry) {
-          this.#vectors[key] = this.#telemetry.traceClass(vector, {
-            excludeMethods: ['__setTelemetry', '__getTelemetry'],
-          });
-          this.#vectors[key].__setTelemetry(this.#telemetry);
-        } else {
-          this.#vectors[key] = vector;
-        }
+        this.registerVector(key, vector)
       });
     }
 
+    /*
+    MCP Servers
+    */
+
     if (config?.mcpServers) {
-      this.#mcpServers = config.mcpServers;
-
-      // Set logger/telemetry/Mastra instance/id for MCP servers
-      Object.entries(this.#mcpServers).forEach(([key, server]) => {
-        server.setId(key);
-        if (this.#telemetry) {
-          server.__setTelemetry(this.#telemetry);
-        }
-
-        server.__registerMastra(this);
-        server.__setLogger(this.getLogger());
+      Object.entries(config.mcpServers).forEach(([key, server]) => {
+        this.registerMCPServer(key, server)
       });
     }
 
@@ -544,18 +532,13 @@ do:
       throw error;
     }
 
+    /*
+    TTS
+    */
+
     if (config?.tts) {
-      this.#tts = config.tts;
-      Object.entries(this.#tts).forEach(([key, ttsCl]) => {
-        if (this.#tts?.[key]) {
-          if (this.#telemetry) {
-            // @ts-ignore
-            this.#tts[key] = this.#telemetry.traceClass(ttsCl, {
-              excludeMethods: ['__setTelemetry', '__getTelemetry'],
-            });
-            this.#tts[key].__setTelemetry(this.#telemetry);
-          }
-        }
+      Object.entries(config.tts).forEach(([key, ttsCl]) => {
+        this.registerTTS(key, ttsCl)
       });
     }
 
@@ -565,27 +548,7 @@ do:
 
     if (config?.agents) {
       Object.entries(config.agents).forEach(([key, agent]) => {
-        if (this.#agents[key]) {
-          const error = new MastraError({
-            id: 'MASTRA_AGENT_REGISTRATION_DUPLICATE_ID',
-            domain: ErrorDomain.MASTRA,
-            category: ErrorCategory.USER,
-            text: `Agent with name ID:${key} already exists`,
-            details: {
-              agentId: key,
-            },
-          });
-          this.#logger?.trackException(error);
-          throw error;
-        }
-        agent.__registerMastra(this);
-
-        agent.__registerPrimitives({
-          logger: this.getLogger(),
-          telemetry: this.#telemetry,
-        });
-
-        this.#agents[key] = agent;
+        this.registerAgent(key, agent)
       });
     }
 
@@ -595,7 +558,7 @@ do:
 
     if (config?.scorers) {
       Object.entries(config.scorers).forEach(([key, scorer]) => {
-        this.#scorers[key] = scorer;
+        this.registerScorer(key, scorer)
       });
     }
 
@@ -610,14 +573,12 @@ do:
           logger: this.getLogger(),
           telemetry: this.#telemetry,
         });
-        // @ts-ignore
         this.#legacy_workflows[key] = workflow;
 
         const workflowSteps = Object.values(workflow.steps).filter(step => !!step.workflowId && !!step.workflow);
         if (workflowSteps.length > 0) {
           workflowSteps.forEach(step => {
-            // @ts-ignore
-            this.#legacy_workflows[step.workflowId] = step.workflow;
+            this.#legacy_workflows[step.workflowId!] = step.workflow!;
           });
         }
       });
@@ -629,13 +590,7 @@ do:
   
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
-        workflow.__registerMastra(this);
-        workflow.__registerPrimitives({
-          logger: this.getLogger(),
-          telemetry: this.#telemetry,
-        });
-        // @ts-ignore
-        this.#workflows[key] = workflow;
+        this.registerWorkflow(key, workflow)
       });
     }
 
@@ -1571,6 +1526,201 @@ do:
 
   public getServerCache() {
     return this.#serverCache;
+  }
+
+  /**
+   * Internal helper to throw a tracked MastraError and stop execution.
+   */
+  private __throwTrackedUserError({
+    id,
+    text,
+    details,
+  }: {
+    id: Uppercase<string>;
+    text: string;
+    details?: Record<string, String>;
+  }): never {
+    const error = new MastraError({
+      id,
+      domain: ErrorDomain.MASTRA,
+      category: ErrorCategory.USER,
+      text,
+      details: details,
+    });
+    this.#logger?.trackException(error);
+    throw error;
+  }
+
+  /**
+   * Ensures that an entry is NOT already present in the provided registry.
+   */
+  private __ensureNotRegistered(
+    registry: Record<string, unknown>,
+    key: string,
+    errorConfig: { id: Uppercase<string>; text: string; details?: Record<string, unknown> },
+  ): void {
+    if (registry[key]) {
+      this.__throwTrackedUserError(errorConfig);
+    }
+  }
+
+  /**
+   * Ensures that an entry IS present in the provided registry.
+   */
+  private __ensureRegistered(
+    registry: Record<string, unknown>,
+    key: string,
+    errorConfig: { id: Uppercase<string>; text: string; details?: Record<string, unknown> },
+  ): void {
+    if (!registry[key]) {
+      this.__throwTrackedUserError(errorConfig);
+    }
+  }
+
+  public registerAgent(key: string, agent: Agent): void {
+    this.__ensureNotRegistered(this.#agents, key, {
+      id: 'MASTRA_AGENT_REGISTRATION_DUPLICATE_ID',
+      text: `Agent with name ID:${key} already exists`,
+      details: { agentId: key },
+    });
+    agent.__registerMastra(this);
+
+    agent.__registerPrimitives({
+      logger: this.getLogger(),
+      telemetry: this.#telemetry,
+    });
+
+    this.#agents[key] = agent;
+  }
+
+  public registerMCPServer(key: string, server: MCPServerBase): void {
+    this.__ensureNotRegistered(this.#mcpServers, key, {
+      id: 'MASTRA_MCP_SERVER_REGISTRATION_DUPLICATE_ID',
+      text: `MCP Server with name ID:${key} already exists`,
+      details: { mcpServerId: key },
+    });
+
+    server.setId(key);
+    if (this.#telemetry) {
+      server.__setTelemetry(this.#telemetry);
+    }
+    server.__registerMastra(this);
+    server.__setLogger(this.getLogger());
+
+    this.#mcpServers[key] = server;
+  }
+
+  public registerScorer(key: string, scorer: MastraScorer): void {
+    this.__ensureNotRegistered(this.#scorers, key, {
+      id: 'MASTRA_SCORER_REGISTRATION_DUPLICATE_ID',
+      text: `Scorer with name ID:${key} already exists`,
+      details: { scorerId: key },
+    });
+    this.#scorers[key] = scorer;
+  }
+
+  public registerTTS(key: string, ttsCl: MastraTTS): void {
+    this.__ensureNotRegistered(this.#tts, key, {
+      id: 'MASTRA_TTS_REGISTRATION_DUPLICATE_ID',
+      text: `TTS with name ID:${key} already exists`,
+      details: { ttsId: key },
+    });
+
+    if (this.#telemetry) {
+      // @ts-ignore
+      this.#tts[key] = this.#telemetry.traceClass(ttsCl, {
+        excludeMethods: ['__setTelemetry', '__getTelemetry'],
+      });
+      this.#tts[key].__setTelemetry(this.#telemetry);
+    } else {
+      this.#tts[key] = ttsCl;
+    }
+
+    this.#tts[key].__setLogger(this.getLogger());
+  }
+
+  public registerVector(key: string, vector: MastraVector): void {
+    this.__ensureNotRegistered(this.#vectors, key, {
+      id: 'MASTRA_VECTOR_REGISTRATION_DUPLICATE_ID',
+      text: `Vector with name ID:${key} already exists`,
+      details: { vectorId: key },
+    });
+    if (this.#telemetry) {
+      this.#vectors[key] = this.#telemetry.traceClass(vector, {
+        excludeMethods: ['__setTelemetry', '__getTelemetry'],
+      });
+      this.#vectors[key].__setTelemetry(this.#telemetry);
+    } else {
+      this.#vectors[key] = vector;
+    }
+  }
+
+  public registerWorkflow(key: string, workflow: Workflow): void {
+    this.__ensureNotRegistered(this.#workflows, key, {
+      id: 'MASTRA_WORKFLOW_REGISTRATION_DUPLICATE_ID',
+      text: `Workflow with name ID:${key} already exists`,
+      details: { workflowId: key },
+    });
+    workflow.__registerMastra(this);
+    workflow.__registerPrimitives({
+      logger: this.getLogger(),
+      telemetry: this.#telemetry,
+    });
+    this.#workflows[key] = workflow;
+  }
+
+  public unregisterAgent(key: string): void {
+    this.__ensureRegistered(this.#agents, key, {
+      id: 'MASTRA_AGENT_DEREGISTRATION_UNKNOWN_ID',
+      text: `Agent with name ID:${key} not found`,
+      details: { agentId: key },
+    });
+    delete this.#agents[key]
+  }
+
+  public unregisterMCPServer(key: string): void {
+    this.__ensureRegistered(this.#mcpServers, key, {
+      id: 'MASTRA_MCP_SERVER_DEREGISTRATION_UNKNOWN_ID',
+      text: `MCP Server with name ID:${key} not found`,
+      details: { mcpServerId: key },
+    });
+    delete this.#mcpServers[key]
+  }
+
+  public unregisterScorer(key: string): void {
+    this.__ensureRegistered(this.#scorers, key, {
+      id: 'MASTRA_SCORER_DEREGISTRATION_UNKNOWN_ID',
+      text: `Scorer with name ID:${key} not found`,
+      details: { scorerId: key },
+    });
+    delete this.#scorers[key]
+  }
+
+  public unregisterTTS(key: string): void {
+    this.__ensureRegistered(this.#tts, key, {
+      id: 'MASTRA_TTS_DEREGISTRATION_UNKNOWN_ID',
+      text: `TTS with name ID:${key} not found`,
+      details: { ttsId: key },
+    });
+    delete this.#tts[key]
+  }
+
+  public unregisterVector(key: string): void {
+    this.__ensureRegistered(this.#vectors, key, {
+      id: 'MASTRA_VECTOR_DEREGISTRATION_UNKNOWN_ID',
+      text: `Vector with name ID:${key} not found`,
+      details: { vectorId: key },
+    });
+    delete this.#vectors[key]
+  }
+
+  public unregisterWorkflow(key: string): void {
+    this.__ensureRegistered(this.#workflows, key, {
+      id: 'MASTRA_WORKFLOW_DEREGISTRATION_UNKNOWN_ID',
+      text: `Workflow with name ID:${key} not found`,
+      details: { workflowId: key },
+    });
+    delete this.#workflows[key]
   }
 
   public setServerMiddleware(serverMiddleware: Middleware | Middleware[]) {
