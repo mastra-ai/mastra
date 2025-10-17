@@ -19,7 +19,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -93,7 +92,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -134,7 +132,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -177,7 +174,6 @@ describe('output-format-handlers', () => {
       );
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -218,7 +214,6 @@ describe('output-format-handlers', () => {
       const schema = z.enum(['red', 'green', 'blue']);
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -256,7 +251,6 @@ describe('output-format-handlers', () => {
       const schema = z.enum(['red', 'green', 'blue']);
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -304,7 +298,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -351,7 +344,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -393,7 +385,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -439,7 +430,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -483,7 +473,6 @@ describe('output-format-handlers', () => {
       const aiSdkSchema = asSchema(zodSchema);
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema: aiSdkSchema },
       });
 
@@ -529,7 +518,6 @@ describe('output-format-handlers', () => {
       };
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -573,7 +561,6 @@ describe('output-format-handlers', () => {
       };
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -616,7 +603,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -663,7 +649,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -706,7 +691,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -751,7 +735,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -804,7 +787,6 @@ describe('output-format-handlers', () => {
       };
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: {
           schema,
           errorStrategy: 'warn',
@@ -863,7 +845,6 @@ describe('output-format-handlers', () => {
       const fallbackValue = { name: 'Default', age: 0 };
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: {
           schema,
           errorStrategy: 'fallback',

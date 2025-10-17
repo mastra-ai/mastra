@@ -503,11 +503,9 @@ function createOutputHandler<OUTPUT extends OutputSchema = undefined>({ schema }
  * - Always passes through original chunks for downstream processing
  */
 export function createObjectStreamTransformer<OUTPUT extends OutputSchema = undefined>({
-  isLLMExecutionStep,
   structuredOutput,
   logger,
 }: {
-  isLLMExecutionStep?: boolean;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   logger?: IMastraLogger;
 }) {
@@ -520,13 +518,6 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
-      if (!isLLMExecutionStep) {
-        // Bypassing processing if we are not in the LLM execution step (inner stream)
-        // OR if there is no output schema provided
-        controller.enqueue(chunk);
-        return;
-      }
-
       if (chunk.runId) {
         // save runId to use in error chunks
         currentRunId = chunk.runId;
@@ -605,12 +596,6 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
     },
 
     async flush(controller) {
-      // Bypass final validation if there is no output schema provided
-      // or if we are not in the LLM execution step (inner stream)
-      if (!isLLMExecutionStep) {
-        return;
-      }
-
       // Safety net: If text-end was never emitted, validate now as fallback
       // This handles edge cases where providers might not emit text-end
       if (accumulatedText?.trim() && !objectResolved) {
