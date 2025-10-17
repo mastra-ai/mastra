@@ -47,18 +47,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
-    "model": "huggingface/deepseek-ai/Deepseek-V3-0324",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 16384,
-    "maxOutput": 8192,
-    "inputCost": 1.25,
-    "outputCost": 1.25
-  },
-  {
     "model": "huggingface/deepseek-ai/DeepSeek-R1-0528",
     "imageInput": false,
     "audioInput": false,
@@ -71,88 +59,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 5
   },
   {
-    "model": "huggingface/Qwen/Qwen3-235B-A22B-Thinking-2507",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 3
-  },
-  {
-    "model": "huggingface/Qwen/Qwen3-Next-80B-A3B-Thinking",
+    "model": "huggingface/deepseek-ai/Deepseek-V3-0324",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 2
-  },
-  {
-    "model": "huggingface/Qwen/Qwen3-Next-80B-A3B-Instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 66536,
-    "inputCost": 0.25,
-    "outputCost": 1
-  },
-  {
-    "model": "huggingface/Qwen/Qwen3-Coder-480B-A35B-Instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 66536,
-    "inputCost": 2,
-    "outputCost": 2
-  },
-  {
-    "model": "huggingface/zai-org/GLM-4.6",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 128000,
-    "inputCost": 0.6,
-    "outputCost": 2.2
-  },
-  {
-    "model": "huggingface/zai-org/GLM-4.5-Air",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 96000,
-    "inputCost": 0.2,
-    "outputCost": 1.1
-  },
-  {
-    "model": "huggingface/zai-org/GLM-4.5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 98304,
-    "inputCost": 0.6,
-    "outputCost": 2.2
+    "contextWindow": 16384,
+    "maxOutput": 8192,
+    "inputCost": 1.25,
+    "outputCost": 1.25
   },
   {
     "model": "huggingface/moonshotai/Kimi-K2-Instruct",
@@ -177,6 +93,90 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 16384,
     "inputCost": 1,
     "outputCost": 3
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 3
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
+    "inputCost": 2,
+    "outputCost": 2
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3-Next-80B-A3B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
+    "inputCost": 0.25,
+    "outputCost": 1
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3-Next-80B-A3B-Thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 2
+  },
+  {
+    "model": "huggingface/zai-org/GLM-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": 0.6,
+    "outputCost": 2.2
+  },
+  {
+    "model": "huggingface/zai-org/GLM-4.5-Air",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 96000,
+    "inputCost": 0.2,
+    "outputCost": 1.1
+  },
+  {
+    "model": "huggingface/zai-org/GLM-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 128000,
+    "inputCost": 0.6,
+    "outputCost": 2.2
   }
 ]}
 />

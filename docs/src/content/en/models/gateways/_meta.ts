@@ -1,8 +1,8 @@
 const meta = {
   index: "Overview",
+  netlify: "Netlify",
   openrouter: "OpenRouter",
   vercel: "Vercel",
-  netlify: "Netlify",
 };
 
 export default meta;

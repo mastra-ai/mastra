@@ -47,18 +47,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
-    "model": "wandb/deepseek-ai/DeepSeek-V3-0324",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 161000,
-    "maxOutput": 8192,
-    "inputCost": 1.14,
-    "outputCost": 2.75
-  },
-  {
     "model": "wandb/deepseek-ai/DeepSeek-R1-0528",
     "imageInput": false,
     "audioInput": false,
@@ -71,16 +59,76 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 5.4
   },
   {
-    "model": "wandb/Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "model": "wandb/deepseek-ai/DeepSeek-V3-0324",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 161000,
+    "maxOutput": 8192,
+    "inputCost": 1.14,
+    "outputCost": 2.75
+  },
+  {
+    "model": "wandb/meta-llama/Llama-3.1-8B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": 0.1,
-    "outputCost": 0.1
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 0.22,
+    "outputCost": 0.22
+  },
+  {
+    "model": "wandb/meta-llama/Llama-3.3-70B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 0.71,
+    "outputCost": 0.71
+  },
+  {
+    "model": "wandb/meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 64000,
+    "maxOutput": 8192,
+    "inputCost": 0.17,
+    "outputCost": 0.66
+  },
+  {
+    "model": "wandb/microsoft/Phi-4-mini-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.08,
+    "outputCost": 0.35
+  },
+  {
+    "model": "wandb/moonshotai/Kimi-K2-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 1.35,
+    "outputCost": 4
   },
   {
     "model": "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507",
@@ -89,6 +137,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": 0.1,
+    "outputCost": 0.1
+  },
+  {
+    "model": "wandb/Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 131072,
     "inputCost": 0.1,
@@ -105,66 +165,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 66536,
     "inputCost": 1,
     "outputCost": 1.5
-  },
-  {
-    "model": "wandb/meta-llama/Llama-4-Scout-17B-16E-Instruct",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 64000,
-    "maxOutput": 8192,
-    "inputCost": 0.17,
-    "outputCost": 0.66
-  },
-  {
-    "model": "wandb/meta-llama/Llama-3.3-70B-Instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 32768,
-    "inputCost": 0.71,
-    "outputCost": 0.71
-  },
-  {
-    "model": "wandb/meta-llama/Llama-3.1-8B-Instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 32768,
-    "inputCost": 0.22,
-    "outputCost": 0.22
-  },
-  {
-    "model": "wandb/moonshotai/Kimi-K2-Instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 1.35,
-    "outputCost": 4
-  },
-  {
-    "model": "wandb/microsoft/Phi-4-mini-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": 0.08,
-    "outputCost": 0.35
   }
 ]}
 />

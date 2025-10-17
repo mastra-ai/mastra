@@ -170,18 +170,20 @@ async function fetchProviderInfo(providerId: string): Promise<{ models: any[]; p
 
     if (!provider?.models) return { models: [] };
 
-    const models = Object.entries(provider.models).map(([modelId, model]: [string, any]) => ({
-      model: `${providerId}/${modelId}`,
-      imageInput: model.modalities?.input?.includes('image') || false,
-      audioInput: model.modalities?.input?.includes('audio') || false,
-      videoInput: model.modalities?.input?.includes('video') || false,
-      toolUsage: model.tool_call !== false,
-      reasoning: model.reasoning === true,
-      contextWindow: model.limit?.context || null,
-      maxOutput: model.limit?.output || null,
-      inputCost: model.cost?.input || null,
-      outputCost: model.cost?.output || null,
-    }));
+    const models = Object.entries(provider.models)
+      .map(([modelId, model]: [string, any]) => ({
+        model: `${providerId}/${modelId}`,
+        imageInput: model.modalities?.input?.includes('image') || false,
+        audioInput: model.modalities?.input?.includes('audio') || false,
+        videoInput: model.modalities?.input?.includes('video') || false,
+        toolUsage: model.tool_call !== false,
+        reasoning: model.reasoning === true,
+        contextWindow: model.limit?.context || null,
+        maxOutput: model.limit?.output || null,
+        inputCost: model.cost?.input || null,
+        outputCost: model.cost?.output || null,
+      }))
+      .sort((a, b) => a.model.localeCompare(b.model));
 
     return {
       models,
@@ -411,8 +413,8 @@ function generateGatewayPage(
     ? `${gatewayDescription} Access ${totalModels} models through Mastra's model router.\n\nLearn more in the [${displayName} documentation](${docUrl}).`
     : `${gatewayDescription} Access ${totalModels} models through Mastra's model router.`;
 
-  // Create model table for all models
-  const allModels = providers.flatMap(p => p.models);
+  // Create model table for all models (sorted alphabetically)
+  const allModels = providers.flatMap(p => p.models).sort((a, b) => a.localeCompare(b));
   const modelTable =
     allModels.length > 0
       ? `
@@ -776,8 +778,8 @@ You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accept
 }
 
 function generateGatewaysIndexPage(grouped: GroupedProviders): string {
-  const orderedGateways = ['openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai', 'vercel', 'netlify'];
-  const gatewaysList = orderedGateways.filter(g => grouped.gateways.has(g));
+  // Sort gateways alphabetically
+  const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
   const hasNetlify = gatewaysList.includes('netlify');
   const logoImport = hasNetlify ? '\nimport { NetlifyLogo } from "@/components/logos/NetlifyLogo";' : '';
@@ -869,10 +871,10 @@ export default meta;
 }
 
 function generateGatewaysMeta(grouped: GroupedProviders): string {
-  const orderedGateways = ['openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai', 'vercel', 'netlify'];
-  const gatewaysList = orderedGateways.filter(g => grouped.gateways.has(g));
+  // Sort gateways alphabetically
+  const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
-  // Build the meta object with index first, then all gateways in order
+  // Build the meta object with index first, then all gateways in alphabetical order
   const metaEntries = ['  index: \"Overview\"'];
 
   for (const gatewayId of gatewaysList) {

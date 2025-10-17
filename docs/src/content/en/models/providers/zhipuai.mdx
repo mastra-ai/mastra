@@ -47,6 +47,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
+    "model": "zhipuai/glm-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": 0.6,
+    "outputCost": 2.2
+  },
+  {
     "model": "zhipuai/glm-4.5-air",
     "imageInput": false,
     "audioInput": false,
@@ -71,30 +83,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "zhipuai/glm-4.6",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 0.6,
-    "outputCost": 2.2
-  },
-  {
-    "model": "zhipuai/glm-4.5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 98304,
-    "inputCost": 0.6,
-    "outputCost": 2.2
-  },
-  {
     "model": "zhipuai/glm-4.5v",
     "imageInput": true,
     "audioInput": false,
@@ -105,6 +93,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 16384,
     "inputCost": 0.6,
     "outputCost": 1.8
+  },
+  {
+    "model": "zhipuai/glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.6,
+    "outputCost": 2.2
   }
 ]}
 />

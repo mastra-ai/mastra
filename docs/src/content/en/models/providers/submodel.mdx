@@ -47,18 +47,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
-    "model": "submodel/deepseek-ai/DeepSeek-V3-0324",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 75000,
-    "maxOutput": 163840,
-    "inputCost": 0.2,
-    "outputCost": 0.8
-  },
-  {
     "model": "submodel/deepseek-ai/DeepSeek-R1-0528",
     "imageInput": false,
     "audioInput": false,
@@ -69,6 +57,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 163840,
     "inputCost": 0.5,
     "outputCost": 2.15
+  },
+  {
+    "model": "submodel/deepseek-ai/DeepSeek-V3-0324",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 75000,
+    "maxOutput": 163840,
+    "inputCost": 0.2,
+    "outputCost": 0.8
   },
   {
     "model": "submodel/deepseek-ai/DeepSeek-V3.1",
@@ -83,16 +83,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.8
   },
   {
-    "model": "submodel/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+    "model": "submodel/openai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.1,
+    "outputCost": 0.5
+  },
+  {
+    "model": "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 262144,
-    "maxOutput": 262144,
+    "maxOutput": 131072,
     "inputCost": 0.2,
-    "outputCost": 0.8
+    "outputCost": 0.3
   },
   {
     "model": "submodel/Qwen/Qwen3-235B-A22B-Thinking-2507",
@@ -107,16 +119,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.6
   },
   {
-    "model": "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "model": "submodel/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 262144,
-    "maxOutput": 131072,
+    "maxOutput": 262144,
     "inputCost": 0.2,
-    "outputCost": 0.3
+    "outputCost": 0.8
   },
   {
     "model": "submodel/zai-org/GLM-4.5-Air",
@@ -141,18 +153,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.2,
     "outputCost": 0.8
-  },
-  {
-    "model": "submodel/openai/gpt-oss-120b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.1,
-    "outputCost": 0.5
   }
 ]}
 />

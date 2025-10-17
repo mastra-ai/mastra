@@ -47,54 +47,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
-    "model": "nvidia/nvidia/cosmos-nemotron-34b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "nvidia/nvidia/parakeet-tdt-0.6b-v2",
-    "imageInput": false,
-    "audioInput": true,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": 4096,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "nvidia/nvidia/nemoretriever-ocr-v1",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": 4096,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "nvidia/nvidia/llama-3.1-nemotron-ultra-253b-v1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "nvidia/black-forest-labs/flux.1-dev",
     "imageInput": false,
     "audioInput": false,
@@ -103,18 +55,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 4096,
     "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "nvidia/deepseek-ai/deepseek-v3.1-terminus",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
     "inputCost": null,
     "outputCost": null
   },
@@ -131,25 +71,13 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "nvidia/qwen/qwen3-coder-480b-a35b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 66536,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "nvidia/qwen/qwen3-235b-a22b",
+    "model": "nvidia/deepseek-ai/deepseek-v3.1-terminus",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
+    "contextWindow": 128000,
     "maxOutput": 8192,
     "inputCost": null,
     "outputCost": null
@@ -167,25 +95,13 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "nvidia/openai/whisper-large-v3",
-    "imageInput": false,
+    "model": "nvidia/microsoft/phi-4-mini-instruct",
+    "imageInput": true,
     "audioInput": true,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": 4096,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "nvidia/openai/gpt-oss-120b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 128000,
+    "contextWindow": 131072,
     "maxOutput": 8192,
     "inputCost": null,
     "outputCost": null
@@ -215,14 +131,98 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "nvidia/microsoft/phi-4-mini-instruct",
+    "model": "nvidia/nvidia/cosmos-nemotron-34b",
     "imageInput": true,
-    "audioInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/nvidia/llama-3.1-nemotron-ultra-253b-v1",
+    "imageInput": false,
+    "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/nvidia/nemoretriever-ocr-v1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/nvidia/parakeet-tdt-0.6b-v2",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/openai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/openai/whisper-large-v3",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/qwen/qwen3-235b-a22b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/qwen/qwen3-coder-480b-a35b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
     "inputCost": null,
     "outputCost": null
   }

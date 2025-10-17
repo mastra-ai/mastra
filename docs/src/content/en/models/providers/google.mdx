@@ -43,52 +43,28 @@ for await (const chunk of stream) {
 <ProviderModelsTable 
   models={[
   {
-    "model": "google/gemini-2.5-pro-preview-05-06",
+    "model": "google/gemini-1.5-flash",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
     "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 1.25,
-    "outputCost": 10
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 8192,
+    "inputCost": 0.075,
+    "outputCost": 0.3
   },
   {
-    "model": "google/gemini-flash-lite-latest",
+    "model": "google/gemini-1.5-flash-8b",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
     "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 0.1,
-    "outputCost": 0.4
-  },
-  {
-    "model": "google/gemini-2.5-flash-image-preview",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 32768,
-    "maxOutput": 32768,
-    "inputCost": 0.3,
-    "outputCost": 30
-  },
-  {
-    "model": "google/gemini-2.5-flash-preview-04-17",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 0.15,
-    "outputCost": 0.6
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 8192,
+    "inputCost": 0.0375,
+    "outputCost": 0.15
   },
   {
     "model": "google/gemini-1.5-pro",
@@ -103,30 +79,6 @@ for await (const chunk of stream) {
     "outputCost": 5
   },
   {
-    "model": "google/gemini-live-2.5-flash",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 8000,
-    "inputCost": 0.5,
-    "outputCost": 2
-  },
-  {
-    "model": "google/gemini-2.5-flash-preview-tts",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 8000,
-    "maxOutput": 16000,
-    "inputCost": 0.5,
-    "outputCost": 10
-  },
-  {
     "model": "google/gemini-2.0-flash",
     "imageInput": true,
     "audioInput": true,
@@ -135,6 +87,66 @@ for await (const chunk of stream) {
     "reasoning": false,
     "contextWindow": 1048576,
     "maxOutput": 8192,
+    "inputCost": 0.1,
+    "outputCost": 0.4
+  },
+  {
+    "model": "google/gemini-2.0-flash-lite",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1048576,
+    "maxOutput": 8192,
+    "inputCost": 0.075,
+    "outputCost": 0.3
+  },
+  {
+    "model": "google/gemini-2.5-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 2.5
+  },
+  {
+    "model": "google/gemini-2.5-flash-image",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 30
+  },
+  {
+    "model": "google/gemini-2.5-flash-image-preview",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 30
+  },
+  {
+    "model": "google/gemini-2.5-flash-lite",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
     "inputCost": 0.1,
     "outputCost": 0.4
   },
@@ -151,7 +163,7 @@ for await (const chunk of stream) {
     "outputCost": 0.4
   },
   {
-    "model": "google/gemini-2.5-pro-preview-06-05",
+    "model": "google/gemini-2.5-flash-lite-preview-09-2025",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -159,8 +171,20 @@ for await (const chunk of stream) {
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
-    "inputCost": 1.25,
-    "outputCost": 10
+    "inputCost": 0.1,
+    "outputCost": 0.4
+  },
+  {
+    "model": "google/gemini-2.5-flash-preview-04-17",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "google/gemini-2.5-flash-preview-05-20",
@@ -175,19 +199,7 @@ for await (const chunk of stream) {
     "outputCost": 0.6
   },
   {
-    "model": "google/gemini-2.5-flash-lite",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 0.1,
-    "outputCost": 0.4
-  },
-  {
-    "model": "google/gemini-2.5-flash",
+    "model": "google/gemini-2.5-flash-preview-09-2025",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -199,28 +211,16 @@ for await (const chunk of stream) {
     "outputCost": 2.5
   },
   {
-    "model": "google/gemini-1.5-flash-8b",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 1000000,
-    "maxOutput": 8192,
-    "inputCost": 0.0375,
-    "outputCost": 0.15
-  },
-  {
-    "model": "google/gemini-live-2.5-flash-preview-native-audio",
+    "model": "google/gemini-2.5-flash-preview-tts",
     "imageInput": false,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 65536,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8000,
+    "maxOutput": 16000,
     "inputCost": 0.5,
-    "outputCost": 2
+    "outputCost": 10
   },
   {
     "model": "google/gemini-2.5-pro",
@@ -235,28 +235,28 @@ for await (const chunk of stream) {
     "outputCost": 10
   },
   {
-    "model": "google/gemini-2.5-flash-image",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 32768,
-    "maxOutput": 32768,
-    "inputCost": 0.3,
-    "outputCost": 30
-  },
-  {
-    "model": "google/gemini-2.0-flash-lite",
+    "model": "google/gemini-2.5-pro-preview-05-06",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
     "toolUsage": true,
-    "reasoning": false,
+    "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 8192,
-    "inputCost": 0.075,
-    "outputCost": 0.3
+    "maxOutput": 65536,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "google/gemini-2.5-pro-preview-06-05",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 1.25,
+    "outputCost": 10
   },
   {
     "model": "google/gemini-2.5-pro-preview-tts",
@@ -271,7 +271,19 @@ for await (const chunk of stream) {
     "outputCost": 20
   },
   {
-    "model": "google/gemini-2.5-flash-lite-preview-09-2025",
+    "model": "google/gemini-flash-latest",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 2.5
+  },
+  {
+    "model": "google/gemini-flash-lite-latest",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -283,40 +295,28 @@ for await (const chunk of stream) {
     "outputCost": 0.4
   },
   {
-    "model": "google/gemini-1.5-flash",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 1000000,
-    "maxOutput": 8192,
-    "inputCost": 0.075,
-    "outputCost": 0.3
-  },
-  {
-    "model": "google/gemini-2.5-flash-preview-09-2025",
+    "model": "google/gemini-live-2.5-flash",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 0.3,
-    "outputCost": 2.5
+    "contextWindow": 128000,
+    "maxOutput": 8000,
+    "inputCost": 0.5,
+    "outputCost": 2
   },
   {
-    "model": "google/gemini-flash-latest",
-    "imageInput": true,
+    "model": "google/gemini-live-2.5-flash-preview-native-audio",
+    "imageInput": false,
     "audioInput": true,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048576,
+    "contextWindow": 131072,
     "maxOutput": 65536,
-    "inputCost": 0.3,
-    "outputCost": 2.5
+    "inputCost": 0.5,
+    "outputCost": 2
   }
 ]}
 />
