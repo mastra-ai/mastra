@@ -581,6 +581,11 @@ aside > div:nth-child(1) button {
   gap: var(--button-gap);
 }
 
+/* Make the subfolders not seem nested under previous item */
+aside ul ul > li > button {
+  padding-left: 0;
+}
+
 /*** Table of Contents ***/
 
 .nextra-toc > * {

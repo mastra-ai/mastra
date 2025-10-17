@@ -10,7 +10,7 @@ export function TextAndIcon({ children, className }: TextAndIconProps) {
     <span
       className={cn(
         'flex items-center gap-[0.5em] text-icon4 text-[0.875rem]',
-        '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-50 [&_svg]:flex-shrink-0',
+        '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:opacity-50 [&_svg]:flex-shrink-0',
         className,
       )}
     >

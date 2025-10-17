@@ -45,14 +45,16 @@ export const ThreadList = ({ children }: ThreadListProps) => {
 export interface ThreadItemProps {
   children: React.ReactNode;
   isActive?: boolean;
+  className?: string;
 }
 
-export const ThreadItem = ({ children, isActive }: ThreadItemProps) => {
+export const ThreadItem = ({ children, isActive, className }: ThreadItemProps) => {
   return (
     <li
       className={clsx(
         'border-b-sm border-border1 hover:bg-surface3 group flex h-[54px] items-center justify-between gap-2 px-3 py-2',
         isActive && 'bg-surface4',
+        className,
       )}
     >
       {children}

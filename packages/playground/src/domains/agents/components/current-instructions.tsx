@@ -1,6 +1,6 @@
 import { Wand2, Loader, CheckIcon, X, FileClock } from 'lucide-react';
 
-import { Icon } from '@mastra/playground-ui';
+import { Icon, extractPrompt } from '@mastra/playground-ui';
 import { CodeDisplay } from '@/components/ui/code-display';
 
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
@@ -21,33 +21,6 @@ interface CurrentInstructionsProps {
   onShowHistory: () => void;
 }
 
-const resolveInstructionPart = (part: any) => {
-  if (typeof part === 'string') {
-    return part.trim();
-  }
-  return part.text?.trim() || '';
-};
-
-const resolveInstructions = (instructions?: AgentInstructions): string => {
-  if (typeof instructions === 'string') {
-    return instructions.trim();
-  }
-
-  if (typeof instructions === 'object' && 'content' in instructions) {
-    if (Array.isArray(instructions.content)) {
-      return instructions.content.map(resolveInstructionPart).join('\n\n').trim();
-    }
-
-    return instructions.content.trim();
-  }
-
-  if (Array.isArray(instructions)) {
-    return instructions.map(resolveInstructions).join('\n\n').trim();
-  }
-
-  return '';
-};
-
 export function CurrentInstructions({
   instructions,
   enhancedPrompt,
@@ -59,7 +32,7 @@ export function CurrentInstructions({
   onCommentChange,
   onShowHistory,
 }: CurrentInstructionsProps) {
-  const currentContent = enhancedPrompt || resolveInstructions(instructions);
+  const currentContent = enhancedPrompt || extractPrompt(instructions);
 
   const { isCopied, handleCopy } = useCopyToClipboard({ text: currentContent || '' });
 

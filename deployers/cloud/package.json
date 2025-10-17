@@ -1,12 +1,13 @@
 {
   "name": "@mastra/deployer-cloud",
-  "version": "0.19.1",
+  "version": "0.21.1",
   "description": "",
   "type": "module",
   "files": [
     "dist",
     "CHANGELOG.md",
-    "templates"
+    "templates",
+    "versions.json"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -27,7 +28,8 @@
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "prepack": "node scripts/sync-versions.mjs"
   },
   "keywords": [],
   "license": "Apache-2.0",
@@ -37,20 +39,21 @@
     "execa": "^9.6.0",
     "fs-extra": "^11.3.2",
     "pino": "^9.7.0",
-    "redis": "^5.8.2"
+    "redis": "^5.8.3"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@manypkg/get-packages": "^3.1.0",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.19.0",
-    "eslint": "^9.35.0",
+    "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.20.0-0"
+    "@mastra/core": ">=0.20.1-0 <0.22.0-0"
   },
   "repository": {
     "type": "git",

@@ -81,11 +81,6 @@ describe('NetlifyGateway - Real API Integration', () => {
     if (providers['openai']) {
       const url = await gateway.buildUrl('netlify/openai/gpt-4o', insufficientEnvVars);
       expect(url).toBe(false); // Should return false without site ID and token
-
-      // buildHeaders should throw error without proper credentials
-      await expect(gateway.buildHeaders('netlify/openai/gpt-4o', insufficientEnvVars)).rejects.toThrow(
-        'NETLIFY_SITE_ID and NETLIFY_TOKEN are required',
-      );
     }
   });
 
@@ -102,21 +97,5 @@ describe('NetlifyGateway - Real API Integration', () => {
     } finally {
       global.fetch = originalFetch;
     }
-  });
-
-  it('should return false for non-Netlify model IDs in buildUrl', async () => {
-    // These should all return false since they don't have the netlify/ prefix
-    const testEnvVars = {
-      NETLIFY_SITE_ID: 'test-site-id',
-      NETLIFY_TOKEN: 'test-token',
-    };
-
-    expect(await gateway.buildUrl('openai/gpt-4o', testEnvVars)).toBe(false);
-    expect(await gateway.buildUrl('anthropic/claude-3', testEnvVars)).toBe(false);
-    expect(await gateway.buildUrl('gemini/gemini-pro', testEnvVars)).toBe(false);
-
-    // buildHeaders will attempt to fetch a token for any model ID, even non-Netlify ones
-    // This is expected behavior - the gateway doesn't filter by prefix in buildHeaders
-    // The actual filtering happens in buildUrl, which returns false for non-Netlify models
   });
 });

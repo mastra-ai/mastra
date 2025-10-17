@@ -12,11 +12,15 @@ Workflow streaming in Mastra enables workflows to send incremental results while
 Streams can be written to in two main ways:
 
 - **From within a workflow step**: every workflow step receives a `writer` argument, which is a writable stream you can use to push updates as execution progresses.
-- **From an agent stream**: you can also pipe an agent's `streamVNext` output directly into a workflow step's writer, making it easy to chain agent responses into workflow results without extra glue code.
+- **From an agent stream**: you can also pipe an agent's `stream` output directly into a workflow step's writer, making it easy to chain agent responses into workflow results without extra glue code.
 
 By combining writable workflow streams with agent streaming, you gain fine-grained control over how intermediate results flow through your system and into the user experience.
 
 ### Using the `writer` argument
+
+<Callout type="warning">
+The writer is only available when using `streamVNext`.
+</Callout>
 
 The `writer` argument is passed to a workflow step's `execute` function and can be used to emit custom events, data, or values into the active stream. This enables workflow steps to provide intermediate results or status updates while execution is still in progress.
 
@@ -69,6 +73,29 @@ const stream = await run.streamVNext({
 for await (const chunk of stream) {
   console.log(chunk);
 }
+
+if (result!.status === "suspended") {
+  // if the workflow is suspended, we can resume it with the resumeStreamVNext method
+  const resumedStream = await run.resumeStreamVNext({
+    resumeData: { value: "resume data" }
+  });
+
+  for await (const chunk of resumedStream) {
+    console.log(chunk);
+  }
+}
+```
+
+### Resuming an interrupted workflow stream
+
+If a workflow stream is closed or interrupted for any reason, you can resume it with the `resumeStreamVNext` method. This will return a new `ReadableStream` that you can use to observe the workflow events.
+
+```typescript showLineNumbers copy
+const newStream = await run.resumeStreamVNext();
+
+for await (const chunk of newStream) {
+  console.log(chunk);
+}
 ```
 
 ## Workflow using an agent
@@ -85,7 +112,7 @@ export const testStep = createStep({
     const { city } = inputData
 
     const testAgent = mastra?.getAgent("testAgent");
-    const stream = await testAgent?.streamVNext(`What is the weather in ${city}$?`);
+    const stream = await testAgent?.stream(`What is the weather in ${city}$?`);
 
     await stream!.textStream.pipeTo(writer!);
 

@@ -54,7 +54,7 @@ export class CloudExporter implements AITracingExporter {
 
     const accessToken = config.accessToken ?? process.env.MASTRA_CLOUD_ACCESS_TOKEN;
     if (!accessToken) {
-      this.logger.warn(
+      this.logger.debug(
         'CloudExporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set. ' +
           '🚀 Sign up for Mastra Cloud at https://cloud.mastra.ai to see your AI traces online and obtain your access token.',
       );

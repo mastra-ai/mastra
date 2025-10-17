@@ -6,13 +6,14 @@ import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import { ScrollableContainer } from '@/components/scrollable-container';
 import { Skeleton } from '@/components/ui/skeleton';
 import { columns } from './columns';
 import { ScorerTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
+import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
 
 export interface ScorersTableProps {
   scorers: Record<string, GetScorerResponse>;
@@ -21,15 +22,15 @@ export interface ScorersTableProps {
 
 export function ScorersTable({ scorers, isLoading }: ScorersTableProps) {
   const { navigate, paths } = useLinkComponent();
+  const [search, setSearch] = useState('');
   const scorersData: ScorerTableData[] = useMemo(
     () =>
       Object.keys(scorers).map(key => {
         const scorer = scorers[key];
 
         return {
+          ...scorer,
           id: key,
-          name: scorer.scorer.config.name,
-          description: scorer.scorer.config.description,
         };
       }),
     [scorers],
@@ -41,42 +42,51 @@ export function ScorersTable({ scorers, isLoading }: ScorersTableProps) {
     getCoreRowModel: getCoreRowModel(),
   });
 
-  if (isLoading) return <ScorersTableSkeleton />;
-
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows.concat();
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && !isLoading) {
     return <EmptyScorersTable />;
   }
 
+  const filteredRows = rows.filter(row => row.original.scorer.config.name.toLowerCase().includes(search.toLowerCase()));
+
   return (
-    <ScrollableContainer>
-      <Table>
-        <Thead className="sticky top-0">
-          {ths.headers.map(header => (
-            <Th key={header.id} style={{ width: header.index === 0 ? 'auto' : header.column.getSize() }}>
-              {flexRender(header.column.columnDef.header, header.getContext())}
-            </Th>
-          ))}
-        </Thead>
-        <Tbody>
-          {rows.map(row => (
-            <Row key={row.id} onClick={() => navigate(paths.scorerLink(row.original.id))}>
-              {row.getVisibleCells().map(cell => (
-                <React.Fragment key={cell.id}>
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </React.Fragment>
+    <div>
+      <SearchbarWrapper>
+        <Searchbar onSearch={setSearch} label="Search scorers" placeholder="Search scorers" />
+      </SearchbarWrapper>
+      {isLoading ? (
+        <ScorersTableSkeleton />
+      ) : (
+        <ScrollableContainer>
+          <Table>
+            <Thead className="sticky top-0">
+              {ths.headers.map(header => (
+                <Th key={header.id} style={{ width: header.index === 0 ? 'auto' : header.column.getSize() }}>
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                </Th>
               ))}
-            </Row>
-          ))}
-        </Tbody>
-      </Table>
-    </ScrollableContainer>
+            </Thead>
+            <Tbody>
+              {filteredRows.map(row => (
+                <Row key={row.id} onClick={() => navigate(paths.scorerLink(row.original.id))}>
+                  {row.getVisibleCells().map(cell => (
+                    <React.Fragment key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </React.Fragment>
+                  ))}
+                </Row>
+              ))}
+            </Tbody>
+          </Table>
+        </ScrollableContainer>
+      )}
+    </div>
   );
 }
 
-export const ScorersTableSkeleton = () => (
+const ScorersTableSkeleton = () => (
   <Table>
     <Thead>
       <Th>Name</Th>
@@ -93,7 +103,7 @@ export const ScorersTableSkeleton = () => (
   </Table>
 );
 
-export const EmptyScorersTable = () => (
+const EmptyScorersTable = () => (
   <div className="flex h-full items-center justify-center">
     <EmptyState
       iconSlot={<AgentCoinIcon />}

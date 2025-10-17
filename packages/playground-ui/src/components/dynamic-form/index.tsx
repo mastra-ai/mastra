@@ -71,6 +71,7 @@ export function DynamicForm<T extends z.ZodSchema>({
     defaultValues: isNotZodObject ? (defaultValues ? { '\u200B': defaultValues } : undefined) : (defaultValues as any),
     formProps: {
       className,
+      noValidate: true,
     },
     uiComponents: {
       SubmitButton: ({ children }) =>

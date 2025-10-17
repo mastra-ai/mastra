@@ -73,7 +73,7 @@ export const getModelOutputForTripwire = async <
       runId,
       rootSpan,
       telemetry_settings: options.telemetry,
-      output: options.output,
+      structuredOutput: options.structuredOutput,
       tracingContext,
       onFinish: options.onFinish as any, // Fix these types after the types PR is merged
       onStepFinish: options.onStepFinish as any,

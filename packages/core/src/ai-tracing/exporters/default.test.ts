@@ -188,7 +188,7 @@ describe('DefaultExporter', () => {
         // Strategy should be initialized when init() is called
         exporter.init();
 
-        expect(mockLogger.info).toHaveBeenCalledWith(
+        expect(mockLogger.debug).toHaveBeenCalledWith(
           'AI tracing exporter initialized',
           expect.objectContaining({
             strategy: 'batch-with-updates',
@@ -206,7 +206,7 @@ describe('DefaultExporter', () => {
         // Strategy should be initialized when init() is called
         exporter.init();
 
-        expect(mockLogger.info).toHaveBeenCalledWith(
+        expect(mockLogger.debug).toHaveBeenCalledWith(
           'AI tracing exporter initialized',
           expect.objectContaining({
             strategy: 'realtime',

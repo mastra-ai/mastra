@@ -1,6 +1,17 @@
 import { Link } from 'react-router';
 
-import { Crumb, Header, HeaderGroup, Button, Breadcrumb, HeaderAction, Icon, ApiIcon } from '@mastra/playground-ui';
+import {
+  Crumb,
+  Header,
+  HeaderGroup,
+  Button,
+  Breadcrumb,
+  HeaderAction,
+  Icon,
+  ApiIcon,
+  WorkflowIcon,
+  DocsIcon,
+} from '@mastra/playground-ui';
 
 export function WorkflowHeader({
   workflowName,
@@ -16,6 +27,9 @@ export function WorkflowHeader({
       <Header>
         <Breadcrumb>
           <Crumb as={Link} to={`/workflows`}>
+            <Icon>
+              <WorkflowIcon />
+            </Icon>
             Workflows
           </Crumb>
           <Crumb as={Link} to={`/workflows/${workflowId}`} isCurrent={!runId}>
@@ -44,6 +58,13 @@ export function WorkflowHeader({
               <ApiIcon />
             </Icon>
             API endpoints
+          </Button>
+
+          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank">
+            <Icon>
+              <DocsIcon />
+            </Icon>
+            Workflows documentation
           </Button>
         </HeaderAction>
       </Header>

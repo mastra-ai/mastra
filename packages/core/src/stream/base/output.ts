@@ -119,7 +119,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     usage: new DelayedPromise<LLMStepResult['usage']>(),
     warnings: new DelayedPromise<LLMStepResult['warnings']>(),
     providerMetadata: new DelayedPromise<LLMStepResult['providerMetadata']>(),
-    response: new DelayedPromise<LLMStepResult['response']>(),
+    response: new DelayedPromise<LLMStepResult<OUTPUT>['response']>(),
     request: new DelayedPromise<LLMStepResult['request']>(),
     text: new DelayedPromise<LLMStepResult['text']>(),
     reasoning: new DelayedPromise<LLMStepResult['reasoning']>(),
@@ -135,6 +135,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
   #consumptionStarted = false;
   #returnScorerData = false;
+  #structuredOutputMode: 'direct' | 'processor' | undefined = undefined;
 
   #model: {
     modelId: string | undefined;
@@ -188,6 +189,14 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
     this.messageId = messageId;
 
+    // Determine structured output mode:
+    // - 'direct': LLM generates JSON directly (no model provided), object transformers run in this stream
+    // - 'processor': StructuredOutputProcessor uses internal agent with provided model
+    // - undefined: No structured output
+    if (options.structuredOutput?.schema) {
+      this.#structuredOutputMode = options.structuredOutput.model ? 'processor' : 'direct';
+    }
+
     // Create processor runner if outputProcessors are provided
     if (options.outputProcessors?.length) {
       this.processorRunner = new ProcessorRunner({
@@ -228,9 +237,19 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                * Need to update controller on each new LLM execution step since each step has its own TransformStream.
                */
               if (!processorStates.has(STRUCTURED_OUTPUT_PROCESSOR_NAME)) {
-                const structuredOutputProcessorState = new ProcessorState<OUTPUT>(STRUCTURED_OUTPUT_PROCESSOR_NAME);
-                structuredOutputProcessorState.customState = { controller };
-                processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
+                const processorIndex = processorRunner.outputProcessors.findIndex(
+                  p => p.name === STRUCTURED_OUTPUT_PROCESSOR_NAME,
+                );
+                // Only create the state if the processor actually exists in the list
+                if (processorIndex !== -1) {
+                  const structuredOutputProcessorState = new ProcessorState<OUTPUT>({
+                    processorName: STRUCTURED_OUTPUT_PROCESSOR_NAME,
+                    tracingContext: options.tracingContext,
+                    processorIndex,
+                  });
+                  structuredOutputProcessorState.customState = { controller };
+                  processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
+                }
               } else {
                 // Update controller for new LLM execution step
                 const structuredOutputProcessorState = processorStates.get(STRUCTURED_OUTPUT_PROCESSOR_NAME);
@@ -239,7 +258,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 }
               }
 
-              const { part: processed, blocked, reason } = await processorRunner.processPart(chunk, processorStates);
+              const {
+                part: processed,
+                blocked,
+                reason,
+              } = await processorRunner.processPart(chunk, processorStates, options.tracingContext);
               if (blocked) {
                 // Emit a tripwire chunk so downstream knows about the abort
                 controller.enqueue({
@@ -259,12 +282,17 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       );
     }
 
-    processedStream = processedStream.pipeThrough(
-      createObjectStreamTransformer({
-        isLLMExecutionStep: self.#options.isLLMExecutionStep,
-        schema: self.#options.output,
-      }),
-    );
+    // Only apply object transformer in 'direct' mode (LLM generates JSON directly)
+    // In 'processor' mode, the StructuredOutputProcessor handles object transformation
+    if (self.#structuredOutputMode === 'direct') {
+      processedStream = processedStream.pipeThrough(
+        createObjectStreamTransformer({
+          isLLMExecutionStep: self.#options.isLLMExecutionStep,
+          structuredOutput: self.#options.structuredOutput,
+          logger: self.logger,
+        }),
+      );
+    }
 
     this.#baseStream = processedStream.pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
@@ -428,7 +456,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
                   ...otherMetadata,
                   messages: chunk.payload.messages?.nonUser || [],
-                  uiMessages: messageList.get.response.aiV5.ui(),
+                  // We have to cast this until messageList can take generics also and type metadata, it was too
+                  // complicated to do this in this PR, it will require a much bigger change.
+                  uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                 },
                 providerMetadata: providerMetadata,
               };
@@ -484,7 +514,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.usage.resolve(self.#usageCount);
               self.#delayedPromises.warnings.resolve(self.#warnings);
               self.#delayedPromises.providerMetadata.resolve(undefined);
-              self.#delayedPromises.response.resolve({} as LLMStepResult['response']);
+              self.#delayedPromises.response.resolve({} as LLMStepResult<OUTPUT>['response']);
               self.#delayedPromises.request.resolve({});
               self.#delayedPromises.reasoning.resolve([]);
               self.#delayedPromises.reasoningText.resolve(undefined);
@@ -511,14 +541,26 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 self.#finishReason = chunk.payload.stepResult.reason;
               }
 
-              let response = {};
+              // Add structured output to the latest assistant message metadata
+              if (self.#bufferedObject !== undefined) {
+                const responseMessages = messageList.get.response.v2();
+                const lastAssistantMessage = [...responseMessages].reverse().find(m => m.role === 'assistant');
+                if (lastAssistantMessage) {
+                  if (!lastAssistantMessage.content.metadata) {
+                    lastAssistantMessage.content.metadata = {};
+                  }
+                  lastAssistantMessage.content.metadata.structuredOutput = self.#bufferedObject;
+                }
+              }
+
+              let response: LLMStepResult<OUTPUT>['response'] = {};
               if (chunk.payload.metadata) {
                 const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
                 response = {
                   ...otherMetadata,
                   messages: messageList.get.response.aiV5.model(),
-                  uiMessages: messageList.get.response.aiV5.ui(),
+                  uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                 };
               }
 
@@ -538,7 +580,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               try {
                 if (self.processorRunner && !self.#options.isLLMExecutionStep) {
-                  self.messageList = await self.processorRunner.runOutputProcessors(self.messageList);
+                  self.messageList = await self.processorRunner.runOutputProcessors(
+                    self.messageList,
+                    options.tracingContext,
+                  );
                   const outputText = self.messageList.get.response.aiV4
                     .core()
                     .map(m => MessageList.coreContentToString(m.content))
@@ -553,7 +598,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     response = {
                       ...otherMetadata,
                       messages: messageList.get.response.aiV5.model(),
-                      uiMessages: messageList.get.response.aiV5.ui(),
+                      uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                     };
                   }
                 } else {
@@ -581,7 +626,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.usage.resolve(self.#usageCount);
               self.#delayedPromises.warnings.resolve(self.#warnings);
               self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
-              self.#delayedPromises.response.resolve(response as LLMStepResult['response']);
+              self.#delayedPromises.response.resolve(response as LLMStepResult<OUTPUT>['response']);
               self.#delayedPromises.request.resolve(self.#request || {});
               self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
               const reasoningText =
@@ -640,7 +685,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                       ? undefined
                       : self.#delayedPromises.object.status.type === 'resolved'
                         ? self.#delayedPromises.object.status.value
-                        : self.#options.output && baseFinishStep.text
+                        : self.#structuredOutputMode === 'direct' && baseFinishStep.text
                           ? (() => {
                               try {
                                 return JSON.parse(baseFinishStep.text);
@@ -724,7 +769,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               // Reject all delayed promises on error
               const errorMessage = (self.#error as any)?.message || safeParseErrorObject(self.#error);
-              const error = new Error(errorMessage);
+              const errorCause = self.#error instanceof Error ? self.#error.cause : undefined;
+              const error = new Error(errorMessage, errorCause ? { cause: errorCause } : undefined);
 
               Object.values(self.#delayedPromises).forEach(promise => {
                 if (promise.status.type === 'pending') {
@@ -738,8 +784,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
           controller.enqueue(chunk);
         },
         flush: () => {
-          if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
-            // always resolve object promise as undefined if still hanging in flush and no output schema provided
+          if (self.#delayedPromises.object.status.type === 'pending') {
+            // always resolve pending object promise as undefined if still hanging in flush and hasn't been rejected by validation error
             self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
           }
           // If stream ends without proper finish/error chunks, reject unresolved promises
@@ -764,7 +810,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       messageList,
       options: {
         toolCallStreaming: options?.toolCallStreaming,
-        output: options?.output,
+        structuredOutput: options?.structuredOutput,
         tracingContext: options?.tracingContext,
       },
     });
@@ -1052,8 +1098,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    *
    * @example
    * ```typescript
-   * const stream = await agent.streamVNext("Extract data", {
-   *   output: z.object({ name: z.string(), age: z.number() })
+   * const stream = await agent.stream("Extract data", {
+   *   structuredOutput: {
+   *     schema: z.object({ name: z.string(), age: z.number() }),
+   *     model: 'gpt-4o-mini' // optional to use a model for structuring json output
+   *   }
    * });
    * // partial json chunks
    * for await (const data of stream.objectStream) {
@@ -1099,10 +1148,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * Stream of only text content, filtering out metadata and other chunk types.
    */
   get textStream() {
-    const outputSchema = getTransformedSchema(this.#options.output);
-
-    if (outputSchema?.outputFormat === 'array') {
-      return this.#createEventedStream().pipeThrough(createJsonTextStreamTransformer(this.#options.output));
+    if (this.#structuredOutputMode === 'direct') {
+      const outputSchema = getTransformedSchema(this.#options.structuredOutput?.schema);
+      if (outputSchema?.outputFormat === 'array') {
+        return this.#createEventedStream().pipeThrough(
+          createJsonTextStreamTransformer(this.#options.structuredOutput?.schema),
+        );
+      }
     }
 
     return this.#createEventedStream().pipeThrough(
@@ -1121,15 +1173,22 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    *
    * @example
    * ```typescript
-   * const stream = await agent.streamVNext("Extract data", {
-   *   output: z.object({ name: z.string(), age: z.number() })
+   * const stream = await agent.stream("Extract data", {
+   *   structuredOutput: {
+   *     schema: z.object({ name: z.string(), age: z.number() }),
+   *     model: 'gpt-4o-mini' // optionally use a model for structuring json output
+   *   }
    * });
    * // final validated json
    * const data = await stream.object // { name: 'John', age: 30 }
    * ```
    */
   get object() {
-    if (!this.processorRunner && !this.#options.output && this.#delayedPromises.object.status.type === 'pending') {
+    if (
+      !this.processorRunner &&
+      !this.#options.structuredOutput?.schema &&
+      this.#delayedPromises.object.status.type === 'pending'
+    ) {
       this.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
     }
 

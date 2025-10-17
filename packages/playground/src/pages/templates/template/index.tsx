@@ -20,10 +20,11 @@ import {
   ToolsIcon,
   AgentIcon,
   TemplateFailure,
+  Icon,
 } from '@mastra/playground-ui';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useEffect, useState } from 'react';
-import { BrainIcon, TagIcon, WorkflowIcon } from 'lucide-react';
+import { BrainIcon, PackageIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 
 export default function Template() {
   const { templateSlug } = useParams()! as { templateSlug: string };
@@ -327,6 +328,9 @@ export default function Template() {
       <Header>
         <Breadcrumb>
           <Crumb as={Link} to={`/templates`}>
+            <Icon>
+              <PackageIcon />
+            </Icon>
             Templates
           </Crumb>
 

@@ -7,7 +7,8 @@ permissions:
 jobs:
   link-checker-docs:
     name: Run link checker
-    if: ${{ github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'Preview – mastra-docs' }}
+    if: false # disable this for now, model router added like 1000 links and its making this take forever and hogging up CI runners. most people also ignore failures in this anyway
+    # if: ${{ github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'Preview – mastra-docs' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -15,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.19.1'
+          node-version: '20.19.5'
           registry-url: 'https://registry.yarnpkg.com'
       - name: Check links
         run: npx --force --ignore-engine github:wardpeet/broken-link-checker ${{ github.event.deployment_status.target_url }}/docs -roef
@@ -32,7 +33,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.19.1'
+          node-version: '20.19.5'
           registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies for docs

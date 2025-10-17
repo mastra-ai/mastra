@@ -1,7 +1,6 @@
 import { mastra } from "@/src/mastra";
 import { convertMessages } from "@mastra/core/agent";
 import { NextResponse } from "next/server";
-import { convertMessages } from "@mastra/core/agent";
 
 const myAgent = mastra.getAgent("weatherAgent");
 export async function GET() {

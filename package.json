@@ -15,7 +15,10 @@
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   },
+  "private": true,
   "scripts": {
+    "changeset": "pnpm --filter @internal/changeset-cli start",
+    "changeset-cli": "changeset",
     "ci:publish": "pnpm publish -r",
     "build": "pnpm turbo build --filter \"!./examples/*\" --filter \"!./examples/**/*\" --filter \"!./docs/\"",
     "build:integrations": "pnpm turbo build --filter \"./integrations/*\"",
@@ -62,7 +65,7 @@
     "test:agent-builder:integration": "pnpm --filter @mastra/agent-builder-integration-tests test",
     "test:observability": "pnpm --filter \"./observability/*\" test",
     "lint-staged": "lint-staged",
-    "lint": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!./integrations/**/*\" --filter \"!@internal/playground\" lint",
+    "lint": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!@internal/playground\" lint",
     "preinstall": "npx only-allow pnpm",
     "prepare": "husky",
     "prettier:format": "prettier --write . --log-level warn",
@@ -71,7 +74,7 @@
     "list-prettier-files": "pnpm --silent list-changed-files | grep -E '\\.(js|mjs|ts|tsx|md|mdx|json|graphql|gql)$' || true",
     "prettier:changed": "pnpm --silent list-prettier-files | xargs prettier --write --log-level warn",
     "typecheck": "pnpm --filter \"!./explorations/**/*\" -r typecheck",
-    "format": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!./integrations/**/*\" --filter \"!@internal/playground\" lint -- --fix",
+    "format": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!@internal/playground\" lint -- --fix",
     "dev:services:up": "docker compose -f .dev/docker-compose.yaml up -d",
     "dev:services:down": "docker compose -f .dev/docker-compose.yaml down",
     "setup": "pnpm install --ignore-scripts && pnpm run build:cli"
@@ -86,13 +89,13 @@
   },
   "resolutions": {
     "typescript": "^5.8.3",
-    "@types/node": "^20.17.57",
+    "@types/node": "^20.19.21",
     "cookie": ">=0.7.2",
     "tmp": ">=0.2.5",
     "jsondiffpatch": ">=0.7.3"
   },
   "license": "Apache-2.0",
-  "packageManager": "pnpm@10.12.4",
+  "packageManager": "pnpm@10.18.2",
   "dependencies": {
     "globby": "^14.1.0",
     "resolve-from": "^5.0.0"

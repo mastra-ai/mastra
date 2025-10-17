@@ -1,10 +1,11 @@
 import { client } from '@/lib/client';
 import { StreamVNextChunkType, WorkflowWatchResult } from '@mastra/client-js';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { WorkflowStreamResult as CoreWorkflowStreamResult } from '@mastra/core/workflows';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState, useRef, useEffect } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { mapWorkflowStreamChunkToWatchResult } from '@mastra/playground-ui';
+import { mapWorkflowStreamChunkToWatchResult } from '@mastra/react';
 import type { ReadableStreamDefaultReader } from 'stream/web';
 
 export type ExtendedWorkflowWatchResult = WorkflowWatchResult & {
@@ -175,8 +176,10 @@ export const useWatchWorkflow = () => {
   };
 };
 
+type WorkflowStreamResult = CoreWorkflowStreamResult<any, any, any, any>;
+
 export const useStreamWorkflow = () => {
-  const [streamResult, setStreamResult] = useState<WorkflowWatchResult>({} as WorkflowWatchResult);
+  const [streamResult, setStreamResult] = useState<WorkflowStreamResult>({} as WorkflowStreamResult);
   const [isStreaming, setIsStreaming] = useState(false);
   const readerRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
   const observerRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
@@ -185,6 +188,7 @@ export const useStreamWorkflow = () => {
 
   // Cleanup on unmount
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       if (readerRef.current) {
@@ -234,7 +238,7 @@ export const useStreamWorkflow = () => {
       if (!isMountedRef.current) return;
 
       setIsStreaming(true);
-      setStreamResult({} as WorkflowWatchResult);
+      setStreamResult({ input: inputData } as WorkflowStreamResult);
       const runtimeContext = new RuntimeContext();
       Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
         runtimeContext.set(key as keyof RuntimeContext, value);
@@ -287,7 +291,15 @@ export const useStreamWorkflow = () => {
   });
 
   const observeWorkflowStream = useMutation({
-    mutationFn: async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
+    mutationFn: async ({
+      workflowId,
+      runId,
+      storeRunResult,
+    }: {
+      workflowId: string;
+      runId: string;
+      storeRunResult: WorkflowStreamResult | null;
+    }) => {
       // Clean up any existing reader before starting new stream
       if (observerRef.current) {
         observerRef.current.releaseLock();
@@ -296,7 +308,12 @@ export const useStreamWorkflow = () => {
       if (!isMountedRef.current) return;
 
       setIsStreaming(true);
-      setStreamResult({} as WorkflowWatchResult);
+
+      setStreamResult((storeRunResult || {}) as WorkflowStreamResult);
+      if (storeRunResult?.status === 'suspended') {
+        setIsStreaming(false);
+        return;
+      }
       const workflow = client.getWorkflow(workflowId);
       const stream = await workflow.observeStreamVNext({ runId });
 
@@ -419,7 +436,7 @@ export const useStreamWorkflow = () => {
 
   const closeStreamsAndReset = () => {
     setIsStreaming(false);
-    setStreamResult({} as WorkflowWatchResult);
+    setStreamResult({} as WorkflowStreamResult);
     if (readerRef.current) {
       try {
         readerRef.current.releaseLock();

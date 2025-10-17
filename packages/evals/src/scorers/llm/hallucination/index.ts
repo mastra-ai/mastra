@@ -1,4 +1,4 @@
-import type { LanguageModel } from '@mastra/core/llm';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
 
 import { z } from 'zod';
@@ -19,7 +19,7 @@ export function createHallucinationScorer({
   model,
   options,
 }: {
-  model: LanguageModel;
+  model: MastraModelConfig;
   options?: HallucinationMetricOptions;
 }) {
   return createScorer({

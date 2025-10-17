@@ -40,7 +40,7 @@ const createMockAgent = (response: string = 'Dummy response'): Agent => {
   });
 
   // Add a spy to the generate method (without mocking the return value)
-  vi.spyOn(agent, 'generate');
+  vi.spyOn(agent, 'generateLegacy');
 
   return agent;
 };
@@ -80,7 +80,7 @@ const createMockAgentV2 = (response: string = 'Dummy response'): Agent => {
   });
 
   // Add a spy to the generate method (without mocking the return value)
-  vi.spyOn(agent, 'generateVNext');
+  vi.spyOn(agent, 'generate');
 
   return agent;
 };
@@ -143,7 +143,7 @@ describe('runExperiment', () => {
   });
 
   describe('V2 Agent integration', () => {
-    it('should call agent.generate with correct parameters', async () => {
+    it('should call agent.generateLegacy with correct parameters', async () => {
       const mockAgent = createMockAgentV2();
       await runExperiment({
         data: [{ input: 'test input', groundTruth: 'truth' }],
@@ -164,15 +164,15 @@ describe('runExperiment', () => {
   });
 
   describe('Agent integration', () => {
-    it('should call agent.generate with correct parameters', async () => {
+    it('should call agent.generateLegacy with correct parameters', async () => {
       await runExperiment({
         data: [{ input: 'test input', groundTruth: 'truth' }],
         scorers: mockScorers,
         target: mockAgent,
       });
 
-      expect(mockAgent.generate).toHaveBeenCalledTimes(1);
-      expect(mockAgent.generate).toHaveBeenCalledWith('test input', {
+      expect(mockAgent.generateLegacy).toHaveBeenCalledTimes(1);
+      expect(mockAgent.generateLegacy).toHaveBeenCalledWith('test input', {
         scorers: {},
         returnScorerData: true,
         runtimeContext: undefined,
@@ -194,8 +194,8 @@ describe('runExperiment', () => {
         target: mockAgent,
       });
 
-      expect(mockAgent.generate).toHaveBeenCalledTimes(1);
-      expect(mockAgent.generate).toHaveBeenCalledWith('test input', {
+      expect(mockAgent.generateLegacy).toHaveBeenCalledTimes(1);
+      expect(mockAgent.generateLegacy).toHaveBeenCalledWith('test input', {
         scorers: {},
         returnScorerData: true,
         runtimeContext,
@@ -213,7 +213,7 @@ describe('runExperiment', () => {
       };
 
       // Mock the agent's generate method to return the expected response
-      mockAgent.generate = vi.fn().mockResolvedValue(mockResponse);
+      mockAgent.generateLegacy = vi.fn().mockResolvedValue(mockResponse);
 
       await runExperiment({
         data: [{ input: 'test', groundTruth: 'truth' }],
@@ -229,7 +229,7 @@ describe('runExperiment', () => {
     });
 
     it('should handle missing scoringData gracefully', async () => {
-      mockAgent.generate = vi.fn().mockResolvedValue({ response: 'test' });
+      mockAgent.generateLegacy = vi.fn().mockResolvedValue({ response: 'test' });
 
       await runExperiment({
         data: [{ input: 'test', groundTruth: 'truth' }],
@@ -270,7 +270,7 @@ describe('runExperiment', () => {
   });
   describe('Error handling', () => {
     it('should handle agent generate errors', async () => {
-      mockAgent.generate = vi.fn().mockRejectedValue(new Error('Agent error'));
+      mockAgent.generateLegacy = vi.fn().mockRejectedValue(new Error('Agent error'));
 
       await expect(
         runExperiment({

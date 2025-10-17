@@ -1,6 +1,9 @@
 import type { AgentExecutionOptions } from '@mastra/core/agent';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
+import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
+import { toAISdkFormat } from './to-ai-sdk-format';
 
 export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
   defaultOptions?: AgentExecutionOptions<OUTPUT, 'aisdk'>;
@@ -120,6 +123,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
     handler: async c => {
       const { messages, ...rest } = await c.req.json();
       const mastra = c.get('mastra');
+      const runtimeContext = (c as any).get('runtimeContext') as RuntimeContext | undefined;
 
       let agentToUse: string | undefined = agent;
       if (!agent) {
@@ -135,6 +139,12 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
           );
       }
 
+      if (runtimeContext && defaultOptions?.runtimeContext) {
+        mastra
+          .getLogger()
+          ?.warn(`"runtimeContext" set in the route options will be overridden by the request's "runtimeContext".`);
+      }
+
       if (!agentToUse) {
         throw new Error('Agent ID is required');
       }
@@ -144,13 +154,24 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         throw new Error(`Agent ${agentToUse} not found`);
       }
 
-      const result = await agentObj.streamVNext<OUTPUT, 'aisdk'>(messages, {
+      const result = await agentObj.stream<OUTPUT, 'mastra'>(messages, {
         ...defaultOptions,
         ...rest,
-        format: 'aisdk',
+        runtimeContext: runtimeContext || defaultOptions?.runtimeContext,
       });
 
-      return result.toUIMessageStreamResponse();
+      const uiMessageStream = createUIMessageStream({
+        originalMessages: messages,
+        execute: async ({ writer }) => {
+          for await (const part of toAISdkFormat(result, { from: 'agent' })!) {
+            writer.write(part);
+          }
+        },
+      });
+
+      return createUIMessageStreamResponse({
+        stream: uiMessageStream,
+      });
     },
   });
 }

@@ -4,7 +4,7 @@ import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import { MockTracer } from './mockTracer';
-import { createTestModels, testUsage } from './utils';
+import { createMessageListWithUserMessage, createTestModels, testUsage } from './utils';
 
 export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('telemetry', () => {
@@ -15,14 +15,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
     });
 
     it('should not record any telemetry data when not explicitly enabled', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,
@@ -31,6 +24,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
         _internal: {
           now: mockValues(0, 100, 500),
         },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -39,14 +33,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
     });
 
     it('should record telemetry data when enabled', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,
@@ -75,6 +62,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
           tracer,
         },
         _internal: { now: mockValues(0, 100, 500) },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -83,14 +71,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
     });
 
     it('should record successful tool call', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,
@@ -124,6 +105,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
         messageList,
         telemetry_settings: { isEnabled: true, tracer },
         _internal: { now: mockValues(0, 100, 500) },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -132,14 +114,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
     });
 
     it('should record error on tool call', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,
@@ -175,6 +150,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
         messageList,
         telemetry_settings: { isEnabled: true, tracer },
         _internal: { now: mockValues(0, 100, 500) },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -206,14 +182,8 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
     });
 
     it('should not record telemetry inputs / outputs when disabled', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
+
       const result = await loopFn({
         runId,
         models: createTestModels({
@@ -251,6 +221,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
           tracer,
         },
         _internal: { now: mockValues(0, 100, 500) },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();

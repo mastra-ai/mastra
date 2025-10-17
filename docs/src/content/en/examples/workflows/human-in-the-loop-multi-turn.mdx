@@ -179,10 +179,12 @@ const gameStep = createStep({
         Please respond appropriately. If this is a guess, tell me if it's correct.
       `,
       {
-        output: z.object({
-          response: z.string(),
-          gameWon: z.boolean(),
-        }),
+        structuredOutput: {
+          schema: z.object({
+            response: z.string(),
+            gameWon: z.boolean(),
+          })
+        },
       },
     );
 

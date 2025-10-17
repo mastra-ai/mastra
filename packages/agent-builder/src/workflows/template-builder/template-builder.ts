@@ -3,7 +3,7 @@ import { mkdtemp, copyFile, readFile, mkdir, readdir, rm, writeFile } from 'fs/p
 import { tmpdir } from 'os';
 import { join, dirname, resolve, extname, basename } from 'path';
 import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
@@ -233,11 +233,13 @@ Return the actual exported names of the units, as well as the file names.`,
       });
 
       const result = isV2
-        ? await agent.generateVNext(prompt, {
-            output,
+        ? await tryGenerateWithJsonFallback(agent, prompt, {
+            structuredOutput: {
+              schema: output,
+            },
             maxSteps: 100,
           })
-        : await agent.generate(prompt, {
+        : await agent.generateLegacy(prompt, {
             experimental_output: output,
             maxSteps: 100,
           });
@@ -1161,7 +1163,7 @@ Start by listing your tasks and work through them systematically!
 
       // Process tasks systematically
       const isV2 = model.specificationVersion === 'v2';
-      const result = isV2 ? await agentBuilder.streamVNext(prompt) : await agentBuilder.stream(prompt);
+      const result = isV2 ? await agentBuilder.stream(prompt) : await agentBuilder.streamLegacy(prompt);
 
       // Extract actual conflict resolution details from agent execution
       const actualResolutions: Array<{
@@ -1438,10 +1440,12 @@ Previous iterations may have fixed some issues, so start by re-running validateC
         const isV2 = model.specificationVersion === 'v2';
         const output = z.object({ success: z.boolean() });
         const result = isV2
-          ? await validationAgent.streamVNext(iterationPrompt, {
-              output,
+          ? await tryStreamWithJsonFallback(validationAgent, iterationPrompt, {
+              structuredOutput: {
+                schema: output,
+              },
             })
-          : await validationAgent.stream(iterationPrompt, {
+          : await validationAgent.streamLegacy(iterationPrompt, {
               experimental_output: output,
             });
 

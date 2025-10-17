@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-netlify",
-  "version": "0.13.4",
+  "version": "0.13.9",
   "description": "",
   "type": "module",
   "files": [
@@ -33,7 +33,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/deployer": "workspace:^",
-    "@rollup/plugin-virtual": "^3.0.2",
+    "@rollup/plugin-virtual": "3.0.2",
     "date-fns": "^4.1.0",
     "execa": "^9.6.0",
     "fs-extra": "^11.3.2"
@@ -44,7 +44,7 @@
     "@microsoft/api-extractor": "^7.52.8",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.19.0",
-    "eslint": "^9.35.0",
+    "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
@@ -60,7 +60,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.20.0-0",
+    "@mastra/core": ">=0.20.1-0 <0.22.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   }
 }

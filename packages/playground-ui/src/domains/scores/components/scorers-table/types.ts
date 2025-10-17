@@ -1,5 +1,5 @@
-export type ScorerTableData = {
+import { GetScorerResponse } from '@mastra/client-js';
+
+export type ScorerTableData = GetScorerResponse & {
   id: string;
-  name: string;
-  description: string;
 };

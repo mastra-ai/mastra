@@ -25,6 +25,7 @@ interface MapResultsStepOptions<
   saveQueueManager: SaveQueueManager;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
   instructions: SystemMessage;
+  agentId: string;
 }
 
 export function createMapResultsStep<
@@ -41,6 +42,7 @@ export function createMapResultsStep<
   saveQueueManager,
   agentAISpan,
   instructions,
+  agentId,
 }: MapResultsStepOptions<OUTPUT, FORMAT>) {
   return async ({
     inputData,
@@ -59,6 +61,7 @@ export function createMapResultsStep<
 
     const result = {
       ...options,
+      agentId,
       tools: toolsData.convertedTools,
       runId,
       temperature: options.modelSettings?.temperature,
@@ -127,9 +130,9 @@ export function createMapResultsStep<
         : []);
 
     // Handle structuredOutput option by creating an StructuredOutputProcessor
-    if (options.structuredOutput) {
-      const agentModel = await capabilities.getModel({ runtimeContext: result.runtimeContext! });
-      const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput, agentModel);
+    // Only create the processor if a model is explicitly provided
+    if (options.structuredOutput?.model) {
+      const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput);
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
@@ -138,6 +141,7 @@ export function createMapResultsStep<
     const messageList = memoryData.messageList!;
 
     const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
+      agentId,
       runtimeContext: result.runtimeContext!,
       tracingContext: { currentSpan: agentAISpan },
       runId,
@@ -145,7 +149,6 @@ export function createMapResultsStep<
       tools: result.tools,
       resourceId: result.resourceId,
       threadId: result.threadId,
-      structuredOutput: result.structuredOutput as any,
       stopWhen: result.stopWhen,
       maxSteps: result.maxSteps,
       providerOptions: result.providerOptions,
@@ -180,7 +183,7 @@ export function createMapResultsStep<
               runId,
               messageList,
               threadExists: memoryData.threadExists,
-              structuredOutput: !!options.output,
+              structuredOutput: !!options.structuredOutput?.schema,
               saveQueueManager,
               overrideScorers: options.scorers,
             });
@@ -206,7 +209,7 @@ export function createMapResultsStep<
         activeTools: options.activeTools,
         abortSignal: options.abortSignal,
       },
-      output: options.output,
+      structuredOutput: options.structuredOutput,
       outputProcessors: effectiveOutputProcessors,
       modelSettings: {
         temperature: 0,

@@ -1,9 +1,8 @@
 import { noopLogger, type IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
-import nodeResolve from '@rollup/plugin-node-resolve';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { rollup, type OutputChunk, type Plugin, type SourceMap } from 'rollup';
 import resolveFrom from 'resolve-from';
 import { esbuild } from '../plugins/esbuild';
@@ -14,7 +13,6 @@ import { getPackageName, getPackageRootPath, slash } from '../utils';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE } from './constants';
-import { getPackageInfo } from 'local-pkg';
 
 /**
  * Configures and returns the Rollup plugins needed for analyzing entry files.

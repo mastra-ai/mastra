@@ -23,7 +23,7 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v2
         id: app-token
         with:
           app-id: ${{ vars.DANE_APP_ID }}
@@ -70,7 +70,7 @@ jobs:
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20.19.1
+          node-version: 20.19.5
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -89,13 +89,14 @@ jobs:
         # prerelease mode, enter prerelease mode with tag alpha
         if: steps.check_files.outputs.files_exists == 'true'
         run: |
-          pnpm changeset pre exit
-          pnpm changeset version
+          pnpm changeset-cli pre exit
+          pnpm changeset-cli version
           git add -A
           git commit -m 'chore: version - exit prerelease mode' --no-verify
           git push
           echo "executed=true" >> "$GITHUB_OUTPUT"
           pnpm install
+          pnpm build
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
@@ -123,7 +124,7 @@ jobs:
 
       - name: Add tags
         run: |
-          pnpm changeset tag;
+          pnpm changeset-cli tag;
           git push --follow-tags
 
   enter_prerelease:
@@ -131,7 +132,7 @@ jobs:
     if: ${{ github.repository == 'mastra-ai/mastra' && needs.release.outputs.exited_prerelease == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v2
         id: app-token
         with:
           app-id: ${{ vars.DANE_APP_ID }}
@@ -169,7 +170,7 @@ jobs:
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20.19.1
+          node-version: 20.19.5
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -178,7 +179,7 @@ jobs:
       - name: Enter prerelease mode
         run: |
           git pull
-          pnpm changeset pre enter alpha
+          pnpm changeset-cli pre enter alpha
           git add -A
           git commit -m 'chore: version - enter prerelease mode' --no-verify
 

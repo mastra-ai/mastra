@@ -11,8 +11,8 @@ const defaultSettings: AgentSettings = {
     maxSteps: 5,
     temperature: 0.5,
     topP: 1,
+    chatWithGenerateLegacy: false,
     chatWithGenerate: false,
-    chatWithGenerateVNext: false,
   },
 };
 

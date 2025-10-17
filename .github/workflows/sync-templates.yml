@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Get Github App Token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v2
         id: app-token
         with:
           app-id: ${{ vars.DANE_APP_ID }}

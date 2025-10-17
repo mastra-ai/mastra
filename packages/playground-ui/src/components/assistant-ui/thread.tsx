@@ -22,19 +22,18 @@ import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
 
 export interface ThreadProps {
-  ToolFallback?: ToolCallMessagePartComponent;
   agentName?: string;
   agentId?: string;
   hasMemory?: boolean;
   hasModelList?: boolean;
 }
 
-export const Thread = ({ ToolFallback, agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
+export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
   const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
-    return <AssistantMessage {...props} ToolFallback={ToolFallback} hasModelList={hasModelList} />;
+    return <AssistantMessage {...props} hasModelList={hasModelList} />;
   };
 
   return (
@@ -116,7 +115,7 @@ const Composer = ({ hasMemory, agentId }: ComposerProps) => {
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
               className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none outline-none"
-              autoFocus
+              autoFocus={document.activeElement === document.body}
               placeholder="Enter your message..."
               name=""
               id=""

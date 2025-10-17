@@ -45,57 +45,121 @@ import { ResourceClientActions } from './resourceActions';
 // Re-export MCP SDK LoggingLevel for convenience
 export type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 
+/**
+ * Log message structure for MCP client logging.
+ */
 export interface LogMessage {
+  /** Logging level (debug, info, warning, error, etc.) */
   level: LoggingLevel;
+  /** Log message content */
   message: string;
+  /** Timestamp when the log was created */
   timestamp: Date;
+  /** Name of the MCP server that generated the log */
   serverName: string;
+  /** Optional additional details */
   details?: Record<string, any>;
   runtimeContext?: RuntimeContext | null;
 }
 
+/**
+ * Handler function for processing log messages from MCP servers.
+ */
 export type LogHandler = (logMessage: LogMessage) => void;
 
-// Elicitation handler type
+/**
+ * Handler function for processing elicitation requests from MCP servers.
+ *
+ * @param request - The elicitation request parameters including message and schema
+ * @returns Promise resolving to the user's response (accept/decline/cancel with optional content)
+ */
 export type ElicitationHandler = (request: ElicitRequest['params']) => Promise<ElicitResult>;
 
-// Base options common to all server definitions
+/**
+ * Base options common to all MCP server definitions.
+ */
 type BaseServerOptions = {
+  /** Optional handler for server log messages */
   logger?: LogHandler;
+  /** Optional timeout in milliseconds for server operations */
   timeout?: number;
+  /** Optional client capabilities to advertise to the server */
   capabilities?: ClientCapabilities;
+  /** Whether to enable server log forwarding (default: true) */
   enableServerLogs?: boolean;
 };
 
+/**
+ * Configuration for MCP servers using stdio (subprocess) transport.
+ *
+ * Used when the MCP server is spawned as a subprocess that communicates via stdin/stdout.
+ */
 type StdioServerDefinition = BaseServerOptions & {
-  command: string; // 'command' is required for Stdio
+  /** Command to execute (e.g., 'node', 'python', 'npx') */
+  command: string;
+  /** Optional arguments to pass to the command */
   args?: string[];
+  /** Optional environment variables for the subprocess */
   env?: Record<string, string>;
 
-  url?: never; // Exclude 'url' for Stdio
-  requestInit?: never; // Exclude HTTP options for Stdio
-  eventSourceInit?: never; // Exclude HTTP options for Stdio
-  authProvider?: never; // Exclude HTTP options for Stdio
-  reconnectionOptions?: never; // Exclude Streamable HTTP specific options
-  sessionId?: never; // Exclude Streamable HTTP specific options
+  url?: never;
+  requestInit?: never;
+  eventSourceInit?: never;
+  authProvider?: never;
+  reconnectionOptions?: never;
+  sessionId?: never;
 };
 
-// HTTP Server Definition (Streamable HTTP or SSE fallback)
+/**
+ * Configuration for MCP servers using HTTP-based transport (Streamable HTTP or SSE fallback).
+ *
+ * Used when connecting to remote MCP servers over HTTP. The client will attempt Streamable HTTP
+ * transport first and fall back to SSE if that fails.
+ */
 type HttpServerDefinition = BaseServerOptions & {
-  url: URL; // 'url' is required for HTTP
+  /** URL of the MCP server endpoint */
+  url: URL;
 
-  command?: never; // Exclude 'command' for HTTP
-  args?: never; // Exclude Stdio options for HTTP
-  env?: never; // Exclude Stdio options for HTTP
+  command?: never;
+  args?: never;
+  env?: never;
 
-  // Include relevant options from SDK HTTP transport types
+  /** Optional request configuration for HTTP requests */
   requestInit?: StreamableHTTPClientTransportOptions['requestInit'];
+  /** Optional configuration for SSE fallback (required when using custom headers with SSE) */
   eventSourceInit?: SSEClientTransportOptions['eventSourceInit'];
+  /** Optional authentication provider for HTTP requests */
   authProvider?: StreamableHTTPClientTransportOptions['authProvider'];
+  /** Optional reconnection configuration for Streamable HTTP */
   reconnectionOptions?: StreamableHTTPClientTransportOptions['reconnectionOptions'];
+  /** Optional session ID for Streamable HTTP */
   sessionId?: StreamableHTTPClientTransportOptions['sessionId'];
 };
 
+/**
+ * Configuration for connecting to an MCP server.
+ *
+ * Either stdio-based (subprocess) or HTTP-based (remote server). The transport type is
+ * automatically detected based on whether `command` or `url` is provided.
+ *
+ * @example
+ * ```typescript
+ * // Stdio server
+ * const stdioServer: MastraMCPServerDefinition = {
+ *   command: 'npx',
+ *   args: ['tsx', 'server.ts'],
+ *   env: { API_KEY: 'secret' }
+ * };
+ *
+ * // HTTP server
+ * const httpServer: MastraMCPServerDefinition = {
+ *   url: new URL('http://localhost:8080/mcp'),
+ *   requestInit: {
+ *     headers: { Authorization: 'Bearer token' }
+ *   }
+ * };
+ * ```
+ */
 export type MastraMCPServerDefinition = StdioServerDefinition | HttpServerDefinition;
 
 /**
@@ -121,14 +185,32 @@ function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 
   }
 }
 
+/**
+ * Options for creating an internal MCP client instance.
+ *
+ * @internal
+ */
 export type InternalMastraMCPClientOptions = {
+  /** Name identifier for this client */
   name: string;
+  /** Server connection configuration */
   server: MastraMCPServerDefinition;
+  /** Optional client capabilities */
   capabilities?: ClientCapabilities;
+  /** Optional client version */
   version?: string;
+  /** Optional timeout in milliseconds */
   timeout?: number;
 };
 
+/**
+ * Internal MCP client implementation for connecting to a single MCP server.
+ *
+ * This class handles the low-level connection, transport management, and protocol
+ * communication with an MCP server. Most users should use MCPClient instead.
+ *
+ * @internal
+ */
 export class InternalMastraMCPClient extends MastraBase {
   name: string;
   private client: Client;
@@ -138,9 +220,17 @@ export class InternalMastraMCPClient extends MastraBase {
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
   private currentOperationContext: RuntimeContext | null = null;
+
+  /** Provides access to resource operations (list, read, subscribe, etc.) */
   public readonly resources: ResourceClientActions;
+  /** Provides access to prompt operations (list, get, notifications) */
   public readonly prompts: PromptClientActions;
+  /** Provides access to elicitation operations (request handling) */
   public readonly elicitation: ElicitationClientActions;
+
+  /**
+   * @internal
+   */
   constructor({
     name,
     version = '1.0.0',
@@ -288,6 +378,17 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private isConnected: Promise<boolean> | null = null;
 
+  /**
+   * Connects to the MCP server using the configured transport.
+   *
+   * Automatically detects transport type based on configuration (stdio vs HTTP).
+   * Safe to call multiple times - returns existing connection if already connected.
+   *
+   * @returns Promise resolving to true when connected
+   * @throws {MastraError} If connection fails
+   *
+   * @internal
+   */
   async connect() {
     // If a connection attempt is in progress, wait for it.
     if (await this.isConnected) {
@@ -338,8 +439,13 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Get the current session ID if using the Streamable HTTP transport.
-   * Returns undefined if not connected or not using Streamable HTTP.
+   * Gets the current session ID if using Streamable HTTP transport.
+   *
+   * Returns undefined if not connected or not using Streamable HTTP transport.
+   *
+   * @returns Session ID string or undefined
+   *
+   * @internal
    */
   get sessionId(): string | undefined {
     if (this.transport instanceof StreamableHTTPClientTransport) {

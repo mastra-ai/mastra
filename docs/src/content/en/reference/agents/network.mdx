@@ -278,7 +278,7 @@ await agent.network(`
     },
     {
       name: "result",
-      type: "Promise<WorkflowResult<TOutput, TSteps>>",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
       description: "A promise that resolves to the final workflow result",
     },
     {

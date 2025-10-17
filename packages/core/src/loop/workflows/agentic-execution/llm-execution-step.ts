@@ -336,7 +336,8 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         let e = chunk.payload.error as any;
         if (typeof e === 'object') {
           const errorMessage = safeParseErrorObject(e);
-          e = new Error(errorMessage);
+          const originalCause = e instanceof Error ? e.cause : undefined;
+          e = new Error(errorMessage, originalCause ? { cause: originalCause } : undefined);
           Object.assign(e, chunk.payload.error);
         }
 
@@ -435,7 +436,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   options,
   toolCallStreaming,
   controller,
-  output,
+  structuredOutput,
   outputProcessors,
   headers,
   downloadRetries,
@@ -531,7 +532,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               modelSettings,
               telemetry_settings,
               includeRawChunks,
-              output,
+              structuredOutput,
               headers,
               onResult: ({
                 warnings: warningsFromStream,
@@ -584,7 +585,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             toolCallStreaming,
             telemetry_settings,
             includeRawChunks,
-            output,
+            structuredOutput,
             outputProcessors,
             isLLMExecutionStep: true,
             tracingContext,

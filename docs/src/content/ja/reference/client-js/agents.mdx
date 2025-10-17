@@ -3,9 +3,6 @@ title: Mastra クライアントエージェント API
 description: client-js SDK を使って、応答生成、ストリーミングでの対話、エージェントツールの管理など、Mastra の AI エージェントとのやり取り方法を学びます。
 ---
 
-import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
-
-
 # Agents API
 
 Agents API は、応答の生成、ストリーミングでのやり取り、エージェントツールの管理など、Mastra の AI エージェントと対話するためのメソッドを提供します。
@@ -163,8 +160,6 @@ const liveEvals = await agent.liveEvals();
 ```
 
 ### Stream VNext（実験的）
-
-<StreamVNextCallout />
 
 強化されたメソッドシグネチャを備えた拡張 VNext API を使って、レスポンスをストリーミングします。本手法は機能面とフォーマットの柔軟性が向上しており、Mastra のネイティブ形式と AI SDK v5 互換形式の両方をサポートします:
 
