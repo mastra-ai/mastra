@@ -16,6 +16,10 @@ type State = {
   isReasoning: boolean;
   isStreaming: boolean;
   providerOptions: Record<string, any> | undefined;
+  llmIterationRetry?: {
+    prompt: string;
+    retryCount: number;
+  };
 };
 
 export class AgenticRunState {

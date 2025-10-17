@@ -197,6 +197,11 @@ interface ErrorPayload {
   [key: string]: unknown;
 }
 
+interface LLMIterationRetryPayload {
+  prompt: string;
+  retryCount: number;
+}
+
 interface RawPayload {
   [key: string]: unknown;
 }
@@ -233,6 +238,7 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT exten
     usage: LanguageModelV2Usage;
     steps?: StepResult<Tools>[];
     object?: OUTPUT extends undefined ? unknown : InferSchemaOutput<OUTPUT>;
+    llmIterationRetry?: LLMIterationRetryPayload;
   };
   metadata: {
     request?: LanguageModelRequestMetadata;
@@ -483,6 +489,7 @@ export type AgentChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'tool-call-input-streaming-end'; payload: ToolCallInputStreamingEndPayload })
   | (BaseChunkType & { type: 'finish'; payload: FinishPayload })
   | (BaseChunkType & { type: 'error'; payload: ErrorPayload })
+  | (BaseChunkType & { type: 'llm-retry'; payload: LLMIterationRetryPayload })
   | (BaseChunkType & { type: 'raw'; payload: RawPayload })
   | (BaseChunkType & { type: 'start'; payload: StartPayload })
   | (BaseChunkType & { type: 'step-start'; payload: StepStartPayload })
@@ -663,6 +670,7 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   returnScorerData?: boolean;
   tracingContext?: TracingContext;
   processorStates?: Map<string, any>;
+  llmIterationRetryCount?: number;
 };
 
 export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {

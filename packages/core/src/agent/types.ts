@@ -70,6 +70,20 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
    * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
    */
   jsonPromptInjection?: boolean;
+
+  /**
+   * Maximum number of retries when validation fails.
+   * Only applies in direct mode (when no model is specified).
+   * @defaultValue 1
+   */
+  maxValidationRetries?: number;
+
+  /**
+   * Whether to retry on validation errors.
+   * Only applies in direct mode (when no model is specified).
+   * @defaultValue true
+   */
+  retryOnValidationError?: boolean;
 } & FallbackFields<OUTPUT>;
 
 export type SerializableStructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = Omit<

@@ -166,7 +166,11 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         return false;
       }
 
-      return typedInputData.stepResult?.isContinued ?? false;
+      // Check if we should continue - either due to isContinued or llmIterationRetry
+      const hasContinuation = typedInputData.stepResult?.isContinued ?? false;
+      const hasLLMIterationRetry = !!typedInputData.output?.llmIterationRetry;
+
+      return hasContinuation || hasLLMIterationRetry;
     })
     .commit();
 }

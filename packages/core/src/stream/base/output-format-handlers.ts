@@ -113,6 +113,10 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
             value: result.data as InferSchemaOutput<OUTPUT>,
           };
         } else {
+          // Extract the generated value and validation errors for retry context
+          const generatedValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+          const validationErrors = z4.prettifyError(result.error);
+
           return {
             success: false,
             error: new MastraError(
@@ -120,9 +124,12 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
                 domain: ErrorDomain.AGENT,
                 category: ErrorCategory.SYSTEM,
                 id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
-                text: `Structured output validation failed\n${z4.prettifyError(result.error)}\n`,
+                text: `Structured output validation failed:\n\n${validationErrors}\n\nGenerated output:\n${generatedValue}\n`,
                 details: {
-                  value: typeof value === 'object' ? JSON.stringify(value) : String(value),
+                  value: generatedValue,
+                  validationErrors,
+                  retryHint:
+                    'Include the validation errors in your next prompt to help the model understand what needs to be fixed.',
                 },
               },
               result.error,
@@ -497,10 +504,12 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
   isLLMExecutionStep,
   structuredOutput,
   logger,
+  previousRetryCount,
 }: {
   isLLMExecutionStep?: boolean;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   logger?: IMastraLogger;
+  previousRetryCount?: number;
 }) {
   const handler = createOutputHandler({ schema: structuredOutput?.schema });
 
@@ -508,6 +517,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
   let previousObject: any = undefined;
   let finishReason: string | undefined;
   let currentRunId: string | undefined;
+  let validationRetryCount = previousRetryCount ?? 0;
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
@@ -591,14 +601,46 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
           return;
         }
 
-        controller.enqueue({
-          from: ChunkFrom.AGENT,
-          runId: currentRunId ?? '',
-          type: 'error',
-          payload: {
-            error: finalResult.error,
-          },
-        });
+        // Check if we should retry validation
+        const shouldRetry =
+          structuredOutput?.retryOnValidationError !== false && // Default to true
+          validationRetryCount < (structuredOutput?.maxValidationRetries ?? 1);
+
+        if (shouldRetry) {
+          // Emit validation-retry chunk for the workflow to handle
+
+          const validationErrors = (finalResult.error as any)?.details?.validationErrors ?? 'akshdkjahsdjk';
+          const generatedValue = (finalResult.error as any)?.details?.value ?? 'akshdkjahsdjk';
+
+          const retryPrompt = `The previous response failed validation with the following errors:\n
+${validationErrors}\n
+Generated value that failed:\n${generatedValue}\n
+Please try again and ensure your response matches the required schema format.`;
+
+          logger?.error(
+            `Structured output validation failed. Attempting retry (${validationRetryCount + 1}) with prompt:\n\n${retryPrompt}\n`,
+          );
+
+          controller.enqueue({
+            from: ChunkFrom.AGENT,
+            runId: currentRunId ?? '',
+            type: 'llm-retry',
+            payload: {
+              prompt: retryPrompt,
+              retryCount: validationRetryCount + 1, // Increment for the next iteration
+            },
+          });
+        } else {
+          // Max retries reached or retry disabled - emit error chunk
+          controller.enqueue({
+            from: ChunkFrom.AGENT,
+            runId: currentRunId ?? '',
+            type: 'error',
+            payload: {
+              error: finalResult.error,
+            },
+          });
+        }
         return;
       }
 

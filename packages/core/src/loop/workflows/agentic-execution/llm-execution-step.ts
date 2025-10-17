@@ -56,6 +56,14 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       continue;
     }
 
+    if ('type' in chunk && chunk.type === 'llm-retry') {
+      // Store llm iteration retry data in state and and omit the chunk from the stream
+      runState.setState({
+        llmIterationRetry: chunk.payload,
+      });
+      continue;
+    }
+
     if (chunk.type == 'object' || chunk.type == 'object-result') {
       controller.enqueue(chunk);
       continue;
@@ -472,6 +480,22 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             };
             let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
+            // If there's a llm iteration retry from the previous iteration, add it to the messages
+            if (inputData.output?.llmIterationRetry) {
+              // Add message with the llm iteration retry prompt
+              messageList.add(
+                {
+                  id: _internal?.generateId?.(),
+                  role: 'user',
+                  content: inputData.output.llmIterationRetry.prompt,
+                },
+                'input',
+              );
+
+              // Update the inputMessages
+              inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+            }
+
             // Call prepareStep callback if provided
             let stepModel = model;
             let stepToolChoice = toolChoice;
@@ -590,6 +614,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
             isLLMExecutionStep: true,
             tracingContext,
             processorStates,
+            llmIterationRetryCount: inputData.output?.llmIterationRetry?.retryCount,
           },
         });
 
@@ -728,8 +753,12 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
       const responseMetadata = runState.state.responseMetadata;
       const text = outputStream._getImmediateText();
       const object = outputStream._getImmediateObject();
+      const llmIterationRetry = runState.state.llmIterationRetry;
       // Check if tripwire was triggered
       const tripwireTriggered = outputStream.tripwire;
+
+      // Use isContinued from state if it's been explicitly set
+      const isContinuedFromState = runState.state.stepResult?.isContinued;
 
       const steps = inputData.output?.steps || [];
 
@@ -764,7 +793,11 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
         stepResult: {
           reason: tripwireTriggered ? 'abort' : hasErrored ? 'error' : finishReason,
           warnings,
-          isContinued: tripwireTriggered ? false : !['stop', 'error'].includes(finishReason),
+          isContinued: tripwireTriggered
+            ? false
+            : isContinuedFromState !== undefined
+              ? isContinuedFromState
+              : !['stop', 'error'].includes(finishReason),
         },
         metadata: {
           providerMetadata: runState.state.providerOptions,
@@ -780,6 +813,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
           usage: usage ?? inputData.output?.usage,
           steps,
           ...(object ? { object } : {}),
+          ...(llmIterationRetry ? { llmIterationRetry: llmIterationRetry } : {}),
         },
         messages,
       };
