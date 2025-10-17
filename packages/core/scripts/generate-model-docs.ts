@@ -237,6 +237,9 @@ Learn more in the [${provider.name} documentation](${docUrl}).`
   const { models: modelsWithCapabilities, packageName } = await fetchProviderInfo(provider.id);
   provider.packageName = packageName;
 
+  // Check for AI SDK docs link if package is available
+  const aiSdkDocsLink = packageName ? await checkAiSdkDocsLink(provider.id) : null;
+
   // Generate static model data as JSON for the component (show all models)
   const modelDataJson = JSON.stringify(modelsWithCapabilities, null, 2);
 
@@ -335,28 +338,10 @@ ${
 
 This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/${provider.packageName}) for more details.
 
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
-  <Tab>
-    \`\`\`bash copy
-    npm install ${provider.packageName}
-    \`\`\`
-  </Tab>
-  <Tab>
-    \`\`\`bash copy
-    yarn add ${provider.packageName}
-    \`\`\`
-  </Tab>
-  <Tab>
-    \`\`\`bash copy
-    pnpm add ${provider.packageName}
-    \`\`\`
-  </Tab>
-  <Tab>
-    \`\`\`bash copy
-    bun add ${provider.packageName}
-    \`\`\`
-  </Tab>
-</Tabs>
+\`\`\`bash npm2yarn copy
+npm install ${provider.packageName}
+\`\`\`
+${aiSdkDocsLink ? `\nFor detailed provider-specific documentation, see the [AI SDK ${provider.name} provider docs](${aiSdkDocsLink}).` : ''}
 `
     : ''
 }`;
@@ -977,60 +962,10 @@ ${provider.name} is available through the AI SDK. Install the provider package t
 
 ## Installation
 
-\`\`\`bash
+\`\`\`bash npm2yarn copy
 npm install ${packageName}
 \`\`\`
 ${aiSdkDocsSection}
-`;
-}
-
-async function generateAiSdkProvidersIndexPage(aiSdkProviders: any[]): Promise<string> {
-  return `---
-title: "AI SDK Providers"
-description: "Install additional AI providers via the AI SDK."
----
-
-${getGeneratedComment()}
-
-import { CardGrid, CardGridItem } from "@/components/cards/card-grid";
-
-# AI SDK Providers
-
-These providers are available through the AI SDK. Install the provider package to use their models with Mastra.
-
-<CardGrid>
-${aiSdkProviders
-  .map(
-    p => `    <CardGridItem
-      title="${p.name.replace(/&/g, '&amp;')}"
-      description="${p.models ? Object.keys(p.models).length : 0} models"
-      href="./ai-sdk-providers/${p.id}"
-      logo="${getLogoUrl(p.id)}"
-    />`,
-  )
-  .join(
-    '\
-',
-  )}
-</CardGrid>`;
-}
-
-function generateAiSdkProvidersMeta(aiSdkProviders: any[]): string {
-  const metaEntries = ['  index: "Overview"'];
-
-  for (const provider of aiSdkProviders) {
-    const key = provider.id.includes('-') ? `"${provider.id}"` : provider.id;
-    metaEntries.push(`  ${key}: "${provider.name}"`);
-  }
-
-  return `const meta = {
-${metaEntries.join(
-  ',\
-',
-)},
-};
-
-export default meta;
 `;
 }
 
