@@ -43,76 +43,16 @@ for await (const chunk of stream) {
 <ProviderModelsTable 
   models={[
   {
-    "model": "xai/grok-3-mini",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.3,
-    "outputCost": 0.5
-  },
-  {
-    "model": "xai/grok-code-fast-1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 10000,
-    "inputCost": 0.2,
-    "outputCost": 1.5
-  },
-  {
-    "model": "xai/grok-3-mini-fast",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.6,
-    "outputCost": 4
-  },
-  {
-    "model": "xai/grok-4",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 64000,
-    "inputCost": 3,
-    "outputCost": 15
-  },
-  {
-    "model": "xai/grok-2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 2,
-    "outputCost": 10
-  },
-  {
-    "model": "xai/grok-vision-beta",
+    "model": "xai/grok-4-fast-non-reasoning",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 8192,
-    "maxOutput": 4096,
-    "inputCost": 5,
-    "outputCost": 15
+    "contextWindow": 2000000,
+    "maxOutput": 30000,
+    "inputCost": 0.2,
+    "outputCost": 0.5
   },
   {
     "model": "xai/grok-3-fast",
@@ -127,31 +67,19 @@ for await (const chunk of stream) {
     "outputCost": 25
   },
   {
-    "model": "xai/grok-beta",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 4096,
-    "inputCost": 5,
-    "outputCost": 15
-  },
-  {
-    "model": "xai/grok-3-mini-latest",
+    "model": "xai/grok-4",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.3,
-    "outputCost": 0.5
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
   },
   {
-    "model": "xai/grok-2-vision-1212",
+    "model": "xai/grok-2-vision",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -159,6 +87,30 @@ for await (const chunk of stream) {
     "reasoning": false,
     "contextWindow": 8192,
     "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "xai/grok-code-fast-1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 10000,
+    "inputCost": 0.2,
+    "outputCost": 1.5
+  },
+  {
+    "model": "xai/grok-2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
     "inputCost": 2,
     "outputCost": 10
   },
@@ -173,6 +125,18 @@ for await (const chunk of stream) {
     "maxOutput": 8192,
     "inputCost": 0.6,
     "outputCost": 4
+  },
+  {
+    "model": "xai/grok-2-vision-1212",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 10
   },
   {
     "model": "xai/grok-3",
@@ -199,14 +163,26 @@ for await (const chunk of stream) {
     "outputCost": 0.5
   },
   {
-    "model": "xai/grok-2-vision",
-    "imageInput": true,
+    "model": "xai/grok-2-latest",
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 8192,
-    "maxOutput": 4096,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "xai/grok-2-1212",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
     "inputCost": 2,
     "outputCost": 10
   },
@@ -221,18 +197,6 @@ for await (const chunk of stream) {
     "maxOutput": 8192,
     "inputCost": 5,
     "outputCost": 25
-  },
-  {
-    "model": "xai/grok-4-fast-non-reasoning",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 2000000,
-    "maxOutput": 30000,
-    "inputCost": 0.2,
-    "outputCost": 0.5
   },
   {
     "model": "xai/grok-3-latest",
@@ -259,28 +223,64 @@ for await (const chunk of stream) {
     "outputCost": 10
   },
   {
-    "model": "xai/grok-2-1212",
-    "imageInput": false,
+    "model": "xai/grok-vision-beta",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 2,
-    "outputCost": 10
+    "contextWindow": 8192,
+    "maxOutput": 4096,
+    "inputCost": 5,
+    "outputCost": 15
   },
   {
-    "model": "xai/grok-2-latest",
+    "model": "xai/grok-3-mini",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.3,
+    "outputCost": 0.5
+  },
+  {
+    "model": "xai/grok-beta",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
+    "maxOutput": 4096,
+    "inputCost": 5,
+    "outputCost": 15
+  },
+  {
+    "model": "xai/grok-3-mini-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
     "maxOutput": 8192,
-    "inputCost": 2,
-    "outputCost": 10
+    "inputCost": 0.3,
+    "outputCost": 0.5
+  },
+  {
+    "model": "xai/grok-3-mini-fast",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.6,
+    "outputCost": 4
   }
 ]}
 />

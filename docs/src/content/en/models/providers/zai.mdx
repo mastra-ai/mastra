@@ -47,16 +47,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
-    "model": "zai/glm-4.5v",
-    "imageInput": true,
+    "model": "zai/glm-4.5-flash",
+    "imageInput": false,
     "audioInput": false,
-    "videoInput": true,
+    "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 64000,
-    "maxOutput": 16384,
-    "inputCost": 0.6,
-    "outputCost": 1.8
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "zai/glm-4.5",
@@ -71,30 +71,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.2
   },
   {
-    "model": "zai/glm-4.6",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 0.6,
-    "outputCost": 2.2
-  },
-  {
-    "model": "zai/glm-4.5-flash",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 98304,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "zai/glm-4.5-air",
     "imageInput": false,
     "audioInput": false,
@@ -105,6 +81,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 98304,
     "inputCost": 0.2,
     "outputCost": 1.1
+  },
+  {
+    "model": "zai/glm-4.5v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 64000,
+    "maxOutput": 16384,
+    "inputCost": 0.6,
+    "outputCost": 1.8
+  },
+  {
+    "model": "zai/glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.6,
+    "outputCost": 2.2
   }
 ]}
 />
