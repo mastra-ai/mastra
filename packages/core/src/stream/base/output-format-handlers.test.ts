@@ -48,6 +48,12 @@ describe('output-format-handlers', () => {
           from: ChunkFrom.AGENT,
           payload: { id: '1', text: '"email":"invalid"}' },
         },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
+        },
       ];
       // @ts-expect-error - web/stream readable stream type error
       const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
@@ -262,6 +268,12 @@ describe('output-format-handlers', () => {
           payload: { id: '1', text: '{"result":"yellow"}' },
         },
         {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
+        },
+        {
           type: 'finish',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
@@ -302,6 +314,12 @@ describe('output-format-handlers', () => {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           payload: { id: '1', text: '{"name":"Jo","age":-5}' },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
         },
         {
           type: 'finish',
@@ -384,7 +402,13 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"email":"notanemail","score":150}' },
+          payload: { id: '1', text: '{"name":"Jo","age":-5}' },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
         },
         {
           type: 'finish',
@@ -739,6 +763,12 @@ describe('output-format-handlers', () => {
           payload: { id: '1', text: '{"name":"Jo","age":-5}' },
         },
         {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
+        },
+        {
           type: 'finish',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
@@ -788,6 +818,12 @@ describe('output-format-handlers', () => {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           payload: { id: '1', text: '{"name":"Jo","age":-5}' },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
         },
         {
           type: 'finish',
@@ -841,6 +877,12 @@ describe('output-format-handlers', () => {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           payload: { id: '1', text: '{"name":"Jo","age":-5}' },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
         },
         {
           type: 'finish',

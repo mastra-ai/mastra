@@ -517,6 +517,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
   let previousObject: any = undefined;
   let finishReason: string | undefined;
   let currentRunId: string | undefined;
+  let objectResolved = false;
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
@@ -559,6 +560,48 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         }
       }
 
+      // Validate and resolve object when text generation completes
+      if (chunk.type === 'text-end') {
+        controller.enqueue(chunk);
+
+        if (accumulatedText?.trim() && !objectResolved) {
+          const finalResult = await handler.validateAndTransformFinal(accumulatedText);
+
+          if (!finalResult.success) {
+            // Handle validation errors based on error strategy
+            if (structuredOutput?.errorStrategy === 'warn') {
+              logger?.warn(finalResult.error.message);
+            } else if (structuredOutput?.errorStrategy === 'fallback') {
+              controller.enqueue({
+                from: ChunkFrom.AGENT,
+                runId: currentRunId ?? '',
+                type: 'object-result',
+                object: structuredOutput?.fallbackValue,
+              });
+              objectResolved = true;
+            } else {
+              // Error strategy is 'throw' (default)
+              controller.enqueue({
+                from: ChunkFrom.AGENT,
+                runId: currentRunId ?? '',
+                type: 'error',
+                payload: { error: finalResult.error },
+              });
+            }
+          } else {
+            // Success - emit final validated object
+            controller.enqueue({
+              from: ChunkFrom.AGENT,
+              runId: currentRunId ?? '',
+              type: 'object-result',
+              object: finalResult.value,
+            });
+            objectResolved = true;
+          }
+        }
+        return; // Early return - text-end already enqueued above
+      }
+
       // Always pass through the original chunk for downstream processing
       controller.enqueue(chunk);
     },
@@ -570,65 +613,21 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         return;
       }
 
-      if (['tool-calls'].includes(finishReason ?? '')) {
-        // When finishReason is 'tool-calls', we still need to check if there's
-        // valid structured output in the accumulated text (e.g., Bedrock with isJsonResponseFromTool)
-        if (accumulatedText && accumulatedText.trim()) {
-          // Try to parse and validate the accumulated text
-          const finalResult = await handler.validateAndTransformFinal(accumulatedText);
+      // Safety net: If text-end was never emitted, validate now as fallback
+      // This handles edge cases where providers might not emit text-end
+      if (accumulatedText?.trim() && !objectResolved) {
+        const finalResult = await handler.validateAndTransformFinal(accumulatedText);
 
-          if (finalResult.success) {
-            // Successfully parsed structured output from text
-            controller.enqueue({
-              from: ChunkFrom.AGENT,
-              runId: currentRunId ?? '',
-              type: 'object-result',
-              object: finalResult.value,
-            });
-          }
-          // If parsing failed, this is likely a legitimate tool call (not Bedrock structured output)
-          // Fall through to return without emitting anything
-        }
-        // No valid structured output - return without emitting object-result
-        // This preserves the original behavior for actual tool calls
-        return;
-      }
-
-      const finalResult = await handler.validateAndTransformFinal(accumulatedText);
-
-      if (!finalResult.success) {
-        if (structuredOutput?.errorStrategy === 'warn') {
-          logger?.warn(finalResult.error.message);
-          return;
-        }
-        if (structuredOutput?.errorStrategy === 'fallback') {
+        if (finalResult.success) {
           controller.enqueue({
             from: ChunkFrom.AGENT,
             runId: currentRunId ?? '',
             type: 'object-result',
-            object: structuredOutput?.fallbackValue,
+            object: finalResult.value,
           });
-          return;
+          objectResolved = true;
         }
-
-        controller.enqueue({
-          from: ChunkFrom.AGENT,
-          runId: currentRunId ?? '',
-          type: 'error',
-          payload: {
-            error: finalResult.error,
-          },
-        });
-        return;
       }
-
-      controller.enqueue({
-        from: ChunkFrom.AGENT,
-        runId: currentRunId ?? '',
-        type: 'object-result',
-        object: finalResult.value,
-      });
-      return;
     },
   });
 }
