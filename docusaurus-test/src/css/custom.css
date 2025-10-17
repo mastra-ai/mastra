@@ -159,7 +159,8 @@
   --ifm-navbar-height: calc(60px + 50px);
 
   /* Code blocks */
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  --docusaurus-highlighted-code-line-bg: color-mix(in oklab,#e0e0e0e6 90%, transparent);
+
 
   /* Syntax highlighting colors - Light mode */
   --prism-color-string: #158D29;
@@ -352,8 +353,6 @@ span[class*="categoryLinkLabel"] {
   padding-inline-start: 0.25rem;
 }
 
-
-
 .menu__caret {
   &:hover {
     background: transparent;
@@ -516,6 +515,8 @@ ol {
   list-style: decimal;
 }
 
+/* ==================== PAGINATION ==================== */
+
 .pagination-nav {
   display: flex;
   align-items: center;
@@ -548,8 +549,6 @@ ol {
 
 
 
-
-
 /* ==================== CODE BLOCKS ==================== */
 .theme-code-block.theme-code-block {
   box-shadow: none;
@@ -576,16 +575,6 @@ code {
   padding: .12em .25em;
 }
 
-[data-theme='dark'] code {
-  border-color: var(--mastra-border-code);
-}
-
-
-
-[data-theme='dark'] pre {
-  border-color: var(--mastra-border);
-  background: #171717;
-}
 
 pre code {
   font-size: 13px;
@@ -594,10 +583,6 @@ pre code {
   border: none;
   padding: 0;
   color: var(--mastra-text-muted);
-}
-
-[data-theme='dark'] pre code {
-  color: var(--mastra-text-quaternary);
 }
 
 /* Code block title bar */
@@ -628,10 +613,8 @@ div[class*="codeBlockTitle"]+div[class*="codeBlockContent"] pre {
 
 /* Highlighted lines in code blocks */
 .theme-code-block-highlighted-line {
-  background-color: var(--mastra-surface-5);
-  display: block;
-  margin: 0 calc(-1 * var(--ifm-pre-padding));
-  padding: 0 var(--ifm-pre-padding);
+  /* border-left: 2px solid var(--mastra-green-accent-2); */
+  box-shadow: 2px 0 var(--mastra-green-accent-2) inset;
 }
 
 [data-theme='dark'] .theme-code-block-highlighted-line {
