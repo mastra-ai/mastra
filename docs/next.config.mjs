@@ -5,6 +5,7 @@ import { transformerNotationDiff } from "@shikijs/transformers";
 import path from "path";
 import { readFileSync } from "fs";
 import { redirectList } from "./config/redirects.mjs";
+import withVercelToolbar from "@vercel/toolbar/plugins/next";
 
 const withNextra = nextra({
   search: {
@@ -23,7 +24,7 @@ const withNextra = nextra({
 
 const withGT = initGT();
 
-export default withGT(
+export default withGT(withVercelToolbar()(
   withNextra({
     assetPrefix: process.env.NODE_ENV === "production" ? "/docs" : "",
     i18n: {
@@ -71,4 +72,4 @@ export default withGT(
     redirects: () => redirectList,
     trailingSlash: false,
   }),
-);
+));

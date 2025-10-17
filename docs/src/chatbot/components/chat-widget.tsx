@@ -1,268 +1,222 @@
 "use client";
-import { CopilotKit, useCopilotChat } from "@copilotkit/react-core";
-import { Markdown } from "@copilotkit/react-ui";
-import { Role, TextMessage } from "@copilotkit/runtime-client-gql";
-import { usePostHog } from "posthog-js/react";
-import { StickToBottom } from "use-stick-to-bottom";
-
-import { ArrowLeftIcon } from "@/components/svgs/Icons";
+import { PulsingDots } from "@/components/loading";
+import { Clippy } from "@/components/svgs/clippy";
 import { Button } from "@/components/ui/button";
-import Spinner from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { Markdown } from "@copilotkit/react-ui";
 import "@copilotkit/react-ui/styles.css";
-import { ArrowUp } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import { useChat } from "@kapaai/react-sdk";
+import { ArrowUp, Square, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import React, { useState } from "react";
+import { useStickToBottom } from "use-stick-to-bottom";
 
-interface ResponseData {
-  response: string;
-  conversation_id: string;
-  question_id?: string;
-  original_question?: string;
-}
-
-const DocsChat: React.FC<{
-  setIsAgentMode: (isAgentMode: boolean) => void;
-  searchQuery: string;
-}> = ({ setIsAgentMode, searchQuery }) => {
-  return (
-    <CopilotKit
-      runtimeUrl={
-        process.env.NODE_ENV === "production"
-          ? "/docs/api/copilotkit"
-          : "/api/copilotkit"
-      }
-      showDevConsole={false}
-      // agent lock to the relevant agent
-      agent="docsAgent"
-    >
-      <CustomChatInterface
-        setIsAgentMode={setIsAgentMode}
-        searchQuery={searchQuery}
-      />
-    </CopilotKit>
-  );
-};
-
-export function CustomChatInterface({
-  setIsAgentMode,
-  searchQuery,
+export function KapaChat({
+  className,
+  close,
 }: {
-  setIsAgentMode: (isAgentMode: boolean) => void;
-  searchQuery: string;
+  className?: string;
+  close: () => void;
 }) {
-  const { visibleMessages, appendMessage, isLoading } = useCopilotChat();
-  const posthog = usePostHog();
-
+  const {
+    conversation,
+    submitQuery,
+    isGeneratingAnswer,
+    isPreparingAnswer,
+    stopGeneration,
+    addFeedback,
+  } = useChat();
   const [inputValue, setInputValue] = useState("");
-  const processedQueryRef = useRef(""); // Track processed queries
-  const conversationIdRef = useRef<string>(); // Track conversation ID
-  const pendingQuestionRef = useRef<{ id: string; question: string } | null>(
-    null,
-  ); // Track pending question waiting for response
-  const previouslyLoadingRef = useRef(false); // Track previous loading state
-  const lastResponseCapturedRef = useRef<string>(""); // Track last captured response to avoid duplicates
 
-  // Initialize conversation ID on first render
-  useEffect(() => {
-    if (!conversationIdRef.current) {
-      conversationIdRef.current = `conversation_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+  const isLoading = isGeneratingAnswer || isPreparingAnswer;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inputValue.trim()) {
+      submitQuery(inputValue);
+      setInputValue("");
     }
-  }, []);
-
-  const trackQuestion = (question: string) => {
-    const questionId = `question_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-
-    posthog?.capture("DOCS_CHATBOT_QUESTION", {
-      question,
-      question_id: questionId,
-      conversation_id: conversationIdRef.current,
-    });
-
-    // Store the pending question for response linking
-    pendingQuestionRef.current = { id: questionId, question };
   };
 
-  useEffect(() => {
-    if (searchQuery === "" || processedQueryRef.current === searchQuery) return;
-
-    // Track that we've processed this query
-    processedQueryRef.current = searchQuery;
-
-    // Track the question
-    trackQuestion(searchQuery);
-
-    appendMessage(new TextMessage({ content: searchQuery, role: Role.User }));
-  }, [searchQuery, appendMessage, posthog]);
-
-  // Track responses when streaming is complete
-  useEffect(() => {
-    // Only capture response when loading changes from true to false (streaming complete)
-    if (previouslyLoadingRef.current && !isLoading) {
-      // Find the most recent assistant message
-      const lastAssistantMessage = [...visibleMessages]
-        .reverse()
-        .find(
-          (message) => "role" in message && message.role === Role.Assistant,
-        );
-
-      if (lastAssistantMessage) {
-        const messageContent =
-          "content" in lastAssistantMessage
-            ? String(lastAssistantMessage.content)
-            : "";
-
-        // Only capture if we have content and haven't captured this exact response before
-        if (
-          messageContent.trim() &&
-          messageContent !== lastResponseCapturedRef.current
-        ) {
-          // Link response to the pending question
-          const responseData: ResponseData = {
-            response: messageContent,
-            conversation_id: conversationIdRef.current || "",
-          };
-
-          if (pendingQuestionRef.current) {
-            responseData.question_id = pendingQuestionRef.current.id;
-            responseData.original_question =
-              pendingQuestionRef.current.question;
-
-            // Clear the pending question after linking
-            pendingQuestionRef.current = null;
-          }
-
-          posthog?.capture("DOCS_CHATBOT_RESPONSE", responseData);
-          lastResponseCapturedRef.current = messageContent;
-        }
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (inputValue.trim()) {
+        submitQuery(inputValue);
+        setInputValue("");
       }
     }
-
-    // Update previous loading state
-    previouslyLoadingRef.current = isLoading;
-  }, [isLoading, visibleMessages, posthog]);
-
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (inputValue.trim() === "") return;
-
-    // Track the question
-    trackQuestion(inputValue);
-
-    // Send the message
-    appendMessage(new TextMessage({ content: inputValue, role: Role.User }));
-    setInputValue("");
   };
 
-  const handleBackToSearch = () => {
-    setIsAgentMode(false);
+  const handleFeedback = (
+    questionAnswerId: string,
+    reaction: "upvote" | "downvote",
+  ) => {
+    addFeedback(questionAnswerId, reaction);
   };
+
+  const { scrollRef, contentRef } = useStickToBottom();
 
   return (
-    <div className="flex flex-col w-full h-[600px]">
+    <div className={cn("flex relative flex-col w-full h-[700px]", className)}>
       {/* Chat header */}
-      <div className="flex p-5 w-full">
+      <div className="flex absolute top-0 right-0 left-0 z-20 justify-between items-center px-5 py-3 w-full border-b backdrop-blur-md border-neutral-200 dark:border-neutral-800 dark:bg-surface-6">
+        <span className="text-sm dark:text-icons-5">Ask mastra docs</span>
         <Button
+          onClick={() => close()}
           variant="ghost"
-          className="cursor-pointer hover:bg-surface-6 dark:text-icons-3 text-[var(--light-color-text-4)] dark:bg-surface-5 bg-[var(--light-color-surface-4)]"
-          size="slim"
-          onClick={handleBackToSearch}
+          size="sm"
+          className="self-end p-0 w-8 h-8 cursor-pointer"
+          aria-label="Close chat"
         >
-          <ArrowLeftIcon className="w-3 h-3" />
-          Back to Search
+          <X className="w-4 h-4 dark:text-icons-5" />
         </Button>
       </div>
 
-      {/* Messages container */}
-      <StickToBottom
-        className="flex-1 overflow-auto [&>div]:scrollbar-thin"
-        resize="smooth"
-      >
-        <StickToBottom.Content className="p-4">
-          {visibleMessages.map((message) => {
-            // Check if 'role' exists on message and if it equals Role.User
-            const isUser = "role" in message && message.role === Role.User;
-            const isAssistant =
-              "role" in message && message.role === Role.Assistant;
+      <div className="overflow-y-auto px-5 h-full" ref={scrollRef}>
+        <div ref={contentRef} className="flex flex-col gap-8">
+          {/* spacer */}
+          <div className="h-12" />
+          {conversation.length > 0
+            ? conversation.map(({ answer: a, question: q, id, reaction }) => {
+                return (
+                  <div key={id} className={`flex flex-col gap-8 w-full`}>
+                    {!!q && (
+                      <div className="px-4 self-end text-[13px] py-2 rounded-lg max-w-[80%] dark:bg-surface-3 bg-[var(--light-color-surface-4)] dark:text-icons-6 text-[var(--light-color-text-4)]  rounded-br-none">
+                        {q}
+                      </div>
+                    )}
 
-            // Check if 'content' exists on message, if so use it, otherwise use empty string
-            const messageContent: string =
-              "content" in message ? String(message.content) : "";
-
-            if (!isAssistant && !isUser) {
-              return null;
-            }
-
-            return (
-              <div
-                key={message.id}
-                className={`mb-4 w-full flex ${isUser ? "justify-end" : "justify-start"}`}
-              >
-                {isUser && (
-                  <div className="px-4 text-[13px] py-2 rounded-lg max-w-[80%] dark:bg-surface-3 bg-[var(--light-color-surface-4)] dark:text-icons-6 text-[var(--light-color-text-4)]  rounded-br-none">
-                    {messageContent}
+                    {!!a && (
+                      <div className="relative pl-4 text-[13px] bg-transparent max-w-full dark:text-icons-6 text-[var(--light-color-text-4)]">
+                        <Clippy className="absolute top-1 -left-2 w-5 h-5 dark:text-accent-green text-accent-green-2" />
+                        <Markdown content={a} />
+                        {/* Feedback buttons - only show when answer is complete */}
+                        {id && (
+                          <div className="flex gap-2 items-center mt-3">
+                            <span className="text-xs text-icons-2">
+                              Was this helpful?
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => handleFeedback(id, "upvote")}
+                              className={`p-1 cursor-pointer ${
+                                reaction === "upvote"
+                                  ? "dark:text-accent-green text-[var(--light-green-accent)]"
+                                  : "dark:text-icons-3 text-[var(--light-color-text-4)]"
+                              }`}
+                            >
+                              <ThumbsUp className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => handleFeedback(id, "downvote")}
+                              className={`p-1 cursor-pointer ${
+                                reaction === "downvote"
+                                  ? "dark:text-red-500 text-red-600"
+                                  : "dark:text-icons-3 text-[var(--light-color-text-4)]"
+                              }`}
+                            >
+                              <ThumbsDown className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
-                {isAssistant && (
-                  <div className="px-4 text-[13px] py-2 bg-transparent relative w-full dark:text-icons-6 text-[var(--light-color-text-4)]">
-                    <Markdown content={messageContent} />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </StickToBottom.Content>
-      </StickToBottom>
+                );
+              })
+            : null}
+          {isPreparingAnswer && (
+            <div className="self-start p-4 w-fit">
+              <PulsingDots />
+            </div>
+          )}
+          {/* spacer */}
+          <div className="h-20" />
+        </div>
+      </div>
 
       {/* Input area */}
-      <div className="p-4">
+      <div className="">
         <form
-          onSubmit={handleSendMessage}
-          className="border-t dark:border-borders-2 border-[var(--light-border-code)] "
+          onSubmit={handleSubmit}
+          className="p-2 border-t border-neutral-200 dark:border-neutral-800"
         >
           <div className="flex items-center">
             <Textarea
               id="custom-chat-input"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  if (e.nativeEvent.isComposing) {
-                    return;
-                  }
-                  if (inputValue.trim() === "" || isLoading) return;
-                  // Track the question
-
-                  trackQuestion(inputValue);
-
-                  // Submit the form on Enter
-                  appendMessage(
-                    new TextMessage({ content: inputValue, role: Role.User }),
-                  );
-                  setInputValue("");
-                }
-              }}
+              onKeyDown={handleKeyDown}
               placeholder="Enter your message..."
-              className="border-none shadow-none resize-none dark:text-icons-6 text-[var(--light-color-text-4)] placeholder:text-icons-2 focus-visible:ring-0"
+              className="border-none outline-none shadow-none resize-none dark:text-icons-6 text-[var(--light-color-text-4)] placeholder:text-icons-2 focus-visible:ring-0"
             />
-            <Button
-              type="submit"
-              variant="ghost"
-              size="icon-sm"
-              disabled={isLoading || inputValue.trim() === ""}
-              className="relative self-end p-2 rounded-full cursor-pointer dark:bg-surface-5 bg-[var(--light-color-surface-1)] dark:ring-borders-2 dark:ring"
-            >
-              {isLoading ? (
-                <Spinner className="dark:text-accent-green text-[var(--light-green-accent-2)]" />
-              ) : (
+            {isLoading ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={stopGeneration}
+                className="relative self-end p-3 bg-red-100 rounded-full transition-colors cursor-pointer dark:bg-red-500/20 dark:ring-red-500/50 dark:ring hover:dark:bg-red-500/30 hover:bg-red-200"
+              >
+                <Square className="w-1 h-1 text-red-600 fill-current dark:text-red-400" />
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                variant="ghost"
+                size="icon-sm"
+                disabled={inputValue.trim() === ""}
+                className="relative self-end p-2 rounded-full cursor-pointer dark:bg-surface-5 bg-[var(--light-color-surface-1)] dark:ring-borders-2 dark:ring disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <ArrowUp className="w-4 h-4 dark:text-accent-green text-[var(--light-green-accent)]" />
-              )}
-            </Button>
+              </Button>
+            )}
           </div>
         </form>
+
+        {/* Compliance text */}
+        <div className="p-2 mt-2 text-center bg-surface-2 dark:bg-surface-5">
+          <p className="text-[10px] text-icons-2 dark:text-icons-2">
+            Powered by{" "}
+            <a
+              href="https://kapa.ai"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline text-accent-green-2 dark:text-accent-green"
+            >
+              kapa.ai
+            </a>
+          </p>
+          {/* Required disclaimer text */}
+          <p className="recaptcha-disclaimer text-[10px] text-icons-2 dark:text-icons-2 mt-1">
+            This site is protected by reCAPTCHA and the Google{" "}
+            <a
+              href="https://policies.google.com/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline text-accent-green-2 dark:text-accent-green"
+            >
+              Privacy Policy
+            </a>{" "}
+            and{" "}
+            <a
+              href="https://policies.google.com/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline text-accent-green-2 dark:text-accent-green"
+            >
+              Terms of Service
+            </a>{" "}
+            apply.
+          </p>
+        </div>
       </div>
     </div>
   );
 }
 
-export default DocsChat;
+export default KapaChat;
