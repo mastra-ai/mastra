@@ -10,7 +10,7 @@ const meta = {
     theme: { collapsed: true },
     display: "hidden",
   },
-  streaming: <Tag text="experimental">Streaming</Tag>,
+  streaming: { title: "Streaming" },
   "tools-mcp": { title: "Tools & MCP" },
   memory: { title: "Memory" },
   rag: { title: "RAG" },
