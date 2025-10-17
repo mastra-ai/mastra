@@ -180,7 +180,7 @@ To stream AI SDK-formatted parts on the client from an `agent.stream(...)` respo
 ```typescript filename="client-ai-sdk-transform.ts" copy
 import { createUIMessageStream } from 'ai';
 import { toAISdkFormat } from '@mastra/ai-sdk';
-import type { ChunkType } from '@mastra/core/stream';
+import type { ChunkType, MastraModelOutput } from '@mastra/core/stream';
 
 const response = await agent.stream({ messages: 'Tell me a story' });
 
@@ -194,7 +194,7 @@ const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
 
 const uiMessageStream = createUIMessageStream({
   execute: async ({ writer }) => {
-    for await (const part of toAISdkFormat(chunkStream as unknown as any, { from: 'agent' })) {
+    for await (const part of toAISdkFormat(chunkStream as unknown as MastraModelOutput, { from: 'agent' })) {
       writer.write(part);
     }
   },
