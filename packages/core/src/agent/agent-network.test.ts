@@ -254,7 +254,7 @@ describe('Agent - network', () => {
 
     // Consume the stream
     for await (const chunk of anStream) {
-      // Just consume the chunks
+      console.log(chunk);
     }
 
     // Wait a bit for async title generation to complete
@@ -317,7 +317,7 @@ describe('Agent - network', () => {
 
     // Consume the stream
     for await (const chunk of anStream) {
-      // Just consume the chunks
+      console.log(chunk);
     }
 
     // Wait a bit for async title generation to complete
@@ -366,7 +366,7 @@ describe('Agent - network', () => {
 
     // Consume the stream
     for await (const chunk of anStream) {
-      // Just consume the chunks
+      console.log(chunk);
     }
 
     // Wait for any async operations
@@ -415,7 +415,7 @@ describe('Agent - network', () => {
 
     // Consume the stream
     for await (const chunk of anStream) {
-      // Just consume the chunks
+      console.log(chunk);
     }
 
     // Wait for any async operations
