@@ -1043,6 +1043,7 @@ export class Workflow<
           activePaths: [],
           serializedStepGraph: this.serializedStepGraph,
           suspendedPaths: {},
+          resumeLabels: {},
           waitingPaths: {},
           result: undefined,
           error: undefined,
@@ -2237,6 +2238,7 @@ export class Run<
         ]
       | string
       | string[];
+    label?: string;
     runtimeContext?: RuntimeContext;
     runCount?: number;
     tracingContext?: TracingContext;
@@ -2260,6 +2262,7 @@ export class Run<
         ]
       | string
       | string[];
+    label?: string;
     runtimeContext?: RuntimeContext;
     runCount?: number;
     tracingContext?: TracingContext;
@@ -2281,10 +2284,12 @@ export class Run<
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
     }
 
+    const stepParam = params.label ? snapshot?.resumeLabels?.[params.label] : params.step;
+
     // Auto-detect suspended steps if no step is provided
     let steps: string[];
-    if (params.step) {
-      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
+    if (stepParam) {
+      steps = (Array.isArray(stepParam) ? stepParam : [stepParam]).map(step =>
         typeof step === 'string' ? step : step?.id,
       );
     } else {

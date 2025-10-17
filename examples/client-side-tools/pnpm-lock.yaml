@@ -50,7 +50,7 @@ importers:
         specifier: ^5.2.0
         version: 5.2.0(eslint@9.37.0)
       eslint-plugin-react-refresh:
-        specifier: ^0.4.23
+        specifier: ^0.4.24
         version: 0.4.24(eslint@9.37.0)
       globals:
         specifier: ^15.15.0
