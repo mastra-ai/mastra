@@ -78,6 +78,7 @@ export type ProviderModelsMap = {
   readonly nvidia: readonly [
     'black-forest-labs/flux.1-dev',
     'deepseek-ai/deepseek-v3.1',
+    'deepseek-ai/deepseek-v3.1-terminus',
     'google/gemma-3-27b-it',
     'microsoft/phi-4-mini-instruct',
     'moonshotai/kimi-k2-instruct',
@@ -427,7 +428,11 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2-Instruct',
     'openai/gpt-oss-120b',
   ];
-  readonly baseten: readonly ['Qwen3/Qwen3-Coder-480B-A35B-Instruct', 'moonshotai/Kimi-K2-Instruct-0905'];
+  readonly baseten: readonly [
+    'Qwen3/Qwen3-Coder-480B-A35B-Instruct',
+    'moonshotai/Kimi-K2-Instruct-0905',
+    'zai-org/GLM-4.6',
+  ];
   readonly huggingface: readonly [
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
