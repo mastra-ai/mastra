@@ -48,6 +48,9 @@ export function WorkflowDefaultNode({
       {!withoutTopHandle && <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />}
 
       <div
+        data-workflow-node
+        data-workflow-step-status={step?.status ?? 'idle'}
+        data-testid="workflow-default-node"
         className={cn(
           'bg-surface3 rounded-lg w-[274px] border-sm border-border1 pt-2',
           step?.status === 'success' && 'bg-accent1Darker',
