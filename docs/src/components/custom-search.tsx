@@ -2,14 +2,7 @@
 
 import { useVirtualizer } from "@tanstack/react-virtual";
 import cn from "clsx";
-import {
-  BookOpen,
-  Code2,
-  FileText,
-  Lightbulb,
-  Search,
-  Zap,
-} from "lucide-react";
+import { BookOpen, Code2, FileText, Lightbulb, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { FC, SyntheticEvent } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -19,8 +12,6 @@ import {
   useAlgoliaSearch,
 } from "../hooks/use-algolia-search";
 import { BurgerIcon } from "./svgs/Icons";
-import { Button } from "./ui/button";
-
 // Custom hook for responsive design
 const useMediaQuery = (query: string): boolean => {
   const [matches, setMatches] = useState(false);
@@ -80,13 +71,6 @@ const getSectionIcon = (section?: string) => {
   }
 };
 
-/**
- * A built-in search component provides a seamless and fast search
- * experience out of the box. Under the hood, it leverages Algolia
- * for powerful, fast search capabilities with highlighting and filtering.
- *
- * @see [Algolia documentation](https://www.algolia.com/doc/)
- */
 export const CustomSearch: FC<SearchProps> = ({
   className,
   placeholder = "Search docs...",
@@ -185,7 +169,8 @@ export const CustomSearch: FC<SearchProps> = ({
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!search) return;
+    const isEmptyState = !search || !results.length;
+    const emptyStateItemCount = 11; // Number of items in EmptyState
 
     switch (event.key) {
       case "Tab":
@@ -193,16 +178,20 @@ export const CustomSearch: FC<SearchProps> = ({
       case "ArrowDown":
         event.preventDefault();
         setSelectedIndex((prev) => {
-          const newIndex = prev < totalItems - 1 ? prev + 1 : prev;
-          // Scroll to the selected item
-          requestAnimationFrame(() => {
-            virtualizer.scrollToIndex(newIndex, { align: "auto" });
-          });
+          const maxIndex = isEmptyState ? emptyStateItemCount - 1 : totalItems - 1;
+          const newIndex = prev < maxIndex ? prev + 1 : prev;
 
-          // Check if we're approaching the end and should load more
-          // Load more when we're within 5 items of the end
-          if (hasMore && !isLoadingMore && newIndex >= totalItems - 5) {
-            loadMore();
+          // Scroll to the selected item (only for search results with virtualizer)
+          if (!isEmptyState) {
+            requestAnimationFrame(() => {
+              virtualizer.scrollToIndex(newIndex, { align: "auto" });
+            });
+
+            // Check if we're approaching the end and should load more
+            // Load more when we're within 10 items of the end
+            if (hasMore && !isLoadingMore && newIndex >= totalItems - 10) {
+              loadMore();
+            }
           }
 
           return newIndex;
@@ -213,10 +202,13 @@ export const CustomSearch: FC<SearchProps> = ({
         event.preventDefault();
         setSelectedIndex((prev) => {
           const newIndex = prev > 0 ? prev - 1 : prev;
-          // Scroll to the selected item
-          requestAnimationFrame(() => {
-            virtualizer.scrollToIndex(newIndex, { align: "auto" });
-          });
+
+          // Scroll to the selected item (only for search results with virtualizer)
+          if (!isEmptyState) {
+            requestAnimationFrame(() => {
+              virtualizer.scrollToIndex(newIndex, { align: "auto" });
+            });
+          }
           return newIndex;
         });
         break;
@@ -225,15 +217,46 @@ export const CustomSearch: FC<SearchProps> = ({
         if (event.nativeEvent.isComposing) {
           return;
         }
-        const selectedResult = flattenedResults[selectedIndex];
-        if (selectedResult) {
-          handleSelect(selectedResult);
+
+        if (isEmptyState) {
+          // Handle empty state selection
+          handleEmptyStateSelect(selectedIndex);
+        } else {
+          // Handle search result selection
+          const selectedResult = flattenedResults[selectedIndex];
+          if (selectedResult) {
+            handleSelect(selectedResult);
+          }
         }
         break;
       case "Escape":
         event.preventDefault();
         closeModal();
         break;
+    }
+  };
+
+  // Handler for empty state item selection
+  const handleEmptyStateSelect = (index: number) => {
+    const emptyStateLinks = [
+      "/docs/getting-started/installation",
+      "/docs/agents/overview",
+      "/docs/workflows/overview",
+      "/docs/server-db/local-dev-playground",
+      "/docs/streaming/overview",
+      "/docs/tools-mcp/mcp-overview",
+      "/docs/memory/overview",
+      "/docs/scorers/overview",
+      "/docs/rag/overview",
+      "/docs/observability/overview",
+      "/docs/deployment/overview",
+    ];
+
+    const link = emptyStateLinks[index];
+    if (link) {
+      inputRef.current.blur();
+      router.push(link);
+      closeModal();
     }
   };
 
@@ -281,7 +304,7 @@ export const CustomSearch: FC<SearchProps> = ({
           spellCheck={false}
           className={cn(
             "x:[&::-webkit-search-cancel-button]:appearance-none",
-            "outline-none caret-[var(--light-green-accent-2)]  dark:caret-accent-green dark:text-icons-6 text-[var(--light-color-text-4)] focus:outline-none w-full placeholder:text-icons-4 dark:placeholder:text-icons-2 placeholder:text-small md:placeholder:text-base placeholder:font-medium",
+            "outline-none caret-[var(--light-green-accent-2)] dark:caret-accent-green dark:text-icons-6 text-[var(--light-color-text-4)] focus:outline-none w-full placeholder:text-icons-4 dark:placeholder:text-icons-2 placeholder:text-small md:placeholder:text-base placeholder:font-medium",
           )}
           autoComplete="off"
           type="search"
@@ -293,172 +316,212 @@ export const CustomSearch: FC<SearchProps> = ({
         />
       </div>
 
-      <div
-        className={cn(
-          "relative overflow-hidden p-1.5",
-          !search || !results.length ? "h-fit" : "h-[400px]",
-        )}
-      >
+      <div className={cn("relative overflow-hidden p-1.5 h-[400px]")}>
         <div
           ref={resultsContainerRef}
           className="overflow-auto h-full"
           id="docs-search-results"
         >
-          <div
-            className={cn(
-              "x:motion-reduce:transition-none",
-              "x:origin-top x:transition x:duration-200 x:ease-out x:data-closed:scale-95 x:data-closed:opacity-0 x:empty:invisible",
-              "x:w-full",
-            )}
-          >
+          {!search || !results.length || showLoader ? (
+            <EmptyState
+              selectedIndex={selectedIndex}
+              onSelect={handleEmptyStateSelect}
+              onHover={setSelectedIndex}
+            />
+          ) : (
             <div
-              style={{
-                height: `${virtualizer.getTotalSize()}px`,
-                width: "100%",
-                position: "relative",
-              }}
+              className={cn(
+                "x:motion-reduce:transition-none",
+                "x:origin-top x:transition x:duration-200 x:ease-out x:data-closed:scale-95 x:data-closed:opacity-0 x:empty:invisible",
+                "x:w-full",
+              )}
             >
-              {virtualizer.getVirtualItems().map((virtualItem) => {
-                if (showLoader) {
-                  return;
-                }
+              <div
+                style={{
+                  height: `${virtualizer.getTotalSize()}px`,
+                  width: "100%",
+                  position: "relative",
+                }}
+              >
+                {virtualizer.getVirtualItems().map((virtualItem) => {
+                  if (showLoader) {
+                    return;
+                  }
 
-                // The Rest are search results
-                const resultIndex = virtualItem.index;
-                const subResult = flattenedResults[resultIndex];
-                const isSelected = selectedIndex === virtualItem.index;
+                  // The Rest are search results
+                  const resultIndex = virtualItem.index;
+                  const subResult = flattenedResults[resultIndex];
+                  const isSelected = selectedIndex === virtualItem.index;
 
-                if (!subResult) return null;
+                  if (!subResult) return null;
 
-                // Get the appropriate icon component for this section
-                const IconComponent = getSectionIcon(subResult.section);
+                  // Get the appropriate icon component for this section
+                  const IconComponent = getSectionIcon(subResult.section);
 
-                return (
-                  <div
-                    key={subResult.url}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: `${virtualItem.size}px`,
-                      transform: `translateY(${virtualItem.start}px)`,
-                    }}
-                  >
+                  return (
                     <div
-                      className={cn(
-                        "flex flex-col gap-1 p-2 rounded-md cursor-pointer",
-                        isSelected
-                          ? "dark:bg-surface-5 bg-[var(--light-color-surface-2)]"
-                          : "bg-[var(--light-color-surface-15)] dark:bg-surface-4",
-                      )}
-                      onClick={() => handleSelect(subResult)}
-                      onMouseEnter={() => setSelectedIndex(virtualItem.index)}
+                      key={subResult.url}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: `${virtualItem.size}px`,
+                        transform: `translateY(${virtualItem.start}px)`,
+                      }}
                     >
-                      <span className="pl-7 text-xs font-medium capitalize text-icons-3">
-                        {subResult.section}
-                      </span>
-                      <div className="flex gap-2 items-center">
-                        <IconComponent className="w-4 h-4 md:w-5 md:h-5 text-icons-3 shrink-0" />
-                        <span
-                          className="text-sm font-medium truncate dark:text-icons-6 text-[var(--light-color-text-4)] [&_mark]:text-accent-green-2 dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
-                          dangerouslySetInnerHTML={{
-                            __html: subResult.title,
-                          }}
-                        />
-                      </div>
-                      <div className="ml-2 flex items-center gap-2 truncate border-l-2 dark:border-borders-2 border-[var(--light-border-code)] pl-4">
-                        <BurgerIcon className="w-3 h-3 md:w-3.5 md:h-3.5 shrink-0 text-icons-3" />
-                        <div
-                          className="text-sm font-normal truncate text-icons-3 [&_mark]:text-accent-green-2 dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
-                          dangerouslySetInnerHTML={{
-                            __html: subResult.excerpt,
-                          }}
-                        />
+                      <div
+                        className={cn(
+                          "flex flex-col gap-1 p-2 rounded-md cursor-pointer",
+                          isSelected
+                            ? "dark:bg-surface-5 bg-[var(--light-color-surface-2)]"
+                            : "bg-[var(--light-color-surface-15)] dark:bg-surface-4",
+                        )}
+                        onClick={() => handleSelect(subResult)}
+                        onMouseEnter={() => setSelectedIndex(virtualItem.index)}
+                      >
+                        <span className="pl-7 text-xs font-medium capitalize text-icons-3">
+                          {subResult.section}
+                        </span>
+                        <div className="flex gap-2 items-center">
+                          <IconComponent className="w-4 h-4 md:w-5 md:h-5 text-icons-3 shrink-0" />
+                          <span
+                            className="text-sm font-medium truncate dark:text-icons-6 text-[var(--light-color-text-4)] [&_mark]:text-accent-green-2 dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
+                            dangerouslySetInnerHTML={{
+                              __html: subResult.title,
+                            }}
+                          />
+                        </div>
+                        <div className="ml-2 flex items-center gap-2 truncate border-l-2 dark:border-borders-2 border-[var(--light-border-code)] pl-4">
+                          <BurgerIcon className="w-3 h-3 md:w-3.5 md:h-3.5 shrink-0 text-icons-3" />
+                          <div
+                            className="text-sm font-normal truncate text-icons-3 [&_mark]:text-accent-green-2 dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
+                            dangerouslySetInnerHTML={{
+                              __html: subResult.excerpt,
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Intersection observer trigger for infinite scroll */}
-            {hasMore && results.length > 0 && (
-              <div
-                ref={loadMoreTriggerRef}
-                className="p-4 text-sm text-center text-icons-3"
-              >
-                {isLoadingMore && (
-                  <div className="flex gap-2 justify-center items-center">
-                    <div className="w-4 h-4 rounded-full border-2 animate-spin border-accent-green border-t-transparent" />
-                    <span>Loading more results...</span>
-                  </div>
-                )}
+                  );
+                })}
               </div>
-            )}
 
-            {(!search || !results.length || showLoader) && (
-              <EmptyState setSearch={setSearch} />
-            )}
-          </div>
+              {/* Intersection observer trigger for infinite scroll */}
+              {hasMore && results.length > 0 && (
+                <div
+                  ref={loadMoreTriggerRef}
+                  className="p-4 text-sm text-center text-icons-3"
+                >
+                  {isLoadingMore && (
+                    <div className="flex gap-2 justify-center items-center">
+                      <div className="w-4 h-4 rounded-full border-2 animate-spin border-accent-green border-t-transparent" />
+                      <span>Loading more results...</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
 
-function EmptyState({ setSearch }: { setSearch: (search: string) => void }) {
+function EmptyState({
+  selectedIndex,
+  onSelect,
+  onHover,
+}: {
+  selectedIndex: number;
+  onSelect: (link: string) => void;
+  onHover: (index: number) => void;
+}) {
   const searches = [
     {
-      label: "Search for RAG",
-      search: "RAG",
+      label: "Quickstart",
+      description: "Get up and running with Mastra AI",
+      link: "/docs/getting-started/installation",
     },
     {
-      label: "Search for Workflows",
-      search: "Workflows",
+      label: "Agents",
+      description: "Use LLMs and tools to solve open-ended tasks",
+      link: "/docs/agents/overview",
     },
     {
-      label: "Search for Tools and MCP",
-      search: "Tools MCP",
+      label: "Workflows",
+      description: "Define and manage complex sequences of tasks",
+      link: "/docs/workflows/overview",
     },
     {
-      label: "Search for Memory",
-      search: "Memory",
+      label: "Playground",
+      description: "Test your agents, workflows, and tools during development",
+      link: "/docs/server-db/local-dev-playground",
     },
     {
-      label: "Search for Evals",
-      search: "Evals",
+      label: "Streaming",
+      description: "Streaming for real-time agent interactions",
+      link: "/docs/streaming/overview",
     },
     {
-      label: "Search for Voice",
-      search: "Voice",
+      label: "MCP",
+      description: "Connect AI agents to external tools and resources",
+      link: "/docs/tools-mcp/mcp-overview",
+    },
+    {
+      label: "Memory",
+      description: "Manage agent context across conversations",
+      link: "/docs/memory/overview",
+    },
+    {
+      label: "Scorers",
+      description: "Evaluate agent performance",
+      link: "/docs/scorers/overview",
+    },
+    {
+      label: "RAG",
+      description: "Incorporate relevant context from your own data sources",
+      link: "/docs/rag/overview",
+    },
+    {
+      label: "Observability",
+      description: "Monitor and log agent activity",
+      link: "/docs/observability/overview",
+    },
+    {
+      label: "Deployment",
+      description: "Deploy your agents, workflows, and tools",
+      link: "/docs/deployment/overview",
     },
   ];
 
   return (
-    <div className="flex flex-col">
-      <p className="mt-4 pl-2 mb-2 text-[13px] font-medium text-icons-3">
-        Suggestions
-      </p>
-      <ul className="flex flex-col w-full">
-        {searches.map((search) => (
-          <Button
-            key={search.search}
-            variant="ghost"
-            onClick={() => setSearch(search.search)}
+    <div className="flex flex-col gap-1">
+      {searches.map((search, index) => {
+        const isSelected = selectedIndex === index;
+        return (
+          <div
+            key={search.link}
             className={cn(
-              "justify-start w-full h-auto text-left rounded-md cursor-pointer md:p-3",
-              "hover:dark:bg-surface-5 hover:bg-[var(--light-color-surface-2)]",
-              "bg-[var(--light-color-surface-15)] dark:bg-surface-4",
+              "flex flex-col gap-1 p-2 rounded-md cursor-pointer",
+              isSelected
+                ? "dark:bg-surface-5 bg-[var(--light-color-surface-2)]"
+                : "bg-[var(--light-color-surface-15)] dark:bg-surface-4",
             )}
+            onClick={() => onSelect(search.link)}
+            onMouseEnter={() => onHover(index)}
           >
-            <Zap className="w-4 h-4 md:w-5 md:h-5 shrink-0 text-accent-green-2 dark:text-accent-green" />
-            <span className="text-sm font-normal truncate dark:text-icons-6 text-[var(--light-color-text-4)]">
+            <p className="text-sm font-medium truncate dark:text-icons-6 text-[var(--light-color-text-4)]">
               {search.label}
-            </span>
-          </Button>
-        ))}
-      </ul>
+            </p>
+
+            <p className="text-sm font-normal truncate text-icons-3">
+              {search.description}
+            </p>
+          </div>
+        );
+      })}
     </div>
   );
 }

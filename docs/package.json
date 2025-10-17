@@ -38,6 +38,7 @@
     "algoliasearch": "5.25.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
     "flags": "^4.0.0",
     "gt-next": "^5.2.21",
     "gtx-cli": "^1.2.33",
