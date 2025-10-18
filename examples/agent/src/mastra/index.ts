@@ -5,7 +5,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { myWorkflow } from './workflows';
-import { chefModelV2Agent, networkAgent } from './agents/model-v2-agent';
+import { chefModelV2Agent, networkAgent, weatherAgent } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/scores';
 import { myWorkflowX } from './workflows/other';
 
@@ -29,6 +29,7 @@ export const mastra = new Mastra({
     evalAgent,
     chefModelV2Agent,
     networkAgent,
+    weatherAgent,
   },
   logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
   storage,
