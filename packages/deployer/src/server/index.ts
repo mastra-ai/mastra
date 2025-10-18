@@ -24,6 +24,7 @@ import { rootHandler } from './handlers/root';
 import { agentBuilderRouter } from './handlers/routes/agent-builder/router';
 import { getModelProvidersHandler } from './handlers/routes/agents/handlers';
 import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
+import { completionsRouter } from './handlers/routes/completions/router';
 import { logsRouter } from './handlers/routes/logs/router';
 import { mcpRouter } from './handlers/routes/mcp/router';
 import { memoryRoutes } from './handlers/routes/memory/router';
@@ -461,6 +462,8 @@ export async function createHonoServer(
   app.route('/api/scores', scoresRouter(bodyLimitOptions));
   // Agent builder routes
   app.route('/api/agent-builder', agentBuilderRouter(bodyLimitOptions));
+  // Completions routes (OpenAI-compatible)
+  app.route('/api/chat', completionsRouter(bodyLimitOptions));
   // Tool routes
   app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
   // Vector routes
@@ -618,12 +621,12 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       hostname: serverOptions?.host,
       ...(isHttpsEnabled
         ? {
-            createServer: https.createServer,
-            serverOptions: {
-              key,
-              cert,
-            },
-          }
+          createServer: https.createServer,
+          serverOptions: {
+            key,
+            cert,
+          },
+        }
         : {}),
     },
     () => {

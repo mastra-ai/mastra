@@ -1,17 +1,23 @@
-import { z } from 'zod';
-import { mastra } from './mastra';
+import { generateText } from 'ai-v5';
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
-const agent = mastra.getAgent('chefAgent');
-const responsesAgent = mastra.getAgent('chefAgentResponses');
-const agentThatHarassesYou = mastra.getAgent('agentThatHarassesYou');
 
-const stream = await agentThatHarassesYou.stream('I want to fight you');
+const mastraOpenAICompatible = createOpenAICompatible({
+  name: 'mastra',
+  baseURL: 'http://localhost:4111/api',
+  apiKey: process.env.OPENAI_API_KEY,
 
-for await (const chunk of stream.textStream) {
-  console.log(`frontend received chunk: ${chunk}`);
-}
+})
 
-console.log('done');
+const model = mastraOpenAICompatible('mastra/networkAgent')
+
+const result = await generateText({
+  model,
+  prompt: 'Make me a recipe with tomato and cheese',
+})
+
+console.log(result.content);
+
 
 // async function text() {
 //   // Query 1: Basic pantry ingredients
