@@ -18,20 +18,32 @@ export type { AnthropicProviderOptions, GoogleGenerativeAIProviderOptions, OpenA
 export type GoogleProviderOptions = GoogleGenerativeAIProviderOptions;
 export type OpenAIProviderOptions = OpenAIResponsesProviderOptions;
 
-// Union type for all provider options
-export type ProviderSpecificOptions = 
-  | AnthropicProviderOptions
-  | GoogleProviderOptions
-  | OpenAIProviderOptions
-  | XaiProviderOptions;
-
 // Map provider IDs to their specific options types
 export type ProviderOptionsMap = {
-  anthropic: AnthropicProviderOptions;
-  google: GoogleProviderOptions;
-  openai: OpenAIProviderOptions;
-  xai: XaiProviderOptions;
+  anthropic?: AnthropicProviderOptions;
+  google?: GoogleProviderOptions;
+  openai?: OpenAIProviderOptions;
+  xai?: XaiProviderOptions;
 };
+
+/**
+ * Provider options for AI SDK models.
+ * 
+ * Provider options are keyed by provider ID and contain provider-specific configuration.
+ * 
+ * @example
+ * ```ts
+ * const result = await agent.generate('hello', {
+ *   providerOptions: {
+ *     anthropic: {
+ *       sendReasoning: true,
+ *       thinking: { type: 'enabled', budget: ['low'] }
+ *     }
+ *   }
+ * });
+ * ```
+ */
+export type ProviderOptions = ProviderOptionsMap;
 
 // Helper type to get provider options based on provider ID
 export type ProviderOptionsFor<T extends keyof ProviderOptionsMap> = ProviderOptionsMap[T];

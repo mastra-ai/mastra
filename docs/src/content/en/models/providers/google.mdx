@@ -360,7 +360,9 @@ Google supports the following provider-specific options via the `providerOptions
 ```typescript
 const response = await agent.generate("Hello!", {
   providerOptions: {
-    // See available options in the table below
+    google: {
+      // See available options in the table below
+    }
   }
 });
 ```

@@ -324,7 +324,9 @@ xAI supports the following provider-specific options via the `providerOptions` p
 ```typescript
 const response = await agent.generate("Hello!", {
   providerOptions: {
-    // See available options in the table below
+    xai: {
+      // See available options in the table below
+    }
   }
 });
 ```

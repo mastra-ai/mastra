@@ -34,15 +34,19 @@ function extractPropertiesFromType(type: Type): PropertyInfo[] {
     if (declarations.length === 0) continue;
 
     const declaration = declarations[0];
+    if (!declaration) continue;
+
     const propType = prop.getTypeAtLocation(declaration);
     const propName = prop.getName();
     const isOptional = prop.isOptional();
 
     // Get JSDoc comment if available
     let description: string | undefined;
-    const jsDocs = declaration.getJsDocs();
-    if (jsDocs.length > 0) {
-      description = jsDocs[0].getDescription().trim();
+    if ('getJsDocs' in declaration && typeof declaration.getJsDocs === 'function') {
+      const jsDocs = declaration.getJsDocs();
+      if (jsDocs.length > 0) {
+        description = jsDocs[0].getDescription().trim();
+      }
     }
 
     // Format the type string
@@ -187,7 +191,9 @@ export function generateProviderOptionsSection(providerId: string): string {
   markdown += `\`\`\`typescript\n`;
   markdown += `const response = await agent.generate("Hello!", {\n`;
   markdown += `  providerOptions: {\n`;
-  markdown += `    // See available options in the table below\n`;
+  markdown += `    ${providerId}: {\n`;
+  markdown += `      // See available options in the table below\n`;
+  markdown += `    }\n`;
   markdown += `  }\n`;
   markdown += `});\n`;
   markdown += `\`\`\`\n\n`;
