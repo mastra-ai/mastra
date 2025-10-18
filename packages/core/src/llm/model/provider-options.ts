@@ -9,6 +9,7 @@
 import type { AnthropicProviderOptions } from '@ai-sdk/anthropic-v5';
 import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google-v5';
 import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai-v5';
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { XaiProviderOptions } from '@ai-sdk/xai-v5';
 
 // Re-export the types
@@ -18,18 +19,14 @@ export type { AnthropicProviderOptions, GoogleGenerativeAIProviderOptions, OpenA
 export type GoogleProviderOptions = GoogleGenerativeAIProviderOptions;
 export type OpenAIProviderOptions = OpenAIResponsesProviderOptions;
 
-// Map provider IDs to their specific options types
-export type ProviderOptionsMap = {
-  anthropic?: AnthropicProviderOptions;
-  google?: GoogleProviderOptions;
-  openai?: OpenAIProviderOptions;
-  xai?: XaiProviderOptions;
-};
-
 /**
  * Provider options for AI SDK models.
  * 
  * Provider options are keyed by provider ID and contain provider-specific configuration.
+ * This type extends SharedV2ProviderOptions to maintain compatibility with AI SDK.
+ * 
+ * Each provider's options can include both known typed options and unknown keys for
+ * forward compatibility with new provider features.
  * 
  * @example
  * ```ts
@@ -43,7 +40,9 @@ export type ProviderOptionsMap = {
  * });
  * ```
  */
-export type ProviderOptions = ProviderOptionsMap;
-
-// Helper type to get provider options based on provider ID
-export type ProviderOptionsFor<T extends keyof ProviderOptionsMap> = ProviderOptionsMap[T];
+export type ProviderOptions = SharedV2ProviderOptions & {
+  anthropic?: AnthropicProviderOptions & Record<string, any>;
+  google?: GoogleProviderOptions & Record<string, any>;
+  openai?: OpenAIProviderOptions & Record<string, any>;
+  xai?: XaiProviderOptions & Record<string, any>;
+};
