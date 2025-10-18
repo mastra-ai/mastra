@@ -341,7 +341,12 @@ This provider can also be installed directly as a standalone package, which can 
 \`\`\`bash npm2yarn copy
 npm install ${provider.packageName}
 \`\`\`
-${aiSdkDocsLink ? `\nFor detailed provider-specific documentation, see the [AI SDK ${provider.name} provider docs](${aiSdkDocsLink}).` : ''}
+${
+  aiSdkDocsLink
+    ? `
+For detailed provider-specific documentation, see the [AI SDK ${provider.name} provider docs](${aiSdkDocsLink}).`
+    : ''
+}
 `
     : ''
 }`;
@@ -944,11 +949,8 @@ async function generateAiSdkProviderPage(provider: any, aiSdkDocsUrl: string | n
   const logoUrl = getLogoUrl(provider.id);
   const logoClass = getLogoClass(provider.id);
 
-  const aiSdkDocsSection = aiSdkDocsUrl
-    ? `
-## AI SDK Documentation
-
-For detailed provider-specific documentation, see the [AI SDK ${provider.name} provider docs](${aiSdkDocsUrl}).`
+  const aiSdkDocsText = aiSdkDocsUrl
+    ? `\n\nFor detailed provider-specific documentation, see the [AI SDK ${provider.name} provider docs](${aiSdkDocsUrl}).`
     : '';
 
   return `---
@@ -960,14 +962,15 @@ ${getGeneratedComment()}
 
 # <img src="${logoUrl}" alt="${provider.name} logo" className="${logoClass}" />${provider.name}
 
-${provider.name} is available through the AI SDK. Install the provider package to use their models with Mastra.
+${provider.name} is available through the AI SDK. Install the provider package to use their models with Mastra.${aiSdkDocsText}
+
+To use this provider with Mastra agents, see the [Agent Overview documentation](/en/docs/agents/overview).
 
 ## Installation
 
 \`\`\`bash npm2yarn copy
 npm install ${packageName}
 \`\`\`
-${aiSdkDocsSection}
 `;
 }
 
@@ -1040,7 +1043,10 @@ async function generateDocs() {
   console.info('✅ Generated gateways/_meta.ts');
 
   // Generate AI SDK provider documentation
-  console.info('\\n🔍 Filtering AI SDK providers...');
+  console.info(
+    '\
+🔍 Filtering AI SDK providers...',
+  );
   const supportedProviderIds = new Set(Object.keys(providerRegistry));
   const aiSdkProviders = allModelsDevProviders
     .filter(p => {
