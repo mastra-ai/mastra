@@ -2,10 +2,12 @@ import { TransformStream } from 'stream/web';
 import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from 'ai-v5';
 import type { JSONSchema7, Schema } from 'ai-v5';
 import type z3 from 'zod/v3';
-import type z4 from 'zod/v4';
+import z4 from 'zod/v4';
 import type { StructuredOutputOptions } from '../../agent/types';
-import { MastraError } from '../../error';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import type { IMastraLogger } from '../../logger';
 import { safeValidateTypes } from '../aisdk/v5/compat';
+import type { ValidationResult } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
 import { getTransformedSchema } from './schema';
@@ -55,37 +57,110 @@ type ValidateAndTransformFinalResult<OUTPUT extends OutputSchema = undefined> =
 abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
   abstract readonly type: 'object' | 'array' | 'enum';
   /**
-   * The user-provided schema to validate the final result against.
+   * The original user-provided schema (Zod, JSON Schema, or AI SDK Schema).
    */
-  readonly schema: Schema<InferSchemaOutput<OUTPUT>> | undefined;
-
+  readonly schema: OUTPUT | undefined;
   /**
-   * Whether to validate partial chunks. @planned
+   * Validate partial chunks as they are streamed. @planned
    */
   readonly validatePartialChunks: boolean = false;
-  /**
-   * Partial schema for validating partial chunks as they are streamed. @planned
-   */
   readonly partialSchema?: ZodLikePartialSchema<InferSchemaOutput<OUTPUT>> | undefined;
 
   constructor(schema?: OUTPUT, options: { validatePartialChunks?: boolean } = {}) {
-    if (!schema) {
-      this.schema = undefined;
-    } else if (
-      schema &&
-      typeof schema === 'object' &&
-      !(schema as z3.ZodType<any> | z4.ZodType<any, any>).safeParse &&
-      !(schema as Schema<any>).jsonSchema
+    this.schema = schema;
+
+    if (
+      options.validatePartialChunks &&
+      this.isZodSchema(schema) &&
+      'partial' in schema &&
+      typeof schema.partial === 'function'
     ) {
-      this.schema = jsonSchema(schema as JSONSchema7);
-    } else {
-      this.schema = asSchema(schema as z3.ZodType<any> | z4.ZodType<any, any> | Schema<any>);
+      this.partialSchema = schema.partial() as ZodLikePartialSchema<InferSchemaOutput<OUTPUT>>;
+      this.validatePartialChunks = true;
     }
-    if (options.validatePartialChunks) {
-      if (schema !== undefined && 'partial' in schema && typeof schema.partial === 'function') {
-        this.validatePartialChunks = true;
-        this.partialSchema = schema.partial() as ZodLikePartialSchema<InferSchemaOutput<OUTPUT>>;
+  }
+
+  /**
+   * Checks if the original schema is a Zod schema with safeParse method.
+   */
+  protected isZodSchema(schema: unknown): schema is z3.ZodType<any, z3.ZodTypeDef, any> | z4.ZodType<any, any> {
+    return (
+      schema !== undefined &&
+      schema !== null &&
+      typeof schema === 'object' &&
+      'safeParse' in schema &&
+      typeof schema.safeParse === 'function'
+    );
+  }
+
+  /**
+   * Validates a value against the schema, preferring Zod's safeParse.
+   */
+  protected async validateValue(value: unknown): Promise<ValidationResult<InferSchemaOutput<OUTPUT>>> {
+    if (!this.schema) {
+      return {
+        success: true,
+        value: value as InferSchemaOutput<OUTPUT>,
+      };
+    }
+
+    if (this.isZodSchema(this.schema)) {
+      try {
+        const result = this.schema.safeParse(value);
+        if (result.success) {
+          return {
+            success: true,
+            value: result.data as InferSchemaOutput<OUTPUT>,
+          };
+        } else {
+          return {
+            success: false,
+            error: new MastraError(
+              {
+                domain: ErrorDomain.AGENT,
+                category: ErrorCategory.SYSTEM,
+                id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
+                text: `Structured output validation failed\n${z4.prettifyError(result.error)}\n`,
+                details: {
+                  value: typeof value === 'object' ? JSON.stringify(value) : String(value),
+                },
+              },
+              result.error,
+            ),
+          };
+        }
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error : new Error('Zod validation failed', { cause: error }),
+        };
       }
+    }
+
+    try {
+      if (typeof this.schema === 'object' && !(this.schema as Schema<any>).jsonSchema) {
+        // Plain JSONSchema7 object - wrap it using jsonSchema()
+        const result = await safeValidateTypes({ value, schema: jsonSchema(this.schema as JSONSchema7) });
+        return result as ValidationResult<InferSchemaOutput<OUTPUT>>;
+      } else if ((this.schema as Schema<any>).jsonSchema) {
+        // Already an AI SDK Schema - use it directly
+        const result = await safeValidateTypes({
+          value,
+          schema: this.schema as Schema<InferSchemaOutput<OUTPUT>>,
+        });
+        return result;
+      } else {
+        // Should not reach here, but handle as fallback
+        return {
+          success: true,
+          value: value as InferSchemaOutput<OUTPUT>,
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error : new Error('Validation failed', { cause: error }),
+      };
     }
   }
 
@@ -114,6 +189,15 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
    */
   protected preprocessText(accumulatedText: string): string {
     let processedText = accumulatedText;
+
+    // Some LLMs (e.g., LMStudio with jsonPromptInjection) wrap JSON in special tokens
+    // Format: '<|channel|>final <|constrain|>JSON<|message|>{"key":"value"}'
+    if (processedText.includes('<|message|>')) {
+      const match = processedText.match(/<\|message\|>([\s\S]+)$/);
+      if (match && match[1]) {
+        processedText = match[1];
+      }
+    }
 
     // Some LLMs wrap the JSON response in code blocks.
     // In that case, first try to extract content from complete code blocks
@@ -189,33 +273,7 @@ class ObjectFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseF
     const rawValue = this.preprocessText(finalRawValue);
     const { value } = await parsePartialJson(rawValue);
 
-    if (!this.schema) {
-      return {
-        success: true,
-        value: value as InferSchemaOutput<OUTPUT>,
-      };
-    }
-
-    try {
-      const result = await safeValidateTypes({ value, schema: this.schema });
-
-      if (result.success) {
-        return {
-          success: true,
-          value: result.value,
-        };
-      } else {
-        return {
-          success: false,
-          error: result.error ?? new Error('Validation failed', { cause: result.error }),
-        };
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error : new Error('Validation failed', { cause: error }),
-      };
-    }
+    return this.validateValue(value);
   }
 }
 
@@ -299,33 +357,7 @@ class ArrayFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFo
       };
     }
 
-    if (!this.schema) {
-      return {
-        success: true,
-        value: resultValue as InferSchemaOutput<OUTPUT>,
-      };
-    }
-
-    try {
-      const result = await safeValidateTypes({ value: resultValue, schema: this.schema });
-
-      if (result.success) {
-        return {
-          success: true,
-          value: result.value,
-        };
-      } else {
-        return {
-          success: false,
-          error: result.error ?? new Error('Validation failed', { cause: result.error }),
-        };
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error : new Error('Validation failed', { cause: error }),
-      };
-    }
+    return this.validateValue(resultValue);
   }
 }
 
@@ -347,11 +379,29 @@ class EnumFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFor
    * @returns Best matching enum value or undefined if no matches
    */
   private findBestEnumMatch(partialResult: string): string | undefined {
-    if (!this.schema?.jsonSchema?.enum) {
+    if (!this.schema) {
       return undefined;
     }
 
-    const enumValues = this.schema.jsonSchema.enum;
+    // Get enum values from the schema (need to wrap it first to get jsonSchema)
+    let enumValues: unknown[] | undefined;
+
+    if (this.isZodSchema(this.schema)) {
+      const wrappedSchema = asSchema(this.schema);
+      enumValues = wrappedSchema.jsonSchema?.enum;
+    } else if (typeof this.schema === 'object' && !(this.schema as Schema<any>).jsonSchema) {
+      // Plain JSONSchema7
+      const wrappedSchema = jsonSchema(this.schema as JSONSchema7);
+      enumValues = wrappedSchema.jsonSchema?.enum;
+    } else {
+      // Already an AI SDK Schema
+      enumValues = (this.schema as Schema<any>).jsonSchema?.enum;
+    }
+
+    if (!enumValues) {
+      return undefined;
+    }
+
     const possibleEnumValues = enumValues
       .filter((value: unknown): value is string => typeof value === 'string')
       .filter((enumValue: string) => enumValue.startsWith(partialResult));
@@ -416,35 +466,8 @@ class EnumFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFor
       };
     }
 
-    if (!this.schema) {
-      return {
-        success: true,
-        value: finalValue.result,
-      };
-    }
-
-    try {
-      // Validate the unwrapped enum value against original schema
-      const result = await safeValidateTypes({ value: finalValue.result, schema: this.schema });
-
-      if (result.success) {
-        // Return the unwrapped enum value, not the wrapped object
-        return {
-          success: true,
-          value: result.value,
-        };
-      } else {
-        return {
-          success: false,
-          error: result.error ?? new Error('Enum validation failed'),
-        };
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error : new Error('Validation failed'),
-      };
-    }
+    // Validate the unwrapped enum value
+    return this.validateValue(finalValue.result);
   }
 }
 
@@ -455,13 +478,8 @@ class EnumFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFor
  * @param transformedSchema - Wrapped/transformed schema used for LLM generation (arrays wrapped in {elements: []}, enums in {result: ""})
  * @returns Handler instance for the detected format type
  */
-function createOutputHandler<OUTPUT extends OutputSchema = undefined>({
-  schema,
-  transformedSchema,
-}: {
-  schema?: OUTPUT;
-  transformedSchema: ReturnType<typeof getTransformedSchema<OUTPUT>>;
-}) {
+function createOutputHandler<OUTPUT extends OutputSchema = undefined>({ schema }: { schema?: OUTPUT }) {
+  const transformedSchema = getTransformedSchema(schema);
   switch (transformedSchema?.outputFormat) {
     case 'array':
       return new ArrayFormatHandler(schema);
@@ -485,38 +503,24 @@ function createOutputHandler<OUTPUT extends OutputSchema = undefined>({
  * - Always passes through original chunks for downstream processing
  */
 export function createObjectStreamTransformer<OUTPUT extends OutputSchema = undefined>({
-  isLLMExecutionStep,
   structuredOutput,
+  logger,
 }: {
-  isLLMExecutionStep?: boolean;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  logger?: IMastraLogger;
 }) {
-  const transformedSchema = getTransformedSchema(structuredOutput?.schema);
-  const handler = createOutputHandler({ transformedSchema, schema: structuredOutput?.schema });
+  const handler = createOutputHandler({ schema: structuredOutput?.schema });
 
   let accumulatedText = '';
   let previousObject: any = undefined;
-  let finishReason: string | undefined;
   let currentRunId: string | undefined;
+  let finalResult: ValidateAndTransformFinalResult<OUTPUT> | undefined;
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
-      if (!isLLMExecutionStep) {
-        // Bypassing processing if we are not in the LLM execution step (inner stream)
-        // OR if there is no output schema provided
-        controller.enqueue(chunk);
-        return;
-      }
-
       if (chunk.runId) {
         // save runId to use in error chunks
         currentRunId = chunk.runId;
-      }
-
-      if (chunk.type === 'finish') {
-        finishReason = chunk.payload.stepResult.reason;
-        controller.enqueue(chunk);
-        return;
       }
 
       if (chunk.type === 'text-delta' && typeof chunk.payload?.text === 'string') {
@@ -540,61 +544,74 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         }
       }
 
+      // Validate and resolve object when text generation completes
+      if (chunk.type === 'text-end') {
+        controller.enqueue(chunk);
+
+        if (accumulatedText?.trim() && !finalResult) {
+          finalResult = await handler.validateAndTransformFinal(accumulatedText);
+          if (finalResult.success) {
+            controller.enqueue({
+              from: ChunkFrom.AGENT,
+              runId: currentRunId ?? '',
+              type: 'object-result',
+              object: finalResult.value,
+            });
+          }
+        }
+        return;
+      }
+
       // Always pass through the original chunk for downstream processing
       controller.enqueue(chunk);
     },
 
     async flush(controller) {
-      // Bypass final validation if there is no output schema provided
-      // or if we are not in the LLM execution step (inner stream)
-      if (!isLLMExecutionStep) {
-        return;
+      if (finalResult && !finalResult.success) {
+        handleValidationError(finalResult.error, controller);
       }
-
-      if (['tool-calls'].includes(finishReason ?? '')) {
-        // TODO: this breaks object output when tools are called.
-        // The reason we did this was to be able to work with client-side tool calls. We need the object to resolve in that case
-        // but this will
-        // controller.enqueue({
-        //   from: ChunkFrom.AGENT,
-        //   runId: currentRunId ?? '',
-        //   type: 'object-result',
-        //   object: undefined as InferSchemaOutput<OUTPUT>,
-        // });
-        return;
+      // Safety net: If text-end was never emitted, validate now as fallback
+      // This handles edge cases where providers might not emit text-end
+      if (accumulatedText?.trim() && !finalResult) {
+        finalResult = await handler.validateAndTransformFinal(accumulatedText);
+        if (finalResult.success) {
+          controller.enqueue({
+            from: ChunkFrom.AGENT,
+            runId: currentRunId ?? '',
+            type: 'object-result',
+            object: finalResult.value,
+          });
+        } else {
+          handleValidationError(finalResult.error, controller);
+        }
       }
+    },
+  });
 
-      const finalResult = await handler.validateAndTransformFinal(accumulatedText);
-
-      if (!finalResult.success) {
-        controller.enqueue({
-          from: ChunkFrom.AGENT,
-          runId: currentRunId ?? '',
-          type: 'error',
-          payload: {
-            error: new MastraError(
-              {
-                domain: 'AGENT',
-                category: 'SYSTEM',
-                id: 'OUTPUT_SCHEMA_VALIDATION_FAILED',
-                text: finalResult.error.message,
-              },
-              { cause: finalResult.error },
-            ),
-          },
-        });
-        return;
-      }
-
+  /**
+   * Handle validation errors based on error strategy
+   */
+  function handleValidationError(error: Error, controller: TransformStreamDefaultController<ChunkType<OUTPUT>>) {
+    if (structuredOutput?.errorStrategy === 'warn') {
+      logger?.warn(error.message);
+    } else if (structuredOutput?.errorStrategy === 'fallback') {
       controller.enqueue({
         from: ChunkFrom.AGENT,
         runId: currentRunId ?? '',
         type: 'object-result',
-        object: finalResult.value,
+        object: structuredOutput?.fallbackValue,
       });
-      return;
-    },
-  });
+    } else {
+      controller.enqueue({
+        from: ChunkFrom.AGENT,
+        runId: currentRunId ?? '',
+        type: 'error',
+        payload: {
+          error,
+        },
+      });
+    }
+  }
 }
 
 /**

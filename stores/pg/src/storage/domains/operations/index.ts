@@ -319,12 +319,14 @@ export class StoreOperationsPG extends StoreOperations {
    * Set up timestamp triggers for a table to automatically manage createdAt/updatedAt
    */
   private async setupTimestampTriggers(tableName: TABLE_NAMES): Promise<void> {
+    const schemaName = getSchemaName(this.schemaName);
     const fullTableName = this.getQualifiedTableName(tableName);
+    const functionName = `${schemaName}.trigger_set_timestamps`;
 
     try {
       const triggerSQL = `
-        -- Create or replace the trigger function
-        CREATE OR REPLACE FUNCTION trigger_set_timestamps()
+        -- Create or replace the trigger function in the schema
+        CREATE OR REPLACE FUNCTION ${functionName}()
         RETURNS TRIGGER AS $$
         BEGIN
             IF TG_OP = 'INSERT' THEN
@@ -350,7 +352,7 @@ export class StoreOperationsPG extends StoreOperations {
         CREATE TRIGGER ${tableName}_timestamps
             BEFORE INSERT OR UPDATE ON ${fullTableName}
             FOR EACH ROW
-            EXECUTE FUNCTION trigger_set_timestamps();
+            EXECUTE FUNCTION ${functionName}();
       `;
 
       await this.client.none(triggerSQL);

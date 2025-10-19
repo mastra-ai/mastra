@@ -2,7 +2,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import { InternalSpans } from '../../ai-tracing';
+import type { TracingContext } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Processor } from '../index';
 
@@ -173,16 +173,16 @@ export class LanguageDetector implements Processor {
       name: 'language-detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
-      options: { tracingPolicy: { internal: InternalSpans.ALL } },
     });
   }
 
   async processInput(args: {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
+    tracingContext?: TracingContext;
   }): Promise<MastraMessageV2[]> {
     try {
-      const { messages, abort } = args;
+      const { messages, abort, tracingContext } = args;
 
       if (messages.length === 0) {
         return messages;
@@ -199,7 +199,7 @@ export class LanguageDetector implements Processor {
           continue;
         }
 
-        const detectionResult = await this.detectLanguage(textContent);
+        const detectionResult = await this.detectLanguage(textContent, tracingContext);
 
         // Check if confidence meets threshold
         if (detectionResult.confidence && detectionResult.confidence < this.threshold) {
@@ -248,7 +248,7 @@ export class LanguageDetector implements Processor {
   /**
    * Detect language using the internal agent
    */
-  private async detectLanguage(content: string): Promise<LanguageDetectionResult> {
+  private async detectLanguage(content: string, tracingContext?: TracingContext): Promise<LanguageDetectionResult> {
     const prompt = this.createDetectionPrompt(content);
 
     try {
@@ -268,11 +268,13 @@ export class LanguageDetector implements Processor {
           modelSettings: {
             temperature: 0,
           },
+          tracingContext,
         });
       } else {
         response = await this.detectionAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
+          tracingContext,
         });
       }
 

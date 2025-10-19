@@ -1,22 +1,14 @@
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils/test';
+import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, expect, it } from 'vitest';
-import { MessageList } from '../../agent/message-list';
+import { createMessageListWithUserMessage } from './utils';
 import { testUsage } from '../../stream/aisdk/v5/test-utils';
 import type { loop } from '../loop';
 
 export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('result.textStream', () => {
     it('should send text deltas', async () => {
-      const messageList = new MessageList();
-
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,

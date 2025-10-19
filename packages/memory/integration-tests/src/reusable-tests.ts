@@ -5,7 +5,7 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV1, SharedMemoryConfig } from '@mastra/core/memory';
 import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import type { Memory } from '@mastra/memory';
-import type { PostgresConfig } from '@mastra/pg';
+import type { PostgresStoreConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
 import type { ToolResultPart, TextPart, ToolCallPart } from 'ai';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
@@ -21,7 +21,7 @@ export enum StorageType {
 
 interface WorkerTestConfig {
   storageTypeForWorker: StorageType;
-  storageConfigForWorker: LibSQLConfig | PostgresConfig | UpstashConfig;
+  storageConfigForWorker: LibSQLConfig | PostgresStoreConfig | UpstashConfig;
   vectorConfigForWorker?: LibSQLVectorConfig;
   memoryOptionsForWorker?: SharedMemoryConfig['options'];
 }

@@ -237,9 +237,19 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                * Need to update controller on each new LLM execution step since each step has its own TransformStream.
                */
               if (!processorStates.has(STRUCTURED_OUTPUT_PROCESSOR_NAME)) {
-                const structuredOutputProcessorState = new ProcessorState<OUTPUT>(STRUCTURED_OUTPUT_PROCESSOR_NAME);
-                structuredOutputProcessorState.customState = { controller };
-                processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
+                const processorIndex = processorRunner.outputProcessors.findIndex(
+                  p => p.name === STRUCTURED_OUTPUT_PROCESSOR_NAME,
+                );
+                // Only create the state if the processor actually exists in the list
+                if (processorIndex !== -1) {
+                  const structuredOutputProcessorState = new ProcessorState<OUTPUT>({
+                    processorName: STRUCTURED_OUTPUT_PROCESSOR_NAME,
+                    tracingContext: options.tracingContext,
+                    processorIndex,
+                  });
+                  structuredOutputProcessorState.customState = { controller };
+                  processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
+                }
               } else {
                 // Update controller for new LLM execution step
                 const structuredOutputProcessorState = processorStates.get(STRUCTURED_OUTPUT_PROCESSOR_NAME);
@@ -248,7 +258,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 }
               }
 
-              const { part: processed, blocked, reason } = await processorRunner.processPart(chunk, processorStates);
+              const {
+                part: processed,
+                blocked,
+                reason,
+              } = await processorRunner.processPart(chunk, processorStates, options.tracingContext);
               if (blocked) {
                 // Emit a tripwire chunk so downstream knows about the abort
                 controller.enqueue({
@@ -270,11 +284,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
     // Only apply object transformer in 'direct' mode (LLM generates JSON directly)
     // In 'processor' mode, the StructuredOutputProcessor handles object transformation
-    if (self.#structuredOutputMode === 'direct') {
+    if (self.#structuredOutputMode === 'direct' && self.#options.isLLMExecutionStep) {
       processedStream = processedStream.pipeThrough(
         createObjectStreamTransformer({
-          isLLMExecutionStep: self.#options.isLLMExecutionStep,
           structuredOutput: self.#options.structuredOutput,
+          logger: self.logger,
         }),
       );
     }
@@ -565,7 +579,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               try {
                 if (self.processorRunner && !self.#options.isLLMExecutionStep) {
-                  self.messageList = await self.processorRunner.runOutputProcessors(self.messageList);
+                  self.messageList = await self.processorRunner.runOutputProcessors(
+                    self.messageList,
+                    options.tracingContext,
+                  );
                   const outputText = self.messageList.get.response.aiV4
                     .core()
                     .map(m => MessageList.coreContentToString(m.content))
@@ -751,7 +768,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               // Reject all delayed promises on error
               const errorMessage = (self.#error as any)?.message || safeParseErrorObject(self.#error);
-              const error = new Error(errorMessage);
+              const errorCause = self.#error instanceof Error ? self.#error.cause : undefined;
+              const error = new Error(errorMessage, errorCause ? { cause: errorCause } : undefined);
 
               Object.values(self.#delayedPromises).forEach(promise => {
                 if (promise.status.type === 'pending') {
@@ -765,8 +783,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
           controller.enqueue(chunk);
         },
         flush: () => {
-          if (self.#delayedPromises.object.status.type !== 'resolved') {
-            // always resolve object promise as undefined if still hanging in flush and no output schema provided
+          if (self.#delayedPromises.object.status.type === 'pending') {
+            // always resolve pending object promise as undefined if still hanging in flush and hasn't been rejected by validation error
             self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
           }
           // If stream ends without proper finish/error chunks, reject unresolved promises

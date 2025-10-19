@@ -15,7 +15,7 @@ import type { DynamicArgument } from '../types';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
-import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
+import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step, SuspendOptions } from './step';
 import { getStepResult } from './step';
 import type {
   DefaultEngineType,
@@ -33,13 +33,14 @@ export type ExecutionContext = {
   runId: string;
   executionPath: number[];
   suspendedPaths: Record<string, number[]>;
+  resumeLabels: Record<string, string>;
   waitingPaths?: Record<string, number[]>;
   retryConfig: {
     attempts: number;
     delay: number;
   };
   executionSpan: Span;
-  format?: 'aisdk' | 'mastra' | undefined;
+  format?: 'legacy' | 'vnext' | undefined;
   state: Record<string, any>;
 };
 
@@ -214,7 +215,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowAISpan?: AISpan<AISpanType.WORKFLOW_RUN>;
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
-    format?: 'aisdk' | 'mastra' | undefined;
+    format?: 'legacy' | 'vnext' | undefined;
     outputOptions?: {
       includeState?: boolean;
     };
@@ -270,6 +271,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runId,
         executionPath: [i],
         suspendedPaths: {},
+        resumeLabels: {},
         retryConfig: { attempts, delay },
         executionSpan: executionSpan as Span,
         format: params.format,
@@ -887,8 +889,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           tracingContext: { currentSpan: stepAISpan },
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(this, stepResults),
-          suspend: async (suspendPayload: any): Promise<any> => {
+          suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions): Promise<any> => {
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
+            if (suspendOptions?.resumeLabel) {
+              executionContext.resumeLabels[suspendOptions.resumeLabel] = step.id;
+            }
+
             suspended = { payload: suspendPayload };
           },
           bail: (result: any) => {
@@ -1177,6 +1183,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             runId,
             executionPath: [...executionContext.executionPath, i],
             suspendedPaths: executionContext.suspendedPaths,
+            resumeLabels: executionContext.resumeLabels,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
             state: executionContext.state,
@@ -1404,6 +1411,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             runId,
             executionPath: [...executionContext.executionPath, stepsToRun.indexOf(step)],
             suspendedPaths: executionContext.suspendedPaths,
+            resumeLabels: executionContext.resumeLabels,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
             state: executionContext.state,
@@ -1956,6 +1964,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         serializedStepGraph,
         suspendedPaths: executionContext.suspendedPaths,
         waitingPaths: {},
+        resumeLabels: executionContext.resumeLabels,
         result,
         error,
         runtimeContext: runtimeContextObj,
@@ -2045,6 +2054,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           runId,
           executionPath: [...executionContext.executionPath, idx!],
           suspendedPaths: executionContext.suspendedPaths,
+          resumeLabels: executionContext.resumeLabels,
           retryConfig: executionContext.retryConfig,
           executionSpan: executionContext.executionSpan,
           state: executionContext.state,

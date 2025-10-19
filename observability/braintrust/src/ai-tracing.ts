@@ -122,8 +122,12 @@ export class BraintrustExporter implements AITracingExporter {
     const payload = this.buildSpanPayload(span);
 
     const braintrustSpan = braintrustParent.startSpan({
+      spanId: span.id,
       name: span.name,
       type: mapSpanType(span.type),
+      parentSpanIds: span.parentSpanId
+        ? { spanId: span.parentSpanId, rootSpanId: span.traceId }
+        : { spanId: span.traceId, rootSpanId: span.traceId },
       ...payload,
     });
 
@@ -200,8 +204,12 @@ export class BraintrustExporter implements AITracingExporter {
 
     // Create zero-duration span for event (convert milliseconds to seconds)
     const braintrustSpan = braintrustParent.startSpan({
+      spanId: span.id,
       name: span.name,
       type: mapSpanType(span.type),
+      parentSpanIds: span.parentSpanId
+        ? { spanId: span.parentSpanId, rootSpanId: span.traceId }
+        : { spanId: span.traceId, rootSpanId: span.traceId },
       startTime: span.startTime.getTime() / 1000,
       ...payload,
     });

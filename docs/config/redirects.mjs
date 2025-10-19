@@ -1,5 +1,10 @@
 export const redirectList = [
   {
+    source: "/:locale/docs/getting-started/model-providers",
+    destination: "/:locale/models",
+    permanent: true,
+  },
+  {
     source: "/:locale/docs/getting-started/model-capability",
     destination: "/:locale/models",
     permanent: true,
@@ -1066,8 +1071,191 @@ export const redirectList = [
     permanent: true,
   },
   {
+    source: "/:locale/docs/agents/using-tools-and-mcp",
+    destination: "/:locale/docs/agents/using-tools",
+    permanent: true,
+  },
+  {
     source: "/:locale/reference/agents/migration-guide",
     destination: "/:locale/guides/migrations/vnext-to-standard-apis",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/agents/runtime-context",
+    destination: "/:locale/docs/server-db/runtime-context",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/agents/adding-voice-capabilities",
+    destination: "/:locale/docs/agents/adding-voice",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/deployment",
+    destination: "/:locale/docs/deployment/overview",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/deployment/index",
+    destination: "/:locale/docs/deployment/overview",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/deployment/deploying-mastra-server",
+    destination: "/:locale/docs/deployment/overview",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/deployment/auth-middleware",
+    destination: "/:locale/docs/server-db/middleware",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/deployment/cors-middleware",
+    destination: "/:locale/docs/server-db/middleware",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/deployment/custom-api-route",
+    destination: "/:locale/docs/server-db/middleware",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/deployment/logging-middleware",
+    destination: "/:locale/docs/server-db/middleware",
+    permanent: true,
+  },
+
+  {
+    source: "/:locale/examples/scorers/answer-relevancy",
+    destination: "/:locale/reference/scorers/answer-relevancy",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/answer-similarity",
+    destination: "/:locale/reference/scorers/answer-similarity",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/bias",
+    destination: "/:locale/reference/scorers/bias",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/completeness",
+    destination: "/:locale/reference/scorers/completeness",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/content-similarity",
+    destination: "/:locale/reference/scorers/content-similarity",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/context-precision",
+    destination: "/:locale/reference/scorers/context-precision",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/context-relevance",
+    destination: "/:locale/reference/scorers/context-relevance",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/faithfulness",
+    destination: "/:locale/reference/scorers/faithfulness",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/hallucination",
+    destination: "/:locale/reference/scorers/hallucination",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/keyword-coverage",
+    destination: "/:locale/reference/scorers/keyword-coverage",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/textual-difference",
+    destination: "/:locale/reference/scorers/textual-difference",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/tone-consistency",
+    destination: "/:locale/reference/scorers/tone-consistency",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/tool-call-accuracy",
+    destination: "/:locale/reference/scorers/tool-call-accuracy",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/prompt-alignment",
+    destination: "/:locale/reference/scorers/prompt-alignment",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/noise-sensitivity",
+    destination: "/:locale/reference/scorers/noise-sensitivity",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/toxicity",
+    destination: "/:locale/reference/scorers/toxicity",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/scorers/custom-scorer",
+    destination: "/:locale/docs/scorers/custom-scorers",
+    permanent: true,
+  },
+  {
+    source: "/:locale/en/docs/tools-mcp/runtime-context",
+    destination: "/:locale/en/docs/server-db/runtime-context",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/evals",
+    destination: "/:locale/docs/scorers/evals-old-api",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/evals/overview",
+    destination: "/:locale/docs/scorers/evals-old-api/overview",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/evals/custom-eval",
+    destination: "/:locale/docs/scorers/evals-old-api/custom-eval",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/evals/running-in-ci",
+    destination: "/:locale/docs/scorers/evals-old-api/running-in-ci",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/evals/textual-evals",
+    destination: "/:locale/docs/scorers/evals-old-api/textual-evals",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/agents/using-a-tool",
+    destination:
+      "/:locale/docs/agents/using-tools-and-mcp#adding-tools-to-an-agent",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/agents/using-a-workflow",
+    destination:
+      "/:locale/docs/workflows/using-with-agents-and-tools#adding-an-agent-as-a-step",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/server-db/snapshots",
+    destination: "/:locale/docs/workflows/snapshots",
     permanent: true,
   },
 ];

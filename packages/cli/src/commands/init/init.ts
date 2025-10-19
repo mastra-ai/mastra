@@ -11,18 +11,18 @@ import type { Components, LLMProvider } from './utils';
 const s = p.spinner();
 
 export const init = async ({
-  directory,
-  addExample = false,
+  directory = 'src/',
   components,
   llmProvider = 'openai',
   llmApiKey,
+  addExample = false,
   configureEditorWithDocsMCP,
 }: {
-  directory: string;
+  directory?: string;
   components: string[];
-  llmProvider: LLMProvider;
-  addExample: boolean;
+  llmProvider?: LLMProvider;
   llmApiKey?: string;
+  addExample?: boolean;
   configureEditorWithDocsMCP?: Editor;
 }) => {
   s.start('Initializing Mastra');

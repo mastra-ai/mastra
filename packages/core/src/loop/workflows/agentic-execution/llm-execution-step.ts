@@ -336,7 +336,8 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         let e = chunk.payload.error as any;
         if (typeof e === 'object') {
           const errorMessage = safeParseErrorObject(e);
-          e = new Error(errorMessage);
+          const originalCause = e instanceof Error ? e.cause : undefined;
+          e = new Error(errorMessage, originalCause ? { cause: originalCause } : undefined);
           Object.assign(e, chunk.payload.error);
         }
 

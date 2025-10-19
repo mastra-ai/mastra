@@ -14,7 +14,7 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v2
         id: app-token
         with:
           app-id: ${{ vars.DANE_APP_ID }}
@@ -57,7 +57,7 @@ jobs:
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20.19.1
+          node-version: 20.19.5
           registry-url: 'https://registry.yarnpkg.com'
 
       - name: Check for package.json changes in examples and e2e-tests

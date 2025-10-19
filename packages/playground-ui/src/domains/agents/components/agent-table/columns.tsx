@@ -10,6 +10,7 @@ import { providerMapToIcon } from '../provider-map-icon';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ToolsIcon, WorkflowIcon } from '@/ds/icons';
+import { extractPrompt } from '../../utils/extractPrompt';
 
 export type AgentTableColumn = {
   id: string;
@@ -25,7 +26,7 @@ const NameCell = ({ row }: { row: Row<AgentTableColumn> }) => {
           {row.original.name}
         </Link>
       }
-      description={row.original.instructions}
+      description={extractPrompt(row.original.instructions)}
     />
   );
 };

@@ -4,6 +4,7 @@ import type { JSONSchema7 } from 'json-schema';
 
 export type { MastraMessageV2 } from '../agent';
 import type { ZodObject } from 'zod';
+import type { EmbeddingModelId } from '../llm/model/index.js';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { MastraStorage } from '../storage';
 import type { DynamicArgument } from '../types';
@@ -366,12 +367,20 @@ export type SharedMemoryConfig = {
    * Compatible with any AI SDK embedding model. FastEmbed provides local embeddings,
    * while providers like OpenAI offer cloud-based models.
    *
+   * Can be specified as:
+   * - A string in the format "provider/model" (e.g., "openai/text-embedding-3-small")
+   * - An EmbeddingModel or EmbeddingModelV2 instance
+   *
    * @example
    * ```typescript
+   * // Using a string (model router format)
+   * embedder: "openai/text-embedding-3-small"
+   *
+   * // Using an AI SDK model directly
    * embedder: openai.embedding("text-embedding-3-small")
    * ```
    */
-  embedder?: EmbeddingModel<string> | EmbeddingModelV2<string>;
+  embedder?: EmbeddingModelId | EmbeddingModel<string> | EmbeddingModelV2<string>;
 
   /**
    * Memory processors that modify retrieved messages before sending to the LLM.

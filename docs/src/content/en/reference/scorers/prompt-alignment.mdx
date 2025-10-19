@@ -59,7 +59,59 @@ The `createPromptAlignmentScorerLLM()` function creates a scorer that evaluates 
   ]}
 />
 
+`.run()` returns a result in the following shape:
+
+```typescript
+{
+  runId: string,
+  score: number,
+  reason: string,
+  analyzeStepResult: {
+    intentAlignment: {
+      score: number,
+      primaryIntent: string,
+      isAddressed: boolean,
+      reasoning: string
+    },
+    requirementsFulfillment: {
+      requirements: Array<{
+        requirement: string,
+        isFulfilled: boolean,
+        reasoning: string
+      }>,
+      overallScore: number
+    },
+    completeness: {
+      score: number,
+      missingElements: string[],
+      reasoning: string
+    },
+    responseAppropriateness: {
+      score: number,
+      formatAlignment: boolean,
+      toneAlignment: boolean,
+      reasoning: string
+    },
+    overallAssessment: string
+  }
+}
+```
+
 ## Scoring Details
+
+### Scorer configuration
+
+You can customize the Prompt Alignment Scorer by adjusting the scale parameter and evaluation mode to fit your scoring needs.
+
+```typescript showLineNumbers copy
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini"), 
+  options: { 
+    scale: 10, // Score from 0-10 instead of 0-1
+    evaluationMode: 'both' // 'user', 'system', or 'both' (default)
+  }
+});
+```
 
 ### Multi-Dimensional Analysis
 
@@ -126,15 +178,6 @@ Final Score = Weighted Score × scale
 - **0.4-0.6** = Poor alignment with significant issues
 - **0.0-0.4** = Very poor alignment, response doesn't address the prompt effectively
 
-### Comparison with Other Scorers
-
-| Aspect | Prompt Alignment | Answer Relevancy | Faithfulness |
-|--------|------------------|------------------|--------------|
-| **Focus** | Multi-dimensional prompt adherence | Query-response relevance | Context groundedness |
-| **Evaluation** | Intent, requirements, completeness, format | Semantic similarity to query | Factual consistency with context |
-| **Use Case** | General prompt following | Information retrieval | RAG/context-based systems |
-| **Dimensions** | 4 weighted dimensions | Single relevance dimension | Single faithfulness dimension |
-
 ### When to Use Each Mode
 
 **User Mode (`'user'`)** - Use when:
@@ -155,7 +198,115 @@ Final Score = Weighted Score × scale
 - Production monitoring where both user and system requirements matter
 - Holistic assessment of prompt-response alignment
 
-## Usage Examples
+## Common Use Cases
+
+### Code Generation Evaluation
+Ideal for evaluating:
+- Programming task completion
+- Code quality and completeness  
+- Adherence to coding requirements
+- Format specifications (functions, classes, etc.)
+
+```typescript
+// Example: API endpoint creation
+const codePrompt = "Create a REST API endpoint with authentication and rate limiting";
+// Scorer evaluates: intent (API creation), requirements (auth + rate limiting), 
+// completeness (full implementation), format (code structure)
+```
+
+### Instruction Following Assessment
+Perfect for:
+- Task completion verification
+- Multi-step instruction adherence
+- Requirement compliance checking
+- Educational content evaluation
+
+```typescript
+// Example: Multi-requirement task
+const taskPrompt = "Write a Python class with initialization, validation, error handling, and documentation";
+// Scorer tracks each requirement individually and provides detailed breakdown
+```
+
+### Content Format Validation
+Useful for:
+- Format specification compliance
+- Style guide adherence
+- Output structure verification
+- Response appropriateness checking
+
+```typescript
+// Example: Structured output
+const formatPrompt = "Explain the differences between let and const in JavaScript using bullet points";
+// Scorer evaluates content accuracy AND format compliance
+```
+
+### Agent Response Quality
+Measure how well your AI agents follow user instructions:
+
+```typescript
+const agent = new Agent({
+  name: 'CodingAssistant',
+  instructions: 'You are a helpful coding assistant. Always provide working code examples.',
+  model: openai('gpt-4o'),
+});
+
+// Evaluate comprehensive alignment (default)
+const scorer = createPromptAlignmentScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: { evaluationMode: 'both' } // Evaluates both user intent and system guidelines
+});
+
+// Evaluate just user satisfaction
+const userScorer = createPromptAlignmentScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: { evaluationMode: 'user' } // Focus only on user request fulfillment
+});
+
+// Evaluate system compliance
+const systemScorer = createPromptAlignmentScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: { evaluationMode: 'system' } // Check adherence to system instructions
+});
+
+const result = await scorer.run(agentRun);
+```
+
+### Prompt Engineering Optimization
+Test different prompts to improve alignment:
+
+```typescript
+const prompts = [
+  'Write a function to calculate factorial',
+  'Create a Python function that calculates factorial with error handling for negative inputs',
+  'Implement a factorial calculator in Python with: input validation, error handling, and docstring'
+];
+
+// Compare alignment scores to find the best prompt
+for (const prompt of prompts) {
+  const result = await scorer.run(createTestRun(prompt, response));
+  console.log(`Prompt alignment: ${result.score}`);
+}
+```
+
+### Multi-Agent System Evaluation
+Compare different agents or models:
+
+```typescript
+const agents = [agent1, agent2, agent3];
+const testPrompts = [...]; // Array of test prompts
+
+for (const agent of agents) {
+  let totalScore = 0;
+  for (const prompt of testPrompts) {
+    const response = await agent.run(prompt);
+    const evaluation = await scorer.run({ input: prompt, output: response });
+    totalScore += evaluation.score;
+  }
+  console.log(`${agent.name} average alignment: ${totalScore / testPrompts.length}`);
+}
+```
+
+## Examples
 
 ### Basic Configuration
 
@@ -231,135 +382,233 @@ const result = await scorer.run({
 // Result: Lower appropriateness score due to format mismatch (paragraph vs bullet points)
 ```
 
-## Usage Patterns
+### Excellent alignment example
 
-### Code Generation Evaluation
-Ideal for evaluating:
-- Programming task completion
-- Code quality and completeness  
-- Adherence to coding requirements
-- Format specifications (functions, classes, etc.)
+In this example, the response fully addresses the user's prompt with all requirements met.
 
-```typescript
-// Example: API endpoint creation
-const codePrompt = "Create a REST API endpoint with authentication and rate limiting";
-// Scorer evaluates: intent (API creation), requirements (auth + rate limiting), 
-// completeness (full implementation), format (code structure)
-```
+```typescript filename="src/example-excellent-prompt-alignment.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
 
-### Instruction Following Assessment
-Perfect for:
-- Task completion verification
-- Multi-step instruction adherence
-- Requirement compliance checking
-- Educational content evaluation
-
-```typescript
-// Example: Multi-requirement task
-const taskPrompt = "Write a Python class with initialization, validation, error handling, and documentation";
-// Scorer tracks each requirement individually and provides detailed breakdown
-```
-
-### Content Format Validation
-Useful for:
-- Format specification compliance
-- Style guide adherence
-- Output structure verification
-- Response appropriateness checking
-
-```typescript
-// Example: Structured output
-const formatPrompt = "Explain the differences between let and const in JavaScript using bullet points";
-// Scorer evaluates content accuracy AND format compliance
-```
-
-## Common Use Cases
-
-### 1. Agent Response Quality
-Measure how well your AI agents follow user instructions:
-
-```typescript
-const agent = new Agent({
-  name: 'CodingAssistant',
-  instructions: 'You are a helpful coding assistant. Always provide working code examples.',
-  model: openai('gpt-4o'),
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini") 
 });
 
-// Evaluate comprehensive alignment (default)
-const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
-  options: { evaluationMode: 'both' } // Evaluates both user intent and system guidelines
+const inputMessages = [{ 
+  role: 'user', 
+  content: "Write a Python function to calculate factorial with error handling for negative numbers" 
+}];
+
+const outputMessage = { 
+  text: `def factorial(n):
+    """Calculate factorial of a number."""
+    if n < 0:
+        raise ValueError("Factorial not defined for negative numbers")
+    if n == 0 or n == 1:
+        return 1
+    return n * factorial(n - 1)` 
+};
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
 });
 
-// Evaluate just user satisfaction
-const userScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
-  options: { evaluationMode: 'user' } // Focus only on user request fulfillment
-});
-
-// Evaluate system compliance
-const systemScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
-  options: { evaluationMode: 'system' } // Check adherence to system instructions
-});
-
-const result = await scorer.run(agentRun);
+console.log(result);
 ```
 
-### 2. Prompt Engineering Optimization
-Test different prompts to improve alignment:
+### Excellent alignment output
+
+The output receives a high score because it perfectly addresses the intent, fulfills all requirements, and uses appropriate format.
 
 ```typescript
-const prompts = [
-  'Write a function to calculate factorial',
-  'Create a Python function that calculates factorial with error handling for negative inputs',
-  'Implement a factorial calculator in Python with: input validation, error handling, and docstring'
-];
-
-// Compare alignment scores to find the best prompt
-for (const prompt of prompts) {
-  const result = await scorer.run(createTestRun(prompt, response));
-  console.log(`Prompt alignment: ${result.score}`);
+{
+  score: 0.95,
+  reason: 'The score is 0.95 because the response perfectly addresses the primary intent of creating a factorial function and fulfills all requirements including Python implementation, error handling for negative numbers, and proper documentation. The code format is appropriate and the implementation is complete.'
 }
 ```
 
-### 3. Multi-Agent System Evaluation
-Compare different agents or models:
+### Partial alignment example
+
+In this example, the response addresses the core intent but misses some requirements or has format issues.
+
+```typescript filename="src/example-partial-prompt-alignment.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
+
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini") 
+});
+
+const inputMessages = [{ 
+  role: 'user', 
+  content: "List the benefits of TypeScript in bullet points" 
+}];
+
+const outputMessage = { 
+  text: "TypeScript provides static typing, better IDE support, and enhanced code reliability through compile-time error checking." 
+};
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+#### Partial alignment output
+
+The output receives a lower score because while the content is accurate, it doesn't follow the requested format (bullet points).
 
 ```typescript
-const agents = [agent1, agent2, agent3];
-const testPrompts = [...]; // Array of test prompts
+{
+  score: 0.75,
+  reason: 'The score is 0.75 because the response addresses the intent of explaining TypeScript benefits and provides accurate information, but fails to use the requested bullet point format, resulting in lower appropriateness scoring.'
+}
+```
 
-for (const agent of agents) {
-  let totalScore = 0;
-  for (const prompt of testPrompts) {
-    const response = await agent.run(prompt);
-    const evaluation = await scorer.run({ input: prompt, output: response });
-    totalScore += evaluation.score;
+### Poor alignment example
+
+In this example, the response fails to address the user's specific requirements.
+
+```typescript filename="src/example-poor-prompt-alignment.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
+
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini") 
+});
+
+const inputMessages = [{ 
+  role: 'user', 
+  content: "Write a Python class with initialization, validation, error handling, and documentation" 
+}];
+
+const outputMessage = { 
+  text: `class Example:
+    def __init__(self, value):
+        self.value = value` 
+};
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+### Poor alignment output
+
+The output receives a low score because it only partially fulfills the requirements, missing validation, error handling, and documentation.
+
+```typescript
+{
+  score: 0.35,
+  reason: 'The score is 0.35 because while the response addresses the basic intent of creating a Python class with initialization, it fails to include validation, error handling, and documentation as specifically requested, resulting in incomplete requirement fulfillment.'
+}
+```
+
+### Evaluation Mode Examples
+
+#### User Mode - Focus on User Prompt Only
+
+Evaluates how well the response addresses the user's request, ignoring system instructions:
+
+```typescript filename="src/example-user-mode.ts" showLineNumbers copy
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini"),
+  options: { evaluationMode: 'user' }
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [{ 
+      role: 'user', 
+      content: "Explain recursion with an example" 
+    }],
+    systemMessages: [{ 
+      role: 'system', 
+      content: "Always provide code examples in Python" 
+    }]
+  },
+  output: { 
+    text: "Recursion is when a function calls itself. For example: factorial(5) = 5 * factorial(4)" 
   }
-  console.log(`${agent.name} average alignment: ${totalScore / testPrompts.length}`);
-}
-```
-
-## Error Handling
-
-The scorer handles various edge cases gracefully:
-
-```typescript
-// Missing user prompt
-try {
-  await scorer.run({ input: [], output: response });
-} catch (error) {
-  // Error: "Both user prompt and agent response are required for prompt alignment scoring"
-}
-
-// Empty response
-const result = await scorer.run({ 
-  input: [userMessage], 
-  output: { role: 'assistant', text: '' } 
 });
-// Returns low scores with detailed reasoning about incompleteness
+// Scores high for addressing user request, even without Python code
 ```
+
+#### System Mode - Focus on System Guidelines Only
+
+Evaluates compliance with system behavioral guidelines and constraints:
+
+```typescript filename="src/example-system-mode.ts" showLineNumbers copy
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini"),
+  options: { evaluationMode: 'system' }
+});
+
+const result = await scorer.run({
+  input: {
+    systemMessages: [{ 
+      role: 'system', 
+      content: "You are a helpful assistant. Always be polite, concise, and provide examples." 
+    }],
+    inputMessages: [{ 
+      role: 'user', 
+      content: "What is machine learning?" 
+    }]
+  },
+  output: { 
+    text: "Machine learning is a subset of AI where computers learn from data. For example, spam filters learn to identify unwanted emails by analyzing patterns in previously marked spam." 
+  }
+});
+// Evaluates politeness, conciseness, and example provision
+```
+
+#### Both Mode - Combined Evaluation (Default)
+
+Evaluates both user intent fulfillment and system compliance with weighted scoring (70% user, 30% system):
+
+```typescript filename="src/example-both-mode.ts" showLineNumbers copy
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini"),
+  options: { evaluationMode: 'both' } // This is the default
+});
+
+const result = await scorer.run({
+  input: {
+    systemMessages: [{ 
+      role: 'system', 
+      content: "Always provide code examples when explaining programming concepts" 
+    }],
+    inputMessages: [{ 
+      role: 'user', 
+      content: "Explain how to reverse a string" 
+    }]
+  },
+  output: { 
+    text: `To reverse a string, you can iterate through it backwards. Here's an example in Python:
+    
+    def reverse_string(s):
+        return s[::-1]
+    
+    # Usage: reverse_string("hello") returns "olleh"` 
+  }
+});
+// High score for both addressing the user's request AND following system guidelines
+```
+
+## Comparison with Other Scorers
+
+| Aspect | Prompt Alignment | Answer Relevancy | Faithfulness |
+|--------|------------------|------------------|--------------|
+| **Focus** | Multi-dimensional prompt adherence | Query-response relevance | Context groundedness |
+| **Evaluation** | Intent, requirements, completeness, format | Semantic similarity to query | Factual consistency with context |
+| **Use Case** | General prompt following | Information retrieval | RAG/context-based systems |
+| **Dimensions** | 4 weighted dimensions | Single relevance dimension | Single faithfulness dimension |
 
 ## Related
 

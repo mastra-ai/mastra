@@ -150,7 +150,6 @@ You can populate `runtimeContext` dynamically in server middleware by extracting
 import { Mastra } from "@mastra/core/mastra";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { testWeatherAgent } from "./agents/test-weather-agent";
-import { WeatherRuntimeContext } from "./mastra/tools/test-weather-tool";
 
 export const mastra = new Mastra({
   agents: { testWeatherAgent },
@@ -158,7 +157,7 @@ export const mastra = new Mastra({
     middleware: [
       async (context, next) => {
         const country = context.req.header("CF-IPCountry");
-        const runtimeContext = context.get("runtimeContext") as RuntimeContext<WeatherRuntimeContext>;
+        const runtimeContext = context.get("runtimeContext");
 
         runtimeContext.set("temperature-unit", country === "US" ? "fahrenheit" : "celsius");
 
@@ -168,3 +167,7 @@ export const mastra = new Mastra({
   }
 });
 ```
+
+# Related
+
+- [Runtime Context](./runtime-context.mdx)

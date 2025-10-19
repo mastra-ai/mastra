@@ -39,17 +39,18 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'mastra-ai/mastra'
     steps:
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v2
         id: app-token
         with:
           app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
-          permission-pull-requests: write
-          permission-issues: write
-          permission-security-events: write
-          permission-statuses: write
-          permission-contents: write
-          permission-workflows: write
+          minutes: 120
+          #permission-pull-requests: write
+          #permission-issues: write
+          #permission-security-events: write
+          #permission-statuses: write
+          #permission-contents: write
+          #permission-workflows: write
 
       - name: Get GitHub App User ID
         id: get-user-id
@@ -112,7 +113,7 @@ jobs:
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
       - name: Self-hosted Renovate
-        uses: renovatebot/github-action@v43.0.9
+        uses: renovatebot/github-action@v43.0.17
         with:
           configurationFile: renovate.json
           docker-user: '${{ steps.id.outputs.user }}:${{ steps.id.outputs.group }}'

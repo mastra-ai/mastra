@@ -1,6 +1,6 @@
 {
   "name": "@mastra/google-cloud-pubsub",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Mastra Google Cloud PubSub integration",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
     "@google-cloud/pubsub": "^5.2.0",
     "@inngest/realtime": "^0.4.4",
     "@opentelemetry/api": "^1.9.0",
-    "inngest": "^3.40.3",
+    "inngest": "^3.44.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -44,7 +44,7 @@
     "@mastra/libsql": "workspace:*",
     "@types/node": "^20.19.0",
     "typescript": "^5.8.3",
-    "eslint": "^9.36.0",
+    "eslint": "^9.37.0",
     "vitest": "^3.2.4",
     "tsup": "^8.4.0"
   },

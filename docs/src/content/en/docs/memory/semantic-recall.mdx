@@ -98,7 +98,48 @@ const agent = new Agent({
 
 ### Embedder configuration
 
-Semantic recall relies on an [embedding model](/reference/memory/Memory#embedder) to convert messages into embeddings. You can specify any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
+Semantic recall relies on an [embedding model](/reference/memory/Memory#embedder) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
+
+#### Using the Model Router (Recommended)
+
+The simplest way is to use a `provider/model` string with autocomplete support:
+
+```ts {7}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  memory: new Memory({
+    // ... other memory options
+    embedder: "openai/text-embedding-3-small", // TypeScript autocomplete supported
+  }),
+});
+```
+
+Supported embedding models:
+- **OpenAI**: `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`
+- **Google**: `gemini-embedding-001`, `text-embedding-004`
+
+The model router automatically handles API key detection from environment variables (`OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`).
+
+#### Using AI SDK Packages
+
+You can also use AI SDK embedding models directly:
+
+```ts {3,8}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  memory: new Memory({
+    // ... other memory options
+    embedder: openai.embedding("text-embedding-3-small"),
+  }),
+});
+```
+
+#### Using FastEmbed (Local)
 
 To use FastEmbed (a local embedding model), install `@mastra/fastembed`:
 
@@ -117,21 +158,6 @@ const agent = new Agent({
   memory: new Memory({
     // ... other memory options
     embedder: fastembed,
-  }),
-});
-```
-
-Alternatively, use a different provider like OpenAI:
-
-```ts {3,8}
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-
-const agent = new Agent({
-  memory: new Memory({
-    // ... other memory options
-    embedder: openai.embedding("text-embedding-3-small"),
   }),
 });
 ```

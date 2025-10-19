@@ -134,6 +134,20 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
     return this.parent.id;
   }
 
+  /** Find the closest parent span of a specific type by walking up the parent chain */
+  public findParent<T extends AISpanType>(spanType: T): AISpan<T> | undefined {
+    let current: AnyAISpan | undefined = this.parent;
+
+    while (current) {
+      if (current.type === spanType) {
+        return current as AISpan<T>;
+      }
+      current = current.parent;
+    }
+
+    return undefined;
+  }
+
   /** Returns a lightweight span ready for export */
   public exportSpan(includeInternalSpans?: boolean): ExportedAISpan<TType> {
     return {
