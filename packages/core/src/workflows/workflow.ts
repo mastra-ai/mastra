@@ -1172,6 +1172,7 @@ export class Workflow<
           step: resume.steps as any,
           runtimeContext,
           tracingContext,
+          writableStream: writer,
           outputOptions: { includeState: true },
         })
       : await run.start({
