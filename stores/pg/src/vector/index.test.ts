@@ -3648,6 +3648,73 @@ describe('Validation', () => {
       }
     });
   });
+
+  describe('tableMap support (PgVector)', () => {
+    const logicalName = 'logical_vectors_tbl';
+    const physicalName = 'physical_vectors_tbl';
+    const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+
+    let db: PgVector;
+    let client: pg.PoolClient;
+
+    beforeAll(async () => {
+      // Cast to any to provide tableMap for vector logical->physical mapping
+      db = new PgVector({ connectionString, tableMap: { [logicalName]: physicalName } } as any);
+      client = await new pg.Pool({ connectionString }).connect();
+      // Ensure clean slate
+      await client.query(`DROP TABLE IF EXISTS ${physicalName} CASCADE`);
+      await client.query(`DROP TABLE IF EXISTS ${logicalName} CASCADE`);
+    });
+
+    afterAll(async () => {
+      try {
+        await db.deleteIndex({ indexName: logicalName });
+      } catch {}
+      try {
+        await client.query(`DROP TABLE IF EXISTS ${physicalName} CASCADE`);
+      } catch {}
+      client.release();
+      await db.disconnect();
+    });
+
+    it('creates physical table using mapping and lists logical name', async () => {
+      await db.createIndex({ indexName: logicalName, dimension: 4 });
+
+      // Verify physical table exists
+      const res = await client.query(
+        `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
+        ['public', physicalName],
+      );
+      expect(res.rowCount).toBe(1);
+
+      // listIndexes should return logical name
+      const indexes = await db.listIndexes();
+      expect(indexes).toContain(logicalName);
+      expect(indexes).not.toContain(physicalName);
+    });
+
+    it('describeIndex works via logical name while targeting physical', async () => {
+      const info = await db.describeIndex({ indexName: logicalName });
+      expect(info.dimension).toBe(4);
+    });
+
+    it('upsert/query/update/delete operate using mapping', async () => {
+      const ids = await db.upsert({ indexName: logicalName, vectors: [[0.1, 0.2, 0.3, 0.4]], metadata: [{ a: 1 }] });
+      expect(ids).toHaveLength(1);
+
+      const results = await db.query({ indexName: logicalName, queryVector: [0.1, 0.2, 0.3, 0.4], topK: 1 });
+      expect(results.length).toBe(1);
+
+      await db.updateVector({ indexName: logicalName, id: ids[0]!, update: { metadata: { a: 2 } } });
+
+      const results2 = await db.query({ indexName: logicalName, queryVector: [0.1, 0.2, 0.3, 0.4], topK: 1 });
+      expect(results2[0]?.metadata?.a).toBe(2);
+
+      await db.deleteVector({ indexName: logicalName, id: ids[0]! });
+      const results3 = await db.query({ indexName: logicalName, queryVector: [0.1, 0.2, 0.3, 0.4], topK: 1 });
+      expect(results3.length).toBe(0);
+    });
+  });
 });
 
 // Metadata filtering tests for Memory system
