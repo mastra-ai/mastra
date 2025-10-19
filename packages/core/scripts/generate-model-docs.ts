@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { ProviderConfig } from '../src/index.js';
 import { PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants.js';
+import { generateProviderOptionsSection } from './generate-provider-options-docs.js';
 
 /**
  * Generate a comment indicating the file was auto-generated
@@ -223,8 +224,9 @@ description: "Use ${provider.name} models with Mastra. ${modelCount} model${mode
 ${getGeneratedComment()}
 
 import { ProviderModelsTable } from "@/components/provider-models-table";
+import { PropertiesTable } from "@/components/properties-table";
 import { Callout } from "nextra/components";
-${provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible' ? 'import { Tabs, Tab } from \"@/components/tabs\";' : ''}
+${provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible' ? 'import { Tabs, Tab } from "@/components/tabs";' : ''}
 
 # <img src="${getLogoUrl(provider.id)}" alt="${provider.name} logo" className="${getLogoClass(provider.id)}" />${provider.name}
 
@@ -298,6 +300,8 @@ const agent = new Agent({
   }
 });
 \`\`\`
+
+${generateProviderOptionsSection(provider.id)}
 ${
   provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible'
     ? `
