@@ -2412,6 +2412,7 @@ export class Run<
         runtimeContext: runtimeContextToUse,
         abortController: this.abortController,
         workflowAISpan,
+        writableStream: params.writableStream,
         outputOptions: params.outputOptions,
       })
       .then(result => {
