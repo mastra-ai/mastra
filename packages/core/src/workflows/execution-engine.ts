@@ -62,6 +62,7 @@ export abstract class ExecutionEngine extends MastraBase {
       resumePayload: any;
       resumePath: number[];
       forEachIndex?: number;
+      label?: string;
     };
     emitter: Emitter;
     runtimeContext: RuntimeContext;
@@ -75,6 +76,7 @@ export abstract class ExecutionEngine extends MastraBase {
     format?: 'legacy' | 'vnext' | undefined;
     outputOptions?: {
       includeState?: boolean;
+      includeResumeLabels?: boolean;
     };
   }): Promise<TOutput>;
 }

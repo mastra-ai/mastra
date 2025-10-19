@@ -14,6 +14,7 @@ interface StreamStepOptions<FORMAT extends 'aisdk' | 'mastra' | undefined = unde
   requireToolApproval?: boolean;
   resumeContext?: any;
   agentId: string;
+  toolCallId?: string;
 }
 
 export function createStreamStep<
@@ -27,6 +28,7 @@ export function createStreamStep<
   requireToolApproval,
   resumeContext,
   agentId,
+  toolCallId,
 }: StreamStepOptions<FORMAT>) {
   return createStep({
     id: 'stream-text-step',
@@ -64,6 +66,7 @@ export function createStreamStep<
           generateId: capabilities.generateMessageId,
         },
         agentId,
+        toolCallId,
       });
 
       if (format === 'aisdk') {

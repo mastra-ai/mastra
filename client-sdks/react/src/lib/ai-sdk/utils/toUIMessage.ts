@@ -286,6 +286,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       ];
     }
 
+    case 'tool-error':
     case 'tool-result': {
       const lastMessage = result[result.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') return result;
@@ -300,14 +301,15 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
         const toolPart = parts[toolPartIndex];
 
         if (toolPart.type === 'dynamic-tool') {
-          if (chunk.payload.isError) {
+          if ((chunk.type === 'tool-result' && chunk.payload.isError) || chunk.type === 'tool-error') {
+            const error = chunk.type === 'tool-error' ? chunk.payload.error : chunk.payload.result;
             parts[toolPartIndex] = {
               type: 'dynamic-tool',
               toolName: toolPart.toolName,
               toolCallId: toolPart.toolCallId,
               state: 'output-error',
               input: toolPart.input,
-              errorText: String(chunk.payload.result),
+              errorText: String(error),
               callProviderMetadata: chunk.payload.providerMetadata,
             };
           } else {
@@ -461,6 +463,9 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
       // Find and update the corresponding tool call
 
+      const lastRequireApprovalMetadata =
+        lastMessage.metadata?.mode === 'stream' ? lastMessage.metadata?.requireApprovalMetadata : {};
+
       return [
         ...result.slice(0, -1),
         {
@@ -469,9 +474,12 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             ...lastMessage.metadata,
             mode: 'stream',
             requireApprovalMetadata: {
-              toolCallId: chunk.payload.toolCallId,
-              toolName: chunk.payload.toolName,
-              args: chunk.payload.args,
+              ...lastRequireApprovalMetadata,
+              [chunk.payload.toolCallId]: {
+                toolCallId: chunk.payload.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+              },
             },
           },
         },

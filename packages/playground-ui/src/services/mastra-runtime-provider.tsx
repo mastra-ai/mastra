@@ -698,7 +698,7 @@ export function MastraRuntimeProvider({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ToolCallProvider approveToolcall={approveToolCall} declineToolcall={declineToolCall}>
+      <ToolCallProvider approveToolcall={approveToolCall} declineToolcall={declineToolCall} isRunning={isRunningStream}>
         {children}
       </ToolCallProvider>
     </AssistantRuntimeProvider>

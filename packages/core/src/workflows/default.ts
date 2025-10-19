@@ -213,6 +213,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
+      label?: string;
+      forEachIndex?: number;
     };
     emitter: Emitter;
     retryConfig?: {
@@ -226,6 +228,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     format?: 'legacy' | 'vnext' | undefined;
     outputOptions?: {
       includeState?: boolean;
+      includeResumeLabels?: boolean;
     };
   }): Promise<TOutput> {
     const {
@@ -350,6 +353,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 status: result.status,
               },
             });
+          }
+          if (lastOutput.result.status === 'suspended' && params.outputOptions?.includeResumeLabels) {
+            return { ...result, resumeLabels: lastOutput.executionContext?.resumeLabels };
           }
           return result;
         }
@@ -753,6 +759,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume?: {
       steps: string[];
       resumePayload: any;
+      label?: string;
+      forEachIndex?: number;
     };
     prevOutput: any;
     emitter: Emitter;
@@ -900,10 +908,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions): Promise<any> => {
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
             if (suspendOptions?.resumeLabel) {
-              executionContext.resumeLabels[suspendOptions.resumeLabel] = {
-                stepId: step.id,
-                foreachIndex: executionContext.foreachIndex,
-              };
+              const resumeLabel = Array.isArray(suspendOptions.resumeLabel)
+                ? suspendOptions.resumeLabel
+                : [suspendOptions.resumeLabel];
+              for (const label of resumeLabel) {
+                executionContext.resumeLabels[label] = {
+                  stepId: step.id,
+                  foreachIndex: executionContext.foreachIndex,
+                };
+              }
             }
 
             suspended = { payload: suspendPayload };
@@ -923,6 +936,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                   resumePayload: resume?.resumePayload,
                   // @ts-ignore
                   runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
+                  label: resume?.label,
+                  forEachIndex: resume?.forEachIndex,
                 }
               : undefined,
           [EMITTER_SYMBOL]: emitter,

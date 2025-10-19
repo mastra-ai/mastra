@@ -3537,6 +3537,7 @@ export class Agent<
       requireToolApproval: options.requireToolApproval,
       resumeContext,
       agentId: this.id,
+      toolCallId: options.toolCallId,
     });
 
     const run = await executionWorkflow.createRunAsync();

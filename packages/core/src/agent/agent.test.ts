@@ -19,6 +19,7 @@ import type { MastraMessageV2, StorageThreadType } from '../memory';
 import { RuntimeContext } from '../runtime-context';
 import { createScorer } from '../scores';
 import { runScorer } from '../scores/hooks';
+import { MockStore } from '../storage';
 import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import { delay } from '../utils';
@@ -27,6 +28,8 @@ import { assertNoDuplicateParts, MockMemory } from './test-utils';
 import { Agent } from './index';
 
 config();
+
+const mockStorage = new MockStore();
 
 const mockFindUser = vi.fn().mockImplementation(async data => {
   const list = [
@@ -375,52 +378,176 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
     });
 
-    it('should call findUserTool', async () => {
-      const findUserTool = createTool({
-        id: 'Find user tool',
-        description: 'This is a test tool that returns the name and email',
-        inputSchema: z.object({
-          name: z.string(),
-        }),
-        execute: ({ context }) => {
-          return mockFindUser(context) as Promise<Record<string, any>>;
-        },
-      });
-
-      const userAgent = new Agent({
-        name: 'User agent',
-        instructions: 'You are an agent that can get list of users using findUserTool.',
-        model: openaiModel,
-        tools: { findUserTool },
-      });
-
-      const mastra = new Mastra({
-        agents: { userAgent },
-        logger: false,
-      });
-
-      const agentOne = mastra.getAgent('userAgent');
-
-      let toolCall;
-      let response;
-      if (version === 'v1') {
-        response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
-          maxSteps: 2,
-          toolChoice: 'required',
-        });
-        toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
-      } else {
-        response = await agentOne.generate('Find the user with name - Dero Israel');
-        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
-      }
-
-      const name = toolCall?.result?.name;
-
-      expect(mockFindUser).toHaveBeenCalled();
-      expect(name).toBe('Dero Israel');
-    }, 500000);
-
     describe('tool approval and suspension', () => {
+      describe.skipIf(version === 'v1')('requireToolApproval', () => {
+        it('should call findUserTool with requireToolApproval on tool and be able to reject the tool call', async () => {
+          const findUserTool = createTool({
+            id: 'Find user tool',
+            description: 'This is a test tool that returns the name and email',
+            inputSchema: z.object({
+              name: z.string(),
+            }),
+            // requireApproval: true,
+            execute: async ({ context }) => {
+              return mockFindUser(context) as Promise<Record<string, any>>;
+            },
+          });
+
+          const userAgent = new Agent({
+            name: 'User agent',
+            instructions: 'You are an agent that can get list of users using findUserTool.',
+            model: openaiModel,
+            tools: { findUserTool },
+          });
+
+          const mastra = new Mastra({
+            agents: { userAgent },
+            logger: false,
+            storage: mockStorage,
+          });
+
+          const agentOne = mastra.getAgent('userAgent');
+
+          const stream = await agentOne.stream('Find the user with name - Dero Israel', { requireToolApproval: true });
+          let toolCallId = '';
+          for await (const _chunk of stream.fullStream) {
+            if (_chunk.type === 'tool-call-approval') {
+              toolCallId = _chunk.payload.toolCallId;
+            }
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const resumeStream = await agentOne.declineToolCall({ runId: stream.runId, toolCallId });
+          for await (const _chunk of resumeStream.fullStream) {
+            console.log(_chunk);
+          }
+
+          expect((await resumeStream.toolCalls).length).toBe(1);
+          expect((await resumeStream.toolResults).length).toBe(0);
+          expect(mockFindUser).toHaveBeenCalledTimes(0);
+        }, 500000);
+
+        it('should call findUserTool with requireToolApproval on agent', async () => {
+          const findUserTool = createTool({
+            id: 'Find user tool',
+            description: 'This is a test tool that returns the name and email',
+            inputSchema: z.object({
+              name: z.string(),
+            }),
+            execute: async ({ context }) => {
+              return mockFindUser(context) as Promise<Record<string, any>>;
+            },
+          });
+
+          const userAgent = new Agent({
+            name: 'User agent',
+            instructions: 'You are an agent that can get list of users using findUserTool.',
+            model: openaiModel,
+            tools: { findUserTool },
+          });
+
+          const mastra = new Mastra({
+            agents: { userAgent },
+            logger: false,
+            storage: mockStorage,
+          });
+
+          const agentOne = mastra.getAgent('userAgent');
+
+          let toolCall;
+          let response;
+          if (version === 'v1') {
+            response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
+              maxSteps: 2,
+              toolChoice: 'required',
+            });
+            toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
+          } else {
+            const stream = await agentOne.stream('Find the user with name - Dero Israel', {
+              requireToolApproval: true,
+            });
+            let toolCallId = '';
+            for await (const _chunk of stream.fullStream) {
+              if (_chunk.type === 'tool-call-approval') {
+                toolCallId = _chunk.payload.toolCallId;
+              }
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
+            for await (const _chunk of resumeStream.fullStream) {
+            }
+
+            toolCall = (await resumeStream.toolResults).find(
+              (result: any) => result.payload.toolName === 'findUserTool',
+            ).payload;
+          }
+
+          const name = toolCall?.result?.name;
+
+          expect(mockFindUser).toHaveBeenCalled();
+          expect(name).toBe('Dero Israel');
+        }, 500000);
+
+        it('should call findUserTool with requireToolApproval on tool', async () => {
+          const findUserTool = createTool({
+            id: 'Find user tool',
+            description: 'This is a test tool that returns the name and email',
+            inputSchema: z.object({
+              name: z.string(),
+            }),
+            requireApproval: true,
+            execute: async ({ context }) => {
+              return mockFindUser(context) as Promise<Record<string, any>>;
+            },
+          });
+
+          const userAgent = new Agent({
+            name: 'User agent',
+            instructions: 'You are an agent that can get list of users using findUserTool.',
+            model: openaiModel,
+            tools: { findUserTool },
+          });
+
+          const mastra = new Mastra({
+            agents: { userAgent },
+            logger: false,
+            storage: mockStorage,
+          });
+
+          const agentOne = mastra.getAgent('userAgent');
+
+          let toolCall;
+          let response;
+          if (version === 'v1') {
+            response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
+              maxSteps: 2,
+              toolChoice: 'required',
+            });
+            toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
+          } else {
+            const stream = await agentOne.stream('Find the user with name - Dero Israel');
+            let toolCallId = '';
+            for await (const _chunk of stream.fullStream) {
+              if (_chunk.type === 'tool-call-approval') {
+                toolCallId = _chunk.payload.toolCallId;
+              }
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
+            for await (const _chunk of resumeStream.fullStream) {
+            }
+
+            toolCall = (await resumeStream.toolResults).find(
+              (result: any) => result.payload.toolName === 'findUserTool',
+            ).payload;
+          }
+
+          const name = toolCall?.result?.name;
+
+          expect(mockFindUser).toHaveBeenCalled();
+          expect(name).toBe('Dero Israel');
+        }, 500000);
+      });
+
       describe.skipIf(version === 'v1')('suspension', () => {
         it('should call findUserTool with suspend and resume', async () => {
           const findUserTool = createTool({
@@ -483,163 +610,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }, 500000);
       });
 
-      describe.skipIf(version === 'v1')('requireToolApproval', () => {
-        it('should call findUserTool with requireToolApproval on agent', async () => {
-          const findUserTool = createTool({
-            id: 'Find user tool',
-            description: 'This is a test tool that returns the name and email',
-            inputSchema: z.object({
-              name: z.string(),
-            }),
-            execute: async ({ context }) => {
-              return mockFindUser(context) as Promise<Record<string, any>>;
-            },
-          });
-
-          const userAgent = new Agent({
-            name: 'User agent',
-            instructions: 'You are an agent that can get list of users using findUserTool.',
-            model: openaiModel,
-            tools: { findUserTool },
-          });
-
-          const mastra = new Mastra({
-            agents: { userAgent },
-            logger: false,
-            storage: mockStorage,
-          });
-
-          const agentOne = mastra.getAgent('userAgent');
-
-          let toolCall;
-          let response;
-          if (version === 'v1') {
-            response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
-              maxSteps: 2,
-              toolChoice: 'required',
-            });
-            toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
-          } else {
-            const stream = await agentOne.stream('Find the user with name - Dero Israel', {
-              requireToolApproval: true,
-            });
-            for await (const _chunk of stream.fullStream) {
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const resumeStream = await agentOne.approveToolCall({ runId: stream.runId });
-            for await (const _chunk of resumeStream.fullStream) {
-            }
-
-            toolCall = (await resumeStream.toolResults).find(
-              (result: any) => result.payload.toolName === 'findUserTool',
-            ).payload;
-          }
-
-          const name = toolCall?.result?.name;
-
-          expect(mockFindUser).toHaveBeenCalled();
-          expect(name).toBe('Dero Israel');
-        }, 500000);
-
-        it('should call findUserTool with requireToolApproval on tool', async () => {
-          const findUserTool = createTool({
-            id: 'Find user tool',
-            description: 'This is a test tool that returns the name and email',
-            inputSchema: z.object({
-              name: z.string(),
-            }),
-            requireApproval: true,
-            execute: async ({ context }) => {
-              return mockFindUser(context) as Promise<Record<string, any>>;
-            },
-          });
-
-          const userAgent = new Agent({
-            name: 'User agent',
-            instructions: 'You are an agent that can get list of users using findUserTool.',
-            model: openaiModel,
-            tools: { findUserTool },
-          });
-
-          const mastra = new Mastra({
-            agents: { userAgent },
-            logger: false,
-            storage: mockStorage,
-          });
-
-          const agentOne = mastra.getAgent('userAgent');
-
-          let toolCall;
-          let response;
-          if (version === 'v1') {
-            response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
-              maxSteps: 2,
-              toolChoice: 'required',
-            });
-            toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
-          } else {
-            const stream = await agentOne.stream('Find the user with name - Dero Israel');
-            for await (const _chunk of stream.fullStream) {
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const resumeStream = await agentOne.approveToolCall({ runId: stream.runId });
-            for await (const _chunk of resumeStream.fullStream) {
-            }
-
-            toolCall = (await resumeStream.toolResults).find(
-              (result: any) => result.payload.toolName === 'findUserTool',
-            ).payload;
-          }
-
-          const name = toolCall?.result?.name;
-
-          expect(mockFindUser).toHaveBeenCalled();
-          expect(name).toBe('Dero Israel');
-        }, 500000);
-
-        it.only('should call findUserTool with requireToolApproval on tool and be able to reject the tool call', async () => {
-          const findUserTool = createTool({
-            id: 'Find user tool',
-            description: 'This is a test tool that returns the name and email',
-            inputSchema: z.object({
-              name: z.string(),
-            }),
-            // requireApproval: true,
-            execute: async ({ context }) => {
-              return mockFindUser(context) as Promise<Record<string, any>>;
-            },
-          });
-
-          const userAgent = new Agent({
-            name: 'User agent',
-            instructions: 'You are an agent that can get list of users using findUserTool.',
-            model: openaiModel,
-            tools: { findUserTool },
-          });
-
-          const mastra = new Mastra({
-            agents: { userAgent },
-            logger: false,
-            storage: mockStorage,
-          });
-
-          const agentOne = mastra.getAgent('userAgent');
-
-          const stream = await agentOne.stream('Find the user with name - Dero Israel', { requireToolApproval: true });
-          for await (const _chunk of stream.fullStream) {
-          }
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          const resumeStream = await agentOne.declineToolCall({ runId: stream.runId });
-          for await (const _chunk of resumeStream.fullStream) {
-            console.log(_chunk);
-          }
-
-          expect((await resumeStream.toolCalls).length).toBe(1);
-          expect((await resumeStream.toolResults).length).toBe(0);
-          expect(mockFindUser).toHaveBeenCalledTimes(0);
-        }, 500000);
-      });
-
       describe.skipIf(version === 'v1')('persist model output stream state', () => {
         it('should persist text stream state', async () => {
           const findUserTool = createTool({
@@ -684,13 +654,20 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               },
             );
             let firstText = '';
+            let toolCallId = '';
             for await (const chunk of stream.fullStream) {
               if (chunk.type === 'text-delta') {
                 firstText += chunk.payload.text;
               }
+              if (chunk.type === 'tool-call-approval') {
+                toolCallId = chunk.payload.toolCallId;
+              }
             }
             await new Promise(resolve => setTimeout(resolve, 1000));
-            const resumeStream = await agentOne.resumeStreamVNext({ hello: 'world' }, { runId: stream.runId });
+            const resumeStream = await agentOne.resumeStreamVNext(
+              { approved: true },
+              { runId: stream.runId, toolCallId },
+            );
             let secondText = '';
             for await (const chunk of resumeStream.fullStream) {
               if (chunk.type === 'text-delta') {
@@ -718,6 +695,51 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }, 500000);
       });
     });
+
+    it('should call findUserTool', async () => {
+      const findUserTool = createTool({
+        id: 'Find user tool',
+        description: 'This is a test tool that returns the name and email',
+        inputSchema: z.object({
+          name: z.string(),
+        }),
+        execute: ({ context }) => {
+          return mockFindUser(context) as Promise<Record<string, any>>;
+        },
+      });
+
+      const userAgent = new Agent({
+        name: 'User agent',
+        instructions: 'You are an agent that can get list of users using findUserTool.',
+        model: openaiModel,
+        tools: { findUserTool },
+      });
+
+      const mastra = new Mastra({
+        agents: { userAgent },
+        logger: false,
+      });
+
+      const agentOne = mastra.getAgent('userAgent');
+
+      let toolCall;
+      let response;
+      if (version === 'v1') {
+        response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
+          maxSteps: 2,
+          toolChoice: 'required',
+        });
+        toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
+      } else {
+        response = await agentOne.generate('Find the user with name - Dero Israel');
+        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
+      }
+
+      const name = toolCall?.result?.name;
+
+      expect(mockFindUser).toHaveBeenCalled();
+      expect(name).toBe('Dero Israel');
+    }, 500000);
 
     it('generate - should pass and call client side tools', async () => {
       const userAgent = new Agent({

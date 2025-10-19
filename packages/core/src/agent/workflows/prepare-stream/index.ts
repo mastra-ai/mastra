@@ -37,6 +37,7 @@ interface CreatePrepareStreamWorkflowOptions<
   requireToolApproval?: boolean;
   resumeContext?: any;
   agentId: string;
+  toolCallId?: string;
 }
 
 export function createPrepareStreamWorkflow<
@@ -60,6 +61,7 @@ export function createPrepareStreamWorkflow<
   requireToolApproval,
   resumeContext,
   agentId,
+  toolCallId,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -96,6 +98,7 @@ export function createPrepareStreamWorkflow<
     requireToolApproval,
     resumeContext,
     agentId,
+    toolCallId,
   });
 
   const mapResultsStep = createMapResultsStep({

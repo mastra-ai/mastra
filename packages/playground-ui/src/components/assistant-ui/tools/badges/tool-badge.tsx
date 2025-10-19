@@ -1,4 +1,7 @@
 import { ToolsIcon } from '@/ds/icons';
+import { Button } from '@/ds/components/Button';
+import { Icon } from '@/ds/icons';
+import { Check, X } from 'lucide-react';
 import { SyntaxHighlighter } from '../../../ui/syntax-highlighter';
 import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
@@ -10,27 +13,43 @@ export interface ToolBadgeProps {
   result: any;
   metadata?: MastraUIMessage['metadata'];
   toolOutput: Array<{ toolId: string }>;
+  requiresApproval?: boolean;
+  onApprove?: () => void;
+  onDecline?: () => void;
+  isRunning?: boolean;
 }
 
-export const ToolBadge = ({ toolName, args, result, metadata, toolOutput }: ToolBadgeProps) => {
+export const ToolBadge = ({
+  toolName,
+  args,
+  result,
+  metadata,
+  toolOutput,
+  requiresApproval,
+  onApprove,
+  onDecline,
+  isRunning,
+}: ToolBadgeProps) => {
   let argSlot = null;
 
   try {
     const { __mastraMetadata: _, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
     argSlot = <SyntaxHighlighter data={formattedArgs} />;
   } catch {
-    argSlot = <pre className="whitespace-pre-wrap">{args as string}</pre>;
+    argSlot = <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{args as string}</pre>;
   }
 
   let resultSlot =
     typeof result === 'string' ? (
-      <pre className="whitespace-pre-wrap bg-surface4 p-4 rounded-md">{result}</pre>
+      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{result}</pre>
     ) : (
       <SyntaxHighlighter data={result} />
     );
 
   const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
+
+  const toolCalled = result || toolOutput.length > 0;
 
   return (
     <BadgeWrapper
@@ -45,6 +64,7 @@ export const ToolBadge = ({ toolName, args, result, metadata, toolOutput }: Tool
           />
         )
       }
+      initialCollapsed={!requiresApproval}
     >
       <div className="space-y-4">
         <div>
@@ -52,7 +72,7 @@ export const ToolBadge = ({ toolName, args, result, metadata, toolOutput }: Tool
           {argSlot}
         </div>
 
-        {resultSlot !== undefined && (
+        {resultSlot !== undefined && result && (
           <div>
             <p className="font-medium pb-2">Tool result</p>
             {resultSlot}
@@ -65,6 +85,26 @@ export const ToolBadge = ({ toolName, args, result, metadata, toolOutput }: Tool
 
             <div className="h-40 overflow-y-auto">
               <SyntaxHighlighter data={toolOutput} />
+            </div>
+          </div>
+        )}
+
+        {requiresApproval && !toolCalled && (
+          <div>
+            <p className="font-medium pb-2">Tool approval required</p>
+            <div className="flex gap-2 items-center">
+              <Button onClick={onApprove} disabled={isRunning}>
+                <Icon>
+                  <Check />
+                </Icon>
+                Approve
+              </Button>
+              <Button onClick={onDecline} disabled={isRunning}>
+                <Icon>
+                  <X />
+                </Icon>
+                Decline
+              </Button>
             </div>
           </div>
         )}

@@ -3,20 +3,26 @@
 import { createContext, useContext, ReactNode } from 'react';
 
 interface ToolCallContextValue {
-  approveToolcall: () => void;
-  declineToolcall: () => void;
+  approveToolcall: (toolCallId: string) => void;
+  declineToolcall: (toolCallId: string) => void;
+  isRunning: boolean;
 }
 
 const ToolCallContext = createContext<ToolCallContextValue | undefined>(undefined);
 
 interface ToolCallProviderProps {
   children: ReactNode;
-  approveToolcall: () => void;
-  declineToolcall: () => void;
+  approveToolcall: (toolCallId: string) => void;
+  declineToolcall: (toolCallId: string) => void;
+  isRunning: boolean;
 }
 
-export function ToolCallProvider({ children, approveToolcall, declineToolcall }: ToolCallProviderProps) {
-  return <ToolCallContext.Provider value={{ approveToolcall, declineToolcall }}>{children}</ToolCallContext.Provider>;
+export function ToolCallProvider({ children, approveToolcall, declineToolcall, isRunning }: ToolCallProviderProps) {
+  return (
+    <ToolCallContext.Provider value={{ approveToolcall, declineToolcall, isRunning }}>
+      {children}
+    </ToolCallContext.Provider>
+  );
 }
 
 export function useToolCall() {

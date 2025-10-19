@@ -21,7 +21,7 @@ import type { DynamicArgument } from '../types';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
-import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
+import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step, SuspendOptions } from './step';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -1112,11 +1112,13 @@ export class Workflow<
     getStepResult<T extends Step<any, any, any, any, any, any, TEngineType>>(
       stepId: T,
     ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
-    suspend: (suspendPayload: any) => Promise<any>;
+    suspend: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
     resume?: {
       steps: string[];
       resumePayload: any;
       runId?: string;
+      label?: string;
+      forEachIndex?: number;
     };
     [EMITTER_SYMBOL]: { emit: (event: string, data: any) => void };
     mastra: Mastra;
@@ -1144,7 +1146,7 @@ export class Workflow<
       validateInputs: validateInputs ?? false,
     };
 
-    const isResume = !!(resume?.steps && resume.steps.length > 0);
+    const isResume = !!(resume?.steps && resume.steps.length > 0) || !!resume?.label;
     const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync({ runId });
     const nestedAbortCb = () => {
       abort();
@@ -1172,7 +1174,8 @@ export class Workflow<
           step: resume.steps as any,
           runtimeContext,
           tracingContext,
-          outputOptions: { includeState: true },
+          outputOptions: { includeState: true, includeResumeLabels: true },
+          label: resume.label,
         })
       : await run.start({
           inputData,
@@ -1180,7 +1183,7 @@ export class Workflow<
           tracingContext,
           writableStream: writer,
           initialState: state,
-          outputOptions: { includeState: true },
+          outputOptions: { includeState: true, includeResumeLabels: true },
         });
     unwatch();
     unwatchV2();
@@ -1197,10 +1200,15 @@ export class Workflow<
       for (const [stepName, stepResult] of suspendedSteps) {
         // @ts-ignore
         const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
-        await suspend({
-          ...(stepResult as any)?.suspendPayload,
-          __workflow_meta: { runId: run.runId, path: suspendPath },
-        });
+        await suspend(
+          {
+            ...(stepResult as any)?.suspendPayload,
+            __workflow_meta: { runId: run.runId, path: suspendPath },
+          },
+          {
+            resumeLabel: Object.keys(res.resumeLabels ?? {}),
+          },
+        );
       }
     }
 
@@ -1594,6 +1602,7 @@ export class Run<
     format?: 'legacy' | 'vnext' | undefined;
     outputOptions?: {
       includeState?: boolean;
+      includeResumeLabels?: boolean;
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // note: this span is ended inside this.executionEngine.execute()
@@ -1681,6 +1690,7 @@ export class Run<
     tracingOptions?: TracingOptions;
     outputOptions?: {
       includeState?: boolean;
+      includeResumeLabels?: boolean;
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._start({
@@ -2246,6 +2256,7 @@ export class Run<
     writableStream?: WritableStream<ChunkType>;
     outputOptions?: {
       includeState?: boolean;
+      includeResumeLabels?: boolean;
     };
     forEachIndex?: number;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
@@ -2272,6 +2283,7 @@ export class Run<
     isVNext?: boolean;
     outputOptions?: {
       includeState?: boolean;
+      includeResumeLabels?: boolean;
     };
     forEachIndex?: number;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
@@ -2399,6 +2411,7 @@ export class Run<
           // @ts-ignore
           resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
           forEachIndex: params.forEachIndex ?? snapshotResumeLabel?.foreachIndex,
+          label: params.label,
         },
         format: params.format,
         emitter: {

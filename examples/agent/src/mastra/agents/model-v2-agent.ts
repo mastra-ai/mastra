@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
+import { cookingTool } from '../tools';
 
 export const weatherInfo = createTool({
   id: 'weather-info',

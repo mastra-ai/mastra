@@ -163,6 +163,7 @@ export class MastraLLMVNext extends MastraBase {
     requireToolApproval,
     _internal,
     agentId,
+    toolCallId,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
@@ -208,6 +209,7 @@ export class MastraLLMVNext extends MastraBase {
         mastra: this.#mastra,
         resumeContext,
         runId,
+        toolCallId,
         messageList,
         models: this.#models,
         tools: tools as Tools,

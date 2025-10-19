@@ -9,9 +9,11 @@ export type MastraUIMessageMetadata = {
   | {
       mode: 'stream';
       requireApprovalMetadata?: {
-        toolCallId: string;
-        toolName: string;
-        args: any;
+        [toolCallId: string]: {
+          toolCallId: string;
+          toolName: string;
+          args: Record<string, any>;
+        };
       };
     }
   | {

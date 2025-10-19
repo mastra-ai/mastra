@@ -650,7 +650,6 @@ export function approveToolCallHandler({
   body: GetHITLBody<'approveToolCall'> & {
     runtimeContext?: string;
     format?: 'aisdk' | 'mastra';
-    runId: string;
   };
   abortSignal?: AbortSignal;
 }): ReturnType<Agent['approveToolCall']> {
@@ -659,6 +658,14 @@ export function approveToolCallHandler({
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    if (!body.runId) {
+      throw new HTTPException(400, { message: 'Run id is required' });
+    }
+
+    if (!body.toolCallId) {
+      throw new HTTPException(400, { message: 'Tool call id is required' });
     }
 
     // UI Frameworks may send "client tools" in the body,
@@ -706,6 +713,14 @@ export function declineToolCallHandler({
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    if (!body.runId) {
+      throw new HTTPException(400, { message: 'Run id is required' });
+    }
+
+    if (!body.toolCallId) {
+      throw new HTTPException(400, { message: 'Tool call id is required' });
     }
 
     // UI Frameworks may send "client tools" in the body,

@@ -1403,7 +1403,7 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async approveToolCall(params: { runId: string }): Promise<
+  async approveToolCall(params: { runId: string; toolCallId: string }): Promise<
     Response & {
       processDataStream: ({
         onChunk,
@@ -1446,7 +1446,7 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async declineToolCall(params: { runId: string }): Promise<
+  async declineToolCall(params: { runId: string; toolCallId: string }): Promise<
     Response & {
       processDataStream: ({
         onChunk,

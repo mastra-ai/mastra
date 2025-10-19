@@ -261,30 +261,36 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
     _onChunk.current = undefined;
   };
 
-  const approveToolCall = async () => {
+  const approveToolCall = async (toolCallId: string) => {
     const onChunk = _onChunk.current;
     const currentRunId = _currentRunId.current;
 
     if (!currentRunId)
       return console.info('[approveToolCall] approveToolCall can only be called after a stream has started');
 
+    setIsRunning(true);
+
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.approveToolCall({ runId: currentRunId });
+    const response = await agent.approveToolCall({ runId: currentRunId, toolCallId });
 
     await handleStreamResponse(response, onChunk);
+    setIsRunning(false);
   };
 
-  const declineToolCall = async () => {
+  const declineToolCall = async (toolCallId: string) => {
     const onChunk = _onChunk.current;
     const currentRunId = _currentRunId.current;
 
     if (!currentRunId)
       return console.info('[declineToolCall] declineToolCall can only be called after a stream has started');
 
+    setIsRunning(true);
+
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.declineToolCall({ runId: currentRunId });
+    const response = await agent.declineToolCall({ runId: currentRunId, toolCallId });
 
     await handleStreamResponse(response, onChunk);
+    setIsRunning(false);
   };
 
   const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {

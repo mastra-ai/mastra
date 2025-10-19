@@ -7,7 +7,6 @@ import { WorkflowRunProvider } from '@/domains/workflows';
 import { LoadingBadge } from './badges/loading-badge';
 import { AgentBadge } from './badges/agent-badge';
 import { MastraUIMessage } from '@mastra/react';
-import { ToolApproval } from './tool-approval';
 import { useToolCall } from '@/services/tool-call-provider';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
@@ -22,7 +21,7 @@ export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackP
   );
 };
 
-const ToolFallbackInner = ({ toolName, result, args, metadata, ...props }: ToolFallbackProps) => {
+const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...props }: ToolFallbackProps) => {
   // We need to handle the stream data even if the workflow is not resolved yet
   // The response from the fetch request resolving the workflow might theoretically
   // be resolved after we receive the first stream event
@@ -30,14 +29,14 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, ...props }: ToolF
   useWorkflowStream(result);
   const { data: workflow, isLoading } = useWorkflow(toolName);
 
-  const { approveToolcall, declineToolcall } = useToolCall();
+  const { approveToolcall, declineToolcall, isRunning } = useToolCall();
 
-  const handleApprove = () => {
-    approveToolcall();
+  const handleApprove = (toolCallId: string) => {
+    approveToolcall(toolCallId);
   };
 
-  const handleDecline = () => {
-    declineToolcall();
+  const handleDecline = (toolCallId: string) => {
+    declineToolcall(toolCallId);
   };
 
   const isAgent = metadata?.mode === 'network' && metadata.from === 'AGENT';
@@ -52,17 +51,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, ...props }: ToolF
 
   const requireApprovalMetadata = metadata?.mode === 'stream' && metadata?.requireApprovalMetadata;
 
-  if (requireApprovalMetadata) {
-    return (
-      <ToolApproval
-        toolName={requireApprovalMetadata.toolName}
-        args={requireApprovalMetadata.args}
-        onApprove={handleApprove}
-        onDecline={handleDecline}
-        toolCallId={requireApprovalMetadata.toolCallId}
-      />
-    );
-  }
+  const toolApprovalMetadata = requireApprovalMetadata ? requireApprovalMetadata?.[toolCallId] : undefined;
 
   if (workflow) {
     const isStreaming = metadata?.mode === 'stream' || metadata?.mode === 'network';
@@ -85,6 +74,10 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, ...props }: ToolF
       result={result}
       toolOutput={result?.toolOutput || []}
       metadata={metadata}
+      requiresApproval={!!toolApprovalMetadata}
+      onApprove={() => handleApprove(toolApprovalMetadata?.toolCallId ?? '')}
+      onDecline={() => handleDecline(toolApprovalMetadata?.toolCallId ?? '')}
+      isRunning={isRunning}
     />
   );
 };

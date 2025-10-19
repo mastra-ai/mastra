@@ -1731,10 +1731,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
               executionContext.suspendedPaths[step.id] = executionContext.executionPath;
               if (suspendOptions?.resumeLabel) {
-                executionContext.resumeLabels[suspendOptions.resumeLabel] = {
-                  stepId: step.id,
-                  foreachIndex: executionContext.foreachIndex,
-                };
+                const resumeLabel = Array.isArray(suspendOptions.resumeLabel)
+                  ? suspendOptions.resumeLabel
+                  : [suspendOptions.resumeLabel];
+                for (const label of resumeLabel) {
+                  executionContext.resumeLabels[label] = {
+                    stepId: step.id,
+                    foreachIndex: executionContext.foreachIndex,
+                  };
+                }
               }
               suspended = { payload: suspendPayload };
             },

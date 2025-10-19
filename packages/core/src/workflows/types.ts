@@ -342,6 +342,7 @@ export type WorkflowResult<
   | ({
       status: 'success';
       state?: z.infer<TState>;
+      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       result: z.infer<TOutput>;
       input: z.infer<TInput>;
       steps: {
@@ -359,6 +360,7 @@ export type WorkflowResult<
       status: 'failed';
       input: z.infer<TInput>;
       state?: z.infer<TState>;
+      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
@@ -375,6 +377,7 @@ export type WorkflowResult<
       status: 'suspended';
       input: z.infer<TInput>;
       state?: z.infer<TState>;
+      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
