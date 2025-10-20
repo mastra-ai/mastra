@@ -5,16 +5,17 @@ description: "Steps in Mastra workflows provide a structured way to manage opera
 
 # Agents and Tools
 
-Workflow steps are composable and typically run logic directly within the `execute` function. However, there are cases where calling an agent or tool is more appropriate. This pattern is especially useful when:
+Workflow steps can call agents to leverage LLM reasoning or run custom functions from your codebase. You can either invoke them from within a step's `execute` function or compose them directly as steps using `createStep()`.
 
-- Generating natural language responses from user input using an LLM.
-- Abstracting complex or reusable logic into a dedicated tool.
-- Interacting with third-party APIs in a structured or reusable way.
+## When to use agents and tools
 
-Workflows can use Mastra agents or tools directly as steps, for example: `createStep(testAgent)` or `createStep(testTool)`.
+Use agents in workflow steps when you need to solve open-ended tasks that require reasoning or language generation. Use tools when you need to call APIs, query databases, or run custom functions that perform specific operations.
 
+## Using agents with workflow steps
 
-## Calling agents from workflow steps
+There are two ways to use agents with workflow steps. Either call the agent using  `.generate()` or `.stream()`, or compose an agent as a step.
+
+### Calling an agent from a step
 
 You can call agents from within a step’s `execute` function to generate a response and pass the result to the next step in the sequence. Agents are called the same way from a step as they are from any other context.
 
@@ -37,7 +38,36 @@ const step1 = createStep({
 > See [Calling Agents](../../examples/agents/calling-agents.mdx) for more information.
 
 
-## Using tools in workflow steps
+### Adding an agent as a step
+
+...
+
+
+<!-- ![Agent as step](/image/workflows/workflows-agent-tools-agent-step.jpg) -->
+
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { testAgent } from "../agents/test-agent";
+
+const step1 = createStep(testAgent);
+
+export const testWorkflow = createWorkflow({
+  // ...
+  .map(({ inputData }) => {
+    const { input } = inputData;
+    return {
+      prompt: `Provide facts about the city: ${input}`
+    };
+  })
+  .then(step1)
+  .commit();
+```
+
+## Using tools with workflow steps
+
+To use a tool within a workflow, define it in the usual way, then either add it directly to the workflow using `createStep(testTool)` or, invoke it from within a step's `execute` function using `.execute()`.
+
+### Using a tool in workflow step
 
 You can call tools from within a step’s `execute` function to produce a result and pass it to the next step in the sequence. Tools are called the same way from a step as they are from any other context.
 
@@ -65,139 +95,7 @@ const step1 = createStep({
 
 > See [Calling Tools](../../examples/tools/calling-tools.mdx) for more information.
 
-
-## Using agents in workflows
-
-To include an agent in a workflow, define it in the usual way, then either add it directly to the workflow using `createStep(testAgent)` or, invoke it from within a step's `execute` function using `.generate()`.
-
-### Example agent
-
-This agent uses OpenAI to generate a fact about a city, country, and timezone.
-
-```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-
-export const testAgent = new Agent({
-  name: "test-agent",
-  description: "Create facts for a country based on the city",
-  instructions: `Return an interesting fact about the country based on the city provided`,
-  model: openai("gpt-4o")
-});
-```
-
-### Adding an agent as a step
-
-In this example, `step1` uses the `testAgent` to generate an interesting fact about the country based on a given city.
-
-The `.map` method transforms the workflow input into a `prompt` string compatible with the `testAgent`.
-
-The step is composed into the workflow using `.then()`, allowing it to receive the mapped input and return the agent's structured output. The workflow is finalized with `.commit()`.
-
-
-![Agent as step](/image/workflows/workflows-agent-tools-agent-step.jpg)
-
-
-```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { testAgent } from "../agents/test-agent";
-
-const step1 = createStep(testAgent);
-
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.object({
-    input: z.string()
-  }),
-  outputSchema: z.object({
-    output: z.string()
-  })
-})
-  .map(({ inputData }) => {
-    const { input } = inputData;
-    return {
-      prompt: `Provide facts about the city: ${input}`
-    };
-  })
-  .then(step1)
-  .commit();
-```
-
-### Calling an agent with `.generate()`
-
-In this example, the `step1` builds a prompt using the provided `input` and passes it to the `testAgent`, which returns a plain-text response containing facts about the city and its country.
-
-The step is added to the workflow using the sequential `.then()` method, allowing it to receive input from the workflow and return structured output. The workflow is finalized with `.commit()`.
-
-```typescript {1,18, 29} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { testAgent } from "../agents/test-agent";
-
-const step1 = createStep({
-  id: "step-1",
-  description: "Create facts for a country based on the city",
-  inputSchema: z.object({
-    input: z.string()
-  }),
-  outputSchema: z.object({
-    output: z.string()
-  }),
-
-  execute: async ({ inputData }) => {
-    const { input } = inputData;
-
-    const  prompt = `Provide facts about the city: ${input}`
-
-    const { text } = await testAgent.generate([
-      { role: "user", content: prompt }
-    ]);
-
-    return {
-      output: text
-    };
-  }
-});
-
-export const testWorkflow = createWorkflow({...})
-  .then(step1)
-  .commit();
-```
-
-## Using tools in workflows
-
-To use a tool within a workflow, define it in the usual way, then either add it directly to the workflow using `createStep(testTool)` or, invoke it from within a step's `execute` function using `.execute()`.
-
-### Example tool
-
-The example below uses the Open Meteo API to retrieve geolocation details for a city, returning its name, country, and timezone.
-
-```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
-import { createTool } from "@mastra/core";
-import { z } from "zod";
-
-export const testTool = createTool({
-  id: "test-tool",
-  description: "Gets country for a city",
-  inputSchema: z.object({
-    input: z.string()
-  }),
-  outputSchema: z.object({
-    country_name: z.string()
-  }),
-  execute: async ({ context }) => {
-    const { input } = context;
-    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${input}`);
-    const geocodingData = await geocodingResponse.json();
-
-    const { country } = geocodingData.results[0];
-
-    return {
-      country_name: country
-    };
-  }
-});
-```
-
-### Adding a tool as a step
+### Using a tools as a step
 
 In this example, `step1` uses the `testTool`, which performs a geocoding lookup using the provided `city` and returns the resolved `country`.
 
@@ -215,47 +113,8 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-### Calling a tool with `.execute()`
 
-In this example, `step1` directly invokes `testTool` using its `.execute()` method. The tool performs a geocoding lookup with the provided `city` and returns the corresponding `country`.
-
-The result is returned as structured output from the step. The step is composed into the workflow using `.then()`, enabling it to process workflow input and produce typed output. The workflow is finalized with `.commit()`
-
-```typescript {3,20,32} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/di";
-
-import { testTool } from "../tools/test-tool";
-
-const runtimeContext = new RuntimeContext();
-
-const step1 = createStep({
-  id: "step-1",
-  description: "Gets country for a city",
-  inputSchema: z.object({
-    input: z.string()
-  }),
-  outputSchema: z.object({
-    output: z.string()
-  }),
-
-  execute: async ({ inputData }) => {
-    const { input } = inputData;
-
-    const { country_name } = await testTool.execute({
-      context: { input },
-      runtimeContext
-    });
-
-    return {
-      output: country_name
-    };
-  }
-});
-
-export const testWorkflow = createWorkflow({...})
-  .then(step1)
-  .commit();
-```
+## ----- OLD
 
 ## Using workflows as tools
 
