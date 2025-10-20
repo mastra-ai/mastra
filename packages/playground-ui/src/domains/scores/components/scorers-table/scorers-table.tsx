@@ -52,7 +52,7 @@ export function ScorersTable({ scorers, isLoading }: ScorersTableProps) {
   const filteredRows = rows.filter(row => row.original.scorer.config.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <>
+    <div>
       <SearchbarWrapper>
         <Searchbar onSearch={setSearch} label="Search scorers" placeholder="Search scorers" />
       </SearchbarWrapper>
@@ -82,7 +82,7 @@ export function ScorersTable({ scorers, isLoading }: ScorersTableProps) {
           </Table>
         </ScrollableContainer>
       )}
-    </>
+    </div>
   );
 }
 

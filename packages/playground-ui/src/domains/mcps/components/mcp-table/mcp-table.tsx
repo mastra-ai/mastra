@@ -40,7 +40,7 @@ export function MCPTable({ mcpServers, isLoading }: MCPTableProps) {
   const filteredRows = rows.filter(row => row.original.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <>
+    <div>
       <SearchbarWrapper>
         <Searchbar onSearch={setSearch} label="Search MCP servers" placeholder="Search MCP servers" />
       </SearchbarWrapper>
@@ -73,7 +73,7 @@ export function MCPTable({ mcpServers, isLoading }: MCPTableProps) {
           </TooltipProvider>
         </ScrollableContainer>
       )}
-    </>
+    </div>
   );
 }
 

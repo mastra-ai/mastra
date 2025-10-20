@@ -5,5 +5,5 @@ type EntryListRootProps = {
 };
 
 export function EntryListRoot({ children }: EntryListRootProps) {
-  return <div className="grid mb-[3rem]">{children}</div>;
+  return <div className="grid">{children}</div>;
 }

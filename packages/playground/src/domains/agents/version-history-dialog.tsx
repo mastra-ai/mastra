@@ -1,13 +1,12 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { VersionHistory } from './components/version-history';
-import type { PromptVersion } from './types';
 
 export interface VersionHistoryDialogProps {
-  versions: PromptVersion[];
+  versions: any[];
   onDelete: (index: number) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSetActive: (version: PromptVersion, index: number) => Promise<void>;
+  onSetActive: (version: any, index: number) => Promise<void>;
   isUpdating: boolean;
 }
 

@@ -3,12 +3,33 @@
 import { useMessagePart } from '@assistant-ui/react';
 import { AlertCircle } from 'lucide-react';
 import { MarkdownText } from './markdown-text';
+import { MastraUIMessageMetadata } from '@mastra/react';
+import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
 
 export const ErrorAwareText = () => {
   const part = useMessagePart();
 
   // Get text from the part - it's a TextPart so it has a text property
   const text = (part as any).text || '';
+  const metadata = ((part as any).metadata || {}) as MastraUIMessageMetadata;
+
+  if (metadata?.status === 'warning') {
+    return (
+      <Alert variant="warning">
+        <AlertTitle as="h5">Warning</AlertTitle>
+        <AlertDescription as="p">{text}</AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (metadata?.status === 'error') {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle as="h5">Error</AlertTitle>
+        <AlertDescription as="p">{text}</AlertDescription>
+      </Alert>
+    );
+  }
 
   try {
     // Check if this is an error message (trim whitespace first)

@@ -1,5 +1,5 @@
 import { WorkflowIcon } from '@/ds/icons';
-import { GetWorkflowResponse, WorkflowWatchResult } from '@mastra/client-js';
+import { GetWorkflowResponse } from '@mastra/client-js';
 
 import { useContext, useEffect } from 'react';
 
@@ -12,19 +12,17 @@ import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
+import { MastraUIMessage } from '@mastra/react';
 
 export interface WorkflowBadgeProps {
   workflow: GetWorkflowResponse;
   workflowId: string;
   runId?: string;
   isStreaming?: boolean;
-  networkMetadata?: {
-    input?: string | Record<string, unknown>;
-    selectionReason?: string;
-  };
+  metadata?: MastraUIMessage['metadata'];
 }
 
-export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming, networkMetadata }: WorkflowBadgeProps) => {
+export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming, metadata }: WorkflowBadgeProps) => {
   const { data: runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, {
     enabled: Boolean(runId) && !isStreaming,
   });
@@ -33,16 +31,20 @@ export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming, networ
 
   const snapshot = typeof run?.snapshot === 'object' ? run?.snapshot : undefined;
 
+  const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
+  const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
+
   return (
     <BadgeWrapper
+      data-testid="workflow-badge"
       icon={<WorkflowIcon className="text-accent3" />}
       title={workflow.name}
       initialCollapsed={false}
       extraInfo={
-        networkMetadata && (
+        metadata?.mode === 'network' && (
           <NetworkChoiceMetadataDialogTrigger
-            selectionReason={networkMetadata?.selectionReason || ''}
-            input={networkMetadata?.input}
+            selectionReason={selectionReason ?? ''}
+            input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
         )
       }

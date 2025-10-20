@@ -2,7 +2,6 @@ import { tool } from 'ai-v5';
 import { convertArrayToReadableStream } from 'ai-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import {
   createTestModels,
@@ -12,26 +11,18 @@ import {
   modelWithReasoning,
   modelWithSources,
   testUsage,
+  createMessageListWithUserMessage,
 } from './utils';
 
 export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('result.warnings', () => {
     it('should resolve with warnings', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
-
       const result = loopFn({
         runId,
         models: createTestModels({
           warnings: [{ type: 'other', message: 'test-warning' }],
         }),
-        messageList,
+        messageList: createMessageListWithUserMessage(),
         agentId: 'agent-id',
       });
 
@@ -43,15 +34,6 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.usage', () => {
     it('should resolve with token usage', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
-
       const result = loopFn({
         runId,
         models: createTestModels({
@@ -66,7 +48,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             },
           ]),
         }),
-        messageList,
+        messageList: createMessageListWithUserMessage(),
         agentId: 'agent-id',
       });
 
@@ -84,14 +66,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.finishReason', () => {
     it('should resolve with finish reason', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
         runId,
@@ -119,14 +94,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.providerMetadata', () => {
     it('should resolve with provider metadata', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
         runId,
@@ -159,7 +127,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.response.messages', () => {
     it.todo('should contain reasoning', async () => {
-      const messageList = new MessageList();
+      const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
         runId,
@@ -236,14 +204,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.request', () => {
     it('should resolve with response information', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
         runId,
@@ -280,7 +241,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.response', () => {
     it('should resolve with response information', async () => {
-      const messageList = new MessageList();
+      const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
         runId,
@@ -338,7 +299,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "id": "msg-0",
               "metadata": {
                 "__originalContent": "Hello",
-                "createdAt": ${mockDate.toISOString()},
+                "createdAt": 2024-01-01T00:00:00.001Z,
               },
               "parts": [
                 {
@@ -359,7 +320,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         models: createTestModels(),
-        messageList: new MessageList(),
+        messageList: createMessageListWithUserMessage(),
         ...defaultSettings(),
         agentId: 'agent-id',
       });
@@ -374,7 +335,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it('should contain reasoning text from model response', async () => {
       const result = loopFn({
         runId,
-        messageList: new MessageList(),
+        messageList: createMessageListWithUserMessage(),
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         ...defaultSettings(),
         agentId: 'agent-id',
@@ -390,7 +351,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it('should contain reasoning from model response', async () => {
       const result = loopFn({
         runId,
-        messageList: new MessageList(),
+        messageList: createMessageListWithUserMessage(),
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         ...defaultSettings(),
       });
@@ -405,7 +366,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it('should contain sources', async () => {
       const result = loopFn({
         runId,
-        messageList: new MessageList(),
+        messageList: createMessageListWithUserMessage(),
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
         ...defaultSettings(),
       });
@@ -420,7 +381,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it('should contain files', async () => {
       const result = loopFn({
         runId,
-        messageList: new MessageList(),
+        messageList: createMessageListWithUserMessage(),
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
         ...defaultSettings(),
       });
@@ -436,7 +397,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
-        messageList: new MessageList(),
+        messageList: createMessageListWithUserMessage(),
         ...defaultSettings(),
       });
 
@@ -582,7 +543,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it.todo('should add the sources from the model response to the step result', async () => {
       const result = loopFn({
         runId,
-        messageList: new MessageList(),
+        messageList: createMessageListWithUserMessage(),
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
         ...defaultSettings(),
       });
@@ -662,7 +623,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it('should add the files from the model response to the step result', async () => {
       const result = loopFn({
         runId,
-        messageList: new MessageList(),
+        messageList: createMessageListWithUserMessage(),
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
         ...defaultSettings(),
         agentId: 'agent-id',
@@ -768,7 +729,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "id": "msg-0",
                   "metadata": {
                     "__originalContent": "Hello!",
-                    "createdAt": 2024-01-01T00:00:00.002Z,
+                    "createdAt": 2024-01-01T00:00:00.003Z,
                   },
                   "parts": [
                     {
@@ -813,18 +774,9 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.toolCalls', () => {
     it('should resolve with tool calls', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
-
       const result = loopFn({
         runId,
-        messageList,
+        messageList: createMessageListWithUserMessage(),
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {
@@ -869,18 +821,9 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.toolResults', () => {
     it('should resolve with tool results', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
-
       const result = loopFn({
         runId,
-        messageList,
+        messageList: createMessageListWithUserMessage(),
         models: createTestModels({
           stream: convertArrayToReadableStream([
             {

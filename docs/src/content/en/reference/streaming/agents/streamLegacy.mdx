@@ -1,5 +1,5 @@
 ---
-title: "Reference: Agent.streamLegacy() (Legacy) | Agents | Mastra Docs"  
+title: "Reference: Agent.streamLegacy() (Legacy) | Agents | Mastra Docs"
 description: "Documentation for the legacy `Agent.streamLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version."
 ---
 
@@ -8,7 +8,7 @@ import { Callout } from 'nextra/components';
 # Agent.streamLegacy() (Legacy)
 
 <Callout type="warning">
-  **Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.stream()`](./stream.mdx) method instead. See the [migration guide](../../agents/migration-guide.mdx) for details on upgrading.
+  **Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.stream()`](./stream.mdx) method instead. See the [migration guide](../../../guides/migrations/vnext-to-standard-apis) for details on upgrading.
 </Callout>
 
 The `.streamLegacy()` method is the legacy version of the agent streaming API, used for real-time streaming of responses from V1 model agents. This method accepts messages and optional streaming options.
@@ -482,7 +482,7 @@ await agent.streamLegacy("message for agent", {
 ## Migration to New API
 
 <Callout type="info">
-  The new `.stream()` method offers enhanced capabilities including AI SDK v5 compatibility, better structured output handling, and improved callback system. See the [migration guide](../../agents/migration-guide.mdx) for detailed migration instructions.
+  The new `.stream()` method offers enhanced capabilities including AI SDK v5 compatibility, better structured output handling, and improved callback system. See the [migration guide](../../../guides/migrations/vnext-to-standard-apis) for detailed migration instructions.
 </Callout>
 
 ### Quick Migration Example
@@ -509,7 +509,7 @@ const result = await agent.stream("message", {
 
 ## Related
 
-- [Migration Guide](../../agents/migration-guide.mdx)
+- [Migration Guide](../../../guides/migrations/vnext-to-standard-apis)
 - [New .stream() method](./stream.mdx)
-- [Generating responses](../../docs/agents/overview.mdx#generating-responses)
-- [Streaming responses](../../docs/agents/overview.mdx#streaming-responses)
+- [Generating responses](../../../docs/agents/overview.mdx#generating-responses)
+- [Streaming responses](../../../docs/agents/overview.mdx#streaming-responses)

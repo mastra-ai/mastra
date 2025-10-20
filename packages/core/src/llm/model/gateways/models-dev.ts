@@ -67,8 +67,6 @@ export class ModelsDevGateway extends MastraModelGateway {
   }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
-    console.info('Fetching providers from models.dev API...');
-
     const response = await fetch('https://models.dev/api.json');
     if (!response.ok) {
       throw new Error(`Failed to fetch from models.dev: ${response.statusText}`);
@@ -108,7 +106,6 @@ export class ModelsDevGateway extends MastraModelGateway {
 
         // Skip if we don't have a URL
         if (!hasInstalledPackage && !url) {
-          console.info(`Skipping ${normalizedId}: No API URL available`);
           continue;
         }
 
@@ -130,16 +127,12 @@ export class ModelsDevGateway extends MastraModelGateway {
           docUrl: providerInfo.doc, // Include documentation URL if available
           gateway: `models.dev`,
         };
-      } else {
-        console.info(`Skipped provider ${providerInfo.name}`);
       }
     }
 
     // Store for later use in buildUrl and buildHeaders
     this.providerConfigs = providerConfigs;
 
-    console.info(`Found ${Object.keys(providerConfigs).length} OpenAI-compatible providers`);
-    console.info('Providers:', Object.keys(providerConfigs).sort());
     return providerConfigs;
   }
 
@@ -208,7 +201,9 @@ export class ModelsDevGateway extends MastraModelGateway {
         })(modelId);
       default:
         if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-        return createOpenAICompatible({ name: providerId, apiKey, baseURL }).chatModel(modelId);
+        return createOpenAICompatible({ name: providerId, apiKey, baseURL, supportsStructuredOutputs: true }).chatModel(
+          modelId,
+        );
     }
   }
 }

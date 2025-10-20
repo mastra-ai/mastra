@@ -787,12 +787,28 @@ describe('Memory Handlers', () => {
           'test-agent': mockAgent,
         },
       });
-      const expectedResult = { messages: mockMessages, uiMessages: [] };
+      const expectedResult = { messages: mockMessages, uiMessages: [], legacyMessages: [] };
       mockMemory.getThreadById.mockResolvedValue(createThread({}));
       mockMemory.query.mockResolvedValue(expectedResult);
 
       const result = await getMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'test-agent' });
-      expect(result).toEqual(expectedResult);
+      expect(result.messages).toEqual(expectedResult.messages);
+      expect(result.uiMessages).toMatchObject([
+        {
+          //"id": "a5bfc144-244b-4970-9f39-ef8e4ce76af3",
+          metadata: {
+            //"createdAt": 2025-10-08T14:33:23.266Z,
+          },
+          parts: [
+            {
+              text: 'Test message',
+              type: 'text',
+            },
+          ],
+          role: 'user',
+        },
+      ]);
+      expect(result.legacyMessages).toEqual(expectedResult.legacyMessages);
     });
   });
 

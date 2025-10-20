@@ -19,6 +19,7 @@ import {
   parseDataUri,
 } from './prompt/image-utils';
 import type { AIV4Type, AIV5Type } from './types';
+import { ensureGeminiCompatibleMessages } from './utils/ai-v5/gemini-compatibility';
 import { getToolName } from './utils/ai-v5/tool';
 
 type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
@@ -218,24 +219,15 @@ export class MessageList {
 
       // Used when calling AI SDK streamText/generateText
       prompt: (): AIV5Type.ModelMessage[] => {
-        const messages = [
-          ...this.aiV4CoreMessagesToAIV5ModelMessages(
-            [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
-            `system`,
-          ),
-          ...this.all.aiV5.model(),
-        ];
+        const systemMessages = this.aiV4CoreMessagesToAIV5ModelMessages(
+          [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
+          `system`,
+        );
+        const modelMessages = this.all.aiV5.model();
 
-        const needsDefaultUserMessage = !messages.length || messages[0]?.role === 'assistant';
-        if (needsDefaultUserMessage) {
-          const defaultMessage: AIV5Type.ModelMessage = {
-            role: 'user',
-            content: '.',
-          };
-          messages.unshift(defaultMessage);
-        }
+        const messages = [...systemMessages, ...modelMessages];
 
-        return messages;
+        return ensureGeminiCompatibleMessages(messages);
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
@@ -295,15 +287,7 @@ export class MessageList {
           });
         }
 
-        // Ensure we have at least one user message
-        const needsDefaultUserMessage = !messages.length || messages[0]?.role === 'assistant';
-        if (needsDefaultUserMessage) {
-          const defaultMessage: AIV5Type.ModelMessage = {
-            role: 'user',
-            content: '.',
-          };
-          messages.unshift(defaultMessage);
-        }
+        messages = ensureGeminiCompatibleMessages(messages);
 
         return messages.map(MessageList.aiV5ModelMessageToV2PromptMessage);
       },
@@ -324,16 +308,7 @@ export class MessageList {
         const coreMessages = this.all.aiV4.core();
         const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
 
-        const needsDefaultUserMessage = !messages.length || messages[0]?.role === 'assistant';
-        if (needsDefaultUserMessage) {
-          const defaultMessage: AIV4Type.CoreMessage = {
-            role: 'user',
-            content: '.',
-          };
-          messages.unshift(defaultMessage);
-        }
-
-        return messages;
+        return ensureGeminiCompatibleMessages(messages);
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
@@ -341,18 +316,9 @@ export class MessageList {
         const coreMessages = this.all.aiV4.core();
 
         const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
-        const messages = [...systemMessages, ...coreMessages];
+        let messages = [...systemMessages, ...coreMessages];
 
-        // Ensure we have at least one user message
-        const needsDefaultUserMessage = !messages.length || messages[0]?.role === 'assistant';
-
-        if (needsDefaultUserMessage) {
-          const defaultMessage: AIV4Type.CoreMessage = {
-            role: 'user',
-            content: '.',
-          };
-          messages.unshift(defaultMessage);
-        }
+        messages = ensureGeminiCompatibleMessages(messages);
 
         return messages.map(MessageList.aiV4CoreMessageToV1PromptMessage);
       },
@@ -1396,6 +1362,10 @@ export class MessageList {
       parts.push({
         type: 'text',
         text: coreMessage.content,
+        // Preserve providerOptions from CoreMessage (e.g., for system messages with cacheControl)
+        ...('providerOptions' in coreMessage && coreMessage.providerOptions
+          ? { providerMetadata: coreMessage.providerOptions }
+          : {}),
       });
     } else if (Array.isArray(coreMessage.content)) {
       for (const part of coreMessage.content) {
@@ -1406,9 +1376,17 @@ export class MessageList {
             if (coreMessage.role === 'assistant' && prevPart && prevPart.type === 'tool-invocation') {
               parts.push({ type: 'step-start' });
             }
+            // Merge part-level and message-level providerOptions
+            // Part-level takes precedence over message-level
+            const mergedProviderMetadata = {
+              ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
+              ...('providerOptions' in part && part.providerOptions ? part.providerOptions : {}),
+            };
+
             parts.push({
               type: 'text',
               text: part.text,
+              ...(Object.keys(mergedProviderMetadata).length > 0 ? { providerMetadata: mergedProviderMetadata } : {}),
             });
             break;
 
@@ -2608,6 +2586,10 @@ export class MessageList {
       parts.push({
         type: 'text',
         text: coreMessage.content,
+        // Preserve providerOptions from ModelMessage level (e.g., system messages with cacheControl)
+        ...('providerOptions' in coreMessage && coreMessage.providerOptions
+          ? { providerMetadata: coreMessage.providerOptions }
+          : {}),
       });
     } else if (Array.isArray(coreMessage.content)) {
       for (const part of coreMessage.content) {
@@ -2625,10 +2607,19 @@ export class MessageList {
                 type: 'step-start',
               });
             }
+            // Merge part-level and message-level providerOptions
+            // Part-level takes precedence over message-level
+            const mergedProviderMetadataV3 = {
+              ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
+              ...(part.providerOptions || {}),
+            };
+
             parts.push({
               type: 'text',
               text: part.text,
-              providerMetadata: part.providerOptions,
+              ...(Object.keys(mergedProviderMetadataV3).length > 0
+                ? { providerMetadata: mergedProviderMetadataV3 }
+                : {}),
             });
             break;
 

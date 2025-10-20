@@ -18,7 +18,7 @@ import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodType } from 'zod';
 import type {
-  GenerateParams,
+  GenerateLegacyParams,
   GetAgentResponse,
   GetEvalsByAgentIdResponse,
   GetToolResponse,
@@ -208,18 +208,18 @@ export class Agent extends BaseResource {
    * @returns Promise containing the generated response
    */
   async generateLegacy(
-    params: GenerateParams<undefined> & { output?: never; experimental_output?: never },
+    params: GenerateLegacyParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
   async generateLegacy<Output extends JSONSchema7 | ZodType>(
-    params: GenerateParams<Output> & { output: Output; experimental_output?: never },
+    params: GenerateLegacyParams<Output> & { output: Output; experimental_output?: never },
   ): Promise<GenerateReturn<any, Output, undefined>>;
   async generateLegacy<StructuredOutput extends JSONSchema7 | ZodType>(
-    params: GenerateParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
+    params: GenerateLegacyParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
   ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
   async generateLegacy<
     Output extends JSONSchema7 | ZodType | undefined = undefined,
     StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
-  >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
+  >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
     const processedParams = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
@@ -228,7 +228,7 @@ export class Agent extends BaseResource {
       clientTools: processClientTools(params.clientTools),
     };
 
-    const { runId, resourceId, threadId, runtimeContext } = processedParams as GenerateParams;
+    const { runId, resourceId, threadId, runtimeContext } = processedParams as GenerateLegacyParams;
 
     const response: GenerateReturn<any, Output, StructuredOutput> = await this.request(
       `/api/agents/${this.agentId}/generate-legacy`,
@@ -301,15 +301,15 @@ export class Agent extends BaseResource {
   async generate<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
-  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
+  ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   // Backward compatibility overload
   async generate<OUTPUT extends OutputSchema = undefined>(
     params: StreamParams<OUTPUT>,
-  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
+  ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   async generate<OUTPUT extends OutputSchema = undefined>(
     messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
     options?: Omit<StreamParams<OUTPUT>, 'messages'>,
-  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
+  ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>> {
     // Handle both new signature (messages, options) and old signature (single param object)
     let params: StreamParams<OUTPUT>;
     if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
@@ -337,7 +337,7 @@ export class Agent extends BaseResource {
 
     const { runId, resourceId, threadId, runtimeContext } = processedParams as StreamParams;
 
-    const response = await this.request<ReturnType<MastraModelOutput['getFullOutput']>>(
+    const response = await this.request<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>(
       `/api/agents/${this.agentId}/generate`,
       {
         method: 'POST',
@@ -354,7 +354,7 @@ export class Agent extends BaseResource {
         threadId,
         runtimeContext: runtimeContext as RuntimeContext<any>,
         respondFn: this.generate.bind(this),
-      }) as unknown as Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
+      }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
 
     return response;
@@ -729,7 +729,7 @@ export class Agent extends BaseResource {
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(processedParams, writable);
+    const response = await this.processStreamResponseLegacy(processedParams, writable);
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -1105,7 +1105,7 @@ export class Agent extends BaseResource {
     onFinish?.({ message, finishReason, usage });
   }
 
-  async processStreamResponse_vNext(processedParams: any, writable: any) {
+  async processStreamResponse(processedParams: any, writable: any) {
     const response: Response = await this.request(`/api/agents/${this.agentId}/stream`, {
       method: 'POST',
       body: processedParams,
@@ -1242,7 +1242,7 @@ export class Agent extends BaseResource {
                   lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
 
                 // Recursively call stream with updated messages
-                this.processStreamResponse_vNext(
+                this.processStreamResponse(
                   {
                     ...processedParams,
                     messages: updatedMessages,
@@ -1376,7 +1376,7 @@ export class Agent extends BaseResource {
         ...options,
       } as StreamParams<OUTPUT>;
     }
-    const processedParams = {
+    const processedParams: StreamParams<OUTPUT> = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
@@ -1384,7 +1384,7 @@ export class Agent extends BaseResource {
       structuredOutput: params.structuredOutput
         ? {
             ...params.structuredOutput,
-            schema: zodToJsonSchema(params.structuredOutput.schema),
+            schema: zodToJsonSchema(params.structuredOutput.schema) as OUTPUT,
           }
         : undefined,
     };
@@ -1393,7 +1393,7 @@ export class Agent extends BaseResource {
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse_vNext(processedParams, writable);
+    const response = await this.processStreamResponse(processedParams, writable);
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -1426,7 +1426,7 @@ export class Agent extends BaseResource {
   /**
    * Processes the stream response and handles tool calls
    */
-  private async processStreamResponse(processedParams: any, writable: WritableStream<Uint8Array>) {
+  private async processStreamResponseLegacy(processedParams: any, writable: WritableStream<Uint8Array>) {
     const response: Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
     } = await this.request(`/api/agents/${this.agentId}/stream-legacy`, {
@@ -1540,7 +1540,7 @@ export class Agent extends BaseResource {
                 }
 
                 // Recursively call stream with updated messages
-                this.processStreamResponse(
+                this.processStreamResponseLegacy(
                   {
                     ...processedParams,
                     messages: [...messages.filter(m => m.id !== lastMessage.id), lastMessage],

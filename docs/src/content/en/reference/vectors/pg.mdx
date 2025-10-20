@@ -16,6 +16,43 @@ It provides robust vector similarity search capabilities within your existing Po
       name: "connectionString",
       type: "string",
       description: "PostgreSQL connection URL",
+      isOptional: true,
+    },
+    {
+      name: "host",
+      type: "string",
+      description: "PostgreSQL server host",
+      isOptional: true,
+    },
+    {
+      name: "port",
+      type: "number",
+      description: "PostgreSQL server port",
+      isOptional: true,
+    },
+    {
+      name: "database",
+      type: "string",
+      description: "PostgreSQL database name",
+      isOptional: true,
+    },
+    {
+      name: "user",
+      type: "string",
+      description: "PostgreSQL user",
+      isOptional: true,
+    },
+    {
+      name: "password",
+      type: "string",
+      description: "PostgreSQL password",
+      isOptional: true,
+    },
+    {
+      name: "ssl",
+      type: "boolean | ConnectionOptions",
+      description: "Enable SSL or provide custom SSL configuration",
+      isOptional: true,
     },
     {
       name: "schemaName",
@@ -24,19 +61,63 @@ It provides robust vector similarity search capabilities within your existing Po
         "The name of the schema you want the vector store to use. Will use the default schema if not provided.",
       isOptional: true,
     },
+    {
+      name: "max",
+      type: "number",
+      description: "Maximum number of pool connections (default: 20)",
+      isOptional: true,
+    },
+    {
+      name: "idleTimeoutMillis",
+      type: "number",
+      description: "Idle connection timeout in milliseconds (default: 30000)",
+      isOptional: true,
+    },
+    {
+      name: "pgPoolOptions",
+      type: "PoolConfig",
+      description: "Additional pg pool configuration options",
+      isOptional: true,
+    },
   ]}
 />
 
 ## Constructor Examples
 
-You can instantiate `PgVector` using a config object (with optional schemaName):
+### Connection String
 
 ```ts
 import { PgVector } from "@mastra/pg";
 
 const vectorStore = new PgVector({
   connectionString: "postgresql://user:password@localhost:5432/mydb",
-  schemaName: "custom_schema", // optional
+});
+```
+
+### Host/Port/Database Configuration
+
+```ts
+const vectorStore = new PgVector({
+  host: "localhost",
+  port: 5432,
+  database: "mydb",
+  user: "postgres",
+  password: "password",
+});
+```
+
+### Advanced Configuration
+
+```ts
+const vectorStore = new PgVector({
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
+  schemaName: "custom_schema",
+  max: 30,
+  idleTimeoutMillis: 60000,
+  pgPoolOptions: {
+    connectionTimeoutMillis: 5000,
+    allowExitOnIdle: true,
+  },
 });
 ```
 

@@ -1,6 +1,5 @@
 import { useMastraClient } from '@mastra/react';
 import { useMutation } from '@tanstack/react-query';
-import { toast } from 'sonner';
 
 interface TriggerScoreArgs {
   scorerName: string;
@@ -8,7 +7,7 @@ interface TriggerScoreArgs {
   spanId?: string;
 }
 
-export const useTriggerScorer = (onScorerTriggered: (scorerName: string, traceId: string, spanId?: string) => void) => {
+export const useTriggerScorer = () => {
   const client = useMastraClient();
 
   return useMutation({
@@ -19,13 +18,6 @@ export const useTriggerScorer = (onScorerTriggered: (scorerName: string, traceId
       });
 
       return response;
-    },
-    onSuccess: (_, variables) => {
-      toast.success('Scorer triggered successfully');
-      onScorerTriggered(variables.scorerName, variables.traceId, variables.spanId);
-    },
-    onError: () => {
-      toast.error('Error triggering scorer');
     },
   });
 };

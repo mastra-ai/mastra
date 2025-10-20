@@ -20,7 +20,7 @@ Use processors for content moderation, prompt injection prevention, response san
 
 ## Adding processors to an agent
 
-Import and instantiate the relevant processor class, and pass it to your agent’s configuration using either the `inputProcessors` or `outputProcessors` parameter:
+Import and instantiate the relevant processor class, and pass it to your agent’s configuration using either the `inputProcessors` or `outputProcessors` option:
 
 ```typescript {3,9-17} filename="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -325,11 +325,18 @@ for await (const chunk of stream.fullStream) {
   }
 }
 ```
-
 In this case, the `tripwireReason` indicates that a credit card number was detected:
 
 ```text
 PII detected. Types: credit-card
 ```
 
+## Custom processors
 
+If the built-in processors don’t cover your needs, you can create your own by extending the `Processor` class.
+
+Available examples:
+
+- [Message Length Limiter](../../examples/processors/message-length-limiter)
+- [Response Length Limiter](../../examples/rocessors/response-length-limiter)
+- [Response Validator](../../examples/processors/response-validator)

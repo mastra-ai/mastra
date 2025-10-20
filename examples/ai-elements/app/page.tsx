@@ -1,14 +1,30 @@
 'use client';
 
-import { MastraReactProvider, MastraUIMessage, toUIMessage, useChat } from '@mastra/react';
 import {
-  Conversation,
-  ConversationContent,
-  ConversationEmptyState,
-  ConversationScrollButton,
-} from '@/components/ai-elements/conversation';
-import { Message, MessageContent } from '@/components/ai-elements/message';
-import { MessageSquare } from 'lucide-react';
+  MastraReactProvider,
+  useChat,
+  MessageList,
+  Message,
+  MessageContent,
+  Entity,
+  EntityContent,
+  EntityTrigger,
+  EntityCaret,
+  Icon,
+  Entry,
+  EntryTitle,
+  CodeBlock,
+  CodeCopyButton,
+  ToolsIcon,
+  MessageUsage,
+  MessageUsageEntry,
+  MessageUsageValue,
+  MessageUsages,
+  MessageActions,
+  IconButton,
+} from '@mastra/react';
+import '@mastra/react/styles.css';
+
 import {
   PromptInput,
   PromptInputMessage,
@@ -16,19 +32,19 @@ import {
   PromptInputTextarea,
 } from '@/components/ai-elements/prompt-input';
 import { FormEvent, useState } from 'react';
-import { Response } from '@/components/ai-elements/response';
-import { PlaygroundQueryClient, ReadonlyJSONObject, ToolFallback } from '@mastra/playground-ui';
+import { Copy, Hash, Mic } from 'lucide-react';
 
 function HomeInner() {
   const [input, setInput] = useState('');
-  const { messages, setMessages, streamVNext, isRunning } = useChat<MastraUIMessage>({
+  const { messages, setMessages, stream, isRunning } = useChat({
     agentId: 'chefModelV2Agent',
   });
 
   const handleSubmit = (message: PromptInputMessage, event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (input.trim()) {
-      setMessages([
+      setMessages(state => [
+        ...state,
         {
           role: 'user',
           parts: [{ type: 'text', text: input }],
@@ -36,16 +52,13 @@ function HomeInner() {
         },
       ]);
 
-      streamVNext({
+      stream({
         coreUserMessages: [
           {
             role: 'user',
             content: input,
           },
         ],
-        onChunk: (chunk, conversation) => {
-          return toUIMessage({ chunk, conversation });
-        },
       });
 
       setInput('');
@@ -53,63 +66,76 @@ function HomeInner() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6 relative size-full rounded-lg border h-[600px]">
+    <div className="max-w-[80vh] mx-auto h-[80vh] ">
       <div className="flex flex-col h-full">
-        <Conversation>
-          <ConversationContent>
-            {messages.length === 0 ? (
-              <ConversationEmptyState
-                icon={<MessageSquare className="size-12" />}
-                title="Start a conversation"
-                description="Type a message below to begin chatting"
-              />
-            ) : (
-              messages.map(message => (
-                <Message from={message.role} key={message.id}>
-                  <MessageContent>
-                    {message.parts.map((part, i) => {
-                      switch (part.type) {
-                        case 'text': // we don't use any reasoning or tool calls in this example
-                          return <Response key={`${message.id}-${i}`}>{part.text}</Response>;
-                        case 'dynamic-tool': {
-                          return (
-                            <div
-                              key={`${message.id}-${i}`}
-                              className="block w-full flex-1 shrink-0"
-                              style={{ width: '600px' }}
-                            >
-                              <ToolFallback
-                                type="tool-call"
-                                toolCallId={part.toolCallId}
-                                argsText={typeof part.input === 'string' ? part.input : JSON.stringify(part.input)}
-                                toolName={part.toolName}
-                                args={
-                                  {
-                                    ...(part.input as ReadonlyJSONObject),
-                                    __mastraMetadata: {
-                                      isStreaming: true,
-                                      workflowFullState: part.output as ReadonlyJSONObject,
-                                    },
-                                  } as ReadonlyJSONObject
-                                }
-                                result={part.output}
-                                addResult={() => {}}
-                                status={{ type: 'complete' }}
-                              />
-                            </div>
-                          );
-                        }
-                        default:
-                          return null;
-                      }
-                    })}
-                  </MessageContent>
-                </Message>
-              ))
-            )}
-          </ConversationContent>
-          <ConversationScrollButton />
-        </Conversation>
+        <MessageList>
+          {messages.map(message => {
+            const isStreaming = message.role === 'assistant' && isRunning;
+            const position = message.role === 'user' ? 'right' : 'left';
+
+            return message.parts.map((part, index) => (
+              <Message key={message.id + index} position={position}>
+                {part.type === 'text' ? (
+                  <>
+                    {message.role === 'assistant' && (
+                      <MessageUsages>
+                        <MessageUsage>
+                          <MessageUsageEntry>
+                            <Icon>
+                              <Hash />
+                            </Icon>
+                            Tokens:
+                          </MessageUsageEntry>
+                          <MessageUsageValue>100</MessageUsageValue>
+                        </MessageUsage>
+                      </MessageUsages>
+                    )}
+                    <MessageContent isStreaming={isStreaming}>{part.text}</MessageContent>
+                  </>
+                ) : part.type === 'dynamic-tool' ? (
+                  <Entity key={message.id + index} variant="tool">
+                    <EntityTrigger>
+                      <Icon>
+                        <ToolsIcon />
+                      </Icon>
+                      {part.toolName}
+                      <EntityCaret />
+                    </EntityTrigger>
+
+                    <EntityContent>
+                      <Entry>
+                        <EntryTitle>Tool input</EntryTitle>
+                        <CodeBlock
+                          code={JSON.stringify(part.input, null, 2)}
+                          language="json"
+                          cta={<CodeCopyButton code={JSON.stringify(part.input, null, 2)} />}
+                        />
+                      </Entry>
+
+                      <Entry>
+                        <EntryTitle>Tool output</EntryTitle>
+                        <CodeBlock
+                          cta={<CodeCopyButton code={JSON.stringify(part.output, null, 2)} />}
+                          code={JSON.stringify(part.output, null, 2)}
+                          language="json"
+                        />
+                      </Entry>
+                    </EntityContent>
+                  </Entity>
+                ) : null}
+                <MessageActions>
+                  <IconButton tooltip="Voice message">
+                    <Mic />
+                  </IconButton>
+
+                  <IconButton tooltip="Copy">
+                    <Copy />
+                  </IconButton>
+                </MessageActions>
+              </Message>
+            ));
+          })}
+        </MessageList>
 
         <PromptInput onSubmit={handleSubmit} className="mt-4 w-full max-w-2xl mx-auto relative">
           <PromptInputTextarea
@@ -119,7 +145,7 @@ function HomeInner() {
             className="pr-12"
           />
           <PromptInputSubmit
-            status={status === 'streaming' ? 'streaming' : 'ready'}
+            status={isRunning ? 'streaming' : 'ready'}
             disabled={!input.trim()}
             className="absolute bottom-1 right-1"
           />
@@ -131,10 +157,8 @@ function HomeInner() {
 
 export default function Home() {
   return (
-    <PlaygroundQueryClient>
-      <MastraReactProvider baseUrl="http://localhost:4111">
-        <HomeInner />
-      </MastraReactProvider>
-    </PlaygroundQueryClient>
+    <MastraReactProvider baseUrl="http://localhost:4111">
+      <HomeInner />
+    </MastraReactProvider>
   );
 }

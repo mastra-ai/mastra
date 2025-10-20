@@ -3,6 +3,7 @@ import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { TracingContext, TracingOptions } from '../ai-tracing';
 import type { SystemMessage } from '../llm';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
+import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
@@ -80,7 +81,7 @@ export type AgentExecutionOptions<
   stopWhen?: LoopOptions['stopWhen'];
 
   /** Provider-specific options passed to the language model */
-  providerOptions?: LoopOptions['providerOptions'];
+  providerOptions?: ProviderOptions;
 
   /** Callback fired after each execution step. Type varies by format */
   onStepFinish?: FORMAT extends 'aisdk' ? StreamTextOnStepFinishCallback<any> : LoopConfig['onStepFinish'];
@@ -95,7 +96,9 @@ export type AgentExecutionOptions<
   onAbort?: LoopConfig['onAbort'];
   /** Tools that are active for this execution */
   activeTools?: LoopConfig['activeTools'];
-  /** Signal to abort the streaming operation */
+  /**
+   * Signal to abort the streaming operation
+   */
   abortSignal?: LoopConfig['abortSignal'];
 
   /** Input processors to use for this execution (overrides agent's default) */
@@ -127,22 +130,17 @@ export type AgentExecutionOptions<
 
   /** Require approval for all tool calls */
   requireToolApproval?: boolean;
-} & OutputOptions<OUTPUT>;
 
-type OutputOptions<OUTPUT extends OutputSchema = undefined> =
-  | {
-      /**
-       * Schema for structured output generation (Zod schema or JSON Schema)
-       * @deprecated Use `structuredOutput` instead. The `output` property will be removed in a future version.
-       */
-      output?: OUTPUT;
-      structuredOutput?: never;
-    }
-  | {
-      /** Structured output generation with enhanced developer experience  */
-      structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
-      output?: never;
-    };
+  /** Structured output generation with enhanced developer experience  */
+  structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
+};
+
+export type DeprecatedOutputOptions<OUTPUT extends OutputSchema = undefined> = {
+  /** Schema for structured output generation (Zod schema or JSON Schema)
+   * @deprecated Use `structuredOutput.schema` instead. The `output` property will be removed in a future version.
+   */
+  output?: OUTPUT;
+};
 
 export type InnerAgentExecutionOptions<
   OUTPUT extends OutputSchema = undefined,

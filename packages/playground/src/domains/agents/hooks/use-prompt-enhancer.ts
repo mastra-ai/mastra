@@ -1,13 +1,11 @@
 import { useState } from 'react';
 
-import type { PromptVersion } from '../types';
-
 interface UsePromptEnhancerProps {
   agentId: string;
   instructions?: string;
-  versions: PromptVersion[];
-  onVersionCreate: (version: PromptVersion) => void;
-  onVersionUpdate: (index: number, updates: Partial<PromptVersion>) => void;
+  versions: any[];
+  onVersionCreate: (version: any) => void;
+  onVersionUpdate: (index: number, updates: Partial<any>) => void;
 }
 
 interface UsePromptEnhancerResult {

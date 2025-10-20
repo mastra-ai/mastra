@@ -72,14 +72,6 @@ export async function getInputOptions(
             return null;
           }
 
-          const isInvalidChunk = analyzedBundleInfo.invalidChunks.has(analyzedBundleInfo.dependencies.get(id)!);
-          if (isInvalidChunk) {
-            return {
-              id,
-              external: true,
-            };
-          }
-
           const filename = analyzedBundleInfo.dependencies.get(id)!;
           const absolutePath = join(workspaceRoot || projectRoot, filename);
 

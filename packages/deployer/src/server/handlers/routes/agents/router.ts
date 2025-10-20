@@ -224,7 +224,32 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                   deprecated: true,
                 },
                 runId: { type: 'string' },
-                output: { type: 'object' },
+                structuredOutput: {
+                  type: 'object',
+                  properties: {
+                    schema: { type: 'object', description: 'The schema to use for the structured output' },
+                    model: {
+                      type: 'string',
+                      description: 'Additional model to use for generating the structured output if provided',
+                    },
+                    instructions: {
+                      type: 'string',
+                      description:
+                        'Custom instructions to provide to the structuring agent. This will override the default instructions.',
+                    },
+                    errorStrategy: {
+                      type: 'string',
+                      enum: ['strict', 'warn', 'fallback'],
+                      description: 'The error strategy to use for the structured output',
+                    },
+                    fallbackValue: {
+                      type: 'object',
+                      description:
+                        "The fallback value to use for the structured output when using 'fallback' error strategy",
+                    },
+                  },
+                },
+                output: { type: 'object', deprecated: true },
                 tracingOptions: {
                   type: 'object',
                   description: 'Tracing options for the agent execution',
@@ -457,7 +482,32 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                   deprecated: true,
                 },
                 runId: { type: 'string' },
-                output: { type: 'object' },
+                structuredOutput: {
+                  type: 'object',
+                  properties: {
+                    schema: { type: 'object', description: 'The schema to use for the structured output' },
+                    model: {
+                      type: 'string',
+                      description: 'Additional model to use for generating the structured output if provided',
+                    },
+                    instructions: {
+                      type: 'string',
+                      description:
+                        'Custom instructions to provide to the structuring agent. This will override the default instructions.',
+                    },
+                    errorStrategy: {
+                      type: 'string',
+                      enum: ['strict', 'warn', 'fallback'],
+                      description: 'The error strategy to use for the structured output',
+                    },
+                    fallbackValue: {
+                      type: 'object',
+                      description:
+                        "The fallback value to use for the structured output when using 'fallback' error strategy",
+                    },
+                  },
+                },
+                output: { type: 'object', deprecated: true },
                 tracingOptions: {
                   type: 'object',
                   description: 'Tracing options for the agent execution',
