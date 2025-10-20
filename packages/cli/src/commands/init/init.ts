@@ -72,7 +72,8 @@ export const init = async ({
         await depService.installPackages(['@mastra/loggers']);
       }
 
-      const needsEvals = components.includes(`scorers`) && (await depService.checkDependencies(['@mastra/evals'])) !== `ok`;
+      const needsEvals =
+        components.includes(`scorers`) && (await depService.checkDependencies(['@mastra/evals'])) !== `ok`;
       if (needsEvals) {
         await depService.installPackages(['@mastra/evals']);
       }

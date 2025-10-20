@@ -56,7 +56,12 @@ export const getModelIdentifier = (llmProvider: LLMProvider) => {
   }
 };
 
-export async function writeAgentSample(llmProvider: LLMProvider, destPath: string, addExampleTool: boolean, addScorers: boolean) {
+export async function writeAgentSample(
+  llmProvider: LLMProvider,
+  destPath: string,
+  addExampleTool: boolean,
+  addScorers: boolean,
+) {
   const modelString = getModelIdentifier(llmProvider);
 
   const instructions = `
@@ -85,7 +90,9 @@ export const weatherAgent = new Agent({
   instructions: \`${instructions}\`,
   model: ${modelString},
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
-  ${addScorers ? `scorers: {
+  ${
+    addScorers
+      ? `scorers: {
     toolCallAppropriateness: {
       scorer: scorers.toolCallAppropriatenessScorer,
       sampling: {
@@ -107,7 +114,9 @@ export const weatherAgent = new Agent({
         rate: 1,
       },
     },
-  },` : ''}
+  },`
+      : ''
+  }
   memory: new Memory({
     storage: new LibSQLStore({
       url: "file:../mastra.db", // path is relative to the .mastra/output directory
@@ -421,7 +430,12 @@ export async function writeCodeSampleForComponents(
 ) {
   switch (component) {
     case 'agents':
-      return writeAgentSample(llmprovider, destPath, importComponents.includes('tools'), importComponents.includes('scorers'));
+      return writeAgentSample(
+        llmprovider,
+        destPath,
+        importComponents.includes('tools'),
+        importComponents.includes('scorers'),
+      );
     case 'tools':
       return writeToolSample(destPath);
     case 'workflows':
