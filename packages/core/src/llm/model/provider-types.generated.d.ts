@@ -34,6 +34,31 @@ export type ProviderModelsMap = {
     'ZhipuAI/GLM-4.5',
     'ZhipuAI/GLM-4.6',
   ];
+  readonly aihubmix: readonly [
+    'DeepSeek-V3.2-Exp',
+    'DeepSeek-V3.2-Exp-Think',
+    'Kimi-K2-0905',
+    'claude-haiku-4-5',
+    'claude-opus-4-1',
+    'claude-sonnet-4-5',
+    'gemini-2.5-flash',
+    'gemini-2.5-pro',
+    'glm-4.6',
+    'gpt-4.1',
+    'gpt-4.1-mini',
+    'gpt-4.1-nano',
+    'gpt-4o',
+    'gpt-4o-2024-11-20',
+    'gpt-5',
+    'gpt-5-codex',
+    'gpt-5-mini',
+    'gpt-5-nano',
+    'gpt-5-pro',
+    'o4-mini',
+    'qwen3-235b-a22b-instruct-2507',
+    'qwen3-235b-a22b-thinking-2507',
+    'qwen3-coder-480b-a35b-instruct',
+  ];
   readonly lucidquery: readonly ['lucidnova-rf1-100b', 'lucidquery-nexus-coder'];
   readonly xai: readonly [
     'grok-2',
