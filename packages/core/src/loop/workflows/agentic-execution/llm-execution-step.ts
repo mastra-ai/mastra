@@ -111,6 +111,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       chunk.type !== 'reasoning-delta' &&
       chunk.type !== 'reasoning-end' &&
       chunk.type !== 'redacted-reasoning' &&
+      chunk.type !== 'reasoning-signature' &&
       chunk.type !== 'response-metadata' &&
       runState.state.isReasoning
     ) {
