@@ -31,6 +31,86 @@ describe('Workflow', () => {
     });
   });
 
+  describe('Input Schema Defaults', () => {
+    it('should apply inputSchema defaults when executing a workflow step', async () => {
+      const stepAction = vi.fn<any>().mockImplementation(async ({ inputData }) => {
+        return { temperature: 20, city: inputData.city };
+      });
+
+      const fetchWeather = createStep({
+        id: 'fetch-weather',
+        description: 'Fetches weather forecast for a given city',
+        inputSchema: z.object({
+          city: z.string().default('San Francisco'),
+        }),
+        outputSchema: z.object({
+          temperature: z.number(),
+          city: z.string(),
+        }),
+        execute: stepAction,
+      });
+
+      const workflow = createWorkflow({
+        id: 'weather-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [fetchWeather],
+      });
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
+
+      expect(stepAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputData: { city: 'San Francisco' },
+        })
+      );
+      expect(result.steps['fetch-weather'].output).toEqual({
+        temperature: 20,
+        city: 'San Francisco',
+      });
+    });
+
+    it('should not override provided values when defaults are present', async () => {
+      const stepAction = vi.fn<any>().mockImplementation(async ({ inputData }) => {
+        return { temperature: 20, city: inputData.city };
+      });
+
+      const fetchWeather = createStep({
+        id: 'fetch-weather',
+        description: 'Fetches weather forecast for a given city',
+        inputSchema: z.object({
+          city: z.string().default('San Francisco'),
+        }),
+        outputSchema: z.object({
+          temperature: z.number(),
+          city: z.string(),
+        }),
+        execute: stepAction,
+      });
+
+      const workflow = createWorkflow({
+        id: 'weather-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [fetchWeather],
+      });
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: { city: 'New York' } });
+
+      expect(stepAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputData: { city: 'New York' },
+        })
+      );
+      expect(result.steps['fetch-weather'].output).toEqual({
+        temperature: 20,
+        city: 'New York',
+      });
+    });
+  });
+
   describe('Streaming', () => {
     it('should generate a stream', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
