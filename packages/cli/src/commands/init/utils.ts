@@ -44,7 +44,7 @@ export const getModelIdentifier = (llmProvider: LLMProvider) => {
   if (llmProvider === 'openai') {
     return `'openai/gpt-4o-mini'`;
   } else if (llmProvider === 'anthropic') {
-    return `'anthropic/claude-3-5-sonnet-20241022'`;
+    return `'anthropic/claude-sonnet-4-5-20250929'`;
   } else if (llmProvider === 'groq') {
     return `'groq/llama-3.3-70b-versatile'`;
   } else if (llmProvider === 'google') {
