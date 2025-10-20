@@ -28,7 +28,7 @@ The `.set()` method takes two arguments:
 1. **key**: The name used to identify the value.
 2. **value**: The data to associate with that key.
 
-```typescript {7,9,13,21,28} showLineNumbers
+```typescript showLineNumbers
 import { RuntimeContext } from "@mastra/core/runtime-context";
 
 export type UserTier = {
@@ -36,7 +36,6 @@ export type UserTier = {
 };
 
 const runtimeContext = new RuntimeContext<UserTier>();
-
 runtimeContext.set("user-tier", "enterprise");
 
 const agent = mastra.getAgent("weatherAgent");
@@ -56,6 +55,12 @@ await run.start({
   },
   runtimeContext
 });
+await run.resume({
+  resumeData: {
+    city: "New York"
+  },
+  runtimeContext
+});
 
 await weatherTool.execute({
   context: {
@@ -63,7 +68,6 @@ await weatherTool.execute({
   },
   runtimeContext
 });
-
 ```
 
 ### Setting values based on request headers
