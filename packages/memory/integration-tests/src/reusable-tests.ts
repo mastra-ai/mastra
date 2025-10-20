@@ -449,7 +449,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
             semanticRecall: {
               topK: 1,
               messageRange: 1,
-              scope: 'thread' // Explicitly set (default is now 'resource')
+              scope: 'thread', // Explicitly set (default is now 'resource')
             },
           },
         });
