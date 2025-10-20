@@ -136,6 +136,14 @@ export class Memory extends MastraMemory {
 
     const resourceScope = typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`;
 
+    // Guard: If resource-scoped semantic recall is enabled but no resourceId is provided, throw an error
+    if (resourceScope && !resourceId && config?.semanticRecall && selectBy?.vectorSearchString) {
+      throw new Error(
+        `Memory error: Resource-scoped semantic recall is enabled but no resourceId was provided. ` +
+          `Either provide a resourceId or explicitly set semanticRecall.scope to 'thread'.`,
+      );
+    }
+
     if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector) {
       const { embeddings, dimension } = await this.embedMessageContent(selectBy.vectorSearchString!);
       const { indexName } = await this.createEmbeddingIndex(dimension, config);
@@ -428,6 +436,14 @@ export class Memory extends MastraMemory {
 
     const scope = config.workingMemory.scope || 'resource';
 
+    // Guard: If resource-scoped working memory is enabled but no resourceId is provided, throw an error
+    if (scope === 'resource' && !resourceId) {
+      throw new Error(
+        `Memory error: Resource-scoped working memory is enabled but no resourceId was provided. ` +
+          `Either provide a resourceId or explicitly set workingMemory.scope to 'thread'.`,
+      );
+    }
+
     if (scope === 'resource' && resourceId) {
       // Update working memory in resource table
       await this.storage.updateResource({
@@ -527,6 +543,14 @@ export class Memory extends MastraMemory {
       workingMemory = template?.content ? workingMemory.replaceAll(template?.content, '') : workingMemory;
 
       const scope = config.workingMemory.scope || 'resource';
+
+      // Guard: If resource-scoped working memory is enabled but no resourceId is provided, throw an error
+      if (scope === 'resource' && !resourceId) {
+        throw new Error(
+          `Memory error: Resource-scoped working memory is enabled but no resourceId was provided. ` +
+            `Either provide a resourceId or explicitly set workingMemory.scope to 'thread'.`,
+        );
+      }
 
       if (scope === 'resource' && resourceId) {
         // Update working memory in resource table
@@ -844,6 +868,14 @@ export class Memory extends MastraMemory {
 
     const scope = config.workingMemory.scope || 'resource';
     let workingMemoryData: string | null = null;
+
+    // Guard: If resource-scoped working memory is enabled but no resourceId is provided, throw an error
+    if (scope === 'resource' && !resourceId) {
+      throw new Error(
+        `Memory error: Resource-scoped working memory is enabled but no resourceId was provided. ` +
+          `Either provide a resourceId or explicitly set workingMemory.scope to 'thread'.`,
+      );
+    }
 
     if (scope === 'resource' && resourceId) {
       // Get working memory from resource table
