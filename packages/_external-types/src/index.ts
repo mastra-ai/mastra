@@ -13,12 +13,32 @@ export type { Tool as ToolV5, ToolCallOptions, FlexibleSchema } from '@ai-sdk/pr
  *
  * This structural type allows Mastra to accept any object that looks like a tool,
  * regardless of which module path or version it came from.
+ *
+ * Uses union type to match both Tool (v4) and ToolV5 structures, with index
+ * signature to remain future-proof as the AI SDK evolves.
  */
-export type ProviderDefinedTool = {
-  inputSchema?: any;
-  parameters?: any;
-  description?: string;
-  [key: string]: any;
-};
+export type ProviderDefinedTool =
+  | {
+      // Tool v4 structure
+      parameters: any;
+      description?: string;
+      type?: string;
+      id?: string;
+      args?: Record<string, unknown>;
+      execute?: (...args: any[]) => any;
+      [key: string]: any; // Allows experimental_* and other future properties
+    }
+  | {
+      // ToolV5 structure
+      inputSchema: any;
+      description?: string;
+      type?: string;
+      id?: string;
+      name?: string;
+      providerOptions?: any;
+      execute?: (...args: any[]) => any;
+      outputSchema?: any;
+      [key: string]: any; // Allows onInput* callbacks and other future properties
+    };
 
 export default {};
