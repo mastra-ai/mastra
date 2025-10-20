@@ -4,6 +4,7 @@ import { useDoc } from '@docusaurus/plugin-content-docs/client';
 
 import TOC from '@theme/TOC';
 import SubscribeForm from '@site/src/components/subscribe-form';
+import { FeedbackTrigger } from '@site/src/components/feedback-trigger';
 
 export default function DocItemTOCDesktop(): ReactNode {
   const { toc, frontMatter } = useDoc();
@@ -16,8 +17,9 @@ export default function DocItemTOCDesktop(): ReactNode {
         className={ThemeClassNames.docs.docTocDesktop}
       />
       {/* use container queries here to determine the padding to add */}
-      <div className="mt-3 px-1.5">
+      <div className="mt-3 flex flex-col gap-4 px-1.5">
         <SubscribeForm />
+        <FeedbackTrigger />
       </div>
     </div>
   );
