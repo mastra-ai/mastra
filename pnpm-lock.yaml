@@ -768,8 +768,8 @@ importers:
   observability/arize:
     dependencies:
       '@arizeai/openinference-genai':
-        specifier: https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-genai@0724788
-        version: https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-genai@0724788(@opentelemetry/api@1.9.0)(@opentelemetry/semantic-conventions@1.37.0)
+        specifier: 0.1.0
+        version: 0.1.0(@opentelemetry/api@1.9.0)(@opentelemetry/semantic-conventions@1.37.0)
       '@arizeai/openinference-semantic-conventions':
         specifier: ^2.1.2
         version: 2.1.2
@@ -4539,19 +4539,14 @@ packages:
     peerDependencies:
       '@types/json-schema': ^7.0.15
 
-  '@arizeai/openinference-genai@https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-genai@0724788':
-    resolution: {tarball: https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-genai@0724788}
-    version: 0.0.0
+  '@arizeai/openinference-genai@0.1.0':
+    resolution: {integrity: sha512-KfNcWlpK3uD5cIQ5+BZDtjXgtRsAhhwQgNCgNuasGOfLeS0XK9by1S6FSe5+u4RoqoXxYdVtW6SkkZzDpigEqA==}
     peerDependencies:
       '@opentelemetry/api': '>=1.9.0'
       '@opentelemetry/semantic-conventions': '>=1.37.0'
 
   '@arizeai/openinference-semantic-conventions@2.1.2':
     resolution: {integrity: sha512-u7UeuU9bJ1LxzHk0MPWb+1ZcotCcJwPnKDXi7Rl2cPs1pWMFg9Ogq7zzYZX+sDcibD2AEa1U+ElyOD8DwZc9gw==}
-
-  '@arizeai/openinference-semantic-conventions@https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-semantic-conventions@07247882c534ffa9a275640b6ce7347667ab297d':
-    resolution: {tarball: https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-semantic-conventions@07247882c534ffa9a275640b6ce7347667ab297d}
-    version: 2.1.2
 
   '@asamuzakjp/css-color@3.2.0':
     resolution: {integrity: sha512-K1A6z8tS3XsmCMM86xoWdn7Fkdn9m6RSVtocUrJYIwZnFVkng/PvkEoWtOWmP+Scc6saYWHWZYbndEEXxl24jw==}
@@ -17532,15 +17527,13 @@ snapshots:
       '@types/json-schema': 7.0.15
       js-yaml: 4.1.0
 
-  '@arizeai/openinference-genai@https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-genai@0724788(@opentelemetry/api@1.9.0)(@opentelemetry/semantic-conventions@1.37.0)':
+  '@arizeai/openinference-genai@0.1.0(@opentelemetry/api@1.9.0)(@opentelemetry/semantic-conventions@1.37.0)':
     dependencies:
-      '@arizeai/openinference-semantic-conventions': https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-semantic-conventions@07247882c534ffa9a275640b6ce7347667ab297d
+      '@arizeai/openinference-semantic-conventions': 2.1.2
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/semantic-conventions': 1.37.0
 
   '@arizeai/openinference-semantic-conventions@2.1.2': {}
-
-  '@arizeai/openinference-semantic-conventions@https://pkg.pr.new/Arize-ai/openinference/@arizeai/openinference-semantic-conventions@07247882c534ffa9a275640b6ce7347667ab297d': {}
 
   '@asamuzakjp/css-color@3.2.0':
     dependencies:
