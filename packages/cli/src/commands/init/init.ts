@@ -43,6 +43,7 @@ export const init = async ({
         addExample,
         addWorkflow: components.includes('workflows'),
         addAgent: components.includes('agents'),
+        addScorers: components.includes('scorers'),
       }),
       ...components.map(component => createComponentsDir(dirPath, component)),
       writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }),
@@ -69,6 +70,11 @@ export const init = async ({
       const needsLoggers = (await depService.checkDependencies(['@mastra/loggers'])) !== `ok`;
       if (needsLoggers) {
         await depService.installPackages(['@mastra/loggers']);
+      }
+
+      const needsEvals = components.includes(`scorers`) && (await depService.checkDependencies(['@mastra/evals'])) !== `ok`;
+      if (needsEvals) {
+        await depService.installPackages(['@mastra/evals']);
       }
     }
 

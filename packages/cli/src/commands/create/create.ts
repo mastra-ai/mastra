@@ -60,7 +60,7 @@ export const create = async (args: {
     await init({
       ...result,
       llmApiKey: result?.llmApiKey as string | undefined,
-      components: ['agents', 'tools', 'workflows'],
+      components: ['agents', 'tools', 'workflows', 'scorers'],
       addExample: true,
     });
     postCreate({ projectName });
