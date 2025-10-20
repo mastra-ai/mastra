@@ -1,5 +1,4 @@
 ---
-'@internal/external-types': patch
 '@mastra/core': patch
 ---
 
