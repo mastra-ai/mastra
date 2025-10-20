@@ -36,10 +36,12 @@ const config = {
     locales: ['en'],
   },
 
-  // Custom fields for Algolia search
+  // Custom fields for Algolia search and HubSpot
   customFields: {
     algoliaAppId: process.env.ALGOLIA_APP_ID,
     algoliaSearchApiKey: process.env.ALGOLIA_SEARCH_API_KEY,
+    hsPortalId: process.env.HS_PORTAL_ID,
+    hsFormGuid: process.env.HS_FORM_GUID,
   },
 
   // Preconnect to Google Fonts
