@@ -56,13 +56,13 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
           ...(enabled
             ? [
                 { label: 'Scope', value: semanticRecall.scope || 'thread' },
-                { label: 'Top K Results', value: semanticRecall.topK || 5 },
+                { label: 'Top K Results', value: semanticRecall.topK || 4 },
                 {
                   label: 'Message Range',
                   value:
                     typeof semanticRecall.messageRange === 'object'
-                      ? `${semanticRecall.messageRange.before || 0} before, ${semanticRecall.messageRange.after || 0} after`
-                      : `${semanticRecall.messageRange || 20} messages`,
+                      ? `${semanticRecall.messageRange.before || 1} before, ${semanticRecall.messageRange.after || 1} after`
+                      : `${semanticRecall.messageRange || 4} messages`,
                 },
               ]
             : []),
