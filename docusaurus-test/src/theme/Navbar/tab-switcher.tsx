@@ -38,7 +38,6 @@ const docsTabs = [
 export const TabSwitcher = ({ className }: { className?: string }) => {
   const location = useLocation();
   const pathname = location.pathname;
-
   return (
     <div
       className={cn(
@@ -49,7 +48,11 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
       <div className="mx-auto max-w-(--ifm-container-width)">
         <div className="flex tab gap-6 overflow-x-auto py-2 px-5 -ml-3" aria-label="Documentation tabs">
           {docsTabs.map(tab => {
-            const isActive = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+            // Handle nested paths by checking if current path starts with tab href
+            // Special case: /docs/intro should also match /docs and /docs/
+            const isActive =
+              pathname.startsWith(tab.href) ||
+              (tab.href === '/docs/intro' && (pathname === '/docs' || pathname === '/docs/'));
 
             return (
               <Link
