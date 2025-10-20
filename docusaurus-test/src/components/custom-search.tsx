@@ -403,6 +403,19 @@ function EmptyState({ setSearch }: { setSearch: (search: string) => void }) {
               'bg-[var(--light-color-surface-15)] dark:bg-surface-4',
             )}
           >
+            <svg width="24" height="25" viewBox="0 0 24 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                fill="currentColor"
+                d="M13.2 6.90023V3.29688L18.8034 8.90023H15.2C14.0954 8.90023 13.2 8.0048 13.2 6.90023Z"
+              ></path>
+              <path
+                fill="currentColor"
+                fill-rule="evenodd"
+                clip-rule="evenodd"
+                d="M11.4 3.29736H7.84183C6.18497 3.29736 4.84183 4.64051 4.84183 6.29736V18.704C4.84183 20.3609 6.18497 21.704 7.84183 21.704H16.1581C17.815 21.704 19.1581 20.3609 19.1581 18.704V10.6999H15.6C13.2804 10.6999 11.4 8.81945 11.4 6.49985V3.29736ZM13.2 6.49958C13.2 7.82507 14.2745 8.89958 15.6 8.89958H18.5939C18.594 8.89967 18.594 8.89976 18.5941 8.89985H15.6C14.2745 8.89985 13.2 7.82534 13.2 6.49985V6.49958Z"
+                opacity="0.6"
+              ></path>
+            </svg>
             <span className="text-sm font-normal truncate dark:text-icons-6 text-[var(--light-color-text-4)]">
               {search.label}
             </span>
