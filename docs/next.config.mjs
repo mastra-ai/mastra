@@ -5,6 +5,7 @@ import { transformerNotationDiff } from "@shikijs/transformers";
 import path from "path";
 import { readFileSync } from "fs";
 import { redirectList } from "./config/redirects.mjs";
+import withVercelToolbar from "@vercel/toolbar/plugins/next";
 
 const withNextra = nextra({
   search: {
@@ -24,51 +25,53 @@ const withNextra = nextra({
 const withGT = initGT();
 
 export default withGT(
-  withNextra({
-    assetPrefix: process.env.NODE_ENV === "production" ? "/docs" : "",
-    i18n: {
-      locales: ["en", "ja"],
-      defaultLocale: "en",
-    },
-    async rewrites() {
-      return {
-        beforeFiles: [
-          {
-            source: "/en/docs/api/copilotkit",
-            destination: "/api/copilotkit",
-          },
-          {
-            source: "/ja/docs/api/copilotkit",
-            destination: "/api/copilotkit",
-          },
-          {
-            source: "/docs/api/copilotkit",
-            destination: "/api/copilotkit",
-          },
-          {
-            source: "/en/docs/api/feedback",
-            destination: "/api/feedback",
-          },
-          {
-            source: "/ja/docs/api/feedback",
-            destination: "/api/feedback",
-          },
-          {
-            source: "/docs/api/feedback",
-            destination: "/api/feedback",
-          },
-          {
-            source: "/:locale/docs/_next/:path+",
-            destination: "/_next/:path+",
-          },
-          {
-            source: "/docs/_next/:path+",
-            destination: "/_next/:path+",
-          },
-        ],
-      };
-    },
-    redirects: () => redirectList,
-    trailingSlash: false,
-  }),
+  withVercelToolbar()(
+    withNextra({
+      assetPrefix: process.env.NODE_ENV === "production" ? "/docs" : "",
+      i18n: {
+        locales: ["en", "ja"],
+        defaultLocale: "en",
+      },
+      async rewrites() {
+        return {
+          beforeFiles: [
+            {
+              source: "/en/docs/api/copilotkit",
+              destination: "/api/copilotkit",
+            },
+            {
+              source: "/ja/docs/api/copilotkit",
+              destination: "/api/copilotkit",
+            },
+            {
+              source: "/docs/api/copilotkit",
+              destination: "/api/copilotkit",
+            },
+            {
+              source: "/en/docs/api/feedback",
+              destination: "/api/feedback",
+            },
+            {
+              source: "/ja/docs/api/feedback",
+              destination: "/api/feedback",
+            },
+            {
+              source: "/docs/api/feedback",
+              destination: "/api/feedback",
+            },
+            {
+              source: "/:locale/docs/_next/:path+",
+              destination: "/_next/:path+",
+            },
+            {
+              source: "/docs/_next/:path+",
+              destination: "/_next/:path+",
+            },
+          ],
+        };
+      },
+      redirects: () => redirectList,
+      trailingSlash: false,
+    }),
+  ),
 );
