@@ -787,6 +787,7 @@ export function streamNetworkHandler({
       memory: {
         thread: rest.thread ?? '',
         resource: rest.resourceId ?? '',
+        options: rest.memory?.options ?? {},
       },
       runtimeContext: finalRuntimeContext,
     });
