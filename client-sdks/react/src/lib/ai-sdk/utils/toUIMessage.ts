@@ -373,7 +373,10 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
               ...toolPart,
               output: updatedWorkflowState as any,
             };
-          } else if (chunk.payload.output?.from === 'AGENT') {
+          } else if (
+            chunk.payload.output?.from === 'AGENT' ||
+            (chunk.payload.output?.from === 'USER' && chunk.payload.output?.type?.startsWith('workflow-'))
+          ) {
             return toUIMessageFromAgent(chunk.payload.output, conversation, metadata);
           } else {
             // Handle regular tool output

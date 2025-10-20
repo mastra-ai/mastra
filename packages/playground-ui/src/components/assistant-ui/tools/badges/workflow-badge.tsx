@@ -75,9 +75,11 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
         <Button as={Link} href={`/workflows/${workflowId}/graph`}>
           Go to workflow
         </Button>
-        <Button as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
-          See run
-        </Button>
+        {runId && (
+          <Button as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
+            See run
+          </Button>
+        )}
       </div>
 
       <div className="rounded-md overflow-hidden h-[60vh] w-full">
