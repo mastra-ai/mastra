@@ -153,7 +153,6 @@ export class SpanConverter {
       // Add specific attributes based on span type
       if (aiSpan.type === AISpanType.LLM_GENERATION) {
         attributes['gen_ai.prompt'] = inputStr;
-        attributes['gen_ai.input.messages'] = this.convertMessages(inputStr);
       } else if (aiSpan.type === AISpanType.TOOL_CALL || aiSpan.type === AISpanType.MCP_TOOL_CALL) {
         attributes['gen_ai.tool.input'] = inputStr;
       }
@@ -167,7 +166,6 @@ export class SpanConverter {
       // Add specific attributes based on span type
       if (aiSpan.type === AISpanType.LLM_GENERATION) {
         attributes['gen_ai.completion'] = outputStr;
-        attributes['gen_ai.output.messages'] = this.convertMessages(outputStr);
       } else if (aiSpan.type === AISpanType.TOOL_CALL || aiSpan.type === AISpanType.MCP_TOOL_CALL) {
         attributes['gen_ai.tool.output'] = outputStr;
       }
@@ -340,71 +338,6 @@ export class SpanConverter {
     }
 
     return attributes;
-  }
-
-  /**
-   * Convert messages to gen_ai input messages schema
-   * @todo This is absurdly hacky and not typed at all. This is just for demonstration purposes.
-   *       This was implemented by manually inspecting span payloads and hand-converting them to the correct schema for GenAI.
-   *       This should be replaced by converting well typed mastra messages to well typed Otel GenAI messages
-   *       See https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-input-messages.json
-   *       See https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-output-messages.json
-   * @param messages
-   */
-  private convertMessages(messages: string): string {
-    try {
-      const newMessages = JSON.parse(messages)?.messages;
-      if (Array.isArray(newMessages)) {
-        return JSON.stringify(
-          newMessages.map((m: any) => {
-            const role = m.role;
-            let parts: any[] = [];
-            if (Array.isArray(m.content)) {
-              parts = m.content.map((c: any) => {
-                switch (c.type) {
-                  case 'text':
-                    return {
-                      type: 'text',
-                      content: c.text,
-                    };
-                  case 'tool-call':
-                    return {
-                      type: 'tool_call',
-                      id: c.toolCallId,
-                      name: c.toolName,
-                      arguments: JSON.stringify(c.input),
-                    };
-                  case 'tool-result':
-                    return {
-                      type: 'tool_call_response',
-                      id: c.toolCallId,
-                      name: c.toolName,
-                      response: JSON.stringify(c.output.value),
-                    };
-                  default:
-                    return c;
-                }
-              });
-            } else {
-              parts = [
-                {
-                  type: 'text',
-                  content: m.content,
-                },
-              ];
-            }
-            return {
-              role,
-              parts,
-            };
-          }),
-        );
-      }
-      return messages;
-    } catch (error) {
-      console.error('Error converting messages', error);
-      return messages;
-    }
   }
 
   /**
