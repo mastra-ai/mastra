@@ -7,31 +7,37 @@ const docsTabs = [
     id: 'Docs',
     label: 'Docs',
     href: '/docs/intro',
+    basePath: '/docs',
   },
   {
     id: 'Models',
     label: 'Models',
     href: '/docs/models',
+    basePath: '/docs/models',
   },
   {
     id: 'Examples',
     label: 'Examples',
     href: '/docs/examples',
+    basePath: '/docs/examples',
   },
   {
     id: 'Guides',
     label: 'Guides',
     href: '/docs/guides',
+    basePath: '/docs/guides',
   },
   {
     id: 'API Reference',
     label: 'API Reference',
     href: '/docs/reference',
+    basePath: '/docs/reference',
   },
   {
     id: 'Showcase',
     label: 'Showcase',
     href: '/docs/showcase',
+    basePath: '/docs/showcase',
   },
 ];
 
@@ -48,11 +54,20 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
       <div className="mx-auto max-w-(--ifm-container-width)">
         <div className="flex tab gap-6 overflow-x-auto py-2 px-5 -ml-3" aria-label="Documentation tabs">
           {docsTabs.map(tab => {
-            // Handle nested paths by checking if current path starts with tab href
-            // Special case: /docs/intro should also match /docs and /docs/
-            const isActive =
-              pathname.startsWith(tab.href) ||
-              (tab.href === '/docs/intro' && (pathname === '/docs' || pathname === '/docs/'));
+            // Check if current path matches the tab's base path
+            // For "Docs" tab, match any path starting with /docs/ that isn't covered by other tabs
+            const isActive = (() => {
+              // Check if path starts with this tab's base path
+              if (pathname.startsWith(tab.basePath + '/') || pathname === tab.basePath) {
+                // For the general "Docs" tab, exclude paths that belong to other specific tabs
+                if (tab.basePath === '/docs') {
+                  const otherTabPaths = docsTabs.filter(t => t.id !== 'Docs').map(t => t.basePath);
+                  return !otherTabPaths.some(path => pathname.startsWith(path + '/') || pathname === path);
+                }
+                return true;
+              }
+              return false;
+            })();
 
             return (
               <Link
