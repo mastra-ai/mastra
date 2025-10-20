@@ -25,33 +25,14 @@ import { MastraClient } from './client';
       }),
     });
 
-    // Process data stream - unstructured output
-
-    // response.processDataStream({
-    //   onTextPart: text => {
-    //     process.stdout.write(text);
-    //   },
-    //   onFilePart: file => {
-    //     console.log(file);
-    //   },
-    //   onDataPart: data => {
-    //     console.log(data);
-    //   },
-    //   onErrorPart: error => {
-    //     console.error(error);
-    //   },
-    //   onToolCallPart(streamPart) {
-    //     console.log(streamPart);
-    //   },
-    // });
-
-    // Process text stream - structured output
-
-    // response.processTextStream({
-    //   onTextPart: text => {
-    //     process.stdout.write(text);
-    //   },
-    // });
+    // Process data stream
+    response.processDataStream({
+      onChunk: async chunk => {
+        if (chunk.type === 'text-delta') {
+          console.log(chunk.payload.text);
+        }
+      },
+    });
 
     // read the response body directly
 

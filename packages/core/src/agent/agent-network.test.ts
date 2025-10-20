@@ -175,15 +175,15 @@ describe('Agent - network', () => {
     const calculatorAgent = new Agent({
       id: 'calculator-agent',
       name: 'Calculator Agent',
-      instructions: `You are a calculator agent. You can perform basic arithmetic operations such as addition, subtraction, multiplication, and division. 
+      instructions: `You are a calculator agent. You can perform basic arithmetic operations such as addition, subtraction, multiplication, and division.
     When you receive a request, you should respond with the result of the calculation.`,
       model: openai('gpt-4o-mini'),
     });
 
     const orchestratorAgentConfig = {
       systemInstruction: `
-      You are an orchestrator agent. 
-      
+      You are an orchestrator agent.
+
       You have access to one agent: Calculator Agent.
     - Calculator Agent can perform basic arithmetic operations such as addition, subtraction, multiplication, and division.
     `,
@@ -202,5 +202,225 @@ describe('Agent - network', () => {
     const prompt = `Hi!`; // <- this triggers an infinite loop
 
     expect(orchestratorAgent.network([{ role: 'user', content: prompt }])).rejects.toThrow();
+  });
+
+  it('Should generate title for network thread when generateTitle is enabled', async () => {
+    let titleGenerated = false;
+    let generatedTitle = '';
+
+    // Create a custom memory with generateTitle enabled
+    const memoryWithTitleGen = new MockMemory();
+    memoryWithTitleGen.getMergedThreadConfig = () => {
+      return {
+        threads: {
+          generateTitle: true,
+        },
+      };
+    };
+
+    // Override createThread to capture the title
+    const originalCreateThread = memoryWithTitleGen.createThread.bind(memoryWithTitleGen);
+    memoryWithTitleGen.createThread = async (params: any) => {
+      const result = await originalCreateThread(params);
+      if (params.title && !params.title.startsWith('New Thread')) {
+        titleGenerated = true;
+        generatedTitle = params.title;
+      }
+      return result;
+    };
+
+    const networkWithTitle = new Agent({
+      id: 'test-network-with-title',
+      name: 'Test Network With Title',
+      instructions:
+        'You can research cities. You can also synthesize research material. You can also write a full report based on the researched material.',
+      model: openai('gpt-4o-mini'),
+      agents: {
+        agent1,
+        agent2,
+      },
+      workflows: {
+        workflow1,
+      },
+      tools: {
+        tool,
+      },
+      memory: memoryWithTitleGen,
+    });
+
+    const anStream = await networkWithTitle.network('Research dolphins', {
+      runtimeContext,
+    });
+
+    // Consume the stream
+    for await (const chunk of anStream) {
+      console.log(chunk);
+    }
+
+    // Wait a bit for async title generation to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect(titleGenerated).toBe(true);
+    expect(generatedTitle).toBeTruthy();
+    expect(generatedTitle.length).toBeGreaterThan(0);
+  });
+
+  it('Should generate title for network thread when generateTitle is enabled via network options', async () => {
+    let titleGenerated = false;
+    let generatedTitle = '';
+
+    // Create a custom memory with generateTitle enabled
+    const memoryWithTitleGen = new MockMemory();
+
+    // Override createThread to capture the title
+    const originalCreateThread = memoryWithTitleGen.createThread.bind(memoryWithTitleGen);
+    memoryWithTitleGen.createThread = async (params: any) => {
+      const result = await originalCreateThread(params);
+      if (params.title && !params.title.startsWith('New Thread')) {
+        titleGenerated = true;
+        generatedTitle = params.title;
+      }
+      return result;
+    };
+
+    const networkWithTitle = new Agent({
+      id: 'test-network-with-title-in-options',
+      name: 'Test Network With Title In Options',
+      instructions:
+        'You can research cities. You can also synthesize research material. You can also write a full report based on the researched material.',
+      model: openai('gpt-4o-mini'),
+      agents: {
+        agent1,
+        agent2,
+      },
+      workflows: {
+        workflow1,
+      },
+      tools: {
+        tool,
+      },
+      memory: memoryWithTitleGen,
+    });
+
+    const anStream = await networkWithTitle.network('Research dolphins', {
+      runtimeContext,
+      memory: {
+        thread: 'test-network-with-title',
+        resource: 'test-network-with-title',
+        options: {
+          threads: {
+            generateTitle: true,
+          },
+        },
+      },
+    });
+
+    // Consume the stream
+    for await (const chunk of anStream) {
+      console.log(chunk);
+    }
+
+    // Wait a bit for async title generation to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect(titleGenerated).toBe(true);
+    expect(generatedTitle).toBeTruthy();
+    expect(generatedTitle.length).toBeGreaterThan(0);
+  });
+
+  it('Should not generate title when generateTitle is false', async () => {
+    let titleGenerationAttempted = false;
+
+    const memoryWithoutTitleGen = new MockMemory();
+    memoryWithoutTitleGen.getMergedThreadConfig = () => {
+      return {
+        threads: {
+          generateTitle: false,
+        },
+      };
+    };
+
+    // Override createThread to check if title generation was attempted
+    const originalCreateThread = memoryWithoutTitleGen.createThread.bind(memoryWithoutTitleGen);
+    memoryWithoutTitleGen.createThread = async (params: any) => {
+      if (params.title && !params.title.startsWith('New Thread')) {
+        titleGenerationAttempted = true;
+      }
+      return await originalCreateThread(params);
+    };
+
+    const networkNoTitle = new Agent({
+      id: 'test-network-no-title',
+      name: 'Test Network No Title',
+      instructions: 'You can research topics.',
+      model: openai('gpt-4o-mini'),
+      agents: {
+        agent1,
+      },
+      memory: memoryWithoutTitleGen,
+    });
+
+    const anStream = await networkNoTitle.network('Research dolphins', {
+      runtimeContext,
+    });
+
+    // Consume the stream
+    for await (const chunk of anStream) {
+      console.log(chunk);
+    }
+
+    // Wait for any async operations
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect(titleGenerationAttempted).toBe(false);
+  });
+
+  it('Should not generate title when generateTitle:false is passed in netwwork options', async () => {
+    let titleGenerationAttempted = false;
+
+    const memoryWithoutTitleGen = new MockMemory();
+
+    // Override createThread to check if title generation was attempted
+    const originalCreateThread = memoryWithoutTitleGen.createThread.bind(memoryWithoutTitleGen);
+    memoryWithoutTitleGen.createThread = async (params: any) => {
+      if (params.title && !params.title.startsWith('New Thread')) {
+        titleGenerationAttempted = true;
+      }
+      return await originalCreateThread(params);
+    };
+
+    const networkNoTitle = new Agent({
+      id: 'test-network-no-title',
+      name: 'Test Network No Title',
+      instructions: 'You can research topics.',
+      model: openai('gpt-4o-mini'),
+      agents: {
+        agent1,
+      },
+      memory: memoryWithoutTitleGen,
+    });
+
+    const anStream = await networkNoTitle.network('Research dolphins', {
+      runtimeContext,
+      memory: {
+        thread: 'test-network-no-title',
+        resource: 'test-network-no-title',
+        options: {
+          threads: {
+            generateTitle: false,
+          },
+        },
+      },
+    });
+
+    // Consume the stream
+    for await (const chunk of anStream) {
+      console.log(chunk);
+    }
+
+    // Wait for any async operations
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect(titleGenerationAttempted).toBe(false);
   });
 }, 120e3);

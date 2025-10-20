@@ -175,12 +175,11 @@ await runExperiment({
 In this example, the agent's output semantically matches the ground truth perfectly.
 
 ```typescript filename="src/example-perfect-similarity.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { runExperiment } from "@mastra/core/scores";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
 
-const scorer = createAnswerSimilarityScorer({ model: openai("gpt-4o-mini") });
+const scorer = createAnswerSimilarityScorer({ model: 'openai/gpt-4o-mini' });
 
 const result = await runExperiment({
   data: [
@@ -214,12 +213,11 @@ The output receives a perfect score because both the agent's answer and ground t
 In this example, the agent provides the same information as the ground truth but with different phrasing.
 
 ```typescript filename="src/example-semantic-similarity.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { runExperiment } from "@mastra/core/scores";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
 
-const scorer = createAnswerSimilarityScorer({ model: openai("gpt-4o-mini") });
+const scorer = createAnswerSimilarityScorer({ model: 'openai/gpt-4o-mini' });
 
 const result = await runExperiment({
   data: [
@@ -253,12 +251,11 @@ The output receives a high score because it conveys the same information with eq
 In this example, the agent's response is partially correct but missing key information.
 
 ```typescript filename="src/example-partial-similarity.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { runExperiment } from "@mastra/core/scores";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
 
-const scorer = createAnswerSimilarityScorer({ model: openai("gpt-4o-mini") });
+const scorer = createAnswerSimilarityScorer({ model: 'openai/gpt-4o-mini' });
 
 const result = await runExperiment({
   data: [
@@ -292,12 +289,11 @@ The output receives a moderate score because it includes some correct informatio
 In this example, the agent provides factually incorrect information that contradicts the ground truth.
 
 ```typescript filename="src/example-contradiction.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { runExperiment } from "@mastra/core/scores";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
 
-const scorer = createAnswerSimilarityScorer({ model: openai("gpt-4o-mini") });
+const scorer = createAnswerSimilarityScorer({ model: 'openai/gpt-4o-mini' });
 
 const result = await runExperiment({
   data: [
@@ -332,13 +328,12 @@ Use the scorer in your test suites to ensure agent consistency over time:
 
 ```typescript filename="src/ci-integration.test.ts" showLineNumbers copy
 import { describe, it, expect } from 'vitest';
-import { openai } from "@ai-sdk/openai";
 import { runExperiment } from "@mastra/core/scores";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
 
 describe('Agent Consistency Tests', () => {
-  const scorer = createAnswerSimilarityScorer({ model: openai("gpt-4o-mini") });
+  const scorer = createAnswerSimilarityScorer({ model: 'openai/gpt-4o-mini' });
 
   it('should provide accurate factual answers', async () => {
     const result = await runExperiment({
@@ -386,14 +381,13 @@ describe('Agent Consistency Tests', () => {
 Customize the scorer behavior for specific use cases:
 
 ```typescript filename="src/custom-config.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { runExperiment } from "@mastra/core/scores";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
 import { myAgent } from "./agent";
 
 // Configure for strict exact matching with high scale
 const strictScorer = createAnswerSimilarityScorer({ 
-  model: openai("gpt-4o-mini"),
+  model: 'openai/gpt-4o-mini',
   options: {
     exactMatchBonus: 0.5,        // Higher bonus for exact matches
     contradictionPenalty: 2.0,   // Very strict on contradictions
@@ -404,7 +398,7 @@ const strictScorer = createAnswerSimilarityScorer({
 
 // Configure for lenient semantic matching
 const lenientScorer = createAnswerSimilarityScorer({ 
-  model: openai("gpt-4o-mini"),
+  model: 'openai/gpt-4o-mini',
   options: {
     semanticThreshold: 0.6,      // Lower threshold for semantic matches
     contradictionPenalty: 0.5,   // More forgiving on minor contradictions
