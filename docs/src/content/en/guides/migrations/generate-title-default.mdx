@@ -1,0 +1,90 @@
+---
+title: Thread Title Generation Default Change
+description: Migration guide for the generateTitle default value change from true to false
+---
+
+# Thread Title Generation Default Change
+
+## Overview
+
+Starting from version 0.21.2-alpha.0, the default value for `threads.generateTitle` has changed from `true` to `false`. This means thread title auto-generation is now opt-in rather than automatic.
+
+## Why This Change?
+
+This change was made to:
+- Avoid unexpected LLM API calls and associated costs
+- Give developers explicit control over when title generation occurs
+- Improve predictability of memory behavior
+
+## Migration Steps
+
+### If You Want to Keep Auto-Generation
+
+If your application relies on automatic thread title generation, you need to explicitly enable it in your memory configuration:
+
+```typescript
+// Before (implicit true)
+const agent = new Agent({
+  memory: new Memory({
+    // generateTitle was true by default
+  })
+});
+
+// After (explicit true)
+const agent = new Agent({
+  memory: new Memory({
+    threads: {
+      generateTitle: true  // Explicitly enable title generation
+    }
+  })
+});
+```
+
+### Custom Title Generation
+
+You can also customize the model and instructions used for title generation:
+
+```typescript
+const agent = new Agent({
+  memory: new Memory({
+    threads: {
+      generateTitle: {
+        model: openai("gpt-4o-mini"),
+        instructions: "Generate a concise title (max 5 words) that summarizes the conversation"
+      }
+    }
+  })
+});
+```
+
+### If You Don't Need Auto-Generation
+
+If you don't need automatic title generation, no changes are required. The new default (`false`) will prevent automatic title generation.
+
+## Checking Your Current Configuration
+
+To verify your current configuration in the Mastra Playground:
+
+1. Navigate to your agent's memory configuration
+2. Look for the "Auto-generate Titles" setting
+3. It will show as disabled by default unless explicitly configured
+
+## Setting Titles Manually
+
+If you prefer to set thread titles manually, you can do so when creating or updating threads:
+
+```typescript
+// Manual title setting example
+await memory.saveMessages({
+  threadId: "thread-123",
+  threadTitle: "Customer Support - Order #12345",  // Set title manually
+  messages: [...]
+});
+```
+
+## Questions?
+
+If you have questions about this migration, please:
+- Check the [Memory documentation](/docs/memory/threads-and-resources)
+- Open an issue on [GitHub](https://github.com/mastra-ai/mastra)
+- Join our [Discord community](https://discord.gg/mastra)

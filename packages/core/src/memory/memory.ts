@@ -43,7 +43,7 @@ export const memoryDefaultOptions = {
   lastMessages: 10,
   semanticRecall: false,
   threads: {
-    generateTitle: true,
+    generateTitle: false,
   },
   workingMemory: {
     enabled: false,

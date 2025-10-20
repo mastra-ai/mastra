@@ -31,14 +31,14 @@ Even with memory configured, agents won’t store or recall information unless b
 
 ### Thread title generation
 
-Mastra can automatically generate descriptive thread titles based on the user's first message. Enable this by setting `generateTitle` to `true`. This improves organization and makes it easier to display conversations in your UI.
+Mastra can automatically generate descriptive thread titles based on the user's first message. This feature is disabled by default. Enable it by setting `generateTitle` to `true`. This improves organization and makes it easier to display conversations in your UI.
 
 ```typescript {3-7} showLineNumbers
 export const testAgent = new Agent({
   memory: new Memory({
     options: {
       threads: {
-        generateTitle: true,
+        generateTitle: true,  // Explicitly enable automatic title generation
       }
     },
   })
