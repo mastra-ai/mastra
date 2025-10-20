@@ -20,7 +20,7 @@ export type { Tool as ToolV5, ToolCallOptions, FlexibleSchema } from '@ai-sdk/pr
 export type ProviderDefinedTool =
   | {
       // Tool v4 structure
-      parameters: any;
+      parameters: unknown;
       description?: string;
       type?: string;
       id?: string;
@@ -30,7 +30,7 @@ export type ProviderDefinedTool =
     }
   | {
       // ToolV5 structure
-      inputSchema: any;
+      inputSchema: unknown;
       description?: string;
       type?: string;
       id?: string;
