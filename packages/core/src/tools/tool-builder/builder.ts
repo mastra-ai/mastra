@@ -50,14 +50,43 @@ export class CoreToolBuilder extends MastraBase {
   // Helper to get parameters based on tool type
   private getParameters = () => {
     if (isVercelTool(this.originalTool)) {
-      return this.originalTool.parameters ?? z.object({});
+      // Handle both 'parameters' (v4) and 'inputSchema' (v5) properties
+      // Also handle case where the schema is a function that returns a schema
+      let schema =
+        this.originalTool.parameters ??
+        ('inputSchema' in this.originalTool ? (this.originalTool as any).inputSchema : undefined) ??
+        z.object({});
+
+      // If schema is a function, call it to get the actual schema
+      if (typeof schema === 'function') {
+        schema = schema();
+      }
+
+      return schema;
     }
 
-    return this.originalTool.inputSchema ?? z.object({});
+    // For Mastra tools, inputSchema might also be a function
+    let schema = this.originalTool.inputSchema ?? z.object({});
+
+    // If schema is a function, call it to get the actual schema
+    if (typeof schema === 'function') {
+      schema = schema();
+    }
+
+    return schema;
   };
 
   private getOutputSchema = () => {
-    if ('outputSchema' in this.originalTool) return this.originalTool.outputSchema;
+    if ('outputSchema' in this.originalTool) {
+      let schema = this.originalTool.outputSchema;
+
+      // If schema is a function, call it to get the actual schema
+      if (typeof schema === 'function') {
+        schema = schema();
+      }
+
+      return schema;
+    }
     return null;
   };
 
@@ -72,13 +101,16 @@ export class CoreToolBuilder extends MastraBase {
     ) {
       const parameters = this.getParameters();
       const outputSchema = this.getOutputSchema();
+
       return {
         type: 'provider-defined' as const,
         id: tool.id,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
-        parameters: convertZodSchemaToAISDKSchema(parameters),
-        ...(outputSchema ? { outputSchema: convertZodSchemaToAISDKSchema(outputSchema) } : {}),
+        parameters: parameters.jsonSchema ? parameters : convertZodSchemaToAISDKSchema(parameters),
+        ...(outputSchema
+          ? { outputSchema: outputSchema.jsonSchema ? outputSchema : convertZodSchemaToAISDKSchema(outputSchema) }
+          : {}),
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
