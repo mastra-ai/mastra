@@ -89,9 +89,9 @@ export const networkAgent = new Agent({
   agents: {
     weatherAgent,
   },
-  workflows: {
-    myWorkflow,
-  },
+  // workflows: {
+  //   myWorkflow,
+  // },
   // tools: {
   //   weatherInfo,
   // },
