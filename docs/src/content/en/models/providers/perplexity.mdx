@@ -48,6 +48,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
+    "model": "perplexity/sonar",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 1,
+    "outputCost": 1
+  },
+  {
     "model": "perplexity/sonar-pro",
     "imageInput": true,
     "audioInput": false,
@@ -82,18 +94,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 4096,
     "inputCost": 2,
     "outputCost": 8
-  },
-  {
-    "model": "perplexity/sonar",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": 1,
-    "outputCost": 1
   }
 ]}
 />

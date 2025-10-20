@@ -48,6 +48,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
+    "model": "deepinfra/moonshotai/Kimi-K2-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.5,
+    "outputCost": 2
+  },
+  {
     "model": "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct",
     "imageInput": false,
     "audioInput": false,
@@ -82,18 +94,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 98304,
     "inputCost": 0.6,
     "outputCost": 2.2
-  },
-  {
-    "model": "deepinfra/moonshotai/Kimi-K2-Instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.5,
-    "outputCost": 2
   }
 ]}
 />
