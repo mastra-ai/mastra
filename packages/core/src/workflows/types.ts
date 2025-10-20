@@ -210,6 +210,7 @@ export interface WorkflowRunState {
   serializedStepGraph: SerializedStepFlowEntry[];
   activePaths: Array<unknown>;
   suspendedPaths: Record<string, number[]>;
+  resumeLabels: Record<string, string>;
   waitingPaths: Record<string, number[]>;
   timestamp: number;
 }

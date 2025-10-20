@@ -28,6 +28,7 @@ import type {
   ChunkType,
   ExecutionEngineOptions,
   StepWithComponent,
+  SuspendOptions,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -223,6 +224,7 @@ export class InngestRun<
         context: {} as any,
         activePaths: [],
         suspendedPaths: {},
+        resumeLabels: {},
         waitingPaths: {},
         timestamp: Date.now(),
         status: 'running',
@@ -551,6 +553,7 @@ export class InngestWorkflow<
           waitingPaths: {},
           serializedStepGraph: this.serializedStepGraph,
           suspendedPaths: {},
+          resumeLabels: {},
           result: undefined,
           error: undefined,
           // @ts-ignore
@@ -1725,8 +1728,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
-            suspend: async (suspendPayload: any) => {
+            suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
               executionContext.suspendedPaths[step.id] = executionContext.executionPath;
+              if (suspendOptions?.resumeLabel) {
+                executionContext.resumeLabels[suspendOptions.resumeLabel] = step.id;
+              }
               suspended = { payload: suspendPayload };
             },
             bail: (result: any) => {
@@ -1933,6 +1939,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             context: stepResults as any,
             activePaths: [],
             suspendedPaths: executionContext.suspendedPaths,
+            resumeLabels: executionContext.resumeLabels,
             waitingPaths: {},
             serializedStepGraph,
             status: workflowStatus,
@@ -2101,6 +2108,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             runId,
             executionPath: [...executionContext.executionPath, index],
             suspendedPaths: executionContext.suspendedPaths,
+            resumeLabels: executionContext.resumeLabels,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
             state: executionContext.state,
