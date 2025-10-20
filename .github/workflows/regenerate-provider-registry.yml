@@ -94,7 +94,11 @@ jobs:
         if: steps.git-check.outputs.changed == 'true'
         run: |
           # Check if an automated provider registry changeset already exists
-          EXISTING_CHANGESET=$(ls .changeset/automated-provider-registry-*.md 2>/dev/null | head -n 1)
+          if [ -d .changeset ]; then
+            EXISTING_CHANGESET=$(ls .changeset/automated-provider-registry-*.md 2>/dev/null | head -n 1)
+          else
+            EXISTING_CHANGESET=""
+          fi
           
           if [ -n "$EXISTING_CHANGESET" ]; then
             echo "Automated changeset already exists: ${EXISTING_CHANGESET}"
@@ -124,7 +128,9 @@ jobs:
           git add packages/core/src/llm/model/provider-registry.json
           git add packages/core/src/llm/model/provider-types.generated.d.ts
           git add docs/src/content/en/models/
-          git add "${CHANGESET_FILE}"
+          if [ -n "${CHANGESET_FILE}" ]; then
+            git add "${CHANGESET_FILE}"
+          fi
           git commit -m "chore: regenerate provider registry and model documentation [skip ci]"
           git pull --rebase
           git push
