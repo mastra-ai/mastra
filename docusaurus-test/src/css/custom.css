@@ -1002,7 +1002,7 @@ input:-webkit-autofill:focus,
 textarea:-webkit-autofill,
 textarea:-webkit-autofill:hover,
 textarea:-webkit-autofill:focus {
-  -webkit-box-shadow: 0 0 0px 1000px #fff inset !important;
+  -webkit-box-shadow: 0 0 0px 1000px var(--ifm-background-color) inset !important;
   /* you might also set text-fill colour if needed */
   -webkit-text-fill-color: #000 !important;
 }
