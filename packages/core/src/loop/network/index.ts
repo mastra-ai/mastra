@@ -133,22 +133,29 @@ export async function prepareMemoryStep({
   }
   let userMessage: string | undefined;
 
+  // Parallelize async operations
+  const promises: Promise<any>[] = [];
+
   if (typeof messages === 'string') {
     userMessage = messages;
-    await memory?.saveMessages({
-      messages: [
-        {
-          id: generateId(),
-          type: 'text',
-          role: 'user',
-          content: { parts: [{ type: 'text', text: messages }], format: 2 },
-          createdAt: new Date(),
-          threadId: thread?.id,
-          resourceId: thread?.resourceId,
-        },
-      ] as MastraMessageV2[],
-      format: 'v2',
-    });
+    if (memory) {
+      promises.push(
+        memory.saveMessages({
+          messages: [
+            {
+              id: generateId(),
+              type: 'text',
+              role: 'user',
+              content: { parts: [{ type: 'text', text: messages }], format: 2 },
+              createdAt: new Date(),
+              threadId: thread?.id,
+              resourceId: thread?.resourceId,
+            },
+          ] as MastraMessageV2[],
+          format: 'v2',
+        }),
+      );
+    }
   } else {
     const messageList = new MessageList({
       threadId: thread?.id,
@@ -157,10 +164,14 @@ export async function prepareMemoryStep({
     messageList.add(messages, 'user');
     const messagesToSave = messageList.get.all.v2();
 
-    await memory?.saveMessages({
-      messages: messagesToSave,
-      format: 'v2',
-    });
+    if (memory) {
+      promises.push(
+        memory.saveMessages({
+          messages: messagesToSave,
+          format: 'v2',
+        }),
+      );
+    }
 
     // Get the user message for title generation
     const uiMessages = messageList.get.all.ui();
@@ -168,7 +179,7 @@ export async function prepareMemoryStep({
     userMessage = mostRecentUserMessage?.content;
   }
 
-  // Generate title if needed
+  // Add title generation to promises if needed (non-blocking)
   if (thread?.title?.startsWith('New Thread') && memory) {
     const config = memory.getMergedThreadConfig(memoryConfig || {});
 
@@ -179,28 +190,31 @@ export async function prepareMemoryStep({
     } = routingAgent.resolveTitleGenerationConfig(config?.threads?.generateTitle);
 
     if (shouldGenerate && userMessage) {
-      const title = await routingAgent.genTitle(
-        userMessage,
-        runtimeContext,
-        tracingContext || { currentSpan: undefined },
-        titleModel,
-        titleInstructions,
+      promises.push(
+        routingAgent
+          .genTitle(
+            userMessage,
+            runtimeContext,
+            tracingContext || { currentSpan: undefined },
+            titleModel,
+            titleInstructions,
+          )
+          .then(title => {
+            if (title) {
+              return memory.createThread({
+                threadId: thread.id,
+                resourceId: thread.resourceId,
+                memoryConfig,
+                title,
+                metadata: thread.metadata,
+              });
+            }
+          }),
       );
-
-      if (title) {
-        await memory.createThread({
-          threadId: thread.id,
-          resourceId: thread.resourceId,
-          memoryConfig,
-          title,
-          metadata: thread.metadata,
-        });
-
-        // Update the thread object with the new title
-        thread = { ...thread, title };
-      }
     }
   }
+
+  await Promise.all(promises);
 
   return { thread };
 }
