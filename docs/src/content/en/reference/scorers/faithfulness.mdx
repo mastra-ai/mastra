@@ -121,10 +121,9 @@ A faithfulness score between 0 and 1:
 In this example, the response closely aligns with the context. Each statement in the output is verifiable and supported by the provided context entries, resulting in a high score.
 
 ```typescript filename="src/example-high-faithfulness.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
 
-const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options: {
+const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [
     "The Tesla Model 3 was launched in 2017.",
     "It has a range of up to 358 miles.",
@@ -159,10 +158,9 @@ The output receives a score of 1 because all the information it provides can be 
 In this example, there are a mix of supported and unsupported claims. Some parts of the response are backed by the context, while others introduce new information not found in the source material.
 
 ```typescript filename="src/example-mixed-faithfulness.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
 
-const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options: {
+const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [
     "Python was created by Guido van Rossum.",
     "The first version was released in 1991.",
@@ -197,10 +195,9 @@ The score is lower because only a portion of the response is verifiable. While s
 In this example, the response directly contradicts the context. None of the claims are supported, and several conflict with the facts provided.
 
 ```typescript filename="src/example-low-faithfulness.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
 
-const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options: {
+const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [
     "Mars is the fourth planet from the Sun.",
     "It has a thin atmosphere of mostly carbon dioxide.",

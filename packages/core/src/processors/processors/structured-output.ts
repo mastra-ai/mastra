@@ -124,7 +124,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
 
       // Stream object chunks directly into the main stream
       for await (const chunk of structuringAgentStream.fullStream) {
-        if (excludedChunkTypes.includes(chunk.type)) {
+        if (excludedChunkTypes.includes(chunk.type) || chunk.type.startsWith('data-')) {
           continue;
         }
         if (chunk.type === 'error') {
