@@ -21,7 +21,10 @@ export class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
         );
       }
       const processedAttributes = convertGenAISpanAttributesToOpenInferenceSpanAttributes(span.attributes);
-      (span as Mutable<ReadableSpan>).attributes = processedAttributes;
+      // only add processed attributes if conversion was successful
+      if (processedAttributes) {
+        (span as Mutable<ReadableSpan>).attributes = processedAttributes;
+      }
       return span;
     });
 
