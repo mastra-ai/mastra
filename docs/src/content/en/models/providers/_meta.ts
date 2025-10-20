@@ -6,6 +6,7 @@ const meta = {
   deepseek: "DeepSeek",
   mistral: "Mistral",
   xai: "xAI",
+  aihubmix: "AIHubMix",
   alibaba: "Alibaba",
   "alibaba-cn": "Alibaba (China)",
   baseten: "Baseten",

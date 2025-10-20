@@ -41,11 +41,21 @@ workflow.sleepUntil(new Date(Date.now() + 5000));
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-workflow.sleepUntil(async ({ inputData }) => {
-  return new Date(Date.now() + inputData.value);
-});
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .sleepUntil(async ({ inputData }) => {
+    const { delayInMs } = inputData;
+    return new Date(Date.now() + delayInMs);
+  })
+  .then(step2)
+  .commit();
 ```
 
 ## Related
 
-- [Sleep & Events](../../../docs/workflows/pausing-execution.mdx)
+- [Suspend & Resume](../../../docs/workflows/suspend-and-resume.mdx#sleep--events)

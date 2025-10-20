@@ -255,6 +255,10 @@ export function MastraRuntimeProvider({
               ) {
                 refreshWorkingMemory?.();
               }
+
+              if (chunk.type === 'network-execution-event-step-finish') {
+                refreshThreadList?.();
+              }
             },
           });
         } else {
@@ -269,6 +273,8 @@ export function MastraRuntimeProvider({
               signal: controller.signal,
             });
 
+            await refreshThreadList?.();
+
             return;
           } else {
             await sendMessage({
@@ -279,6 +285,10 @@ export function MastraRuntimeProvider({
               threadId,
               modelSettings: modelSettingsArgs,
               onChunk: async chunk => {
+                if (chunk.type === 'finish') {
+                  await refreshThreadList?.();
+                }
+
                 if (
                   chunk.type === 'tool-result' &&
                   chunk.payload?.toolName === 'updateWorkingMemory' &&

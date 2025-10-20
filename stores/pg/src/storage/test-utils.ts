@@ -329,6 +329,83 @@ export function pgTests() {
       });
     });
 
+    describe('Function Namespace in Schema', () => {
+      const testSchema = 'schema_fn_test';
+      let testStore: PostgresStore;
+
+      beforeAll(async () => {
+        // Use a temp connection to set up schema
+        const tempPgp = pgPromise();
+        const tempDb = tempPgp(connectionString);
+
+        try {
+          await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+          await tempDb.none(`CREATE SCHEMA ${testSchema}`);
+          // Drop the function from public schema if it exists from other tests
+          await tempDb.none(`DROP FUNCTION IF EXISTS public.trigger_set_timestamps() CASCADE`);
+        } finally {
+          tempPgp.end();
+        }
+
+        testStore = new PostgresStore({
+          ...TEST_CONFIG,
+          schemaName: testSchema,
+        });
+        await testStore.init();
+      });
+
+      afterAll(async () => {
+        await testStore?.close();
+
+        // Use a temp connection to clean up
+        const tempPgp = pgPromise();
+        const tempDb = tempPgp(connectionString);
+
+        try {
+          await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+        } finally {
+          tempPgp.end();
+        }
+      });
+
+      it('should create trigger function in the correct schema namespace', async () => {
+        const aiSpansSchema = {
+          id: { type: 'text', primaryKey: true, nullable: false },
+          name: { type: 'text', nullable: true },
+          createdAt: { type: 'timestamp', nullable: false },
+          updatedAt: { type: 'timestamp', nullable: false },
+        } as Record<string, StorageColumn>;
+
+        await testStore.createTable({
+          tableName: 'mastra_ai_spans' as TABLE_NAMES,
+          schema: aiSpansSchema,
+        });
+
+        // Verify trigger function exists in the correct schema
+        const functionInfo = await testStore.db.oneOrNone(
+          `SELECT p.proname, n.nspname
+           FROM pg_proc p
+           JOIN pg_namespace n ON p.pronamespace = n.oid
+           WHERE n.nspname = $1 AND p.proname = 'trigger_set_timestamps'`,
+          [testSchema],
+        );
+
+        expect(functionInfo).toBeDefined();
+        expect(functionInfo?.proname).toBe('trigger_set_timestamps');
+        expect(functionInfo?.nspname).toBe(testSchema);
+
+        // Verify function does NOT exist in public schema
+        const publicFunction = await testStore.db.oneOrNone(
+          `SELECT p.proname, n.nspname
+           FROM pg_proc p
+           JOIN pg_namespace n ON p.pronamespace = n.oid
+           WHERE n.nspname = 'public' AND p.proname = 'trigger_set_timestamps'`,
+        );
+
+        expect(publicFunction).toBeNull();
+      });
+    });
+
     describe('Timestamp Fallback Handling', () => {
       let testThreadId: string;
       let testResourceId: string;
