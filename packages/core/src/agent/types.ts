@@ -1,3 +1,4 @@
+import type { ProviderDefinedTool } from '@internal/external-types';
 import type { GenerateTextOnStepFinishCallback, TelemetrySettings, ToolSet } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -30,7 +31,6 @@ import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scor
 import type { OutputSchema } from '../stream';
 import type { InferSchemaOutput } from '../stream/base/schema';
 import type { ModelManagerModelConfig } from '../stream/types';
-import type { ProviderDefinedTool } from '@internal/external-types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
