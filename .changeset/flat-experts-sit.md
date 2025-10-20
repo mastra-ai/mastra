@@ -3,4 +3,4 @@
 '@mastra/core': patch
 ---
 
-Fix reasoning messages stored in memory
+Fix incomplete reasoning messages stored in memory
