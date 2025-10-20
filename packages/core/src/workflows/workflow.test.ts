@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { createTool, Mastra, Telemetry } from '..';
 import { Agent } from '../agent';
 import { RuntimeContext } from '../di';
+import { MastraError } from '../error';
 import { MockStore } from '../storage/mock';
 import type { ChunkType, StreamEvent, WatchEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
@@ -5565,6 +5566,143 @@ describe('Workflow', () => {
           },
         },
       });
+    });
+
+    it('should persist only error message without stack trace in snapshot (GitHub issue #5563)', async () => {
+      // Create a custom storage to capture the snapshot
+      const mockStorage = new MockStore();
+      const persistSpy = vi.spyOn(mockStorage, 'persistWorkflowSnapshot');
+
+      const mastra = new Mastra({
+        storage: mockStorage,
+      });
+
+      const errorMessage = 'Test error: step execution failed.';
+      const failingAction = vi.fn<any>().mockImplementation(() => {
+        throw new Error(errorMessage);
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: failingAction,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        mastra,
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      // Check that persistWorkflowSnapshot was called
+      expect(persistSpy).toHaveBeenCalled();
+
+      // Get the snapshot that was persisted
+      const persistCall = persistSpy.mock.calls[persistSpy.mock.calls.length - 1];
+      const snapshot = persistCall?.[0]?.snapshot;
+
+      expect(snapshot).toBeDefined();
+      expect(snapshot.status).toBe('failed');
+
+      // Check the step error in the snapshot context
+      const step1Result = snapshot.context.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result?.status).toBe('failed');
+
+      // Type guard to access error property
+      if (step1Result?.status === 'failed') {
+        const stepError = step1Result.error;
+        expect(stepError).toBeDefined();
+
+        // EXPECTED BEHAVIOR: Error should be just the message
+        // This test will FAIL with current implementation because it saves stack traces
+
+        // Verify NO stack trace is present (no "at " which appears in stack traces)
+        expect(String(stepError)).not.toContain('at Object.execute');
+        expect(String(stepError)).not.toContain('at ');
+        expect(String(stepError)).not.toContain('\n');
+      }
+    });
+
+    it('should persist only MastraError message without stack trace in snapshot (GitHub issue #5563)', async () => {
+      // Create a custom storage to capture the snapshot
+      const mockStorage = new MockStore();
+      const persistSpy = vi.spyOn(mockStorage, 'persistWorkflowSnapshot');
+
+      const mastra = new Mastra({
+        storage: mockStorage,
+      });
+
+      const errorMessage = 'Test MastraError: step execution failed.';
+      const failingAction = vi.fn<any>().mockImplementation(() => {
+        throw new MastraError({
+          id: 'TEST_STEP_EXECUTION_ERROR',
+          domain: 'MASTRA_WORKFLOW',
+          category: 'USER',
+          text: errorMessage,
+          details: { testContext: 'test-scenario' },
+        });
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: failingAction,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        mastra,
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      // Check that persistWorkflowSnapshot was called
+      expect(persistSpy).toHaveBeenCalled();
+
+      // Get the snapshot that was persisted
+      const persistCall = persistSpy.mock.calls[persistSpy.mock.calls.length - 1];
+      const snapshot = persistCall?.[0]?.snapshot;
+
+      expect(snapshot).toBeDefined();
+      expect(snapshot.status).toBe('failed');
+
+      // Check the step error in the snapshot context
+      const step1Result = snapshot.context.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result?.status).toBe('failed');
+
+      // Type guard to access error property
+      if (step1Result?.status === 'failed') {
+        const stepError = step1Result.error;
+        expect(stepError).toBeDefined();
+
+        // EXPECTED BEHAVIOR: Error should be just the message
+        // This test will FAIL with current implementation because it saves stack traces
+        expect(stepError).toBe(errorMessage);
+
+        // Verify NO stack trace is present
+        expect(String(stepError)).not.toContain('at Object.execute');
+        expect(String(stepError)).not.toContain('at ');
+        expect(String(stepError)).not.toContain('\n');
+      }
     });
 
     it('should handle step execution errors within branches', async () => {

@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { Mastra } from '../..';
 import type { StepFlowEntry, StepResult } from '../..';
+import { MastraError } from '../../error';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { RuntimeContext } from '../../runtime-context';
+import { createStep } from '../workflow';
 import { StepExecutor } from './step-executor';
 
 interface SleepFnContext {
@@ -197,5 +200,95 @@ describe('StepExecutor', () => {
     // Act & Assert: Call resolveSleep and verify it returns 0
     const result = await stepExecutor.resolveSleep(params);
     expect(result).toBe(0);
+  });
+
+  it('should save only error message without stack trace when step fails (GitHub issue #5563)', async () => {
+    // Arrange: Create a step that throws an error
+    const errorMessage = 'Test error: step execution failed.';
+    const failingStep = createStep({
+      id: 'failing-step',
+      execute: vi.fn().mockImplementation(() => {
+        throw new Error(errorMessage);
+      }),
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+
+    const emitter = new EventEmitterPubSub();
+
+    // Act: Execute the step
+    const result = await stepExecutor.execute({
+      workflowId: 'test-workflow',
+      step: failingStep,
+      runId: 'test-run',
+      input: {},
+      stepResults: {},
+      state: {},
+      emitter: emitter as any,
+      runtimeContext,
+    });
+
+    // Assert: Verify the result is a failure
+    expect(result.status).toBe('failed');
+
+    // Type guard to access error property
+    if (result.status === 'failed') {
+      // EXPECTED BEHAVIOR: Error should be just the message
+      // This test will FAIL with current implementation because it saves stack traces
+      expect(result.error).toBe(errorMessage);
+
+      // Verify NO stack trace is present (no "at " which appears in stack traces)
+      expect(String(result.error)).not.toContain('at Object.execute');
+      expect(String(result.error)).not.toContain('at ');
+      expect(String(result.error)).not.toContain('\n');
+    }
+  });
+
+  it('should save only MastraError message without stack trace when step fails (GitHub issue #5563)', async () => {
+    // Arrange: Create a step that throws a MastraError
+    const errorMessage = 'Test MastraError: step execution failed.';
+    const failingStep = createStep({
+      id: 'failing-step',
+      execute: vi.fn().mockImplementation(() => {
+        throw new MastraError({
+          id: 'VALIDATION_ERROR',
+          domain: 'MASTRA_WORKFLOW',
+          category: 'USER',
+          text: errorMessage,
+          details: { field: 'test' },
+        });
+      }),
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+
+    const emitter = new EventEmitterPubSub();
+
+    // Act: Execute the step
+    const result = await stepExecutor.execute({
+      workflowId: 'test-workflow',
+      step: failingStep,
+      runId: 'test-run',
+      input: {},
+      stepResults: {},
+      state: {},
+      emitter: emitter as any,
+      runtimeContext,
+    });
+
+    // Assert: Verify the result is a failure
+    expect(result.status).toBe('failed');
+
+    // Type guard to access error property
+    if (result.status === 'failed') {
+      // EXPECTED BEHAVIOR: Error should be just the message
+      // This test will FAIL with current implementation because it saves stack traces
+      expect(result.error).toBe(errorMessage);
+
+      // Verify NO stack trace is present
+      expect(String(result.error)).not.toContain('at Object.execute');
+      expect(String(result.error)).not.toContain('at ');
+      expect(String(result.error)).not.toContain('\n');
+    }
   });
 });
