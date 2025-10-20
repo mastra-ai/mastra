@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { toast } from './custom-toast';
 import { z } from 'zod/v4';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
+import { Button } from './ui/button';
 
 export const formSchema = z.object({
   email: z.email(),
@@ -117,7 +118,7 @@ const SubscribeForm = ({
   return (
     <Form {...form}>
       <form
-        className={cn('mt-[2.38rem] outline items-end flex flex-col md:flex-row w-full gap-2 ', className)}
+        className={cn('mt-[2.38rem] items-end flex flex-col w-full gap-2 ', className)}
         onKeyDown={e => {
           if (e.key === 'Enter') {
             e.preventDefault();
@@ -141,7 +142,7 @@ const SubscribeForm = ({
                   placeholder={placeholder || 'you@example.com'}
                   {...field}
                   className={cn(
-                    'bg-transparent dark:text-white placeholder:text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none focus:ring-1 h-[35px] focus:ring-[hsl(var(--tag-green))] w-full py-[0.56rem] px-4 dark:border-[#343434] border border-[var(--light-border-muted)] rounded-md',
+                    'bg-transparent dark:text-white focus-visible:border-green-500 placeholder:text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none h-[35px] focus:ring-2 focus:ring-(--mastra-green-accent)/50 w-full py-[0.56rem] px-4 dark:border-[#343434] border border-(--border) rounded-[10px]',
                     inputClassName,
                   )}
                 />
@@ -155,7 +156,7 @@ const SubscribeForm = ({
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
-                    stroke-width="2"
+                    strokeWidth="2"
                     stroke-linecap="round"
                     stroke-linejoin="round"
                     className="text-red-500"
@@ -165,15 +166,15 @@ const SubscribeForm = ({
                     <line x1="12" x2="12.01" y1="16" y2="16" />
                   </svg>
                 )}
-                <FormMessage className="text-red-500" />
+                <FormMessage className="text-red-500 !mb-0" />
               </span>
             </FormItem>
           )}
         />
 
-        <button
+        <Button
           className={cn(
-            'dark:bg-[#121212] focus-visible:outline-accent-green bg-[var(--light-color-surface-3)] w-full rounded-md hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]',
+            'bg-(--mastra-surface-3) w-full rounded-[10px] hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]',
             buttonClassName,
           )}
           onClick={e => {
@@ -198,7 +199,7 @@ const SubscribeForm = ({
               }
             </motion.span>
           </AnimatePresence>
-        </button>
+        </Button>
       </form>
     </Form>
   );
