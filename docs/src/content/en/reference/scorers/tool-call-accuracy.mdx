@@ -304,7 +304,7 @@ The `createToolCallAccuracyScorerLLM()` function from `@mastra/evals/scorers/llm
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
+      type: "MastraModelConfig",
       description: "The LLM model to use for evaluating tool appropriateness",
       required: true,
     },
@@ -345,7 +345,7 @@ The LLM-based scorer provides:
 ```typescript showLineNumbers copy
 // Basic configuration
 const basicLLMScorer = createLLMScorer({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   availableTools: [
     { name: 'tool1', description: 'Description 1' },
     { name: 'tool2', description: 'Description 2' }
@@ -385,7 +385,7 @@ The LLM-based scorer uses AI to evaluate whether tool selections are appropriate
 
 ```typescript filename="src/example-llm-basic.ts" showLineNumbers copy
 const llmScorer = createToolCallAccuracyScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   availableTools: [
     { 
       name: 'weather-tool', 
@@ -508,7 +508,6 @@ Here's an example using both scorers on the same data:
 ```typescript filename="src/example-comparison.ts" showLineNumbers copy
 import { createToolCallAccuracyScorerCode as createCodeScorer } from '@mastra/evals/scorers/code';
 import { createToolCallAccuracyScorerLLM as createLLMScorer } from '@mastra/evals/scorers/llm';
-import { openai } from '@ai-sdk/openai';
 
 // Setup both scorers
 const codeScorer = createCodeScorer({
@@ -517,7 +516,7 @@ const codeScorer = createCodeScorer({
 });
 
 const llmScorer = createLLMScorer({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   availableTools: [
     { name: 'weather-tool', description: 'Get weather information' },
     { name: 'search-tool', description: 'Search the web' }

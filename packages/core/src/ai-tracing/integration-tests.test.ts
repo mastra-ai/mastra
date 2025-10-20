@@ -803,8 +803,9 @@ describe('AI Tracing Integration Tests', () => {
       id2: 'tacos',
     };
 
+    const resourceId = 'test-resource-id';
     const workflow = mastra.getWorkflow('branchingWorkflow');
-    const run = await workflow.createRunAsync();
+    const run = await workflow.createRunAsync({ resourceId });
     const result = await run.start({ inputData: { value: 15 }, tracingOptions: { metadata: customMetadata } });
     expect(result.status).toBe('success');
     expect(result.traceId).toBeDefined();
@@ -818,6 +819,8 @@ describe('AI Tracing Integration Tests', () => {
 
     expect(workflowRunSpan?.traceId).toBe(result.traceId);
     expect(workflowRunSpan?.isRootSpan).toBe(true);
+    expect(workflowRunSpan?.metadata?.runId).toBeDefined();
+    expect(workflowRunSpan?.metadata?.resourceId).toBe(resourceId);
     expect(workflowRunSpan?.metadata?.id1).toBe(customMetadata.id1);
     expect(workflowRunSpan?.metadata?.id2).toBe(customMetadata.id2);
 
@@ -1109,8 +1112,9 @@ describe('AI Tracing Integration Tests', () => {
           agents: { testAgent },
         });
 
+        const resourceId = 'test-resource-id';
         const agent = mastra.getAgent('testAgent');
-        const result = await method(agent, 'Calculate 5 + 3');
+        const result = await method(agent, 'Calculate 5 + 3', { resourceId });
         expect(result.text).toBeDefined();
         expect(result.traceId).toBeDefined();
 
@@ -1131,6 +1135,8 @@ describe('AI Tracing Integration Tests', () => {
         const toolCallSpan = toolCallSpans[0];
 
         expect(agentRunSpan?.traceId).toBe(result.traceId);
+        expect(agentRunSpan?.metadata?.runId).toBeDefined();
+        expect(agentRunSpan?.metadata?.resourceId).toBe(resourceId);
 
         // verify span nesting
         expect(llmGenerationSpan?.parentSpanId).toEqual(agentRunSpan?.id);
