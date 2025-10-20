@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-feat(create-mastra): fix model id for anthropic
+Use newer model id for anthropic during `create-mastra`
