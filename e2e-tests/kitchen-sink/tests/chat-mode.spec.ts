@@ -25,12 +25,12 @@ test.describe('chat modes', () => {
       const threadNav = await page.getByTestId('thread-list');
 
       // Assert partial streaming chunks
-      await expect(threadContent.locator(`text=${expectedResult.slice(0, 20)}`)).toBeVisible({ timeout: 20000 });
-      await expect(threadContent.locator(`text=${expectedResult.slice(0, 100)}`)).toBeVisible({ timeout: 20000 });
-      await expect(threadContent.locator(`text=${expectedResult}`)).not.toBeVisible({ timeout: 20000 });
+      await expect(threadContent.getByText(expectedResult.slice(0, 20))).toBeVisible({ timeout: 20000 });
+      await expect(threadContent.getByText(expectedResult.slice(0, 100))).toBeVisible({ timeout: 20000 });
+      await expect(threadContent.getByText(expectedResult)).not.toBeVisible({ timeout: 20000 });
 
       // Asset streaming result
-      await expect(threadContent.locator(`text=${expectedResult}`)).toBeVisible({ timeout: 20000 });
+      await expect(threadContent.getByText(expectedResult)).toBeVisible({ timeout: 20000 });
 
       // Assert thread entry refreshing
       await expect(threadNav.getByRole('link', { name: expectedResult })).toBeVisible({ timeout: 20000 });
