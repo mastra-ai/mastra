@@ -28,7 +28,7 @@ const mastra = new Mastra({
   observability: {
     // Enables ArizeExporter for AI tracing
     configs: {
-      otel: {
+      arize: {
         serviceName: PROJECT_NAME,
         exporters: [
           new ArizeExporter({
