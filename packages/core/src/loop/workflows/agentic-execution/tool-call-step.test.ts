@@ -2,8 +2,8 @@ import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import type { MessageList } from '../../../agent/message-list';
 import { RuntimeContext } from '../../../runtime-context';
-import { ToolStream } from '../../../tools/stream';
 import { ChunkFrom } from '../../../stream/types';
+import { ToolStream } from '../../../tools/stream';
 import { createToolCallStep } from './tool-call-step';
 
 describe('createToolCallStep tool approval workflow', () => {
