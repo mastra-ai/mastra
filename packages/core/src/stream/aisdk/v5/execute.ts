@@ -2,7 +2,7 @@ import { injectJsonInstructionIntoMessages, isAbortError } from '@ai-sdk/provide
 import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
 import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
-import pRetry from 'p-retry';
+// import pRetry from 'p-retry';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
@@ -148,7 +148,8 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
         const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers', 'abortSignal']);
         const abortSignal = options?.abortSignal || modelSettings?.abortSignal;
 
-        return await pRetry(
+        const pRetry = await import('p-retry');
+        return await pRetry.default(
           async () => {
             const streamResult = await model.doStream({
               ...toolsAndToolChoice,

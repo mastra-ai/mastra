@@ -34,6 +34,31 @@ export type ProviderModelsMap = {
     'ZhipuAI/GLM-4.5',
     'ZhipuAI/GLM-4.6',
   ];
+  readonly aihubmix: readonly [
+    'DeepSeek-V3.2-Exp',
+    'DeepSeek-V3.2-Exp-Think',
+    'Kimi-K2-0905',
+    'claude-haiku-4-5',
+    'claude-opus-4-1',
+    'claude-sonnet-4-5',
+    'gemini-2.5-flash',
+    'gemini-2.5-pro',
+    'glm-4.6',
+    'gpt-4.1',
+    'gpt-4.1-mini',
+    'gpt-4.1-nano',
+    'gpt-4o',
+    'gpt-4o-2024-11-20',
+    'gpt-5',
+    'gpt-5-codex',
+    'gpt-5-mini',
+    'gpt-5-nano',
+    'gpt-5-pro',
+    'o4-mini',
+    'qwen3-235b-a22b-instruct-2507',
+    'qwen3-235b-a22b-thinking-2507',
+    'qwen3-coder-480b-a35b-instruct',
+  ];
   readonly lucidquery: readonly ['lucidnova-rf1-100b', 'lucidquery-nexus-coder'];
   readonly xai: readonly [
     'grok-2',
@@ -109,6 +134,19 @@ export type ProviderModelsMap = {
   readonly perplexity: readonly ['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro'];
   readonly morph: readonly ['auto', 'morph-v3-fast', 'morph-v3-large'];
   readonly 'zai-coding-plan': readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'];
+  readonly scaleway: readonly [
+    'deepseek-r1-distill-llama-70b',
+    'gemma-3-27b-it',
+    'gpt-oss-120b',
+    'llama-3.1-8b-instruct',
+    'llama-3.3-70b-instruct',
+    'mistral-nemo-instruct-2407',
+    'mistral-small-3.2-24b-instruct-2506',
+    'pixtral-12b-2409',
+    'qwen3-235b-a22b-instruct-2507',
+    'qwen3-coder-30b-a3b-instruct',
+    'voxtral-small-24b-2507',
+  ];
   readonly huggingface: readonly [
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
@@ -498,8 +536,8 @@ export type ProviderModelsMap = {
   ];
   readonly zai: readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'];
   readonly opencode: readonly [
-    'an-g8x',
     'an-gbt',
+    'big-pickle',
     'claude-3-5-haiku',
     'claude-haiku-4-5',
     'claude-opus-4-1',
