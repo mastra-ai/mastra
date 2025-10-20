@@ -46,6 +46,7 @@ function isSpanInternal(spanType: AISpanType, flags?: InternalSpans): boolean {
 
     // LLM-related spans
     case AISpanType.LLM_GENERATION:
+    case AISpanType.LLM_STEP:
     case AISpanType.LLM_CHUNK:
       return (flags & InternalSpans.LLM) !== 0;
 

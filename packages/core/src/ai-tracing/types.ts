@@ -21,6 +21,8 @@ export enum AISpanType {
   GENERIC = 'generic',
   /** LLM generation with model calls, token usage, prompts, completions */
   LLM_GENERATION = 'llm_generation',
+  /** Single LLM execution step within a generation (one API call) */
+  LLM_STEP = 'llm_step',
   /** Individual LLM streaming chunk/event */
   LLM_CHUNK = 'llm_chunk',
   /** MCP (Model Context Protocol) tool execution */
@@ -72,6 +74,22 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   maxSteps?: number;
 }
 
+/** Token usage statistics - supports both v5 and legacy formats */
+export interface UsageStats {
+  // VNext paths
+  inputTokens?: number;
+  outputTokens?: number;
+  // Legacy format (for backward compatibility)
+  promptTokens?: number;
+  completionTokens?: number;
+  // Common fields
+  totalTokens?: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  promptCacheHitTokens?: number;
+  promptCacheMissTokens?: number;
+}
+
 /**
  * LLM Generation attributes
  */
@@ -83,20 +101,7 @@ export interface LLMGenerationAttributes extends AIBaseAttributes {
   /** Type of result/output this LLM call produced */
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
   /** Token usage statistics - supports both v5 and legacy formats */
-  usage?: {
-    // VNext paths
-    inputTokens?: number;
-    outputTokens?: number;
-    // Legacy format (for backward compatibility)
-    promptTokens?: number;
-    completionTokens?: number;
-    // Common fields
-    totalTokens?: number;
-    reasoningTokens?: number;
-    cachedInputTokens?: number;
-    promptCacheHitTokens?: number;
-    promptCacheMissTokens?: number;
-  };
+  usage?: UsageStats;
   /** Model parameters */
   parameters?: {
     maxOutputTokens?: number;
@@ -115,6 +120,22 @@ export interface LLMGenerationAttributes extends AIBaseAttributes {
   streaming?: boolean;
   /** Reason the generation finished */
   finishReason?: string;
+}
+
+/**
+ * LLM Step attributes - for a single LLM execution within a generation
+ */
+export interface LLMStepAttributes extends AIBaseAttributes {
+  /** Index of this step in the generation (0, 1, 2, ...) */
+  stepIndex?: number;
+  /** Token usage statistics */
+  usage?: UsageStats;
+  /** Reason this step finished (stop, tool-calls, length, etc.) */
+  finishReason?: string;
+  /** Should execution continue */
+  isContinued?: boolean;
+  /** Result warnings */
+  warnings?: Record<string, any>;
 }
 
 /**
@@ -262,6 +283,7 @@ export interface AISpanTypeMap {
   [AISpanType.AGENT_RUN]: AgentRunAttributes;
   [AISpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
   [AISpanType.LLM_GENERATION]: LLMGenerationAttributes;
+  [AISpanType.LLM_STEP]: LLMStepAttributes;
   [AISpanType.LLM_CHUNK]: LLMChunkAttributes;
   [AISpanType.TOOL_CALL]: ToolCallAttributes;
   [AISpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
