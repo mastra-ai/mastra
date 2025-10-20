@@ -62,7 +62,7 @@ export function KapaChat({
       {/* Chat header */}
       <div className="flex absolute top-0 right-0 left-0 z-20 justify-between items-center px-5 py-3 w-full border-b backdrop-blur-md border-neutral-200 dark:border-neutral-800 dark:bg-surface-6">
         <span className="text-sm dark:text-icons-5">
-          Chat with Mastra Docs"
+          Chat with Mastra Docs
         </span>
         <Button
           onClick={() => close()}
