@@ -16,7 +16,7 @@ const withNextra = nextra({
       theme: JSON.parse(
         readFileSync(path.join(process.cwd(), "theme.json"), "utf-8"),
       ),
-      // transformers: [transformerNotationDiff()],
+      transformers: [transformerNotationDiff()],
     },
   },
   unstable_shouldAddLocaleToLinks: true,
