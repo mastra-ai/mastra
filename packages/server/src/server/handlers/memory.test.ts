@@ -531,6 +531,7 @@ describe('Memory Handlers', () => {
           { role: 'assistant', content: 'Hello from v2 format!' },
         ] as CoreMessage[],
         uiMessages: [],
+        messagesV2: [],
       });
 
       // Save both messages
@@ -781,13 +782,27 @@ describe('Memory Handlers', () => {
 
     it('should return messages for valid thread', async () => {
       const mockMessages: CoreMessage[] = [{ role: 'user', content: 'Test message' }];
+      const mockMessagesV2: MastraMessageV2[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          createdAt: new Date(),
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Test message' }],
+            content: 'Test message',
+          },
+        },
+      ];
       const mastra = new Mastra({
         logger: false,
         agents: {
           'test-agent': mockAgent,
         },
       });
-      const expectedResult = { messages: mockMessages, uiMessages: [], legacyMessages: [] };
+      const expectedResult = { messages: mockMessages, uiMessages: [], messagesV2: mockMessagesV2, legacyMessages: [] };
       mockMemory.getThreadById.mockResolvedValue(createThread({}));
       mockMemory.query.mockResolvedValue(expectedResult);
 
@@ -808,7 +823,7 @@ describe('Memory Handlers', () => {
           role: 'user',
         },
       ]);
-      expect(result.legacyMessages).toEqual(expectedResult.legacyMessages);
+      expect(result.legacyMessages).toEqual([]);
     });
 
     it('should preserve custom metadata in uiMessages when loading messages with metadata', async () => {
@@ -874,6 +889,193 @@ describe('Memory Handlers', () => {
       expect(result.uiMessages[0]?.metadata).toHaveProperty('createdAt');
       expect(result.uiMessages[0]?.metadata).toHaveProperty('threadId', 'test-thread');
       expect(result.uiMessages[0]?.metadata).toHaveProperty('resourceId', 'test-resource');
+    });
+
+    it('should handle messages with tool invocations correctly', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+      });
+
+      const messagesV2: MastraMessageV2[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          createdAt: new Date(),
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolCallId: 'call-1',
+                  toolName: 'searchTool',
+                  args: { query: 'test' },
+                  state: 'result',
+                  result: 'search results',
+                },
+              },
+            ],
+            toolInvocations: [
+              {
+                toolCallId: 'call-1',
+                toolName: 'searchTool',
+                args: { query: 'test' },
+                state: 'result',
+                result: 'search results',
+              },
+            ],
+          },
+        },
+      ];
+
+      const expectedResult = {
+        messages: [] as CoreMessage[],
+        uiMessages: [],
+        messagesV2,
+      };
+
+      mockMemory.getThreadById.mockResolvedValue(createThread({}));
+      mockMemory.query.mockResolvedValue(expectedResult);
+
+      const result = await getMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'test-agent' });
+
+      expect(result.uiMessages).toHaveLength(1);
+      expect(result.uiMessages[0]?.role).toBe('assistant');
+      expect(result.uiMessages[0]?.parts).toHaveLength(1);
+      // AIV5 converts tool-invocation to tool-{toolName} format
+      expect(result.uiMessages[0]?.parts[0]?.type).toBe('tool-searchTool');
+    });
+
+    it('should handle multi-part messages (text + images) correctly', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+      });
+
+      const messagesV2: MastraMessageV2[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          createdAt: new Date(),
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Check this image' },
+              { type: 'file', mimeType: 'image/png', data: 'base64data' },
+            ],
+            content: 'Check this image',
+            metadata: {
+              imageSource: 'upload',
+            },
+          },
+        },
+      ];
+
+      const expectedResult = {
+        messages: [] as CoreMessage[],
+        uiMessages: [],
+        messagesV2,
+      };
+
+      mockMemory.getThreadById.mockResolvedValue(createThread({}));
+      mockMemory.query.mockResolvedValue(expectedResult);
+
+      const result = await getMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'test-agent' });
+
+      expect(result.uiMessages).toHaveLength(1);
+      expect(result.uiMessages[0]?.parts).toHaveLength(2);
+      expect(result.uiMessages[0]?.parts[0]?.type).toBe('text');
+      expect(result.uiMessages[0]?.parts[1]?.type).toBe('file');
+      // Custom metadata should be preserved
+      expect(result.uiMessages[0]?.metadata).toHaveProperty('imageSource', 'upload');
+    });
+
+    it('should handle conversation with multiple messages and mixed metadata', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+      });
+
+      const messagesV2: MastraMessageV2[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          createdAt: new Date('2025-01-01T00:00:00Z'),
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'First message' }],
+            content: 'First message',
+            metadata: {
+              sessionId: 'session-1',
+            },
+          },
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          createdAt: new Date('2025-01-01T00:01:00Z'),
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Response' }],
+            content: 'Response',
+            // No custom metadata on this one
+          },
+        },
+        {
+          id: 'msg-3',
+          role: 'user',
+          createdAt: new Date('2025-01-01T00:02:00Z'),
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Follow up' }],
+            content: 'Follow up',
+            metadata: {
+              referenceId: 'ref-123',
+            },
+          },
+        },
+      ];
+
+      const expectedResult = {
+        messages: [] as CoreMessage[],
+        uiMessages: [],
+        messagesV2,
+      };
+
+      mockMemory.getThreadById.mockResolvedValue(createThread({}));
+      mockMemory.query.mockResolvedValue(expectedResult);
+
+      const result = await getMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'test-agent' });
+
+      expect(result.uiMessages).toHaveLength(3);
+
+      // First message should have custom metadata
+      expect(result.uiMessages[0]?.metadata).toHaveProperty('sessionId', 'session-1');
+
+      // Second message should NOT have custom metadata (only system metadata)
+      expect(result.uiMessages[1]?.metadata).not.toHaveProperty('sessionId');
+      expect(result.uiMessages[1]?.metadata).not.toHaveProperty('referenceId');
+      expect(result.uiMessages[1]?.metadata).toHaveProperty('threadId', 'test-thread');
+
+      // Third message should have its own custom metadata
+      expect(result.uiMessages[2]?.metadata).toHaveProperty('referenceId', 'ref-123');
     });
   });
 
