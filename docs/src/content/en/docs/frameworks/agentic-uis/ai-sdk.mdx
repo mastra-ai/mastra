@@ -82,6 +82,30 @@ const { error, status, sendMessage, messages, regenerate, stop } =
     }),
   });
 ```
+
+Pass extra agent stream execution options:
+
+```typescript
+const { error, status, sendMessage, messages, regenerate, stop } =
+  useChat({
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat',
+      prepareSendMessagesRequest({ messages }) {
+        return {
+          body: {
+            messages,
+            // Pass memory config
+            memory: {
+              thread: "user-1",
+              resource: "user-1"
+            }
+          },
+        }
+      }
+    }),
+  });
+```
+
 ### `workflowRoute()`
 
 Use the `workflowRoute()` utility to create a route handler that automatically formats the workflow stream into an AI SDK-compatible format.
@@ -249,6 +273,41 @@ export async function POST(req: Request) {
   return createUIMessageStreamResponse({
     stream: uiMessageStream,
   });
+}
+```
+
+### Client Side Stream Transformations
+
+If you have a client-side `response` from `agent.stream(...)` and want AI SDK-formatted parts without custom SSE parsing, wrap `response.processDataStream` into a `ReadableStream<ChunkType>` and pipe it through `toAISdkFormat`:
+
+```typescript filename="client-stream-to-ai-sdk.ts" copy
+import { createUIMessageStream } from 'ai';
+import { toAISdkFormat } from '@mastra/ai-sdk';
+import type { ChunkType, MastraModelOutput } from '@mastra/core/stream';
+
+// Client SDK agent stream
+const response = await agent.stream({ messages: 'What is the weather in Tokyo' });
+
+const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
+  start(controller) {
+    response.processDataStream({
+      onChunk: async (chunk) => {
+        controller.enqueue(chunk as ChunkType);
+      },
+    }).finally(() => controller.close());
+  },
+});
+
+const uiMessageStream = createUIMessageStream({
+  execute: async ({ writer }) => {
+    for await (const part of toAISdkFormat(chunkStream as unknown as MastraModelOutput, { from: 'agent' })) {
+      writer.write(part);
+    }
+  },
+});
+
+for await (const part of uiMessageStream) {
+  console.log(part);
 }
 ```
 
