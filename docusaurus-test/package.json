@@ -28,6 +28,7 @@
     "algoliasearch": "^5.40.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.0.0",
+    "cmdk": "^1.1.1",
     "motion": "^12.23.24",
     "prism-react-renderer": "^2.3.0",
     "react": "^18.0.0",
