@@ -59,6 +59,8 @@ export function createMapResultsStep<
     const toolsData = inputData['prepare-tools-step'];
     const memoryData = inputData['prepare-memory-step'];
 
+    console.log('memoryData===', JSON.stringify(memoryData, null, 2));
+
     const result = {
       ...options,
       agentId,
@@ -168,6 +170,12 @@ export function createMapResultsStep<
               .core()
               .map(m => m.content)
               .join('\n');
+
+            console.log('outputText', outputText);
+            console.log('messageList', messageList.serialize());
+            console.log('threadId', result.threadId);
+            console.log('thread', result.thread);
+            console.log('resourceId', resourceId);
 
             await capabilities.executeOnFinish({
               result: payload,

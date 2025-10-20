@@ -1304,6 +1304,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   }
 
   serializeState() {
+    console.log('serializing state', this.messageList.serialize());
     return {
       status: this.#status,
       bufferedSteps: this.#bufferedSteps,
@@ -1324,7 +1325,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       usageCount: this.#usageCount,
       tripwire: this.#tripwire,
       tripwireReason: this.#tripwireReason,
-      messageList: this.messageList.get.all.core(),
+      messageList: this.messageList.serialize(),
     };
   }
 
@@ -1348,6 +1349,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#usageCount = state.usageCount;
     this.#tripwire = state.tripwire;
     this.#tripwireReason = state.tripwireReason;
-    this.messageList.add(state.messageList, 'user');
+    console.log('deserializing state', state.messageList);
+    this.messageList = this.messageList.deserialize(state.messageList);
   }
 }
