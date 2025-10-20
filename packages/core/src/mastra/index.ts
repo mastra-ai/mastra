@@ -1531,14 +1531,14 @@ do:
   /**
    * Internal helper to throw a tracked MastraError and stop execution.
    */
-  private __throwTrackedUserError({
+  private __throwTrackedRegistrationError({
     id,
     text,
     details,
   }: {
     id: Uppercase<string>;
     text: string;
-    details?: Record<string, String>;
+    details?: Record<string, string>;
   }): never {
     const error = new MastraError({
       id,
@@ -1557,10 +1557,10 @@ do:
   private __ensureNotRegistered(
     registry: Record<string, unknown>,
     key: string,
-    errorConfig: { id: Uppercase<string>; text: string; details?: Record<string, unknown> },
+    errorConfig: { id: Uppercase<string>; text: string; details?: Record<string, string> },
   ): void {
     if (registry[key]) {
-      this.__throwTrackedUserError(errorConfig);
+      this.__throwTrackedRegistrationError(errorConfig);
     }
   }
 
@@ -1570,10 +1570,10 @@ do:
   private __ensureRegistered(
     registry: Record<string, unknown>,
     key: string,
-    errorConfig: { id: Uppercase<string>; text: string; details?: Record<string, unknown> },
+    errorConfig: { id: Uppercase<string>; text: string; details?: Record<string, string> },
   ): void {
     if (!registry[key]) {
-      this.__throwTrackedUserError(errorConfig);
+      this.__throwTrackedRegistrationError(errorConfig);
     }
   }
 
