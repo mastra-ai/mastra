@@ -48,6 +48,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
+    "model": "perplexity/sonar",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 1,
+    "outputCost": 1
+  },
+  {
     "model": "perplexity/sonar-pro",
     "imageInput": true,
     "audioInput": false,
@@ -82,18 +94,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 4096,
     "inputCost": 2,
     "outputCost": 8
-  },
-  {
-    "model": "perplexity/sonar",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": 1,
-    "outputCost": 1
   }
 ]}
 />
@@ -136,25 +136,8 @@ const agent = new Agent({
 
 This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@perplexity-ai/perplexity_ai) for more details.
 
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
-  <Tab>
-    ```bash copy
-    npm install @perplexity-ai/perplexity_ai
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    yarn add @perplexity-ai/perplexity_ai
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    pnpm add @perplexity-ai/perplexity_ai
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    bun add @perplexity-ai/perplexity_ai
-    ```
-  </Tab>
-</Tabs>
+```bash npm2yarn copy
+npm install @perplexity-ai/perplexity_ai
+```
+
+For detailed provider-specific documentation, see the [AI SDK Perplexity provider docs](https://ai-sdk.dev/providers/ai-sdk-providers/perplexity).

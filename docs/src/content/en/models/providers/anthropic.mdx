@@ -44,64 +44,28 @@ for await (const chunk of stream) {
 <ProviderModelsTable 
   models={[
   {
-    "model": "anthropic/claude-haiku-4-5-20251001",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 1,
-    "outputCost": 5
-  },
-  {
-    "model": "anthropic/claude-3-sonnet-20240229",
+    "model": "anthropic/claude-3-5-haiku-20241022",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 200000,
-    "maxOutput": 4096,
-    "inputCost": 3,
-    "outputCost": 15
+    "maxOutput": 8192,
+    "inputCost": 0.8,
+    "outputCost": 4
   },
   {
-    "model": "anthropic/claude-opus-4-20250514",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 32000,
-    "inputCost": 15,
-    "outputCost": 75
-  },
-  {
-    "model": "anthropic/claude-3-opus-20240229",
+    "model": "anthropic/claude-3-5-haiku-latest",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 200000,
-    "maxOutput": 4096,
-    "inputCost": 15,
-    "outputCost": 75
-  },
-  {
-    "model": "anthropic/claude-3-haiku-20240307",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 200000,
-    "maxOutput": 4096,
-    "inputCost": 0.25,
-    "outputCost": 1.25
+    "maxOutput": 8192,
+    "inputCost": 0.8,
+    "outputCost": 4
   },
   {
     "model": "anthropic/claude-3-5-sonnet-20240620",
@@ -140,16 +104,100 @@ for await (const chunk of stream) {
     "outputCost": 15
   },
   {
-    "model": "anthropic/claude-3-5-haiku-20241022",
+    "model": "anthropic/claude-3-7-sonnet-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "anthropic/claude-3-haiku-20240307",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 200000,
-    "maxOutput": 8192,
-    "inputCost": 0.8,
-    "outputCost": 4
+    "maxOutput": 4096,
+    "inputCost": 0.25,
+    "outputCost": 1.25
+  },
+  {
+    "model": "anthropic/claude-3-opus-20240229",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 4096,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "anthropic/claude-3-sonnet-20240229",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 4096,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "anthropic/claude-haiku-4-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "anthropic/claude-haiku-4-5-20251001",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "anthropic/claude-opus-4-0",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "anthropic/claude-opus-4-1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
   },
   {
     "model": "anthropic/claude-opus-4-1-20250805",
@@ -164,7 +212,19 @@ for await (const chunk of stream) {
     "outputCost": 75
   },
   {
-    "model": "anthropic/claude-sonnet-4-5-20250929",
+    "model": "anthropic/claude-opus-4-20250514",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "anthropic/claude-sonnet-4-0",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -200,31 +260,7 @@ for await (const chunk of stream) {
     "outputCost": 15
   },
   {
-    "model": "anthropic/claude-3-5-haiku-latest",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 200000,
-    "maxOutput": 8192,
-    "inputCost": 0.8,
-    "outputCost": 4
-  },
-  {
-    "model": "anthropic/claude-opus-4-1",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 32000,
-    "inputCost": 15,
-    "outputCost": 75
-  },
-  {
-    "model": "anthropic/claude-sonnet-4-0",
+    "model": "anthropic/claude-sonnet-4-5-20250929",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -234,42 +270,6 @@ for await (const chunk of stream) {
     "maxOutput": 64000,
     "inputCost": 3,
     "outputCost": 15
-  },
-  {
-    "model": "anthropic/claude-3-7-sonnet-latest",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 3,
-    "outputCost": 15
-  },
-  {
-    "model": "anthropic/claude-haiku-4-5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 1,
-    "outputCost": 5
-  },
-  {
-    "model": "anthropic/claude-opus-4-0",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 32000,
-    "inputCost": 15,
-    "outputCost": 75
   }
 ]}
 />
@@ -356,25 +356,8 @@ const response = await agent.generate("Hello!", {
 
 This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/anthropic) for more details.
 
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
-  <Tab>
-    ```bash copy
-    npm install @ai-sdk/anthropic
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    yarn add @ai-sdk/anthropic
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    pnpm add @ai-sdk/anthropic
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    bun add @ai-sdk/anthropic
-    ```
-  </Tab>
-</Tabs>
+```bash npm2yarn copy
+npm install @ai-sdk/anthropic
+```
+
+For detailed provider-specific documentation, see the [AI SDK Anthropic provider docs](https://ai-sdk.dev/providers/ai-sdk-providers/anthropic).
