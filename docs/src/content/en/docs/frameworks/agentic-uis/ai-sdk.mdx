@@ -82,6 +82,31 @@ const { error, status, sendMessage, messages, regenerate, stop } =
     }),
   });
 ```
+
+Pass extra agent stream execution options
+
+```typescript
+const { error, status, sendMessage, messages, regenerate, stop } =
+  useChat({
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat',
+      prepareSendMessagesRequest({ messages }) {
+        return {
+          body: {
+            messages,
+            // Pass memory config
+            memory: {
+              thread: "user-1",
+              resource: "user-1"
+            }
+          },
+        }
+      }
+    }),
+  });
+```
+
+
 ### `workflowRoute()`
 
 Use the `workflowRoute()` utility to create a route handler that automatically formats the workflow stream into an AI SDK-compatible format.
