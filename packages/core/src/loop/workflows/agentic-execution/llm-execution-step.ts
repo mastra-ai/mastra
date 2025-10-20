@@ -243,20 +243,17 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       case 'reasoning-end': {
         // Use the accumulated reasoning deltas from runState
         if (runState.state.reasoningDeltas.length > 0) {
-          const content: any = {
-            type: 'reasoning',
-            text: runState.state.reasoningDeltas.join(''),
-          };
-
-          if (chunk.payload.providerMetadata) {
-            content.providerMetadata = chunk.payload.providerMetadata;
-          }
-
           messageList.add(
             {
               id: messageId,
               role: 'assistant',
-              content: [content],
+              content: [
+                {
+                  type: 'reasoning',
+                  text: runState.state.reasoningDeltas.join(''),
+                  providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
+                },
+              ],
             },
             'response',
           );
