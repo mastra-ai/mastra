@@ -155,7 +155,7 @@ const { error, status, sendMessage, messages, regenerate, stop } =
 
 ### Custom UI
 
-The `@mastra/ai-sdk` package transforms and emits Mastra streams (e.g workflow, network streams) into AI SDK-compatible uiMessages DataParts format.
+The `@mastra/ai-sdk` package transforms and emits Mastra streams (e.g workflow, network streams) into AI SDK-compatible [uiMessages DataParts](https://ai-sdk.dev/docs/reference/ai-sdk-core/ui-message#datauipart) format.
 
 - **Top-level parts**: These are streamed via direct workflow and network stream transformations (e.g in `workflowRoute()` and `networkRoute()`)
   - `data-workflow`: Aggregates a workflow run with step inputs/outputs and final usage.
