@@ -30,8 +30,10 @@ export const GithubStarCount = () => {
   });
 
   return (
-    <span
-      onClick={() => window.open('https://github.com/mastra-ai/mastra', '_blank')}
+    <a
+      href="https://github.com/mastra-ai/mastra"
+      target="_blank"
+      rel="noopener noreferrer"
       className="font-medium hover:text-black  cursor-pointer w-fit text-(--mastra-text-quaternary) dark:text-white  rounded-md  transition-colors hover:opacity-100 flex items-center gap-2 justify-start pl-[7px] pr-2.5 py-2 h-[2.125rem] text-sm"
     >
       <svg
@@ -53,6 +55,6 @@ export const GithubStarCount = () => {
       <div className="flex gap-1  items-center w-4">
         {isLoading ? <span className="animate-pulse">...</span> : <span>{formatToK(stars)}</span>}
       </div>
-    </span>
+    </a>
   );
 };
