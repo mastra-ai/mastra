@@ -139,7 +139,7 @@ interface UseAlgoliaSearchResult {
  * @returns Search state and setter function
  */
 export function useAlgoliaSearch(
-  debounceTime = 300,
+  debounceTime = 100,
   searchOptions?: AlgoliaSearchOptions,
 ): UseAlgoliaSearchResult {
   const [isSearchLoading, setIsSearchLoading] = useState(false);
