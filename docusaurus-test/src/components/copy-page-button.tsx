@@ -58,7 +58,7 @@ export const CopyPageButton = () => {
         onClick={handleCopyPage}
         className={cn(
           'inline-flex border border-r-0 items-center rounded-[12px] rounded-tr-none rounded-br-none gap-2 px-3 py-1.5 text-sm font-medium',
-          ' border-(--border-subtle) ',
+          ' border-(--border) ',
           'bg-[var(--ifm-background-color)] hover:bg-[var(--ifm-color-emphasis-100)]',
         )}
       >
@@ -72,7 +72,7 @@ export const CopyPageButton = () => {
             variant="ghost"
             className={cn(
               'inline-flex h-9  items-center rounded-[12px] rounded-tl-none rounded-bl-none justify-center p-1.5 px-2.5',
-              'border border-(--border-subtle)',
+              'border border-(--border)',
               'bg-[var(--ifm-background-color)] hover:bg-[var(--ifm-color-emphasis-100)]',
             )}
           >
