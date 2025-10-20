@@ -393,15 +393,12 @@ span[class*="categoryLinkLabel"] {
 
   /* Custom Scrollbars*/
   .menu,
-  pre {
+  pre, [class*="tableOfContents"] {
     padding-inline: 0 !important;
     scrollbar-width: thin;
     scrollbar-color: #dedede transparent;
   }
 
-  pre {
-    scrollbar-color: #dedede transparent;
-  }
 
   li:has(ul.menu__list) .menu__list {
     margin-bottom: 0.25rem;
@@ -440,7 +437,14 @@ span[class*="categoryLinkLabel"] {
   }
 
   .theme-doc-toc-desktop.theme-doc-toc-desktop {
+    position: static !important;
+  }
+
+  .toc-wrapper {
+    position: sticky;
     top: calc(var(--ifm-navbar-height) + 1rem);
+    max-height: calc(100vh - var(--ifm-navbar-height) - 2rem);
+    overflow-y: auto;
   }
 
   .menu__link--sublist {
