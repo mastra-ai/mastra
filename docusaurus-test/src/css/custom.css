@@ -995,3 +995,14 @@ input[type="search"]::-webkit-search-cancel-button {
 .zoom-in-95 {
   animation: zoomIn 0.15s ease-out;
 }
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px #fff inset !important;
+  /* you might also set text-fill colour if needed */
+  -webkit-text-fill-color: #000 !important;
+}
