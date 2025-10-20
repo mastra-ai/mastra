@@ -20,6 +20,7 @@ import type {
   StreamTextOnStepFinishCallback,
   StreamObjectOnFinishCallback,
 } from '../llm/model/base.types';
+import type { ProviderOptions } from '../llm/model/provider-options';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
@@ -253,6 +254,8 @@ export type AgentGenerateOptions<
   tracingContext?: TracingContext;
   /** AI tracing options for starting new traces */
   tracingOptions?: TracingOptions;
+  /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
+  providerOptions?: ProviderOptions;
 } & (
   | {
       /**
@@ -332,6 +335,8 @@ export type AgentStreamOptions<
   tracingOptions?: TracingOptions;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
+  providerOptions?: ProviderOptions;
 } & (
   | {
       /**

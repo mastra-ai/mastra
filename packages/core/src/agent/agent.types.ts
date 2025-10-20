@@ -3,6 +3,7 @@ import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { TracingContext, TracingOptions } from '../ai-tracing';
 import type { SystemMessage } from '../llm';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
+import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
@@ -80,7 +81,7 @@ export type AgentExecutionOptions<
   stopWhen?: LoopOptions['stopWhen'];
 
   /** Provider-specific options passed to the language model */
-  providerOptions?: LoopOptions['providerOptions'];
+  providerOptions?: ProviderOptions;
 
   /** Callback fired after each execution step. Type varies by format */
   onStepFinish?: FORMAT extends 'aisdk' ? StreamTextOnStepFinishCallback<any> : LoopConfig['onStepFinish'];
