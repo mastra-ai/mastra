@@ -11,6 +11,8 @@ test.describe('chat modes', () => {
 
   test.describe('stream', () => {
     test('text stream', async () => {
+      const expectedResult = `I can help you get accurate weather forecasts by providing real-time data for your location. Just tell me your city or location, and I'll give you current conditions and detailed forecasts with temperature, humidity, and wind speed. Whether you're planning a trip or just checking today, I'm here to help! What is your current location?`;
+
       await selectFixture(page, 'text-stream');
       await page.goto('http://localhost:4111/agents/weatherAgent/chat/123');
       await page.click('text=Model settings');
@@ -19,11 +21,19 @@ test.describe('chat modes', () => {
       await page.locator('textarea').fill('Give me the Lorem Ipsum thing');
       await page.click('button:has-text("Send")');
 
-      await expect(
-        page.locator(
-          `text=I can help you get accurate weather forecasts by providing real-time data for your location. Just tell me your city or location, and I'll give you current conditions and detailed forecasts with temperature, humidity, and wind speed. Whether you're planning a trip or just checking today, I'm here to help! What is your current location?`,
-        ),
-      ).toBeVisible({ timeout: 20000 });
+      const threadContent = await page.getByTestId('thread-wrapper');
+      const threadNav = await page.getByTestId('thread-list');
+
+      // Assert partial streaming chunks
+      await expect(threadContent.locator(`text=${expectedResult.slice(0, 20)}`)).toBeVisible({ timeout: 20000 });
+      await expect(threadContent.locator(`text=${expectedResult.slice(0, 100)}`)).toBeVisible({ timeout: 20000 });
+      await expect(threadContent.locator(`text=${expectedResult}`)).not.toBeVisible({ timeout: 20000 });
+
+      // Asset streaming result
+      await expect(threadContent.locator(`text=${expectedResult}`)).toBeVisible({ timeout: 20000 });
+
+      // Assert thread entry refreshing
+      await expect(threadNav.getByRole('link', { name: expectedResult })).toBeVisible({ timeout: 20000 });
     });
   });
 });
