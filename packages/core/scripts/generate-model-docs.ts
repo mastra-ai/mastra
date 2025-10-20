@@ -468,12 +468,7 @@ Learn more in the [${displayName} documentation](${docUrl}).`
 
 | Model |
 |-------|
-${allModels
-  .map(m => `| \`${m}\` |`)
-  .join(
-    '\
-',
-  )}
+${allModels.map(m => `| \`${m}\` |`).join('\n')}
 `
       : '';
 
