@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloud",
-  "version": "0.21.1",
+  "version": "0.21.2-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -47,7 +47,7 @@
     "@manypkg/get-packages": "^3.1.0",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.19.0",
-    "eslint": "^9.36.0",
+    "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"

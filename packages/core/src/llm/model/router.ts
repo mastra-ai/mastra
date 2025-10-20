@@ -96,7 +96,13 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
     // Validate API key and return error stream if validation fails
     let apiKey: string;
     try {
-      apiKey = this.config.apiKey || (await this.gateway.getApiKey(this.config.routerId));
+      // If custom URL is provided, skip gateway API key resolution
+      // The provider might not be in the registry (e.g., custom providers like ollama)
+      if (this.config.url) {
+        apiKey = this.config.apiKey || '';
+      } else {
+        apiKey = this.config.apiKey || (await this.gateway.getApiKey(this.config.routerId));
+      }
     } catch (error) {
       // Return an error stream instead of throwing
       return {
@@ -140,6 +146,7 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
         apiKey,
         baseURL: this.config.url,
         headers: this.config.headers,
+        supportsStructuredOutputs: true,
       }).chatModel(modelId);
       ModelRouterLanguageModel.modelInstances.set(key, modelInstance);
       return modelInstance;

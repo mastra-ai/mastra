@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.21.1",
+  "version": "0.21.2-alpha.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -189,6 +189,10 @@
   },
   "dependencies": {
     "@a2a-js/sdk": "~0.2.4",
+    "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.23",
+    "@ai-sdk/google-v5": "npm:@ai-sdk/google@2.0.17",
+    "@ai-sdk/openai-compatible-v5": "npm:@ai-sdk/openai-compatible@1.0.19",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.42",
     "@ai-sdk/provider": "^1.1.3",
     "@ai-sdk/provider-utils": "^2.2.8",
     "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.10",
@@ -229,13 +233,7 @@
     "sift": "^17.1.3",
     "ulid": "^3.0.1",
     "xstate": "^5.20.1",
-    "zod-to-json-schema": "^3.24.6",
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.42",
-    "@ai-sdk/openai-compatible-v5": "npm:@ai-sdk/openai-compatible@1.0.19",
-    "@ai-sdk/google-v5": "npm:@ai-sdk/google@2.0.17",
-    "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.23",
-    "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.2.0",
-    "@ai-sdk/xai-v5": "npm:@ai-sdk/xai@2.0.23"
+    "zod-to-json-schema": "^3.24.6"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
@@ -253,11 +251,12 @@
     "@types/node": "^20.19.0",
     "@types/pino": "^7.0.5",
     "@types/qs": "^6.14.0",
-    "eslint": "^9.36.0",
+    "eslint": "^9.37.0",
     "fast-deep-equal": "^3.1.3",
     "globby": "^14.1.0",
     "msw": "^2.11.3",
     "rollup": "^4.50.2",
+    "ts-morph": "^27.0.2",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",

@@ -6,11 +6,11 @@
 /* Move all colors to :root and unify dark mode */
 /* Use one color format*/
 :root {
-  --border: hsla(0, 0%, 80%, 1);
   --color-text-icon-5: hsla(0, 0%, 8%, 1);
   --color-text-icon-6: hsla(0, 0%, 4%, 1);
   --color-green-accent: hsla(130deg, 81.6%, 27.6%, 1);
   --color-green-accent-2: hsla(125, 66%, 50%, 1);
+  --border: hsla(0, 0%, 80%, 1);
   --border-2: hsla(0, 0%, 72%, 1);
   --border-radius-lg: 0.5rem;
   --diff-color: #2ea04326;
@@ -22,6 +22,7 @@
   --color-text-icon-5: hsla(0, 0%, 90%, 1);
   --color-text-icon-6: hsla(0, 0%, 100%, 1);
   --primary: #050505;
+  --border-1: #303030;
   --border-2: hsla(0, 0%, 26%, 1);
   --button-outline: hsla(125, 66%, 50%, 1);
 }
@@ -83,9 +84,12 @@
   --color-surface-3: hsla(0, 0%, 8%, 1);
   --color-surface-4: hsla(0, 0%, 10%, 1);
   --color-surface-5: hsla(0, 0%, 18%, 0.9);
+  --color-surface-6: hsla(0, 0%, 10%, 0.5);
   --color-borders-1: hsla(0, 0%, 19%, 1);
   --color-borders-2: hsla(0, 0%, 26%, 1);
+  --color-borders-3: hsla(0, 0%, 30%, 0.2);
   --color-accent-green: hsla(143, 97%, 54%, 1);
+  --color-accent-green-2: hsla(143, 97%, 24%, 1);
   --color-tag-green-2: hsla(142, 30%, 15%, 1);
 }
 
@@ -123,10 +127,6 @@ html[class~="dark"] *::selection {
   background: var(--copilot-kit-background-color);
 }
 
-#scroll-area-viewport > div {
-  display: block !important;
-}
-
 .copilotKitMarkdown p {
   font-size: 13px !important;
 }
@@ -137,11 +137,34 @@ html[class~="dark"] *::selection {
 }
 
 .copilotKitMarkdown a {
-  color: var(--color-accent-green) !important;
+  color: var(--color-accent-green-2) !important;
+  padding-left: 4px !important;
+  font-weight: 500;
+
+  &:where(.dark, .dark *) {
+    color: var(--color-accent-green) !important;
+  }
+}
+
+.copilotKitMarkdown code {
+  background-color: var(--color-surface-2);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-weight: 500;
+
+  &:where(.dark, .dark *) {
+    background-color: var(--color-surface-5);
+  }
+}
+
+.copilotKitMarkdown .copilotKitCodeBlock code {
+  background-color: unset;
+  padding: 0;
+  border-radius: 0;
 }
 
 .copilotKitMarkdown {
-  max-width: 100% !important;
+  width: 100% !important;
 }
 
 button.copilotKitCodeBlockToolbarButton {
@@ -178,6 +201,10 @@ div .copilotKitPopup {
 div .copilotKitInputContainer {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
+}
+
+.grecaptcha-badge {
+  visibility: hidden;
 }
 
 /* Navbar */
@@ -734,7 +761,8 @@ table td code.nextra-code:not([class*="twoslash-"]) {
   }
 }
 
-#headlessui-portal-root ul {
+/* TODO: Too aggressive, might need to revisit */
+/* #headlessui-portal-root ul {
   border-radius: 12px;
   padding-inline: 0.25rem;
   border-width: 0.5px;
@@ -751,7 +779,7 @@ table td code.nextra-code:not([class*="twoslash-"]) {
 
 #headlessui-portal-root ul li {
   border-radius: 8px;
-}
+} */
 
 .nextra-breadcrumb + div {
   border-radius: 10px !important;

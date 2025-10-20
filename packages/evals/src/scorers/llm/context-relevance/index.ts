@@ -1,4 +1,4 @@
-import type { MastraLanguageModel } from '@mastra/core/agent';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import { createScorer } from '@mastra/core/scores';
 import { z } from 'zod';
@@ -41,7 +41,7 @@ export function createContextRelevanceScorerLLM({
   model,
   options,
 }: {
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   options: ContextRelevanceOptions;
 }) {
   if (!options.context && !options.contextExtractor) {
