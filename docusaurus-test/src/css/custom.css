@@ -960,3 +960,34 @@ input[type="search"]::-webkit-search-cancel-button {
   -webkit-appearance: none;
   appearance: none;
 }
+
+/* ==================== DROPDOWN ANIMATIONS ==================== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes zoomIn {
+  from {
+    transform: scale(0.95);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.animate-in {
+  animation: fadeIn 0.15s ease-out, zoomIn 0.15s ease-out;
+}
+
+.fade-in-0 {
+  animation: fadeIn 0.15s ease-out;
+}
+
+.zoom-in-95 {
+  animation: zoomIn 0.15s ease-out;
+}
