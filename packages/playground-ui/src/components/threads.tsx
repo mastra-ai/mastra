@@ -39,7 +39,7 @@ export interface ThreadListProps {
 }
 
 export const ThreadList = ({ children }: ThreadListProps) => {
-  return <ol>{children}</ol>;
+  return <ol data-testid="thread-list">{children}</ol>;
 };
 
 export interface ThreadItemProps {
