@@ -58,9 +58,7 @@ export class ToolStream<T> extends WritableStream<T> {
     }
   }
 
-  async custom<T extends { type: string }>(
-    data: T extends { type: `data-${string}` } ? DataChunkType : T,
-  ) {
+  async custom<T extends { type: string }>(data: T extends { type: `data-${string}` } ? DataChunkType : T) {
     const writer = this.originalStream?.getWriter();
     try {
       await writer?.write(data);
