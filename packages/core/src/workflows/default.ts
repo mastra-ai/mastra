@@ -144,16 +144,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
 
       if (error instanceof Error) {
-        base.error = error?.stack ?? error;
+        base.error = error.message ?? error;
       } else if (lastOutput.error) {
         base.error = lastOutput.error;
       } else if (typeof error === 'string') {
         base.error = error;
       } else {
-        // For non-string, non-Error values, create a descriptive error
         const errorMessage = safeParseErrorObject(error);
         const errorObj = new Error('Unknown error: ' + errorMessage);
-        base.error = errorObj?.stack ?? errorObj;
+        base.error = errorObj?.message ?? errorObj;
       }
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
@@ -976,6 +975,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         execResults = {
           status: 'failed',
+          // error: error?.message, // this is the proposed change
           error: error?.stack,
           endedAt: Date.now(),
         };
