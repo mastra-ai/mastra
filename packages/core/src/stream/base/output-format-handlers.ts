@@ -190,6 +190,15 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
   protected preprocessText(accumulatedText: string): string {
     let processedText = accumulatedText;
 
+    // Some LLMs (e.g., LMStudio with jsonPromptInjection) wrap JSON in special tokens
+    // Format: '<|channel|>final <|constrain|>JSON<|message|>{"key":"value"}'
+    if (processedText.includes('<|message|>')) {
+      const match = processedText.match(/<\|message\|>([\s\S]+)$/);
+      if (match && match[1]) {
+        processedText = match[1];
+      }
+    }
+
     // Some LLMs wrap the JSON response in code blocks.
     // In that case, first try to extract content from complete code blocks
     if (processedText.includes('```json')) {
@@ -494,11 +503,9 @@ function createOutputHandler<OUTPUT extends OutputSchema = undefined>({ schema }
  * - Always passes through original chunks for downstream processing
  */
 export function createObjectStreamTransformer<OUTPUT extends OutputSchema = undefined>({
-  isLLMExecutionStep,
   structuredOutput,
   logger,
 }: {
-  isLLMExecutionStep?: boolean;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   logger?: IMastraLogger;
 }) {
@@ -506,27 +513,14 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
 
   let accumulatedText = '';
   let previousObject: any = undefined;
-  let finishReason: string | undefined;
   let currentRunId: string | undefined;
+  let finalResult: ValidateAndTransformFinalResult<OUTPUT> | undefined;
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
-      if (!isLLMExecutionStep) {
-        // Bypassing processing if we are not in the LLM execution step (inner stream)
-        // OR if there is no output schema provided
-        controller.enqueue(chunk);
-        return;
-      }
-
       if (chunk.runId) {
         // save runId to use in error chunks
         currentRunId = chunk.runId;
-      }
-
-      if (chunk.type === 'finish') {
-        finishReason = chunk.payload.stepResult.reason;
-        controller.enqueue(chunk);
-        return;
       }
 
       if (chunk.type === 'text-delta' && typeof chunk.payload?.text === 'string') {
@@ -550,67 +544,74 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         }
       }
 
+      // Validate and resolve object when text generation completes
+      if (chunk.type === 'text-end') {
+        controller.enqueue(chunk);
+
+        if (accumulatedText?.trim() && !finalResult) {
+          finalResult = await handler.validateAndTransformFinal(accumulatedText);
+          if (finalResult.success) {
+            controller.enqueue({
+              from: ChunkFrom.AGENT,
+              runId: currentRunId ?? '',
+              type: 'object-result',
+              object: finalResult.value,
+            });
+          }
+        }
+        return;
+      }
+
       // Always pass through the original chunk for downstream processing
       controller.enqueue(chunk);
     },
 
     async flush(controller) {
-      // Bypass final validation if there is no output schema provided
-      // or if we are not in the LLM execution step (inner stream)
-      if (!isLLMExecutionStep) {
-        return;
+      if (finalResult && !finalResult.success) {
+        handleValidationError(finalResult.error, controller);
       }
-
-      if (['tool-calls'].includes(finishReason ?? '')) {
-        // TODO: this breaks object output when tools are called.
-        // The reason we did this was to be able to work with client-side tool calls. We need the object to resolve in that case
-        // but this will
-        // controller.enqueue({
-        //   from: ChunkFrom.AGENT,
-        //   runId: currentRunId ?? '',
-        //   type: 'object-result',
-        //   object: undefined as InferSchemaOutput<OUTPUT>,
-        // });
-        return;
-      }
-
-      const finalResult = await handler.validateAndTransformFinal(accumulatedText);
-
-      if (!finalResult.success) {
-        if (structuredOutput?.errorStrategy === 'warn') {
-          logger?.warn(finalResult.error.message);
-          return;
-        }
-        if (structuredOutput?.errorStrategy === 'fallback') {
+      // Safety net: If text-end was never emitted, validate now as fallback
+      // This handles edge cases where providers might not emit text-end
+      if (accumulatedText?.trim() && !finalResult) {
+        finalResult = await handler.validateAndTransformFinal(accumulatedText);
+        if (finalResult.success) {
           controller.enqueue({
             from: ChunkFrom.AGENT,
             runId: currentRunId ?? '',
             type: 'object-result',
-            object: structuredOutput?.fallbackValue,
+            object: finalResult.value,
           });
-          return;
+        } else {
+          handleValidationError(finalResult.error, controller);
         }
-
-        controller.enqueue({
-          from: ChunkFrom.AGENT,
-          runId: currentRunId ?? '',
-          type: 'error',
-          payload: {
-            error: finalResult.error,
-          },
-        });
-        return;
       }
+    },
+  });
 
+  /**
+   * Handle validation errors based on error strategy
+   */
+  function handleValidationError(error: Error, controller: TransformStreamDefaultController<ChunkType<OUTPUT>>) {
+    if (structuredOutput?.errorStrategy === 'warn') {
+      logger?.warn(error.message);
+    } else if (structuredOutput?.errorStrategy === 'fallback') {
       controller.enqueue({
         from: ChunkFrom.AGENT,
         runId: currentRunId ?? '',
         type: 'object-result',
-        object: finalResult.value,
+        object: structuredOutput?.fallbackValue,
       });
-      return;
-    },
-  });
+    } else {
+      controller.enqueue({
+        from: ChunkFrom.AGENT,
+        runId: currentRunId ?? '',
+        type: 'error',
+        payload: {
+          error,
+        },
+      });
+    }
+  }
 }
 
 /**

@@ -44,6 +44,23 @@ workflow.waitForEvent('event-name', step1);
   ]}
 />
 
+## Extended usage example
+
+```typescript showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+const step3 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .waitForEvent("event-name", step2)
+  .then(step3)
+  .commit();
+```
+
 ## Related
 
-- [Sleep & Events](../../../docs/workflows/pausing-execution.mdx)
+- [.sendEvent()](./sendEvent.mdx)
+- [Suspend & Resume](../../../docs/workflows/suspend-and-resume.mdx#sleep--events)

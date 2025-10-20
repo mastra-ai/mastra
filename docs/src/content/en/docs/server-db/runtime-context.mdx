@@ -21,14 +21,14 @@ Use `RuntimeContext` when a primitive’s behavior should change based on runtim
 
 ## Setting values
 
-Pass `runtimeContext` into an agent, workflow, or tool call to make values available to all underlying primitives during execution. Use `.set()` to define values before making the call.
+Pass `runtimeContext` into an agent, network, workflow, or tool call to make values available to all underlying primitives during execution. Use `.set()` to define values before making the call.
 
 The `.set()` method takes two arguments:
 
 1. **key**: The name used to identify the value.
 2. **value**: The data to associate with that key.
 
-```typescript {7,9,13,21,28} showLineNumbers
+```typescript showLineNumbers
 import { RuntimeContext } from "@mastra/core/runtime-context";
 
 export type UserTier = {
@@ -36,7 +36,6 @@ export type UserTier = {
 };
 
 const runtimeContext = new RuntimeContext<UserTier>();
-
 runtimeContext.set("user-tier", "enterprise");
 
 const agent = mastra.getAgent("weatherAgent");
@@ -44,10 +43,21 @@ await agent.generate("What's the weather in London?", {
   runtimeContext
 })
 
+const routingAgent = mastra.getAgent("routingAgent");
+routingAgent.network("What's the weather in London?", {
+  runtimeContext
+});
+
 const run = await mastra.getWorkflow("weatherWorkflow").createRunAsync();
 await run.start({
   inputData: {
     location: "London"
+  },
+  runtimeContext
+});
+await run.resume({
+  resumeData: {
+    city: "New York"
   },
   runtimeContext
 });

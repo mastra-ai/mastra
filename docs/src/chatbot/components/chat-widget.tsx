@@ -61,7 +61,7 @@ export function KapaChat({
     <div className={cn("flex relative flex-col w-full h-[700px]", className)}>
       {/* Chat header */}
       <div className="flex absolute top-0 right-0 left-0 z-20 justify-between items-center px-5 py-3 w-full border-b backdrop-blur-md border-neutral-200 dark:border-neutral-800 dark:bg-surface-6">
-        <span className="text-sm dark:text-icons-5">Ask mastra docs</span>
+        <span className="text-sm dark:text-icons-5">Chat with Mastra Docs</span>
         <Button
           onClick={() => close()}
           variant="ghost"
@@ -160,9 +160,9 @@ export function KapaChat({
                 variant="ghost"
                 size="icon-sm"
                 onClick={stopGeneration}
-                className="relative self-end p-2 bg-red-100 rounded-full transition-colors cursor-pointer dark:bg-red-500/20 dark:ring-red-500/50 dark:ring hover:dark:bg-red-500/30 hover:bg-red-200"
+                className="relative self-end p-3 bg-red-100 rounded-full transition-colors cursor-pointer dark:bg-red-500/20 dark:ring-red-500/50 dark:ring hover:dark:bg-red-500/30 hover:bg-red-200"
               >
-                <Square className="w-4 h-4 text-red-600 fill-current dark:text-red-400" />
+                <Square className="w-1 h-1 text-red-600 fill-current dark:text-red-400" />
               </Button>
             ) : (
               <Button

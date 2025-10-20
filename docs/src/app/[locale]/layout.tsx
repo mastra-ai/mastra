@@ -14,6 +14,7 @@ import { CustomHead } from "@/components/custom-head";
 import { NextraLayout } from "@/components/nextra-layout";
 import { GTProvider } from "gt-next";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
+import { kapaChatbotFlag } from "../../../flags";
 
 const fetchStars = async () => {
   try {
@@ -45,6 +46,7 @@ export default async function RootLayout({
   const { locale } = await params;
   const pageMap = await getPageMap(`/${locale || "en"}`);
   const stars = await fetchStars();
+  const isChatbotEnabled = await kapaChatbotFlag();
 
   return (
     <html
@@ -63,7 +65,12 @@ export default async function RootLayout({
       <body>
         <GTProvider locale={locale}>
           <PostHogProvider>
-            <NextraLayout stars={stars} locale={locale} pageMap={pageMap}>
+            <NextraLayout
+              stars={stars}
+              locale={locale}
+              pageMap={pageMap}
+              isChatbotEnabled={isChatbotEnabled}
+            >
               <NuqsAdapter>{children}</NuqsAdapter>
             </NextraLayout>
           </PostHogProvider>
