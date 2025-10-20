@@ -3943,7 +3943,7 @@ export class Agent<
     }
 
     if (streamOptions?.format === 'aisdk') {
-      console.warn(
+      this.logger.warn(
         '[@mastra/core] format: "aisdk" is deprecated. Use the @mastra/ai-sdk package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming',
       );
     }
