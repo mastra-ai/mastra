@@ -1604,6 +1604,10 @@ export class Run<
       attributes: {
         workflowId: this.workflowId,
       },
+      metadata: {
+        resourceId: this.resourceId,
+        runId: this.runId,
+      },
       tracingPolicy: this.tracingPolicy,
       tracingOptions,
       tracingContext,
@@ -2368,6 +2372,10 @@ export class Run<
       input: resumeDataToUse,
       attributes: {
         workflowId: this.workflowId,
+      },
+      metadata: {
+        resourceId: this.resourceId,
+        runId: this.runId,
       },
       tracingPolicy: this.tracingPolicy,
       tracingOptions: params.tracingOptions,

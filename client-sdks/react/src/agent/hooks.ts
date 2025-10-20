@@ -7,7 +7,6 @@ import { CoreUserMessage } from '@mastra/core/llm';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useState } from 'react';
-import { flushSync } from 'react-dom';
 import { toUIMessage } from '@/lib/ai-sdk';
 import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
 import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
@@ -167,9 +166,8 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
         // Without this, React might batch intermediate chunks which would break the message reconstruction over time
-        flushSync(() => {
-          setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-        });
+
+        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
         onChunk?.(chunk);
       },
@@ -221,10 +219,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
 
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
-        flushSync(() => {
-          setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
-        });
-
+        setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
         onNetworkChunk?.(chunk);
       },
     });
