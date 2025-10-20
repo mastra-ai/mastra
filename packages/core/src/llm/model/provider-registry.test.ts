@@ -52,18 +52,16 @@ describe('GatewayRegistry Auto-Refresh', () => {
     // Mock file write operations globally to prevent any test from modifying the actual registry files
     // Only block writes to the actual provider-registry.json and provider-types.generated.d.ts files
     vi.spyOn(fs.promises, 'writeFile').mockImplementation(async (filePath, ...args) => {
-      if (typeof filePath === 'string' && 
-          (filePath === PROVIDER_REGISTRY_PATH || filePath === PROVIDER_TYPES_PATH)) {
+      if (typeof filePath === 'string' && (filePath === PROVIDER_REGISTRY_PATH || filePath === PROVIDER_TYPES_PATH)) {
         // Block writes to the actual registry files
         return Promise.resolve();
       }
       // Allow all other writes (including temp files in tests)
       return originalWriteFile(filePath, ...args);
     });
-    
+
     vi.spyOn(fs.promises, 'copyFile').mockImplementation(async (src, dest, ...args) => {
-      if (typeof dest === 'string' && 
-          (dest === PROVIDER_REGISTRY_PATH || dest === PROVIDER_TYPES_PATH)) {
+      if (typeof dest === 'string' && (dest === PROVIDER_REGISTRY_PATH || dest === PROVIDER_TYPES_PATH)) {
         // Block copies to the actual registry files
         return Promise.resolve();
       }

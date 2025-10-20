@@ -99,7 +99,7 @@ jobs:
           else
             EXISTING_CHANGESET=""
           fi
-          
+
           if [ -n "$EXISTING_CHANGESET" ]; then
             echo "Automated changeset already exists: ${EXISTING_CHANGESET}"
             echo "Skipping changeset creation to avoid spam"
