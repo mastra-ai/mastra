@@ -42,6 +42,7 @@ const config = {
     algoliaSearchApiKey: process.env.ALGOLIA_SEARCH_API_KEY,
     hsPortalId: process.env.HS_PORTAL_ID,
     hsFormGuid: process.env.HS_FORM_GUID,
+   mastraWebsite: process.env.MASTRA_WEBSITE,
   },
 
   // Preconnect to Google Fonts

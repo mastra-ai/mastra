@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormMessage } from './ui/forms';
 import { Label } from './ui/label';
 import { CancelIcon } from './copy-page-icons';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 
 const feedbackSchema = z.object({
   feedback: z.string().min(5, 'Please enter your feedback'),
@@ -96,6 +97,11 @@ const ratings = [
 ];
 
 export const FeedbackForm = ({ isOpen, onClose, currentPage }: FeedbackFormProps) => {
+  const { siteConfig } = useDocusaurusContext();
+  const { mastraWebsite } = siteConfig.customFields as {
+    mastraWebsite?: string;
+  };
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -117,9 +123,11 @@ export const FeedbackForm = ({ isOpen, onClose, currentPage }: FeedbackFormProps
     setErrorMessage('');
 
     try {
-      const url = process.env.NODE_ENV === 'production' ? '/docs/api/feedback' : '/api/feedback';
+      if (!mastraWebsite) {
+        throw new Error('Website URL is not configured');
+      }
 
-      const response = await fetch(url, {
+      const response = await fetch(mastraWebsite, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
