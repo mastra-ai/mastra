@@ -21,19 +21,27 @@ test.describe('chat modes', () => {
       await page.locator('textarea').fill('Give me the Lorem Ipsum thing');
       await page.click('button:has-text("Send")');
 
-      const threadContent = await page.getByTestId('thread-wrapper');
-      const threadNav = await page.getByTestId('thread-list');
-
       // Assert partial streaming chunks
-      await expect(threadContent.getByText(expectedResult.slice(0, 20))).toBeVisible({ timeout: 20000 });
-      await expect(threadContent.getByText(expectedResult.slice(0, 100))).toBeVisible({ timeout: 20000 });
-      await expect(threadContent.getByText(expectedResult)).not.toBeVisible({ timeout: 20000 });
+      await expect(page.getByTestId('thread-wrapper').getByText(`I can help you get accurate`)).toBeVisible({
+        timeout: 20000,
+      });
+
+      await expect(
+        page
+          .getByTestId('thread-wrapper')
+          .getByText(`I can help you get accurate weather forecasts by providing real-time`),
+      ).toBeVisible({
+        timeout: 20000,
+      });
+      await expect(page.getByTestId('thread-wrapper').getByText(expectedResult)).not.toBeVisible({ timeout: 20000 });
 
       // Asset streaming result
-      await expect(threadContent.getByText(expectedResult)).toBeVisible({ timeout: 20000 });
+      await expect(page.getByTestId('thread-wrapper').getByText(expectedResult)).toBeVisible({ timeout: 20000 });
 
       // Assert thread entry refreshing
-      await expect(threadNav.getByRole('link', { name: expectedResult })).toBeVisible({ timeout: 20000 });
+      await expect(page.getByTestId('thread-list').getByRole('link', { name: expectedResult })).toBeVisible({
+        timeout: 20000,
+      });
     });
   });
 });
