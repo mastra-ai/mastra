@@ -91,9 +91,11 @@ describe('GatewayRegistry Auto-Refresh', () => {
 
     // Restore all mocks
     vi.restoreAllMocks();
+  });
 
-    // Restore original file contents AFTER restoring mocks
-    // This ensures we write back the original content using the real fs functions
+  afterAll(() => {
+    // Restore original file contents after all tests complete
+    // This ensures we only write back once, improving efficiency
     try {
       if (originalProviderRegistryContent !== null) {
         fs.writeFileSync(PROVIDER_REGISTRY_PATH, originalProviderRegistryContent, 'utf-8');
@@ -102,7 +104,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
         fs.writeFileSync(PROVIDER_TYPES_PATH, originalProviderTypesContent, 'utf-8');
       }
     } catch (error) {
-      console.warn('Failed to restore files in afterEach:', error);
+      console.warn('Failed to restore files in afterAll:', error);
     }
   });
 
