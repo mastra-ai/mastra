@@ -69,6 +69,10 @@ export function createStreamStep<
         agentId,
       });
 
+      if (format === 'aisdk') {
+        return streamResult.aisdk.v5;
+      }
+
       return streamResult;
     },
   });
