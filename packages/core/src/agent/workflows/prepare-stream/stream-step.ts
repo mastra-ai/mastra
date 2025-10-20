@@ -69,13 +69,6 @@ export function createStreamStep<
         agentId,
       });
 
-      if (format === 'aisdk') {
-        capabilities.logger.warn(
-          '[@mastra/core] format: "aisdk" is deprecated. Use the @mastra/ai-sdk package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming',
-        );
-        return streamResult.aisdk.v5;
-      }
-
       return streamResult;
     },
   });
