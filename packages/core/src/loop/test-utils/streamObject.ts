@@ -976,6 +976,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "metadata": {
                       "__originalContent": "{ "content": "Hello, world!" }",
                       "createdAt": 2024-01-01T00:00:00.001Z,
+                      "structuredOutput": {
+                        "content": "Hello, world!",
+                      },
                     },
                     "parts": [
                       {
@@ -1037,6 +1040,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "metadata": {
                           "__originalContent": "{ "content": "Hello, world!" }",
                           "createdAt": 2024-01-01T00:00:00.001Z,
+                          "structuredOutput": {
+                            "content": "Hello, world!",
+                          },
                         },
                         "parts": [
                           {

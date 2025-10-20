@@ -3767,6 +3767,7 @@ export class Agent<
       routingAgentOptions: {
         telemetry: options?.telemetry,
         modelSettings: options?.modelSettings,
+        memory: options?.memory,
       },
       generateId: () => this.#mastra?.generateId() || randomUUID(),
       maxIterations: options?.maxSteps || 1,
@@ -4797,10 +4798,9 @@ export class Agent<
 
   /**
    * Resolves the configuration for title generation.
-   * @private
    * @internal
    */
-  private resolveTitleGenerationConfig(
+  resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
       | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }
@@ -4827,10 +4827,9 @@ export class Agent<
 
   /**
    * Resolves title generation instructions, handling both static strings and dynamic functions
-   * @private
    * @internal
    */
-  private async resolveTitleInstructions(
+  async resolveTitleInstructions(
     runtimeContext: RuntimeContext,
     instructions?: DynamicArgument<string>,
   ): Promise<string> {
