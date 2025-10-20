@@ -90,6 +90,15 @@ export function AgentNetworkToAISDKTransformer() {
         type?: 'start' | 'finish';
       }
     | NetworkDataPart
+    | {
+        type: 'text-delta';
+        id: string;
+        delta: string;
+      }
+    | {
+        type: 'text-start';
+        id: string;
+      }
   >({
     start(controller) {
       controller.enqueue({
@@ -407,6 +416,23 @@ export function transformNetwork(
           steps: bufferedNetworks.get(payload.payload.runId)!.steps,
           output: null,
         },
+      } as const;
+    }
+    case 'routing-agent-text-start': {
+      const current = bufferedNetworks.get(payload.runId!);
+      if (!current) return null;
+      return {
+        type: 'text-start',
+        id: payload.runId!,
+      } as const;
+    }
+    case 'routing-agent-text-delta': {
+      const current = bufferedNetworks.get(payload.runId!);
+      if (!current) return null;
+      return {
+        type: 'text-delta',
+        id: payload.runId!,
+        delta: payload.payload.text,
       } as const;
     }
     case 'agent-execution-start': {
