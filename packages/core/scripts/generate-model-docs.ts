@@ -914,7 +914,7 @@ ${allProviders
 function generateProvidersMeta(grouped: GroupedProviders, aiSdkProviders: ModelsDevProvider[] = []): string {
   // Keep popular providers in their original order
   const popularProviders = grouped.popular.map(p => ({ id: p.id, name: p.name }));
-  
+
   // Combine "other" model router providers with AI SDK providers and sort alphabetically
   const otherProviders = [
     ...grouped.other.map(p => ({ id: p.id, name: p.name })),
