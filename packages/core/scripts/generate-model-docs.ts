@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { z } from 'zod';
 import type { ProviderConfig } from '../src/index.js';
 import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants.js';
+import { generateProviderOptionsSection } from './generate-provider-options-docs.js';
 
 /**
  * Generate a comment indicating the file was auto-generated
@@ -251,8 +252,9 @@ description: "Use ${provider.name} models with Mastra. ${modelCount} model${mode
 ${getGeneratedComment()}
 
 import { ProviderModelsTable } from "@/components/provider-models-table";
+import { PropertiesTable } from "@/components/properties-table";
 import { Callout } from "nextra/components";
-${provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible' ? 'import { Tabs, Tab } from \"@/components/tabs\";' : ''}
+${provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible' ? 'import { Tabs, Tab } from "@/components/tabs";' : ''}
 
 # <img src="${getLogoUrl(provider.id)}" alt="${provider.name} logo" className="${getLogoClass(provider.id)}" />${provider.name}
 
@@ -331,6 +333,8 @@ const agent = new Agent({
   }
 });
 \`\`\`
+
+${generateProviderOptionsSection(provider.id)}
 ${
   provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible'
     ? `
@@ -908,11 +912,12 @@ ${allProviders
 }
 
 function generateProvidersMeta(grouped: GroupedProviders, aiSdkProviders: ModelsDevProvider[] = []): string {
-  const allProviders = [...grouped.popular, ...grouped.other];
-
-  // Combine all providers with AI SDK providers and sort alphabetically
-  const combinedProviders: Array<{ id: string; name: string }> = [
-    ...allProviders.map(p => ({ id: p.id, name: p.name })),
+  // Keep popular providers in their original order
+  const popularProviders = grouped.popular.map(p => ({ id: p.id, name: p.name }));
+  
+  // Combine "other" model router providers with AI SDK providers and sort alphabetically
+  const otherProviders = [
+    ...grouped.other.map(p => ({ id: p.id, name: p.name })),
     ...aiSdkProviders.map(p => {
       let displayName = p.name;
       if (p.id === 'google-vertex') {
@@ -924,10 +929,17 @@ function generateProvidersMeta(grouped: GroupedProviders, aiSdkProviders: Models
     }),
   ].sort((a, b) => a.name.localeCompare(b.name));
 
-  // Build the meta object with index first, then all providers alphabetically
+  // Build the meta object with index first, then popular providers, then other providers alphabetically
   const metaEntries = ['  index: "Overview"'];
 
-  for (const provider of combinedProviders) {
+  // Add popular providers first (in their original order)
+  for (const provider of popularProviders) {
+    const key = provider.id.includes('-') ? `"${provider.id}"` : provider.id;
+    metaEntries.push(`  ${key}: "${provider.name}"`);
+  }
+
+  // Add other providers alphabetically
+  for (const provider of otherProviders) {
     // Quote keys that contain dashes or other special characters
     const key = provider.id.includes('-') ? `"${provider.id}"` : provider.id;
     metaEntries.push(`  ${key}: "${provider.name}"`);

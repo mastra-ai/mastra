@@ -1,5 +1,5 @@
 import type { Tool } from '@mastra/core';
-import type { MastraLanguageModel } from '@mastra/core/agent';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
 import { z } from 'zod';
 import {
@@ -11,7 +11,7 @@ import {
 import { TOOL_SELECTION_ACCURACY_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
 
 export interface ToolCallAccuracyOptions {
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   availableTools: Tool[];
 }
 
