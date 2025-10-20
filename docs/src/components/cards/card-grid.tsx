@@ -1,5 +1,5 @@
 import {
-  CardLink,
+  Card,
   CardHeader,
   CardContent,
   CardTitle,
@@ -42,8 +42,8 @@ export const CardGridItem = ({
   children?: React.ReactNode;
 }) => {
   return (
-    <Link href={href} passHref legacyBehavior>
-      <CardLink className="h-full shadow-none dark:border-[var(--border)] border-[var(--light-border-muted)] hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer">
+    <Link href={href} className="block h-full">
+      <Card className="h-full shadow-none dark:border-[var(--border)] border-[var(--light-border-muted)] hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer">
         <CardHeader>
           <div className="flex items-center gap-3">
             {logo &&
@@ -72,7 +72,7 @@ export const CardGridItem = ({
           </div>
         </CardHeader>
         <CardContent className="text-sm">{children || description}</CardContent>
-      </CardLink>
+      </Card>
     </Link>
   );
 };
