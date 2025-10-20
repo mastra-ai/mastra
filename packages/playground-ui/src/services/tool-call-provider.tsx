@@ -6,6 +6,7 @@ interface ToolCallContextValue {
   approveToolcall: (toolCallId: string) => void;
   declineToolcall: (toolCallId: string) => void;
   isRunning: boolean;
+  toolCallApprovals: { [toolCallId: string]: { status: 'approved' | 'declined' } };
 }
 
 const ToolCallContext = createContext<ToolCallContextValue | undefined>(undefined);
@@ -15,11 +16,18 @@ interface ToolCallProviderProps {
   approveToolcall: (toolCallId: string) => void;
   declineToolcall: (toolCallId: string) => void;
   isRunning: boolean;
+  toolCallApprovals: { [toolCallId: string]: { status: 'approved' | 'declined' } };
 }
 
-export function ToolCallProvider({ children, approveToolcall, declineToolcall, isRunning }: ToolCallProviderProps) {
+export function ToolCallProvider({
+  children,
+  approveToolcall,
+  declineToolcall,
+  isRunning,
+  toolCallApprovals,
+}: ToolCallProviderProps) {
   return (
-    <ToolCallContext.Provider value={{ approveToolcall, declineToolcall, isRunning }}>
+    <ToolCallContext.Provider value={{ approveToolcall, declineToolcall, isRunning, toolCallApprovals }}>
       {children}
     </ToolCallContext.Provider>
   );

@@ -1324,6 +1324,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       usageCount: this.#usageCount,
       tripwire: this.#tripwire,
       tripwireReason: this.#tripwireReason,
+      messageList: this.messageList.get.all.core(),
     };
   }
 
@@ -1347,5 +1348,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#usageCount = state.usageCount;
     this.#tripwire = state.tripwire;
     this.#tripwireReason = state.tripwireReason;
+    this.messageList.add(state.messageList, 'user');
   }
 }

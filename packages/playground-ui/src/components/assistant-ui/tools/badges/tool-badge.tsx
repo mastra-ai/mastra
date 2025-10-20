@@ -17,6 +17,7 @@ export interface ToolBadgeProps {
   onApprove?: () => void;
   onDecline?: () => void;
   isRunning?: boolean;
+  toolCallApprovalStatus?: 'approved' | 'declined';
 }
 
 export const ToolBadge = ({
@@ -29,6 +30,7 @@ export const ToolBadge = ({
   onApprove,
   onDecline,
   isRunning,
+  toolCallApprovalStatus,
 }: ToolBadgeProps) => {
   let argSlot = null;
 
@@ -93,13 +95,21 @@ export const ToolBadge = ({
           <div>
             <p className="font-medium pb-2">Tool approval required</p>
             <div className="flex gap-2 items-center">
-              <Button onClick={onApprove} disabled={isRunning}>
+              <Button
+                onClick={onApprove}
+                disabled={isRunning}
+                className={toolCallApprovalStatus === 'approved' ? '!text-accent1' : ''}
+              >
                 <Icon>
                   <Check />
                 </Icon>
                 Approve
               </Button>
-              <Button onClick={onDecline} disabled={isRunning}>
+              <Button
+                onClick={onDecline}
+                disabled={isRunning}
+                className={toolCallApprovalStatus === 'declined' ? '!text-accent2' : ''}
+              >
                 <Icon>
                   <X />
                 </Icon>

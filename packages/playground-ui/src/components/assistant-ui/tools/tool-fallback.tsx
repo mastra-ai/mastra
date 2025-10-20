@@ -29,7 +29,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   useWorkflowStream(result);
   const { data: workflow, isLoading } = useWorkflow(toolName);
 
-  const { approveToolcall, declineToolcall, isRunning } = useToolCall();
+  const { approveToolcall, declineToolcall, isRunning, toolCallApprovals } = useToolCall();
 
   const handleApprove = (toolCallId: string) => {
     approveToolcall(toolCallId);
@@ -52,6 +52,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const requireApprovalMetadata = metadata?.mode === 'stream' && metadata?.requireApprovalMetadata;
 
   const toolApprovalMetadata = requireApprovalMetadata ? requireApprovalMetadata?.[toolCallId] : undefined;
+  const toolCallApprovalStatus = toolCallApprovals?.[toolCallId]?.status;
 
   if (workflow) {
     const isStreaming = metadata?.mode === 'stream' || metadata?.mode === 'network';
@@ -78,6 +79,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
       onApprove={() => handleApprove(toolApprovalMetadata?.toolCallId ?? '')}
       onDecline={() => handleDecline(toolApprovalMetadata?.toolCallId ?? '')}
       isRunning={isRunning}
+      toolCallApprovalStatus={toolCallApprovalStatus}
     />
   );
 };

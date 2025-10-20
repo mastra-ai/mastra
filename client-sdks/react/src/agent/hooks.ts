@@ -48,6 +48,9 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
   const [messages, setMessages] = useState<MastraUIMessage[]>(() =>
     resolveInitialMessages(initializeMessages?.() || []),
   );
+  const [toolCallApprovals, setToolCallApprovals] = useState<{
+    [toolCallId: string]: { status: 'approved' | 'declined' };
+  }>({});
 
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
@@ -269,6 +272,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
       return console.info('[approveToolCall] approveToolCall can only be called after a stream has started');
 
     setIsRunning(true);
+    setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
     const agent = baseClient.getAgent(agentId);
     const response = await agent.approveToolCall({ runId: currentRunId, toolCallId });
@@ -285,7 +289,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
       return console.info('[declineToolCall] declineToolCall can only be called after a stream has started');
 
     setIsRunning(true);
-
+    setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
     const agent = baseClient.getAgent(agentId);
     const response = await agent.declineToolCall({ runId: currentRunId, toolCallId });
 
@@ -316,5 +320,6 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
     approveToolCall,
     declineToolCall,
     cancelRun: handleCancelRun,
+    toolCallApprovals,
   };
 };

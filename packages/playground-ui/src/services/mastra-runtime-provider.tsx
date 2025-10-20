@@ -168,6 +168,7 @@ export function MastraRuntimeProvider({
     setMessages,
     approveToolCall,
     declineToolCall,
+    toolCallApprovals,
   } = useChat({
     agentId,
     initializeMessages: () => initialMessages || [],
@@ -698,7 +699,12 @@ export function MastraRuntimeProvider({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ToolCallProvider approveToolcall={approveToolCall} declineToolcall={declineToolCall} isRunning={isRunningStream}>
+      <ToolCallProvider
+        approveToolcall={approveToolCall}
+        declineToolcall={declineToolCall}
+        isRunning={isRunningStream}
+        toolCallApprovals={toolCallApprovals}
+      >
         {children}
       </ToolCallProvider>
     </AssistantRuntimeProvider>

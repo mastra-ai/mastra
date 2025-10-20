@@ -127,17 +127,10 @@ export function createToolCallStep<
             );
           } else {
             if (!resumeData.approved) {
-              const error = new Error(
-                'Tool call was declined: ' +
-                  JSON.stringify({
-                    toolCallId: inputData.toolCallId,
-                    toolName: inputData.toolName,
-                    args: inputData.args,
-                  }),
-              );
-
+              span.end();
               return {
-                error,
+                result: {},
+                __mastra_toolCallDeclined: true,
                 ...inputData,
               };
             }
