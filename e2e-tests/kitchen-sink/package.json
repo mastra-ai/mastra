@@ -25,6 +25,7 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "nanoid": "^5.1.6",
     "npm-cli-login": "^1.0.0",
     "playwright": "^1.56.0",
     "react": "^19.2.0",

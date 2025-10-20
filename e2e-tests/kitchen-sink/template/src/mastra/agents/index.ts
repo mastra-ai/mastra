@@ -1,12 +1,14 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { weatherTool } from '../tools';
+import { weatherInfo } from '../tools';
 import { simulateReadableStream } from 'ai';
 import * as aiTest from 'ai/test';
 import { fixtures } from '../../../fixtures';
 import { Fixtures } from '../../../types';
 
 const memory = new Memory();
+
+let count = 0;
 
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
@@ -22,15 +24,27 @@ export const weatherAgent = new Agent({
 `,
   model: ({ runtimeContext }) => {
     const fixture = runtimeContext.get('fixture') as Fixtures;
+    const fixtureData = fixtures[fixture];
 
     return new aiTest.MockLanguageModelV2({
-      doStream: async () => ({
-        stream: simulateReadableStream({
-          chunks: fixtures[fixture],
-        }),
-      }),
+      doStream: async () => {
+        count++;
+
+        const chunk = fixtureData[count - 1] as Array<any>;
+
+        if (count === fixtureData.length) {
+          count = 0;
+        }
+
+        return {
+          stream: simulateReadableStream({
+            chunks: chunk,
+            delay: 100,
+          }),
+        };
+      },
     });
   },
-  tools: { weatherTool },
+  tools: { weatherInfo },
   memory,
 });
