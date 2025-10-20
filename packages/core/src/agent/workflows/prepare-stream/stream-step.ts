@@ -10,6 +10,9 @@ interface StreamStepOptions<FORMAT extends 'aisdk' | 'mastra' | undefined = unde
   capabilities: AgentCapabilities;
   runId: string;
   returnScorerData?: boolean;
+  /**
+   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
+   */
   format?: FORMAT;
   requireToolApproval?: boolean;
   resumeContext?: any;
@@ -67,6 +70,9 @@ export function createStreamStep<
       });
 
       if (format === 'aisdk') {
+        console.warn(
+          '[@mastra/core] format: "aisdk" is deprecated. Use the @mastra/ai-sdk package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming',
+        );
         return streamResult.aisdk.v5;
       }
 

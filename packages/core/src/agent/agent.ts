@@ -3834,6 +3834,12 @@ export class Agent<
       throw error;
     }
 
+    if (options?.format === 'aisdk') {
+      console.warn(
+        '[@mastra/core] format: "aisdk" is deprecated. Use the @mastra/ai-sdk package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming',
+      );
+    }
+
     return fullOutput as FORMAT extends 'aisdk'
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
@@ -3940,6 +3946,11 @@ export class Agent<
       });
     }
 
+    if (streamOptions?.format === 'aisdk') {
+      console.warn(
+        '[@mastra/core] format: "aisdk" is deprecated. Use the @mastra/ai-sdk package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming',
+      );
+    }
     return result.result as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
