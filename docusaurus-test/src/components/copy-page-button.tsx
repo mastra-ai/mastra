@@ -1,16 +1,8 @@
-import React, { useState } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { cn } from '@site/src/css/utils';
+import { useState } from 'react';
+import { ChatGPTIcon, ChevronDownIcon, ClaudeIcon, CopyPageIcon, ExternalLinkIcon } from './copy-page-icons';
 import { toast } from './custom-toast';
-import {
-  ChatGPTIcon,
-  ClaudeIcon,
-  CursorIcon,
-  VSCodeIcon,
-  ChevronDownIcon,
-  ExternalLinkIcon,
-  CopyPageIcon,
-} from './copy-page-icons';
 import { Button } from './ui/button';
 
 export const CopyPageButton = () => {
@@ -18,14 +10,12 @@ export const CopyPageButton = () => {
   const [copied, setCopied] = useState(false);
 
   const getMarkdownContent = () => {
-    // Get the main article element which contains the markdown content
     const articleElement = document.querySelector('article .markdown');
 
     if (!articleElement) {
       return 'No content found';
     }
 
-    // Simple text extraction
     const title = document.querySelector('article h1')?.textContent || '';
     const content = articleElement.textContent || '';
 
@@ -61,20 +51,6 @@ export const CopyPageButton = () => {
     window.open(claudeUrl, '_blank');
   };
 
-  const handleConnectToCursor = () => {
-    toast({
-      title: 'Connect to Cursor',
-      description: 'MCP server integration coming soon. Check the documentation for updates.',
-    });
-  };
-
-  const handleConnectToVSCode = () => {
-    toast({
-      title: 'Connect to VS Code',
-      description: 'MCP server integration coming soon. Check the documentation for updates.',
-    });
-  };
-
   return (
     <div className="flex items-center">
       <Button
@@ -82,7 +58,7 @@ export const CopyPageButton = () => {
         onClick={handleCopyPage}
         className={cn(
           'inline-flex border border-r-0 items-center rounded-[12px] rounded-tr-none rounded-br-none gap-2 px-3 py-1.5 text-sm font-medium',
-          'border-[var(--ifm-color-emphasis-300)] ',
+          ' border-(--border-subtle) ',
           'bg-[var(--ifm-background-color)] hover:bg-[var(--ifm-color-emphasis-100)]',
         )}
       >
@@ -92,23 +68,24 @@ export const CopyPageButton = () => {
 
       <DropdownMenu.Root open={open} onOpenChange={setOpen}>
         <DropdownMenu.Trigger asChild>
-          <button
+          <Button
+            variant="ghost"
             className={cn(
               'inline-flex h-9  items-center rounded-[12px] rounded-tl-none rounded-bl-none justify-center p-1.5 px-2.5',
-              'border border-[var(--ifm-color-emphasis-300)] ',
+              'border border-(--border-subtle)',
               'bg-[var(--ifm-background-color)] hover:bg-[var(--ifm-color-emphasis-100)]',
             )}
           >
             <ChevronDownIcon
-              className={cn('w-4 h-4 transition-transform duration-200', open && 'transform rotate-180')}
+              className={cn('size-3 transition-transform duration-200', open && 'transform rotate-180')}
             />
-          </button>
+          </Button>
         </DropdownMenu.Trigger>
 
         <DropdownMenu.Portal>
           <DropdownMenu.Content
             className={cn(
-              'min-w-[280px] bg-(--ifm-background-color) rounded-lg rounded-xl',
+              'min-w-[280px] bg-(--ifm-background-color) rounded-xl',
               'border border-(--ifm-color-emphasis-200)',
               'p-1 z-50',
               'animate-in fade-in-0 zoom-in-95',
@@ -120,8 +97,8 @@ export const CopyPageButton = () => {
               className={cn(
                 'flex items-center gap-3 px-2 py-2 text-sm',
                 'text-[var(--ifm-font-color-base)]',
-                'rounded-md cursor-pointer outline-none',
-                'hover:bg-[var(--ifm-color-emphasis-100)]',
+                'rounded-lg cursor-pointer outline-none',
+                'hover:bg-(--mastra-surface-2)',
                 'focus:bg-[var(--ifm-color-emphasis-100)]',
                 'transition-colors duration-150',
               )}
@@ -141,8 +118,8 @@ export const CopyPageButton = () => {
               className={cn(
                 'flex items-center gap-3 p-2 text-sm',
                 'text-[var(--ifm-font-color-base)]',
-                'rounded-md cursor-pointer outline-none',
-                'hover:bg-[var(--ifm-color-emphasis-100)]',
+                'rounded-lg cursor-pointer outline-none',
+                'hover:bg-(--mastra-surface-2)',
                 'focus:bg-[var(--ifm-color-emphasis-100)]',
                 'transition-colors duration-150',
               )}
@@ -164,8 +141,8 @@ export const CopyPageButton = () => {
               className={cn(
                 'flex items-center gap-3 p-2 text-sm',
                 'text-[var(--ifm-font-color-base)]',
-                'rounded-md cursor-pointer outline-none',
-                'hover:bg-[var(--ifm-color-emphasis-100)]',
+                'rounded-lg cursor-pointer outline-none',
+                'hover:bg-(--mastra-surface-2)',
                 'focus:bg-[var(--ifm-color-emphasis-100)]',
                 'transition-colors duration-150',
               )}
