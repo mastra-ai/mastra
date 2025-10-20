@@ -4,8 +4,6 @@ import {
   DialogPanel,
   DialogTitle,
 } from "@headlessui/react";
-import { KapaProvider } from "@kapaai/react-sdk";
-import { usePostHog } from "posthog-js/react";
 import { useEffect, useState } from "react";
 import { CustomSearch } from "./custom-search";
 import { getSearchPlaceholder } from "./search-placeholder";
@@ -16,7 +14,6 @@ const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
 
 export const SearchWrapper = ({ locale }: { locale: string }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const posthog = usePostHog();
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -82,38 +79,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
   };
 
   return (
-    <KapaProvider
-      integrationId={process.env.NEXT_PUBLIC_KAPA_INTEGRATION_ID!}
-      callbacks={{
-        askAI: {
-          onQuerySubmit({ question, threadId, conversation }) {
-            posthog.capture("DOCS_CHATBOT_QUESTION", {
-              question,
-              thread_id: threadId,
-              conversation_length: conversation.length,
-              timestamp: new Date().toISOString(),
-            });
-          },
-          onAnswerGenerationCompleted({
-            answer,
-            question,
-            threadId,
-            questionAnswerId,
-            conversation,
-          }) {
-            posthog.capture("DOCS_CHATBOT_RESPONSE", {
-              answer,
-              question,
-              question_answer_id: questionAnswerId,
-              thread_id: threadId,
-              conversation_length: conversation.length,
-              answer_length: answer.length,
-              timestamp: new Date().toISOString(),
-            });
-          },
-        },
-      }}
-    >
+    <>
       <div className="hidden md:block absolute inset-0 m-auto w-[460px] h-fit">
         <Button
           onClick={open}
@@ -152,6 +118,6 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
           </div>
         </div>
       </Dialog>
-    </KapaProvider>
+    </>
   );
 };
