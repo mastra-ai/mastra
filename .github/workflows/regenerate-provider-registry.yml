@@ -93,12 +93,20 @@ jobs:
       - name: Create changeset
         if: steps.git-check.outputs.changed == 'true'
         run: |
-          # Generate a unique changeset filename with timestamp
-          CHANGESET_ID="automated-provider-registry-$(date +%Y%m%d-%H%M%S)"
-          CHANGESET_FILE=".changeset/${CHANGESET_ID}.md"
+          # Check if an automated provider registry changeset already exists
+          EXISTING_CHANGESET=$(ls .changeset/automated-provider-registry-*.md 2>/dev/null | head -n 1)
+          
+          if [ -n "$EXISTING_CHANGESET" ]; then
+            echo "Automated changeset already exists: ${EXISTING_CHANGESET}"
+            echo "Skipping changeset creation to avoid spam"
+            echo "CHANGESET_FILE=" >> $GITHUB_ENV
+          else
+            # Generate a unique changeset filename with timestamp
+            CHANGESET_ID="automated-provider-registry-$(date +%Y%m%d-%H%M%S)"
+            CHANGESET_FILE=".changeset/${CHANGESET_ID}.md"
 
-          # Create changeset for @mastra/core with patch bump
-          cat > "${CHANGESET_FILE}" << 'EOF'
+            # Create changeset for @mastra/core with patch bump
+            cat > "${CHANGESET_FILE}" << 'EOF'
           ---
           '@mastra/core': patch
           ---
@@ -106,8 +114,9 @@ jobs:
           Update provider registry and model documentation with latest models and providers
           EOF
 
-          echo "Created changeset: ${CHANGESET_FILE}"
-          echo "CHANGESET_FILE=${CHANGESET_FILE}" >> $GITHUB_ENV
+            echo "Created changeset: ${CHANGESET_FILE}"
+            echo "CHANGESET_FILE=${CHANGESET_FILE}" >> $GITHUB_ENV
+          fi
 
       - name: Commit and push changes
         if: steps.git-check.outputs.changed == 'true'
