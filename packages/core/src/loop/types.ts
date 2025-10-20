@@ -12,6 +12,7 @@ import type {
 } from 'ai-v5';
 import z from 'zod';
 import type { MessageList } from '../agent/message-list';
+import type { StructuredOutputOptions } from '../agent/types';
 import type { AISpan, AISpanType } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
@@ -81,7 +82,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   stopWhen?: StopCondition<NoInfer<Tools>> | Array<StopCondition<NoInfer<Tools>>>;
   maxSteps?: number;
   _internal?: StreamInternal;
-  output?: OUTPUT;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
   returnScorerData?: boolean;
   downloadRetries?: number;
   downloadConcurrency?: number;

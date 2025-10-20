@@ -1,6 +1,6 @@
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { watch } from 'rollup';
-import { join, dirname, posix } from 'node:path';
+import { dirname, posix } from 'node:path';
 import * as pkg from 'empathic/package';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
@@ -49,7 +49,6 @@ export async function getInputOptions(
     {
       dependencies: deps,
       externalDependencies: new Set(),
-      invalidChunks: new Set(),
       workspaceMap,
     },
     platform,

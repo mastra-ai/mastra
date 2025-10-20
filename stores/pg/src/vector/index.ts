@@ -13,9 +13,11 @@ import type {
   UpdateVectorParams,
 } from '@mastra/core/vector';
 import { Mutex } from 'async-mutex';
-import pg from 'pg';
+import * as pg from 'pg';
 import xxhash from 'xxhash-wasm';
 
+import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
+import type { PgVectorConfig } from '../shared/config';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
 import { buildFilterQuery } from './sql-builder';
@@ -69,32 +71,50 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private schemaSetupComplete: boolean | undefined = undefined;
   private cacheWarmupPromise: Promise<void> | null = null;
 
-  constructor({
-    connectionString,
-    schemaName,
-    pgPoolOptions,
-  }: {
-    connectionString: string;
-    schemaName?: string;
-    pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
-  }) {
+  constructor(config: PgVectorConfig) {
     try {
-      if (!connectionString || connectionString.trim() === '') {
-        throw new Error(
-          'PgVector: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
-        );
-      }
+      validateConfig('PgVector', config);
       super();
 
-      this.schema = schemaName;
+      this.schema = config.schemaName;
 
-      const basePool = new pg.Pool({
-        connectionString,
-        max: 20, // Maximum number of clients in the pool
-        idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
-        connectionTimeoutMillis: 2000, // Fail fast if can't connect
-        ...pgPoolOptions,
-      });
+      let poolConfig: pg.PoolConfig;
+
+      if (isConnectionStringConfig(config)) {
+        poolConfig = {
+          connectionString: config.connectionString,
+          ssl: config.ssl,
+          max: config.max ?? 20,
+          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+          connectionTimeoutMillis: 2000,
+          ...config.pgPoolOptions,
+        };
+      } else if (isCloudSqlConfig(config)) {
+        poolConfig = {
+          ...config,
+          max: config.max ?? 20,
+          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+          connectionTimeoutMillis: 2000,
+          ...config.pgPoolOptions,
+        } as pg.PoolConfig;
+      } else if (isHostConfig(config)) {
+        poolConfig = {
+          host: config.host,
+          port: config.port,
+          database: config.database,
+          user: config.user,
+          password: config.password,
+          ssl: config.ssl,
+          max: config.max ?? 20,
+          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+          connectionTimeoutMillis: 2000,
+          ...config.pgPoolOptions,
+        };
+      } else {
+        throw new Error('PgVector: invalid configuration provided');
+      }
+
+      const basePool = new pg.Pool(poolConfig);
 
       const telemetry = this.__getTelemetry();
 
@@ -136,7 +156,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            schemaName: schemaName ?? '',
+            schemaName: 'schemaName' in config ? (config.schemaName ?? '') : '',
           },
         },
         error,

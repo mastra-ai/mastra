@@ -3,12 +3,12 @@ import { TransformStream } from 'stream/web';
 import { getErrorMessage } from '@ai-sdk/provider-v5';
 import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse, generateId } from 'ai-v5';
 import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
-import type z from 'zod';
 import type { MessageList } from '../../../agent/message-list';
+import type { StructuredOutputOptions } from '../../../agent/types';
 import { getValidTraceId } from '../../../ai-tracing';
 import type { TracingContext } from '../../../ai-tracing';
 import type { MastraModelOutput } from '../../base/output';
-import type { OutputSchema } from '../../base/schema';
+import type { InferSchemaOutput, OutputSchema } from '../../base/schema';
 import type { ChunkType } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
 import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream } from './compat';
@@ -18,19 +18,19 @@ import type { OutputChunkType } from './transform';
 type AISDKV5OutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   toolCallStreaming?: boolean;
   includeRawChunks?: boolean;
-  output?: OUTPUT;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
   tracingContext?: TracingContext;
 };
 
-export type AIV5FullStreamPart<T = undefined> = T extends undefined
+export type AIV5FullStreamPart<OUTPUT extends OutputSchema = undefined> = OUTPUT extends undefined
   ? TextStreamPart<ToolSet>
   :
       | TextStreamPart<ToolSet>
       | {
           type: 'object';
-          object: T extends z.ZodSchema ? Partial<z.infer<T>> : unknown;
+          object: InferSchemaOutput<OUTPUT>;
         };
-export type AIV5FullStreamType<T> = ReadableStream<AIV5FullStreamPart<T>>;
+export type AIV5FullStreamType<OUTPUT extends OutputSchema = undefined> = ReadableStream<AIV5FullStreamPart<OUTPUT>>;
 
 export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   #modelOutput: MastraModelOutput<OUTPUT>;

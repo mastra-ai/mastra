@@ -435,7 +435,7 @@ export async function generateLegacyHandler({
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
-  body: GetBody<'generate'> & {
+  body: GetBody<'generateLegacy'> & {
     // @deprecated use resourceId
     resourceid?: string;
     runtimeContext?: Record<string, unknown>;
@@ -535,7 +535,7 @@ export async function streamGenerateLegacyHandler({
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
-  body: GetBody<'stream'> & {
+  body: GetBody<'streamLegacy'> & {
     // @deprecated use resourceId
     resourceid?: string;
     runtimeContext?: string;
@@ -771,6 +771,7 @@ export function streamNetworkHandler({
       memory: {
         thread: rest.thread ?? '',
         resource: rest.resourceId ?? '',
+        options: rest.memory?.options ?? {},
       },
       runtimeContext: finalRuntimeContext,
     });

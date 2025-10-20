@@ -17,11 +17,53 @@ npm install @mastra/pg
 
 ### Vector Store
 
+#### Basic Configuration
+
+PgVector supports multiple connection methods:
+
+**1. Connection String (Recommended)**
+
 ```typescript
 import { PgVector } from '@mastra/pg';
 
-const vectorStore = new PgVector({ connectionString: 'postgresql://user:pass@localhost:5432/db' });
+const vectorStore = new PgVector({
+  connectionString: 'postgresql://user:pass@localhost:5432/db',
+});
+```
 
+**2. Host/Port/Database Configuration**
+
+```typescript
+const vectorStore = new PgVector({
+  host: 'localhost',
+  port: 5432,
+  database: 'mydb',
+  user: 'postgres',
+  password: 'password',
+});
+```
+
+> **Note:** PgVector also supports advanced configurations like Google Cloud SQL Connector via `pg.ClientConfig`.
+
+#### Advanced Options
+
+```typescript
+const vectorStore = new PgVector({
+  connectionString: 'postgresql://user:pass@localhost:5432/db',
+  schemaName: 'custom_schema', // Use custom schema (default: public)
+  max: 30, // Max pool connections (default: 20)
+  idleTimeoutMillis: 60000, // Idle timeout (default: 30000)
+  pgPoolOptions: {
+    // Additional pg pool options
+    connectionTimeoutMillis: 5000,
+    allowExitOnIdle: true,
+  },
+});
+```
+
+#### Usage Example
+
+```typescript
 // Create a new table with vector support
 await vectorStore.createIndex({
   indexName: 'my_vectors',
@@ -97,12 +139,40 @@ const messages = await store.getMessages('thread-123');
 
 ## Configuration
 
-The PostgreSQL store can be initialized with either:
+### Connection Methods
 
-- `connectionString`: PostgreSQL connection string (for vector store)
-- Configuration object with host, port, database, user, and password (for storage)
+Both `PgVector` and `PostgresStore` support multiple connection methods:
 
-Connection pool settings:
+1. **Connection String**
+
+   ```typescript
+   {
+     connectionString: 'postgresql://user:pass@localhost:5432/db';
+   }
+   ```
+
+2. **Host/Port/Database**
+   ```typescript
+   {
+     host: 'localhost',
+     port: 5432,
+     database: 'mydb',
+     user: 'postgres',
+     password: 'password'
+   }
+   ```
+
+> **Advanced:** Also supports `pg.ClientConfig` for use cases like Google Cloud SQL Connector with IAM authentication.
+
+### Optional Configuration
+
+- `schemaName`: Custom PostgreSQL schema (default: `public`)
+- `ssl`: Enable SSL or provide custom SSL options (`true` | `false` | `ConnectionOptions`)
+- `max`: Maximum pool connections (default: `20`)
+- `idleTimeoutMillis`: Idle connection timeout (default: `30000`)
+- `pgPoolOptions`: Additional pg pool options (PgVector only)
+
+### Default Connection Pool Settings
 
 - Maximum connections: 20
 - Idle timeout: 30 seconds

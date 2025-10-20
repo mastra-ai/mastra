@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { MastraMessageV2, UIMessageWithMetadata } from '../';
 import type { MastraMessageV1 } from '../../../memory';
 import { MessageList } from '../index';
-import type { AIV4Type } from '../types';
+import type { AIV4Type, AIV5Type } from '../types';
 
 type VercelUIMessage = Message;
 type VercelCoreMessage = CoreMessage;
@@ -3490,6 +3490,380 @@ describe('MessageList', () => {
         // Check that we don't have double suffixes like __split-1__split-1
         expect(msg.id).not.toMatch(/__split-\d+__split-\d+/);
       });
+    });
+  });
+
+  describe('providerOptions preservation', () => {
+    describe('AIV5 ModelMessage - System messages', () => {
+      it('should preserve providerOptions on system message with string content', async () => {
+        // This test verifies the fix for issue #8810
+        // System messages are stored separately and converted via aiV4CoreMessagesToAIV5ModelMessages
+        const messageList = new MessageList();
+
+        const systemMessage: AIV5Type.ModelMessage = {
+          role: 'system' as const,
+          content: 'You are a helpful assistant.',
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' as const } },
+          },
+        };
+
+        messageList.addSystem(systemMessage);
+        // Add a user message to avoid empty message list error
+        messageList.add({ role: 'user', content: 'Hello' }, 'input');
+
+        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'system');
+
+        expect(retrievedMessage).toBeDefined();
+        expect(retrievedMessage?.providerOptions).toEqual({
+          anthropic: { cacheControl: { type: 'ephemeral' } },
+        });
+      });
+    });
+
+    describe('AIV5 ModelMessage - User messages', () => {
+      it('should preserve providerOptions on user message with string content', async () => {
+        const messageList = new MessageList();
+
+        const userMessage: AIV5Type.ModelMessage = {
+          role: 'user' as const,
+          content: 'Test message with caching',
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' as const } },
+          },
+        };
+
+        messageList.add(userMessage, 'input');
+
+        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
+
+        expect(retrievedMessage).toBeDefined();
+        expect(Array.isArray(retrievedMessage?.content)).toBe(true);
+
+        // AI SDK's convertToModelMessages always creates array content for user/assistant messages,
+        // converting providerMetadata on UI parts to providerOptions on ModelMessage parts
+        const firstPart = (retrievedMessage?.content as any[])?.[0];
+        expect(firstPart?.type).toBe('text');
+        expect(firstPart?.providerOptions).toEqual({
+          anthropic: { cacheControl: { type: 'ephemeral' } },
+        });
+      });
+
+      it('should preserve providerOptions on user message with array content (single text part)', async () => {
+        const messageList = new MessageList();
+
+        const userMessage: AIV5Type.ModelMessage = {
+          role: 'user' as const,
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Important context that should be cached.',
+              providerOptions: {
+                anthropic: { cacheControl: { type: 'ephemeral' as const } },
+              },
+            },
+          ],
+        };
+
+        messageList.add(userMessage, 'input');
+
+        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
+
+        expect(retrievedMessage).toBeDefined();
+        expect(Array.isArray(retrievedMessage?.content)).toBe(true);
+
+        const firstPart = (retrievedMessage?.content as any[])?.[0];
+        expect(firstPart?.type).toBe('text');
+        expect(firstPart?.providerOptions).toEqual({
+          anthropic: { cacheControl: { type: 'ephemeral' } },
+        });
+      });
+
+      it('should preserve providerOptions on user message with multiple content parts', async () => {
+        const messageList = new MessageList();
+
+        const userMessage: AIV5Type.ModelMessage = {
+          role: 'user' as const,
+          content: [
+            {
+              type: 'text' as const,
+              text: 'First part with cache',
+              providerOptions: {
+                anthropic: { cacheControl: { type: 'ephemeral' as const } },
+              },
+            },
+            {
+              type: 'text' as const,
+              text: 'Second part without cache',
+            },
+          ],
+        };
+
+        messageList.add(userMessage, 'input');
+
+        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
+
+        expect(retrievedMessage).toBeDefined();
+        expect(Array.isArray(retrievedMessage?.content)).toBe(true);
+
+        const firstPart = (retrievedMessage?.content as any[])?.[0];
+        expect(firstPart?.providerOptions).toEqual({
+          anthropic: { cacheControl: { type: 'ephemeral' } },
+        });
+
+        const secondPart = (retrievedMessage?.content as any[])?.[1];
+        expect(secondPart?.providerOptions).toBeUndefined();
+      });
+
+      it('should preserve both message-level and part-level providerOptions', async () => {
+        const messageList = new MessageList();
+
+        // AIV5 ModelMessage with BOTH message-level AND part-level providerOptions
+        const userMessage: AIV5Type.ModelMessage = {
+          role: 'user' as const,
+          content: [
+            {
+              type: 'text' as const,
+              text: 'First part with its own cache',
+              providerOptions: {
+                anthropic: { cacheControl: { type: 'ephemeral' as const } },
+              },
+            },
+            {
+              type: 'text' as const,
+              text: 'Second part without part-level options',
+            },
+          ],
+          // Message-level providerOptions
+          providerOptions: {
+            openai: { store: true },
+          },
+        };
+
+        messageList.add(userMessage, 'input');
+
+        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
+
+        expect(retrievedMessage).toBeDefined();
+        expect(Array.isArray(retrievedMessage?.content)).toBe(true);
+
+        // First part should have BOTH message-level and part-level providerOptions merged
+        // (message-level is spread first, then part-level overrides)
+        const firstPart = (retrievedMessage?.content as any[])?.[0];
+        expect(firstPart?.providerOptions).toEqual({
+          openai: { store: true }, // from message-level
+          anthropic: { cacheControl: { type: 'ephemeral' } }, // from part-level
+        });
+
+        // Second part should inherit message-level providerOptions only
+        const secondPart = (retrievedMessage?.content as any[])?.[1];
+        expect(secondPart?.providerOptions).toEqual({
+          openai: { store: true },
+        });
+      });
+    });
+
+    describe('AIV5 ModelMessage - Assistant messages', () => {
+      it('should preserve providerOptions on assistant message with string content', async () => {
+        const messageList = new MessageList();
+
+        const assistantMessage: AIV5Type.ModelMessage = {
+          role: 'assistant' as const,
+          content: 'Assistant response with caching',
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' as const } },
+          },
+        };
+
+        messageList.add(assistantMessage, 'memory');
+
+        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'assistant');
+
+        expect(retrievedMessage).toBeDefined();
+        expect(Array.isArray(retrievedMessage?.content)).toBe(true);
+
+        // AI SDK's convertToModelMessages always creates array content for user/assistant messages,
+        // converting providerMetadata on UI parts to providerOptions on ModelMessage parts
+        const firstPart = (retrievedMessage?.content as any[])?.[0];
+        expect(firstPart?.type).toBe('text');
+        expect(firstPart?.providerOptions).toEqual({
+          anthropic: { cacheControl: { type: 'ephemeral' } },
+        });
+      });
+    });
+
+    describe('AIV4 CoreMessage', () => {
+      it('should preserve providerOptions on CoreMessage with string content', async () => {
+        const messageList = new MessageList();
+
+        const coreMessage: AIV4Type.CoreMessage = {
+          role: 'user' as const,
+          content: 'Core message with caching',
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' as const } },
+          },
+        };
+
+        messageList.add(coreMessage, 'input');
+
+        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
+
+        expect(retrievedMessage).toBeDefined();
+        expect(Array.isArray(retrievedMessage?.content)).toBe(true);
+
+        // AI SDK's convertToModelMessages always creates array content for user/assistant messages,
+        // converting providerMetadata on UI parts to providerOptions on ModelMessage parts
+        const firstPart = (retrievedMessage?.content as any[])?.[0];
+        expect(firstPart?.type).toBe('text');
+        expect(firstPart?.providerOptions).toEqual({
+          anthropic: { cacheControl: { type: 'ephemeral' } },
+        });
+      });
+
+      it('should preserve providerOptions on CoreMessage with array content (text + image)', async () => {
+        const messageList = new MessageList();
+
+        const coreMessage: AIV4Type.CoreMessage = {
+          role: 'user' as const,
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Image context with caching',
+              providerOptions: {
+                anthropic: { cacheControl: { type: 'ephemeral' as const } },
+              },
+            },
+            {
+              type: 'image' as const,
+              image:
+                'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            },
+          ],
+        };
+
+        messageList.add(coreMessage, 'input');
+
+        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+        const retrievedMessage = llmPrompt.find((msg: any) => msg.role === 'user');
+
+        expect(retrievedMessage).toBeDefined();
+        expect(Array.isArray(retrievedMessage?.content)).toBe(true);
+
+        const textPart = (retrievedMessage?.content as any[])?.[0];
+        expect(textPart?.type).toBe('text');
+        expect(textPart?.providerOptions).toEqual({
+          anthropic: { cacheControl: { type: 'ephemeral' } },
+        });
+      });
+    });
+
+    describe('Mixed conversation scenarios', () => {
+      it('should preserve providerOptions across system, user, and assistant messages', async () => {
+        const messageList = new MessageList();
+
+        // System message with cache
+        messageList.addSystem({
+          role: 'system' as const,
+          content: 'System instructions',
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' as const } },
+          },
+        });
+
+        // User message with cache on content part
+        messageList.add(
+          {
+            role: 'user' as const,
+            content: [
+              {
+                type: 'text' as const,
+                text: 'User context',
+                providerOptions: {
+                  anthropic: { cacheControl: { type: 'ephemeral' as const } },
+                },
+              },
+            ],
+          },
+          'input',
+        );
+
+        // Assistant message with cache
+        messageList.add(
+          {
+            role: 'assistant' as const,
+            content: 'Assistant response',
+            providerOptions: {
+              anthropic: { cacheControl: { type: 'ephemeral' as const } },
+            },
+          },
+          'memory',
+        );
+
+        const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+
+        // System message should have providerOptions at message level
+        const systemMsg = llmPrompt.find((msg: any) => msg.role === 'system');
+        expect(systemMsg?.providerOptions).toEqual({
+          anthropic: { cacheControl: { type: 'ephemeral' } },
+        });
+
+        // User message should have providerOptions on content part
+        const userMsg = llmPrompt.find((msg: any) => msg.role === 'user');
+        expect((userMsg?.content as any[])?.[0]?.providerOptions).toEqual({
+          anthropic: { cacheControl: { type: 'ephemeral' } },
+        });
+
+        // Assistant message should have providerOptions on content part (converted from string)
+        const assistantMsg = llmPrompt.find((msg: any) => msg.role === 'assistant');
+        expect(Array.isArray(assistantMsg?.content)).toBe(true);
+        expect((assistantMsg?.content as any[])?.[0]?.providerOptions).toEqual({
+          anthropic: { cacheControl: { type: 'ephemeral' } },
+        });
+      });
+    });
+  });
+
+  describe('Empty message list validation', () => {
+    it('should throw error when calling prompt() with empty message list', () => {
+      const list = new MessageList();
+
+      expect(() => list.get.all.aiV5.prompt()).toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
+    });
+
+    it('should throw error when calling prompt() with only system messages', () => {
+      const list = new MessageList();
+      list.addSystem('You are a helpful assistant');
+      list.addSystem('Follow these rules');
+
+      expect(() => list.get.all.aiV5.prompt()).toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
+    });
+
+    it('should throw error when calling llmPrompt() with empty message list', async () => {
+      const list = new MessageList();
+
+      await expect(list.get.all.aiV5.llmPrompt()).rejects.toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
+    });
+
+    it('should throw error when calling llmPrompt() with only system messages', async () => {
+      const list = new MessageList();
+      list.addSystem('You are a helpful assistant');
+
+      await expect(list.get.all.aiV5.llmPrompt()).rejects.toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
     });
   });
 });

@@ -1,16 +1,20 @@
 import { ModelSettings } from './types';
 import { useMastraClient } from '@/mastra-client-context';
 import { UIMessage } from '@ai-sdk/react';
+import { MastraUIMessage } from '../lib/ai-sdk';
 import { MastraClient } from '@mastra/client-js';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useState } from 'react';
 import { flushSync } from 'react-dom';
+import { toUIMessage } from '@/lib/ai-sdk';
+import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
+import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
 
-export interface MastraChatProps<TMessage> {
+export interface MastraChatProps {
   agentId: string;
-  initializeMessages?: () => TMessage[];
+  initializeMessages?: () => MastraUIMessage[];
 }
 
 interface SharedArgs {
@@ -21,20 +25,28 @@ interface SharedArgs {
   signal?: AbortSignal;
 }
 
-export type GenerateArgs<TMessage> = SharedArgs & {
-  onFinish: ({ messages, tripwireReason }: { messages: UIMessage[]; tripwireReason: string }) => TMessage[];
+export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMessage[] } & (
+  | ({ mode: 'generate' } & Omit<GenerateArgs, 'coreUserMessages'>)
+  | ({ mode: 'stream' } & Omit<StreamArgs, 'coreUserMessages'>)
+  | ({ mode: 'network' } & Omit<NetworkArgs, 'coreUserMessages'>)
+  | ({ mode?: undefined } & Omit<StreamArgs, 'coreUserMessages'>)
+);
+
+export type GenerateArgs = SharedArgs & { onFinish?: (messages: UIMessage[]) => Promise<void> };
+
+export type StreamArgs = SharedArgs & {
+  onChunk?: (chunk: ChunkType) => Promise<void>;
 };
 
-export type StreamArgs<TMessage> = SharedArgs & {
-  onChunk: (chunk: ChunkType, conversation: TMessage[]) => TMessage[];
+export type NetworkArgs = SharedArgs & {
+  onNetworkChunk?: (chunk: NetworkChunkType) => Promise<void>;
 };
 
-export type NetworkArgs<TMessage> = SharedArgs & {
-  onNetworkChunk: (chunk: NetworkChunkType, conversation: TMessage[]) => TMessage[];
-};
+export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
+  const [messages, setMessages] = useState<MastraUIMessage[]>(() =>
+    resolveInitialMessages(initializeMessages?.() || []),
+  );
 
-export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatProps<TMessage>) => {
-  const [messages, setMessages] = useState<TMessage[]>(initializeMessages || []);
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
 
@@ -45,7 +57,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     modelSettings,
     signal,
     onFinish,
-  }: GenerateArgs<TMessage>) => {
+  }: GenerateArgs) => {
     const {
       frequencyPenalty,
       presencePenalty,
@@ -90,21 +102,20 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
 
     setIsRunning(false);
 
-    const uiMessages =
-      response && 'uiMessages' in response.response && response.response.uiMessages ? response.response.uiMessages : [];
+    if (response && 'uiMessages' in response.response && response.response.uiMessages) {
+      onFinish?.(response.response.uiMessages);
+      const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map(message => ({
+        ...message,
+        metadata: {
+          mode: 'generate',
+        },
+      }));
 
-    const formatted = onFinish({ messages: uiMessages, tripwireReason: response.tripwireReason });
-    setMessages(prev => [...prev, ...formatted]);
+      setMessages(prev => [...prev, ...mastraUIMessages]);
+    }
   };
 
-  const stream = async ({
-    coreUserMessages,
-    runtimeContext,
-    threadId,
-    onChunk,
-    modelSettings,
-    signal,
-  }: StreamArgs<TMessage>) => {
+  const stream = async ({ coreUserMessages, runtimeContext, threadId, onChunk, modelSettings, signal }: StreamArgs) => {
     const {
       frequencyPenalty,
       presencePenalty,
@@ -154,13 +165,13 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     }
 
     await response.processDataStream({
-      onChunk: (chunk: ChunkType) => {
+      onChunk: async (chunk: ChunkType) => {
         // Without this, React might batch intermediate chunks which would break the message reconstruction over time
         flushSync(() => {
-          setMessages(prev => onChunk(chunk, prev));
+          setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
         });
 
-        return Promise.resolve();
+        onChunk?.(chunk);
       },
     });
 
@@ -174,7 +185,7 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
     onNetworkChunk,
     modelSettings,
     signal,
-  }: NetworkArgs<TMessage>) => {
+  }: NetworkArgs) => {
     const { frequencyPenalty, presencePenalty, maxRetries, maxTokens, temperature, topK, topP, maxSteps } =
       modelSettings || {};
 
@@ -206,26 +217,41 @@ export const useChat = <TMessage>({ agentId, initializeMessages }: MastraChatPro
       ...(threadId ? { thread: threadId, resourceId: agentId } : {}),
     });
 
+    const transformer = new AISdkNetworkTransformer();
+
     await response.processDataStream({
-      onChunk: (chunk: NetworkChunkType) => {
+      onChunk: async (chunk: NetworkChunkType) => {
         flushSync(() => {
-          setMessages(prev => onNetworkChunk(chunk, prev));
+          setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
         });
 
-        return Promise.resolve();
+        onNetworkChunk?.(chunk);
       },
     });
 
     setIsRunning(false);
   };
 
+  const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {
+    const nextMessage: Omit<CoreUserMessage, 'id'> = { role: 'user', content: [{ type: 'text', text: args.message }] };
+    const messages = args.coreUserMessages ? [nextMessage, ...args.coreUserMessages] : [nextMessage];
+
+    setMessages(s => [...s, { role: 'user', parts: [{ type: 'text', text: args.message }] }] as MastraUIMessage[]);
+
+    if (mode === 'generate') {
+      await generate({ ...args, coreUserMessages: messages });
+    } else if (mode === 'stream') {
+      await stream({ ...args, coreUserMessages: messages });
+    } else if (mode === 'network') {
+      await network({ ...args, coreUserMessages: messages });
+    }
+  };
+
   return {
-    network,
-    stream,
-    generate,
+    setMessages,
+    sendMessage,
     isRunning,
     messages,
-    setMessages,
     cancelRun: () => setIsRunning(false),
   };
 };
