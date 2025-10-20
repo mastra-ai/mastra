@@ -13,7 +13,6 @@ import type {
   ChunkType,
   ExecuteStreamModelManager,
   ModelManagerModelConfig,
-  ReasoningStartPayload,
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
@@ -61,37 +60,6 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       continue;
     }
 
-    // Reasoning
-    if (
-      chunk.type !== 'reasoning-delta' &&
-      chunk.type !== 'reasoning-signature' &&
-      chunk.type !== 'redacted-reasoning' &&
-      runState.state.isReasoning
-    ) {
-      if (runState.state.reasoningDeltas.length) {
-        messageList.add(
-          {
-            id: messageId,
-            role: 'assistant',
-            content: [
-              {
-                type: 'reasoning',
-                text: runState.state.reasoningDeltas.join(''),
-                signature: (chunk.payload as ReasoningStartPayload).signature,
-                providerOptions:
-                  (chunk.payload as ReasoningStartPayload).providerMetadata ?? runState.state.providerOptions,
-              },
-            ],
-          },
-          'response',
-        );
-      }
-      runState.setState({
-        isReasoning: false,
-        reasoningDeltas: [],
-      });
-    }
-
     // Streaming
     if (
       chunk.type !== 'text-delta' &&
@@ -135,6 +103,20 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       runState.setState({
         isStreaming: false,
         textDeltas: [],
+      });
+    }
+
+    if (
+      chunk.type !== 'reasoning-start' &&
+      chunk.type !== 'reasoning-delta' &&
+      chunk.type !== 'reasoning-end' &&
+      chunk.type !== 'redacted-reasoning' &&
+      chunk.type !== 'response-metadata' &&
+      runState.state.isReasoning
+    ) {
+      runState.setState({
+        isReasoning: false,
+        reasoningDeltas: [],
       });
     }
 
@@ -212,6 +194,8 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
 
       case 'reasoning-start': {
         runState.setState({
+          isReasoning: true,
+          reasoningDeltas: [],
           providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
         });
 
@@ -249,6 +233,40 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
           reasoningDeltas: reasoningDeltasFromState,
           providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
         });
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
+        break;
+      }
+
+      case 'reasoning-end': {
+        // Use the accumulated reasoning deltas from runState
+        if (runState.state.reasoningDeltas.length > 0) {
+          const content: any = {
+            type: 'reasoning',
+            text: runState.state.reasoningDeltas.join(''),
+          };
+
+          if (chunk.payload.providerMetadata) {
+            content.providerMetadata = chunk.payload.providerMetadata;
+          }
+
+          messageList.add(
+            {
+              id: messageId,
+              role: 'assistant',
+              content: [content],
+            },
+            'response',
+          );
+        }
+
+        // Reset reasoning state
+        runState.setState({
+          isReasoning: false,
+          reasoningDeltas: [],
+        });
+
         if (isControllerOpen(controller)) {
           controller.enqueue(chunk);
         }
