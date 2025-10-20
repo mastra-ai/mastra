@@ -383,7 +383,7 @@ export class ProcessorRunner {
     }
 
     if (processableMessages.length > 0) {
-      messageList.add(processableMessages, 'user');
+      messageList.add(processableMessages, 'input');
     }
 
     return messageList;
