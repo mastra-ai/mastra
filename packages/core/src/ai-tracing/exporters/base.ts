@@ -45,8 +45,7 @@ export interface BaseExporterConfig {
  *     // Initialize exporter-specific logic
  *   }
  *
- *   async exportEvent(event: AITracingEvent): Promise<void> {
- *     if (this.isDisabled) return;
+ *   async _exportEvent(event: AITracingEvent): Promise<void> {
  *     // Export logic
  *   }
  * }
