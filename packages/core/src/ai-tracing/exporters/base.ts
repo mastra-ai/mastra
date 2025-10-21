@@ -17,8 +17,8 @@ import type { AITracingEvent, AITracingExporter } from '../types';
 export interface BaseExporterConfig {
   /** Optional Mastra logger instance */
   logger?: IMastraLogger;
-  /** Log level for the exporter (defaults to INFO) */
-  logLevel?: LogLevel;
+  /** Log level for the exporter (defaults to INFO) - accepts both enum and string */
+  logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error';
 }
 
 /**
@@ -66,7 +66,33 @@ export abstract class BaseExporter implements AITracingExporter {
    * Initialize the base exporter with logger
    */
   constructor(config: BaseExporterConfig = {}) {
-    this.logger = config.logger ?? new ConsoleLogger({ level: config.logLevel ?? LogLevel.INFO });
+    // Map string log level to LogLevel enum if needed
+    const logLevel = this.resolveLogLevel(config.logLevel);
+    this.logger = config.logger ?? new ConsoleLogger({ level: logLevel });
+  }
+
+  /**
+   * Convert string log level to LogLevel enum
+   */
+  private resolveLogLevel(logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'): LogLevel {
+    if (!logLevel) {
+      return LogLevel.INFO;
+    }
+
+    // If already a LogLevel enum, return as-is
+    if (typeof logLevel === 'number') {
+      return logLevel;
+    }
+
+    // Map string to enum
+    const logLevelMap: Record<string, LogLevel> = {
+      debug: LogLevel.DEBUG,
+      info: LogLevel.INFO,
+      warn: LogLevel.WARN,
+      error: LogLevel.ERROR,
+    };
+
+    return logLevelMap[logLevel] ?? LogLevel.INFO;
   }
 
   /**

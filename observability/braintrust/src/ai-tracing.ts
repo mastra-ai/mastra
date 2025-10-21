@@ -10,7 +10,6 @@ import type { AITracingEvent, AnyExportedAISpan, LLMGenerationAttributes } from 
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
 import { BaseExporter } from '@mastra/core/ai-tracing/exporters';
 import type { BaseExporterConfig } from '@mastra/core/ai-tracing/exporters';
-import { LogLevel } from '@mastra/core/logger';
 import { initLogger } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
 import { normalizeUsageMetrics } from './metrics';
@@ -56,17 +55,9 @@ export class BraintrustExporter extends BaseExporter {
   private config: BraintrustExporterConfig;
 
   constructor(config: BraintrustExporterConfig) {
-    // Map string log level to LogLevel enum for base class
-    const logLevelMap: Record<string, LogLevel> = {
-      debug: LogLevel.DEBUG,
-      info: LogLevel.INFO,
-      warn: LogLevel.WARN,
-      error: LogLevel.ERROR,
-    };
-
     super({
       ...config,
-      logLevel: config.logLevel ? logLevelMap[config.logLevel] : LogLevel.WARN,
+      logLevel: config.logLevel ?? 'warn',
     });
 
     if (!config.apiKey) {

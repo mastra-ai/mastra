@@ -16,7 +16,6 @@ import type { AITracingEvent, AnyExportedAISpan, LLMGenerationAttributes } from 
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
 import { BaseExporter } from '@mastra/core/ai-tracing/exporters';
 import type { BaseExporterConfig } from '@mastra/core/ai-tracing/exporters';
-import { LogLevel } from '@mastra/core/logger';
 import { Langfuse } from 'langfuse';
 import type { LangfuseTraceClient, LangfuseSpanClient, LangfuseGenerationClient, LangfuseEventClient } from 'langfuse';
 
@@ -113,17 +112,9 @@ export class LangfuseExporter extends BaseExporter {
   private traceMap = new Map<string, TraceData>();
 
   constructor(config: LangfuseExporterConfig) {
-    // Map string log level to LogLevel enum for base class
-    const logLevelMap: Record<string, LogLevel> = {
-      debug: LogLevel.DEBUG,
-      info: LogLevel.INFO,
-      warn: LogLevel.WARN,
-      error: LogLevel.ERROR,
-    };
-
     super({
       ...config,
-      logLevel: config.logLevel ? logLevelMap[config.logLevel] : LogLevel.WARN,
+      logLevel: config.logLevel ?? 'warn',
     });
 
     this.realtime = config.realtime ?? false;

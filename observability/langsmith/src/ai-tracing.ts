@@ -10,7 +10,6 @@ import type { AITracingEvent, AnyExportedAISpan, LLMGenerationAttributes } from 
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
 import { BaseExporter } from '@mastra/core/ai-tracing/exporters';
 import type { BaseExporterConfig } from '@mastra/core/ai-tracing/exporters';
-import { LogLevel } from '@mastra/core/logger';
 import type { ClientConfig, RunTreeConfig } from 'langsmith';
 import { Client, RunTree } from 'langsmith';
 import type { KVMap } from 'langsmith/schemas';
@@ -55,17 +54,9 @@ export class LangSmithExporter extends BaseExporter {
   private client: Client;
 
   constructor(config: LangSmithExporterConfig) {
-    // Map string log level to LogLevel enum for base class
-    const logLevelMap: Record<string, LogLevel> = {
-      debug: LogLevel.DEBUG,
-      info: LogLevel.INFO,
-      warn: LogLevel.WARN,
-      error: LogLevel.ERROR,
-    };
-
     super({
       ...config,
-      logLevel: config.logLevel ? logLevelMap[config.logLevel] : LogLevel.WARN,
+      logLevel: config.logLevel ?? 'warn',
     });
 
     config.apiKey = config.apiKey ?? process.env.LANGSMITH_API_KEY;
