@@ -4,10 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@mastra/playground-ui': ../packages/playground-ui
-  '@mastra/client-js': ../sdk-clients/client-js
-
 importers:
 
   .:
