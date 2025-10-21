@@ -144,7 +144,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
 
       if (error instanceof Error) {
-        base.error = error.message ? `Error: ${error.message}` : String(error);
+        base.error = error.message ? `Error: ${error.message}` : `Error: ${String(error)}`;
       } else if (lastOutput.error) {
         base.error = lastOutput.error;
       } else if (typeof error === 'string') {
@@ -152,7 +152,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       } else {
         const errorMessage = safeParseErrorObject(error);
         const errorObj = new Error('Unknown error: ' + errorMessage);
-        base.error = errorObj?.message ? `Error: ${errorObj.message}` : String(errorObj);
+        base.error = errorObj?.message ? `Error: ${errorObj.message}` : `Error: ${String(errorObj)}`;
       }
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
@@ -975,7 +975,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         execResults = {
           status: 'failed',
-          error: error?.message ? `Error: ${error.message}` : String(error),
+          error: error?.message ? `Error: ${error.message}` : `Error: ${String(error)}`,
           endedAt: Date.now(),
         };
       }
