@@ -506,6 +506,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               // Mark stream as finished for EventEmitter
               self.#streamFinished = true;
 
+              // Clear buffers to prevent memory leak
+              self.#clearBuffers();
+
               // Resolve all delayed promises before terminating
               self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
               self.#delayedPromises.finishReason.resolve('other');
@@ -766,6 +769,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#status = 'failed';
               self.#streamFinished = true; // Mark stream as finished for EventEmitter
 
+              // Clear buffers to prevent memory leak
+              self.#clearBuffers();
+
               // Reject all delayed promises on error
               const errorMessage = (self.#error as any)?.message || safeParseErrorObject(self.#error);
               const errorCause = self.#error instanceof Error ? self.#error.cause : undefined;
@@ -799,6 +805,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
           // Emit finish event for EventEmitter streams
           self.#streamFinished = true;
+
+          // Clear buffers to prevent memory leak
+          self.#clearBuffers();
+
           self.#emitter.emit('finish');
         },
       }),
@@ -1228,6 +1238,62 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   /** @internal  */
   _getBaseStream() {
     return this.#baseStream;
+  }
+
+  /**
+   * Clears all buffer arrays to prevent memory leaks.
+   * Called when stream finishes to release memory.
+   *
+   * Fixes: Issue #6322 - Memory leak from unbounded buffer accumulation
+   */
+  #clearBuffers() {
+    // Clear all buffer arrays
+    this.#bufferedChunks = [];
+    this.#bufferedSteps = [];
+    this.#bufferedText = [];
+    this.#bufferedSources = [];
+    this.#bufferedReasoning = [];
+    this.#bufferedFiles = [];
+    this.#toolCalls = [];
+    this.#toolResults = [];
+    this.#warnings = [];
+
+    // Clear buffer objects/maps
+    this.#bufferedReasoningDetails = {};
+    this.#bufferedTextChunks = {};
+    this.#toolCallArgsDeltas = {};
+    this.#toolCallDeltaIdNameMap = {};
+
+    // Clear bufferedByStep (reset to empty state)
+    this.#bufferedByStep = {
+      text: '',
+      reasoning: [],
+      sources: [],
+      files: [],
+      toolCalls: [],
+      toolResults: [],
+      dynamicToolCalls: [],
+      dynamicToolResults: [],
+      staticToolCalls: [],
+      staticToolResults: [],
+      content: [],
+      usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      warnings: [],
+      request: {},
+      response: {
+        id: '',
+        timestamp: new Date(),
+        modelId: '',
+        messages: [],
+        uiMessages: [],
+      },
+      reasoningText: '',
+      providerMetadata: undefined,
+      finishReason: undefined,
+    };
+
+    // Note: We intentionally keep #bufferedObject and #usageCount
+    // as they may be accessed after stream completion
   }
 
   #getTotalUsage(): LanguageModelUsage {
