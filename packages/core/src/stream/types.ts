@@ -205,7 +205,7 @@ interface StartPayload {
   [key: string]: unknown;
 }
 
-interface StepStartPayload {
+export interface StepStartPayload {
   messageId?: string;
   request: {
     body?: string;

@@ -1,6 +1,7 @@
-import type { ToolCallOptions, ToolSet } from 'ai-v5';
+import type { ToolSet } from 'ai-v5';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { ChunkFrom } from '../../../stream/types';
+import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { createStep } from '../../../workflows';
 import { assembleOperationName, getTracer } from '../../telemetry';
 import type { OuterLLMRun } from '../../types';
@@ -19,6 +20,7 @@ export function createToolCallStep<
   controller,
   runId,
   streamState,
+  modelSpanTracker,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -139,11 +141,13 @@ export function createToolCallStep<
           }
         }
 
-        const result = await tool.execute(inputData.args, {
+        const toolOptions: MastraToolInvocationOptions = {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
           messages: messageList.get.input.aiV5.model(),
           writableStream: writer,
+          // Pass current step span as parent for tool call spans
+          tracingContext: { currentSpan: modelSpanTracker?.getCurrentStepSpan() },
           suspend: async (suspendPayload: any) => {
             controller.enqueue({
               type: 'tool-call-suspended',
@@ -158,7 +162,9 @@ export function createToolCallStep<
             });
           },
           resumeData,
-        } as ToolCallOptions);
+        };
+
+        const result = await tool.execute(inputData.args, toolOptions);
 
         span.setAttributes({
           'stream.toolCall.result': JSON.stringify(result),
