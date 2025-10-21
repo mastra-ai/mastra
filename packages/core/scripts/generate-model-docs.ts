@@ -1098,38 +1098,45 @@ async function generateDocs() {
   await fs.writeFile(path.join(providersDir, 'index.mdx'), providersIndexContent);
   console.info('✅ Generated providers/index.mdx');
 
-  // Generate individual provider pages
-  for (const provider of [...grouped.popular, ...grouped.other]) {
-    const content = await generateProviderPage(provider, providerRegistry);
-    await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
-    console.info(`✅ Generated providers/${provider.id}.mdx`);
-  }
+  // Generate individual provider pages (parallelized)
+  await Promise.all(
+    [...grouped.popular, ...grouped.other].map(async provider => {
+      const content = await generateProviderPage(provider, providerRegistry);
+      await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
+      console.info(`✅ Generated providers/${provider.id}.mdx`);
+    }),
+  );
 
-  // Generate individual AI SDK provider pages (only if they have AI SDK docs)
-  const aiSdkProvidersWithDocs: ModelsDevProvider[] = [];
-  for (const provider of aiSdkProviders) {
-    const aiSdkDocsUrl = await checkAiSdkDocsLink(provider.id);
-    if (!aiSdkDocsUrl) {
-      console.info(`⏭️  Skipping providers/${provider.id}.mdx (no AI SDK docs found)`);
-      continue;
-    }
-    aiSdkProvidersWithDocs.push(provider);
-    const content = await generateAiSdkProviderPage(provider, aiSdkDocsUrl);
-    await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
-    console.info(`✅ Generated providers/${provider.id}.mdx (AI SDK)`);
-  }
+  // Generate individual AI SDK provider pages (parallelized, only if they have AI SDK docs)
+  const aiSdkProviderResults = await Promise.all(
+    aiSdkProviders.map(async provider => {
+      const aiSdkDocsUrl = await checkAiSdkDocsLink(provider.id);
+      if (!aiSdkDocsUrl) {
+        console.info(`⏭️  Skipping providers/${provider.id}.mdx (no AI SDK docs found)`);
+        return null;
+      }
+      const content = await generateAiSdkProviderPage(provider, aiSdkDocsUrl);
+      await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
+      console.info(`✅ Generated providers/${provider.id}.mdx (AI SDK)`);
+      return provider;
+    }),
+  );
+
+  const aiSdkProvidersWithDocs = aiSdkProviderResults.filter((p): p is ModelsDevProvider => p !== null);
 
   // Generate providers _meta.ts (including AI SDK providers with docs)
   const providersMetaContent = generateProvidersMeta(grouped, aiSdkProvidersWithDocs);
   await fs.writeFile(path.join(providersDir, '_meta.ts'), providersMetaContent);
   console.info('✅ Generated providers/_meta.ts');
 
-  // Generate individual gateway pages
-  for (const [gatewayName, providers] of grouped.gateways) {
-    const content = generateGatewayPage(gatewayName, providers, providerRegistry);
-    await fs.writeFile(path.join(gatewaysDir, `${gatewayName}.mdx`), content);
-    console.info(`✅ Generated gateways/${gatewayName}.mdx`);
-  }
+  // Generate individual gateway pages (parallelized)
+  await Promise.all(
+    Array.from(grouped.gateways.entries()).map(async ([gatewayName, providers]) => {
+      const content = generateGatewayPage(gatewayName, providers, providerRegistry);
+      await fs.writeFile(path.join(gatewaysDir, `${gatewayName}.mdx`), content);
+      console.info(`✅ Generated gateways/${gatewayName}.mdx`);
+    }),
+  );
 
   console.info(`
 📚 Documentation generated successfully!
