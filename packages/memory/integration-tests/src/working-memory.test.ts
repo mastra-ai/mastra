@@ -122,7 +122,7 @@ describe('Working Memory Tests', () => {
       });
 
       // Get working memory
-      const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+      const workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       expect(workingMemory).not.toBeNull();
       if (workingMemory) {
         // Check for specific Markdown format

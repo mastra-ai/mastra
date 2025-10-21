@@ -379,7 +379,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const result = await memory.rememberMessages({
           threadId: thread.id,
           resourceId,
-          config: { lastMessages: 0, semanticRecall: { messageRange: 0, topK: 1 } },
+          config: { lastMessages: 0, semanticRecall: { messageRange: 0, topK: 1, scope: 'thread' } },
           vectorMessageSearch: 'world',
         });
         const contents = result.messages.map(m =>
