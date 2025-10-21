@@ -1,4 +1,4 @@
-import type { ToolCallOptions } from '@ai-sdk/provider-utils-v5';
+import type { ToolCallOptions, ProviderDefinedTool } from '@internal/external-types';
 import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
@@ -21,7 +21,11 @@ import { ToolStream } from '../stream';
 import type { CoreTool, MastraToolInvocationOptions, ToolAction, VercelTool, VercelToolV5 } from '../types';
 import { validateToolInput } from '../validation';
 
-export type ToolToConvert = VercelTool | ToolAction<any, any, any> | VercelToolV5;
+/**
+ * Types that can be converted to Mastra tools.
+ * Includes provider-defined tools from external packages via ProviderDefinedTool.
+ */
+export type ToolToConvert = VercelTool | ToolAction<any, any, any> | VercelToolV5 | ProviderDefinedTool;
 export type LogType = 'tool' | 'toolset' | 'client-tool';
 
 interface LogOptions {
@@ -104,7 +108,7 @@ export class CoreToolBuilder extends MastraBase {
 
       return {
         type: 'provider-defined' as const,
-        id: tool.id,
+        id: tool.id as `${string}.${string}`,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
         parameters: parameters.jsonSchema ? parameters : convertZodSchemaToAISDKSchema(parameters),
@@ -293,13 +297,28 @@ export class CoreToolBuilder extends MastraBase {
       throw new Error('Tool parameters are required');
     }
 
-    return {
+    const base = {
       ...builtTool,
       inputSchema: builtTool.parameters,
       onInputStart: 'onInputStart' in this.originalTool ? this.originalTool.onInputStart : undefined,
       onInputDelta: 'onInputDelta' in this.originalTool ? this.originalTool.onInputDelta : undefined,
       onInputAvailable: 'onInputAvailable' in this.originalTool ? this.originalTool.onInputAvailable : undefined,
-    } as VercelToolV5;
+    };
+
+    // For provider-defined tools, exclude execute and add name as per v5 spec
+    if (builtTool.type === 'provider-defined') {
+      const { execute, parameters, ...rest } = base;
+      const name = builtTool.id.split('.')[1] || builtTool.id;
+      return {
+        ...rest,
+        type: builtTool.type,
+        id: builtTool.id,
+        name,
+        args: builtTool.args,
+      } satisfies VercelToolV5;
+    }
+
+    return base as VercelToolV5;
   }
 
   build(): CoreTool {
