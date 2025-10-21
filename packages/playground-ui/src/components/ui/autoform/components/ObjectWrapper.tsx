@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
-import { ObjectWrapperProps, useAutoForm } from '@autoform/react';
+import { ObjectWrapperProps } from '@autoform/react';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
 import { Braces, ChevronDownIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
 
-export const ObjectWrapper: React.FC<ObjectWrapperProps> = ({ label, children, field }) => {
+export const ObjectWrapper: React.FC<ObjectWrapperProps> = ({ label, children }) => {
   const hasLabel = label !== '\u200B' && label !== '';
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div className="">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center">
         {hasLabel && (
           <Txt as="h3" variant="ui-sm" className="text-icon3 flex items-center gap-1 pb-2">
             <Icon size="sm">
@@ -23,7 +23,7 @@ export const ObjectWrapper: React.FC<ObjectWrapperProps> = ({ label, children, f
           </Txt>
         )}
 
-        <Button onClick={() => setIsOpen(!isOpen)} type="button">
+        <Button onClick={() => setIsOpen(!isOpen)} type="button" className="ml-auto">
           <Icon size="sm">
             <ChevronDownIcon className={cn('transition-all', isOpen ? 'rotate-180' : 'rotate-0')} />
           </Icon>
