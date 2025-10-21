@@ -36,8 +36,8 @@ const docsTabs = [
   {
     id: 'Showcase',
     label: 'Showcase',
-    href: '/docs/showcase',
-    basePath: '/docs/showcase',
+    href: '/showcase',
+    basePath: '/showcase',
   },
 ];
 
