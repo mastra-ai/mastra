@@ -24,7 +24,7 @@ export const LLMProvider = ['openai', 'anthropic', 'groq', 'google', 'cerebras',
 export const COMPONENTS = ['agents', 'workflows', 'tools', 'scorers'] as const;
 
 export type LLMProvider = (typeof LLMProvider)[number];
-export type Components = (typeof COMPONENTS)[number];
+export type Component = (typeof COMPONENTS)[number];
 
 /**
  * Type-guard to check if a value is a valid LLMProvider
@@ -36,8 +36,8 @@ export function isValidLLMProvider(value: string): value is LLMProvider {
 /**
  * Type-guard to check if a value contains only valid Components
  */
-export function areValidComponents(values: string[]): values is Components[] {
-  return values.every(value => COMPONENTS.includes(value as Components));
+export function areValidComponents(values: string[]): values is Component[] {
+  return values.every(value => COMPONENTS.includes(value as Component));
 }
 
 export const getModelIdentifier = (llmProvider: LLMProvider) => {
@@ -424,9 +424,9 @@ export const scorers = {
 
 export async function writeCodeSampleForComponents(
   llmprovider: LLMProvider,
-  component: Components,
+  component: Component,
   destPath: string,
-  importComponents: Components[],
+  importComponents: Component[],
 ) {
   switch (component) {
     case 'agents':
@@ -636,9 +636,9 @@ export const createMastraDir = async (directory: string): Promise<{ ok: true; di
 
 export const writeCodeSample = async (
   dirPath: string,
-  component: Components,
+  component: Component,
   llmProvider: LLMProvider,
-  importComponents: Components[],
+  importComponents: Component[],
 ) => {
   const destPath = dirPath + `/${component}/weather-${component.slice(0, -1)}.ts`;
 
