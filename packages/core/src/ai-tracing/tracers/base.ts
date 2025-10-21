@@ -281,12 +281,17 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
     runtimeContext: RuntimeContext | undefined,
     explicitMetadata: Record<string, any> | undefined,
     traceState: TraceState | undefined,
-  ): Record<string, any> {
+  ): Record<string, any> | undefined {
     if (!runtimeContext || !traceState || traceState.runtimeContextKeys.length === 0) {
-      return explicitMetadata ?? {};
+      return explicitMetadata;
     }
 
     const extracted = this.extractKeys(runtimeContext, traceState.runtimeContextKeys);
+
+    // Only return an object if we have extracted or explicit metadata
+    if (Object.keys(extracted).length === 0 && !explicitMetadata) {
+      return undefined;
+    }
 
     return {
       ...extracted,
