@@ -5,7 +5,8 @@
   "scripts": {
     "docusaurus": "docusaurus",
     "start": "docusaurus start",
-    "build": "docusaurus build",
+    "build": "pnpm build:llms-txt && docusaurus build",
+    "build:llms-txt": "tsx scripts/build-llms-txt.ts",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",
@@ -32,6 +33,7 @@
     "cmdk": "^1.1.1",
     "motion": "^12.23.24",
     "posthog-docusaurus": "^2.0.5",
+    "posthog-js": "^1.264.2",
     "prism-react-renderer": "^2.3.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
@@ -45,11 +47,13 @@
     "@docusaurus/tsconfig": "^3.9.1",
     "@docusaurus/types": "^3.9.1",
     "@tailwindcss/postcss": "^4.0.7",
+    "@types/node": "^20.0.0",
     "postcss": "^8.5.3",
     "prettier-plugin-tailwindcss": "^0.6.11",
     "tailwind-merge": "^3.0.1",
     "tailwindcss": "^4.0.7",
     "tailwindcss-animate": "^1.0.7",
+    "tsx": "^4.0.0",
     "typescript": "^5.9.3"
   },
   "browserslist": {
