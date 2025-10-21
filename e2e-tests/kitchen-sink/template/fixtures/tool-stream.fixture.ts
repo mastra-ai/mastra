@@ -651,4 +651,4 @@ const generateTitleStream = [
   },
 ];
 
-export const toolStreamFixture = [toolStream, generateTitleStream, textDeltaStream];
+export const toolStreamFixture = [toolStream, textDeltaStream, generateTitleStream];

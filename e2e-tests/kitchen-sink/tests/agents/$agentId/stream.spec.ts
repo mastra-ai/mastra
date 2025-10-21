@@ -37,6 +37,8 @@ test('text stream', async () => {
 });
 
 test('tool stream', async () => {
+  const expectedTextResult = `The weather in Paris is sunny, with a temperature of 19°C (66°F). The humidity is at 50%, and there's a light wind blowing at 10 mph. Perfect weather for a lovely day out or a cozy meal at home!`;
+
   await selectFixture(page, 'tool-stream');
   await page.goto(`http://localhost:4111/agents/weatherAgent/chat/${nanoid()}`);
   await page.click('text=Model settings');
@@ -49,4 +51,11 @@ test('tool stream', async () => {
   await expect(page.getByTestId('thread-wrapper').getByRole('button', { name: `weatherInfo` })).toBeVisible({
     timeout: 20000,
   });
+
+  // Asset streaming result
+  await expect(page.getByTestId('thread-wrapper').getByText(expectedTextResult)).toBeVisible({ timeout: 20000 });
+
+  await page.getByRole('button', { name: `weatherInfo` }).click();
+  await expect(page.getByTestId('tool-args')).toContainText('{  \"city\": \"paris\"}');
+  await expect(page.getByTestId('tool-result')).toHaveText('suuuuh');
 });

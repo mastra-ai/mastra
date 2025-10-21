@@ -17,7 +17,7 @@ export const ToolBadge = ({ toolName, args, result, metadata, toolOutput }: Tool
 
   try {
     const { __mastraMetadata: _, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
-    argSlot = <SyntaxHighlighter data={formattedArgs} />;
+    argSlot = <SyntaxHighlighter data={formattedArgs} data-testid="tool-args" />;
   } catch {
     argSlot = <pre className="whitespace-pre-wrap">{args as string}</pre>;
   }
@@ -26,7 +26,7 @@ export const ToolBadge = ({ toolName, args, result, metadata, toolOutput }: Tool
     typeof result === 'string' ? (
       <pre className="whitespace-pre-wrap bg-surface4 p-4 rounded-md">{result}</pre>
     ) : (
-      <SyntaxHighlighter data={result} />
+      <SyntaxHighlighter data={result} data-testid="tool-result" />
     );
 
   const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
@@ -64,7 +64,7 @@ export const ToolBadge = ({ toolName, args, result, metadata, toolOutput }: Tool
             <p className="font-medium pb-2">Tool output</p>
 
             <div className="h-40 overflow-y-auto">
-              <SyntaxHighlighter data={toolOutput} />
+              <SyntaxHighlighter data={toolOutput} data-testid="tool-output" />
             </div>
           </div>
         )}
