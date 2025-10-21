@@ -56,35 +56,3 @@ const agent = new Agent({
   })
 });
 ```
-
-### If You Don't Need Auto-Generation
-
-If you don't need automatic title generation, no changes are required. The new default (`false`) will prevent automatic title generation.
-
-## Checking Your Current Configuration
-
-To verify your current configuration in the Mastra Playground:
-
-1. Navigate to your agent's memory configuration
-2. Look for the "Auto-generate Titles" setting
-3. It will show as disabled by default unless explicitly configured
-
-## Setting Titles Manually
-
-If you prefer to set thread titles manually, you can do so when creating or updating threads:
-
-```typescript
-// Manual title setting example
-await memory.saveMessages({
-  threadId: "thread-123",
-  threadTitle: "Customer Support - Order #12345",  // Set title manually
-  messages: [...]
-});
-```
-
-## Questions?
-
-If you have questions about this migration, please:
-- Check the [Memory documentation](/docs/memory/threads-and-resources)
-- Open an issue on [GitHub](https://github.com/mastra-ai/mastra)
-- Join our [Discord community](https://discord.gg/mastra)
