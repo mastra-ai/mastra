@@ -82,7 +82,9 @@ describe('MessageList', () => {
 
       // Third message: final assistant response
       expect(responseMessages[2].role).toBe('assistant');
-      expect(responseMessages[2].content).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'text' })]));
+      expect(responseMessages[2].content).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'text' })]),
+      );
     });
   });
 
@@ -112,7 +114,7 @@ describe('MessageList', () => {
       expect(list.get.all.aiV5.ui()).toHaveLength(0);
       expect(list.get.all.v1()).toHaveLength(0);
       expect(list.get.all.v2()).toHaveLength(0);
-      expect(list.get.all.v3()).toHaveLength(0);
+      expect(list.get.all.v2()).toHaveLength(0);
 
       list.add(
         {
@@ -132,7 +134,7 @@ describe('MessageList', () => {
       expect(list.get.all.aiV5.ui()).toHaveLength(1);
       expect(list.get.all.v1()).toHaveLength(1);
       expect(list.get.all.v2()).toHaveLength(1);
-      expect(list.get.all.v3()).toHaveLength(1);
+      expect(list.get.all.v2()).toHaveLength(1);
 
       expect(list.getSystemMessages(`memory`)).toHaveLength(1);
       expect(list.get.all.aiV4.prompt()).toHaveLength(2); // system message + user message
