@@ -1,6 +1,6 @@
 ---
-sidebar_position: 5
-title: "Building an AI Stock Agent "
+sidebar_position: 2
+title: "Stock Agent"
 description: Guide on creating a simple stock agent in Mastra to fetch the last day's closing stock price for a given symbol.
 ---
 

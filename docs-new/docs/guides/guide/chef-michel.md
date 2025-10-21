@@ -1,6 +1,6 @@
 ---
-sidebar_position: 3
-title: "Building an AI Chef Assistant "
+sidebar_position: 1
+title: "Agents: Chef Michel"
 description: Guide on creating a Chef Assistant agent in Mastra to help users cook meals with available ingredients.
 ---
 

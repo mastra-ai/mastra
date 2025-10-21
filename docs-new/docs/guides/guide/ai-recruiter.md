@@ -1,6 +1,6 @@
 ---
-sidebar_position: 2
-title: "Building an AI Recruiter "
+sidebar_position: 3
+title: "Workflows: AI Recruiter"
 description: Guide on building a recruiter workflow in Mastra to gather and process candidate information using LLMs.
 ---
 

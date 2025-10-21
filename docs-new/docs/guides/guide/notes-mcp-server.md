@@ -1,6 +1,6 @@
 ---
-sidebar_position: 6
-title: "MCP Server: Building a Notes MCP Server "
+sidebar_position: 5
+title: "MCP Server: Notes MCP Server"
 description: "A step-by-step guide to creating a fully-featured MCP (Model Context Protocol) server for managing notes using the Mastra framework."
 ---
 

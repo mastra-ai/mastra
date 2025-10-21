@@ -1,6 +1,6 @@
 ---
 sidebar_position: 4
-title: "Building a Research Paper Assistant "
+title: "RAG: Research Assistant"
 description: Guide on creating an AI research assistant that can analyze and answer questions about academic papers using RAG.
 ---
 
