@@ -644,7 +644,7 @@ export interface UpdateDatasetRowInput {
 }
 
 export interface UpdateDatasetRowsParams {
-  rows: UpdateDatasetRowInput[];
+  updates: UpdateDatasetRowInput[];
 }
 
 export interface UpdateDatasetRowsResponse {

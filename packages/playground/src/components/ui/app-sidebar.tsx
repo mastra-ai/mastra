@@ -4,12 +4,12 @@ import {
   GaugeIcon,
   EyeIcon,
   PackageIcon,
-  HomeIcon,
   GlobeIcon,
   BookIcon,
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
+  DatabaseIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -54,7 +54,11 @@ const mainNavigation: NavSection[] = [
         url: '/scorers',
         icon: <GaugeIcon />,
       },
-
+      {
+        name: 'Datasets',
+        url: '/datasets',
+        icon: <DatabaseIcon />,
+      },
       {
         name: 'Request Context',
         url: '/request-context',
