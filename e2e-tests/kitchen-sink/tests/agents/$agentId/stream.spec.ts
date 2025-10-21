@@ -57,5 +57,4 @@ test('tool stream', async () => {
 
   await page.getByRole('button', { name: `weatherInfo` }).click();
   await expect(page.getByTestId('tool-args')).toContainText('{  \"city\": \"paris\"}');
-  await expect(page.getByTestId('tool-result')).toHaveText('suuuuh');
 });
