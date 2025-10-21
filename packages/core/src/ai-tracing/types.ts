@@ -353,6 +353,8 @@ export interface AISpan<TType extends AISpanType> extends BaseSpan<TType> {
   parent?: AnyAISpan;
   /** Pointer to the AITracing instance */
   aiTracing: AITracing;
+  /** Trace-level state shared across all spans in this trace */
+  traceState?: TraceState;
 
   // Methods for span lifecycle
   /** End the span */
@@ -465,6 +467,8 @@ interface CreateBaseOptions<TType extends AISpanType> {
   type: TType;
   /** Policy-level tracing configuration */
   tracingPolicy?: TracingPolicy;
+  /** Runtime context for metadata extraction */
+  runtimeContext?: RuntimeContext;
 }
 
 /**
@@ -489,6 +493,8 @@ export interface CreateSpanOptions<TType extends AISpanType> extends CreateBaseO
    * Only used for root spans without a parent.
    */
   parentSpanId?: string;
+  /** Trace-level state shared across all spans in this trace */
+  traceState?: TraceState;
 }
 
 /**
@@ -499,6 +505,8 @@ export interface StartSpanOptions<TType extends AISpanType> extends CreateSpanOp
    * Options passed when using a custom sampler strategy
    */
   customSamplerOptions?: CustomSamplerOptions;
+  /** Tracing options for this execution */
+  tracingOptions?: TracingOptions;
 }
 
 /**
@@ -585,11 +593,30 @@ export interface TracingPolicy {
 }
 
 /**
+ * Trace-level state computed once at the start of a trace
+ * and shared by all spans within that trace.
+ */
+export interface TraceState {
+  /**
+   * RuntimeContext keys to extract as metadata for all spans in this trace.
+   * Computed by merging the tracing config's runtimeContextKeys
+   * with the per-request runtimeContextKeys.
+   */
+  runtimeContextKeys: string[];
+}
+
+/**
  * Options passed when starting a new agent or workflow execution
  */
 export interface TracingOptions {
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>;
+  /**
+   * Additional RuntimeContext keys to extract as metadata for this trace.
+   * These keys are added to the runtimeContextKeys config.
+   * Supports dot notation for nested values (e.g., 'user.id', 'session.data.experimentId').
+   */
+  runtimeContextKeys?: string[];
   /**
    * Trace ID to use for this execution (1-32 hexadecimal characters).
    * If provided, this trace will be part of the specified trace rather than starting a new one.
@@ -638,6 +665,12 @@ export interface TracingConfig {
   processors?: AISpanProcessor[];
   /** Set to `true` if you want to see spans internal to the operation of mastra */
   includeInternalSpans?: boolean;
+  /**
+   * RuntimeContext keys to automatically extract as metadata for all spans
+   * created with this tracing configuration.
+   * Supports dot notation for nested values.
+   */
+  runtimeContextKeys?: string[];
 }
 
 /**
