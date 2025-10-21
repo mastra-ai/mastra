@@ -68,7 +68,15 @@ export abstract class BaseExporter implements AITracingExporter {
   constructor(config: BaseExporterConfig = {}) {
     // Map string log level to LogLevel enum if needed
     const logLevel = this.resolveLogLevel(config.logLevel);
-    this.logger = config.logger ?? new ConsoleLogger({ level: logLevel });
+    this.logger = config.logger ?? new ConsoleLogger({ level: logLevel, name: `Exporter` });
+  }
+
+  /**
+   * Set the logger for the exporter (called by Mastra/AITracing during initialization)
+   */
+  __setLogger(logger: IMastraLogger): void {
+    this.logger = logger;
+    this.logger.debug(`Logger updated for exporter [name=${this.name}]`);
   }
 
   /**
