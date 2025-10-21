@@ -3855,6 +3855,8 @@ export class Agent<
       throw error;
     }
 
+    // Warning already logged in stream() method
+
     return fullOutput as FORMAT extends 'aisdk'
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
@@ -3961,6 +3963,11 @@ export class Agent<
       });
     }
 
+    if (streamOptions?.format === 'aisdk') {
+      this.logger.warn(
+        'The `format: "aisdk"` is deprecated in stream/generate options. Use the @mastra/ai-sdk package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming',
+      );
+    }
     return result.result as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 

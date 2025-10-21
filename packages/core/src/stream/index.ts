@@ -1,4 +1,4 @@
-export type { ChunkType, NetworkChunkType, ReadonlyJSONObject, AgentChunkType } from './types';
+export type { ChunkType, DataChunkType, NetworkChunkType, ReadonlyJSONObject, AgentChunkType } from './types';
 export { ChunkFrom } from './types';
 export { MastraModelOutput } from './base/output';
 export { AISDKV5OutputStream } from './aisdk/v5/output';

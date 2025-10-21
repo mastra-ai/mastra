@@ -408,7 +408,7 @@ export async function getMessagesHandler({
       threadId: threadId!,
       ...(limit && { selectBy: { last: limit } }),
     });
-    const uiMessages = convertMessages(result.messages).to('AIV5.UI');
+    const uiMessages = convertMessages(result.messagesV2).to('AIV5.UI');
     return { messages: result.messages, uiMessages, legacyMessages: result.uiMessages };
   } catch (error) {
     return handleError(error, 'Error getting messages');

@@ -78,5 +78,32 @@
     "@mastra/voice-speechify": "0.11.9",
     "@mastra/inngest": "0.16.1"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_voice-google-8936-dependencies",
+    "automated-provider-registry-20251020-061345",
+    "better-results-lay",
+    "brown-mails-fold",
+    "cold-pens-refuse",
+    "common-olives-pump",
+    "dry-webs-joke",
+    "eleven-trains-send",
+    "lazy-showers-rule",
+    "lemon-eels-marry",
+    "lovely-frogs-wait",
+    "major-towns-feel",
+    "purple-feet-know",
+    "quick-mammals-push",
+    "shaggy-rivers-sleep",
+    "some-things-pick",
+    "thick-laws-appear",
+    "tough-moose-cut",
+    "tricky-dogs-spend",
+    "true-humans-wonder",
+    "true-rabbits-open",
+    "twenty-ties-enjoy",
+    "violet-berries-switch",
+    "warm-drinks-worry",
+    "wet-dancers-kneel",
+    "whole-carrots-hope"
+  ]
 }
