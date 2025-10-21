@@ -1,6 +1,7 @@
 ---
-title: "API Reference"
-description: "Mastra API Reference"
+title: 'API Reference'
+description: 'Mastra API Reference'
+sidebar_position: 1
 ---
 
 import { ReferenceCards } from '@site/src/components/ReferenceCards';

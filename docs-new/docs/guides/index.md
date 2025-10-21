@@ -1,7 +1,7 @@
 ---
+title: 'Overview'
+description: 'Guides on building with Mastra'
 sidebar_position: 1
-title: "Overview"
-description: "Guides on building with Mastra"
 ---
 
 import { CardGrid, CardGridItem } from '@site/src/components/CardGrid';
