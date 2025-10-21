@@ -1889,12 +1889,14 @@ export class Run<
     tracingContext,
     tracingOptions,
     closeOnSuspend = true,
+    initialState,
   }: {
     inputData?: z.input<TInput>;
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     closeOnSuspend?: boolean;
+    initialState?: z.input<TState>;
   } = {}): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     if (this.closeStreamAction && this.#streamOutput) {
       return this.#streamOutput;
@@ -1933,6 +1935,7 @@ export class Run<
           runtimeContext,
           tracingContext,
           tracingOptions,
+          initialState,
           writableStream: new WritableStream<WorkflowStreamEvent>({
             write(chunk) {
               controller.enqueue(chunk);

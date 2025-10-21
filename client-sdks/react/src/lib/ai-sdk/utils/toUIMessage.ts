@@ -1,4 +1,4 @@
-import { ChunkType } from '@mastra/core/stream';
+import { AgentChunkType, ChunkType } from '@mastra/core/stream';
 import { MastraUIMessage, MastraUIMessageMetadata } from '../types';
 import { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
 
@@ -312,13 +312,22 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             };
           } else {
             const isWorkflow = Boolean((chunk.payload.result as any)?.result?.steps);
+            const isAgent = chunk?.from === 'AGENT';
+            let output;
+            if (isWorkflow) {
+              output = (chunk.payload.result as any)?.result;
+            } else if (isAgent) {
+              output = (parts[toolPartIndex] as any).output;
+            } else {
+              output = chunk.payload.result;
+            }
             parts[toolPartIndex] = {
               type: 'dynamic-tool',
               toolName: toolPart.toolName,
               toolCallId: toolPart.toolCallId,
               state: 'output-available',
               input: toolPart.input,
-              output: isWorkflow ? (chunk.payload.result as any)?.result : chunk.payload.result,
+              output,
               callProviderMetadata: chunk.payload.providerMetadata,
             };
           }
@@ -364,6 +373,12 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
               ...toolPart,
               output: updatedWorkflowState as any,
             };
+          } else if (
+            chunk.payload.output?.from === 'AGENT' ||
+            (chunk.payload.output?.from === 'USER' &&
+              chunk.payload.output?.payload?.output?.type?.startsWith('workflow-'))
+          ) {
+            return toUIMessageFromAgent(chunk.payload.output, conversation, metadata);
           } else {
             // Handle regular tool output
             const currentOutput = (toolPart.output as any) || [];
@@ -502,4 +517,130 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
     default:
       return result;
   }
+};
+
+const toUIMessageFromAgent = (
+  chunk: AgentChunkType,
+  conversation: MastraUIMessage[],
+  metadata: MastraUIMessageMetadata,
+): MastraUIMessage[] => {
+  const lastMessage = conversation[conversation.length - 1];
+  if (!lastMessage || lastMessage.role !== 'assistant') return conversation;
+
+  const parts = [...lastMessage.parts];
+
+  if (chunk.type === 'text-delta') {
+    const agentChunk = chunk.payload;
+    const toolPartIndex = parts.findIndex(part => part.type === 'dynamic-tool');
+
+    if (toolPartIndex === -1) return conversation;
+    const toolPart = parts[toolPartIndex];
+
+    // if (toolPart.type !== 'dynamic-tool') return newConversation;
+    const childMessages = (toolPart as any)?.output?.childMessages || [];
+    const lastChildMessage = childMessages[childMessages.length - 1];
+
+    const textMessage = { type: 'text', content: (lastChildMessage?.content || '') + agentChunk.text };
+
+    const nextMessages =
+      lastChildMessage?.type === 'text'
+        ? [...childMessages.slice(0, -1), textMessage]
+        : [...childMessages, textMessage];
+
+    parts[toolPartIndex] = {
+      ...toolPart,
+      output: {
+        childMessages: nextMessages,
+      },
+    } as any;
+  } else if (chunk.type === 'tool-call') {
+    const agentChunk = chunk.payload;
+    const toolPartIndex = parts.findIndex(part => part.type === 'dynamic-tool');
+
+    if (toolPartIndex === -1) return conversation;
+    const toolPart = parts[toolPartIndex];
+    const childMessages = (toolPart as any)?.output?.childMessages || [];
+
+    parts[toolPartIndex] = {
+      ...toolPart,
+      output: {
+        ...(toolPart as any)?.output,
+        childMessages: [
+          ...childMessages,
+          {
+            type: 'tool',
+            toolCallId: agentChunk.toolCallId,
+            toolName: agentChunk.toolName,
+            args: agentChunk.args,
+          },
+        ],
+      },
+    } as any;
+  } else if (chunk.type === 'tool-output') {
+    const agentChunk = chunk.payload;
+    const toolPartIndex = parts.findIndex(part => part.type === 'dynamic-tool');
+
+    if (toolPartIndex === -1) return conversation;
+    const toolPart = parts[toolPartIndex];
+    if (agentChunk?.output?.type?.startsWith('workflow-')) {
+      const childMessages = (toolPart as any)?.output?.childMessages || [];
+      const lastToolIndex = childMessages.length - 1;
+
+      const currentMessage = childMessages[lastToolIndex];
+      const actualExistingWorkflowState = (currentMessage as any)?.toolOutput || {};
+      const updatedWorkflowState = mapWorkflowStreamChunkToWatchResult(actualExistingWorkflowState, agentChunk.output);
+
+      if (lastToolIndex >= 0 && childMessages[lastToolIndex]?.type === 'tool') {
+        parts[toolPartIndex] = {
+          ...toolPart,
+          output: {
+            ...(toolPart as any)?.output,
+            childMessages: [
+              ...childMessages.slice(0, -1),
+              {
+                ...currentMessage,
+                toolOutput: { ...updatedWorkflowState, runId: agentChunk.output.runId },
+              },
+            ],
+          },
+        } as any;
+      }
+    }
+  } else if (chunk.type === 'tool-result') {
+    const agentChunk = chunk.payload;
+    const toolPartIndex = parts.findIndex(part => part.type === 'dynamic-tool');
+
+    if (toolPartIndex === -1) return conversation;
+    const toolPart = parts[toolPartIndex];
+    const childMessages = (toolPart as any)?.output?.childMessages || [];
+
+    const lastToolIndex = childMessages.length - 1;
+    const isWorkflow = agentChunk?.toolName?.startsWith('workflow-');
+
+    if (lastToolIndex >= 0 && childMessages[lastToolIndex]?.type === 'tool') {
+      parts[toolPartIndex] = {
+        ...toolPart,
+        output: {
+          ...(toolPart as any)?.output,
+          childMessages: [
+            ...childMessages.slice(0, -1),
+            {
+              ...childMessages[lastToolIndex],
+              toolOutput: isWorkflow
+                ? { ...(agentChunk.result as any)?.result, runId: (agentChunk.result as any)?.runId }
+                : agentChunk.result,
+            },
+          ],
+        },
+      } as any;
+    }
+  }
+
+  return [
+    ...conversation.slice(0, -1),
+    {
+      ...lastMessage,
+      parts,
+    },
+  ];
 };
