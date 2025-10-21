@@ -22,7 +22,7 @@ const toolStream = [
   {
     type: 'tool-input-delta',
     id: 'call_rnXxpWJCOHCPvSkAaxiLEAhG',
-    delta: 'city',
+    delta: 'location',
   },
   {
     type: 'tool-input-delta',
@@ -52,7 +52,7 @@ const toolStream = [
     type: 'tool-call',
     toolCallId: 'call_rnXxpWJCOHCPvSkAaxiLEAhG',
     toolName: 'weatherInfo',
-    input: '{"city":"paris"}',
+    input: '{"location":"paris"}',
     providerMetadata: {
       openai: {
         itemId: 'fc_021f0dc3850255630068f6624bb5cc819e9a17221d491b5e75',
