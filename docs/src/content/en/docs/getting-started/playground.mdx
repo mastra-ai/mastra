@@ -6,14 +6,15 @@ description: Guide on installing Mastra and setting up the necessary prerequisit
 import YouTube from "@/components/youtube";
 import { Tabs, Tab } from "@/components/tabs";
 import { VideoPlayer } from "@/components/video-player"
+import { Callout } from "nextra/components";
 
 # Playground
 
-Playground gives you an interactive UI for building and testing agents, as well as a REST API that exposes your Mastra application as a local service.
+Playground helps you get started with building agents. It provides an interactive UI for testing your agents, workflows, and tools, along with a REST API that exposes your Mastra application as a local service. This allows you to start building without having to worry about integrating Mastra into your project right away.
 
-It's perfect at the start of a project when you want to prototype your agent before thinking about integration. As your project evolves, Playground lets you view traces, run scorers, and iterate quickly as you extend your agent's capabilities.
+As your project evolves, Playground includes the features you need to support your next steps. You can inspect traces, run scorers, and iterate quickly as you extend your agent's capabilities.
 
-Run Playground locally using the instructions below, or [deploy your agent to Mastra Cloud](/docs/mastra-cloud/setting-up) to access the Playground remotely and share access with your team.
+To get started, run Playground locally using the instructions below, or [deploy to Mastra Cloud](/docs/mastra-cloud/setting-up) to access the Playground remotely and collaborate with your team.
 
 <YouTube id="spGlcTEjuXY" startTime={126}/>
 
@@ -49,25 +50,25 @@ If you created your application with `create mastra`, start the local developmen
   </Tab>
 </Tabs>
 
-By default, Playground starts on port 4111. Once it's running, you can:
+Once it's running, you can:
 
-- Open the Playground UI at http://localhost:4111/ to test your agents interactively.
-- Visit the Swagger UI at http://localhost:4111/swagger-ui to discover and interact with the REST API.
+- Open the Playground UI at http://localhost:4111/ to test your agent interactively.
+- Visit  http://localhost:4111/swagger-ui to discover and interact with the REST API.
 
 ## Playground UI
 
-The Playground UI allows you to interact with your agents, workflows, and tools, observe exactly what happens under the hood with each interaction, and tweak things as you go. 
+The Playground UI provides an interactive development environment for you to test your agents, workflows, and tools, observe exactly what happens under the hood with each interaction, and tweak things as you go. 
 
 ### Agents
 
 
-Chat with your agents directly, dynamically switch between [model providers](/models), and tweak model settings like temperature and top-p to understand how they affect your agent's output.
+Chat with your agent directly, dynamically switch [models](/models), and tweak settings like temperature and top-p to understand how they affect the output.
 
 <VideoPlayer
   src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4"
 />
 
-When you interact with your agents, you can follow each step of their reasoning, view tool call outputs, and [observe traces and logs](#observability) to see how responses are generated. You can also attach [scorers](#scorers) to measure and compare response quality over time.
+When you interact with your agent, you can follow each step of its reasoning, view tool call outputs, and [observe](#observability) traces and logs to see how responses are generated. You can also attach [scorers](#scorers) to measure and compare response quality over time.
 
 ### Workflows
 
@@ -81,43 +82,43 @@ When running a workflow, you can also view detailed traces showing tool calls, r
 
 ### Tools
 
-Run tools in isolation to see how they respond. It's a quick way to test tools before giving them to your agent, or isolate them to debug should something go wrong.
+Run tools in isolation to observe their behavior. Test them before assigning them to your agent, or isolate them to debug issues should something go wrong.
 
 <VideoPlayer
   src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406316/local-dev-agents-tools_100_fe1jdt.mp4"
 />
 ### MCP
-List the MCP servers attached to your Mastra instance, explore the tools they expose, and see how those tools are used by your agents.
-
+List the MCP servers attached to your Mastra instance and explore their available tools.
 
 ![MCP Servers Playground](/image/local-dev/local-dev-mcp-server-playground.jpg)
 
 ### Observability
 
-Playground includes built-in observability powered by AI Tracing, giving you a clear view of what happens inside your agents, workflows, and tools.
+
+When you run an agent or workflow, the Observability tab displays traces that highlight the key AI operations such as model calls, tool executions, and workflow steps. Follow these traces to see how data moves, where time is spent, and what's happening under the hood. 
 
 ![](https://mastra.ai/_next/image?url=%2Ftracingafter.png&w=1920&q=75)
 
-When you run an agent or workflow, the Observability tab displays traces that highlight the key AI operations such as model calls, tool executions, and workflow steps. You can follow these traces in real time to see how data moves, where time is spent, and what's happening under the hood. AI Tracing filters out low-level framework details so your traces stay focused and readable.
+AI Tracing filters out low-level framework details so your traces stay focused and readable.
 
 
 ### Scorers
 
-Test and validate your scoring functions within the Playground environment. Run evaluations against your agents to measure performance metrics, test different scoring criteria, and ensure your agents meet quality standards. The scoring interface helps you understand how well your agents perform across various test cases and identify areas for improvement.
+The Scorers tab displays the results of your agent's scorers as they run. When messages pass through your agent, the defined scorers evaluate each output asynchronously and render their results here. This allows you to understand how your scorers respond to different interactions, compare performance across test cases, and identify areas for improvement.
 
-## API Endpoints
+## REST API
 
 The local development server exposes a complete set of REST API routes, allowing you to programmatically interact with your agents, workflows, and tools during development.
 
-You can explore all available endpoints by accessing the OpenAPI specification at `http://localhost:4111/openapi.json`, which provides detailed documentation of request/response schemas, authentication requirements, and available operations. 
+You can explore all available endpoints in the OpenAPI specification at `http://localhost:4111/openapi.json`, which details every endpoint and its request and response schemas.
 
-For an interactive API exploration experience, visit the Swagger UI at `http://localhost:4111/swagger-ui`, where you can test endpoints directly from your browser with live request/response examples. 
+To explore the API interactively, visit the Swagger UI at `http://localhost:4111/swagger-ui`, where you can test endpoints directly from your browser.
 
 ## Configuration
 
 ### Port
 
-By default, the development server runs on port 4111, but you can customize both the host and port through the Mastra server configuration: 
+By default, the development server runs on port `4111`, but you can customize both the host and port through the Mastra server configuration: 
 
 ```typescript
 import { Mastra } from "@mastra/core/mastra";
@@ -132,7 +133,7 @@ export const mastra = new Mastra({
 
 ### Local HTTPS
 
-Mastra supports local HTTPS development through the `--https` flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). For custom certificate management, you can provide your own key and certificate files through the server configuration:
+Mastra supports local HTTPS development through the [`--https`](/reference/cli/mastra#--https) flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). For custom certificate management, you can provide your own key and certificate files through the server configuration:
 
 ```typescript
 import { Mastra } from "@mastra/core/mastra";
@@ -147,20 +148,7 @@ export const mastra = new Mastra({
   },
 });
 ```
+
+<Callout type="info">
 When both the `--https` flag and `server.https` configuration are provided, the configuration takes precedence.
-
-### Bundling
-
-Use `transpilePackages` to compile TypeScript packages or libraries that need transformation. The `externals` option excludes dependencies that should be resolved at runtime rather than bundled. Enable `sourcemap` to generate readable stack traces for better debugging:
-
-```typescript
-import { Mastra } from "@mastra/core/mastra";
-
-export const mastra = new Mastra({
-  bundler: {
-    transpilePackages: ["utils"],
-    externals: ["ui"],
-    sourcemap: true
-  }
-});
-```
+</Callout>
