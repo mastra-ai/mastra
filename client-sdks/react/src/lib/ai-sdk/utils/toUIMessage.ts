@@ -598,7 +598,7 @@ const toUIMessageFromAgent = (
               ...childMessages.slice(0, -1),
               {
                 ...currentMessage,
-                toolOutput: updatedWorkflowState,
+                toolOutput: { ...updatedWorkflowState, runId: agentChunk.output.runId },
               },
             ],
           },
@@ -625,7 +625,9 @@ const toUIMessageFromAgent = (
             ...childMessages.slice(0, -1),
             {
               ...childMessages[lastToolIndex],
-              toolOutput: isWorkflow ? (agentChunk.result as any)?.result : agentChunk.result,
+              toolOutput: isWorkflow
+                ? { ...(agentChunk.result as any)?.result, runId: (agentChunk.result as any)?.runId }
+                : agentChunk.result,
             },
           ],
         },

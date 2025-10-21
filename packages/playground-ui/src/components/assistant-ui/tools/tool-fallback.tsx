@@ -5,8 +5,8 @@ import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { useWorkflow } from '@/hooks/use-workflows';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { LoadingBadge } from './badges/loading-badge';
-import { AgentBadge } from './badges/agent-badge';
 import { MastraUIMessage } from '@mastra/react';
+import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
   metadata?: MastraUIMessage['metadata'];
@@ -35,9 +35,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, ...props }: ToolF
   const { data: workflow, isLoading } = useWorkflow(workflowToolName, isWorkflow);
 
   if (isAgent) {
-    const messages = result?.childMessages ?? [];
-
-    return <AgentBadge agentId={agentToolName} messages={messages} metadata={metadata} />;
+    return <AgentBadgeWrapper agentId={agentToolName} result={result} metadata={metadata} />;
   }
 
   if (isLoading) return <LoadingBadge />;
