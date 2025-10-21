@@ -1671,7 +1671,7 @@ describe('AI Tracing Integration Tests', () => {
       });
 
       const agent = mastra.getAgent('workflowAgent');
-      const result = await method(agent, 'Execute the simpleWorkflow with test input');
+      const result = await method(agent, 'Execute the workflow-simpleWorkflow with test input');
       expect(result.text).toBeDefined();
       expect(result.traceId).toBeDefined();
 
