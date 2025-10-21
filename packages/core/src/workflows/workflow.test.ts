@@ -12894,35 +12894,38 @@ describe('Workflow', () => {
     });
 
     it('should propagate tracingContext to agent steps created with createStep', async () => {
-      // Track whether tracingContext was passed to the agent
+      // Track whether tracingContext was passed to the agent's stream method
       let receivedTracingContext: any = null;
 
-      // Create a mock agent with v2 model that captures the tracingContext
+      // Create a mock agent with v2 model
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'test instructions',
         model: new MockLanguageModelV2({
-          doStream: async ({ tracingContext }: any) => {
-            // Capture the tracingContext passed to the agent
-            receivedTracingContext = tracingContext;
-            return {
-              stream: simulateReadableStream({
-                chunks: [
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: 'Test response' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    logprobs: undefined,
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                  },
-                ],
-              }),
-              rawCall: { rawPrompt: null, rawSettings: {} },
-            };
-          },
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Test response' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
         }),
       });
+
+      // Spy on the agent's stream method to capture tracingContext
+      const originalStream = agent.stream.bind(agent);
+      agent.stream = vi.fn(async (prompt: any, options?: any) => {
+        receivedTracingContext = options?.tracingContext;
+        return originalStream(prompt, options);
+      }) as any;
 
       const workflow = createWorkflow({
         id: 'tracing-test-workflow',
@@ -12941,40 +12944,43 @@ describe('Workflow', () => {
       const run = await workflow.createRunAsync();
       await run.start({ inputData: { query: 'test query' } });
 
-      // Verify that tracingContext was passed to the agent
+      // Verify that tracingContext was passed to the agent's stream method
       expect(receivedTracingContext).toBeDefined();
       expect(receivedTracingContext.currentSpan).toBeDefined();
     });
 
     it('should propagate tracingContext to agent steps with v1 models', async () => {
-      // Track whether tracingContext was passed to the agent
+      // Track whether tracingContext was passed to the agent's streamLegacy method
       let receivedTracingContext: any = null;
 
-      // Create a mock agent with v1 model that captures the tracingContext
+      // Create a mock agent with v1 model
       const agent = new Agent({
         name: 'test-agent-v1',
         instructions: 'test instructions',
         model: new MockLanguageModelV1({
-          doStream: async ({ tracingContext }: any) => {
-            // Capture the tracingContext passed to the agent
-            receivedTracingContext = tracingContext;
-            return {
-              stream: simulateReadableStream({
-                chunks: [
-                  { type: 'text-delta', textDelta: 'Test response' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    logprobs: undefined,
-                    usage: { completionTokens: 10, promptTokens: 3 },
-                  },
-                ],
-              }),
-              rawCall: { rawPrompt: null, rawSettings: {} },
-            };
-          },
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'Test response' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
         }),
       });
+
+      // Spy on the agent's streamLegacy method to capture tracingContext
+      const originalStreamLegacy = agent.streamLegacy.bind(agent);
+      agent.streamLegacy = vi.fn(async (prompt: any, options?: any) => {
+        receivedTracingContext = options?.tracingContext;
+        return originalStreamLegacy(prompt, options);
+      }) as any;
 
       const workflow = createWorkflow({
         id: 'tracing-test-workflow-v1',
@@ -12993,7 +12999,7 @@ describe('Workflow', () => {
       const run = await workflow.createRunAsync();
       await run.start({ inputData: { query: 'test query' } });
 
-      // Verify that tracingContext was passed to the agent
+      // Verify that tracingContext was passed to the agent's streamLegacy method
       expect(receivedTracingContext).toBeDefined();
       expect(receivedTracingContext.currentSpan).toBeDefined();
     });
