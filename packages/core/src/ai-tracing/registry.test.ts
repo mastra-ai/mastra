@@ -796,7 +796,9 @@ describe('AI Tracing Registry', () => {
 
       // Verify warning message was logged with new exporter name
       expect(infoSpy).toHaveBeenCalledWith(
-        expect.stringContaining('mastra-cloud-ai-tracing-exporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set'),
+        expect.stringContaining(
+          'mastra-cloud-ai-tracing-exporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set',
+        ),
       );
       expect(infoSpy).toHaveBeenCalledWith(
         expect.stringContaining('Sign up for Mastra Cloud at https://cloud.mastra.ai'),
