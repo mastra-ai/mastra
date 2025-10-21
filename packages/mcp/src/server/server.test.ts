@@ -17,7 +17,7 @@ import type {
   GetPromptResult,
   Prompt,
 } from '@modelcontextprotocol/sdk/types.js';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai/test';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
@@ -56,26 +56,76 @@ const minimalTestTool: ToolsInput = {
   },
 };
 
-const mockAgentGenerate = vi.fn(async (query: string) => {
+// Mock function for agent's doGenerate - properly typed
+const mockAgentDoGenerate: MockLanguageModelV2['doGenerate'] = vi.fn(async params => {
+  // Extract query from the params for the mock response
+  const lastMessage = params.prompt[params.prompt.length - 1];
+  let query = '';
+
+  if (lastMessage?.role === 'user') {
+    if (typeof lastMessage.content === 'string') {
+      query = lastMessage.content;
+    } else if (Array.isArray(lastMessage.content)) {
+      const textPart = lastMessage.content.find((part: any) => part.type === 'text') as any;
+      query = textPart?.text || '';
+    }
+  }
+
   return {
-    rawCall: { rawPrompt: null, rawSettings: {} },
-    finishReason: 'stop',
-    usage: { promptTokens: 10, completionTokens: 20 },
-    text: `{"content":"Agent response to: "${JSON.stringify(query)}"}`,
+    finishReason: 'stop' as const,
+    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+    content: [{ type: 'text' as const, text: `Agent response to: "${query}"` }],
+    warnings: [],
   };
 });
 
 const mockAgentGetInstructions = vi.fn(() => 'This is a mock agent for testing.');
 
-const createMockAgent = (name: string, generateFn: any, instructionsFn?: any, description?: string) => {
+const createMockAgent = (
+  name: string,
+  generateFn: MockLanguageModelV2['doGenerate'],
+  instructionsFn?: any,
+  description?: string,
+) => {
   return new Agent({
-    name: name,
+    name,
     instructions: instructionsFn,
-    description: description || '',
-    model: new MockLanguageModelV1({
-      defaultObjectGenerationMode: 'json',
-      doGenerate: async options => {
-        return generateFn((options.prompt.at(-1)?.content[0] as { text: string }).text);
+    description,
+    model: new MockLanguageModelV2({
+      doGenerate: generateFn,
+      doStream: async params => {
+        // Extract the query from the messages
+        const lastMessage = params.prompt[params.prompt.length - 1];
+        let query = '';
+
+        if (lastMessage?.role === 'user') {
+          // The content might be a string or an array of content parts
+          if (typeof lastMessage.content === 'string') {
+            query = lastMessage.content;
+          } else if (Array.isArray(lastMessage.content)) {
+            // Extract text from content parts
+            const textPart = lastMessage.content.find((part: any) => part.type === 'text') as any;
+            query = textPart?.text || '';
+          }
+        }
+
+        // Create the response text based on the query
+        const textContent = `Agent response to: "${query}"`;
+
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: textContent },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
       },
     }),
   });
@@ -544,7 +594,9 @@ describe('MCPServer', () => {
     it('should read resource content for an existing resource', async () => {
       const uri = 'test://resource/1';
       const result = (await notificationTestInternalClient.readResource(uri)) as ReadResourceResult;
-      expect(getResourceContentCallback).toHaveBeenCalledWith({ uri });
+      expect(getResourceContentCallback).toHaveBeenCalledWith(
+        expect.objectContaining({ uri, extra: expect.any(Object) }),
+      );
       expect(result.contents).toEqual([
         {
           uri,
@@ -1179,7 +1231,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
   it('should convert a provided agent to an MCP tool with sync dynamic description', () => {
     const testAgent = createMockAgent(
       'MyTestAgent',
-      mockAgentGenerate,
+      mockAgentDoGenerate,
       mockAgentGetInstructions,
       'Simple mock description.',
     );
@@ -1210,10 +1262,14 @@ describe('MCPServer - Agent to Tool Conversion', () => {
   it('should call agent.generate when the derived tool is executed', async () => {
     const testAgent = createMockAgent(
       'MyExecAgent',
-      mockAgentGenerate,
+      mockAgentDoGenerate,
       mockAgentGetInstructions,
       'Executable mock agent',
     );
+
+    // Spy on the agent's generate method
+    const generateSpy = vi.spyOn(testAgent, 'generate');
+
     server = new MCPServer({
       name: 'AgentExecServer',
       version: '1.0.0',
@@ -1229,9 +1285,18 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     if (agentTool && agentTool.execute) {
       const result = await agentTool.execute(queryInput, { toolCallId: 'mcp-call-123', messages: [] });
 
-      expect(mockAgentGenerate).toHaveBeenCalledTimes(1);
-      expect(mockAgentGenerate).toHaveBeenCalledWith(queryInput.message);
-      expect(result.text).toBe(`{"content":"Agent response to: ""Hello Agent""}`);
+      // Check that agent.generate was called with the correct message
+      expect(generateSpy).toHaveBeenCalledTimes(1);
+      expect(generateSpy).toHaveBeenCalledWith(
+        queryInput.message,
+        expect.objectContaining({
+          runtimeContext: expect.any(Object),
+          tracingContext: expect.any(Object),
+        }),
+      );
+
+      // The result should contain the response text
+      expect(result.text).toBe('Agent response to: "Hello Agent"');
     } else {
       throw new Error('Agent tool or its execute function is undefined');
     }
@@ -1242,7 +1307,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     const explicitToolExecute = vi.fn(async () => 'explicit tool response');
     const collidingAgent = createMockAgent(
       'CollidingAgent',
-      mockAgentGenerate,
+      mockAgentDoGenerate,
       undefined,
       'Colliding agent description',
     );
@@ -1263,13 +1328,13 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     const tools = server.tools();
     expect(tools[explicitToolName]).toBeDefined();
     expect(tools[explicitToolName].description).toBe('An explicit tool that collides.');
-    expect(mockAgentGenerate).not.toHaveBeenCalled();
+    expect(mockAgentDoGenerate).not.toHaveBeenCalled();
   });
 
   it('should use agentKey for tool name ask_<agentKey>', () => {
     const uniqueKeyAgent = createMockAgent(
       'AgentNameDoesNotMatterForToolKey',
-      mockAgentGenerate,
+      mockAgentDoGenerate,
       undefined,
       'Agent description',
     );
@@ -1283,7 +1348,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
   });
 
   it('should throw an error if description is undefined (not provided to mock)', () => {
-    const agentWithNoDesc = createMockAgent('NoDescAgent', mockAgentGenerate, mockAgentGetInstructions, undefined); // getDescription will return ''
+    const agentWithNoDesc = createMockAgent('NoDescAgent', mockAgentDoGenerate, mockAgentGetInstructions, undefined); // getDescription will return ''
 
     expect(
       () =>

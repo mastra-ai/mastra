@@ -214,7 +214,7 @@ export class MCPServer extends MCPServerBase {
    *   name: 'Helper',
    *   description: 'A helpful assistant',
    *   instructions: 'You are helpful.',
-   *   model: openai('gpt-4o-mini'),
+   *   model: 'openai/gpt-4o-mini',
    * });
    *
    * const server = new MCPServer({

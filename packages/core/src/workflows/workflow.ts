@@ -180,6 +180,7 @@ export function createStep<
         [EMITTER_SYMBOL]: emitter,
         [STREAM_FORMAT_SYMBOL]: streamFormat,
         runtimeContext,
+        tracingContext,
         abortSignal,
         abort,
         writer,
@@ -206,6 +207,7 @@ export function createStep<
             // resourceId: inputData.resourceId,
             // threadId: inputData.threadId,
             runtimeContext,
+            tracingContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
             },
@@ -215,6 +217,7 @@ export function createStep<
         } else {
           const modelOutput = await params.stream(inputData.prompt, {
             runtimeContext,
+            tracingContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
             },
