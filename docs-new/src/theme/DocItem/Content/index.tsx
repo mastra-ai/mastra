@@ -19,8 +19,7 @@ import { CopyPageButton } from '@site/src/components/copy-page-button';
 */
 function useSyntheticTitle(): string | null {
   const { metadata, frontMatter, contentTitle } = useDoc();
-  const shouldRender =
-    !frontMatter.hide_title && typeof contentTitle === 'undefined';
+  const shouldRender = !frontMatter.hide_title && typeof contentTitle === 'undefined';
   if (!shouldRender) {
     return null;
   }
@@ -34,7 +33,6 @@ export default function DocItemContent({ children }: Props): ReactNode {
 
   return (
     <div className={clsx(ThemeClassNames.docs.docMarkdown, 'markdown')}>
-      {/* Show copy button unless hide_table_of_contents is true */}
       {shouldShowCopyButton && (
         <div className="relative">
           <div className="absolute right-0 top-0 z-10">
