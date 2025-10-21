@@ -5623,10 +5623,10 @@ describe('Workflow', () => {
         const stepError = step1Result.error;
         expect(stepError).toBeDefined();
 
-        // EXPECTED BEHAVIOR: Error should be just the message
-        // This test will FAIL with current implementation because it saves stack traces
+        // Verify the error is just the message with "Error: " prefix
+        expect(stepError).toBe('Error: ' + errorMessage);
 
-        // Verify NO stack trace is present (no "at " which appears in stack traces)
+        // Verify NO stack trace is present
         expect(String(stepError)).not.toContain('at Object.execute');
         expect(String(stepError)).not.toContain('at ');
         expect(String(stepError)).not.toContain('\n');
@@ -5694,8 +5694,7 @@ describe('Workflow', () => {
         const stepError = step1Result.error;
         expect(stepError).toBeDefined();
 
-        // EXPECTED BEHAVIOR: Error should be just the message
-
+        // Verify the error is just the message with "Error: " prefix
         expect(stepError).toBe('Error: ' + errorMessage);
 
         // Verify NO stack trace is present
