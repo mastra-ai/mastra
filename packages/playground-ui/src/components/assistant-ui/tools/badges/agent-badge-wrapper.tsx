@@ -9,7 +9,11 @@ interface AgentBadgeWrapperProps {
 }
 
 export const AgentBadgeWrapper = ({ agentId, result, metadata }: AgentBadgeWrapperProps) => {
-  const { data: memoryMessages } = useAgentMessages({ threadId: result?.subAgentThreadId ?? '', agentId });
+  const { data: memoryMessages } = useAgentMessages({
+    threadId: result?.subAgentThreadId ?? '',
+    agentId,
+    memory: true,
+  });
   const childMessages =
     result?.childMessages ?? resolveToChildMessages((memoryMessages?.uiMessages ?? []) as MastraUIMessage[]);
 
