@@ -306,9 +306,23 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
     const result: Record<string, any> = {};
 
     for (const key of keys) {
-      const value = getNestedValue(runtimeContext, key);
+      // Handle dot notation: get first part from RuntimeContext, then navigate nested properties
+      const parts = key.split('.');
+      const rootKey = parts[0];
+      const value = runtimeContext.get(rootKey);
+
       if (value !== undefined) {
-        setNestedValue(result, key, value);
+        // If there are nested parts, extract them from the value
+        if (parts.length > 1) {
+          const nestedPath = parts.slice(1).join('.');
+          const nestedValue = getNestedValue(value, nestedPath);
+          if (nestedValue !== undefined) {
+            setNestedValue(result, key, nestedValue);
+          }
+        } else {
+          // Simple key, set directly
+          setNestedValue(result, key, value);
+        }
       }
     }
 
