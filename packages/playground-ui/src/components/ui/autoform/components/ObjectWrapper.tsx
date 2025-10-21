@@ -1,31 +1,44 @@
-import React from 'react';
-import { ObjectWrapperProps } from '@autoform/react';
+import React, { useState } from 'react';
+import { ObjectWrapperProps, useAutoForm } from '@autoform/react';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
-import { Braces } from 'lucide-react';
+import { Braces, ChevronDownIcon } from 'lucide-react';
+import { Button } from '@/ds/components/Button';
+import { cn } from '@/lib/utils';
 
-export const ObjectWrapper: React.FC<ObjectWrapperProps> = ({ label, children }) => {
+export const ObjectWrapper: React.FC<ObjectWrapperProps> = ({ label, children, field }) => {
   const hasLabel = label !== '\u200B' && label !== '';
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div className="">
-      {hasLabel && (
-        <Txt as="h3" variant="ui-sm" className="text-icon3 flex items-center gap-1 pb-2">
+      <div className="flex items-center justify-between">
+        {hasLabel && (
+          <Txt as="h3" variant="ui-sm" className="text-icon3 flex items-center gap-1 pb-2">
+            <Icon size="sm">
+              <Braces />
+            </Icon>
+
+            {label}
+          </Txt>
+        )}
+
+        <Button onClick={() => setIsOpen(!isOpen)} type="button">
           <Icon size="sm">
-            <Braces />
+            <ChevronDownIcon className={cn('transition-all', isOpen ? 'rotate-180' : 'rotate-0')} />
           </Icon>
-
-          {label}
-        </Txt>
-      )}
-
-      <div
-        className={
-          hasLabel ? 'flex flex-col gap-1 [&>*]:border-dashed [&>*]:border-l [&>*]:border-l-border1 [&>*]:pl-4' : ''
-        }
-      >
-        {children}
+        </Button>
       </div>
+
+      {isOpen && (
+        <div
+          className={
+            hasLabel ? 'flex flex-col gap-1 [&>*]:border-dashed [&>*]:border-l [&>*]:border-l-border1 [&>*]:pl-4' : ''
+          }
+        >
+          {children}
+        </div>
+      )}
     </div>
   );
 };
