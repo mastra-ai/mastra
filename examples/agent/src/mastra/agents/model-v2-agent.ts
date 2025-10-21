@@ -14,8 +14,6 @@ export const weatherInfo = createTool({
     city: z.string(),
   }),
   execute: async ({ context }) => {
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    console.log('context==', context);
     return {
       city: context.city,
       weather: 'sunny',
