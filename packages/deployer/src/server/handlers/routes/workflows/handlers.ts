@@ -213,7 +213,7 @@ export async function streamVNextWorkflowHandler(c: Context) {
         }
       },
       async err => {
-        logger.error('Error in workflow VNext stream: ' + err?.message);
+        logger.error('Error in workflow stream: ' + err?.message);
       },
     );
   } catch (error) {
