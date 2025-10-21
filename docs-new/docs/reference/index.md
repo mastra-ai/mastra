@@ -3,6 +3,7 @@ title: "API Reference"
 description: "Mastra API Reference"
 ---
 
+import { ReferenceCards } from '@site/src/components/ReferenceCards';
 
 # Reference
 
