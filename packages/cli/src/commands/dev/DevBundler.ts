@@ -108,7 +108,7 @@ export class DevBundler extends Bundler {
         },
         plugins: [
           // @ts-ignore - types are good
-          // eslint-disable-next-line @typescript-eslint/no-misused-promises
+
           ...inputOptions.plugins,
           {
             name: 'env-watcher',

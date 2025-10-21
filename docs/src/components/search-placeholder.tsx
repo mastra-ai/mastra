@@ -1,8 +1,8 @@
 export function getSearchPlaceholder(locale: string) {
   switch (locale) {
     case "ja":
-      return "検索するかAIに尋ねる...";
+      return "ドキュメントを検索...";
     default:
-      return "Search or ask AI...";
+      return "Search docs...";
   }
 }

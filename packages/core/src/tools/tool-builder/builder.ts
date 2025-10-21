@@ -18,7 +18,7 @@ import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { ToolStream } from '../stream';
-import type { CoreTool, ToolAction, ToolInvocationOptions, VercelTool, VercelToolV5 } from '../types';
+import type { CoreTool, MastraToolInvocationOptions, ToolAction, VercelTool, VercelToolV5 } from '../types';
 import { validateToolInput } from '../validation';
 
 export type ToolToConvert = VercelTool | ToolAction<any, any, any> | VercelToolV5;
@@ -50,14 +50,43 @@ export class CoreToolBuilder extends MastraBase {
   // Helper to get parameters based on tool type
   private getParameters = () => {
     if (isVercelTool(this.originalTool)) {
-      return this.originalTool.parameters ?? z.object({});
+      // Handle both 'parameters' (v4) and 'inputSchema' (v5) properties
+      // Also handle case where the schema is a function that returns a schema
+      let schema =
+        this.originalTool.parameters ??
+        ('inputSchema' in this.originalTool ? (this.originalTool as any).inputSchema : undefined) ??
+        z.object({});
+
+      // If schema is a function, call it to get the actual schema
+      if (typeof schema === 'function') {
+        schema = schema();
+      }
+
+      return schema;
     }
 
-    return this.originalTool.inputSchema ?? z.object({});
+    // For Mastra tools, inputSchema might also be a function
+    let schema = this.originalTool.inputSchema ?? z.object({});
+
+    // If schema is a function, call it to get the actual schema
+    if (typeof schema === 'function') {
+      schema = schema();
+    }
+
+    return schema;
   };
 
   private getOutputSchema = () => {
-    if ('outputSchema' in this.originalTool) return this.originalTool.outputSchema;
+    if ('outputSchema' in this.originalTool) {
+      let schema = this.originalTool.outputSchema;
+
+      // If schema is a function, call it to get the actual schema
+      if (typeof schema === 'function') {
+        schema = schema();
+      }
+
+      return schema;
+    }
     return null;
   };
 
@@ -72,13 +101,16 @@ export class CoreToolBuilder extends MastraBase {
     ) {
       const parameters = this.getParameters();
       const outputSchema = this.getOutputSchema();
+
       return {
         type: 'provider-defined' as const,
         id: tool.id,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
-        parameters: convertZodSchemaToAISDKSchema(parameters),
-        ...(outputSchema ? { outputSchema: convertZodSchemaToAISDKSchema(outputSchema) } : {}),
+        parameters: parameters.jsonSchema ? parameters : convertZodSchemaToAISDKSchema(parameters),
+        ...(outputSchema
+          ? { outputSchema: outputSchema.jsonSchema ? outputSchema : convertZodSchemaToAISDKSchema(outputSchema) }
+          : {}),
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
@@ -125,9 +157,13 @@ export class CoreToolBuilder extends MastraBase {
       type: logType,
     });
 
-    const execFunction = async (args: unknown, execOptions: ToolInvocationOptions) => {
-      // Create tool span if we have an current span available
-      const toolSpan = options.tracingContext?.currentSpan?.createChildSpan({
+    const execFunction = async (args: unknown, execOptions: MastraToolInvocationOptions) => {
+      // Prefer execution-time tracingContext (passed at runtime for VNext methods)
+      // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
+      const tracingContext = execOptions.tracingContext || options.tracingContext;
+
+      // Create tool span if we have a current span available
+      const toolSpan = tracingContext?.currentSpan?.createChildSpan({
         type: AISpanType.TOOL_CALL,
         name: `tool: '${options.name}'`,
         input: args,
@@ -183,7 +219,7 @@ export class CoreToolBuilder extends MastraBase {
                   name: options.name,
                   runId: options.runId!,
                 },
-                options.writableStream || (execOptions as any).writableStream,
+                options.writableStream || execOptions.writableStream,
               ),
               tracingContext: { currentSpan: toolSpan },
             },
@@ -199,7 +235,7 @@ export class CoreToolBuilder extends MastraBase {
       }
     };
 
-    return async (args: unknown, execOptions?: ToolInvocationOptions) => {
+    return async (args: unknown, execOptions?: MastraToolInvocationOptions) => {
       let logger = options.logger || this.logger;
       try {
         logger.debug(start, { ...rest, model: logModelObject, args });

@@ -15,7 +15,7 @@ The `createPromptAlignmentScorerLLM()` function creates a scorer that evaluates 
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
+      type: "MastraModelConfig",
       description: "The language model to use for evaluating prompt-response alignment",
       required: true,
     },
@@ -105,7 +105,7 @@ You can customize the Prompt Alignment Scorer by adjusting the scale parameter a
 
 ```typescript showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({ 
-  model: openai("gpt-4o-mini"), 
+  model: 'openai/gpt-4o-mini', 
   options: { 
     scale: 10, // Score from 0-10 instead of 0-1
     evaluationMode: 'both' // 'user', 'system', or 'both' (default)
@@ -247,24 +247,24 @@ Measure how well your AI agents follow user instructions:
 const agent = new Agent({
   name: 'CodingAssistant',
   instructions: 'You are a helpful coding assistant. Always provide working code examples.',
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
 });
 
 // Evaluate comprehensive alignment (default)
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: { evaluationMode: 'both' } // Evaluates both user intent and system guidelines
 });
 
 // Evaluate just user satisfaction
 const userScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: { evaluationMode: 'user' } // Focus only on user request fulfillment
 });
 
 // Evaluate system compliance
 const systemScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: { evaluationMode: 'system' } // Check adherence to system instructions
 });
 
@@ -311,11 +311,10 @@ for (const agent of agents) {
 ### Basic Configuration
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
 import { createPromptAlignmentScorerLLM } from '@mastra/evals';
 
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
 });
 
 // Evaluate a code generation task
@@ -342,7 +341,7 @@ const result = await scorer.run({
 ```typescript
 // Configure scale and evaluation mode
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
   options: {
     scale: 10, // Score from 0-10 instead of 0-1
     evaluationMode: 'both' // 'user', 'system', or 'both' (default)
@@ -351,13 +350,13 @@ const scorer = createPromptAlignmentScorerLLM({
 
 // User-only evaluation - focus on user satisfaction
 const userScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
   options: { evaluationMode: 'user' }
 });
 
 // System-only evaluation - focus on compliance
 const systemScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
   options: { evaluationMode: 'system' }
 });
 
@@ -387,11 +386,10 @@ const result = await scorer.run({
 In this example, the response fully addresses the user's prompt with all requirements met.
 
 ```typescript filename="src/example-excellent-prompt-alignment.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
 
 const scorer = createPromptAlignmentScorerLLM({ 
-  model: openai("gpt-4o-mini") 
+  model: 'openai/gpt-4o-mini' 
 });
 
 const inputMessages = [{ 
@@ -433,11 +431,10 @@ The output receives a high score because it perfectly addresses the intent, fulf
 In this example, the response addresses the core intent but misses some requirements or has format issues.
 
 ```typescript filename="src/example-partial-prompt-alignment.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
 
 const scorer = createPromptAlignmentScorerLLM({ 
-  model: openai("gpt-4o-mini") 
+  model: 'openai/gpt-4o-mini' 
 });
 
 const inputMessages = [{ 
@@ -473,11 +470,10 @@ The output receives a lower score because while the content is accurate, it does
 In this example, the response fails to address the user's specific requirements.
 
 ```typescript filename="src/example-poor-prompt-alignment.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
 
 const scorer = createPromptAlignmentScorerLLM({ 
-  model: openai("gpt-4o-mini") 
+  model: 'openai/gpt-4o-mini' 
 });
 
 const inputMessages = [{ 
@@ -518,7 +514,7 @@ Evaluates how well the response addresses the user's request, ignoring system in
 
 ```typescript filename="src/example-user-mode.ts" showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({ 
-  model: openai("gpt-4o-mini"),
+  model: 'openai/gpt-4o-mini',
   options: { evaluationMode: 'user' }
 });
 
@@ -546,7 +542,7 @@ Evaluates compliance with system behavioral guidelines and constraints:
 
 ```typescript filename="src/example-system-mode.ts" showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({ 
-  model: openai("gpt-4o-mini"),
+  model: 'openai/gpt-4o-mini',
   options: { evaluationMode: 'system' }
 });
 
@@ -574,7 +570,7 @@ Evaluates both user intent fulfillment and system compliance with weighted scori
 
 ```typescript filename="src/example-both-mode.ts" showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({ 
-  model: openai("gpt-4o-mini"),
+  model: 'openai/gpt-4o-mini',
   options: { evaluationMode: 'both' } // This is the default
 });
 

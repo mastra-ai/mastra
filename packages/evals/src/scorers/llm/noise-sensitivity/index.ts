@@ -1,4 +1,4 @@
-import type { MastraLanguageModel } from '@mastra/core/agent';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
 import { z } from 'zod';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
@@ -57,7 +57,7 @@ export function createNoiseSensitivityScorerLLM({
   model,
   options,
 }: {
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   options: NoiseSensitivityOptions;
 }) {
   if (!options.baselineResponse || !options.noisyQuery) {
