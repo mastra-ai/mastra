@@ -1,8 +1,10 @@
 import { test, expect, Page } from '@playwright/test';
 
-test('overall layout information', async ({ page }) => {
+test.beforeEach(async ({ page }) => {
   await page.goto('http://localhost:4111/workflows/complexWorkflow/graph');
+});
 
+test('overall layout information', async ({ page }) => {
   // Header
   await expect(page).toHaveTitle(/Mastra Studio/);
   await expect(page.locator('text=Workflows documentation')).toHaveAttribute(
@@ -36,78 +38,72 @@ test('overall layout information', async ({ page }) => {
   await expect(codeEditor).toHaveAttribute('data-language', 'json');
 });
 
-test.describe('workflow run', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:4111/workflows/complexWorkflow/graph');
-  });
+test('initial workflow run state', async ({ page }) => {
+  const nodes = await page.locator('[data-workflow-node]');
+  await expect(nodes).toHaveCount(14);
 
-  test('initial workflow run state', async ({ page }) => {
-    const nodes = await page.locator('[data-workflow-node]');
-    await expect(nodes).toHaveCount(14);
+  // Check node ordering
+  await expect(nodes.nth(0)).toContainText('add-letter');
+  await expect(nodes.nth(1)).toContainText('add-letter-b');
+  await expect(nodes.nth(2)).toContainText('add-letter-c');
+  await expect(nodes.nth(3)).toContainText('mapping');
+  await expect(nodes.nth(4)).toContainText('WHEN');
+  await expect(nodes.nth(5)).toContainText('short-text'); // condition short path
+  await expect(nodes.nth(6)).toContainText('WHEN');
+  await expect(nodes.nth(7)).toContainText('long-text'); // condition long path
+  await expect(nodes.nth(8)).toContainText('mapping');
+  await expect(nodes.nth(9)).toContainText('nested-text-processor');
+  await expect(nodes.nth(10)).toContainText('add-letter-with-count');
+  await expect(nodes.nth(11)).toContainText('DOUNTIL');
+  await expect(nodes.nth(12)).toContainText('suspend-resume');
+  await expect(nodes.nth(13)).toContainText('final-step');
+});
 
-    // Check node ordering
-    await expect(nodes.nth(0)).toContainText('add-letter');
-    await expect(nodes.nth(1)).toContainText('add-letter-b');
-    await expect(nodes.nth(2)).toContainText('add-letter-c');
-    await expect(nodes.nth(3)).toContainText('mapping');
-    await expect(nodes.nth(4)).toContainText('WHEN');
-    await expect(nodes.nth(5)).toContainText('short-text'); // condition short path
-    await expect(nodes.nth(6)).toContainText('WHEN');
-    await expect(nodes.nth(7)).toContainText('long-text'); // condition long path
-    await expect(nodes.nth(8)).toContainText('mapping');
-    await expect(nodes.nth(9)).toContainText('nested-text-processor');
-    await expect(nodes.nth(10)).toContainText('add-letter-with-count');
-    await expect(nodes.nth(11)).toContainText('DOUNTIL');
-    await expect(nodes.nth(12)).toContainText('suspend-resume');
-    await expect(nodes.nth(13)).toContainText('final-step');
-  });
+test('running the workflow (form) - short condition', async ({ page }) => {
+  await page.getByRole('textbox', { name: 'Text' }).fill('A');
+  await page.getByRole('button', { name: 'Run' }).click();
 
-  test('running the workflow (form) - short condition', async ({ page }) => {
-    await page.getByRole('textbox', { name: 'Text' }).fill('A');
-    await page.getByRole('button', { name: 'Run' }).click();
+  await runWorkflow(page);
+  await checkShortPath(page);
+});
 
-    await runWorkflow(page);
-    await checkShortPath(page);
-  });
+test('running the workflow (form) - long condition', async ({ page }) => {
+  await page.getByRole('textbox', { name: 'Text' }).fill('SuperLongTextToStartWith');
+  await page.getByRole('button', { name: 'Run' }).click();
 
-  test('running the workflow (form) - long condition', async ({ page }) => {
-    await page.getByRole('textbox', { name: 'Text' }).fill('SuperLongTextToStartWith');
-    await page.getByRole('button', { name: 'Run' }).click();
+  await runWorkflow(page);
+  await checkLongPath(page);
+});
 
-    await runWorkflow(page);
-    await checkLongPath(page);
-  });
+test('running the workflow (json) - short condition', async ({ page }) => {
+  await page.getByRole('radio', { name: 'JSON' }).click();
+  await page.getByRole('textbox').fill('{"text":"A"}');
+  await page.getByRole('button', { name: 'Run' }).click();
 
-  test('running the workflow (json) - short condition', async ({ page }) => {
-    await page.getByRole('radio', { name: 'JSON' }).click();
-    await page.getByRole('textbox').fill('{"text":"A"}');
-    await page.getByRole('button', { name: 'Run' }).click();
+  await runWorkflow(page);
+  await checkShortPath(page);
+});
 
-    await runWorkflow(page);
-    await checkShortPath(page);
-  });
+test('running the workflow (json) - long condition', async ({ page }) => {
+  await page.getByRole('radio', { name: 'JSON' }).click();
+  await page.getByRole('textbox').fill('{"text":"SuperLongTextToStartWith"}');
+  await page.getByRole('button', { name: 'Run' }).click();
 
-  test('running the workflow (json) - long condition', async ({ page }) => {
-    await page.getByRole('radio', { name: 'JSON' }).click();
-    await page.getByRole('textbox').fill('{"text":"SuperLongTextToStartWith"}');
-    await page.getByRole('button', { name: 'Run' }).click();
+  await runWorkflow(page);
+  await checkLongPath(page);
+});
 
-    await runWorkflow(page);
-    await checkLongPath(page);
-  });
+test('resuming a workflow', async ({ page }) => {
+  await page.getByRole('textbox', { name: 'Text' }).fill('A');
+  await page.getByRole('button', { name: 'Run' }).click();
+  await runWorkflow(page);
 
-  test('resuming a workflow', async ({ page }) => {
-    await page.getByRole('textbox', { name: 'Text' }).fill('A');
-    await page.getByRole('button', { name: 'Run' }).click();
-    await runWorkflow(page);
+  await page.getByRole('textbox').fill('Hello');
+  await page.getByRole('button', { name: 'Resume workflow' }).click();
+  const nodes = await page.locator('[data-workflow-node]');
 
-    await page.getByRole('textbox').fill('Hello');
-    await page.getByRole('button', { name: 'Resume workflow' }).click();
-    const nodes = await page.locator('[data-workflow-node]');
-
-    await expect(nodes.nth(12)).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 20000 });
-    await expect(nodes.nth(13)).toHaveAttribute('data-workflow-step-status', 'success');
-  });
+  await expect(nodes.nth(12)).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 20000 });
+  await expect(nodes.nth(13)).toHaveAttribute('data-workflow-step-status', 'success');
 });
 
 async function checkShortPath(page: Page) {
