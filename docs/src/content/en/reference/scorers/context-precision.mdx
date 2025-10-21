@@ -31,7 +31,7 @@ Use when optimizing context selection for:
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
+      type: "MastraModelConfig",
       description: "The language model to use for evaluating context relevance",
       required: true,
     },
@@ -146,7 +146,7 @@ MAP = (1.0 + 0.67) / 2 = 0.835 ≈ **0.83**
 
 ```typescript
 const scorer = createContextPrecisionScorer({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: {
     contextExtractor: (input, output) => {
       // Extract context dynamically based on the query
@@ -165,7 +165,7 @@ const scorer = createContextPrecisionScorer({
 
 ```typescript
 const scorer = createContextPrecisionScorer({
-  model: openai('gpt-4o-mini'), 
+  model: 'openai/gpt-4o-mini', 
   options: {
     context: [
       // Simulate retrieved documents from vector database
@@ -187,11 +187,10 @@ const scorer = createContextPrecisionScorer({
 This example shows perfect context precision where all relevant context appears early:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
 import { createContextPrecisionScorer } from '@mastra/evals';
 
 const scorer = createContextPrecisionScorer({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: {
     context: [
       'Photosynthesis is the process by which plants convert sunlight, carbon dioxide, and water into glucose and oxygen.',
@@ -234,11 +233,10 @@ console.log(result);
 This example shows moderate precision with both relevant and irrelevant context:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
 import { createContextPrecisionScorer } from '@mastra/evals';
 
 const scorer = createContextPrecisionScorer({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini', 
   options: {
     context: [
       'Regular exercise improves cardiovascular health by strengthening the heart muscle.',
@@ -283,11 +281,10 @@ console.log(result);
 This example shows poor context precision with mostly irrelevant context:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
 import { createContextPrecisionScorer } from '@mastra/evals';
 
 const scorer = createContextPrecisionScorer({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: {
     context: [
       'The weather forecast shows sunny skies this weekend.',

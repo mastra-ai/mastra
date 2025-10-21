@@ -276,6 +276,72 @@ describe('Input and Output Processors', () => {
     });
   });
 
+  describe('Input Processors with non-user role messages', () => {
+    it('should handle input processors that add system messages', async () => {
+      const systemMessageProcessor = {
+        name: 'system-message-processor',
+        processInput: async ({ messages }) => {
+          // Add a system message to provide additional context
+          const systemMessage: MastraMessageV2 = {
+            id: crypto.randomUUID(),
+            role: 'system',
+            content: { content: 'You are a helpful assistant.', format: 2, parts: [] },
+            createdAt: new Date(),
+          };
+
+          // Return system message followed by user messages
+          return [systemMessage, ...messages];
+        },
+      };
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a test agent',
+        model: mockModel,
+        inputProcessors: [systemMessageProcessor],
+      });
+
+      // This should not throw an error about invalid system message format
+      const result = await agent.generate('Hello');
+
+      expect(result.text).toBeDefined();
+      expect(result.text).toContain('processed:');
+    });
+
+    it('should handle input processors that add assistant messages for context', async () => {
+      const assistantMessageProcessor = {
+        name: 'assistant-message-processor',
+        processInput: async ({ messages }) => {
+          // Add an assistant message (e.g., from previous conversation)
+          const assistantMessage: MastraMessageV2 = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Previously, I helped you with your code.' }],
+            },
+            createdAt: new Date(),
+          };
+
+          // Return assistant message followed by user messages
+          return [assistantMessage, ...messages];
+        },
+      };
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a test agent',
+        model: mockModel,
+        inputProcessors: [assistantMessageProcessor],
+      });
+
+      const result = await agent.generate('Continue from before');
+
+      expect(result.text).toBeDefined();
+      expect(result.text).toContain('processed:');
+    });
+  });
+
   describe('Input Processors with stream', () => {
     it('should handle input processors with streaming', async () => {
       const streamProcessor = {

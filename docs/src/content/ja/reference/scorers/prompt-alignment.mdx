@@ -19,7 +19,7 @@ import { PropertiesTable } from "@/components/properties-table";
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
+      type: "MastraModelConfig",
       description: "プロンプトと応答の整合性を評価するために使用する言語モデル",
       required: true,
     },
@@ -170,11 +170,10 @@ Final Score = Weighted Score × scale
 ### 基本設定
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
 import { createPromptAlignmentScorerLLM } from '@mastra/evals';
 
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
 });
 
 // コード生成タスクを評価する
@@ -201,7 +200,7 @@ const result = await scorer.run({
 ```typescript
 // スケールと評価モードを設定
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
   options: {
     scale: 10, // スコアを 0–1 ではなく 0–10 に設定
     evaluationMode: 'both' // 'user'、'system'、または 'both'（デフォルト）
@@ -210,13 +209,13 @@ const scorer = createPromptAlignmentScorerLLM({
 
 // ユーザーのみの評価 — ユーザー満足度を重視
 const userScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
   options: { evaluationMode: 'user' }
 });
 
 // システムのみの評価 — コンプライアンスを重視
 const systemScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
   options: { evaluationMode: 'system' }
 });
 
@@ -296,24 +295,24 @@ AIエージェントがユーザーの指示にどれだけ従えているかを
 const agent = new Agent({
   name: 'CodingAssistant',
   instructions: 'You are a helpful coding assistant. Always provide working code examples.',
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
 });
 
 // 包括的な整合性を評価（デフォルト）
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: { evaluationMode: 'both' } // ユーザーの意図とシステムのガイドラインの両方を評価
 });
 
 // ユーザー満足度のみを評価
 const userScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: { evaluationMode: 'user' } // ユーザー要求の充足にのみ焦点を当てる
 });
 
 // システム順守を評価
 const systemScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: { evaluationMode: 'system' } // システム指示への順守を確認
 });
 

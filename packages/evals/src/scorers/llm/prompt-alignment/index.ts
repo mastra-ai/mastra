@@ -1,4 +1,4 @@
-import type { MastraLanguageModel } from '@mastra/core/agent';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import { createScorer } from '@mastra/core/scores';
 import { z } from 'zod';
@@ -71,7 +71,7 @@ export function createPromptAlignmentScorerLLM({
   model,
   options,
 }: {
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   options?: PromptAlignmentOptions;
 }) {
   const scale = options?.scale || 1;

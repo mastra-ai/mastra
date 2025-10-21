@@ -15,13 +15,23 @@ export type VercelToolV5 = ToolV5;
 
 export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 
+/**
+ * Extended version of ToolInvocationOptions that includes Mastra-specific properties
+ * for suspend/resume functionality and stream writing.
+ */
+export type MastraToolInvocationOptions = ToolInvocationOptions & {
+  suspend?: (suspendPayload: any) => Promise<any>;
+  resumeData?: any;
+  writableStream?: WritableStream<any> | ToolStream<any>;
+};
+
 // Define CoreTool as a discriminated union to match the AI SDK's Tool type
 export type CoreTool = {
   id?: string;
   description?: string;
   parameters: ZodSchema | JSONSchema7Type | Schema;
   outputSchema?: ZodSchema | JSONSchema7Type | Schema;
-  execute?: (params: any, options: ToolInvocationOptions) => Promise<any>;
+  execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
 } & (
   | {
       type?: 'function' | undefined;
@@ -40,7 +50,7 @@ export type InternalCoreTool = {
   description?: string;
   parameters: Schema;
   outputSchema?: Schema;
-  execute?: (params: any, options: ToolInvocationOptions) => Promise<any>;
+  execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
 } & (
   | {
       type?: 'function' | undefined;
@@ -76,13 +86,13 @@ export interface ToolAction<
     TSuspendSchema,
     TResumeSchema
   >,
-> extends IAction<string, TSchemaIn, TSchemaOut, TContext, ToolInvocationOptions> {
+> extends IAction<string, TSchemaIn, TSchemaOut, TContext, MastraToolInvocationOptions> {
   suspendSchema?: TSuspendSchema;
   resumeSchema?: TResumeSchema;
   description: string;
   execute?: (
     context: TContext,
-    options?: ToolInvocationOptions,
+    options?: MastraToolInvocationOptions,
   ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
   mastra?: Mastra;
   requireApproval?: boolean;
