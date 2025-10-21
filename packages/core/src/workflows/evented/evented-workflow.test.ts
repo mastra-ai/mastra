@@ -16,13 +16,15 @@ import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
 
 const testStorage = new MockStore();
 
+globalThis.___MASTRA_TELEMETRY___ = true;
+
 describe('Workflow', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   });
 
-  describe('Streaming', () => {
+  describe('Streaming Legacy', () => {
     it('should generate a stream', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
@@ -61,7 +63,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -244,7 +246,7 @@ describe('Workflow', () => {
 
       const run = await promptEvalWorkflow.createRunAsync();
 
-      const { stream, getWorkflowState } = run.stream({ inputData: { input: 'test' } });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: { input: 'test' } });
 
       for await (const data of stream) {
         if (data.type === 'step-suspended') {
@@ -409,7 +411,7 @@ describe('Workflow', () => {
       const run = await workflow.createRunAsync({
         runId: 'test-run-id',
       });
-      const { stream } = await run.stream({
+      const { stream } = await run.streamLegacy({
         inputData: {
           prompt1: 'Capital of France, just the name',
           prompt2: 'Capital of UK, just the name',
@@ -664,7 +666,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -835,7 +837,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       setTimeout(() => {
         run.sendEvent('user-event-test', {
@@ -4593,7 +4595,7 @@ describe('Workflow', () => {
       });
       await mastra.startEventEngine();
 
-      const { stream, getWorkflowState } = (await workflow.createRunAsync()).stream({ inputData: {} });
+      const { stream, getWorkflowState } = (await workflow.createRunAsync()).streamLegacy({ inputData: {} });
 
       const values: StreamEvent[] = [];
       for await (const value of stream.values()) {
