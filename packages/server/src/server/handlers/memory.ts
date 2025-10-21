@@ -535,7 +535,10 @@ export async function searchMemoryHandler({
     // Get memory configuration first to check scope
     const config = memory.getMergedThreadConfig(memoryConfig || {});
     const hasSemanticRecall = !!config?.semanticRecall;
-    const resourceScope = typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === 'resource';
+    // Default scope is now 'resource', so check if it's NOT explicitly set to 'thread'
+    const resourceScope = typeof config?.semanticRecall === 'object' 
+      ? config?.semanticRecall?.scope !== 'thread'
+      : true; // If semanticRecall is just `true`, default to resource scope
 
     // Only validate thread ownership if we're in thread scope
     if (threadId && !resourceScope) {
@@ -560,7 +563,7 @@ export async function searchMemoryHandler({
           results: [],
           count: 0,
           query: searchQuery,
-          searchScope: 'thread',
+          searchScope: resourceScope ? 'resource' : 'thread',
           searchType: hasSemanticRecall ? 'semantic' : 'text',
         };
       }
@@ -646,7 +649,7 @@ export async function searchMemoryHandler({
           results: [],
           count: 0,
           query: searchQuery,
-          searchScope: 'thread',
+          searchScope: resourceScope ? 'resource' : 'thread',
           searchType: hasSemanticRecall ? 'semantic' : 'text',
         };
       }
