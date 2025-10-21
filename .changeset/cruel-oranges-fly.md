@@ -27,3 +27,5 @@ memory: new Memory({
 ```
 
 See the [migration guide](https://mastra.ai/docs/guides/migrations/memory-scope-defaults) for more details.
+
+Also fixed issues where playground semantic recall search could show missing or incorrect results in certain cases.
