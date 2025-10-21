@@ -439,6 +439,54 @@ describe('Agent Memory Tests', () => {
         userId: 'user-123',
       });
     });
+
+    it('should consolidate reasoning into single part when saving to memory', async () => {
+      const reasoningAgent = new Agent({
+        name: 'reasoning-test-agent',
+        instructions: 'You are a helpful assistant that thinks through problems.',
+        model: 'openrouter/openai/gpt-oss-20b',
+        memory,
+      });
+
+      const threadId = randomUUID();
+      const resourceId = 'test-resource-reasoning';
+
+      const result = await reasoningAgent.generate('What is 2+2? Think through this carefully.', {
+        threadId,
+        resourceId,
+      });
+
+      expect(result.reasoning.length).toBeGreaterThan(0);
+      expect(result.reasoningText).toBeDefined();
+      expect(result.reasoningText!.length).toBeGreaterThan(0);
+
+      const originalReasoningText = result.reasoningText;
+
+      const agentMemory = (await reasoningAgent.getMemory())!;
+      const { messages } = await agentMemory.query({ threadId });
+
+      const assistantMessage = messages.find(
+        (m: any) =>
+          m.role === 'assistant' && Array.isArray(m.content) && m.content.some((p: any) => p?.type === 'reasoning'),
+      );
+
+      expect(assistantMessage).toBeDefined();
+
+      const retrievedReasoningParts = Array.isArray((assistantMessage as any).content)
+        ? (assistantMessage as any).content.filter((p: any) => p?.type === 'reasoning')
+        : [];
+
+      expect(retrievedReasoningParts).toBeDefined();
+      expect(retrievedReasoningParts.length).toBeGreaterThan(0);
+
+      const retrievedReasoningText = retrievedReasoningParts.map((p: any) => p.text || '').join('');
+
+      expect(retrievedReasoningText.length).toBeGreaterThan(0);
+      expect(retrievedReasoningText).toBe(originalReasoningText);
+
+      // This is the key fix for issue #8073 - before the fix, reasoning was split into many parts
+      expect(retrievedReasoningParts.length).toBe(1);
+    }, 30000);
   });
 
   describe('Agent thread metadata with generateTitle', () => {

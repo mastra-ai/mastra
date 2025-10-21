@@ -408,6 +408,32 @@ describe('SpanConverter', () => {
       expect(attrs['mcp.server.version']).toBe('1.0.0');
       expect(attrs['gen_ai.tool.success']).toBe(false);
     });
+
+    it('should handle agent attributes correctly', () => {
+      const span: ExportedAISpan<AISpanType.AGENT_RUN> = {
+        id: 'span-1',
+        traceId: 'trace-1',
+        name: 'agent-run',
+        type: AISpanType.AGENT_RUN,
+        startTime: new Date(),
+        endTime: new Date(),
+        isEvent: false,
+        isRootSpan: false,
+        attributes: {
+          agentId: 'test',
+          maxSteps: 10,
+          availableTools: ['tool1', 'tool2'],
+        },
+      };
+
+      const result = converter.convertSpan(span);
+      const attrs = result.attributes;
+
+      expect(attrs['gen_ai.agent.id']).toBe('test');
+      expect(attrs['agent.id']).toBe('test');
+      expect(attrs['agent.max_steps']).toBe(10);
+      expect(attrs['agent.available_tools']).toBe('["tool1","tool2"]');
+    });
   });
 
   describe('Input/Output Handling', () => {

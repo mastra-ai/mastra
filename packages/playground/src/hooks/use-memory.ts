@@ -53,20 +53,6 @@ export const useThreads = ({
   });
 };
 
-export const useMessages = ({ threadId, memory, agentId }: { threadId: string; memory: boolean; agentId: string }) => {
-  const client = useMastraClient();
-
-  return useQuery({
-    queryKey: ['memory', 'messages', threadId, agentId],
-    queryFn: () => (memory ? client.getThreadMessages(threadId, { agentId }) : null),
-    enabled: Boolean(memory),
-    staleTime: 0,
-    gcTime: 0,
-    retry: false,
-    refetchOnWindowFocus: false,
-  });
-};
-
 export const useDeleteThread = () => {
   const client = useMastraClient();
   const queryClient = useQueryClient();

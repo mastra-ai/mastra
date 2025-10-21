@@ -4,7 +4,7 @@ test('overall layout information', async ({ page }) => {
   await page.goto('http://localhost:4111/agents/weatherAgent/chat/1234');
 
   // Header
-  await expect(page).toHaveTitle(/Mastra Playground/);
+  await expect(page).toHaveTitle(/Mastra Studio/);
   await expect(page.locator('text=Agents documentation')).toHaveAttribute(
     'href',
     'https://mastra.ai/en/docs/agents/overview',
@@ -46,8 +46,8 @@ test.describe('agent panels', () => {
 
       const toolBadge = await page.locator('[data-testid="tool-badge"]');
       await expect(toolBadge).toBeVisible();
-      await expect(toolBadge).toHaveText('get-weather');
-      await expect(toolBadge).toHaveAttribute('href', '/agents/weatherAgent/tools/get-weather');
+      await expect(toolBadge).toHaveText('weatherInfo');
+      await expect(toolBadge).toHaveAttribute('href', '/agents/weatherAgent/tools/weatherInfo');
 
       await expect(page.locator('text=No workflows')).toBeVisible();
       await expect(page.locator('text=No scorers')).toBeVisible();

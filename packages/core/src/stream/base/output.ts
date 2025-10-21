@@ -423,7 +423,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 content: messageList.get.response.aiV5.modelContent(-1),
                 text: self.#bufferedByStep.text,
                 reasoningText: self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join(''),
-                reasoning: self.#bufferedByStep.reasoning,
+                reasoning: Object.values(self.#bufferedReasoningDetails),
                 get staticToolCalls() {
                   return self.#bufferedByStep.toolCalls.filter(
                     part => part.type === 'tool-call' && part.payload?.dynamic === false,
