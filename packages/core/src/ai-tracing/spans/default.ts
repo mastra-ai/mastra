@@ -15,15 +15,33 @@ export class DefaultAISpan<TType extends AISpanType> extends BaseAISpan<TType> {
 
   constructor(options: CreateSpanOptions<TType>, aiTracing: AITracing) {
     super(options, aiTracing);
+
+    // Set span ID: use external ID if provided, otherwise generate new
     this.id = generateSpanId();
 
-    // Set trace ID: generate new for root spans, inherit for child spans
-    if (!options.parent) {
-      // This is a root span, so it becomes its own trace with a new trace ID
-      this.traceId = generateTraceId();
-    } else {
-      // Child span inherits trace ID from root span
+    // Set trace ID based on context:
+    if (options.parent) {
+      // Child span inherits trace ID from parent span
       this.traceId = options.parent.traceId;
+    } else if (options.externalTraceId) {
+      // Root span with external trace ID
+      if (!isValidTraceId(options.externalTraceId)) {
+        throw new Error(`Invalid externalTraceId: must be 32 hexadecimal characters, got "${options.externalTraceId}"`);
+      }
+      this.traceId = options.externalTraceId;
+    } else {
+      // Root span without external trace ID - generate new
+      this.traceId = generateTraceId();
+    }
+
+    // Set parent span ID if provided
+    if (!options.parent && options.externalParentSpanId) {
+      if (!isValidSpanId(options.externalParentSpanId)) {
+        throw new Error(
+          `Invalid externalParentSpanId: must be 16 hexadecimal characters, got "${options.externalParentSpanId}"`,
+        );
+      }
+      this.externalParentSpanId = options.externalParentSpanId;
     }
   }
 
@@ -148,4 +166,18 @@ function generateTraceId(): string {
     }
   }
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Validate OpenTelemetry-compatible trace ID (32 hex characters)
+ */
+function isValidTraceId(traceId: string): boolean {
+  return /^[0-9a-f]{32}$/i.test(traceId);
+}
+
+/**
+ * Validate OpenTelemetry-compatible span ID (16 hex characters)
+ */
+function isValidSpanId(spanId: string): boolean {
+  return /^[0-9a-f]{16}$/i.test(spanId);
 }
