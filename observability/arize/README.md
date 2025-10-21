@@ -45,6 +45,14 @@ const mastra = new Mastra({
 
 > [!TIP]
 > You can easily use this exporter with both [self-hosted Phoenix](https://docs.arize.com/phoenix/deployment), or, [Phoenix Cloud](https://app.phoenix.arize.com/login).
+>
+> To quickly verify functionality, you can try out a local in-memory Phoenix instance:
+>
+> ```bash
+> docker run --pull=always -d --name arize-phoenix -p 6006:6006 -e PHOENIX_SQL_DATABASE_URL="sqlite:///:memory:" arizephoenix/phoenix:latest
+> ```
+>
+> Configure your `ArizeExporter` endpoint to `http://localhost:6006/v1/traces` and run the default Mastra weather agent to see traces!
 
 ### Arize AX
 
