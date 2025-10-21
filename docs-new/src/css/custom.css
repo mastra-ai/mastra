@@ -391,9 +391,14 @@ span[class*="categoryLinkLabel"] {
 
 @media (min-width: 997px) {
 
+  [class*="docMainContainer"][class*="docMainContainer"] {
+    min-width: 69rem;
+  }
+
   /* Custom Scrollbars*/
   .menu,
-  pre, [class*="tableOfContents"] {
+  pre,
+  [class*="tableOfContents"] {
     padding-inline: 0 !important;
     scrollbar-width: thin;
     scrollbar-color: #dedede transparent;
@@ -610,7 +615,7 @@ pre code {
 
 /* Code block title bar */
 div[class*="codeBlockTitle"] {
-  border: 0.5px solid var(--mastra-border);
+  border: 0.5px solid var(--border);
   border-bottom: none;
   background: var(--mastra-surface-2);
   border-top-left-radius: 0.5rem;
@@ -648,6 +653,7 @@ div[class*="codeBlockTitle"]+div[class*="codeBlockContent"] pre {
     position: absolute;
     z-index: -1;
   }
+
   position: relative;
   background: transparent;
 }
@@ -656,11 +662,12 @@ div[class*="codeBlockTitle"]+div[class*="codeBlockContent"] pre {
   &:after {
     content: "";
     inset-block: 0;
-    left:0;
+    left: 0;
     background: var(--docusaurus-highlighted-code-line-bg);
     position: absolute;
     z-index: -1;
   }
+
   position: relative;
   background: transparent;
 }
@@ -970,6 +977,7 @@ input[type="search"]::-webkit-search-cancel-button {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -979,6 +987,7 @@ input[type="search"]::-webkit-search-cancel-button {
   from {
     transform: scale(0.95);
   }
+
   to {
     transform: scale(1);
   }
