@@ -148,7 +148,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       } else if (lastOutput.error) {
         base.error = lastOutput.error;
       } else if (typeof error === 'string') {
-        base.error = error;
+        base.error = `Error: ${error}`;
       } else {
         const errorMessage = safeParseErrorObject(error);
         const errorObj = new Error('Unknown error: ' + errorMessage);
