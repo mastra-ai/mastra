@@ -460,10 +460,10 @@ function getToolCallFromPrompt(prompt: string): { toolName: string; toolCallId: 
 
   // Direct workflow detection
   if (lowerPrompt.includes('execute workflows that exist in your config')) {
-    if (!toolsCalled.has('simpleWorkflow')) {
-      toolsCalled.add('simpleWorkflow');
+    if (!toolsCalled.has('workflow-simpleWorkflow')) {
+      toolsCalled.add('workflow-simpleWorkflow');
       return {
-        toolName: 'simpleWorkflow',
+        toolName: 'workflow-simpleWorkflow',
         toolCallId: 'call-workflow-1',
         args: { input: 'test input' },
       };
@@ -1671,7 +1671,7 @@ describe('AI Tracing Integration Tests', () => {
       });
 
       const agent = mastra.getAgent('workflowAgent');
-      const result = await method(agent, 'Execute the workflow-simpleWorkflow with test input');
+      const result = await method(agent, 'Execute the simpleWorkflow with test input');
       expect(result.text).toBeDefined();
       expect(result.traceId).toBeDefined();
 
