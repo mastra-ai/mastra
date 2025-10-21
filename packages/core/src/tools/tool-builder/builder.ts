@@ -12,14 +12,13 @@ import {
 import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
 import { AISpanType, wrapMastra } from '../../ai-tracing';
-import type { TracingContext } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { ToolStream } from '../stream';
-import type { CoreTool, ToolAction, ToolInvocationOptions, VercelTool, VercelToolV5 } from '../types';
+import type { CoreTool, MastraToolInvocationOptions, ToolAction, VercelTool, VercelToolV5 } from '../types';
 import { validateToolInput } from '../validation';
 
 export type ToolToConvert = VercelTool | ToolAction<any, any, any> | VercelToolV5;
@@ -158,10 +157,10 @@ export class CoreToolBuilder extends MastraBase {
       type: logType,
     });
 
-    const execFunction = async (args: unknown, execOptions: ToolInvocationOptions) => {
-      // Use execution-time tracingContext if available (passed at runtime), otherwise fall back to build-time tracingContext
-      // We use 'as any' here because tracingContext is added at runtime and not in the official ToolInvocationOptions type
-      const tracingContext = ((execOptions as any).tracingContext as TracingContext) || options.tracingContext;
+    const execFunction = async (args: unknown, execOptions: MastraToolInvocationOptions) => {
+      // Prefer execution-time tracingContext (passed at runtime for VNext methods)
+      // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
+      const tracingContext = execOptions.tracingContext || options.tracingContext;
 
       // Create tool span if we have a current span available
       const toolSpan = tracingContext?.currentSpan?.createChildSpan({
@@ -220,7 +219,7 @@ export class CoreToolBuilder extends MastraBase {
                   name: options.name,
                   runId: options.runId!,
                 },
-                options.writableStream || (execOptions as any).writableStream,
+                options.writableStream || execOptions.writableStream,
               ),
               tracingContext: { currentSpan: toolSpan },
             },
@@ -236,7 +235,7 @@ export class CoreToolBuilder extends MastraBase {
       }
     };
 
-    return async (args: unknown, execOptions?: ToolInvocationOptions) => {
+    return async (args: unknown, execOptions?: MastraToolInvocationOptions) => {
       let logger = options.logger || this.logger;
       try {
         logger.debug(start, { ...rest, model: logModelObject, args });
