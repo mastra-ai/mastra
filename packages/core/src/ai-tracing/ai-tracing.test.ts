@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraError } from '../error';
+import { RuntimeContext } from '../runtime-context';
 import { clearAITracingRegistry } from './registry';
 import { DefaultAITracing } from './tracers';
 import type { AITracingEvent, AITracingExporter, LLMGenerationAttributes, AITracing, ExportedAISpan } from './types';
@@ -1264,6 +1265,241 @@ describe('AI Tracing', () => {
 
       childSpan.end();
       rootSpan.end();
+    });
+  });
+  describe('TraceState and metadata extraction from RuntimeContext', () => {
+    it('should extract metadata from RuntimeContext using configured keys', () => {
+      const { RuntimeContext } = require('../runtime-context');
+
+      // Create AI tracing with configured metadata keys
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        runtimeContextKeys: ['userId', 'environment'],
+        exporters: [testExporter],
+      });
+
+      // Create runtime context with test data
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('userId', 'user-123');
+      runtimeContext.set('environment', 'production');
+      runtimeContext.set('otherData', 'not-extracted');
+
+      // Start span with runtime context
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        runtimeContext,
+      });
+
+      // Verify metadata was extracted
+      expect(span.metadata).toEqual({
+        userId: 'user-123',
+        environment: 'production',
+      });
+
+      span.end();
+    });
+
+    it('should merge configured keys with per-request keys', () => {
+      const { RuntimeContext } = require('../runtime-context');
+
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        runtimeContextKeys: ['userId', 'environment'],
+        exporters: [testExporter],
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('userId', 'user-123');
+      runtimeContext.set('environment', 'production');
+      runtimeContext.set('experimentId', 'exp-789');
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        runtimeContext,
+        tracingOptions: {
+          runtimeContextKeys: ['experimentId'],
+        },
+      });
+
+      // Verify both configured and per-request keys were extracted
+      expect(span.metadata).toEqual({
+        userId: 'user-123',
+        environment: 'production',
+        experimentId: 'exp-789',
+      });
+
+      span.end();
+    });
+
+    it('should support nested value extraction using dot notation', () => {
+      const { RuntimeContext } = require('../runtime-context');
+
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        runtimeContextKeys: ['user.id', 'session.data.experimentId'],
+        exporters: [testExporter],
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('user', { id: 'user-456', name: 'Test User' });
+      runtimeContext.set('session', { data: { experimentId: 'exp-999' } });
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        runtimeContext,
+      });
+
+      // Verify nested values were extracted
+      expect(span.metadata).toEqual({
+        user: { id: 'user-456' },
+        session: { data: { experimentId: 'exp-999' } },
+      });
+
+      span.end();
+    });
+
+    it('should inherit TraceState in child spans', () => {
+      const { RuntimeContext } = require('../runtime-context');
+
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        runtimeContextKeys: ['userId'],
+        exporters: [testExporter],
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('userId', 'user-123');
+      runtimeContext.set('toolData', 'tool-specific');
+
+      // Create root span
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        runtimeContext,
+      });
+
+      // Create child span - should inherit TraceState
+      const childSpan = rootSpan.createChildSpan({
+        type: AISpanType.TOOL_CALL,
+        name: 'tool-call',
+        attributes: {
+          toolId: 'tool-1',
+        },
+      });
+
+      // Verify TraceState was inherited
+      expect(childSpan.traceState).toEqual(rootSpan.traceState);
+      expect(childSpan.traceState?.runtimeContextKeys).toEqual(['userId']);
+
+      rootSpan.end();
+    });
+
+    it('should prioritize explicit metadata over extracted metadata', () => {
+      const { RuntimeContext } = require('../runtime-context');
+
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        runtimeContextKeys: ['userId'],
+        exporters: [testExporter],
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('userId', 'user-from-context');
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        runtimeContext,
+        metadata: {
+          userId: 'user-explicit',
+          customField: 'custom-value',
+        },
+      });
+
+      // Verify explicit metadata takes precedence
+      expect(span.metadata).toEqual({
+        userId: 'user-explicit',
+        customField: 'custom-value',
+      });
+
+      span.end();
+    });
+
+    it('should handle missing RuntimeContext gracefully', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        runtimeContextKeys: ['userId'],
+        exporters: [testExporter],
+      });
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        // No runtimeContext provided
+      });
+
+      // Should not have metadata from RuntimeContext
+      expect(span.metadata).toBeUndefined();
+
+      span.end();
+    });
+
+    it('should skip undefined values in RuntimeContext', () => {
+      const { RuntimeContext } = require('../runtime-context');
+
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        runtimeContextKeys: ['userId', 'missingKey'],
+        exporters: [testExporter],
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('userId', 'user-123');
+      // missingKey is not set
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        runtimeContext,
+      });
+
+      // Should only include userId
+      expect(span.metadata).toEqual({
+        userId: 'user-123',
+      });
+
+      span.end();
     });
   });
 });

@@ -5,6 +5,7 @@
 import { MastraBase } from '../../base';
 import type { IMastraLogger } from '../../logger';
 import { RegisteredLogger } from '../../logger/constants';
+import type { RuntimeContext } from '../../runtime-context';
 import { NoOpAISpan } from '../spans/no-op';
 import type {
   TracingConfig,
@@ -21,8 +22,11 @@ import type {
   AITracing,
   CustomSamplerOptions,
   AnyExportedAISpan,
+  TraceState,
+  TracingOptions,
 } from '../types';
 import { SamplingStrategyType, AITracingEventType } from '../types';
+import { getNestedValue, setNestedValue } from '../utils';
 
 // ============================================================================
 // Abstract Base Class
@@ -45,6 +49,7 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
       exporters: config.exporters ?? [],
       processors: config.processors ?? [],
       includeInternalSpans: config.includeInternalSpans ?? false,
+      metadataFromRuntimeContext: config.metadataFromRuntimeContext ?? [],
     };
   }
 
@@ -88,13 +93,31 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
    * Start a new span of a specific AISpanType
    */
   startSpan<TType extends AISpanType>(options: StartSpanOptions<TType>): AISpan<TType> {
-    const { customSamplerOptions, ...createSpanOptions } = options;
+    const { customSamplerOptions, runtimeContext, metadata, tracingOptions, ...rest } = options;
 
     if (!this.shouldSample(customSamplerOptions)) {
-      return new NoOpAISpan<TType>(createSpanOptions, this);
+      return new NoOpAISpan<TType>({ ...rest, metadata }, this);
     }
 
-    const span = this.createSpan<TType>(createSpanOptions);
+    // Compute or inherit TraceState
+    let traceState: TraceState | undefined;
+
+    if (options.parent) {
+      // Child span: inherit from parent
+      traceState = options.parent.traceState;
+    } else {
+      // Root span: compute new TraceState
+      traceState = this.computeTraceState(tracingOptions);
+    }
+
+    // Extract metadata from RuntimeContext
+    const enrichedMetadata = this.extractMetadataFromRuntimeContext(runtimeContext, metadata, traceState);
+
+    const span = this.createSpan<TType>({
+      ...rest,
+      metadata: enrichedMetadata,
+      traceState,
+    });
 
     if (span.isEvent) {
       this.emitSpanEnded(span);
@@ -230,6 +253,61 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
       default:
         throw new Error(`Sampling strategy type not implemented: ${(sampling as any).type}`);
     }
+  }
+
+  /**
+   * Compute TraceState for a new trace based on configured and per-request keys
+   */
+  protected computeTraceState(tracingOptions?: TracingOptions): TraceState | undefined {
+    const configuredKeys = this.config.metadataFromRuntimeContext ?? [];
+    const additionalKeys = tracingOptions?.runtimeContextKeys ?? [];
+
+    // Merge: configured + additional
+    const allKeys = [...configuredKeys, ...additionalKeys];
+
+    if (allKeys.length === 0) {
+      return undefined; // No metadata extraction needed
+    }
+
+    return {
+      runtimeContextKeys: allKeys,
+    };
+  }
+
+  /**
+   * Extract metadata from RuntimeContext using TraceState
+   */
+  protected extractMetadataFromRuntimeContext(
+    runtimeContext: RuntimeContext | undefined,
+    explicitMetadata: Record<string, any> | undefined,
+    traceState: TraceState | undefined,
+  ): Record<string, any> {
+    if (!runtimeContext || !traceState || traceState.runtimeContextKeys.length === 0) {
+      return explicitMetadata ?? {};
+    }
+
+    const extracted = this.extractKeys(runtimeContext, traceState.runtimeContextKeys);
+
+    return {
+      ...extracted,
+      ...explicitMetadata, // Explicit metadata always wins
+    };
+  }
+
+  /**
+   * Extract specific keys from RuntimeContext
+   */
+  protected extractKeys(runtimeContext: RuntimeContext, keys: string[]): Record<string, any> {
+    const result: Record<string, any> = {};
+
+    for (const key of keys) {
+      const value = getNestedValue(runtimeContext, key);
+      if (value !== undefined) {
+        setNestedValue(result, key, value);
+      }
+    }
+
+    return result;
   }
 
   /**
