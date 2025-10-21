@@ -18,7 +18,7 @@ import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { ToolStream } from '../stream';
-import type { CoreTool, ToolAction, ToolInvocationOptions, VercelTool, VercelToolV5 } from '../types';
+import type { CoreTool, MastraToolInvocationOptions, ToolAction, VercelTool, VercelToolV5 } from '../types';
 import { validateToolInput } from '../validation';
 
 /**
@@ -161,9 +161,13 @@ export class CoreToolBuilder extends MastraBase {
       type: logType,
     });
 
-    const execFunction = async (args: unknown, execOptions: ToolInvocationOptions) => {
-      // Create tool span if we have an current span available
-      const toolSpan = options.tracingContext?.currentSpan?.createChildSpan({
+    const execFunction = async (args: unknown, execOptions: MastraToolInvocationOptions) => {
+      // Prefer execution-time tracingContext (passed at runtime for VNext methods)
+      // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
+      const tracingContext = execOptions.tracingContext || options.tracingContext;
+
+      // Create tool span if we have a current span available
+      const toolSpan = tracingContext?.currentSpan?.createChildSpan({
         type: AISpanType.TOOL_CALL,
         name: `tool: '${options.name}'`,
         input: args,
@@ -219,7 +223,7 @@ export class CoreToolBuilder extends MastraBase {
                   name: options.name,
                   runId: options.runId!,
                 },
-                options.writableStream || (execOptions as any).writableStream,
+                options.writableStream || execOptions.writableStream,
               ),
               tracingContext: { currentSpan: toolSpan },
             },
@@ -235,7 +239,7 @@ export class CoreToolBuilder extends MastraBase {
       }
     };
 
-    return async (args: unknown, execOptions?: ToolInvocationOptions) => {
+    return async (args: unknown, execOptions?: MastraToolInvocationOptions) => {
       let logger = options.logger || this.logger;
       try {
         logger.debug(start, { ...rest, model: logModelObject, args });
