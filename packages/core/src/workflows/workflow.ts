@@ -1722,7 +1722,7 @@ export class Run<
   } {
     if (this.closeStreamAction) {
       return {
-        stream: this.observeStream().stream,
+        stream: this.observeStreamLegacy().stream,
         getWorkflowState: () => this.executionResults!,
       };
     }
@@ -1796,14 +1796,11 @@ export class Run<
       inputData?: z.input<TInput>;
       runtimeContext?: RuntimeContext;
       tracingContext?: TracingContext;
-      onChunk?: (chunk: StreamEvent) => Promise<unknown>;
       tracingOptions?: TracingOptions;
+      closeOnSuspend?: boolean;
     } = {},
-  ): ReturnType<typeof this.streamLegacy> {
-    console.warn(
-      "Deprecation NOTICE: stream method will switch to use streamVNext implementation October 21st, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
-    );
-    return this.streamLegacy(args);
+  ): ReturnType<typeof this.streamVNext> {
+    return this.streamVNext(args);
   }
 
   /**
@@ -1847,20 +1844,15 @@ export class Run<
    * Observe the workflow stream
    * @returns A readable stream of the workflow events
    */
-  observeStream(): {
-    stream: ReadableStream<StreamEvent>;
-  } {
-    console.warn(
-      "Deprecation NOTICE: observeStream method will switch to use observeStreamVNext implementation October 21st, 2025. Please use observeStreamLegacy if you don't want to upgrade just yet.",
-    );
-    return this.observeStreamLegacy();
+  observeStream(): ReturnType<typeof this.observeStreamVNext> {
+    return this.observeStreamVNext();
   }
 
   /**
    * Observe the workflow stream vnext
    * @returns A readable stream of the workflow events
    */
-  observeStreamVNext(): ReadableStream<ChunkType> {
+  observeStreamVNext(): ReadableStream<WorkflowStreamEvent> {
     if (!this.#streamOutput) {
       throw new Error('Stream has not been started yet. Please start the stream first.');
     }
@@ -1871,10 +1863,7 @@ export class Run<
   async streamAsync({
     inputData,
     runtimeContext,
-  }: { inputData?: z.input<TInput>; runtimeContext?: RuntimeContext } = {}): Promise<{
-    stream: ReadableStream<StreamEvent>;
-    getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
-  }> {
+  }: { inputData?: z.input<TInput>; runtimeContext?: RuntimeContext } = {}): Promise<ReturnType<typeof this.stream>> {
     return this.stream({ inputData, runtimeContext });
   }
 
@@ -1967,6 +1956,37 @@ export class Run<
     });
 
     return this.#streamOutput;
+  }
+
+  /**
+   * Resumes the workflow execution with the provided input as a stream
+   * @param input The input data for the workflow
+   * @returns A promise that resolves to the workflow output
+   */
+  resumeStream({
+    step,
+    resumeData,
+    runtimeContext,
+    tracingContext,
+    tracingOptions,
+  }: {
+    resumeData?: z.input<TInput>;
+    step?:
+      | Step<string, any, any, any, any, any, TEngineType>
+      | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, any, TEngineType>]
+      | string
+      | string[];
+    runtimeContext?: RuntimeContext;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+  } = {}) {
+    return this.resumeStreamVNext({
+      resumeData,
+      step,
+      runtimeContext,
+      tracingContext,
+      tracingOptions,
+    });
   }
 
   /**

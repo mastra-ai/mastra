@@ -21,6 +21,8 @@ import {
   watchWorkflowHandler,
   resumeStreamWorkflowHandler,
   observeStreamVNextWorkflowHandler,
+  streamLegacyWorkflowHandler,
+  observeStreamLegacyWorkflowHandler,
 } from './handlers';
 import {
   createLegacyWorkflowRunHandler,
@@ -619,9 +621,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
   );
 
   router.post(
-    '/:workflowId/stream',
+    '/:workflowId/stream-legacy',
     describeRoute({
-      description: 'Stream workflow in real-time',
+      description: 'Stream legacy workflow in real-time',
       parameters: [
         {
           name: 'workflowId',
@@ -674,11 +676,11 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
       tags: ['workflows'],
     }),
-    streamWorkflowHandler,
+    streamLegacyWorkflowHandler,
   );
 
   router.post(
-    '/:workflowId/observe-stream',
+    '/:workflowId/observe-stream-legacy',
     describeRoute({
       description: 'Observe workflow stream in real-time',
       parameters: [
@@ -705,13 +707,107 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
       tags: ['workflows'],
     }),
-    observeStreamWorkflowHandler,
+    observeStreamLegacyWorkflowHandler,
   );
 
   router.post(
     '/:workflowId/streamVNext',
     describeRoute({
       description: 'Stream workflow in real-time using the VNext streaming API',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                inputData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+                closeOnSuspend: {
+                  type: 'boolean',
+                  description: 'Close the stream on suspend',
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'workflow run started',
+        },
+        404: {
+          description: 'workflow not found',
+        },
+      },
+      tags: ['workflows'],
+    }),
+    streamVNextWorkflowHandler,
+  );
+
+  router.post(
+    '/:workflowId/observe',
+    describeRoute({
+      description: 'Observe workflow stream in real-time using the streaming API',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'workflow stream observed',
+        },
+        404: {
+          description: 'workflow not found',
+        },
+      },
+      tags: ['workflows'],
+    }),
+    observeStreamVNextWorkflowHandler,
+  );
+
+  router.post(
+    '/:workflowId/stream',
+    describeRoute({
+      description: 'Stream workflow in real-time using the streaming API',
       parameters: [
         {
           name: 'workflowId',
