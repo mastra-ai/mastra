@@ -73,10 +73,6 @@ export class LangSmithExporter extends BaseExporter {
   }
 
   protected async _exportEvent(event: AITracingEvent): Promise<void> {
-    if (!this.config) {
-      return;
-    }
-
     if (event.exportedSpan.isEvent) {
       await this.handleEventSpan(event.exportedSpan);
       return;

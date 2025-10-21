@@ -137,11 +137,6 @@ export class LangfuseExporter extends BaseExporter {
   }
 
   protected async _exportEvent(event: AITracingEvent): Promise<void> {
-    if (!this.client) {
-      // Exporter is disabled due to missing credentials
-      return;
-    }
-
     if (event.exportedSpan.isEvent) {
       await this.handleEventSpan(event.exportedSpan);
       return;
