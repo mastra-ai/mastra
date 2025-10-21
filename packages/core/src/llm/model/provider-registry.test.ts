@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
 import type { ProviderConfig } from './gateways/base.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
@@ -11,9 +11,33 @@ describe('GatewayRegistry Auto-Refresh', () => {
   const CACHE_DIR = path.join(os.homedir(), '.cache', 'mastra');
   const CACHE_FILE = path.join(CACHE_DIR, 'gateway-refresh-time');
   let originalEnv: NodeJS.ProcessEnv;
+  let originalWriteFile: typeof fs.promises.writeFile;
+  let originalCopyFile: typeof fs.promises.copyFile;
+
+  // Store original file contents to restore after tests
+  const PROVIDER_REGISTRY_PATH = path.join(__dirname, 'provider-registry.json');
+  const PROVIDER_TYPES_PATH = path.join(__dirname, 'provider-types.generated.d.ts');
+  let originalProviderRegistryContent: string | null = null;
+  let originalProviderTypesContent: string | null = null;
+
+  beforeAll(() => {
+    // Save original file contents before any tests run
+    try {
+      if (fs.existsSync(PROVIDER_REGISTRY_PATH)) {
+        originalProviderRegistryContent = fs.readFileSync(PROVIDER_REGISTRY_PATH, 'utf-8');
+      }
+      if (fs.existsSync(PROVIDER_TYPES_PATH)) {
+        originalProviderTypesContent = fs.readFileSync(PROVIDER_TYPES_PATH, 'utf-8');
+      }
+    } catch (error) {
+      console.warn('Failed to save original file contents:', error);
+    }
+  });
 
   beforeEach(() => {
-    // Save original env
+    // Save original functions
+    originalWriteFile = fs.promises.writeFile;
+    originalCopyFile = fs.promises.copyFile;
     originalEnv = { ...process.env };
 
     // Clean up cache file before each test
@@ -24,6 +48,26 @@ describe('GatewayRegistry Auto-Refresh', () => {
     // Reset the singleton instance
     // @ts-expect-error - accessing private property for testing
     GatewayRegistry['instance'] = undefined;
+
+    // Mock file write operations globally to prevent any test from modifying the actual registry files
+    // Only block writes to the actual provider-registry.json and provider-types.generated.d.ts files
+    vi.spyOn(fs.promises, 'writeFile').mockImplementation(async (filePath, ...args) => {
+      if (typeof filePath === 'string' && (filePath === PROVIDER_REGISTRY_PATH || filePath === PROVIDER_TYPES_PATH)) {
+        // Block writes to the actual registry files
+        return Promise.resolve();
+      }
+      // Allow all other writes (including temp files in tests)
+      return originalWriteFile(filePath, ...args);
+    });
+
+    vi.spyOn(fs.promises, 'copyFile').mockImplementation(async (src, dest, ...args) => {
+      if (typeof dest === 'string' && (dest === PROVIDER_REGISTRY_PATH || dest === PROVIDER_TYPES_PATH)) {
+        // Block copies to the actual registry files
+        return Promise.resolve();
+      }
+      // Allow all other copies
+      return originalCopyFile(src, dest, ...args);
+    });
   });
 
   afterEach(() => {
@@ -45,6 +89,21 @@ describe('GatewayRegistry Auto-Refresh', () => {
 
     // Restore all mocks
     vi.restoreAllMocks();
+  });
+
+  afterAll(() => {
+    // Restore original file contents after all tests complete
+    // This ensures we only write back once, improving efficiency
+    try {
+      if (originalProviderRegistryContent !== null) {
+        fs.writeFileSync(PROVIDER_REGISTRY_PATH, originalProviderRegistryContent, 'utf-8');
+      }
+      if (originalProviderTypesContent !== null) {
+        fs.writeFileSync(PROVIDER_TYPES_PATH, originalProviderTypesContent, 'utf-8');
+      }
+    } catch (error) {
+      console.warn('Failed to restore files in afterAll:', error);
+    }
   });
 
   it('should create cache file on first sync', async () => {

@@ -379,12 +379,7 @@ async function checkAiSdkDocsLink(providerId: string): Promise<string | null> {
 }
 
 function getLogoUrl(providerId: string): string {
-  // Custom logos for specific providers
-  const customLogos: Record<string, string> = {
-    netlify: '/logos/netlify.svg',
-  };
-
-  return customLogos[providerId] || `https://models.dev/logos/${providerId}.svg`;
+  return `https://models.dev/logos/${providerId}.svg`;
 }
 
 function getLogoClass(providerId: string): string {
@@ -543,6 +538,7 @@ ${getGeneratedComment()}
 import { CardGrid, CardGridItem } from "@/components/cards/card-grid";
 import { Tab, Tabs } from "@/components/tabs";
 import { Callout } from "nextra/components";
+import { NetlifyLogo } from "@/components/logos/NetlifyLogo";
 
 # Model Providers
 
@@ -634,20 +630,38 @@ Browse the directory of available models using the navigation on the left, or ex
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-sm">
-            <img src="${getLogoUrl('openrouter')}" alt="OpenRouter" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
-            <span>OpenRouter</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <img src="${getLogoUrl('fireworks-ai')}" alt="Fireworks AI" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
-            <span>Fireworks AI</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <img src="${getLogoUrl('togetherai')}" alt="Together AI" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
-            <span>Together AI</span>
-          </div>
+${(() => {
+  const gatewayOrder = ['openrouter', 'netlify', 'vercel'];
+  const allGateways = Array.from(grouped.gateways.keys());
+  const orderedGateways = gatewayOrder.filter(g => allGateways.includes(g));
+  const remainingGateways = allGateways.filter(g => !gatewayOrder.includes(g)).sort((a, b) => a.localeCompare(b));
+  const finalOrder = [...orderedGateways, ...remainingGateways];
+
+  return finalOrder
+    .slice(0, 3)
+    .map(gatewayId => {
+      const providers = grouped.gateways.get(gatewayId);
+      let displayName = providers?.[0]?.name || gatewayId;
+      // Simplify "Vercel AI Gateway" to just "Vercel"
+      if (gatewayId === 'vercel') {
+        displayName = 'Vercel';
+      }
+
+      // Use NetlifyLogo component for Netlify, img tag for others
+      const logoMarkup =
+        gatewayId === 'netlify'
+          ? `<NetlifyLogo className="w-4 h-4" />`
+          : `<img src="${getLogoUrl(gatewayId)}" alt="${displayName}" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />`;
+
+      return `          <div className="flex items-center gap-2 text-sm">
+            ${logoMarkup}
+            <span>${displayName}</span>
+          </div>`;
+    })
+    .join('\n');
+})()}
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ ${grouped.gateways.size - 3} more</div>
+${grouped.gateways.size > 3 ? `        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ ${grouped.gateways.size - 3} more</div>` : ''}
       </div>
     </CardGridItem>
     <CardGridItem
@@ -959,7 +973,9 @@ async function generateAiSdkProviderPage(provider: any, aiSdkDocsUrl: string | n
   const logoClass = getLogoClass(provider.id);
 
   const aiSdkDocsText = aiSdkDocsUrl
-    ? `\n\nFor detailed provider-specific documentation, see the [AI SDK ${provider.name} provider docs](${aiSdkDocsUrl}).`
+    ? `
+
+For detailed provider-specific documentation, see the [AI SDK ${provider.name} provider docs](${aiSdkDocsUrl}).`
     : '';
 
   return `---
@@ -1082,38 +1098,45 @@ async function generateDocs() {
   await fs.writeFile(path.join(providersDir, 'index.mdx'), providersIndexContent);
   console.info('✅ Generated providers/index.mdx');
 
-  // Generate individual provider pages
-  for (const provider of [...grouped.popular, ...grouped.other]) {
-    const content = await generateProviderPage(provider, providerRegistry);
-    await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
-    console.info(`✅ Generated providers/${provider.id}.mdx`);
-  }
+  // Generate individual provider pages (parallelized)
+  await Promise.all(
+    [...grouped.popular, ...grouped.other].map(async provider => {
+      const content = await generateProviderPage(provider, providerRegistry);
+      await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
+      console.info(`✅ Generated providers/${provider.id}.mdx`);
+    }),
+  );
 
-  // Generate individual AI SDK provider pages (only if they have AI SDK docs)
-  const aiSdkProvidersWithDocs: ModelsDevProvider[] = [];
-  for (const provider of aiSdkProviders) {
-    const aiSdkDocsUrl = await checkAiSdkDocsLink(provider.id);
-    if (!aiSdkDocsUrl) {
-      console.info(`⏭️  Skipping providers/${provider.id}.mdx (no AI SDK docs found)`);
-      continue;
-    }
-    aiSdkProvidersWithDocs.push(provider);
-    const content = await generateAiSdkProviderPage(provider, aiSdkDocsUrl);
-    await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
-    console.info(`✅ Generated providers/${provider.id}.mdx (AI SDK)`);
-  }
+  // Generate individual AI SDK provider pages (parallelized, only if they have AI SDK docs)
+  const aiSdkProviderResults = await Promise.all(
+    aiSdkProviders.map(async provider => {
+      const aiSdkDocsUrl = await checkAiSdkDocsLink(provider.id);
+      if (!aiSdkDocsUrl) {
+        console.info(`⏭️  Skipping providers/${provider.id}.mdx (no AI SDK docs found)`);
+        return null;
+      }
+      const content = await generateAiSdkProviderPage(provider, aiSdkDocsUrl);
+      await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
+      console.info(`✅ Generated providers/${provider.id}.mdx (AI SDK)`);
+      return provider;
+    }),
+  );
+
+  const aiSdkProvidersWithDocs = aiSdkProviderResults.filter((p): p is ModelsDevProvider => p !== null);
 
   // Generate providers _meta.ts (including AI SDK providers with docs)
   const providersMetaContent = generateProvidersMeta(grouped, aiSdkProvidersWithDocs);
   await fs.writeFile(path.join(providersDir, '_meta.ts'), providersMetaContent);
   console.info('✅ Generated providers/_meta.ts');
 
-  // Generate individual gateway pages
-  for (const [gatewayName, providers] of grouped.gateways) {
-    const content = generateGatewayPage(gatewayName, providers, providerRegistry);
-    await fs.writeFile(path.join(gatewaysDir, `${gatewayName}.mdx`), content);
-    console.info(`✅ Generated gateways/${gatewayName}.mdx`);
-  }
+  // Generate individual gateway pages (parallelized)
+  await Promise.all(
+    Array.from(grouped.gateways.entries()).map(async ([gatewayName, providers]) => {
+      const content = generateGatewayPage(gatewayName, providers, providerRegistry);
+      await fs.writeFile(path.join(gatewaysDir, `${gatewayName}.mdx`), content);
+      console.info(`✅ Generated gateways/${gatewayName}.mdx`);
+    }),
+  );
 
   console.info(`
 📚 Documentation generated successfully!

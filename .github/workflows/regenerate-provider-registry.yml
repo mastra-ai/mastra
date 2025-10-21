@@ -93,12 +93,24 @@ jobs:
       - name: Create changeset
         if: steps.git-check.outputs.changed == 'true'
         run: |
-          # Generate a unique changeset filename with timestamp
-          CHANGESET_ID="automated-provider-registry-$(date +%Y%m%d-%H%M%S)"
-          CHANGESET_FILE=".changeset/${CHANGESET_ID}.md"
+          # Check if an automated provider registry changeset already exists
+          if [ -d .changeset ]; then
+            EXISTING_CHANGESET=$(ls .changeset/automated-provider-registry-*.md 2>/dev/null | head -n 1)
+          else
+            EXISTING_CHANGESET=""
+          fi
 
-          # Create changeset for @mastra/core with patch bump
-          cat > "${CHANGESET_FILE}" << 'EOF'
+          if [ -n "$EXISTING_CHANGESET" ]; then
+            echo "Automated changeset already exists: ${EXISTING_CHANGESET}"
+            echo "Skipping changeset creation to avoid spam"
+            echo "CHANGESET_FILE=" >> $GITHUB_ENV
+          else
+            # Generate a unique changeset filename with timestamp
+            CHANGESET_ID="automated-provider-registry-$(date +%Y%m%d-%H%M%S)"
+            CHANGESET_FILE=".changeset/${CHANGESET_ID}.md"
+
+            # Create changeset for @mastra/core with patch bump
+            cat > "${CHANGESET_FILE}" << 'EOF'
           ---
           '@mastra/core': patch
           ---
@@ -106,8 +118,9 @@ jobs:
           Update provider registry and model documentation with latest models and providers
           EOF
 
-          echo "Created changeset: ${CHANGESET_FILE}"
-          echo "CHANGESET_FILE=${CHANGESET_FILE}" >> $GITHUB_ENV
+            echo "Created changeset: ${CHANGESET_FILE}"
+            echo "CHANGESET_FILE=${CHANGESET_FILE}" >> $GITHUB_ENV
+          fi
 
       - name: Commit and push changes
         if: steps.git-check.outputs.changed == 'true'
@@ -115,7 +128,9 @@ jobs:
           git add packages/core/src/llm/model/provider-registry.json
           git add packages/core/src/llm/model/provider-types.generated.d.ts
           git add docs/src/content/en/models/
-          git add "${CHANGESET_FILE}"
+          if [ -n "${CHANGESET_FILE}" ]; then
+            git add "${CHANGESET_FILE}"
+          fi
           git commit -m "chore: regenerate provider registry and model documentation [skip ci]"
           git pull --rebase
           git push

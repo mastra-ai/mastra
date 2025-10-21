@@ -418,6 +418,18 @@ const response = await agent.generate("Hello!", {
         "type": "Record<string, string> | undefined",
         "description": "",
         "isOptional": true
+    },
+    {
+        "name": "mediaResolution",
+        "type": "\"MEDIA_RESOLUTION_UNSPECIFIED\" | \"MEDIA_RESOLUTION_LOW\" | \"MEDIA_RESOLUTION_MEDIUM\" | \"MEDIA_RESOLUTION_HIGH\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "imageConfig",
+        "type": "{ aspectRatio?: \"1:1\" | \"2:3\" | \"3:2\" | \"3:4\" | \"4:3\" | \"4:5\" | \"5:4\" | \"9:16\" | \"16:9\" | \"21:9\" | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
     }
 ]}
 />

@@ -16,6 +16,7 @@ export class MastraReadableSpan implements ReadableSpan {
   readonly name: string;
   readonly kind: SpanKind;
   readonly spanContext: () => SpanContext;
+  readonly parentSpanContext?: SpanContext;
   readonly parentSpanId?: string;
   readonly startTime: [number, number];
   readonly endTime: [number, number];
@@ -103,6 +104,16 @@ export class MastraReadableSpan implements ReadableSpan {
       traceFlags: TraceFlags.SAMPLED,
       isRemote: false,
     });
+
+    // Set parent span context if parent span ID is provided
+    if (parentSpanId) {
+      this.parentSpanContext = {
+        traceId: aiSpan.traceId,
+        spanId: parentSpanId,
+        traceFlags: TraceFlags.SAMPLED,
+        isRemote: false,
+      };
+    }
 
     // Set resource and instrumentation library
     this.resource = resource || ({} as Resource);
