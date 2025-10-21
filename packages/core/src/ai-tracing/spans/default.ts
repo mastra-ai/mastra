@@ -23,27 +23,23 @@ export class DefaultAISpan<TType extends AISpanType> extends BaseAISpan<TType> {
     if (options.parent) {
       // Child span inherits trace ID from parent span
       this.traceId = options.parent.traceId;
-    } else if (options.externalTraceId) {
-      // Root span with external trace ID
-      if (!isValidTraceId(options.externalTraceId)) {
-        throw new Error(
-          `Invalid externalTraceId: must be 1-32 hexadecimal characters, got "${options.externalTraceId}"`,
-        );
+    } else if (options.traceId) {
+      // Root span with provided trace ID
+      if (!isValidTraceId(options.traceId)) {
+        throw new Error(`Invalid traceId: must be 1-32 hexadecimal characters, got "${options.traceId}"`);
       }
-      this.traceId = options.externalTraceId;
+      this.traceId = options.traceId;
     } else {
-      // Root span without external trace ID - generate new
+      // Root span without provided trace ID - generate new
       this.traceId = generateTraceId();
     }
 
     // Set parent span ID if provided
-    if (!options.parent && options.externalParentSpanId) {
-      if (!isValidSpanId(options.externalParentSpanId)) {
-        throw new Error(
-          `Invalid externalParentSpanId: must be 1-16 hexadecimal characters, got "${options.externalParentSpanId}"`,
-        );
+    if (!options.parent && options.parentSpanId) {
+      if (!isValidSpanId(options.parentSpanId)) {
+        throw new Error(`Invalid parentSpanId: must be 1-16 hexadecimal characters, got "${options.parentSpanId}"`);
       }
-      this.externalParentSpanId = options.externalParentSpanId;
+      this.parentSpanId = options.parentSpanId;
     }
   }
 

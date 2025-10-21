@@ -973,7 +973,7 @@ describe('AI Tracing', () => {
         exporters: [testExporter],
       });
 
-      const externalTraceId = '0123456789abcdef0123456789abcdef';
+      const traceId = '0123456789abcdef0123456789abcdef';
 
       const span = aiTracing.startSpan({
         type: AISpanType.AGENT_RUN,
@@ -981,10 +981,10 @@ describe('AI Tracing', () => {
         attributes: {
           agentId: 'agent-1',
         },
-        externalTraceId,
+        traceId,
       });
 
-      expect(span.traceId).toBe(externalTraceId);
+      expect(span.traceId).toBe(traceId);
       expect(span.id).toBeValidSpanId();
       expect(span.getParentSpanId()).toBeUndefined();
 
@@ -999,8 +999,8 @@ describe('AI Tracing', () => {
         exporters: [testExporter],
       });
 
-      const externalTraceId = '0123456789abcdef0123456789abcdef';
-      const externalParentSpanId = '0123456789abcdef';
+      const traceId = '0123456789abcdef0123456789abcdef';
+      const parentSpanId = '0123456789abcdef';
 
       const span = aiTracing.startSpan({
         type: AISpanType.AGENT_RUN,
@@ -1008,20 +1008,20 @@ describe('AI Tracing', () => {
         attributes: {
           agentId: 'agent-1',
         },
-        externalTraceId,
-        externalParentSpanId,
+        traceId,
+        parentSpanId,
       });
 
-      expect(span.traceId).toBe(externalTraceId);
+      expect(span.traceId).toBe(traceId);
       expect(span.id).toBeValidSpanId();
-      expect(span.getParentSpanId()).toBe(externalParentSpanId);
+      expect(span.getParentSpanId()).toBe(parentSpanId);
 
       span.end();
 
       // Verify it's exported correctly
       const endEvent = testExporter.events.find(e => e.type === AITracingEventType.SPAN_ENDED);
       expect(endEvent).toBeDefined();
-      expect(endEvent?.exportedSpan.parentSpanId).toBe(externalParentSpanId);
+      expect(endEvent?.exportedSpan.parentSpanId).toBe(parentSpanId);
     });
 
     it('should throw error for invalid external trace ID', () => {
@@ -1039,9 +1039,9 @@ describe('AI Tracing', () => {
           attributes: {
             agentId: 'agent-1',
           },
-          externalTraceId: 'invalid-trace-id',
+          traceId: 'invalid-trace-id',
         });
-      }).toThrow('Invalid externalTraceId: must be 1-32 hexadecimal characters');
+      }).toThrow('Invalid traceId: must be 1-32 hexadecimal characters');
     });
 
     it('should throw error for trace ID that is too long', () => {
@@ -1059,9 +1059,9 @@ describe('AI Tracing', () => {
           attributes: {
             agentId: 'agent-1',
           },
-          externalTraceId: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0',
+          traceId: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0',
         });
-      }).toThrow('Invalid externalTraceId: must be 1-32 hexadecimal characters');
+      }).toThrow('Invalid traceId: must be 1-32 hexadecimal characters');
     });
 
     it('should throw error for invalid external parent span ID', () => {
@@ -1079,10 +1079,10 @@ describe('AI Tracing', () => {
           attributes: {
             agentId: 'agent-1',
           },
-          externalTraceId: '0123456789abcdef0123456789abcdef',
-          externalParentSpanId: 'invalid-span-id',
+          traceId: '0123456789abcdef0123456789abcdef',
+          parentSpanId: 'invalid-span-id',
         });
-      }).toThrow('Invalid externalParentSpanId: must be 1-16 hexadecimal characters');
+      }).toThrow('Invalid parentSpanId: must be 1-16 hexadecimal characters');
     });
 
     it('should throw error for parent span ID that is too long', () => {
@@ -1100,10 +1100,10 @@ describe('AI Tracing', () => {
           attributes: {
             agentId: 'agent-1',
           },
-          externalTraceId: '0123456789abcdef0123456789abcdef',
-          externalParentSpanId: '0123456789abcdef0123456789abcdef',
+          traceId: '0123456789abcdef0123456789abcdef',
+          parentSpanId: '0123456789abcdef0123456789abcdef',
         });
-      }).toThrow('Invalid externalParentSpanId: must be 1-16 hexadecimal characters');
+      }).toThrow('Invalid parentSpanId: must be 1-16 hexadecimal characters');
     });
 
     it('should accept shorter trace and span IDs', () => {
@@ -1123,8 +1123,8 @@ describe('AI Tracing', () => {
         attributes: {
           agentId: 'agent-1',
         },
-        externalTraceId: shortTraceId,
-        externalParentSpanId: shortSpanId,
+        traceId: shortTraceId,
+        parentSpanId: shortSpanId,
       });
 
       expect(span.traceId).toBe(shortTraceId);
@@ -1141,7 +1141,7 @@ describe('AI Tracing', () => {
         exporters: [testExporter],
       });
 
-      const externalTraceId = 'fedcba9876543210fedcba9876543210';
+      const traceId = 'fedcba9876543210fedcba9876543210';
 
       const rootSpan = aiTracing.startSpan({
         type: AISpanType.AGENT_RUN,
@@ -1149,7 +1149,7 @@ describe('AI Tracing', () => {
         attributes: {
           agentId: 'agent-1',
         },
-        externalTraceId,
+        traceId,
       });
 
       const childSpan = rootSpan.createChildSpan({
@@ -1160,8 +1160,8 @@ describe('AI Tracing', () => {
         },
       });
 
-      expect(rootSpan.traceId).toBe(externalTraceId);
-      expect(childSpan.traceId).toBe(externalTraceId);
+      expect(rootSpan.traceId).toBe(traceId);
+      expect(childSpan.traceId).toBe(traceId);
       expect(childSpan.getParentSpanId()).toBe(rootSpan.id);
 
       childSpan.end();
@@ -1176,7 +1176,7 @@ describe('AI Tracing', () => {
         exporters: [testExporter],
       });
 
-      const externalParentSpanId = 'fedcba9876543210';
+      const parentSpanId = 'fedcba9876543210';
 
       const span = aiTracing.startSpan({
         type: AISpanType.WORKFLOW_RUN,
@@ -1184,13 +1184,13 @@ describe('AI Tracing', () => {
         attributes: {
           workflowId: 'workflow-1',
         },
-        externalParentSpanId,
+        parentSpanId,
       });
 
       // Should generate a new trace ID
       expect(span.traceId).toBeValidTraceId();
       // Should use the external parent span ID
-      expect(span.getParentSpanId()).toBe(externalParentSpanId);
+      expect(span.getParentSpanId()).toBe(parentSpanId);
 
       span.end();
     });

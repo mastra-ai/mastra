@@ -78,8 +78,8 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
     details?: Record<string, any>;
   };
   public metadata?: Record<string, any>;
-  /** External parent span ID (for root spans that are children of external spans) */
-  protected externalParentSpanId?: string;
+  /** Parent span ID (for root spans that are children of external spans) */
+  protected parentSpanId?: string;
 
   constructor(options: CreateSpanOptions<TType>, aiTracing: AITracing) {
     this.name = options.name;
@@ -130,8 +130,8 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
   /** Get the closest parent spanId that isn't an internal span */
   public getParentSpanId(includeInternalSpans?: boolean): string | undefined {
     if (!this.parent) {
-      // Return external parent span ID if available, otherwise undefined
-      return this.externalParentSpanId;
+      // Return parent span ID if available, otherwise undefined
+      return this.parentSpanId;
     }
     if (includeInternalSpans) return this.parent.id;
     if (this.parent.isInternal) return this.parent.getParentSpanId(includeInternalSpans);
