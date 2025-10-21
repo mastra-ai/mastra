@@ -202,8 +202,7 @@ describe('StepExecutor', () => {
     expect(result).toBe(0);
   });
 
-  it('should save only error message without stack trace when step fails (GitHub issue #5563)', async () => {
-    // Arrange: Create a step that throws an error
+  it('should save only error message without stack trace when step fails', async () => {
     const errorMessage = 'Test error: step execution failed.';
     const failingStep = createStep({
       id: 'failing-step',
@@ -216,7 +215,6 @@ describe('StepExecutor', () => {
 
     const emitter = new EventEmitterPubSub();
 
-    // Execute the step
     const result = await stepExecutor.execute({
       workflowId: 'test-workflow',
       step: failingStep,
@@ -228,23 +226,15 @@ describe('StepExecutor', () => {
       runtimeContext,
     });
 
-    // Verify the result is a failure
     expect(result.status).toBe('failed');
-
-    // Type guard to access error property
-    if (result.status === 'failed') {
-      // EXPECTED BEHAVIOR: Error should be just the message with "Error: " prefix
-      expect(result.error).toBe('Error: ' + errorMessage);
-
-      // Verify NO stack trace is present
-      expect(String(result.error)).not.toContain('at Object.execute');
-      expect(String(result.error)).not.toContain('at ');
-      expect(String(result.error)).not.toContain('\n');
-    }
+    const failedResult = result as Extract<typeof result, { status: 'failed' }>;
+    expect(failedResult.error).toBe('Error: ' + errorMessage);
+    expect(String(failedResult.error)).not.toContain('at Object.execute');
+    expect(String(failedResult.error)).not.toContain('at ');
+    expect(String(failedResult.error)).not.toContain('\n');
   });
 
-  it('should save only MastraError message without stack trace when step fails (GitHub issue #5563)', async () => {
-    // Arrange: Create a step that throws a MastraError
+  it('should save MastraError message without stack trace when step fails', async () => {
     const errorMessage = 'Test MastraError: step execution failed.';
     const failingStep = createStep({
       id: 'failing-step',
@@ -263,7 +253,6 @@ describe('StepExecutor', () => {
 
     const emitter = new EventEmitterPubSub();
 
-    // Act: Execute the step
     const result = await stepExecutor.execute({
       workflowId: 'test-workflow',
       step: failingStep,
@@ -275,18 +264,11 @@ describe('StepExecutor', () => {
       runtimeContext,
     });
 
-    // Assert: Verify the result is a failure
     expect(result.status).toBe('failed');
-
-    // Type guard to access error property
-    if (result.status === 'failed') {
-      // EXPECTED BEHAVIOR: Error should be just the message with "Error: " prefix
-      expect(result.error).toBe('Error: ' + errorMessage);
-
-      // Verify NO stack trace is present
-      expect(String(result.error)).not.toContain('at Object.execute');
-      expect(String(result.error)).not.toContain('at ');
-      expect(String(result.error)).not.toContain('\n');
-    }
+    const failedResult = result as Extract<typeof result, { status: 'failed' }>;
+    expect(failedResult.error).toBe('Error: ' + errorMessage);
+    expect(String(failedResult.error)).not.toContain('at Object.execute');
+    expect(String(failedResult.error)).not.toContain('at ');
+    expect(String(failedResult.error)).not.toContain('\n');
   });
 });

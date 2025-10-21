@@ -5568,8 +5568,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should persist only error message without stack trace in snapshot (GitHub issue #5563)', async () => {
-      // Create a custom storage to capture the snapshot
+    it('should persist error message without stack trace in snapshot', async () => {
       const mockStorage = new MockStore();
       const persistSpy = vi.spyOn(mockStorage, 'persistWorkflowSnapshot');
 
@@ -5602,39 +5601,27 @@ describe('Workflow', () => {
       const result = await run.start({ inputData: {} });
 
       expect(result.status).toBe('failed');
-
-      // Check that persistWorkflowSnapshot was called
       expect(persistSpy).toHaveBeenCalled();
 
-      // Get the snapshot that was persisted
       const persistCall = persistSpy.mock.calls[persistSpy.mock.calls.length - 1];
       const snapshot = persistCall?.[0]?.snapshot;
 
       expect(snapshot).toBeDefined();
       expect(snapshot.status).toBe('failed');
 
-      // Check the step error in the snapshot context
       const step1Result = snapshot.context.step1;
       expect(step1Result).toBeDefined();
       expect(step1Result?.status).toBe('failed');
 
-      // Type guard to access error property
-      if (step1Result?.status === 'failed') {
-        const stepError = step1Result.error;
-        expect(stepError).toBeDefined();
-
-        // Verify the error is just the message with "Error: " prefix
-        expect(stepError).toBe('Error: ' + errorMessage);
-
-        // Verify NO stack trace is present
-        expect(String(stepError)).not.toContain('at Object.execute');
-        expect(String(stepError)).not.toContain('at ');
-        expect(String(stepError)).not.toContain('\n');
-      }
+      const failedStepResult = step1Result as Extract<typeof step1Result, { status: 'failed' }>;
+      expect(failedStepResult.error).toBeDefined();
+      expect(failedStepResult.error).toBe('Error: ' + errorMessage);
+      expect(String(failedStepResult.error)).not.toContain('at Object.execute');
+      expect(String(failedStepResult.error)).not.toContain('at ');
+      expect(String(failedStepResult.error)).not.toContain('\n');
     });
 
-    it('should persist only MastraError message without stack trace in snapshot (GitHub issue #5563)', async () => {
-      // Create a custom storage to capture the snapshot
+    it('should persist MastraError message without stack trace in snapshot', async () => {
       const mockStorage = new MockStore();
       const persistSpy = vi.spyOn(mockStorage, 'persistWorkflowSnapshot');
 
@@ -5673,35 +5660,24 @@ describe('Workflow', () => {
       const result = await run.start({ inputData: {} });
 
       expect(result.status).toBe('failed');
-
-      // Check that persistWorkflowSnapshot was called
       expect(persistSpy).toHaveBeenCalled();
 
-      // Get the snapshot that was persisted
       const persistCall = persistSpy.mock.calls[persistSpy.mock.calls.length - 1];
       const snapshot = persistCall?.[0]?.snapshot;
 
       expect(snapshot).toBeDefined();
       expect(snapshot.status).toBe('failed');
 
-      // Check the step error in the snapshot context
       const step1Result = snapshot.context.step1;
       expect(step1Result).toBeDefined();
       expect(step1Result?.status).toBe('failed');
 
-      // Type guard to access error property
-      if (step1Result?.status === 'failed') {
-        const stepError = step1Result.error;
-        expect(stepError).toBeDefined();
-
-        // Verify the error is just the message with "Error: " prefix
-        expect(stepError).toBe('Error: ' + errorMessage);
-
-        // Verify NO stack trace is present
-        expect(String(stepError)).not.toContain('at Object.execute');
-        expect(String(stepError)).not.toContain('at ');
-        expect(String(stepError)).not.toContain('\n');
-      }
+      const failedStepResult = step1Result as Extract<typeof step1Result, { status: 'failed' }>;
+      expect(failedStepResult.error).toBeDefined();
+      expect(failedStepResult.error).toBe('Error: ' + errorMessage);
+      expect(String(failedStepResult.error)).not.toContain('at Object.execute');
+      expect(String(failedStepResult.error)).not.toContain('at ');
+      expect(String(failedStepResult.error)).not.toContain('\n');
     });
 
     it('should handle step execution errors within branches', async () => {
