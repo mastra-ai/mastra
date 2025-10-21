@@ -5628,7 +5628,6 @@ describe('Workflow', () => {
 
         // Verify NO stack trace is present (no "at " which appears in stack traces)
         expect(String(stepError)).not.toContain('at Object.execute');
-        console.log('step error is >>>', stepError, 'type of step error >>>', typeof stepError);
         expect(String(stepError)).not.toContain('at ');
         expect(String(stepError)).not.toContain('\n');
       }
@@ -5643,7 +5642,7 @@ describe('Workflow', () => {
         storage: mockStorage,
       });
 
-      const errorMessage = 'Test MastraError: step execution failed.';
+      const errorMessage = 'Step execution failed.';
       const failingAction = vi.fn<any>().mockImplementation(() => {
         throw new MastraError({
           id: 'VALIDATION_ERROR',
@@ -5696,8 +5695,8 @@ describe('Workflow', () => {
         expect(stepError).toBeDefined();
 
         // EXPECTED BEHAVIOR: Error should be just the message
-        // This test will FAIL with current implementation because it saves stack traces
-        expect(stepError).toBe(errorMessage);
+
+        expect(stepError).toBe('Error: ' + errorMessage);
 
         // Verify NO stack trace is present
         expect(String(stepError)).not.toContain('at Object.execute');

@@ -233,9 +233,8 @@ describe('StepExecutor', () => {
 
     // Type guard to access error property
     if (result.status === 'failed') {
-      // EXPECTED BEHAVIOR: Error should be just the message
-      // This test will FAIL with current implementation because it saves stack traces
-      expect(result.error).toBe(errorMessage);
+      // EXPECTED BEHAVIOR: Error should be just the message with "Error: " prefix
+      expect(result.error).toBe('Error: ' + errorMessage);
 
       // Verify NO stack trace is present (no "at " which appears in stack traces)
       expect(String(result.error)).not.toContain('at Object.execute');
@@ -281,9 +280,8 @@ describe('StepExecutor', () => {
 
     // Type guard to access error property
     if (result.status === 'failed') {
-      // EXPECTED BEHAVIOR: Error should be just the message
-      // This test will FAIL with current implementation because it saves stack traces
-      expect(result.error).toBe(errorMessage);
+      // EXPECTED BEHAVIOR: Error should be just the message with "Error: " prefix
+      expect(result.error).toBe('Error: ' + errorMessage);
 
       // Verify NO stack trace is present
       expect(String(result.error)).not.toContain('at Object.execute');
