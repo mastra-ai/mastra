@@ -536,9 +536,8 @@ export async function searchMemoryHandler({
     const config = memory.getMergedThreadConfig(memoryConfig || {});
     const hasSemanticRecall = !!config?.semanticRecall;
     // Default scope is now 'resource', so check if it's NOT explicitly set to 'thread'
-    const resourceScope = typeof config?.semanticRecall === 'object' 
-      ? config?.semanticRecall?.scope !== 'thread'
-      : true; // If semanticRecall is just `true`, default to resource scope
+    const resourceScope =
+      typeof config?.semanticRecall === 'object' ? config?.semanticRecall?.scope !== 'thread' : true; // If semanticRecall is just `true`, default to resource scope
 
     // Only validate thread ownership if we're in thread scope
     if (threadId && !resourceScope) {
@@ -552,7 +551,6 @@ export async function searchMemoryHandler({
     }
 
     const searchResults: SearchResult[] = [];
-    const messageMap = new Map<string, boolean>(); // For deduplication
 
     // If threadId is provided and scope is thread-based, check if the thread exists
     if (threadId && !resourceScope) {
@@ -569,82 +567,11 @@ export async function searchMemoryHandler({
       }
     }
 
-    // If resource scope is enabled or no threadId provided, search across all threads
-    if (!threadId || resourceScope) {
-      // Search across all threads for this resource
+    // If no threadId provided, get one from the resource
+    if (!threadId) {
       const threads = await memory.getThreadsByResourceId({ resourceId });
 
-      // If no threads exist yet, return empty results
       if (threads.length === 0) {
-        return {
-          results: [],
-          count: 0,
-          query: searchQuery,
-          searchScope: 'resource',
-          searchType: hasSemanticRecall ? 'semantic' : 'text',
-        };
-      }
-
-      for (const thread of threads) {
-        // Use rememberMessages for semantic search
-        const result = await memory.rememberMessages({
-          threadId: thread.id,
-          resourceId,
-          vectorMessageSearch: searchQuery,
-          config,
-        });
-
-        // Get thread messages for context
-        const threadMessages = (await memory.query({ threadId: thread.id })).uiMessages;
-
-        // Process results
-        result.messagesV2.forEach(msg => {
-          if (messageMap.has(msg.id)) return;
-          messageMap.set(msg.id, true);
-
-          const content =
-            msg.content.content || msg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join(' ') || '';
-
-          if (!hasSemanticRecall && !content.toLowerCase().includes(searchQuery.toLowerCase())) {
-            return;
-          }
-
-          const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
-
-          const searchResult: SearchResult = {
-            id: msg.id,
-            role: msg.role,
-            content,
-            createdAt: msg.createdAt,
-            threadId: msg.threadId || thread.id,
-            threadTitle: thread.title || msg.threadId || thread.id,
-          };
-
-          if (messageIndex !== -1) {
-            searchResult.context = {
-              before: threadMessages.slice(Math.max(0, messageIndex - 2), messageIndex).map(m => ({
-                id: m.id,
-                role: m.role,
-                content: m.content,
-                createdAt: m.createdAt || new Date(),
-              })),
-              after: threadMessages.slice(messageIndex + 1, messageIndex + 3).map(m => ({
-                id: m.id,
-                role: m.role,
-                content: m.content,
-                createdAt: m.createdAt || new Date(),
-              })),
-            };
-          }
-
-          searchResults.push(searchResult);
-        });
-      }
-    } else if (threadId) {
-      // Search in specific thread only
-      const thread = await memory.getThreadById({ threadId });
-      if (!thread) {
-        // Thread doesn't exist yet - return empty results
         return {
           results: [],
           count: 0,
@@ -654,61 +581,86 @@ export async function searchMemoryHandler({
         };
       }
 
-      const result = await memory.rememberMessages({
-        threadId,
-        resourceId,
-        vectorMessageSearch: searchQuery,
-        config,
-      });
+      // Use first thread - Memory class will handle scope internally
+      threadId = threads[0]!.id;
+    }
 
-      const threadMessages = (await memory.query({ threadId })).uiMessages;
+    const beforeRange =
+      typeof config.semanticRecall === `boolean`
+        ? 2
+        : typeof config.semanticRecall?.messageRange === `number`
+          ? config.semanticRecall.messageRange
+          : config.semanticRecall?.messageRange.before || 2;
+    const afterRange =
+      typeof config.semanticRecall === `boolean`
+        ? 2
+        : typeof config.semanticRecall?.messageRange === `number`
+          ? config.semanticRecall.messageRange
+          : config.semanticRecall?.messageRange.after || 2;
 
-      result.messagesV2.forEach(msg => {
-        // Skip duplicates
-        if (messageMap.has(msg.id)) return;
-        messageMap.set(msg.id, true);
+    if (resourceScope && config.semanticRecall) {
+      config.semanticRecall =
+        typeof config.semanticRecall === `boolean`
+          ? // make message range 0 so we can highlight the matches in search, message range will include other messages, not the matching ones
+            // and we add prev/next messages in a special section on each message anyway
+            { messageRange: 0, topK: 2, scope: 'resource' }
+          : { ...config.semanticRecall, messageRange: 0 };
+    }
 
-        // Extract content
-        const content =
-          msg.content.content || msg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join(' ') || '';
+    // Single call to rememberMessages - just like the agent does
+    // The Memory class handles scope (thread vs resource) internally
+    const result = await memory.rememberMessages({
+      threadId,
+      resourceId,
+      vectorMessageSearch: searchQuery,
+      config,
+    });
 
-        // If not using semantic recall, filter by text search
-        if (!hasSemanticRecall && !content.toLowerCase().includes(searchQuery.toLowerCase())) {
-          return;
-        }
+    // Get all threads to build context and show which thread each message is from
+    const threads = await memory.getThreadsByResourceId({ resourceId });
+    const threadMap = new Map(threads.map(t => [t.id, t]));
 
-        // Find message index for context
-        const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
+    // Process each message in the results
+    for (const msg of result.messagesV2) {
+      const content =
+        typeof msg.content.content === `string`
+          ? msg.content.content
+          : msg.content.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join(' ') || '';
 
-        const searchResult: SearchResult = {
-          id: msg.id,
-          role: msg.role,
-          content,
-          createdAt: msg.createdAt,
-          threadId: threadId,
-          threadTitle: thread?.title || threadId,
+      const msgThreadId = msg.threadId || threadId;
+      const thread = threadMap.get(msgThreadId);
+
+      // Get thread messages for context
+      const threadMessages = (await memory.query({ threadId: msgThreadId })).uiMessages;
+      const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
+
+      const searchResult: SearchResult = {
+        id: msg.id,
+        role: msg.role,
+        content,
+        createdAt: msg.createdAt,
+        threadId: msgThreadId,
+        threadTitle: thread?.title || msgThreadId,
+      };
+
+      if (messageIndex !== -1) {
+        searchResult.context = {
+          before: threadMessages.slice(Math.max(0, messageIndex - beforeRange), messageIndex).map(m => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            createdAt: m.createdAt || new Date(),
+          })),
+          after: threadMessages.slice(messageIndex + 1, messageIndex + afterRange + 1).map(m => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            createdAt: m.createdAt || new Date(),
+          })),
         };
+      }
 
-        // Add context if found
-        if (messageIndex !== -1) {
-          searchResult.context = {
-            before: threadMessages.slice(Math.max(0, messageIndex - 2), messageIndex).map(m => ({
-              id: m.id,
-              role: m.role,
-              content: m.content,
-              createdAt: m.createdAt || new Date(),
-            })),
-            after: threadMessages.slice(messageIndex + 1, messageIndex + 3).map(m => ({
-              id: m.id,
-              role: m.role,
-              content: m.content,
-              createdAt: m.createdAt || new Date(),
-            })),
-          };
-        }
-
-        searchResults.push(searchResult);
-      });
+      searchResults.push(searchResult);
     }
 
     // Sort by date (newest first) and limit
