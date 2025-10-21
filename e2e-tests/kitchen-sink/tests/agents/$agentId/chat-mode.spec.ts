@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { selectFixture } from './utils/select-fixture';
+import { selectFixture } from '../../__utils__/select-fixture';
 import { nanoid } from 'nanoid';
 
 test.describe('chat modes', () => {
