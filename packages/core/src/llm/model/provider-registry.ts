@@ -385,8 +385,9 @@ export class GatewayRegistry {
       await writeRegistryFiles(distJsonPath, distTypesPath, providers, models);
       // console.debug(`[GatewayRegistry] ✅ Updated registry files in dist/`);
 
-      // Also copy to src/ when explicitly requested or when using dynamic loading
-      if (writeToSrc || this.useDynamicLoading) {
+      // Copy to src/ only when explicitly requested (e.g., running the generation script)
+      const shouldWriteToSrc = writeToSrc;
+      if (shouldWriteToSrc) {
         const srcJsonPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-registry.json');
         const srcTypesPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-types.generated.d.ts');
 
