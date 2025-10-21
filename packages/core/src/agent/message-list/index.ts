@@ -680,6 +680,8 @@ export class MessageList {
       | AIV4Type.CoreMessage[]
       | AIV5Type.ModelMessage
       | AIV5Type.ModelMessage[]
+      | MastraMessageV2
+      | MastraMessageV2[]
       | string
       | string[]
       | null,
@@ -726,12 +728,31 @@ export class MessageList {
     return msgs;
   }
 
-  private addOneSystem(message: AIV4Type.CoreMessage | AIV5Type.ModelMessage | string, tag?: string) {
-    if (typeof message === `string`) message = { role: 'system', content: message };
+  /**
+   * Converts various message formats to AIV4 CoreMessage format for system messages
+   * @param message - The message to convert (can be string, MastraMessageV2, or AI SDK message types)
+   * @returns AIV4 CoreMessage in the proper format
+   */
+  private systemMessageToAICore(
+    message: AIV4Type.CoreMessage | AIV5Type.ModelMessage | MastraMessageV2 | string,
+  ): AIV4Type.CoreMessage {
+    if (typeof message === `string`) {
+      return { role: 'system', content: message };
+    }
 
-    const coreMessage = MessageList.isAIV4CoreMessage(message)
-      ? message
-      : this.aiV5ModelMessagesToAIV4CoreMessages([message], `system`)[0]!;
+    if (MessageList.isAIV5CoreMessage(message)) {
+      return this.aiV5ModelMessagesToAIV4CoreMessages([message as AIV5Type.ModelMessage], `system`)[0]!;
+    }
+
+    if (MessageList.isMastraMessageV2(message)) {
+      return MessageList.mastraMessageV2SystemToV4Core(message);
+    }
+
+    return message;
+  }
+
+  private addOneSystem(message: AIV4Type.CoreMessage | AIV5Type.ModelMessage | MastraMessageV2 | string, tag?: string) {
+    const coreMessage = this.systemMessageToAICore(message);
 
     if (coreMessage.role !== `system`) {
       throw new Error(
@@ -887,6 +908,28 @@ export class MessageList {
     }
     return uiMessage;
   }
+
+  /**
+   * Converts a MastraMessageV2 system message directly to AIV4 CoreMessage format
+   * This is more efficient than converting to UI message first and then to core
+   * @param message - The MastraMessageV2 message to convert
+   * @returns AIV4 CoreMessage with system role
+   */
+  private static mastraMessageV2SystemToV4Core(message: MastraMessageV2): AIV4Type.CoreMessage {
+    if (message.role !== `system` || !message.content.content)
+      throw new MastraError({
+        id: 'INVALID_SYSTEM_MESSAGE_FORMAT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Invalid system message format. System messages must include 'role' and 'content' properties. The content should be a string.`,
+        details: {
+          receivedMessage: JSON.stringify(message, null, 2),
+        },
+      });
+
+    return { role: 'system', content: message.content.content };
+  }
+
   private getMessageById(id: string) {
     return this.messages.find(m => m.id === id);
   }
@@ -934,8 +977,15 @@ export class MessageList {
       // In the past system messages were accidentally stored in the db. these should be ignored because memory is not supposed to store system messages.
       if (messageSource === `memory`) return null;
 
-      if (MessageList.isAIV4CoreMessage(message) || MessageList.isAIV5CoreMessage(message))
+      // Check if the message is in a supported format for system messages
+      const isSupportedSystemFormat =
+        MessageList.isAIV4CoreMessage(message) ||
+        MessageList.isAIV5CoreMessage(message) ||
+        MessageList.isMastraMessageV2(message);
+
+      if (isSupportedSystemFormat) {
         return this.addSystem(message);
+      }
 
       // if we didn't add the message and we didn't ignore this intentionally, then it's a problem!
       throw new MastraError({

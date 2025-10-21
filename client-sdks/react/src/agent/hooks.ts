@@ -7,7 +7,6 @@ import { CoreUserMessage } from '@mastra/core/llm';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
 import { toUIMessage } from '@/lib/ai-sdk';
 import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
 import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
@@ -120,34 +119,6 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
     }
   };
 
-  const handleStreamResponse = async (
-    response: Response & {
-      processDataStream: (options: { onChunk: (chunk: ChunkType) => Promise<void> }) => Promise<void>;
-    },
-    onChunk?: (chunk: ChunkType) => Promise<void>,
-  ) => {
-    if (!response.body) {
-      setIsRunning(false);
-      throw new Error('[Stream] No response body');
-    }
-
-    await response.processDataStream({
-      onChunk: async (chunk: ChunkType) => {
-        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
-        flushSync(() => {
-          setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-        });
-
-        if (chunk.type === 'finish') {
-          _currentRunId.current = undefined;
-          _onChunk.current = undefined;
-        }
-
-        onChunk?.(chunk);
-      },
-    });
-  };
-
   const stream = async ({ coreUserMessages, runtimeContext, threadId, onChunk, modelSettings, signal }: StreamArgs) => {
     const {
       frequencyPenalty,
@@ -199,7 +170,15 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
     _onChunk.current = onChunk;
     _currentRunId.current = runId;
 
-    await handleStreamResponse(response, onChunk);
+    await response.processDataStream({
+      onChunk: async (chunk: ChunkType) => {
+        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
+
+        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+
+        onChunk?.(chunk);
+      },
+    });
 
     setIsRunning(false);
   };
@@ -247,10 +226,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
 
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
-        flushSync(() => {
-          setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
-        });
-
+        setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
         onNetworkChunk?.(chunk);
       },
     });
@@ -277,7 +253,15 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
     const agent = baseClient.getAgent(agentId);
     const response = await agent.approveToolCall({ runId: currentRunId, toolCallId });
 
-    await handleStreamResponse(response, onChunk);
+    await response.processDataStream({
+      onChunk: async (chunk: ChunkType) => {
+        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
+
+        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+
+        onChunk?.(chunk);
+      },
+    });
     setIsRunning(false);
   };
 
@@ -293,7 +277,15 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
     const agent = baseClient.getAgent(agentId);
     const response = await agent.declineToolCall({ runId: currentRunId, toolCallId });
 
-    await handleStreamResponse(response, onChunk);
+    await response.processDataStream({
+      onChunk: async (chunk: ChunkType) => {
+        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
+
+        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+
+        onChunk?.(chunk);
+      },
+    });
     setIsRunning(false);
   };
 

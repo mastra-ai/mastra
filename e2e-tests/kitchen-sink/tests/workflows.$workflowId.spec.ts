@@ -4,7 +4,7 @@ test('overall layout information', async ({ page }) => {
   await page.goto('http://localhost:4111/workflows/complexWorkflow/graph');
 
   // Header
-  await expect(page).toHaveTitle(/Mastra Playground/);
+  await expect(page).toHaveTitle(/Mastra Studio/);
   await expect(page.locator('text=Workflows documentation')).toHaveAttribute(
     'href',
     'https://mastra.ai/en/docs/workflows/overview',
