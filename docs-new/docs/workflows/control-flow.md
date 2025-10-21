@@ -1,6 +1,6 @@
 ---
-title: "Branching, Merging, Conditions "
-description: "Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements."
+title: 'Branching, Merging, Conditions '
+description: 'Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements.'
 ---
 
 # Control Flow
@@ -8,7 +8,7 @@ description: "Control flow in Mastra workflows allows you to manage branching, m
 When you build a workflow, you typically break down operations into smaller tasks that can be linked and reused. **Steps** provide a structured way to manage these tasks by defining inputs, outputs, and execution logic.
 
 - If the schemas match, the `outputSchema` from each step is automatically passed to the `inputSchema` of the next step.
-- If the schemas don't match, use [Input data mapping](./input-data-mapping.md) to transform the `outputSchema` into the expected `inputSchema`.
+- If the schemas don't match, use [Input data mapping](./input-data-mapping) to transform the `outputSchema` into the expected `inputSchema`.
 
 ## Chaining steps with `.then()`
 
@@ -53,7 +53,7 @@ export const testWorkflow = createWorkflow({...})
 
 This executes `step1` and `step2` concurrently, then continues to `step3` after both complete.
 
-> See [Parallel Execution with Steps](../../examples/workflows/parallel-steps.md) for more information.
+> See [Parallel Execution with Steps](../../examples/workflows/parallel-steps) for more information.
 
 > 📹 Watch: How to run steps in parallel and optimize your Mastra workflow → [YouTube (3 minutes)](https://youtu.be/GQJxve5Hki4)
 
@@ -80,7 +80,7 @@ export const testWorkflow = createWorkflow({...})
 
 Branch conditions are evaluated sequentially, but steps with matching conditions are executed in parallel.
 
-> See [Workflow with Conditional Branching](../../examples/workflows/conditional-branching.md) for more information.
+> See [Workflow with Conditional Branching](../../examples/workflows/conditional-branching) for more information.
 
 ## Looping steps
 
@@ -249,12 +249,12 @@ export const testWorkflow = createWorkflow({...})
 The following example demonstrates how to start a run with multiple inputs. Each input will pass through the `mapStep` sequentially.
 
 ```typescript {6} filename="src/test-workflow.ts" showLineNumbers copy
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+const run = await mastra.getWorkflow('testWorkflow').createRunAsync();
 
 const result = await run.start({
-  inputData: [{ number: 10 }, { number: 100 }, { number: 200 }]
+  inputData: [{ number: 10 }, { number: 100 }, { number: 200 }],
 });
 ```
 

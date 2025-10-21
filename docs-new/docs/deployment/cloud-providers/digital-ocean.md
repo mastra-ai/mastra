@@ -1,6 +1,6 @@
 ---
-title: "Digital Ocean"
-description: "Deploy your Mastra applications to Digital Ocean."
+title: 'Digital Ocean'
+description: 'Deploy your Mastra applications to Digital Ocean.'
 ---
 
 import Tabs from '@theme/Tabs';
@@ -12,10 +12,10 @@ Deploy your Mastra applications to Digital Ocean's App Platform and Droplets.
 
 :::note
 
-  This guide assumes your Mastra application has been created using the default
-  `npx create-mastra@latest` command.
-  For more information on how to create a new Mastra application,
-  refer to our [getting started guide](./../../getting-started/installation.md)
+This guide assumes your Mastra application has been created using the default
+`npx create-mastra@latest` command.
+For more information on how to create a new Mastra application,
+refer to our [getting started guide](./../../getting-started/installation)
 
 :::
 
@@ -31,8 +31,6 @@ Deploy your Mastra applications to Digital Ocean's App Platform and Droplets.
 - A [Digital Ocean account](https://www.digitalocean.com/)
 
 ### Deployment Steps
-
-
 
 ### Create a new App
 
@@ -85,8 +83,6 @@ Deploy your Mastra applications to Digital Ocean's App Platform and Droplets.
 - Your app will be built and deployed automatically.
 - Digital Ocean will provide you with a URL to access your deployed application.
 
-
-
 You can now access your deployed application at the URL provided by Digital Ocean.
 
 :::note
@@ -116,8 +112,6 @@ Deploy your Mastra application to Digital Ocean's Droplets.
 - Node.js 18+ installed on your droplet
 
 ### Deployment Steps
-
-
 
 ### Clone your Mastra application
 
@@ -186,8 +180,6 @@ Your Mastra application will run on port 4111 by default. Ensure your reverse pr
 
 :::
 
-
-
 </TabItem>
 
 </Tabs>
@@ -199,10 +191,10 @@ You can now connect to your Mastra server from your client application using a `
 Refer to the [`MastraClient` documentation](/docs/server-db/mastra-client) for more information.
 
 ```typescript copy showLineNumbers
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js';
 
 const mastraClient = new MastraClient({
-  baseUrl: "https://<your-domain-name>",
+  baseUrl: 'https://<your-domain-name>',
 });
 ```
 

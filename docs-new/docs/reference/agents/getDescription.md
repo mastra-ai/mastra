@@ -1,5 +1,5 @@
 ---
-title: "Reference: Agent.getDescription() "
+title: 'Reference: Agent.getDescription() '
 description: "Documentation for the `Agent.getDescription()` method in Mastra agents, which retrieves the agent's description."
 ---
 
@@ -20,15 +20,15 @@ This method takes no parameters.
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "description",
-      type: "string",
-      description: "The description of the agent, or an empty string if no description was configured.",
-    },
-  ]}
+content={[
+{
+name: "description",
+type: "string",
+description: "The description of the agent, or an empty string if no description was configured.",
+},
+]}
 />
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview.md)
+- [Agents overview](../../docs/agents/overview)

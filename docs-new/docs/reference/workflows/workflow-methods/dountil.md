@@ -1,5 +1,5 @@
 ---
-title: "Reference: Workflow.dountil() "
+title: 'Reference: Workflow.dountil() '
 description: Documentation for the `Workflow.dountil()` method in workflows, which creates a loop that executes a step until a condition is met.
 ---
 
@@ -16,37 +16,37 @@ workflow.dountil(step1, async ({ inputData }) => true);
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "step",
-      type: "Step",
-      description: "The step instance to execute in the loop",
-      isOptional: false,
-    },
-    {
-      name: "condition",
-      type: "(params : ExecuteParams & { iterationCount: number }) => Promise<boolean>",
-      description:
-        "A function that returns a boolean indicating whether to continue the loop. The function receives the execution parameters and the iteration count.",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "step",
+type: "Step",
+description: "The step instance to execute in the loop",
+isOptional: false,
+},
+{
+name: "condition",
+type: "(params : ExecuteParams & { iterationCount: number }) => Promise<boolean>",
+description:
+"A function that returns a boolean indicating whether to continue the loop. The function receives the execution parameters and the iteration count.",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "Workflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "Workflow",
+description: "The workflow instance for method chaining",
+},
+]}
 />
 
 ## Related
 
-- [Control Flow](../../../docs/workflows/control-flow.md)
+- [Control Flow](../../../docs/workflows/control-flow)
 
-- [ExecuteParams](../step.mdx#ExecuteParams)
+- [ExecuteParams](../step#ExecuteParams)

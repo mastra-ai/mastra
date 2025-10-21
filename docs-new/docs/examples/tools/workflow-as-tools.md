@@ -1,8 +1,7 @@
 ---
-title: "Workflows as Tools "
+title: 'Workflows as Tools '
 description: Example of using workflows as tools, demonstrating how to create reusable workflow components that can be called like tools.
 ---
-
 
 # Tools with Workflows
 
@@ -18,18 +17,18 @@ This example defines a two-step workflow:
 The workflow takes a `city` as input and outputs the `temperature`.
 
 ```typescript filename="src/mastra/workflows/example-temperature-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
 
 const getCityCoordinates = createStep({
-  id: "get-city-coordinates",
-  description: "Get geocoding details for a city",
+  id: 'get-city-coordinates',
+  description: 'Get geocoding details for a city',
   inputSchema: z.object({
-    city: z.string()
+    city: z.string(),
   }),
   outputSchema: z.object({
     longitude: z.number(),
-    latitude: z.number()
+    latitude: z.number(),
   }),
   execute: async ({ inputData }) => {
     const { city } = inputData;
@@ -41,42 +40,44 @@ const getCityCoordinates = createStep({
 
     return {
       latitude,
-      longitude
+      longitude,
     };
-  }
+  },
 });
 
 const getCityTemperature = createStep({
-  id: "get-city-temperature",
-  description: "Get temperature for latitude/longitude",
+  id: 'get-city-temperature',
+  description: 'Get temperature for latitude/longitude',
   inputSchema: z.object({
     latitude: z.number(),
-    longitude: z.number()
+    longitude: z.number(),
   }),
   outputSchema: z.object({
-    temperature: z.string()
+    temperature: z.string(),
   }),
   execute: async ({ inputData }) => {
     const { latitude, longitude } = inputData;
 
-    const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
+    const response = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`,
+    );
 
     const { current_weather, current_weather_units } = await response.json();
 
     return {
-      temperature: `${current_weather.temperature} ${current_weather_units.temperature}`
+      temperature: `${current_weather.temperature} ${current_weather_units.temperature}`,
     };
-  }
+  },
 });
 
 export const temperatureWorkflow = createWorkflow({
-  id: "temperature-workflow",
+  id: 'temperature-workflow',
   inputSchema: z.object({
-    city: z.string()
+    city: z.string(),
   }),
   outputSchema: z.object({
-    temperature: z.string()
-  })
+    temperature: z.string(),
+  }),
 })
   .then(getCityCoordinates)
   .then(getCityTemperature)
@@ -88,35 +89,35 @@ export const temperatureWorkflow = createWorkflow({
 This tool wraps the workflow and exposes it through a standard tool interface. It takes a `city` as input, runs the underlying workflow, and returns the resulting `temperature`.
 
 ```typescript filename="src/mastra/tools/temperature-tool.ts" showLineNumbers copy
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
 export const getTemperatureTool = createTool({
-  id: "get-temperature-tool",
-  description: "Gets the temperature for a city",
+  id: 'get-temperature-tool',
+  description: 'Gets the temperature for a city',
   inputSchema: z.object({
-    city: z.string()
+    city: z.string(),
   }),
   outputSchema: z.object({
-    temperature: z.string()
+    temperature: z.string(),
   }),
   execute: async ({ context, mastra }) => {
     const { city } = context;
-    const workflow = mastra!.getWorkflow("temperatureWorkflow");
+    const workflow = mastra!.getWorkflow('temperatureWorkflow');
     const run = await workflow!.createRunAsync({});
 
     const runResult = await run!.start({
       inputData: {
-        city
-      }
+        city,
+      },
     });
 
     const { temperature } = (runResult as any).result;
 
     return {
-      temperature
+      temperature,
     };
-  }
+  },
 });
 ```
 
@@ -127,4 +128,4 @@ export const getTemperatureTool = createTool({
 
 ## Related
 
-- [Calling Tools](./calling-tools.mdx#from-the-command-line)
+- [Calling Tools](./calling-tools#from-the-command-line)

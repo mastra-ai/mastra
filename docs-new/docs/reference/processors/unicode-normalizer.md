@@ -1,6 +1,6 @@
 ---
-title: "Reference: Unicode Normalizer "
-description: "Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters."
+title: 'Reference: Unicode Normalizer '
+description: 'Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters.'
 ---
 
 # UnicodeNormalizer
@@ -10,105 +10,103 @@ The `UnicodeNormalizer` is an **input processor** that normalizes Unicode text t
 ## Usage example
 
 ```typescript copy
-import { UnicodeNormalizer } from "@mastra/core/processors";
+import { UnicodeNormalizer } from '@mastra/core/processors';
 
 const processor = new UnicodeNormalizer({
   stripControlChars: true,
-  collapseWhitespace: true
+  collapseWhitespace: true,
 });
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "options",
-      type: "Options",
-      description: "Configuration options for Unicode text normalization",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "options",
+type: "Options",
+description: "Configuration options for Unicode text normalization",
+isOptional: true,
+},
+]}
 />
 
 ### Options
 
 <PropertiesTable
-  content={[
-    {
-      name: "stripControlChars",
-      type: "boolean",
-      description: "Whether to strip control characters. When enabled, removes control characters except \t, \n, \r",
-      isOptional: true,
-      default: "false",
-    },
-    {
-      name: "preserveEmojis",
-      type: "boolean",
-      description: "Whether to preserve emojis. When disabled, emojis may be removed if they contain control characters",
-      isOptional: true,
-      default: "true",
-    },
-    {
-      name: "collapseWhitespace",
-      type: "boolean",
-      description: "Whether to collapse consecutive whitespace. When enabled, multiple spaces/tabs/newlines are collapsed to single instances",
-      isOptional: true,
-      default: "true",
-    },
-    {
-      name: "trim",
-      type: "boolean",
-      description: "Whether to trim leading and trailing whitespace",
-      isOptional: true,
-      default: "true",
-    },
-  ]}
+content={[
+{
+name: "stripControlChars",
+type: "boolean",
+description: "Whether to strip control characters. When enabled, removes control characters except \t, \n, \r",
+isOptional: true,
+default: "false",
+},
+{
+name: "preserveEmojis",
+type: "boolean",
+description: "Whether to preserve emojis. When disabled, emojis may be removed if they contain control characters",
+isOptional: true,
+default: "true",
+},
+{
+name: "collapseWhitespace",
+type: "boolean",
+description: "Whether to collapse consecutive whitespace. When enabled, multiple spaces/tabs/newlines are collapsed to single instances",
+isOptional: true,
+default: "true",
+},
+{
+name: "trim",
+type: "boolean",
+description: "Whether to trim leading and trailing whitespace",
+isOptional: true,
+default: "true",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "name",
-      type: "string",
-      description: "Processor name set to 'unicode-normalizer'",
-      isOptional: false,
-    },
-    {
-      name: "processInput",
-      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }) => MastraMessageV2[]",
-      description: "Processes input messages to normalize Unicode text",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "name",
+type: "string",
+description: "Processor name set to 'unicode-normalizer'",
+isOptional: false,
+},
+{
+name: "processInput",
+type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }) => MastraMessageV2[]",
+description: "Processes input messages to normalize Unicode text",
+isOptional: false,
+},
+]}
 />
-
 
 ## Extended usage example
 
 ```typescript filename="src/mastra/agents/normalized-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-import { UnicodeNormalizer } from "@mastra/core/processors";
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { UnicodeNormalizer } from '@mastra/core/processors';
 
 export const agent = new Agent({
-  name: "normalized-agent",
-  instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  name: 'normalized-agent',
+  instructions: 'You are a helpful assistant',
+  model: openai('gpt-4o-mini'),
   inputProcessors: [
     new UnicodeNormalizer({
       stripControlChars: true,
       preserveEmojis: true,
       collapseWhitespace: true,
-      trim: true
-    })
-  ]
+      trim: true,
+    }),
+  ],
 });
 ```
 
-
 ## Related
 
-- [Input Processors](../../docs/agents/input-processors.md)
+- [Input Processors](../../docs/agents/input-processors)

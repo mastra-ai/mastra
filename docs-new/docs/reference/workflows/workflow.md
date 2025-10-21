@@ -1,5 +1,5 @@
 ---
-title: "Reference: Workflow Class "
+title: 'Reference: Workflow Class '
 description: Documentation for the `Workflow` class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 ---
 
@@ -10,46 +10,46 @@ The `Workflow` class enables you to create state machines for complex sequences 
 ## Usage example
 
 ```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow } from '@mastra/core/workflows';
+import { z } from 'zod';
 
 export const workflow = createWorkflow({
-  id: "test-workflow",
+  id: 'test-workflow',
   inputSchema: z.object({
     value: z.string(),
   }),
   outputSchema: z.object({
     value: z.string(),
-  })
-})
+  }),
+});
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for the workflow",
-    },
-    {
-      name: "inputSchema",
-      type: "z.ZodType<any>",
-      description: "Zod schema defining the input structure for the workflow",
-    },
-    {
-      name: "outputSchema",
-      type: "z.ZodType<any>",
-      description: "Zod schema defining the output structure for the workflow",
-    },
-    {
-      name: "stateSchema",
-      type: "z.ZodObject<any>",
-      description: "Optional Zod schema for the workflow state. Automatically injected when using Mastra's state system. If not specified, type is 'any'.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "id",
+type: "string",
+description: "Unique identifier for the workflow",
+},
+{
+name: "inputSchema",
+type: "z.ZodType<any>",
+description: "Zod schema defining the input structure for the workflow",
+},
+{
+name: "outputSchema",
+type: "z.ZodType<any>",
+description: "Zod schema defining the output structure for the workflow",
+},
+{
+name: "stateSchema",
+type: "z.ZodObject<any>",
+description: "Optional Zod schema for the workflow state. Automatically injected when using Mastra's state system. If not specified, type is 'any'.",
+isOptional: true,
+},
+]}
 />
 
 ## Workflow status
@@ -57,26 +57,26 @@ export const workflow = createWorkflow({
 A workflow's `status` indicates its current execution state. The possible values are:
 
 <PropertiesTable
-  content={[
-    {
-      name: "success",
-      type: "string",
-      description:
-        "All steps finished executing successfully, with a valid result output",
-    },
-    {
-      name: "failed",
-      type: "string",
-      description:
-        "Workflow encountered an error during execution, with error details available",
-    },
-    {
-      name: "suspended",
-      type: "string",
-      description:
-        "Workflow execution is paused waiting for resume, with suspended step information",
-    },
-  ]}
+content={[
+{
+name: "success",
+type: "string",
+description:
+"All steps finished executing successfully, with a valid result output",
+},
+{
+name: "failed",
+type: "string",
+description:
+"Workflow encountered an error during execution, with error details available",
+},
+{
+name: "suspended",
+type: "string",
+description:
+"Workflow execution is paused waiting for resume, with suspended step information",
+},
+]}
 />
 
 ## Extended usage example
@@ -95,5 +95,5 @@ if (result.status === "suspended") {
 
 ## Related
 
-- [Step Class](./step.md)
-- [Control flow](../../docs/workflows/control-flow.md)
+- [Step Class](./step)
+- [Control flow](../../docs/workflows/control-flow)

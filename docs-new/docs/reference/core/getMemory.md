@@ -1,6 +1,6 @@
 ---
-title: "Reference: Mastra.getMemory() "
-description: "Documentation for the `Mastra.getMemory()` method in Mastra, which retrieves the configured memory instance."
+title: 'Reference: Mastra.getMemory() '
+description: 'Documentation for the `Mastra.getMemory()` method in Mastra, which retrieves the configured memory instance.'
 ---
 
 # Mastra.getMemory()
@@ -20,16 +20,16 @@ This method does not accept any parameters.
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "memory",
-      type: "MastraMemory | undefined",
-      description: "The configured memory instance, or undefined if no memory has been configured.",
-    },
-  ]}
+content={[
+{
+name: "memory",
+type: "MastraMemory | undefined",
+description: "The configured memory instance, or undefined if no memory has been configured.",
+},
+]}
 />
 
 ## Related
 
-- [Memory overview](../../docs/memory/overview.md)
-- [Memory reference](../../reference/memory/Memory.md)
+- [Memory overview](../../docs/memory/overview)
+- [Memory reference](../../reference/memory/Memory)

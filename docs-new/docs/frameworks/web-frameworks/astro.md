@@ -1,5 +1,5 @@
 ---
-title: "Getting Started with Mastra and Astro "
+title: 'Getting Started with Mastra and Astro '
 description: A step-by-step guide to integrating Mastra with Astro.
 ---
 
@@ -21,20 +21,19 @@ Use this guide to scaffold and integrate Mastra with your Astro project.
 
 :::warning
 
-  This guide assumes you're using Astro's Actions with React and the Vercel adapter.
+This guide assumes you're using Astro's Actions with React and the Vercel adapter.
 
 :::
 
-  
 ## Install Mastra
 
 Install the required Mastra packages:
-{/*
+{/_
 LLM CONTEXT: This Tabs component shows commands for integrating a new Mastra backend project using different package managers.
 Each tab displays the command for that specific package manager to create an integrated Mastra backend service.
 This is part of the "Integrated Backend Integration" approach for Astro projects.
 All commands create the same Mastra project but use different package manager syntax.
-*/}
+_/}
 
 <Tabs>
   <TabItem value="install" label="install">
@@ -173,25 +172,25 @@ touch src/actions/index.ts
 ```
 
 ```typescript filename="src/actions/index.ts" showLineNumbers copy
-import { defineAction } from "astro:actions";
-import { z } from "astro:schema";
+import { defineAction } from 'astro:actions';
+import { z } from 'astro:schema';
 
-import { mastra } from "../mastra";
+import { mastra } from '../mastra';
 
 export const server = {
   getWeatherInfo: defineAction({
     input: z.object({
-      city: z.string()
+      city: z.string(),
     }),
-    handler: async (input) => {
+    handler: async input => {
       const city = input.city;
-      const agent = mastra.getAgent("weatherAgent");
+      const agent = mastra.getAgent('weatherAgent');
 
       const result = await agent.generate(`What's the weather like in ${city}?`);
 
       return result.text;
-    }
-  })
+    },
+  }),
 };
 ```
 
@@ -261,14 +260,14 @@ Agent response: The current weather in London is as follows:
 
 Let me know if you need more information!
 ```
-  
+
   </TabItem>
 
   <TabItem value="server-endpoints" label="Server Endpoints">
 
 :::warning
 
-  This guide assumes you're using Astro's Endpoints with React and the Vercel adapter, and your output is set to server.
+This guide assumes you're using Astro's Endpoints with React and the Vercel adapter, and your output is set to server.
 
 :::
 
@@ -276,20 +275,19 @@ Let me know if you need more information!
 
 Before proceeding, ensure your Astro project is configured as follows:
 
- - Astro React integration: [@astrojs/react](https://docs.astro.build/en/guides/integrations-guide/react/)
- - Vercel adapter: [@astrojs/vercel](https://docs.astro.build/en/guides/integrations-guide/vercel/)
- - `astro.config.mjs` is set to `output: "server"`
+- Astro React integration: [@astrojs/react](https://docs.astro.build/en/guides/integrations-guide/react/)
+- Vercel adapter: [@astrojs/vercel](https://docs.astro.build/en/guides/integrations-guide/vercel/)
+- `astro.config.mjs` is set to `output: "server"`
 
-  
 ## Install Mastra
 
 Install the required Mastra packages:
-{/*
+{/_
 LLM CONTEXT: This Tabs component shows commands for integrating a new Mastra backend project using different package managers.
 Each tab displays the command for that specific package manager to create an integrated Mastra backend service.
 This is part of the "Integrated Backend Integration" approach for Astro projects.
 All commands create the same Mastra project but use different package manager syntax.
-*/}
+_/}
 
 <Tabs>
   <TabItem value="install" label="install">
@@ -428,13 +426,13 @@ touch src/pages/api/test.ts
 ```
 
 ```typescript filename="src/pages/api/test.ts" showLineNumbers copy
-import type { APIRoute } from "astro";
+import type { APIRoute } from 'astro';
 
-import { mastra } from "../../mastra";
+import { mastra } from '../../mastra';
 
 export const POST: APIRoute = async ({ request }) => {
   const { city } = await new Response(request.body).json();
-  const agent = mastra.getAgent("weatherAgent");
+  const agent = mastra.getAgent('weatherAgent');
 
   const result = await agent.generate(`What's the weather like in ${city}?`);
 
@@ -491,6 +489,7 @@ Create a new Page, and add the example code:
 ```bash copy
 touch src/pages/test.astro
 ```
+
 ```astro filename="src/pages/test.astro" showLineNumbers copy
 ---
 import { Form } from '../components/form'
@@ -499,6 +498,7 @@ import { Form } from '../components/form'
 <h1>Test</h1>
 <Form client:load />
 ```
+
 > You can now navigate to `/test` in your browser to try it out.
 
 Submitting **London** as the city would return a result similar to:
@@ -514,11 +514,11 @@ Agent response: The current weather in London is as follows:
 
 Let me know if you need more information!
 ```
-  
+
   </TabItem>
 </Tabs>
 
 ## Next Steps
 
 - [Deployment | With Astro on Vercel](/docs/deployment/web-framework#with-astro-on-vercel)
-- [Monorepo Deployment](../../deployment/monorepo.md)
+- [Monorepo Deployment](../../deployment/monorepo)

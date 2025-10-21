@@ -69,7 +69,7 @@ const chunks = await doc.chunk({
 
 **Note:** Metadata extraction may use LLM calls, so ensure your API key is set.
 
-We go deeper into chunking strategies in our [chunk documentation](/reference/rag/chunk.md).
+We go deeper into chunking strategies in our [chunk documentation](/reference/rag/chunk).
 
 ## Step 2: Embedding Generation
 
@@ -186,11 +186,11 @@ await vectorStore.upsert({
 
 For more examples of different chunking strategies and embedding configurations, see:
 
-- [Adjust Chunk Size](/reference/rag/chunk.mdx#adjust-chunk-size)
-- [Adjust Chunk Delimiters](/reference/rag/chunk.mdx#adjust-chunk-delimiters)
-- [Embed Text with Cohere](/reference/rag/embeddings.mdx#using-cohere)
+- [Adjust Chunk Size](/reference/rag/chunk#adjust-chunk-size)
+- [Adjust Chunk Delimiters](/reference/rag/chunk#adjust-chunk-delimiters)
+- [Embed Text with Cohere](/reference/rag/embeddings#using-cohere)
 
 For more details on vector databases and embeddings, see:
 
-- [Vector Databases](./vector-databases.md)
-- [Embedding API Reference](/reference/rag/embeddings.md)
+- [Vector Databases](./vector-databases)
+- [Embedding API Reference](/reference/rag/embeddings)

@@ -1,5 +1,5 @@
 ---
-title: "Reference: Workflow.map() "
+title: 'Reference: Workflow.map() '
 description: Documentation for the `Workflow.map()` method in workflows, which maps output data from a previous step to the input of a subsequent step.
 ---
 
@@ -16,28 +16,28 @@ workflow.map(async ({ inputData }) => `${inputData.value} - map`
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "mappingFunction",
-      type: "(params: { inputData: any }) => any",
-      description: "Function that transforms input data and returns the mapped result",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "mappingFunction",
+type: "(params: { inputData: any }) => any",
+description: "Function that transforms input data and returns the mapped result",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "Workflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "Workflow",
+description: "The workflow instance for method chaining",
+},
+]}
 />
 
 ## Related
 
-- [Input data mapping](../../../docs/workflows/input-data-mapping.md)
+- [Input data mapping](../../../docs/workflows/input-data-mapping)

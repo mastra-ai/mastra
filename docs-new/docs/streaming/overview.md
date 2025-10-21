@@ -1,11 +1,9 @@
 ---
-title: "Streaming Overview "
-description: "Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced."
+title: 'Streaming Overview '
+description: 'Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced.'
 ---
 
-
 # Streaming Overview
-
 
 Mastra supports real-time, incremental responses from agents and workflows, allowing users to see output as it’s generated instead of waiting for completion. This is useful for chat, long-form content, multi-step workflows, or any scenario where immediate feedback matters.
 
@@ -22,21 +20,19 @@ You can pass a single string for simple prompts, an array of strings when provid
 
 ### Using `Agent.stream()`
 
-A `textStream` breaks the response into chunks as it's generated, allowing output to stream progressively instead of arriving all at once.  Iterate over the `textStream` using a `for await` loop to inspect each stream chunk.
+A `textStream` breaks the response into chunks as it's generated, allowing output to stream progressively instead of arriving all at once. Iterate over the `textStream` using a `for await` loop to inspect each stream chunk.
 
 ```typescript {3,7} showLineNumbers copy
-const testAgent = mastra.getAgent("testAgent");
+const testAgent = mastra.getAgent('testAgent');
 
-const stream = await testAgent.stream([
-  { role: "user", content: "Help me organize my day" },
-]);
+const stream = await testAgent.stream([{ role: 'user', content: 'Help me organize my day' }]);
 
 for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
 }
 ```
 
-> See [Agent.stream()](../../reference/agents/stream.md) for more information.
+> See [Agent.stream()](../../reference/agents/stream) for more information.
 
 ### Output from `Agent.stream()`
 
@@ -58,7 +54,6 @@ An agent stream provides access to various response properties:
 - **`stream.finishReason`**: The reason the agent stopped streaming.
 - **`stream.usage`**: Token usage information.
 
-
 ### AI SDK v5 Compatibility
 
 AI SDK v5 uses `LanguageModelV2` for the model providers. If you are getting an error that you are using an AI SDK v4 model you will need to upgrade your model package to the next major version.
@@ -66,12 +61,9 @@ AI SDK v5 uses `LanguageModelV2` for the model providers. If you are getting an 
 For integration with AI SDK v5, use `format` 'aisdk' to get an `AISDKV5OutputStream`:
 
 ```typescript {5} showLineNumbers copy
-const testAgent = mastra.getAgent("testAgent");
+const testAgent = mastra.getAgent('testAgent');
 
-const stream = await testAgent.stream(
-  [{ role: "user", content: "Help me organize my day" }],
-  { format: "aisdk" }
-);
+const stream = await testAgent.stream([{ role: 'user', content: 'Help me organize my day' }], { format: 'aisdk' });
 
 for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
@@ -91,8 +83,8 @@ const run = await testWorkflow.createRunAsync();
 
 const stream = await run.streamVNext({
   inputData: {
-    value: "initial data"
-  }
+    value: 'initial data',
+  },
 });
 
 for await (const chunk of stream) {
@@ -100,7 +92,7 @@ for await (const chunk of stream) {
 }
 ```
 
-> See [Run.streamVNext()](../../reference/workflows/run-methods/streamVNext.md) for more information.
+> See [Run.streamVNext()](../../reference/workflows/run-methods/streamVNext) for more information.
 
 ### Output from `Run.stream()`
 
@@ -132,6 +124,6 @@ A workflow stream provides access to various response properties:
 
 ## Related
 
-- [Streaming events](./events.md)
-- [Using Agents](../agents/overview.md)
-- [Workflows overview](../workflows/overview.md)
+- [Streaming events](./events)
+- [Using Agents](../agents/overview)
+- [Workflows overview](../workflows/overview)

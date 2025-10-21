@@ -1,5 +1,5 @@
 ---
-title: "Reference: StepCondition "
+title: 'Reference: StepCondition '
 description: Documentation for the step condition class in workflows, which determines whether a step should execute based on the output of previous steps or trigger data.
 ---
 
@@ -16,8 +16,8 @@ There are three ways to specify conditions: function, query object, and simple p
 ```typescript copy showLineNumbers
 workflow.step(processOrder, {
   when: async ({ context }) => {
-    const auth = context?.getStepResult<{ status: string }>("auth");
-    return auth?.status === "authenticated";
+    const auth = context?.getStepResult<{ status: string }>('auth');
+    return auth?.status === 'authenticated';
   },
 });
 ```
@@ -27,8 +27,8 @@ workflow.step(processOrder, {
 ```typescript copy showLineNumbers
 workflow.step(processOrder, {
   when: {
-    ref: { step: "auth", path: "status" },
-    query: { $eq: "authenticated" },
+    ref: { step: 'auth', path: 'status' },
+    query: { $eq: 'authenticated' },
   },
 });
 ```
@@ -38,7 +38,7 @@ workflow.step(processOrder, {
 ```typescript copy showLineNumbers
 workflow.step(processOrder, {
   when: {
-    "auth.status": "authenticated",
+    'auth.status': 'authenticated',
   },
 });
 ```
@@ -52,21 +52,21 @@ Based on the type of condition, the workflow runner will try to match the condit
 ## StepCondition
 
 <PropertiesTable
-  content={[
-    {
-      name: "ref",
-      type: "{ stepId: string | 'trigger'; path: string }",
-      description:
-        "Reference to step output value. stepId can be a step ID or 'trigger' for initial data. path specifies location of value in step result",
-      isOptional: false,
-    },
-    {
-      name: "query",
-      type: "Query<any>",
-      description: "MongoDB-style query using sift operators ($eq, $gt, etc)",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "ref",
+type: "{ stepId: string | 'trigger'; path: string }",
+description:
+"Reference to step output value. stepId can be a step ID or 'trigger' for initial data. path specifies location of value in step result",
+isOptional: false,
+},
+{
+name: "query",
+type: "Query<any>",
+description: "MongoDB-style query using sift operators ($eq, $gt, etc)",
+isOptional: false,
+},
+]}
 />
 
 ## Query
@@ -76,62 +76,62 @@ The Query object provides MongoDB-style query operators for comparing values fro
 This query syntax allows for readable conditional logic for determining whether a step should execute.
 
 <PropertiesTable
-  content={[
-    {
-      name: "$eq",
+content={[
+{
+name: "$eq",
       type: "any",
       description: "Equal to value",
     },
     {
       name: "$ne",
-      type: "any",
-      description: "Not equal to value",
-    },
-    {
-      name: "$gt",
+type: "any",
+description: "Not equal to value",
+},
+{
+name: "$gt",
       type: "number",
       description: "Greater than value",
     },
     {
       name: "$gte",
-      type: "number",
-      description: "Greater than or equal to value",
-    },
-    {
-      name: "$lt",
+type: "number",
+description: "Greater than or equal to value",
+},
+{
+name: "$lt",
       type: "number",
       description: "Less than value",
     },
     {
       name: "$lte",
-      type: "number",
-      description: "Less than or equal to value",
-    },
-    {
-      name: "$in",
+type: "number",
+description: "Less than or equal to value",
+},
+{
+name: "$in",
       type: "any[]",
       description: "Value exists in array",
     },
     {
       name: "$nin",
-      type: "any[]",
-      description: "Value does not exist in array",
-    },
-    {
-      name: "and",
-      type: "StepCondition[]",
-      description: "Array of conditions that must all be true",
-    },
-    {
-      name: "or",
-      type: "StepCondition[]",
-      description: "Array of conditions where at least one must be true",
-    },
-  ]}
+type: "any[]",
+description: "Value does not exist in array",
+},
+{
+name: "and",
+type: "StepCondition[]",
+description: "Array of conditions that must all be true",
+},
+{
+name: "or",
+type: "StepCondition[]",
+description: "Array of conditions where at least one must be true",
+},
+]}
 />
 
 ## Related
 
-- [Step Options Reference](./step-options.md)
-- [Step Function Reference](./step-function.md)
-- [Control Flow Guide](../../docs/workflows-legacy/control-flow.md)
+- [Step Options Reference](./step-options)
+- [Step Function Reference](./step-function)
+- [Control Flow Guide](../../docs/workflows-legacy/control-flow)

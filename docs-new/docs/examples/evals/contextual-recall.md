@@ -1,8 +1,7 @@
 ---
-title: "Contextual Recall "
+title: 'Contextual Recall '
 description: Example of using the Contextual Recall metric to evaluate how well responses incorporate context information.
 ---
-
 
 # Contextual Recall Evaluation
 
@@ -21,19 +20,16 @@ npm install @mastra/evals
 In this example, the response includes all the information from the context. Every element is accurately recalled and expressed in the output, resulting in a perfect recall score.
 
 ```typescript filename="src/example-high-recall.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { ContextualRecallMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { ContextualRecallMetric } from '@mastra/evals/llm';
 
-const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
-  context: [
-    "Product features include cloud sync.",
-    "Offline mode is available.",
-    "Supports multiple devices."
-  ]
+const metric = new ContextualRecallMetric(openai('gpt-4o-mini'), {
+  context: ['Product features include cloud sync.', 'Offline mode is available.', 'Supports multiple devices.'],
 });
 
-const query = "What are the key features of the product?";
-const response = "The product features cloud synchronization, offline mode support, and the ability to work across multiple devices.";
+const query = 'What are the key features of the product?';
+const response =
+  'The product features cloud synchronization, offline mode support, and the ability to work across multiple devices.';
 
 const result = await metric.measure(query, response);
 
@@ -58,20 +54,20 @@ The output receives a perfect score because all context elements are present in 
 In this example, the response includes some context elements but also introduces unrelated content. The presence of irrelevant information reduces the overall recall score.
 
 ```typescript filename="src/example-mixed-recall.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { ContextualRecallMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { ContextualRecallMetric } from '@mastra/evals/llm';
 
-const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
+const metric = new ContextualRecallMetric(openai('gpt-4o-mini'), {
   context: [
-    "Python is a high-level programming language.",
-    "Python emphasizes code readability.",
-    "Python supports multiple programming paradigms.",
-    "Python is widely used in data science."
-  ]
+    'Python is a high-level programming language.',
+    'Python emphasizes code readability.',
+    'Python supports multiple programming paradigms.',
+    'Python is widely used in data science.',
+  ],
 });
 
 const query = "What are Python's key characteristics?";
-const response = "Python is a high-level programming language. It is also a type of snake.";
+const response = 'Python is a high-level programming language. It is also a type of snake.';
 
 const result = await metric.measure(query, response);
 
@@ -96,20 +92,20 @@ The output receives a mid-range score because it includes one relevant context s
 In this example, the response includes very little or none of the relevant context. Most of the information in the response is unsupported, resulting in a low recall score.
 
 ```typescript filename="src/example-low-recall.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { ContextualRecallMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { ContextualRecallMetric } from '@mastra/evals/llm';
 
-const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
+const metric = new ContextualRecallMetric(openai('gpt-4o-mini'), {
   context: [
-    "The solar system has eight planets.",
-    "Mercury is closest to the Sun.",
-    "Venus is the hottest planet.",
-    "Mars is called the Red Planet."
-  ]
+    'The solar system has eight planets.',
+    'Mercury is closest to the Sun.',
+    'Venus is the hottest planet.',
+    'Mars is called the Red Planet.',
+  ],
 });
 
-const query = "Tell me about the solar system.";
-const response = "Jupiter is the largest planet in the solar system.";
+const query = 'Tell me about the solar system.';
+const response = 'Jupiter is the largest planet in the solar system.';
 
 const result = await metric.measure(query, response);
 
@@ -129,19 +125,18 @@ The output receives a low score because the response includes information that i
 }
 ```
 
-
 ## Metric configuration
 
 You can create a `ContextualRecallMetric` instance by providing a `context` array representing background information relevant to the response. You can also configure optional parameters such as `scale` to define the scoring range.
 
 ```typescript showLineNumbers copy
-const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
-  context: [""],
-  scale: 1
+const metric = new ContextualRecallMetric(openai('gpt-4o-mini'), {
+  context: [''],
+  scale: 1,
 });
 ```
 
-> See [ContextualRecallMetric](/reference/evals/contextual-recall.md) for a full list of configuration options.
+> See [ContextualRecallMetric](/reference/evals/contextual-recall) for a full list of configuration options.
 
 ## Understanding the results
 

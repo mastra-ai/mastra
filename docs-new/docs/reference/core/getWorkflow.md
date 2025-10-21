@@ -1,6 +1,6 @@
 ---
-title: "Reference: Mastra.getWorkflow() "
-description: "Documentation for the `Mastra.getWorkflow()` method in Mastra, which retrieves a workflow by ID."
+title: 'Reference: Mastra.getWorkflow() '
+description: 'Documentation for the `Mastra.getWorkflow()` method in Mastra, which retrieves a workflow by ID.'
 ---
 
 # Mastra.getWorkflow()
@@ -10,39 +10,39 @@ The `.getWorkflow()` method is used to retrieve a workflow by its ID. The method
 ## Usage example
 
 ```typescript copy
-mastra.getWorkflow("testWorkflow");
+mastra.getWorkflow('testWorkflow');
 ```
 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "id",
-      type: "TWorkflowId extends keyof TWorkflows",
-      description: "The ID of the workflow to retrieve. Must be a valid workflow ID that exists in the Mastra configuration.",
-    },
-    {
-      name: "options",
-      type: "{ serialized?: boolean }",
-      description: "Optional configuration object. When `serialized` is true, returns only the workflow name instead of the full workflow instance.",
-      optional: true,
-    },
-  ]}
+content={[
+{
+name: "id",
+type: "TWorkflowId extends keyof TWorkflows",
+description: "The ID of the workflow to retrieve. Must be a valid workflow ID that exists in the Mastra configuration.",
+},
+{
+name: "options",
+type: "{ serialized?: boolean }",
+description: "Optional configuration object. When `serialized` is true, returns only the workflow name instead of the full workflow instance.",
+optional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "TWorkflows[TWorkflowId]",
-      description: "The workflow instance with the specified ID. Throws an error if the workflow is not found.",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "TWorkflows[TWorkflowId]",
+description: "The workflow instance with the specified ID. Throws an error if the workflow is not found.",
+},
+]}
 />
 
 ## Related
 
-- [Workflows overview](../../docs/workflows/overview.md)
+- [Workflows overview](../../docs/workflows/overview)

@@ -1,6 +1,6 @@
 ---
-title: "Error Handling in Workflows (Legacy) "
-description: "Learn how to handle errors in Mastra legacy workflows using step retries, conditional branching, and monitoring."
+title: 'Error Handling in Workflows (Legacy) '
+description: 'Learn how to handle errors in Mastra legacy workflows using step retries, conditional branching, and monitoring.'
 ---
 
 # Error Handling in Workflows (Legacy)
@@ -25,11 +25,11 @@ Mastra provides a built-in retry mechanism for steps that fail due to transient 
 You can configure retries at the workflow level or for individual steps:
 
 ```typescript
-import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
 
 // Workflow-level retry configuration
 const workflow = new LegacyWorkflow({
-  name: "my-workflow",
+  name: 'my-workflow',
   retryConfig: {
     attempts: 3, // Number of retry attempts
     delay: 1000, // Delay between retries in milliseconds
@@ -38,7 +38,7 @@ const workflow = new LegacyWorkflow({
 
 // Step-level retry configuration (overrides workflow-level)
 const apiStep = new LegacyStep({
-  id: "callApi",
+  id: 'callApi',
   execute: async () => {
     // API call that might fail
   },
@@ -49,7 +49,7 @@ const apiStep = new LegacyStep({
 });
 ```
 
-For more details about step retries, see the [Step Retries](../../reference/legacyWorkflows/step-retries.md) reference.
+For more details about step retries, see the [Step Retries](../../reference/legacyWorkflows/step-retries) reference.
 
 ## Conditional Branching
 
@@ -58,7 +58,7 @@ You can create alternative workflow paths based on the success or failure of pre
 ```typescript
 // Create a workflow with conditional branching
 const workflow = new LegacyWorkflow({
-  name: "error-handling-workflow",
+  name: 'error-handling-workflow',
 });
 
 workflow
@@ -66,13 +66,13 @@ workflow
   .then(processDataStep, {
     // Only execute processDataStep if fetchDataStep was successful
     when: ({ context }) => {
-      return context.steps.fetchDataStep?.status === "success";
+      return context.steps.fetchDataStep?.status === 'success';
     },
   })
   .then(fallbackStep, {
     // Execute fallbackStep if fetchDataStep failed
     when: ({ context }) => {
-      return context.steps.fetchDataStep?.status === "failed";
+      return context.steps.fetchDataStep?.status === 'failed';
     },
   })
   .commit();
@@ -88,11 +88,11 @@ const { start, watch } = workflow.createRun();
 watch(async ({ results }) => {
   // Check for any failed steps
   const failedSteps = Object.entries(results)
-    .filter(([_, step]) => step.status === "failed")
+    .filter(([_, step]) => step.status === 'failed')
     .map(([stepId]) => stepId);
 
   if (failedSteps.length > 0) {
-    console.error(`Workflow has failed steps: ${failedSteps.join(", ")}`);
+    console.error(`Workflow has failed steps: ${failedSteps.join(', ')}`);
     // Take remedial action, such as alerting or logging
   }
 });
@@ -106,7 +106,7 @@ Within a step's execution function, you can handle errors programmatically:
 
 ```typescript
 const robustStep = new LegacyStep({
-  id: "robustStep",
+  id: 'robustStep',
   execute: async ({ context }) => {
     try {
       // Attempt the primary operation
@@ -114,13 +114,13 @@ const robustStep = new LegacyStep({
       return { success: true, data: result };
     } catch (error) {
       // Log the error
-      console.error("Operation failed:", error);
+      console.error('Operation failed:', error);
 
       // Return a graceful fallback result instead of throwing
       return {
         success: false,
         error: error.message,
-        fallbackData: "Default value",
+        fallbackData: 'Default value',
       };
     }
   },
@@ -133,21 +133,21 @@ You can make decisions based on the results of previous steps:
 
 ```typescript
 const finalStep = new LegacyStep({
-  id: "finalStep",
+  id: 'finalStep',
   execute: async ({ context }) => {
     // Check results of previous steps
-    const step1Success = context.steps.step1?.status === "success";
-    const step2Success = context.steps.step2?.status === "success";
+    const step1Success = context.steps.step1?.status === 'success';
+    const step2Success = context.steps.step2?.status === 'success';
 
     if (step1Success && step2Success) {
       // All steps succeeded
-      return { status: "complete", result: "All operations succeeded" };
+      return { status: 'complete', result: 'All operations succeeded' };
     } else if (step1Success) {
       // Only step1 succeeded
-      return { status: "partial", result: "Partial completion" };
+      return { status: 'partial', result: 'Partial completion' };
     } else {
       // Critical failure
-      return { status: "failed", result: "Critical steps failed" };
+      return { status: 'failed', result: 'Critical steps failed' };
     }
   },
 });
@@ -179,7 +179,7 @@ For more complex error handling scenarios, consider:
 
 ## Related
 
-- [Step Retries Reference](../../reference/legacyWorkflows/step-retries.md)
-- [Watch Method Reference](../../reference/legacyWorkflows/watch.md)
-- [Step Conditions](../../reference/legacyWorkflows/step-condition.md)
-- [Control Flow](./control-flow.md)
+- [Step Retries Reference](../../reference/legacyWorkflows/step-retries)
+- [Watch Method Reference](../../reference/legacyWorkflows/watch)
+- [Step Conditions](../../reference/legacyWorkflows/step-condition)
+- [Control Flow](./control-flow)

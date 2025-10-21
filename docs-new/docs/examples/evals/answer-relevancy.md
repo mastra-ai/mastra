@@ -1,8 +1,7 @@
 ---
-title: "Answer Relevancy "
+title: 'Answer Relevancy '
 description: Example of using the Answer Relevancy metric to evaluate response relevancy to queries.
 ---
-
 
 # Answer Relevancy Evaluation
 
@@ -21,13 +20,14 @@ npm install @mastra/evals
 In this example, the response accurately addresses the input query with specific and relevant information.
 
 ```typescript filename="src/example-high-answer-relevancy.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { AnswerRelevancyMetric } from '@mastra/evals/llm';
 
-const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"));
+const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'));
 
-const query = "What are the health benefits of regular exercise?";
-const response = "Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.";
+const query = 'What are the health benefits of regular exercise?';
+const response =
+  'Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.';
 
 const result = await metric.measure(query, response);
 
@@ -52,14 +52,14 @@ The output receives a high score because it accurately answers the query without
 In this example, the response addresses the query in part but includes additional information that isn’t directly relevant.
 
 ```typescript filename="src/example-partial-answer-relevancy.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { AnswerRelevancyMetric } from '@mastra/evals/llm';
 
-const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"));
+const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'));
 
-const query = "What should a healthy breakfast include?";
+const query = 'What should a healthy breakfast include?';
 const response =
-  "A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.";
+  'A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.';
 
 const result = await metric.measure(query, response);
 
@@ -84,13 +84,14 @@ The output receives a lower score because it partially answers the query. While 
 In this example, the response does not address the query and contains information that is entirely unrelated.
 
 ```typescript filename="src/example-low-answer-relevancy.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { AnswerRelevancyMetric } from '@mastra/evals/llm';
 
-const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"));
+const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'));
 
-const query = "What are the benefits of meditation?";
-const response = "The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.";
+const query = 'What are the benefits of meditation?';
+const response =
+  'The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.';
 
 const result = await metric.measure(query, response);
 
@@ -115,12 +116,13 @@ The output receives a score of 0 because it fails to answer the query or provide
 You can customize how the `AnswerRelevancyMetric` calculates scores by adjusting optional parameters. For example, `uncertaintyWeight` controls how much weight to give to uncertain responses, and `scale` sets the maximum possible score.
 
 ```typescript showLineNumbers copy
-const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
+const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'), {
   uncertaintyWeight: 0.3,
   scale: 1,
 });
 ```
-> See [AnswerRelevancyMetric](/reference/evals/answer-relevancy.md) for a full list of configuration options.
+
+> See [AnswerRelevancyMetric](/reference/evals/answer-relevancy) for a full list of configuration options.
 
 ## Understanding the results
 

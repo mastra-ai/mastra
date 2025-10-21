@@ -1,5 +1,5 @@
 ---
-title: "Reference: Run.stream() "
+title: 'Reference: Run.stream() '
 description: Documentation for the `Run.stream()` method in workflows, which allows you to monitor the execution of a workflow run as a stream.
 ---
 
@@ -14,7 +14,7 @@ const run = await workflow.createRunAsync();
 
 const { stream } = await run.stream({
   inputData: {
-    value: "initial data",
+    value: 'initial data',
   },
 });
 ```
@@ -22,75 +22,75 @@ const { stream } = await run.stream({
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "inputData",
-      type: "z.infer<TInput>",
-      description: "Input data that matches the workflow's input schema",
-      isOptional: true,
-    },
-    {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "Runtime context data to use during workflow execution",
-      isOptional: true,
-    },
-    {
-      name: "tracingContext",
-      type: "TracingContext",
-      isOptional: true,
-      description: "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
-      properties: [
-        {
-          parameters: [{
-            name: "currentSpan",
-            type: "AISpan",
-            isOptional: true,
-            description: "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution."
-          }]
-        }
-      ]
-    },
-    {
-      name: "tracingOptions",
-      type: "TracingOptions",
-      isOptional: true,
-      description: "Options for AI tracing configuration.",
-      properties: [
-        {
-          parameters: [{
-            name: "metadata",
-            type: "Record<string, any>",
-            isOptional: true,
-            description: "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags."
-          }]
-        }
-      ]
-    },
-  ]}
+content={[
+{
+name: "inputData",
+type: "z.infer<TInput>",
+description: "Input data that matches the workflow's input schema",
+isOptional: true,
+},
+{
+name: "runtimeContext",
+type: "RuntimeContext",
+description: "Runtime context data to use during workflow execution",
+isOptional: true,
+},
+{
+name: "tracingContext",
+type: "TracingContext",
+isOptional: true,
+description: "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+properties: [
+{
+parameters: [{
+name: "currentSpan",
+type: "AISpan",
+isOptional: true,
+description: "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution."
+}]
+}
+]
+},
+{
+name: "tracingOptions",
+type: "TracingOptions",
+isOptional: true,
+description: "Options for AI tracing configuration.",
+properties: [
+{
+parameters: [{
+name: "metadata",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags."
+}]
+}
+]
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "stream",
-      type: "ReadableStream<StreamEvent>",
-      description: "A readable stream that emits workflow execution events in real-time",
-    },
-    {
-      name: "getWorkflowState",
-      type: "() => Promise<WorkflowResult<TState, TOutput, TSteps>>",
-      description: "A function that returns a promise resolving to the final workflow result",
-    },
-    {
-      name: "traceId",
-      type: "string",
-      isOptional: true,
-      description: "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
-    },
-  ]}
+content={[
+{
+name: "stream",
+type: "ReadableStream<StreamEvent>",
+description: "A readable stream that emits workflow execution events in real-time",
+},
+{
+name: "getWorkflowState",
+type: "() => Promise<WorkflowResult<TState, TOutput, TSteps>>",
+description: "A function that returns a promise resolving to the final workflow result",
+},
+{
+name: "traceId",
+type: "string",
+isOptional: true,
+description: "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
+},
+]}
 />
 
 ## Extended usage example
@@ -98,8 +98,8 @@ const { stream } = await run.stream({
 ```typescript showLineNumbers copy
 const { getWorkflowState } = await run.stream({
   inputData: {
-    value: "initial data"
-  }
+    value: 'initial data',
+  },
 });
 
 const result = await getWorkflowState();
@@ -118,8 +118,7 @@ The stream emits various event types during workflow execution. Each event has a
 - **`step-finish`**: A step finishes execution
 - **`finish`**: Workflow execution completes
 
-
 ## Related
 
-- [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
-- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run.md)
+- [Workflows overview](../../../docs/workflows/overview#run-workflow)
+- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run)

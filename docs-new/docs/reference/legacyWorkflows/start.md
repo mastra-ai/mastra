@@ -1,6 +1,6 @@
 ---
-title: "Reference: start() "
-description: "Documentation for the `start()` method in workflows, which begins execution of a workflow run."
+title: 'Reference: start() '
+description: 'Documentation for the `start()` method in workflows, which begins execution of a workflow run.'
 ---
 
 # start()
@@ -19,44 +19,44 @@ const result = await start({
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "config",
-      type: "object",
-      description: "Configuration for starting the workflow run",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "config",
+type: "object",
+description: "Configuration for starting the workflow run",
+isOptional: true,
+},
+]}
 />
 
 ### config
 
 <PropertiesTable
-  content={[
-    {
-      name: "triggerData",
-      type: "Record<string, any>",
-      description: "Initial data that matches the workflow's triggerSchema",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "triggerData",
+type: "Record<string, any>",
+description: "Initial data that matches the workflow's triggerSchema",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "results",
-      type: "Record<string, any>",
-      description: "Combined output from all completed workflow steps",
-    },
-    {
-      name: "status",
-      type: "'completed' | 'error' | 'suspended'",
-      description: "Final status of the workflow run",
-    },
-  ]}
+content={[
+{
+name: "results",
+type: "Record<string, any>",
+description: "Combined output from all completed workflow steps",
+},
+{
+name: "status",
+type: "'completed' | 'error' | 'suspended'",
+description: "Final status of the workflow run",
+},
+]}
 />
 
 ## Error Handling
@@ -76,11 +76,11 @@ try {
 
 ## Related
 
-- [Example: Creating a Workflow](../../examples/workflows_legacy/creating-a-workflow.md)
-- [Example: Suspend and Resume](../../examples/workflows_legacy/suspend-and-resume.md)
-- [createRun Reference](./createRun.md)
-- [Workflow Class Reference](./workflow.md)
-- [Step Class Reference](./step-class.md)
+- [Example: Creating a Workflow](../../examples/workflows_legacy/creating-a-workflow)
+- [Example: Suspend and Resume](../../examples/workflows_legacy/suspend-and-resume)
+- [createRun Reference](./createRun)
+- [Workflow Class Reference](./workflow)
+- [Step Class Reference](./step-class)
 
 ```
 

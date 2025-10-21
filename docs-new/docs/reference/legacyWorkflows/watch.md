@@ -1,5 +1,5 @@
 ---
-title: "Reference: run.watch() "
+title: 'Reference: run.watch() '
 description: Documentation for the `.watch()` method in workflows, which monitors the status of a workflow run.
 ---
 
@@ -10,23 +10,23 @@ The `.watch()` function subscribes to state changes on a mastra run, allowing yo
 ## Usage Example
 
 ```typescript
-import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { LegacyWorkflow } from '@mastra/core/workflows/legacy';
 
 const workflow = new LegacyWorkflow({
-  name: "document-processor",
+  name: 'document-processor',
 });
 
 const run = workflow.createRun();
 
 // Subscribe to state changes
 const unsubscribe = run.watch(({ results, activePaths }) => {
-  console.log("Results:", results);
-  console.log("Active paths:", activePaths);
+  console.log('Results:', results);
+  console.log('Active paths:', activePaths);
 });
 
 // Run the workflow
 await run.start({
-  input: { text: "Process this document" },
+  input: { text: 'Process this document' },
 });
 
 // Stop watching
@@ -36,57 +36,57 @@ unsubscribe();
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "callback",
-      type: "(state: LegacyWorkflowState) => void",
-      description: "Function called whenever the workflow state changes",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "callback",
+type: "(state: LegacyWorkflowState) => void",
+description: "Function called whenever the workflow state changes",
+isOptional: false,
+},
+]}
 />
 
 ### LegacyWorkflowState Properties
 
 <PropertiesTable
-  content={[
-    {
-      name: "results",
-      type: "Record<string, any>",
-      description: "Outputs from completed workflow steps",
-      isOptional: false,
-    },
-    {
-      name: "activePaths",
-      type: "Map<string, { status: string; suspendPayload?: any; stepPath: string[] }>",
-      description: "Current status of each step",
-      isOptional: false,
-    },
-    {
-      name: "runId",
-      type: "string",
-      description: "ID of the workflow run",
-      isOptional: false,
-    },
-    {
-      name: "timestamp",
-      type: "number",
-      description: "Timestamp of the workflow run",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "results",
+type: "Record<string, any>",
+description: "Outputs from completed workflow steps",
+isOptional: false,
+},
+{
+name: "activePaths",
+type: "Map<string, { status: string; suspendPayload?: any; stepPath: string[] }>",
+description: "Current status of each step",
+isOptional: false,
+},
+{
+name: "runId",
+type: "string",
+description: "ID of the workflow run",
+isOptional: false,
+},
+{
+name: "timestamp",
+type: "number",
+description: "Timestamp of the workflow run",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "unsubscribe",
-      type: "() => void",
-      description: "Function to stop watching workflow state changes",
-    },
-  ]}
+content={[
+{
+name: "unsubscribe",
+type: "() => void",
+description: "Function to stop watching workflow state changes",
+},
+]}
 />
 
 ## Additional Examples
@@ -95,11 +95,8 @@ Monitor specific step completion:
 
 ```typescript
 run.watch(({ results, activePaths }) => {
-  if (activePaths.get("processDocument")?.status === "completed") {
-    console.log(
-      "Document processing output:",
-      results["processDocument"].output,
-    );
+  if (activePaths.get('processDocument')?.status === 'completed') {
+    console.log('Document processing output:', results['processDocument'].output);
   }
 });
 ```
@@ -108,11 +105,8 @@ Error handling:
 
 ```typescript
 run.watch(({ results, activePaths }) => {
-  if (activePaths.get("processDocument")?.status === "failed") {
-    console.error(
-      "Document processing failed:",
-      results["processDocument"].error,
-    );
+  if (activePaths.get('processDocument')?.status === 'failed') {
+    console.error('Document processing failed:', results['processDocument'].error);
     // Implement error recovery logic
   }
 });
@@ -120,5 +114,5 @@ run.watch(({ results, activePaths }) => {
 
 ### Related
 
-- [Workflow Creation](./createRun.md)
-- [Step Configuration](./step-class.md)
+- [Workflow Creation](./createRun)
+- [Step Configuration](./step-class)

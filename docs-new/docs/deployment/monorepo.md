@@ -3,7 +3,6 @@ title: Monorepo Deployment
 description: Learn how to deploy Mastra applications that are part of a monorepo setup
 ---
 
-
 # Monorepo Deployment
 
 Deploying Mastra in a monorepo follows the same approach as deploying a standalone application. While some [Cloud](./cloud-providers/) or [Serverless Platform](./serverless-platforms/) providers may introduce extra requirements, the core setup is the same.
@@ -20,10 +19,9 @@ Environment variables like `OPENAI_API_KEY` should be stored in an `.env` file a
 
 > File structure information available - see original documentation for detailed tree view.
 
-
 ## Deployment configuration
 
-The image below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](../mastra-cloud/overview.md). While the interface may differ between providers, the configuration remains the same.
+The image below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](../mastra-cloud/overview). While the interface may differ between providers, the configuration remains the same.
 
 ![Deployment configuration](/img/monorepo/monorepo-mastra-cloud.jpg)
 
@@ -45,19 +43,19 @@ Common issues to watch for when deploying Mastra in a monorepo:
 Use `transpilePackages` to compile TypeScript workspace packages or libraries. List package names exactly as they appear in each `package.json`. Use `externals` to exclude dependencies resolved at runtime, and `sourcemap` to emit readable stack traces.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra({
   // ...
   bundler: {
-    transpilePackages: ["utils"],
-    externals: ["ui"],
-    sourcemap: true
-  }
+    transpilePackages: ['utils'],
+    externals: ['ui'],
+    sourcemap: true,
+  },
 });
 ```
 
-> See [Mastra Class](../../reference/core/mastra-class.md) for more configuration options.
+> See [Mastra Class](../../reference/core/mastra-class) for more configuration options.
 
 ## Supported monorepos
 

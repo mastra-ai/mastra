@@ -1,8 +1,7 @@
 ---
-title: "Textual Difference "
+title: 'Textual Difference '
 description: Example of using the Textual Difference scorer to evaluate similarity between text strings by analyzing sequence differences and changes.
 ---
-
 
 # Textual Difference Scorer
 
@@ -21,7 +20,7 @@ npm install @mastra/evals
 In this example, the texts are exactly the same. The scorer identifies complete similarity with a perfect score and no detected changes.
 
 ```typescript filename="src/example-no-differences.ts" showLineNumbers copy
-import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
+import { createTextualDifferenceScorer } from '@mastra/evals/scorers/code';
 
 const scorer = createTextualDifferenceScorer();
 
@@ -58,7 +57,7 @@ The scorer returns a high score, indicating the texts are identical. The detaile
 In this example, the texts have small variations. The scorer detects these minor differences and returns a moderate similarity score.
 
 ```typescript filename="src/example-minor-differences.ts" showLineNumbers copy
-import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
+import { createTextualDifferenceScorer } from '@mastra/evals/scorers/code';
 
 const scorer = createTextualDifferenceScorer();
 
@@ -95,7 +94,7 @@ The scorer returns a moderate score reflecting the small variations between the 
 In this example, the texts differ significantly. The scorer detects extensive changes and returns a low similarity score.
 
 ```typescript filename="src/example-major-differences.ts" showLineNumbers copy
-import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
+import { createTextualDifferenceScorer } from '@mastra/evals/scorers/code';
 
 const scorer = createTextualDifferenceScorer();
 
@@ -135,7 +134,7 @@ You can create a `TextualDifferenceScorer` instance with default settings. No ad
 const scorer = createTextualDifferenceScorer();
 ```
 
-> See [TextualDifferenceScorer](/reference/scorers/textual-difference.md) for a full list of configuration options.
+> See [TextualDifferenceScorer](/reference/scorers/textual-difference) for a full list of configuration options.
 
 ## Understanding the results
 
@@ -155,6 +154,7 @@ const scorer = createTextualDifferenceScorer();
 ```
 
 ### score
+
 A textual difference score between 0 and 1:
 
 - **1.0**: Identical texts – no differences detected.
@@ -164,10 +164,13 @@ A textual difference score between 0 and 1:
 - **0.0**: Completely different texts.
 
 ### runId
+
 The unique identifier for this scorer run.
 
 ### analyzeStepResult
+
 Object with difference metrics:
+
 - **confidence**: Confidence score based on length difference (higher is better).
 - **ratio**: Similarity ratio between the texts (0-1).
 - **changes**: Number of edit operations required to match the texts.

@@ -1,5 +1,5 @@
 ---
-title: "Reference: DatabaseConfig "
+title: 'Reference: DatabaseConfig '
 description: API reference for database-specific configuration types used with vector query tools in Mastra RAG systems.
 ---
 
@@ -28,42 +28,43 @@ export type DatabaseConfig = {
 Configuration options specific to Pinecone vector store.
 
 <PropertiesTable
-  content={[
-    {
-      name: "namespace",
-      type: "string",
-      description: "Pinecone namespace for organizing and isolating vectors within the same index. Useful for multi-tenancy or environment separation.",
-      isOptional: true,
-    },
-    {
-      name: "sparseVector",
-      type: "{ indices: number[]; values: number[]; }",
-      description: "Sparse vector for hybrid search combining dense and sparse embeddings. Enables better search quality for keyword-based queries.  The indices and values arrays must be the same length.",
-      isOptional: true,
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "indices",
-              description: "Array of indices for sparse vector components",
-              isOptional: false,
-              type: "number[]",
-            },
-            {
-              name: "values",
-              description: "Array of values corresponding to the indices",
-              isOptional: false,
-              type: "number[]",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "namespace",
+type: "string",
+description: "Pinecone namespace for organizing and isolating vectors within the same index. Useful for multi-tenancy or environment separation.",
+isOptional: true,
+},
+{
+name: "sparseVector",
+type: "{ indices: number[]; values: number[]; }",
+description: "Sparse vector for hybrid search combining dense and sparse embeddings. Enables better search quality for keyword-based queries. The indices and values arrays must be the same length.",
+isOptional: true,
+properties: [
+{
+type: "object",
+parameters: [
+{
+name: "indices",
+description: "Array of indices for sparse vector components",
+isOptional: false,
+type: "number[]",
+},
+{
+name: "values",
+description: "Array of values corresponding to the indices",
+isOptional: false,
+type: "number[]",
+},
+],
+},
+],
+},
+]}
 />
 
 **Use Cases:**
+
 - Multi-tenant applications (separate namespaces per tenant)
 - Environment isolation (dev/staging/prod namespaces)
 - Hybrid search combining semantic and keyword matching
@@ -73,34 +74,36 @@ Configuration options specific to Pinecone vector store.
 Configuration options specific to PostgreSQL with pgvector extension.
 
 <PropertiesTable
-  content={[
-    {
-      name: "minScore",
-      type: "number",
-      description: "Minimum similarity score threshold for results. Only vectors with similarity scores above this value will be returned.",
-      isOptional: true,
-    },
-    {
-      name: "ef",
-      type: "number",
-      description: "HNSW search parameter that controls the size of the dynamic candidate list during search. Higher values improve accuracy at the cost of speed. Typically set between topK and 200.",
-      isOptional: true,
-    },
-    {
-      name: "probes",
-      type: "number",
-      description: "IVFFlat probe parameter that specifies the number of index cells to visit during search. Higher values improve recall at the cost of speed.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "minScore",
+type: "number",
+description: "Minimum similarity score threshold for results. Only vectors with similarity scores above this value will be returned.",
+isOptional: true,
+},
+{
+name: "ef",
+type: "number",
+description: "HNSW search parameter that controls the size of the dynamic candidate list during search. Higher values improve accuracy at the cost of speed. Typically set between topK and 200.",
+isOptional: true,
+},
+{
+name: "probes",
+type: "number",
+description: "IVFFlat probe parameter that specifies the number of index cells to visit during search. Higher values improve recall at the cost of speed.",
+isOptional: true,
+},
+]}
 />
 
 **Performance Guidelines:**
+
 - **ef**: Start with 2-4x your topK value, increase for better accuracy
 - **probes**: Start with 1-10, increase for better recall
 - **minScore**: Use values between 0.5-0.9 depending on your quality requirements
 
 **Use Cases:**
+
 - Performance optimization for high-load scenarios
 - Quality filtering to remove irrelevant results
 - Fine-tuning search accuracy vs speed tradeoffs
@@ -110,23 +113,24 @@ Configuration options specific to PostgreSQL with pgvector extension.
 Configuration options specific to Chroma vector store.
 
 <PropertiesTable
-  content={[
-    {
-      name: "where",
-      type: "Record<string, any>",
-      description: "Metadata filtering conditions using MongoDB-style query syntax. Filters results based on metadata fields.",
-      isOptional: true,
-    },
-    {
-      name: "whereDocument",
-      type: "Record<string, any>",
-      description: "Document content filtering conditions. Allows filtering based on the actual document text content.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "where",
+type: "Record<string, any>",
+description: "Metadata filtering conditions using MongoDB-style query syntax. Filters results based on metadata fields.",
+isOptional: true,
+},
+{
+name: "whereDocument",
+type: "Record<string, any>",
+description: "Document content filtering conditions. Allows filtering based on the actual document text content.",
+isOptional: true,
+},
+]}
 />
 
 **Filter Syntax Examples:**
+
 ```typescript
 // Simple equality
 where: { "category": "technical" }
@@ -135,9 +139,9 @@ where: { "category": "technical" }
 where: { "price": { "$gt": 100 } }
 
 // Multiple conditions
-where: { 
+where: {
   "category": "electronics",
-  "inStock": true 
+  "inStock": true
 }
 
 // Document content filtering
@@ -145,6 +149,7 @@ whereDocument: { "$contains": "API documentation" }
 ```
 
 **Use Cases:**
+
 - Advanced metadata filtering
 - Content-based document filtering
 - Complex query combinations
@@ -158,7 +163,7 @@ whereDocument: { "$contains": "API documentation" }
 
     ```typescript
     import { createVectorQueryTool } from '@mastra/rag';
-    
+
     const vectorTool = createVectorQueryTool({
       vectorStoreName: 'pinecone',
       indexName: 'documents',
@@ -170,6 +175,7 @@ whereDocument: { "$contains": "API documentation" }
       }
     });
     ```
+
   </TabItem>
 
   <TabItem value="runtime-configuration-override" label="Runtime Configuration Override">
@@ -177,11 +183,11 @@ whereDocument: { "$contains": "API documentation" }
 
     ```typescript
     import { RuntimeContext } from '@mastra/core/runtime-context';
-    
+
     // Initial configuration
     const vectorTool = createVectorQueryTool({
       vectorStoreName: 'pinecone',
-      indexName: 'documents', 
+      indexName: 'documents',
       model: embedModel,
       databaseConfig: {
         pinecone: {
@@ -189,7 +195,7 @@ whereDocument: { "$contains": "API documentation" }
         }
       }
     });
-    
+
     // Override at runtime
     const runtimeContext = new RuntimeContext();
     runtimeContext.set('databaseConfig', {
@@ -197,13 +203,14 @@ whereDocument: { "$contains": "API documentation" }
         namespace: 'production'
       }
     });
-    
+
     await vectorTool.execute({
       context: { queryText: 'search query' },
       mastra,
       runtimeContext
     });
     ```
+
   </TabItem>
 
   <TabItem value="multi-database-configuration" label="Multi-Database Configuration">
@@ -232,9 +239,9 @@ whereDocument: { "$contains": "API documentation" }
     :::note
 
       **Multi-Database Support**: When you configure multiple databases, only the configuration matching the actual vector store being used will be applied.
-    
+
 :::
-  </TabItem>
+</TabItem>
 
   <TabItem value="performance-tuning" label="Performance Tuning">
     ### Performance Tuning
@@ -253,8 +260,8 @@ whereDocument: { "$contains": "API documentation" }
         }
       }
     });
-    
-    // High speed configuration  
+
+    // High speed configuration
     const highSpeedTool = createVectorQueryTool({
       vectorStoreName: 'postgres',
       indexName: 'embeddings',
@@ -268,6 +275,7 @@ whereDocument: { "$contains": "API documentation" }
       }
     });
     ```
+
   </TabItem>
 </Tabs>
 
@@ -299,9 +307,9 @@ const vectorTool = createVectorQueryTool({
   databaseConfig: {
     newdatabase: {
       customParam1: 'value',
-      customParam2: 42
-    }
-  }
+      customParam2: 42,
+    },
+  },
 });
 ```
 
@@ -333,5 +341,5 @@ const vectorTool = createVectorQueryTool({
 ## Related
 
 - [createVectorQueryTool()](/reference/tools/vector-query-tool)
-- [Hybrid Vector Search](/examples/rag/query/hybrid-vector-search.md)
-- [Metadata Filters](/reference/rag/metadata-filters) 
+- [Hybrid Vector Search](/examples/rag/query/hybrid-vector-search)
+- [Metadata Filters](/reference/rag/metadata-filters)

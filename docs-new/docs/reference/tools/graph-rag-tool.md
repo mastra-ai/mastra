@@ -1,5 +1,5 @@
 ---
-title: "Reference: createGraphRAGTool() "
+title: 'Reference: createGraphRAGTool() '
 description: Documentation for the Graph RAG Tool in Mastra, which enhances RAG by building a graph of semantic relationships between documents.
 ---
 
@@ -10,13 +10,13 @@ The `createGraphRAGTool()` creates a tool that enhances RAG by building a graph 
 ## Usage Example
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { createGraphRAGTool } from "@mastra/rag";
+import { openai } from '@ai-sdk/openai';
+import { createGraphRAGTool } from '@mastra/rag';
 
 const graphTool = createGraphRAGTool({
-  vectorStoreName: "pinecone",
-  indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'pinecone',
+  indexName: 'docs',
+  model: openai.embedding('text-embedding-3-small'),
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,
@@ -30,120 +30,120 @@ const graphTool = createGraphRAGTool({
 
 :::note
 
-  **Parameter Requirements:** Most fields can be set at creation as defaults.
-  Some fields can be overridden at runtime via the runtime context or input. If
-  a required field is missing from both creation and runtime, an error will be
-  thrown. Note that `model`, `id`, and `description` can only be set at creation
-  time.
+**Parameter Requirements:** Most fields can be set at creation as defaults.
+Some fields can be overridden at runtime via the runtime context or input. If
+a required field is missing from both creation and runtime, an error will be
+thrown. Note that `model`, `id`, and `description` can only be set at creation
+time.
 
 :::
 
 <PropertiesTable
-  content={[
-    {
-      name: "id",
-      type: "string",
-      description:
-        "Custom ID for the tool. By default: 'GraphRAG {vectorStoreName} {indexName} Tool'. (Set at creation only.)",
-      isOptional: true,
-    },
-    {
-      name: "description",
-      type: "string",
-      description:
-        "Custom description for the tool. By default: 'Access and analyze relationships between information in the knowledge base to answer complex questions about connections and patterns.' (Set at creation only.)",
-      isOptional: true,
-    },
-    {
-      name: "vectorStoreName",
-      type: "string",
-      description:
-        "Name of the vector store to query. (Can be set at creation or overridden at runtime.)",
-      isOptional: false,
-    },
-    {
-      name: "indexName",
-      type: "string",
-      description:
-        "Name of the index within the vector store. (Can be set at creation or overridden at runtime.)",
-      isOptional: false,
-    },
-    {
-      name: "model",
-      type: "EmbeddingModel",
-      description:
-        "Embedding model to use for vector search. (Set at creation only.)",
-      isOptional: false,
-    },
-    {
-      name: "enableFilter",
-      type: "boolean",
-      description:
-        "Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the runtime context.)",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "includeSources",
-      type: "boolean",
-      description:
-        "Include the full retrieval objects in the results. (Can be set at creation or overridden at runtime.)",
-      isOptional: true,
-      defaultValue: "true",
-    },
-    {
-      name: "graphOptions",
-      type: "GraphOptions",
-      description: "Configuration for the graph-based retrieval",
-      isOptional: true,
-      defaultValue: "Default graph options",
-    },
-    {
-      name: "providerOptions",
-      type: "Record<string, Record<string, any>>",
-      description:
-        "Provider-specific options for the embedding model (e.g., outputDimensionality). **Important**: Only works with AI SDK EmbeddingModelV2 models. For V1 models, configure options when creating the model itself.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "id",
+type: "string",
+description:
+"Custom ID for the tool. By default: 'GraphRAG {vectorStoreName} {indexName} Tool'. (Set at creation only.)",
+isOptional: true,
+},
+{
+name: "description",
+type: "string",
+description:
+"Custom description for the tool. By default: 'Access and analyze relationships between information in the knowledge base to answer complex questions about connections and patterns.' (Set at creation only.)",
+isOptional: true,
+},
+{
+name: "vectorStoreName",
+type: "string",
+description:
+"Name of the vector store to query. (Can be set at creation or overridden at runtime.)",
+isOptional: false,
+},
+{
+name: "indexName",
+type: "string",
+description:
+"Name of the index within the vector store. (Can be set at creation or overridden at runtime.)",
+isOptional: false,
+},
+{
+name: "model",
+type: "EmbeddingModel",
+description:
+"Embedding model to use for vector search. (Set at creation only.)",
+isOptional: false,
+},
+{
+name: "enableFilter",
+type: "boolean",
+description:
+"Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the runtime context.)",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "includeSources",
+type: "boolean",
+description:
+"Include the full retrieval objects in the results. (Can be set at creation or overridden at runtime.)",
+isOptional: true,
+defaultValue: "true",
+},
+{
+name: "graphOptions",
+type: "GraphOptions",
+description: "Configuration for the graph-based retrieval",
+isOptional: true,
+defaultValue: "Default graph options",
+},
+{
+name: "providerOptions",
+type: "Record<string, Record<string, any>>",
+description:
+"Provider-specific options for the embedding model (e.g., outputDimensionality). **Important**: Only works with AI SDK EmbeddingModelV2 models. For V1 models, configure options when creating the model itself.",
+isOptional: true,
+},
+]}
 />
 
 ### GraphOptions
 
 <PropertiesTable
-  content={[
-    {
-      name: "dimension",
-      type: "number",
-      description: "Dimension of the embedding vectors",
-      isOptional: true,
-      defaultValue: "1536",
-    },
-    {
-      name: "threshold",
-      type: "number",
-      description:
-        "Similarity threshold for creating edges between nodes (0-1)",
-      isOptional: true,
-      defaultValue: "0.7",
-    },
-    {
-      name: "randomWalkSteps",
-      type: "number",
-      description:
-        "Number of steps in random walk for graph traversal. (Can be set at creation or overridden at runtime.)",
-      isOptional: true,
-      defaultValue: "100",
-    },
-    {
-      name: "restartProb",
-      type: "number",
-      description:
-        "Probability of restarting random walk from query node. (Can be set at creation or overridden at runtime.)",
-      isOptional: true,
-      defaultValue: "0.15",
-    },
-  ]}
+content={[
+{
+name: "dimension",
+type: "number",
+description: "Dimension of the embedding vectors",
+isOptional: true,
+defaultValue: "1536",
+},
+{
+name: "threshold",
+type: "number",
+description:
+"Similarity threshold for creating edges between nodes (0-1)",
+isOptional: true,
+defaultValue: "0.7",
+},
+{
+name: "randomWalkSteps",
+type: "number",
+description:
+"Number of steps in random walk for graph traversal. (Can be set at creation or overridden at runtime.)",
+isOptional: true,
+defaultValue: "100",
+},
+{
+name: "restartProb",
+type: "number",
+description:
+"Probability of restarting random walk from query node. (Can be set at creation or overridden at runtime.)",
+isOptional: true,
+defaultValue: "0.15",
+},
+]}
 />
 
 ## Returns
@@ -151,20 +151,20 @@ const graphTool = createGraphRAGTool({
 The tool returns an object with:
 
 <PropertiesTable
-  content={[
-    {
-      name: "relevantContext",
-      type: "string",
-      description:
-        "Combined text from the most relevant document chunks, retrieved using graph-based ranking",
-    },
-    {
-      name: "sources",
-      type: "QueryResult[]",
-      description:
-        "Array of full retrieval result objects. Each object contains all information needed to reference the original document, chunk, and similarity score.",
-    },
-  ]}
+content={[
+{
+name: "relevantContext",
+type: "string",
+description:
+"Combined text from the most relevant document chunks, retrieved using graph-based ranking",
+},
+{
+name: "sources",
+type: "QueryResult[]",
+description:
+"Array of full retrieval result objects. Each object contains all information needed to reference the original document, chunk, and similarity score.",
+},
+]}
 />
 
 ### QueryResult object structure
@@ -191,9 +191,9 @@ The default description focuses on:
 
 ```typescript
 const graphTool = createGraphRAGTool({
-  vectorStoreName: "pinecone",
-  indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'pinecone',
+  indexName: 'docs',
+  model: openai.embedding('text-embedding-3-small'),
   graphOptions: {
     dimension: 1536,
     threshold: 0.8, // Higher similarity threshold
@@ -207,9 +207,9 @@ const graphTool = createGraphRAGTool({
 
 ```typescript
 const graphTool = createGraphRAGTool({
-  vectorStoreName: "pinecone",
-  indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'pinecone',
+  indexName: 'docs',
+  model: openai.embedding('text-embedding-3-small'),
   description:
     "Analyze document relationships to find complex patterns and connections in our company's historical data",
 });
@@ -221,9 +221,9 @@ This example shows how to customize the tool description for a specific use case
 
 ```typescript
 const graphTool = createGraphRAGTool({
-  vectorStoreName: "pinecone",
-  indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'pinecone',
+  indexName: 'docs',
+  model: openai.embedding('text-embedding-3-small'),
 });
 ```
 
@@ -236,25 +236,22 @@ const runtimeContext = new RuntimeContext<{
   topK: number;
   filter: any;
 }>();
-runtimeContext.set("vectorStoreName", "my-store");
-runtimeContext.set("indexName", "my-index");
-runtimeContext.set("topK", 5);
-runtimeContext.set("filter", { category: "docs" });
-runtimeContext.set("randomWalkSteps", 100);
-runtimeContext.set("restartProb", 0.15);
+runtimeContext.set('vectorStoreName', 'my-store');
+runtimeContext.set('indexName', 'my-index');
+runtimeContext.set('topK', 5);
+runtimeContext.set('filter', { category: 'docs' });
+runtimeContext.set('randomWalkSteps', 100);
+runtimeContext.set('restartProb', 0.15);
 
-const response = await agent.generate(
-  "Find documentation from the knowledge base.",
-  {
-    runtimeContext,
-  },
-);
+const response = await agent.generate('Find documentation from the knowledge base.', {
+  runtimeContext,
+});
 ```
 
 For more information on runtime context, please see:
 
-- [Agent Runtime Context](../../docs/agents/runtime-context.md)
-- [Tool Runtime Context](../../docs/tools-mcp/runtime-context.md)
+- [Agent Runtime Context](../../docs/agents/runtime-context)
+- [Tool Runtime Context](../../docs/tools-mcp/runtime-context)
 
 ## Related
 

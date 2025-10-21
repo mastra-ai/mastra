@@ -1,5 +1,5 @@
 ---
-title: "Reference: Workflow.sendEvent() "
+title: 'Reference: Workflow.sendEvent() '
 description: Documentation for the `Workflow.sendEvent()` method in workflows, which resumes execution when an event is sent.
 ---
 
@@ -16,34 +16,34 @@ workflow.sendEvent('event-name', step1);
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "eventName",
-      type: "string",
-      description: "The name of the event to send",
-      isOptional: false,
-    },
-    {
-      name: "step",
-      type: "Step",
-      description: "The step to resume after the event is sent",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "eventName",
+type: "string",
+description: "The name of the event to send",
+isOptional: false,
+},
+{
+name: "step",
+type: "Step",
+description: "The step to resume after the event is sent",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "Workflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "Workflow",
+description: "The workflow instance for method chaining",
+},
+]}
 />
 
 ## Related
 
-- [Sleep & Events](../../../docs/workflows/pausing-execution.md)
+- [Sleep & Events](../../../docs/workflows/pausing-execution)

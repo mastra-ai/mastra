@@ -1,6 +1,6 @@
 ---
-title: "Reference: Mastra.setStorage() "
-description: "Documentation for the `Mastra.setStorage()` method in Mastra, which sets the storage instance for the Mastra instance."
+title: 'Reference: Mastra.setStorage() '
+description: 'Documentation for the `Mastra.setStorage()` method in Mastra, which sets the storage instance for the Mastra instance.'
 ---
 
 # Mastra.setStorage()
@@ -12,21 +12,21 @@ The `.setStorage()` method is used to set the storage instance for the Mastra in
 ```typescript copy
 mastra.setStorage(
   new LibSQLStore({
-    url: ":memory:"
-  })
+    url: ':memory:',
+  }),
 );
 ```
 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "storage",
-      type: "MastraStorage",
-      description: "The storage instance to set for the Mastra instance.",
-    },
-  ]}
+content={[
+{
+name: "storage",
+type: "MastraStorage",
+description: "The storage instance to set for the Mastra instance.",
+},
+]}
 />
 
 ## Returns
@@ -35,5 +35,5 @@ This method does not return a value.
 
 ## Related
 
-- [Storage overview](../../docs/server-db/storage.md)
-- [Storage reference](../../reference/storage/libsql.md)
+- [Storage overview](../../docs/server-db/storage)
+- [Storage reference](../../reference/storage/libsql)

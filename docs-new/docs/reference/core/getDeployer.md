@@ -1,6 +1,6 @@
 ---
-title: "Reference: Mastra.getDeployer() "
-description: "Documentation for the `Mastra.getDeployer()` method in Mastra, which retrieves the configured deployer instance."
+title: 'Reference: Mastra.getDeployer() '
+description: 'Documentation for the `Mastra.getDeployer()` method in Mastra, which retrieves the configured deployer instance.'
 ---
 
 # Mastra.getDeployer()
@@ -20,16 +20,16 @@ This method does not accept any parameters.
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "deployer",
-      type: "MastraDeployer | undefined",
-      description: "The configured deployer instance, or undefined if no deployer has been configured.",
-    },
-  ]}
+content={[
+{
+name: "deployer",
+type: "MastraDeployer | undefined",
+description: "The configured deployer instance, or undefined if no deployer has been configured.",
+},
+]}
 />
 
 ## Related
 
-- [Deployment overview](../../docs/deployment/overview.md)
-- [Deployer reference](../../reference/deployer/deployer.md)
+- [Deployment overview](../../docs/deployment/overview)
+- [Deployer reference](../../reference/deployer/deployer)

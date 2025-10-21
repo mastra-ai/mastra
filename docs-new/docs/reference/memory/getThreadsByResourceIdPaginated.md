@@ -1,6 +1,6 @@
 ---
-title: "Reference: Memory.getThreadsByResourceIdPaginated() "
-description: "Documentation for the `Memory.getThreadsByResourceIdPaginated()` method in Mastra, which retrieves threads associated with a specific resource ID with pagination support."
+title: 'Reference: Memory.getThreadsByResourceIdPaginated() '
+description: 'Documentation for the `Memory.getThreadsByResourceIdPaginated()` method in Mastra, which retrieves threads associated with a specific resource ID with pagination support.'
 ---
 
 # Memory.getThreadsByResourceIdPaginated()
@@ -11,67 +11,67 @@ The `.getThreadsByResourceIdPaginated()` method retrieves threads associated wit
 
 ```typescript copy
 await memory.getThreadsByResourceIdPaginated({
-  resourceId: "user-123",
+  resourceId: 'user-123',
   page: 0,
-  perPage: 10
+  perPage: 10,
 });
 ```
 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "resourceId",
-      type: "string",
-      description: "The ID of the resource whose threads are to be retrieved",
-      isOptional: false,
-    },
-    {
-      name: "page",
-      type: "number",
-      description: "Page number to retrieve",
-      isOptional: false,
-    },
-    {
-      name: "perPage",
-      type: "number",
-      description: "Number of threads to return per page",
-      isOptional: false,
-    },
-    {
-      name: "orderBy",
-      type: "'createdAt' | 'updatedAt'",
-      description: "Field to sort threads by",
-      isOptional: true,
-    },
-    {
-      name: "sortDirection",
-      type: "'ASC' | 'DESC'",
-      description: "Sort order direction",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "resourceId",
+type: "string",
+description: "The ID of the resource whose threads are to be retrieved",
+isOptional: false,
+},
+{
+name: "page",
+type: "number",
+description: "Page number to retrieve",
+isOptional: false,
+},
+{
+name: "perPage",
+type: "number",
+description: "Number of threads to return per page",
+isOptional: false,
+},
+{
+name: "orderBy",
+type: "'createdAt' | 'updatedAt'",
+description: "Field to sort threads by",
+isOptional: true,
+},
+{
+name: "sortDirection",
+type: "'ASC' | 'DESC'",
+description: "Sort order direction",
+isOptional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "result",
-      type: "Promise<PaginationInfo & { threads: StorageThreadType[] }>",
-      description: "A promise that resolves to paginated thread results with metadata",
-    },
-  ]}
+content={[
+{
+name: "result",
+type: "Promise<PaginationInfo & { threads: StorageThreadType[] }>",
+description: "A promise that resolves to paginated thread results with metadata",
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const agent = mastra.getAgent("agent");
+const agent = mastra.getAgent('agent');
 const memory = await agent.getMemory();
 
 let currentPage = 0;
@@ -79,19 +79,19 @@ let hasMorePages = true;
 
 while (hasMorePages) {
   const threads = await memory?.getThreadsByResourceIdPaginated({
-    resourceId: "user-123",
+    resourceId: 'user-123',
     page: currentPage,
     perPage: 25,
-    orderBy: "createdAt",
-    sortDirection: "ASC"
+    orderBy: 'createdAt',
+    sortDirection: 'ASC',
   });
 
   if (!threads) {
-    console.log("No threads");
+    console.log('No threads');
     break;
   }
 
-  threads.threads.forEach((thread) => {
+  threads.threads.forEach(thread => {
     console.log(`Thread: ${thread.id}, Created: ${thread.createdAt}`);
   });
 
@@ -102,8 +102,8 @@ while (hasMorePages) {
 
 ## Related
 
-- [Memory Class Reference](/reference/memory/Memory.md)
-- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId.md) - Non-paginated version
-- [Getting Started with Memory](/docs/memory/overview.md) (Covers threads/resources concept)
-- [createThread](/reference/memory/createThread.md)
-- [getThreadById](/reference/memory/getThreadById.md)
+- [Memory Class Reference](/reference/memory/Memory)
+- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId) - Non-paginated version
+- [Getting Started with Memory](/docs/memory/overview) (Covers threads/resources concept)
+- [createThread](/reference/memory/createThread)
+- [getThreadById](/reference/memory/getThreadById)

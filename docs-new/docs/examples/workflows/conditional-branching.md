@@ -1,5 +1,5 @@
 ---
-title: "Conditional Branching "
+title: 'Conditional Branching '
 description: Example of using Mastra to create conditional branches in workflows using the `branch` statement .
 ---
 
@@ -12,52 +12,52 @@ Workflows often need to follow different paths based on a condition. These examp
 In this example, the workflow uses `.branch()` to execute one of two steps based on a condition. If the input `value` is less than or equal to 10, it runs `lessThanStep` and returns `0`. If the value is greater than 10, it runs `greaterThanStep` and returns `20`. Only the first matching branch is executed, and its output becomes the output of the workflow.
 
 ```typescript filename="src/mastra/workflows/example-branch-steps.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
 
 const lessThanStep = createStep({
-  id: "less-than-step",
-  description: "if value is <=10, return 0",
+  id: 'less-than-step',
+  description: 'if value is <=10, return 0',
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   outputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   execute: async () => {
     return {
-      value: 0
+      value: 0,
     };
-  }
+  },
 });
 const greaterThanStep = createStep({
-  id: "greater-than-step",
-  description: "if value is >10, return 20",
+  id: 'greater-than-step',
+  description: 'if value is >10, return 20',
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   outputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   execute: async () => {
     return {
-      value: 20
+      value: 20,
     };
-  }
+  },
 });
 
 export const branchSteps = createWorkflow({
-  id: "branch-workflow",
+  id: 'branch-workflow',
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   outputSchema: z.object({
-    value: z.number()
-  })
+    value: z.number(),
+  }),
 })
   .branch([
     [async ({ inputData: { value } }) => value <= 10, lessThanStep],
-    [async ({ inputData: { value } }) => value > 10, greaterThanStep]
+    [async ({ inputData: { value } }) => value > 10, greaterThanStep],
   ])
   .commit();
 ```
@@ -69,76 +69,76 @@ export const branchSteps = createWorkflow({
 In this example, the workflow uses `.branch()` to execute one of two nested workflows based on a condition. If the input `value` is less than or equal to 10, it runs `lessThanWorkflow`, which runs the `lessThanStep`. If the value is greater than 10, it runs `greaterThanWorkflow`, which runs the `greaterThanStep`.
 
 ```typescript filename="src/mastra/workflows/example-branch-workflows.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
 
 const lessThanStep = createStep({
-  id: "less-than-step",
-  description: "if value is <=10, return 0",
+  id: 'less-than-step',
+  description: 'if value is <=10, return 0',
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   outputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   execute: async () => {
     return {
-      value: 0
+      value: 0,
     };
-  }
+  },
 });
 const greaterThanStep = createStep({
-  id: "greater-than-step",
-  description: "if value is >10, return 20",
+  id: 'greater-than-step',
+  description: 'if value is >10, return 20',
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   outputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   execute: async () => {
     return {
-      value: 20
+      value: 20,
     };
-  }
+  },
 });
 
 export const lessThanWorkflow = createWorkflow({
-  id: "less-than-workflow",
+  id: 'less-than-workflow',
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   outputSchema: z.object({
-    value: z.number()
-  })
+    value: z.number(),
+  }),
 })
   .then(lessThanStep)
   .commit();
 
 export const greaterThanWorkflow = createWorkflow({
-  id: "greater-than-workflow",
+  id: 'greater-than-workflow',
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   outputSchema: z.object({
-    value: z.number()
-  })
+    value: z.number(),
+  }),
 })
   .then(greaterThanStep)
   .commit();
 
 export const branchWorkflows = createWorkflow({
-  id: "branch-workflow",
+  id: 'branch-workflow',
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   outputSchema: z.object({
-    value: z.number()
-  })
+    value: z.number(),
+  }),
 })
   .branch([
     [async ({ inputData: { value } }) => value <= 10, lessThanWorkflow],
-    [async ({ inputData: { value } }) => value > 10, greaterThanWorkflow]
+    [async ({ inputData: { value } }) => value > 10, greaterThanWorkflow],
   ])
   .commit();
 ```
@@ -147,7 +147,7 @@ export const branchWorkflows = createWorkflow({
 
 ## Related
 
-- [Running Workflows](./running-workflows.md)
+- [Running Workflows](./running-workflows)
 
 ## Workflows (Legacy)
 
@@ -155,4 +155,3 @@ The following links provide example documentation for legacy workflows:
 
 - [Branching Paths](/examples/workflows_legacy/branching-paths)
 - [Workflow (Legacy) with Conditional Branching (experimental)](/examples/workflows_legacy/conditional-branching)
-

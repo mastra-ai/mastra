@@ -1,6 +1,6 @@
 ---
-title: "MastraAuthFirebase Class"
-description: "Documentation for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication."
+title: 'MastraAuthFirebase Class'
+description: 'Documentation for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication.'
 ---
 
 import Tabs from '@theme/Tabs';
@@ -43,7 +43,7 @@ npm install @mastra/auth-firebase@latest
 If you set the required environment variables (`FIREBASE_SERVICE_ACCOUNT` and `FIRESTORE_DATABASE_ID`), you can initialize `MastraAuthFirebase` without any constructor arguments. The class will automatically read these environment variables as configuration:
 
 ```typescript {2,7} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthFirebase } from '@mastra/auth-firebase';
 
 // Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
@@ -58,7 +58,7 @@ export const mastra = new Mastra({
 ### Custom configuration
 
 ```typescript {2,7-10} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthFirebase } from '@mastra/auth-firebase';
 
 export const mastra = new Mastra({
@@ -66,7 +66,7 @@ export const mastra = new Mastra({
   server: {
     experimental_auth: new MastraAuthFirebase({
       serviceAccount: '/path/to/service-account.json',
-      databaseId: 'your-database-id'
+      databaseId: 'your-database-id',
     }),
   },
 });
@@ -99,14 +99,14 @@ To customize user authorization, provide a custom `authorizeUser` function:
 import { MastraAuthFirebase } from '@mastra/auth-firebase';
 
 const firebaseAuth = new MastraAuthFirebase({
-  authorizeUser: async (user) => {
+  authorizeUser: async user => {
     // Custom authorization logic
     return user.email?.endsWith('@yourcompany.com') || false;
-  }
+  },
 });
 ```
 
-> See the [MastraAuthFirebase](/reference/auth/firebase.md) API reference for all available configuration options.
+> See the [MastraAuthFirebase](/reference/auth/firebase) API reference for all available configuration options.
 
 ## Client-side setup
 
@@ -176,21 +176,21 @@ export const signOutUser = async () => {
 When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Firebase ID token in the `Authorization` header:
 
 ```typescript {6} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js';
 
 export const createMastraClient = (idToken: string) => {
   return new MastraClient({
-    baseUrl: "https://<mastra-api-url>",
+    baseUrl: 'https://<mastra-api-url>',
     headers: {
-      Authorization: `Bearer ${idToken}`
-    }
+      Authorization: `Bearer ${idToken}`,
+    },
   });
 };
 ```
 
 > **Note:** The ID token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/server-db/mastra-client.md) for more configuration options.
+> See [Mastra Client SDK](/docs/server-db/mastra-client) for more configuration options.
 
 ### Making authenticated requests
 
@@ -230,6 +230,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
       );
     };
     ```
+
   </Tab>
   <Tab>
     ```typescript filename="server.js" showLineNumbers copy
@@ -250,7 +251,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
     app.post('/generate', async (req, res) => {
       try {
         const { idToken } = req.body;
-        
+
         // Verify the token
         await admin.auth().verifyIdToken(idToken);
 
@@ -272,6 +273,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
       }
     });
     ```
+
   </Tab>
   <Tab>
     ```bash copy

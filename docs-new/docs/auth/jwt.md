@@ -1,6 +1,6 @@
 ---
-title: "MastraJwtAuth Class"
-description: "Documentation for the MastraJwtAuth class, which authenticates Mastra applications using JSON Web Tokens."
+title: 'MastraJwtAuth Class'
+description: 'Documentation for the MastraJwtAuth class, which authenticates Mastra applications using JSON Web Tokens.'
 ---
 
 import Tabs from '@theme/Tabs';
@@ -21,37 +21,37 @@ npm install @mastra/auth@latest
 ## Usage example
 
 ```typescript {2,7-9} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 import { MastraJwtAuth } from '@mastra/auth';
 
 export const mastra = new Mastra({
   // ..
   server: {
     experimental_auth: new MastraJwtAuth({
-        secret: process.env.MASTRA_JWT_SECRET
+      secret: process.env.MASTRA_JWT_SECRET,
     }),
   },
 });
 ```
 
-> See the [MastraJwtAuth](/reference/auth/jwt.md) API reference for all available configuration options.
+> See the [MastraJwtAuth](/reference/auth/jwt) API reference for all available configuration options.
 
 ## Configuring `MastraClient`
 
 When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid JWT in the `Authorization` header:
 
 ```typescript {6} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js';
 
 export const mastraClient = new MastraClient({
-  baseUrl: "https://<mastra-api-url>",
+  baseUrl: 'https://<mastra-api-url>',
   headers: {
-    Authorization: `Bearer ${process.env.MASTRA_JWT_TOKEN}`
-  }
+    Authorization: `Bearer ${process.env.MASTRA_JWT_TOKEN}`,
+  },
 });
 ```
 
-> See [Mastra Client SDK](/docs/server-db/mastra-client.md) for more configuration options.
+> See [Mastra Client SDK](/docs/server-db/mastra-client) for more configuration options.
 
 ### Making authenticated requests
 
@@ -76,6 +76,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
       return <button onClick={handleClick}>Test Agent</button>;
     };
     ```
+
   </Tab>
   <Tab>
     ```bash copy

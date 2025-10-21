@@ -1,6 +1,6 @@
 ---
-title: "Reference: Memory.getThreadsByResourceId() "
-description: "Documentation for the `Memory.getThreadsByResourceId()` method in Mastra, which retrieves all threads that belong to a specific resource."
+title: 'Reference: Memory.getThreadsByResourceId() '
+description: 'Documentation for the `Memory.getThreadsByResourceId()` method in Mastra, which retrieves all threads that belong to a specific resource.'
 ---
 
 # Memory.getThreadsByResourceId()
@@ -10,60 +10,59 @@ The `.getThreadsByResourceId()` function retrieves all threads associated with a
 ## Usage Example
 
 ```typescript
-await memory?.getThreadsByResourceId({ resourceId: "user-123" });
+await memory?.getThreadsByResourceId({ resourceId: 'user-123' });
 ```
 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "resourceId",
-      type: "string",
-      description: "The ID of the resource whose threads are to be retrieved.",
-      isOptional: false,
-    },
-    {
-      name: "orderBy",
-      type: "ThreadOrderBy",
-      description: "Field to sort threads by. Accepts 'createdAt' or 'updatedAt'. Default: 'createdAt'",
-      isOptional: true,
-    },
-    {
-      name: "sortDirection",
-      type: "ThreadSortDirection",
-      description: "Sort order direction. Accepts 'ASC' or 'DESC'. Default: 'DESC'",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "resourceId",
+type: "string",
+description: "The ID of the resource whose threads are to be retrieved.",
+isOptional: false,
+},
+{
+name: "orderBy",
+type: "ThreadOrderBy",
+description: "Field to sort threads by. Accepts 'createdAt' or 'updatedAt'. Default: 'createdAt'",
+isOptional: true,
+},
+{
+name: "sortDirection",
+type: "ThreadSortDirection",
+description: "Sort order direction. Accepts 'ASC' or 'DESC'. Default: 'DESC'",
+isOptional: true,
+},
+]}
 />
-
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "StorageThreadType[]",
-      type: "Promise",
-      description:
-        "A promise that resolves to an array of threads associated with the given resource ID.",
-    },
-  ]}
+content={[
+{
+name: "StorageThreadType[]",
+type: "Promise",
+description:
+"A promise that resolves to an array of threads associated with the given resource ID.",
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const agent = mastra.getAgent("agent");
+const agent = mastra.getAgent('agent');
 const memory = await agent.getMemory();
 
 const thread = await memory?.getThreadsByResourceId({
-  resourceId: "user-123",
-  orderBy: "updatedAt",
-  sortDirection: "ASC"
+  resourceId: 'user-123',
+  orderBy: 'updatedAt',
+  sortDirection: 'ASC',
 });
 
 console.log(thread);
@@ -71,8 +70,8 @@ console.log(thread);
 
 ### Related
 
-- [Memory Class Reference](/reference/memory/Memory.md)
-- [getThreadsByResourceIdPaginated](/reference/memory/getThreadsByResourceIdPaginated.md) - Paginated version
-- [Getting Started with Memory](/docs/memory/overview.md) (Covers threads/resources concept)
-- [createThread](/reference/memory/createThread.md)
-- [getThreadById](/reference/memory/getThreadById.md)
+- [Memory Class Reference](/reference/memory/Memory)
+- [getThreadsByResourceIdPaginated](/reference/memory/getThreadsByResourceIdPaginated) - Paginated version
+- [Getting Started with Memory](/docs/memory/overview) (Covers threads/resources concept)
+- [createThread](/reference/memory/createThread)
+- [getThreadById](/reference/memory/getThreadById)

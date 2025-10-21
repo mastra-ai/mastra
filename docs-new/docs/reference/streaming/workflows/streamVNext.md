@@ -1,8 +1,7 @@
 ---
-title: "Reference: Run.streamVNext() "
+title: 'Reference: Run.streamVNext() '
 description: Documentation for the `Run.streamVNext()` method in workflows, which enables real-time streaming of responses.
 ---
-
 
 # Run.streamVNext() (Experimental)
 
@@ -17,7 +16,7 @@ const run = await workflow.createRunAsync();
 
 const stream = run.streamVNext({
   inputData: {
-    value: "initial data",
+    value: 'initial data',
   },
 });
 ```
@@ -25,91 +24,91 @@ const stream = run.streamVNext({
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "inputData",
-      type: "z.infer<TInput>",
-      description: "Input data that matches the workflow's input schema",
-      isOptional: true,
-    },
-    {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "Runtime context data to use during workflow execution",
-      isOptional: true,
-    },
-    {
-      name: "tracingContext",
-      type: "TracingContext",
-      isOptional: true,
-      description: "AI tracing context for creating child spans and adding metadata.",
-      properties: [
-        {
-          parameters: [{
-            name: "currentSpan",
-            type: "AISpan",
-            isOptional: true,
-            description: "Current AI span for creating child spans and adding metadata."
-          }]
-        }
-      ]
-    },
-    {
-      name: "tracingOptions",
-      type: "TracingOptions",
-      isOptional: true,
-      description: "Options for AI tracing configuration.",
-      properties: [
-        {
-          parameters: [{
-            name: "metadata",
-            type: "Record<string, any>",
-            isOptional: true,
-            description: "Metadata to add to the root trace span."
-          }]
-        }
-      ]
-    },
-    {
-      name: "closeOnSuspend",
-      type: "boolean",
-      description: "Whether to close the stream when the workflow is suspended, or to keep the stream open until the workflow is finished (by success or error). Default value is true.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "inputData",
+type: "z.infer<TInput>",
+description: "Input data that matches the workflow's input schema",
+isOptional: true,
+},
+{
+name: "runtimeContext",
+type: "RuntimeContext",
+description: "Runtime context data to use during workflow execution",
+isOptional: true,
+},
+{
+name: "tracingContext",
+type: "TracingContext",
+isOptional: true,
+description: "AI tracing context for creating child spans and adding metadata.",
+properties: [
+{
+parameters: [{
+name: "currentSpan",
+type: "AISpan",
+isOptional: true,
+description: "Current AI span for creating child spans and adding metadata."
+}]
+}
+]
+},
+{
+name: "tracingOptions",
+type: "TracingOptions",
+isOptional: true,
+description: "Options for AI tracing configuration.",
+properties: [
+{
+parameters: [{
+name: "metadata",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata to add to the root trace span."
+}]
+}
+]
+},
+{
+name: "closeOnSuspend",
+type: "boolean",
+description: "Whether to close the stream when the workflow is suspended, or to keep the stream open until the workflow is finished (by success or error). Default value is true.",
+isOptional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "stream",
-      type: "MastraWorkflowStream<ChunkType>",
-      description: "A custom stream that extends ReadableStream<ChunkType> with additional workflow-specific properties",
-    },
-    {
-      name: "stream.status",
-      type: "Promise<RunStatus>",
-      description: "A promise that resolves to the current workflow run status",
-    },
-    {
-      name: "stream.result",
-      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
-      description: "A promise that resolves to the final workflow result",
-    },
-    {
-      name: "stream.usage",
-      type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cacheInputTokens?: number }>",
-      description: "A promise that resolves to token usage statistics",
-    },
-    {
-      name: "stream.traceId",
-      type: "string",
-      isOptional: true,
-      description: "The trace ID associated with this execution when AI tracing is enabled.",
-    },
-  ]}
+content={[
+{
+name: "stream",
+type: "MastraWorkflowStream<ChunkType>",
+description: "A custom stream that extends ReadableStream<ChunkType> with additional workflow-specific properties",
+},
+{
+name: "stream.status",
+type: "Promise<RunStatus>",
+description: "A promise that resolves to the current workflow run status",
+},
+{
+name: "stream.result",
+type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+description: "A promise that resolves to the final workflow result",
+},
+{
+name: "stream.usage",
+type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cacheInputTokens?: number }>",
+description: "A promise that resolves to token usage statistics",
+},
+{
+name: "stream.traceId",
+type: "string",
+isOptional: true,
+description: "The trace ID associated with this execution when AI tracing is enabled.",
+},
+]}
 />
 
 ## Extended usage example
@@ -119,7 +118,7 @@ const run = await workflow.createRunAsync();
 
 const stream = run.streamVNext({
   inputData: {
-    value: "initial data",
+    value: 'initial data',
   },
 });
 
@@ -138,6 +137,6 @@ The stream emits various event types during workflow execution. Each event has a
 
 ## Related
 
-- [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
-- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run.md)
-- [Run.resumeStreamVNext()](./resumeStreamVNext.md)
+- [Workflows overview](../../../docs/workflows/overview#run-workflow)
+- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run)
+- [Run.resumeStreamVNext()](./resumeStreamVNext)

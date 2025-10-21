@@ -1,6 +1,6 @@
 ---
-title: "Reference: Workflow.execute() "
-description: "Documentation for the `.execute()` method in Mastra workflows, which runs workflow steps and returns results."
+title: 'Reference: Workflow.execute() '
+description: 'Documentation for the `.execute()` method in Mastra workflows, which runs workflow steps and returns results.'
 ---
 
 # Workflow.execute()
@@ -11,7 +11,7 @@ Executes a workflow with the provided trigger data and returns the results. The 
 
 ```typescript
 const workflow = new LegacyWorkflow({
-  name: "my-workflow",
+  name: 'my-workflow',
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
@@ -27,57 +27,57 @@ const result = await workflow.execute({
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "options",
-      type: "ExecuteOptions",
-      description: "Options for workflow execution",
-      isOptional: true,
-      properties: [
-        {
-          name: "triggerData",
-          type: "TriggerSchema",
-          description: "Input data matching the workflow's trigger schema",
-          isOptional: false,
-        },
-        {
-          name: "runId",
-          type: "string",
-          description: "Optional ID to track this execution run",
-          isOptional: true,
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "options",
+type: "ExecuteOptions",
+description: "Options for workflow execution",
+isOptional: true,
+properties: [
+{
+name: "triggerData",
+type: "TriggerSchema",
+description: "Input data matching the workflow's trigger schema",
+isOptional: false,
+},
+{
+name: "runId",
+type: "string",
+description: "Optional ID to track this execution run",
+isOptional: true,
+},
+],
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "WorkflowResult",
-      type: "object",
-      description: "Results from workflow execution",
-      properties: [
-        {
-          name: "runId",
-          type: "string",
-          description: "Unique identifier for this execution run",
-        },
-        {
-          name: "results",
-          type: "Record<string, StepResult>",
-          description: "Results from each completed step",
-        },
-        {
-          name: "status",
-          type: "WorkflowStatus",
-          description: "Final status of the workflow run",
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "WorkflowResult",
+type: "object",
+description: "Results from workflow execution",
+properties: [
+{
+name: "runId",
+type: "string",
+description: "Unique identifier for this execution run",
+},
+{
+name: "results",
+type: "Record<string, StepResult>",
+description: "Results from each completed step",
+},
+{
+name: "status",
+type: "WorkflowStatus",
+description: "Final status of the workflow run",
+},
+],
+},
+]}
 />
 
 ## Additional Examples
@@ -86,7 +86,7 @@ Execute with run ID:
 
 ```typescript
 const result = await workflow.execute({
-  runId: "custom-run-id",
+  runId: 'custom-run-id',
   triggerData: { inputValue: 42 },
 });
 ```
@@ -98,13 +98,13 @@ const { runId, results, status } = await workflow.execute({
   triggerData: { inputValue: 42 },
 });
 
-if (status === "COMPLETED") {
-  console.log("Step results:", results);
+if (status === 'COMPLETED') {
+  console.log('Step results:', results);
 }
 ```
 
 ### Related
 
-- [Workflow.createRun()](./createRun.md)
-- [Workflow.commit()](./commit.md)
-- [Workflow.start()](./start.md)
+- [Workflow.createRun()](./createRun)
+- [Workflow.commit()](./commit)
+- [Workflow.start()](./start)

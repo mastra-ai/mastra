@@ -1,8 +1,7 @@
 ---
-title: "Multi-Turn Human in the Loop "
+title: 'Multi-Turn Human in the Loop '
 description: Example of using Mastra to create workflows with multi-turn human/agent interaction points using suspend/resume and dountil methods.
 ---
-
 
 # Multi-Turn Human in the Loop
 
@@ -29,13 +28,13 @@ OPENAI_API_KEY=<your-api-key>
 The `famousPersonAgent` generates a unique name each time the game is played, using semantic memory to avoid repeating suggestions.
 
 ```typescript filename="src/mastra/agents/example-famous-person-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { LibSQLVector } from "@mastra/libsql";
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { LibSQLVector } from '@mastra/libsql';
 
 export const famousPersonAgent = new Agent({
-  name: "Famous Person Generator",
+  name: 'Famous Person Generator',
   instructions: `You are a famous person generator for a "Heads Up" guessing game.
 
 Generate the name of a well-known famous person who:
@@ -49,35 +48,35 @@ IMPORTANT: Use your memory to check what famous people you've already suggested 
 Examples: Albert Einstein, Beyoncé, Leonardo da Vinci, Oprah Winfrey, Michael Jordan
 
 Return only the person's name, nothing else.`,
-  model: openai("gpt-4o"),
+  model: openai('gpt-4o'),
   memory: new Memory({
     vector: new LibSQLVector({
-      connectionUrl: "file:../mastra.db"
+      connectionUrl: 'file:../mastra.db',
     }),
-    embedder: openai.embedding("text-embedding-3-small"),
+    embedder: openai.embedding('text-embedding-3-small'),
     options: {
       lastMessages: 5,
       semanticRecall: {
         topK: 10,
-        messageRange: 1
-      }
-    }
-  })
+        messageRange: 1,
+      },
+    },
+  }),
 });
 ```
 
-> See [Agent](../../reference/agents/agent.md) for a full list of configuration options.
+> See [Agent](../../reference/agents/agent) for a full list of configuration options.
 
 ## Game agent
 
 The `gameAgent` handles user interactions by responding to questions and validating guesses.
 
 ```typescript filename="src/mastra/agents/example-game-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
 
 export const gameAgent = new Agent({
-  name: "Game Agent",
+  name: 'Game Agent',
   instructions: `You are a helpful game assistant for a "Heads Up" guessing game.
 
 CRITICAL: You know the famous person's name but you must NEVER reveal it in any response.
@@ -101,10 +100,9 @@ Encourage players to make a guess when they seem to have enough information.
 You must return a JSON object with:
 - response: Your response to the user
 - gameWon: true if they guessed correctly, false otherwise`,
-  model: openai("gpt-4o")
+  model: openai('gpt-4o'),
 });
 ```
-
 
 ## Multi-turn workflow
 
@@ -182,9 +180,9 @@ const gameStep = createStep({
           schema: z.object({
             response: z.string(),
             gameWon: z.boolean(),
-          })
+          }),
         },
-        maxSteps: 1
+        maxSteps: 1,
       },
     );
 
@@ -236,24 +234,24 @@ export const headsUpWorkflow = createWorkflow({
   .dountil(gameStep, async ({ inputData: { gameWon } }) => gameWon)
   .then(winStep)
   .commit();
-
 ```
-> See [Workflow](../../reference/workflows/workflow.md) for a full list of configuration options.
+
+> See [Workflow](../../reference/workflows/workflow) for a full list of configuration options.
 
 ## Registering the agents and workflow
 
 To use a workflow or an agent, register them in your main Mastra instance.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 
-import { headsUpWorkflow } from "./workflows/example-heads-up-workflow";
-import { famousPersonAgent } from "./agents/example-famous-person-agent";
-import { gameAgent } from "./agents/example-game-agent";
+import { headsUpWorkflow } from './workflows/example-heads-up-workflow';
+import { famousPersonAgent } from './agents/example-famous-person-agent';
+import { gameAgent } from './agents/example-game-agent';
 
 export const mastra = new Mastra({
   workflows: { headsUpWorkflow },
-  agents: { famousPersonAgent, gameAgent }
+  agents: { famousPersonAgent, gameAgent },
 });
 ```
 
@@ -264,5 +262,5 @@ export const mastra = new Mastra({
 
 ## Related
 
-- [Running Workflows](./running-workflows.md)
-- [Control Flow](../../docs/workflows/control-flow.md)
+- [Running Workflows](./running-workflows)
+- [Control Flow](../../docs/workflows/control-flow)

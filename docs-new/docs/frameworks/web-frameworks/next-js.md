@@ -1,5 +1,5 @@
 ---
-title: "Getting Started with Mastra and Next.js "
+title: 'Getting Started with Mastra and Next.js '
 description: A step-by-step guide to integrating Mastra with Next.js.
 ---
 
@@ -21,11 +21,10 @@ Use this guide to scaffold and integrate Mastra with your Next.js project.
 
 :::warning
 
-  This guide assumes you're using the Next.js App Router at the root of your
-  project, e.g., `app` rather than `src/app`.
+This guide assumes you're using the Next.js App Router at the root of your
+project, e.g., `app` rather than `src/app`.
 
 :::
-
 
 ## Integrate Mastra
 
@@ -68,10 +67,10 @@ OPENAI_API_KEY=<your-api-key>
 Add to your `next.config.ts`:
 
 ```typescript filename="next.config.ts" showLineNumbers copy
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["@mastra/*"],
+  serverExternalPackages: ['@mastra/*'],
 };
 
 export default nextConfig;
@@ -98,13 +97,13 @@ touch app/test/action.ts
 ```
 
 ```typescript filename="app/test/action.ts" showLineNumbers copy
-"use server";
+'use server';
 
-import { mastra } from "../../mastra";
+import { mastra } from '../../mastra';
 
 export async function getWeatherInfo(formData: FormData) {
-  const city = formData.get("city")?.toString();
-  const agent = mastra.getAgent("weatherAgent");
+  const city = formData.get('city')?.toString();
+  const agent = mastra.getAgent('weatherAgent');
 
   const result = await agent.generate(`What's the weather like in ${city}?`);
 
@@ -183,18 +182,16 @@ Agent response: The current weather in London is as follows:
 Let me know if you need more information!
 ```
 
-  
   </TabItem>
 
   <TabItem value="integrate-mastra-pages" label="Integrate Mastra (Pages Router)">
 
 :::warning
 
-  This guide assumes you're using the Next.js Pages Router at the root of your
-  project, e.g., `pages` rather than `src/pages`.
+This guide assumes you're using the Next.js Pages Router at the root of your
+project, e.g., `pages` rather than `src/pages`.
 
 :::
-
 
 ## Integrate Mastra
 
@@ -237,10 +234,10 @@ OPENAI_API_KEY=<your-api-key>
 Add to your `next.config.ts`:
 
 ```typescript filename="next.config.ts" showLineNumbers copy
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["@mastra/*"],
+  serverExternalPackages: ['@mastra/*'],
 };
 
 export default nextConfig;
@@ -259,16 +256,13 @@ touch pages/api/test.ts
 ```
 
 ```typescript filename="pages/api/test.ts" showLineNumbers copy
-import type { NextApiRequest, NextApiResponse } from "next";
+import type { NextApiRequest, NextApiResponse } from 'next';
 
-import { mastra } from "../../mastra";
+import { mastra } from '../../mastra';
 
-export default async function getWeatherInfo(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export default async function getWeatherInfo(req: NextApiRequest, res: NextApiResponse) {
   const city = req.body.city;
-  const agent = mastra.getAgent("weatherAgent");
+  const agent = mastra.getAgent('weatherAgent');
 
   const result = await agent.generate(`What's the weather like in ${city}?`);
 
@@ -335,11 +329,10 @@ Agent response: The current weather in London is as follows:
 Let me know if you need more information!
 ```
 
-  
   </TabItem>
 </Tabs>
 
 ## Next Steps
 
 - [Deployment | With Next.js on Vercel](/docs/deployment/web-framework#with-nextjs-on-vercel)
-- [Monorepo Deployment](../../deployment/monorepo.md)
+- [Monorepo Deployment](../../deployment/monorepo)

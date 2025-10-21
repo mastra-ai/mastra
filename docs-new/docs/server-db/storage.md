@@ -28,12 +28,12 @@ Mastra provides different storage providers, but you can treat them as interchan
 Mastra can be configured with a default storage option:
 
 ```typescript copy
-import { Mastra } from "@mastra/core/mastra";
-import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from '@mastra/core/mastra';
+import { LibSQLStore } from '@mastra/libsql';
 
 const mastra = new Mastra({
   storage: new LibSQLStore({
-    url: "file:./mastra.db",
+    url: 'file:./mastra.db',
   }),
 });
 ```
@@ -44,13 +44,13 @@ configuration either on `Mastra` or directly within `new Memory()`.
 
 ## Data Schema
 
-{/*
+{/_
 LLM CONTEXT: This Tabs component displays the database schema for different data types stored by Mastra.
 Each tab shows the table structure and column definitions for a specific data entity (Messages, Threads, Workflows, etc.).
 The tabs help users understand the data model and relationships between different storage entities.
 Each tab includes detailed column information with types, constraints, and example data structures.
 The data types include Messages, Threads, Workflows, Eval Datasets, and Traces.
-*/}
+_/}
 
 <Tabs>
 ['Messages', 'Threads', 'Resources', 'Workflows', 'Eval Datasets', 'Traces']}>
@@ -110,53 +110,51 @@ Stores conversation messages and their metadata. Each message belongs to a threa
 The message `content` column contains a JSON object conforming to the `MastraMessageContentV2` type, which is designed to align closely with the AI SDK `UIMessage` message shape.
 
 <SchemaTable
-  columns={[
-    {
-      name: "format",
-      type: "integer",
-      description: "Message format version (currently 2)",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "parts",
-      type: "array (JSON)",
-      description: "Array of message parts (text, tool-invocation, file, reasoning, etc.). The structure of items in this array varies by `type`.",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "experimental_attachments",
-      type: "array (JSON)",
-      description: "Optional array of file attachments",
-      constraints: [{ type: "nullable", value: true }]
-    },
-    {
-      name: "content",
-      type: "text",
-      description: "Optional main text content of the message",
-      constraints: [{ type: "nullable", value: true }]
-    },
-    {
-      name: "toolInvocations",
-      type: "array (JSON)",
-      description: "Optional array summarizing tool calls and results",
-      constraints: [{ type: "nullable", value: true }]
-    },
-    {
-      name: "reasoning",
-      type: "object (JSON)",
-      description: "Optional information about the reasoning process behind the assistant's response",
-      constraints: [{ type: "nullable", value: true }]
-    },
-    {
-      name: "annotations",
-      type: "object (JSON)",
-      description: "Optional additional metadata or annotations",
-      constraints: [{ type: "nullable", value: true }]
-    }
-  ]}
+columns={[
+{
+name: "format",
+type: "integer",
+description: "Message format version (currently 2)",
+constraints: [{ type: "nullable", value: false }]
+},
+{
+name: "parts",
+type: "array (JSON)",
+description: "Array of message parts (text, tool-invocation, file, reasoning, etc.). The structure of items in this array varies by `type`.",
+constraints: [{ type: "nullable", value: false }]
+},
+{
+name: "experimental_attachments",
+type: "array (JSON)",
+description: "Optional array of file attachments",
+constraints: [{ type: "nullable", value: true }]
+},
+{
+name: "content",
+type: "text",
+description: "Optional main text content of the message",
+constraints: [{ type: "nullable", value: true }]
+},
+{
+name: "toolInvocations",
+type: "array (JSON)",
+description: "Optional array summarizing tool calls and results",
+constraints: [{ type: "nullable", value: true }]
+},
+{
+name: "reasoning",
+type: "object (JSON)",
+description: "Optional information about the reasoning process behind the assistant's response",
+constraints: [{ type: "nullable", value: true }]
+},
+{
+name: "annotations",
+type: "object (JSON)",
+description: "Optional additional metadata or annotations",
+constraints: [{ type: "nullable", value: true }]
+}
+]}
 />
-
-
 
 </TabItem>
 
@@ -507,6 +505,6 @@ const messagesV2 = await mastra.getStorage().getMessagesById({ messageIds: messa
 
 Mastra supports the following providers:
 
-- For local development, check out [LibSQL Storage](../../reference/storage/libsql.md)
-- For production, check out [PostgreSQL Storage](../../reference/storage/postgresql.md)
-- For serverless deployments, check out [Upstash Storage](../../reference/storage/upstash.md)
+- For local development, check out [LibSQL Storage](../../reference/storage/libsql)
+- For production, check out [PostgreSQL Storage](../../reference/storage/postgresql)
+- For serverless deployments, check out [Upstash Storage](../../reference/storage/upstash)

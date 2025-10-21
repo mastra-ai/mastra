@@ -1,5 +1,5 @@
 ---
-title: "Reference: Run Class "
+title: 'Reference: Run Class '
 description: Documentation for the Run class in Mastra, which represents a workflow execution instance.
 ---
 
@@ -13,12 +13,12 @@ The `Run` class represents a workflow execution instance, providing methods to s
 const run = await workflow.createRunAsync();
 
 const result = await run.start({
-  inputData: { value: "initial data" }
+  inputData: { value: 'initial data' },
 });
 
-if (result.status === "suspended") {
+if (result.status === 'suspended') {
   const resumedResult = await run.resume({
-    resumeData: { value: "resume data" }
+    resumeData: { value: 'resume data' },
   });
 }
 ```
@@ -26,44 +26,44 @@ if (result.status === "suspended") {
 ## Run Methods
 
 <PropertiesTable
-  content={[
-    {
-      name: "start",
-      type: "(options?: StartOptions) => Promise<WorkflowResult>",
-      description: "Starts workflow execution with input data",
-      required: true,
-    },
-    {
-      name: "resume",
-      type: "(options?: ResumeOptions) => Promise<WorkflowResult>",
-      description: "Resumes a suspended workflow from a specific step",
-      required: true,
-    },
-    {
-      name: "stream",
-      type: "(options?: StreamOptions) => Promise<StreamResult>",
-      description: "Monitors workflow execution as a stream of events",
-      required: true,
-    },
-    {
-      name: "streamVNext",
-      type: "(options?: StreamOptions) => MastraWorkflowStream",
-      description: "Enables real-time streaming with enhanced features",
-      required: true,
-    },
-    {
-      name: "watch",
-      type: "(callback: WatchCallback, type?: WatchType) => UnwatchFunction",
-      description: "Monitors workflow execution with callback-based events",
-      required: true,
-    },
-    {
-      name: "cancel",
-      type: "() => Promise<void>",
-      description: "Cancels the workflow execution",
-      required: true,
-    }
-  ]}
+content={[
+{
+name: "start",
+type: "(options?: StartOptions) => Promise<WorkflowResult>",
+description: "Starts workflow execution with input data",
+required: true,
+},
+{
+name: "resume",
+type: "(options?: ResumeOptions) => Promise<WorkflowResult>",
+description: "Resumes a suspended workflow from a specific step",
+required: true,
+},
+{
+name: "stream",
+type: "(options?: StreamOptions) => Promise<StreamResult>",
+description: "Monitors workflow execution as a stream of events",
+required: true,
+},
+{
+name: "streamVNext",
+type: "(options?: StreamOptions) => MastraWorkflowStream",
+description: "Enables real-time streaming with enhanced features",
+required: true,
+},
+{
+name: "watch",
+type: "(callback: WatchCallback, type?: WatchType) => UnwatchFunction",
+description: "Monitors workflow execution with callback-based events",
+required: true,
+},
+{
+name: "cancel",
+type: "() => Promise<void>",
+description: "Cancels the workflow execution",
+required: true,
+}
+]}
 />
 
 ## Run Status
@@ -71,34 +71,34 @@ if (result.status === "suspended") {
 A workflow run's `status` indicates its current execution state. The possible values are:
 
 <PropertiesTable
-  content={[
-    {
-      name: "success",
-      type: "string",
-      description:
-        "All steps finished executing successfully, with a valid result output",
-    },
-    {
-      name: "failed",
-      type: "string",
-      description:
-        "Workflow execution encountered an error during execution, with error details available",
-    },
-    {
-      name: "suspended",
-      type: "string",
-      description:
-        "Workflow execution is paused waiting for resume, with suspended step information",
-    },
-  ]}
+content={[
+{
+name: "success",
+type: "string",
+description:
+"All steps finished executing successfully, with a valid result output",
+},
+{
+name: "failed",
+type: "string",
+description:
+"Workflow execution encountered an error during execution, with error details available",
+},
+{
+name: "suspended",
+type: "string",
+description:
+"Workflow execution is paused waiting for resume, with suspended step information",
+},
+]}
 />
 
 ## Related
 
-- [Running workflows](../../examples/workflows/running-workflows.md)
-- [Run.start()](./run-methods/start.md)
-- [Run.resume()](./run-methods/resume.md)
-- [Run.stream()](./run-methods/stream.md)
-- [Run.streamVNext()](./run-methods/streamVNext.md)
-- [Run.watch()](./run-methods/watch.md)
-- [Run.cancel()](./run-methods/cancel.md)
+- [Running workflows](../../examples/workflows/running-workflows)
+- [Run.start()](./run-methods/start)
+- [Run.resume()](./run-methods/resume)
+- [Run.stream()](./run-methods/stream)
+- [Run.streamVNext()](./run-methods/streamVNext)
+- [Run.watch()](./run-methods/watch)
+- [Run.cancel()](./run-methods/cancel)

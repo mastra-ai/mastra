@@ -1,8 +1,7 @@
 ---
-title: "Prompt Alignment "
+title: 'Prompt Alignment '
 description: Example of using the Prompt Alignment metric to evaluate instruction adherence in responses.
 ---
-
 
 # Prompt Alignment Evaluation
 
@@ -21,19 +20,21 @@ npm install @mastra/evals
 In this example, the response follows all applicable instructions from the input. The score reflects full adherence, with no instructions missed or ignored.
 
 ```typescript filename="src/example-high-perfect-alignment.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { PromptAlignmentMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { PromptAlignmentMetric } from '@mastra/evals/llm';
 
-const metric = new PromptAlignmentMetric(openai("gpt-4o-mini"), {
+const metric = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
   instructions: [
-    "Use complete sentences",
-    "Include temperature in Celsius",
-    "Mention wind conditions", "State precipitation chance"
-  ]
+    'Use complete sentences',
+    'Include temperature in Celsius',
+    'Mention wind conditions',
+    'State precipitation chance',
+  ],
 });
 
-const query = "What is the weather like?";
-const response = "The temperature is 22 degrees Celsius with moderate winds from the northwest. There is a 30% chance of rain.";
+const query = 'What is the weather like?';
+const response =
+  'The temperature is 22 degrees Celsius with moderate winds from the northwest. There is a 30% chance of rain.';
 
 const result = await metric.measure(query, response);
 
@@ -64,19 +65,15 @@ The response receives a high score because it fully satisfies all applicable ins
 In this example, the response follows some of the instructions but omits others. The score reflects partial adherence, with a mix of followed and missed instructions.
 
 ```typescript filename="src/example-high-mixed-alignment.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { PromptAlignmentMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { PromptAlignmentMetric } from '@mastra/evals/llm';
 
-const metric = new PromptAlignmentMetric(openai("gpt-4o-mini"), {
-  instructions: [
-    "Use bullet points",
-    "Include prices in USD",
-    "Show stock status", "Add product descriptions"
-  ]
+const metric = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: ['Use bullet points', 'Include prices in USD', 'Show stock status', 'Add product descriptions'],
 });
 
-const query = "List the available products";
-const response = "• Coffee - $4.99 (In Stock)\n• Tea - $3.99\n• Water - $1.99 (Out of Stock)";
+const query = 'List the available products';
+const response = '• Coffee - $4.99 (In Stock)\n• Tea - $3.99\n• Water - $1.99 (Out of Stock)';
 
 const result = await metric.measure(query, response);
 
@@ -106,21 +103,16 @@ The response receives a mixed score because it follows some of the instructions 
 
 In this example, the response does not address any of the instructions because they are unrelated to the query. The score reflects that the instructions were not applicable in this context.
 
-
 ```typescript filename="src/example-non-applicable-alignment.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { PromptAlignmentMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { PromptAlignmentMetric } from '@mastra/evals/llm';
 
-const metric = new PromptAlignmentMetric(openai("gpt-4o-mini"), {
-  instructions: [
-    "Show account balance",
-    "List recent transactions",
-    "Display payment history"
-  ]
+const metric = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: ['Show account balance', 'List recent transactions', 'Display payment history'],
 });
 
-const query = "What is the weather like?";
-const response = "It is sunny and warm outside.";
+const query = 'What is the weather like?';
+const response = 'It is sunny and warm outside.';
 
 const result = await metric.measure(query, response);
 
@@ -151,13 +143,13 @@ The response receives a score indicating that none of the instructions could be 
 You can create a `PromptAlignmentMetric` instance by providing an `instructions` array that defines the expected behaviors or requirements. You can also configure optional parameters such as `scale`
 
 ```typescript showLineNumbers copy
-const metric = new PromptAlignmentMetric(openai("gpt-4o-mini"), {
-  instructions: [""],
-  scale: 1
+const metric = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
+  instructions: [''],
+  scale: 1,
 });
 ```
 
-> See [PromptAlignmentMetric](/reference/evals/prompt-alignment.md) for a full list of configuration options.
+> See [PromptAlignmentMetric](/reference/evals/prompt-alignment) for a full list of configuration options.
 
 ## Understanding the results
 
@@ -176,6 +168,7 @@ const metric = new PromptAlignmentMetric(openai("gpt-4o-mini"), {
   }
 }
 ```
+
 ### Prompt alignment score
 
 A prompt alignment score between 0 and 1:

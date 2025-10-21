@@ -1,6 +1,6 @@
 ---
-title: "Reference: Mastra.getTelemetry() "
-description: "Documentation for the `Mastra.getTelemetry()` method in Mastra, which retrieves the configured telemetry instance."
+title: 'Reference: Mastra.getTelemetry() '
+description: 'Documentation for the `Mastra.getTelemetry()` method in Mastra, which retrieves the configured telemetry instance.'
 ---
 
 # Mastra.getTelemetry()
@@ -20,16 +20,16 @@ This method does not accept any parameters.
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "telemetry",
-      type: "Telemetry | undefined",
-      description: "The configured telemetry instance used for tracing and observability across all components, or undefined if no telemetry has been configured.",
-    },
-  ]}
+content={[
+{
+name: "telemetry",
+type: "Telemetry | undefined",
+description: "The configured telemetry instance used for tracing and observability across all components, or undefined if no telemetry has been configured.",
+},
+]}
 />
 
 ## Related
 
-- [AI tracing](../../docs/observability/ai-tracing.md)
-- [Telemetry reference](../../reference/observability/otel-config.md)
+- [AI tracing](../../docs/observability/ai-tracing)
+- [Telemetry reference](../../reference/observability/otel-config)

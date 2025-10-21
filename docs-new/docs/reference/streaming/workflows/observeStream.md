@@ -1,5 +1,5 @@
 ---
-title: "Reference: Run.observeStream() "
+title: 'Reference: Run.observeStream() '
 description: Documentation for the `Run.observeStream()` method in workflows, which enables reopening the stream of an already active workflow run.
 ---
 
@@ -14,7 +14,7 @@ const run = await workflow.createRunAsync();
 
 run.stream({
   inputData: {
-    value: "initial data",
+    value: 'initial data',
   },
 });
 
@@ -44,6 +44,6 @@ The stream emits various event types during workflow execution. Each event has a
 
 ## Related
 
-- [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
-- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run.md)
-- [Run.stream()](./stream.md)
+- [Workflows overview](../../../docs/workflows/overview#run-workflow)
+- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run)
+- [Run.stream()](./stream)

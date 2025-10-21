@@ -1,5 +1,5 @@
 ---
-title: "Logging "
+title: 'Logging '
 description: Learn how to use logging in Mastra to monitor execution, capture application behavior, and improve the accuracy of AI applications.
 ---
 
@@ -7,11 +7,11 @@ description: Learn how to use logging in Mastra to monitor execution, capture ap
 
 Mastra's logging system captures function execution, input data, and output responses in a structured format.
 
-When deploying to Mastra Cloud, logs are shown on the [Logs](../mastra-cloud/observability.md) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
+When deploying to Mastra Cloud, logs are shown on the [Logs](../mastra-cloud/observability) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
 
 ## PinoLogger
 
-When [initializing a new Mastra project](../getting-started/installation.md) using the CLI, `PinoLogger` is included by default.
+When [initializing a new Mastra project](../getting-started/installation) using the CLI, `PinoLogger` is included by default.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from '@mastra/core/mastra';
@@ -26,7 +26,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> See the [PinoLogger](../../reference/observability/logger.md) API reference for all available configuration options.
+> See the [PinoLogger](../../reference/observability/logger) API reference for all available configuration options.
 
 ## Logging from workflows and tools
 
@@ -35,7 +35,6 @@ Mastra provides access to a logger instance via the `mastra.getLogger()` method,
 ### Logging from workflow steps
 
 Within a workflow step, access the logger via the `mastra` parameter inside the `execute` function. This allows you to log messages relevant to the step’s execution.
-
 
 ```typescript {8-9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -64,23 +63,21 @@ export const testWorkflow = createWorkflow({...})
 Similarly, tools have access to the logger instance via the `mastra` parameter. Use this to log tool specific activity during execution.
 
 ```typescript {8-9} filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
 export const testTool = createTool({
   // ...
   execute: async ({ mastra }) => {
-
     const logger = mastra?.getLogger();
-    logger?.info("tool info log");
+    logger?.info('tool info log');
 
     return {
-      output: ""
+      output: '',
     };
-  }
+  },
 });
 ```
-
 
 ## Logging with additional data
 

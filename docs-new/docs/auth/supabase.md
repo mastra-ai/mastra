@@ -1,6 +1,6 @@
 ---
-title: "MastraAuthSupabase Class"
-description: "Documentation for the MastraAuthSupabase class, which authenticates Mastra applications using Supabase Auth."
+title: 'MastraAuthSupabase Class'
+description: 'Documentation for the MastraAuthSupabase class, which authenticates Mastra applications using Supabase Auth.'
 ---
 
 import Tabs from '@theme/Tabs';
@@ -32,7 +32,7 @@ npm install @mastra/auth-supabase@latest
 ## Usage example
 
 ```typescript {2,7-9} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthSupabase } from '@mastra/auth-supabase';
 
 export const mastra = new Mastra({
@@ -40,7 +40,7 @@ export const mastra = new Mastra({
   server: {
     experimental_auth: new MastraAuthSupabase({
       url: process.env.SUPABASE_URL,
-      anonKey: process.env.SUPABASE_ANON_KEY
+      anonKey: process.env.SUPABASE_ANON_KEY,
     }),
   },
 });
@@ -48,7 +48,7 @@ export const mastra = new Mastra({
 
 > **Note:** The default `authorizeUser` method checks the `isAdmin` column in the `users` table in the `public` schema. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
 
-> See the [MastraAuthSupabase](/reference/auth/supabase.md) API reference for all available configuration options.
+> See the [MastraAuthSupabase](/reference/auth/supabase) API reference for all available configuration options.
 
 ## Client-side setup
 
@@ -59,9 +59,9 @@ When using Supabase auth, you'll need to retrieve the access token from Supabase
 Use the Supabase client to authenticate users and retrieve their access token:
 
 ```typescript filename="lib/auth.ts" showLineNumbers copy
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient("<supabase-url>", "<supabase-key>");
+const supabase = createClient('<supabase-url>', '<supabase-key>');
 
 const authTokenResponse = await supabase.auth.signInWithPassword({
   email: "<user's email>",
@@ -78,19 +78,19 @@ const accessToken = authTokenResponse.data?.session?.access_token;
 When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Supabase access token in the `Authorization` header:
 
 ```typescript {6} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js';
 
 export const mastraClient = new MastraClient({
-  baseUrl: "https://<mastra-api-url>",
+  baseUrl: 'https://<mastra-api-url>',
   headers: {
-    Authorization: `Bearer ${accessToken}`
-  }
+    Authorization: `Bearer ${accessToken}`,
+  },
 });
 ```
 
 > **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/server-db/mastra-client.md) for more configuration options.
+> See [Mastra Client SDK](/docs/server-db/mastra-client) for more configuration options.
 
 ### Making authenticated requests
 
@@ -115,6 +115,7 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
       return <button onClick={handleClick}>Test Agent</button>;
     };
     ```
+
   </Tab>
   <Tab>
     ```bash copy

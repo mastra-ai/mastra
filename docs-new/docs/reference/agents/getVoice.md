@@ -1,6 +1,6 @@
 ---
-title: "Reference: Agent.getVoice() "
-description: "Documentation for the `Agent.getVoice()` method in Mastra agents, which retrieves the voice provider for speech capabilities."
+title: 'Reference: Agent.getVoice() '
+description: 'Documentation for the `Agent.getVoice()` method in Mastra agents, which retrieves the voice provider for speech capabilities.'
 ---
 
 # Agent.getVoice()
@@ -16,52 +16,52 @@ await agent.getVoice();
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
-      isOptional: true,
-      defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
-    },
-  ]}
+content={[
+{
+name: "options",
+type: "{ runtimeContext?: RuntimeContext }",
+isOptional: true,
+defaultValue: "{}",
+description: "Optional configuration object containing runtime context.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "voice",
-      type: "Promise<MastraVoice>",
-      description: "A promise that resolves to the voice provider configured for the agent, or a default voice provider if none was configured.",
-    },
-  ]}
+content={[
+{
+name: "voice",
+type: "Promise<MastraVoice>",
+description: "A promise that resolves to the voice provider configured for the agent, or a default voice provider if none was configured.",
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript copy
 await agent.getVoice({
-  runtimeContext: new RuntimeContext()
+  runtimeContext: new RuntimeContext(),
 });
 ```
 
 ### Options parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      isOptional: true,
-      defaultValue: "new RuntimeContext()",
-      description: "Runtime context for dependency injection and contextual information.",
-    },
-  ]}
+content={[
+{
+name: "runtimeContext",
+type: "RuntimeContext",
+isOptional: true,
+defaultValue: "new RuntimeContext()",
+description: "Runtime context for dependency injection and contextual information.",
+},
+]}
 />
 
 ## Related
 
-- [Adding voice to agents](../../docs/agents/adding-voice.md)
-- [Voice providers](../voice/mastra-voice.md)
+- [Adding voice to agents](../../docs/agents/adding-voice)
+- [Voice providers](../voice/mastra-voice)

@@ -1,6 +1,6 @@
 ---
-title: "Reference: Mastra.getAgentById() "
-description: "Documentation for the `Mastra.getAgentById()` method in Mastra, which retrieves an agent by its ID."
+title: 'Reference: Mastra.getAgentById() '
+description: 'Documentation for the `Mastra.getAgentById()` method in Mastra, which retrieves an agent by its ID.'
 ---
 
 # Mastra.getAgentById()
@@ -10,34 +10,34 @@ The `.getAgentById()` method is used to retrieve an agent by its ID. The method 
 ## Usage example
 
 ```typescript copy
-mastra.getAgentById("test-agent-123");
+mastra.getAgentById('test-agent-123');
 ```
 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "id",
-      type: "string",
-      description: "The ID of the agent to retrieve. The method will first search for an agent with this ID, and if not found, will attempt to use it as a name to call getAgent().",
-    },
-  ]}
+content={[
+{
+name: "id",
+type: "string",
+description: "The ID of the agent to retrieve. The method will first search for an agent with this ID, and if not found, will attempt to use it as a name to call getAgent().",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "agent",
-      type: "Agent",
-      description: "The agent instance with the specified ID. Throws an error if the agent is not found.",
-    },
-  ]}
+content={[
+{
+name: "agent",
+type: "Agent",
+description: "The agent instance with the specified ID. Throws an error if the agent is not found.",
+},
+]}
 />
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview.md)
-- [Dynamic agents](../../docs/agents/dynamic-agents.md)
+- [Agents overview](../../docs/agents/overview)
+- [Dynamic agents](../../docs/agents/dynamic-agents)

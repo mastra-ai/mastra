@@ -1,6 +1,6 @@
 ---
-title: "Reference: suspend() "
-description: "Documentation for the suspend function in Mastra workflows, which pauses execution until resumed."
+title: 'Reference: suspend() '
+description: 'Documentation for the suspend function in Mastra workflows, which pauses execution until resumed.'
 ---
 
 # suspend()
@@ -11,7 +11,7 @@ Pauses workflow execution at the current step until explicitly resumed. The work
 
 ```typescript
 const approvalStep = new LegacyStep({
-  id: "needsApproval",
+  id: 'needsApproval',
   execute: async ({ context, suspend }) => {
     if (context.steps.amount > 1000) {
       await suspend();
@@ -24,26 +24,26 @@ const approvalStep = new LegacyStep({
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "Optional data to store with the suspended state",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "metadata",
+type: "Record<string, any>",
+description: "Optional data to store with the suspended state",
+isOptional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "Promise<void>",
-      type: "Promise",
-      description: "Resolves when the workflow is successfully suspended",
-    },
-  ]}
+content={[
+{
+name: "Promise<void>",
+type: "Promise",
+description: "Resolves when the workflow is successfully suspended",
+},
+]}
 />
 
 ## Additional Examples
@@ -52,10 +52,10 @@ Suspend with metadata:
 
 ```typescript
 const reviewStep = new LegacyStep({
-  id: "review",
+  id: 'review',
   execute: async ({ context, suspend }) => {
     await suspend({
-      reason: "Needs manager approval",
+      reason: 'Needs manager approval',
       requestedBy: context.user,
     });
     return { reviewed: true };
@@ -65,6 +65,6 @@ const reviewStep = new LegacyStep({
 
 ### Related
 
-- [Suspend & Resume Workflows](../../docs/workflows-legacy/suspend-and-resume.md)
-- [.resume()](./resume.md)
-- [.watch()](./watch.md)
+- [Suspend & Resume Workflows](../../docs/workflows-legacy/suspend-and-resume)
+- [.resume()](./resume)
+- [.watch()](./watch)

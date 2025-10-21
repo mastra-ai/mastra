@@ -1,8 +1,7 @@
 ---
-title: "Completeness "
+title: 'Completeness '
 description: Example of using the Completeness metric to evaluate how thoroughly responses cover input elements.
 ---
-
 
 # Completeness Evaluation
 
@@ -21,12 +20,12 @@ npm install @mastra/evals
 In this example, the response contains every element from the input. The content matches exactly, resulting in full coverage.
 
 ```typescript filename="src/example-complete-coverage.ts" showLineNumbers copy
-import { CompletenessMetric } from "@mastra/evals/nlp";
+import { CompletenessMetric } from '@mastra/evals/nlp';
 
 const metric = new CompletenessMetric();
 
-const query = "The primary colors are red, blue, and yellow.";
-const response = "The primary colors are red, blue, and yellow.";
+const query = 'The primary colors are red, blue, and yellow.';
+const response = 'The primary colors are red, blue, and yellow.';
 
 const result = await metric.measure(query, response);
 
@@ -64,12 +63,12 @@ The output receives a score of 1 because all input elements are present in the r
 In this example, the response includes all of the input elements, but also adds extra content that wasn’t in the original query.
 
 ```typescript filename="src/example-partial-coverage.ts" showLineNumbers copy
-import { CompletenessMetric } from "@mastra/evals/nlp";
+import { CompletenessMetric } from '@mastra/evals/nlp';
 
 const metric = new CompletenessMetric();
 
-const query = "The primary colors are red and blue.";
-const response = "The primary colors are red, blue, and yellow.";
+const query = 'The primary colors are red and blue.';
+const response = 'The primary colors are red, blue, and yellow.';
 
 const result = await metric.measure(query, response);
 
@@ -107,12 +106,12 @@ The output receives a high score because no input elements are missing. However,
 In this example, the response contains only some of the elements from the input. Key terms are missing or altered, resulting in reduced coverage.
 
 ```typescript filename="src/example-minimal-coverage.ts" showLineNumbers copy
-import { CompletenessMetric } from "@mastra/evals/nlp";
+import { CompletenessMetric } from '@mastra/evals/nlp';
 
 const metric = new CompletenessMetric();
 
-const query = "The seasons include summer.";
-const response = "The four seasons are spring, summer, fall, and winter.";
+const query = 'The seasons include summer.';
+const response = 'The four seasons are spring, summer, fall, and winter.';
 
 const result = await metric.measure(query, response);
 
@@ -148,7 +147,8 @@ You can create a `CompletenessMetric` instance with default settings. No additio
 ```typescript showLineNumbers copy
 const metric = new CompletenessMetric();
 ```
-> See [CompletenessMetric](/reference/evals/completeness.md) for a full list of configuration options.
+
+> See [CompletenessMetric](/reference/evals/completeness) for a full list of configuration options.
 
 ## Understanding the results
 

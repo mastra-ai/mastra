@@ -1,5 +1,5 @@
 ---
-title: "Reference: Workflow.parallel() "
+title: 'Reference: Workflow.parallel() '
 description: Documentation for the `Workflow.parallel()` method in workflows, which executes multiple steps in parallel.
 ---
 
@@ -16,28 +16,28 @@ workflow.parallel([step1, step2]);
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "steps",
-      type: "Step[]",
-      description: "The step instances to execute in parallel",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "steps",
+type: "Step[]",
+description: "The step instances to execute in parallel",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "Workflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "Workflow",
+description: "The workflow instance for method chaining",
+},
+]}
 />
 
 ## Related
 
-- [Parallel Workflow Example](../../../examples/workflows/parallel-steps.md)
+- [Parallel Workflow Example](../../../examples/workflows/parallel-steps)

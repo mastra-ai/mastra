@@ -1,39 +1,39 @@
 ---
-title: "Working Memory "
-description: "Learn how to configure working memory in Mastra to store persistent user data, preferences."
+title: 'Working Memory '
+description: 'Learn how to configure working memory in Mastra to store persistent user data, preferences.'
 ---
 
 import YouTube from '@site/src/components/YouTube';
 
 # Working Memory
 
-While [conversation history](/docs/memory/overview#conversation-history) and [semantic recall](./semantic-recall.md) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
+While [conversation history](/docs/memory/overview#conversation-history) and [semantic recall](./semantic-recall) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
 
 Think of it as the agent's active thoughts or scratchpad – the key information they keep available about the user or task. It's similar to how a person would naturally remember someone's name, preferences, or important details during a conversation.
 
 This is useful for maintaining ongoing state that's always relevant and should always be available to the agent.
 
 Working memory can persist at two different scopes:
+
 - **Thread-scoped** (default): Memory is isolated per conversation thread
 - **Resource-scoped**: Memory persists across all conversation threads for the same user
 
 **Important:** Switching between scopes means the agent won't see memory from the other scope - thread-scoped memory is completely separate from resource-scoped memory.
-
 
 ## Quick Start
 
 Here's a minimal example of setting up an agent with working memory:
 
 ```typescript {12-15}
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { openai } from '@ai-sdk/openai';
 
 // Create agent with working memory enabled
 const agent = new Agent({
-  name: "PersonalAssistant",
-  instructions: "You are a helpful personal assistant.",
-  model: openai("gpt-4o"),
+  name: 'PersonalAssistant',
+  instructions: 'You are a helpful personal assistant.',
+  model: openai('gpt-4o'),
   memory: new Memory({
     options: {
       workingMemory: {
@@ -76,6 +76,7 @@ const memory = new Memory({
 ```
 
 **Use cases:**
+
 - Different conversations about separate topics
 - Temporary or session-specific information
 - Workflows where each thread needs working memory but threads are ephemeral and not related to each other
@@ -104,6 +105,7 @@ const memory = new Memory({
 ```
 
 **Use cases:**
+
 - Personal assistants that remember user preferences
 - Customer service bots that maintain customer context
 - Educational applications that track student progress
@@ -114,9 +116,9 @@ When using resource-scoped memory, make sure to pass the `resourceId` parameter:
 
 ```typescript
 // Resource-scoped memory requires resourceId
-const response = await agent.generate("Hello!", {
-  threadId: "conversation-123",
-  resourceId: "user-alice-456" // Same user across different threads
+const response = await agent.generate('Hello!', {
+  threadId: 'conversation-123',
+  resourceId: 'user-alice-456', // Same user across different threads
 });
 ```
 
@@ -125,6 +127,7 @@ const response = await agent.generate("Hello!", {
 Resource-scoped working memory requires specific storage adapters that support the `mastra_resources` table:
 
 ### Supported Storage Adapters
+
 - **LibSQL** (`@mastra/libsql`)
 - **PostgreSQL** (`@mastra/pg`)
 - **Upstash** (`@mastra/upstash`)
@@ -229,11 +232,13 @@ const userProfileSchema = z.object({
   name: z.string().optional(),
   location: z.string().optional(),
   timezone: z.string().optional(),
-  preferences: z.object({
-    communicationStyle: z.string().optional(),
-    projectGoal: z.string().optional(),
-    deadlines: z.array(z.string()).optional(),
-  }).optional(),
+  preferences: z
+    .object({
+      communicationStyle: z.string().optional(),
+      projectGoal: z.string().optional(),
+      deadlines: z.array(z.string()).optional(),
+    })
+    .optional(),
 });
 
 const memory = new Memory({
@@ -314,9 +319,9 @@ When creating a thread, you can provide initial working memory through the metad
 ```typescript filename="src/app/medical-consultation.ts" showLineNumbers copy
 // Create a thread with initial working memory
 const thread = await memory.createThread({
-  threadId: "thread-123",
-  resourceId: "user-456",
-  title: "Medical Consultation",
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+  title: 'Medical Consultation',
   metadata: {
     workingMemory: `# Patient Profile
 - Name: John Doe
@@ -324,14 +329,14 @@ const thread = await memory.createThread({
 - Allergies: Penicillin
 - Current Medications: None
 - Medical History: Hypertension (controlled)
-`
-  }
+`,
+  },
 });
 
 // The agent will now have access to this information in all messages
 await agent.generate("What's my blood type?", {
   threadId: thread.id,
-  resourceId: "user-456"
+  resourceId: 'user-456',
 });
 // Response: "Your blood type is O+."
 ```
@@ -343,7 +348,7 @@ You can also update an existing thread's working memory:
 ```typescript filename="src/app/medical-consultation.ts" showLineNumbers copy
 // Update thread metadata to add/modify working memory
 await memory.updateThread({
-  id: "thread-123",
+  id: 'thread-123',
   title: thread.title,
   metadata: {
     ...thread.metadata,
@@ -353,8 +358,8 @@ await memory.updateThread({
 - Allergies: Penicillin, Ibuprofen  // Updated
 - Current Medications: Lisinopril 10mg daily  // Added
 - Medical History: Hypertension (controlled)
-`
-  }
+`,
+  },
 });
 ```
 
@@ -364,9 +369,9 @@ Alternatively, use the `updateWorkingMemory` method directly:
 
 ```typescript filename="src/app/medical-consultation.ts" showLineNumbers copy
 await memory.updateWorkingMemory({
-  threadId: "thread-123",
-  resourceId: "user-456", // Required for resource-scoped memory
-  workingMemory: "Updated memory content..."
+  threadId: 'thread-123',
+  resourceId: 'user-456', // Required for resource-scoped memory
+  workingMemory: 'Updated memory content...',
 });
 ```
 

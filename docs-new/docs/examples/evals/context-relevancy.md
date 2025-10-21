@@ -1,8 +1,7 @@
 ---
-title: "Context Relevancy "
+title: 'Context Relevancy '
 description: Example of using the Context Relevancy metric to evaluate how relevant context information is to a query.
 ---
-
 
 # Context Relevancy Evaluation
 
@@ -21,19 +20,20 @@ npm install @mastra/evals
 In this example, the response uses only context that is directly relevant to the query. Every context item supports the answer, resulting in a perfect relevancy score.
 
 ```typescript filename="src/example-high-context-relevancy.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { ContextRelevancyMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { ContextRelevancyMetric } from '@mastra/evals/llm';
 
-const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
+const metric = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
   context: [
-    "Einstein won the Nobel Prize for his discovery of the photoelectric effect.",
-    "He published his theory of relativity in 1905.",
-    "His work revolutionized modern physics."
-  ]
+    'Einstein won the Nobel Prize for his discovery of the photoelectric effect.',
+    'He published his theory of relativity in 1905.',
+    'His work revolutionized modern physics.',
+  ],
 });
 
 const query = "What were some of Einstein's achievements?";
-const response = "Einstein won the Nobel Prize for discovering the photoelectric effect and published his groundbreaking theory of relativity.";
+const response =
+  'Einstein won the Nobel Prize for discovering the photoelectric effect and published his groundbreaking theory of relativity.';
 
 const result = await metric.measure(query, response);
 
@@ -58,21 +58,20 @@ The output receives a perfect score because all context statements directly cont
 In this example, the response uses one or more relevant context items but also includes unrelated or less useful information. This lowers the overall relevancy score.
 
 ```typescript filename="src/example-mixed-context-relevancy.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { ContextRelevancyMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { ContextRelevancyMetric } from '@mastra/evals/llm';
 
-const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
+const metric = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
   context: [
-    "Solar eclipses occur when the Moon blocks the Sun.",
-    "The Moon moves between the Earth and Sun during eclipses.",
-    "The Moon is visible at night.",
-    "The Moon has no atmosphere."
-  ]
+    'Solar eclipses occur when the Moon blocks the Sun.',
+    'The Moon moves between the Earth and Sun during eclipses.',
+    'The Moon is visible at night.',
+    'The Moon has no atmosphere.',
+  ],
 });
 
-const query = "What causes solar eclipses?";
-const response =
-  "Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.";
+const query = 'What causes solar eclipses?';
+const response = 'Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.';
 
 const result = await metric.measure(query, response);
 
@@ -97,20 +96,20 @@ The output receives a mid-range score because it includes relevant context about
 In this example, most of the context is unrelated to the query. Only one item is relevant, which results in a low relevancy score.
 
 ```typescript filename="src/example-low-context-relevancy.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { ContextRelevancyMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { ContextRelevancyMetric } from '@mastra/evals/llm';
 
-const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
+const metric = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
   context: [
-    "The Great Barrier Reef is in Australia.",
-    "Coral reefs need warm water to survive.",
-    "Marine life depends on coral reefs.",
-    "The capital of Australia is Canberra."
-  ]
+    'The Great Barrier Reef is in Australia.',
+    'Coral reefs need warm water to survive.',
+    'Marine life depends on coral reefs.',
+    'The capital of Australia is Canberra.',
+  ],
 });
 
-const query = "What is the capital of Australia?";
-const response = "The capital of Australia is Canberra.";
+const query = 'What is the capital of Australia?';
+const response = 'The capital of Australia is Canberra.';
 
 const result = await metric.measure(query, response);
 
@@ -135,13 +134,13 @@ The output receives a low score because only one context item is relevant to the
 You can create a `ContextRelevancyMetric` instance by providing a `context` array representing background information relevant to a query. You can also configure optional parameters such as `scale` to define the scoring range.
 
 ```typescript showLineNumbers copy
-const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
-  context: [""],
-  scale: 1
+const metric = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
+  context: [''],
+  scale: 1,
 });
 ```
 
-> See [ContextRelevancyMetric](/reference/evals/context-relevancy.md) for a full list of configuration options.
+> See [ContextRelevancyMetric](/reference/evals/context-relevancy) for a full list of configuration options.
 
 ## Understanding the results
 

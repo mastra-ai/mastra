@@ -1,5 +1,5 @@
 ---
-title: "Human in the Loop "
+title: 'Human in the Loop '
 description: Example of using Mastra to create workflows with human intervention points.
 ---
 
@@ -12,38 +12,38 @@ Use human-in-the-loop workflows to pause execution at specific steps for human i
 In this example, the workflow pauses until user input is received. Execution is suspended at a specific step and only resumes once the required confirmation is provided.
 
 ```typescript filename="src/mastra/workflows/example-human-in-loop.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
 
 const step1 = createStep({
-  id: "step-1",
-  description: "passes value from input to output",
+  id: 'step-1',
+  description: 'passes value from input to output',
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   outputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   execute: async ({ inputData }) => {
     const { value } = inputData;
     return {
-      value
+      value,
     };
-  }
+  },
 });
 
 const step2 = createStep({
-  id: "step-2",
-  description: "pauses until user confirms",
+  id: 'step-2',
+  description: 'pauses until user confirms',
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   resumeSchema: z.object({
-    confirm: z.boolean()
+    confirm: z.boolean(),
   }),
   outputSchema: z.object({
     value: z.number(),
-    confirmed: z.boolean().optional()
+    confirmed: z.boolean().optional(),
   }),
   execute: async ({ inputData, resumeData, suspend }) => {
     const { value } = inputData;
@@ -54,17 +54,17 @@ const step2 = createStep({
     }
 
     return { value: value, confirmed: confirm };
-  }
+  },
 });
 
 export const humanInLoopWorkflow = createWorkflow({
-  id: "human-in-loop-workflow",
+  id: 'human-in-loop-workflow',
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   outputSchema: z.object({
-    value: z.number()
-  })
+    value: z.number(),
+  }),
 })
   .then(step1)
   .then(step2)
@@ -73,11 +73,10 @@ export const humanInLoopWorkflow = createWorkflow({
 
 ## Related
 
-- [Running Workflows](./running-workflows.md)
+- [Running Workflows](./running-workflows)
 
 ## Workflows (Legacy)
 
 The following links provide example documentation for legacy workflows:
 
 - [Human in the Loop Workflow (Legacy)](/examples/workflows_legacy/human-in-the-loop)
-

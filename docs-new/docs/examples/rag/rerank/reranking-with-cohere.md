@@ -1,5 +1,5 @@
 ---
-title: "Reranking with Cohere "
+title: 'Reranking with Cohere '
 description: Example of using Mastra to improve document retrieval relevance with Cohere's reranking service.
 ---
 
@@ -10,9 +10,9 @@ When retrieving documents for RAG, initial vector similarity search may miss imp
 Cohere's reranking service helps improve result relevance by reordering documents using multiple scoring factors.
 
 ```typescript
-import { 
-  rerankWithScorer as rerank, 
-  CohereRelevanceScorer 
+import {
+  rerankWithScorer as rerank,
+  CohereRelevanceScorer
 } from "@mastra/rag";
 
 const results = rerank({
@@ -32,5 +32,5 @@ const results = rerank({
 
 ## Links
 
-- [rerank() reference](/reference/rag/rerankWithScorer.md)
-- [Retrieval docs](/reference/rag/retrieval.md)
+- [rerank() reference](/reference/rag/rerankWithScorer)
+- [Retrieval docs](/reference/rag/retrieval)

@@ -1,6 +1,6 @@
 ---
-title: "Reference: Mastra.getAgents() "
-description: "Documentation for the `Mastra.getAgents()` method in Mastra, which retrieves all configured agents."
+title: 'Reference: Mastra.getAgents() '
+description: 'Documentation for the `Mastra.getAgents()` method in Mastra, which retrieves all configured agents.'
 ---
 
 # Mastra.getAgents()
@@ -20,16 +20,16 @@ This method does not accept any parameters.
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "agents",
-      type: "TAgents",
-      description: "A record of all configured agents, where keys are agent names and values are agent instances.",
-    },
-  ]}
+content={[
+{
+name: "agents",
+type: "TAgents",
+description: "A record of all configured agents, where keys are agent names and values are agent instances.",
+},
+]}
 />
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview.md)
-- [Dynamic agents](../../docs/agents/dynamic-agents.md)
+- [Agents overview](../../docs/agents/overview)
+- [Dynamic agents](../../docs/agents/dynamic-agents)

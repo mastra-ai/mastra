@@ -1,31 +1,30 @@
 ---
-title: "Calling Agents "
+title: 'Calling Agents '
 description: Example for how to call agents.
 ---
 
 # Calling Agents
 
-There are multiple ways to interact with agents created using Mastra. Below you will find examples of how to call agents using workflow steps, tools, the [Mastra Client SDK](../../docs/server-db/mastra-client.md), and the command line for quick local testing.
+There are multiple ways to interact with agents created using Mastra. Below you will find examples of how to call agents using workflow steps, tools, the [Mastra Client SDK](../../docs/server-db/mastra-client), and the command line for quick local testing.
 
-This page demonstrates how to call the `harryPotterAgent` described in the [Changing the System Prompt](./system-prompt.md) example.
+This page demonstrates how to call the `harryPotterAgent` described in the [Changing the System Prompt](./system-prompt) example.
 
 ## From a workflow step
 
 The `mastra` instance is passed as an argument to a workflow step’s `execute` function. It provides access to registered agents using `getAgent()`. Use this method to retrieve your agent, then call `generate()` with a prompt.
 
 ```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
 
 const step1 = createStep({
   // ...
   execute: async ({ mastra }) => {
-
-    const agent = mastra.getAgent("harryPotterAgent");
-    const response = await agent.generate("What is your favorite room in Hogwarts?");
+    const agent = mastra.getAgent('harryPotterAgent');
+    const response = await agent.generate('What is your favorite room in Hogwarts?');
 
     console.log(response.text);
-  }
+  },
 });
 
 export const testWorkflow = createWorkflow({
@@ -40,18 +39,17 @@ export const testWorkflow = createWorkflow({
 The `mastra` instance is available within a tool’s `execute` function. Use `getAgent()` to retrieve a registered agent and call `generate()` with a prompt.
 
 ```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
 export const testTool = createTool({
   // ...
   execute: async ({ mastra }) => {
-
-    const agent = mastra.getAgent("harryPotterAgent");
-    const response = await agent.generate("What is your favorite room in Hogwarts?");
+    const agent = mastra.getAgent('harryPotterAgent');
+    const response = await agent.generate('What is your favorite room in Hogwarts?');
 
     console.log(response!.text);
-  }
+  },
 });
 ```
 
@@ -60,22 +58,22 @@ export const testTool = createTool({
 The `mastraClient` instance provides access to registered agents. Use `getAgent()` to retrieve an agent and call `generate()` with an object containing a `messages` array of role/content pairs.
 
 ```typescript showLineNumbers copy
-import { mastraClient } from "../lib/mastra-client";
+import { mastraClient } from '../lib/mastra-client';
 
-const agent = mastraClient.getAgent("harryPotterAgent");
+const agent = mastraClient.getAgent('harryPotterAgent');
 const response = await agent.generate({
   messages: [
     {
-      role: "user",
-      content: "What is your favorite room in Hogwarts?"
-    }
-  ]
+      role: 'user',
+      content: 'What is your favorite room in Hogwarts?',
+    },
+  ],
 });
 
 console.log(response.text);
 ```
 
-> See [Mastra Client SDK](../../docs/server-db/mastra-client.md) for more information.
+> See [Mastra Client SDK](../../docs/server-db/mastra-client) for more information.
 
 ## From the command line
 
@@ -84,12 +82,12 @@ You can create a simple script to test your agent locally. The `mastra` instance
 To ensure your model has access to environment variables (like `OPENAI_API_KEY`), install `dotenv` and import it at the top of your script.
 
 ```typescript filename="src/test-agent.ts" showLineNumbers copy
-import "dotenv/config";
+import 'dotenv/config';
 
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const agent = mastra.getAgent("harryPotterAgent");
-const response = await agent.generate("What is your favorite room in Hogwarts?");
+const agent = mastra.getAgent('harryPotterAgent');
+const response = await agent.generate('What is your favorite room in Hogwarts?');
 
 console.log(response.text);
 ```
@@ -118,7 +116,6 @@ curl -X POST http://localhost:4111/api/agents/harryPotterAgent/generate \
     ]
   }'| jq -r '.text'
 ```
-
 
 ## Example output
 

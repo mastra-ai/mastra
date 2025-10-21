@@ -1,5 +1,5 @@
 ---
-title: "Reference: run.resume() "
+title: 'Reference: run.resume() '
 description: Documentation for the `.resume()` method in workflows, which continues execution of a suspended workflow step.
 ---
 
@@ -11,8 +11,8 @@ The `.resume()` method continues execution of a suspended workflow step, optiona
 
 ```typescript copy showLineNumbers
 await run.resume({
-  runId: "abc-123",
-  stepId: "stepTwo",
+  runId: 'abc-123',
+  stepId: 'stepTwo',
   context: {
     secondValue: 100,
   },
@@ -22,52 +22,52 @@ await run.resume({
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "config",
-      type: "object",
-      description: "Configuration for resuming the workflow",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "config",
+type: "object",
+description: "Configuration for resuming the workflow",
+isOptional: false,
+},
+]}
 />
 
 ### config
 
 <PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "Unique identifier of the workflow run to resume",
-      isOptional: false,
-    },
-    {
-      name: "stepId",
-      type: "string",
-      description: "ID of the suspended step to resume",
-      isOptional: false,
-    },
-    {
-      name: "context",
-      type: "Record<string, any>",
-      description:
-        "New context data to inject into the step's inputData property",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "runId",
+type: "string",
+description: "Unique identifier of the workflow run to resume",
+isOptional: false,
+},
+{
+name: "stepId",
+type: "string",
+description: "ID of the suspended step to resume",
+isOptional: false,
+},
+{
+name: "context",
+type: "Record<string, any>",
+description:
+"New context data to inject into the step's inputData property",
+isOptional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "Promise<LegacyWorkflowResult>",
-      type: "object",
-      description: "Result of the resumed workflow execution",
-    },
-  ]}
+content={[
+{
+name: "Promise<LegacyWorkflowResult>",
+type: "object",
+description: "Result of the resumed workflow execution",
+},
+]}
 />
 
 ## Async/Await Flow
@@ -77,7 +77,7 @@ When a workflow is resumed, execution continues from the point immediately after
 ```typescript
 // Step definition with suspend point
 const reviewStep = new LegacyStep({
-  id: "review",
+  id: 'review',
   execute: async ({ context, suspend }) => {
     // First part of execution
     const initialAnalysis = analyzeData(context.inputData.data);
@@ -89,10 +89,7 @@ const reviewStep = new LegacyStep({
       // This code runs after resume() is called
       // context.inputData now contains any data provided during resume
       return {
-        reviewedData: enhanceWithFeedback(
-          initialAnalysis,
-          context.inputData.feedback,
-        ),
+        reviewedData: enhanceWithFeedback(initialAnalysis, context.inputData.feedback),
       };
     }
 
@@ -104,17 +101,17 @@ const { runId, resume, start } = workflow.createRun();
 
 await start({
   inputData: {
-    data: "some data",
+    data: 'some data',
   },
 });
 
 // Later, resume the workflow
 const result = await resume({
-  runId: "workflow-123",
-  stepId: "review",
+  runId: 'workflow-123',
+  stepId: 'review',
   context: {
     // This data will be available in `context.inputData`
-    feedback: "Looks good, but improve section 3",
+    feedback: 'Looks good, but improve section 3',
   },
 });
 ```
@@ -137,14 +134,14 @@ The resume function may throw several types of errors:
 try {
   await run.resume({
     runId,
-    stepId: "stepTwo",
+    stepId: 'stepTwo',
     context: newData,
   });
 } catch (error) {
-  if (error.message === "No snapshot found for workflow run") {
+  if (error.message === 'No snapshot found for workflow run') {
     // Handle missing workflow state
   }
-  if (error.message === "Failed to parse workflow snapshot") {
+  if (error.message === 'Failed to parse workflow snapshot') {
     // Handle corrupted workflow state
   }
 }
@@ -152,7 +149,7 @@ try {
 
 ## Related
 
-- [Suspend and Resume](../../docs/workflows-legacy/suspend-and-resume.md)
-- [`suspend` Reference](./suspend.md)
-- [`watch` Reference](./watch.md)
-- [Workflow Class Reference](./workflow.md)
+- [Suspend and Resume](../../docs/workflows-legacy/suspend-and-resume)
+- [`suspend` Reference](./suspend)
+- [`watch` Reference](./watch)
+- [Workflow Class Reference](./workflow)

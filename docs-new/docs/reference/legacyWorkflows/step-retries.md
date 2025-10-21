@@ -1,6 +1,6 @@
 ---
-title: "Step Retries "
-description: "Automatically retry failed steps in Mastra workflows with configurable retry policies."
+title: 'Step Retries '
+description: 'Automatically retry failed steps in Mastra workflows with configurable retry policies.'
 ---
 
 # Step Retries
@@ -35,7 +35,7 @@ You can set a default retry configuration for all steps in a workflow:
 
 ```typescript
 const workflow = new LegacyWorkflow({
-  name: "my-workflow",
+  name: 'my-workflow',
   retryConfig: {
     attempts: 3, // Number of retries (in addition to the initial attempt)
     delay: 1000, // Delay between retries in milliseconds
@@ -49,7 +49,7 @@ You can also configure retries on individual steps, which will override the work
 
 ```typescript
 const fetchDataStep = new LegacyStep({
-  id: "fetchData",
+  id: 'fetchData',
   execute: async () => {
     // Fetch data from external API
   },
@@ -90,18 +90,18 @@ During retry attempts, the workflow execution remains active but paused for the 
 ### Basic Retry Example
 
 ```typescript
-import { LegacyWorkflow, LegacyStep } from "@mastra/core/workflows/legacy";
+import { LegacyWorkflow, LegacyStep } from '@mastra/core/workflows/legacy';
 
 // Define a step that might fail
 const unreliableApiStep = new LegacyStep({
-  id: "callUnreliableApi",
+  id: 'callUnreliableApi',
   execute: async () => {
     // Simulate an API call that might fail
     const random = Math.random();
     if (random < 0.7) {
-      throw new Error("API call failed");
+      throw new Error('API call failed');
     }
-    return { data: "API response data" };
+    return { data: 'API response data' };
   },
   retryConfig: {
     attempts: 3, // Retry up to 3 times
@@ -111,7 +111,7 @@ const unreliableApiStep = new LegacyStep({
 
 // Create a workflow with the unreliable step
 const workflow = new LegacyWorkflow({
-  name: "retry-demo-workflow",
+  name: 'retry-demo-workflow',
 });
 
 workflow.step(unreliableApiStep).then(processResultStep).commit();
@@ -120,11 +120,11 @@ workflow.step(unreliableApiStep).then(processResultStep).commit();
 ### Workflow-level Retries with Step Override
 
 ```typescript
-import { LegacyWorkflow, LegacyStep } from "@mastra/core/workflows/legacy";
+import { LegacyWorkflow, LegacyStep } from '@mastra/core/workflows/legacy';
 
 // Create a workflow with default retry configuration
 const workflow = new LegacyWorkflow({
-  name: "multi-retry-workflow",
+  name: 'multi-retry-workflow',
   retryConfig: {
     attempts: 2, // All steps will retry twice by default
     delay: 1000, // With a 1-second delay
@@ -133,7 +133,7 @@ const workflow = new LegacyWorkflow({
 
 // This step uses the workflow's default retry configuration
 const standardStep = new LegacyStep({
-  id: "standardStep",
+  id: 'standardStep',
   execute: async () => {
     // Some operation that might fail
   },
@@ -141,7 +141,7 @@ const standardStep = new LegacyStep({
 
 // This step overrides the workflow's retry configuration
 const criticalStep = new LegacyStep({
-  id: "criticalStep",
+  id: 'criticalStep',
   execute: async () => {
     // Critical operation that needs more retry attempts
   },
@@ -153,7 +153,7 @@ const criticalStep = new LegacyStep({
 
 // This step disables retries
 const noRetryStep = new LegacyStep({
-  id: "noRetryStep",
+  id: 'noRetryStep',
   execute: async () => {
     // Operation that should not retry
   },
@@ -191,6 +191,6 @@ You can monitor retry attempts in your logs. Mastra logs retry-related events at
 
 ## Related
 
-- [Step Class Reference](./step-class.md)
-- [Workflow Configuration](./workflow.md)
-- [Error Handling in Workflows](../../docs/workflows-legacy/error-handling.md)
+- [Step Class Reference](./step-class)
+- [Workflow Configuration](./workflow)
+- [Error Handling in Workflows](../../docs/workflows-legacy/error-handling)

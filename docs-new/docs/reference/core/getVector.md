@@ -1,6 +1,6 @@
 ---
-title: "Reference: Mastra.getVector() "
-description: "Documentation for the `Mastra.getVector()` method in Mastra, which retrieves a vector store by name."
+title: 'Reference: Mastra.getVector() '
+description: 'Documentation for the `Mastra.getVector()` method in Mastra, which retrieves a vector store by name.'
 ---
 
 # Mastra.getVector()
@@ -10,34 +10,34 @@ The `.getVector()` method is used to retrieve a vector store by its name. The me
 ## Usage example
 
 ```typescript copy
-mastra.getVector("testVectorStore");
+mastra.getVector('testVectorStore');
 ```
 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "name",
-      type: "TVectorName extends keyof TVectors",
-      description: "The name of the vector store to retrieve. Must be a valid vector store name that exists in the Mastra configuration.",
-    },
-  ]}
+content={[
+{
+name: "name",
+type: "TVectorName extends keyof TVectors",
+description: "The name of the vector store to retrieve. Must be a valid vector store name that exists in the Mastra configuration.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "vector",
-      type: "TVectors[TVectorName]",
-      description: "The vector store instance with the specified name. Throws an error if the vector store is not found.",
-    },
-  ]}
+content={[
+{
+name: "vector",
+type: "TVectors[TVectorName]",
+description: "The vector store instance with the specified name. Throws an error if the vector store is not found.",
+},
+]}
 />
 
 ## Related
 
-- [Vector stores overview](../../docs/rag/vector-databases.md)
-- [RAG overview](../../docs/rag/overview.md)
+- [Vector stores overview](../../docs/rag/vector-databases)
+- [RAG overview](../../docs/rag/overview)

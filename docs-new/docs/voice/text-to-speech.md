@@ -25,10 +25,10 @@ The **`speaker`** option allows you to select different voices for speech synthe
 ```typescript
 const voice = new OpenAIVoice({
   speechModel: {
-    name: "tts-1-hd",
+    name: 'tts-1-hd',
     apiKey: process.env.OPENAI_API_KEY,
   },
-  speaker: "alloy",
+  speaker: 'alloy',
 });
 
 // If using default settings the configuration can be simplified to:
@@ -61,30 +61,29 @@ pnpm add @mastra/voice-openai  # Example for OpenAI
 The primary method for TTS is the `speak()` method, which converts text to speech. This method can accept options that allows you to specify the speaker and other provider-specific options. Here's how to use it:
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { OpenAIVoice } from "@mastra/voice-openai";
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { OpenAIVoice } from '@mastra/voice-openai';
 
 const voice = new OpenAIVoice();
 
 const agent = new Agent({
-  name: "Voice Agent",
-  instructions:
-    "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  name: 'Voice Agent',
+  instructions: 'You are a voice assistant that can help users with their tasks.',
+  model: openai('gpt-4o'),
   voice,
 });
 
-const { text } = await agent.generate("What color is the sky?");
+const { text } = await agent.generate('What color is the sky?');
 
 // Convert text to speech to an Audio Stream
 const readableStream = await voice.speak(text, {
-  speaker: "default", // Optional: specify a speaker
+  speaker: 'default', // Optional: specify a speaker
   properties: {
     speed: 1.0, // Optional: adjust speech speed
-    pitch: "default", // Optional: specify pitch if supported
+    pitch: 'default', // Optional: specify pitch if supported
   },
 });
 ```
 
-Check out the [Adding Voice to Agents](../agents/adding-voice.md) documentation to learn how to use TTS in an agent.
+Check out the [Adding Voice to Agents](../agents/adding-voice) documentation to learn how to use TTS in an agent.

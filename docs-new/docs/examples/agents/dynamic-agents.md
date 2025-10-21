@@ -44,7 +44,7 @@ export const supportAgent = new Agent({
 });
 ```
 
-> See [Agent](../../reference/agents/agent.md) for a full list of configuration options.
+> See [Agent](../../reference/agents/agent) for a full list of configuration options.
 
 ## Registering an agent
 
@@ -91,4 +91,4 @@ console.log(response.text);
 
 ## Related
 
-- [Calling Agents](./calling-agents.mdx#from-the-command-line)
+- [Calling Agents](./calling-agents#from-the-command-line)

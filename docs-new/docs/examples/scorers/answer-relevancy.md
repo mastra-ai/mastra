@@ -1,8 +1,7 @@
 ---
-title: "Answer Relevancy "
+title: 'Answer Relevancy '
 description: Example of using the Answer Relevancy scorer to evaluate response relevancy to queries.
 ---
-
 
 # Answer Relevancy Scorer
 
@@ -21,13 +20,15 @@ npm install @mastra/evals
 In this example, the response accurately addresses the input query with specific and relevant information.
 
 ```typescript filename="src/example-high-answer-relevancy.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
+import { openai } from '@ai-sdk/openai';
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
-const scorer = createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") });
+const scorer = createAnswerRelevancyScorer({ model: openai('gpt-4o-mini') });
 
-const inputMessages = [{ role: 'user', content: "What are the health benefits of regular exercise?" }];
-const outputMessage = { text: "Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins." };
+const inputMessages = [{ role: 'user', content: 'What are the health benefits of regular exercise?' }];
+const outputMessage = {
+  text: 'Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.',
+};
 
 const result = await scorer.run({
   input: inputMessages,
@@ -53,13 +54,15 @@ The output receives a high score because it accurately answers the query without
 In this example, the response addresses the query in part but includes additional information that isn’t directly relevant.
 
 ```typescript filename="src/example-partial-answer-relevancy.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
+import { openai } from '@ai-sdk/openai';
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
-const scorer = createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") });
+const scorer = createAnswerRelevancyScorer({ model: openai('gpt-4o-mini') });
 
-const inputMessages = [{ role: 'user', content: "What should a healthy breakfast include?" }];
-const outputMessage = { text: "A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day." };
+const inputMessages = [{ role: 'user', content: 'What should a healthy breakfast include?' }];
+const outputMessage = {
+  text: 'A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.',
+};
 
 const result = await scorer.run({
   input: inputMessages,
@@ -85,13 +88,15 @@ The output receives a lower score because it partially answers the query. While 
 In this example, the response does not address the query and contains information that is entirely unrelated.
 
 ```typescript filename="src/example-low-answer-relevancy.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
+import { openai } from '@ai-sdk/openai';
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
-const scorer = createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") });
+const scorer = createAnswerRelevancyScorer({ model: openai('gpt-4o-mini') });
 
-const inputMessages = [{ role: 'user', content: "What are the benefits of meditation?" }];
-const outputMessage = { text: "The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions." };
+const inputMessages = [{ role: 'user', content: 'What are the benefits of meditation?' }];
+const outputMessage = {
+  text: 'The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.',
+};
 
 const result = await scorer.run({
   input: inputMessages,
@@ -117,9 +122,13 @@ The output receives a score of 0 because it fails to answer the query or provide
 You can customize how the Answer Relevancy Scorer calculates scores by adjusting optional parameters. For example, `uncertaintyWeight` controls how much weight to give to uncertain responses, and `scale` sets the maximum possible score.
 
 ```typescript showLineNumbers copy
-const scorer = createAnswerRelevancyScorer({ model: openai("gpt-4o-mini"), options: { uncertaintyWeight: 0.3, scale: 1 } });
+const scorer = createAnswerRelevancyScorer({
+  model: openai('gpt-4o-mini'),
+  options: { uncertaintyWeight: 0.3, scale: 1 },
+});
 ```
-> See [createAnswerRelevancyScorer](/reference/scorers/answer-relevancy.md) for a full list of configuration options.
+
+> See [createAnswerRelevancyScorer](/reference/scorers/answer-relevancy) for a full list of configuration options.
 
 ## Understanding the results
 
@@ -149,24 +158,31 @@ A relevancy score between 0 and 1:
 - **0.0**: The response is entirely unrelated and does not answer the query.
 
 ### runId
+
 The unique identifier for this scorer run.
 
 ### extractPrompt
+
 The prompt sent to the LLM for the extract step.
 
 ### extractStepResult
+
 The extracted statements from the output, e.g. `{ statements: string[] }`.
 
 ### analyzePrompt
+
 The prompt sent to the LLM for the analyze step.
 
 ### analyzeStepResult
+
 The analysis results, e.g. `{ results: Array<{ result: 'yes' | 'unsure' | 'no', reason: string }> }`.
 
 ### reasonPrompt
+
 The prompt sent to the LLM for the reason step.
 
 ### reason
+
 The explanation for the score, including alignment, focus, and suggestions for improvement.
 
 <GithubLink

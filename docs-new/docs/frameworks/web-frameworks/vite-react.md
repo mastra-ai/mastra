@@ -1,5 +1,5 @@
 ---
-title: "Getting Started with Mastra and Vite/React "
+title: 'Getting Started with Mastra and Vite/React '
 description: A step-by-step guide to integrating Mastra with Vite and React.
 ---
 
@@ -18,20 +18,20 @@ Use this guide to scaffold and integrate Mastra with your Vite/React project.
 
 :::warning
 
-  This guide assumes you're using Vite/React with React Router v7 at the root of
-  your project, e.g., `app`.
+This guide assumes you're using Vite/React with React Router v7 at the root of
+your project, e.g., `app`.
 
 :::
 
 ## Install Mastra
 
 Install the required Mastra packages:
-{/*
+{/_
 LLM CONTEXT: This Tabs component shows commands for integrating a new Mastra backend project using different package managers.
 Each tab displays the command for that specific package manager to create an integrated Mastra backend service.
 This is part of the "Integrated Backend Integration" approach for Vite/React projects.
 All commands create the same Mastra project but use different package manager syntax.
-*/}
+_/}
 
 <Tabs>
   <TabItem value="install" label="install">
@@ -171,10 +171,10 @@ touch lib/mastra.ts
 ```
 
 ```typescript filename="lib/mastra.ts" showLineNumbers copy
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js';
 
 export const mastraClient = new MastraClient({
-  baseUrl: import.meta.env.VITE_MASTRA_API_URL || "http://localhost:4111",
+  baseUrl: import.meta.env.VITE_MASTRA_API_URL || 'http://localhost:4111',
 });
 ```
 
@@ -183,12 +183,9 @@ export const mastraClient = new MastraClient({
 Add new `route` to the config:
 
 ```typescript filename="app/routes.ts" showLineNumbers copy
-import { type RouteConfig, index, route } from "@react-router/dev/routes";
+import { type RouteConfig, index, route } from '@react-router/dev/routes';
 
-export default [
-  index("routes/home.tsx"),
-  route("test", "routes/test.tsx"),
-] satisfies RouteConfig;
+export default [index('routes/home.tsx'), route('test', 'routes/test.tsx')] satisfies RouteConfig;
 ```
 
 ## Create Test Route
@@ -241,7 +238,6 @@ Submitting **London** as the city would return a result similar to:
 The current weather in London is partly cloudy with a temperature of 19.3°C, feeling like 17.4°C. The humidity is at 53%, and there is a wind speed of 15.9 km/h, with gusts up to 38.5 km/h.
 ```
 
-
 ## Next steps
 
-- [Monorepo Deployment](../../deployment/monorepo.md)
+- [Monorepo Deployment](../../deployment/monorepo)

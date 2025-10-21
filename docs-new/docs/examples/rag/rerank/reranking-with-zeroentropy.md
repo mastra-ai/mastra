@@ -1,14 +1,14 @@
 ---
-title: "Reranking with ZeroEntropy "
+title: 'Reranking with ZeroEntropy '
 description: Example of using Mastra to improve document retrieval relevance with ZeroEntropy's reranking service.
 ---
 
 # Reranking with ZeroEntropy
 
 ```typescript
-import { 
-  rerankWithScorer as rerank, 
-  ZeroEntropyRelevanceScorer 
+import {
+  rerankWithScorer as rerank,
+  ZeroEntropyRelevanceScorer
 } from "@mastra/rag";
 
 const results = rerank({
@@ -28,5 +28,5 @@ const results = rerank({
 
 ## Links
 
-- [rerank() reference](/reference/rag/rerankWithScorer.md)
-- [Retrieval docs](/reference/rag/retrieval.md)
+- [rerank() reference](/reference/rag/rerankWithScorer)
+- [Retrieval docs](/reference/rag/retrieval)

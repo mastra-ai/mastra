@@ -1,6 +1,6 @@
 ---
-title: "Reference: Mastra.getServer() "
-description: "Documentation for the `Mastra.getServer()` method in Mastra, which retrieves the configured server configuration."
+title: 'Reference: Mastra.getServer() '
+description: 'Documentation for the `Mastra.getServer()` method in Mastra, which retrieves the configured server configuration.'
 ---
 
 # Mastra.getServer()
@@ -20,16 +20,16 @@ This method does not accept any parameters.
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "server",
-      type: "ServerConfig | undefined",
-      description: "The configured server configuration including port, timeout, API routes, middleware, CORS settings, and build options, or undefined if no server has been configured.",
-    },
-  ]}
+content={[
+{
+name: "server",
+type: "ServerConfig | undefined",
+description: "The configured server configuration including port, timeout, API routes, middleware, CORS settings, and build options, or undefined if no server has been configured.",
+},
+]}
 />
 
 ## Related
 
-- [Server deployment](../../docs/deployment/server-deployment.md)
-- [Server configuration](../../docs/server-db/custom-api-routes.md)
+- [Server deployment](../../docs/deployment/server-deployment)
+- [Server configuration](../../docs/server-db/custom-api-routes)

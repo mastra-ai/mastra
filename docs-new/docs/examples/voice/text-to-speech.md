@@ -1,8 +1,7 @@
 ---
-title: "Text to Speech "
+title: 'Text to Speech '
 description: Example of using Mastra to create a text to speech application.
 ---
-
 
 # Interactive Story Generator
 
@@ -13,10 +12,10 @@ The following code snippets provide example implementations of Text-to-Speech (T
 The following example shows how to set up a story generator agent with TTS capabilities on the backend:
 
 ```typescript filename="src/mastra/agents/index.ts"
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-import { OpenAIVoice } from "@mastra/voice-openai";
-import { Memory } from "@mastra/memory";
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { OpenAIVoice } from '@mastra/voice-openai';
+import { Memory } from '@mastra/memory';
 
 const instructions = `
     You are an Interactive Storyteller Agent. Your job is to create engaging
@@ -24,9 +23,9 @@ const instructions = `
 `;
 
 export const storyTellerAgent = new Agent({
-  name: "Story Teller Agent",
+  name: 'Story Teller Agent',
   instructions: instructions,
-  model: openai("gpt-4o"),
+  model: openai('gpt-4o'),
   voice: new OpenAIVoice(),
 });
 ```
@@ -36,28 +35,28 @@ export const storyTellerAgent = new Agent({
 This snippet demonstrates how to register the agent with your Mastra instance:
 
 ```typescript filename="src/mastra/index.ts"
-import { PinoLogger } from "@mastra/loggers";
-import { Mastra } from "@mastra/core/mastra";
-import { storyTellerAgent } from "./agents";
+import { PinoLogger } from '@mastra/loggers';
+import { Mastra } from '@mastra/core/mastra';
+import { storyTellerAgent } from './agents';
 
 export const mastra = new Mastra({
   agents: { storyTellerAgent },
   logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
+    name: 'Mastra',
+    level: 'info',
   }),
 });
 ```
 
 ## Connecting to Mastra from the Frontend
 
-Here we use the Mastra Client SDK to interact with our Mastra server. For more information about the Mastra Client SDK, check out the [documentation](../../docs/server-db/mastra-client.md).
+Here we use the Mastra Client SDK to interact with our Mastra server. For more information about the Mastra Client SDK, check out the [documentation](../../docs/server-db/mastra-client).
 
 ```typescript filename="src/app/page.tsx"
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js';
 
 export const mastraClient = new MastraClient({
-  baseUrl: "http://localhost:4111", // Replace with your Mastra backend URL
+  baseUrl: 'http://localhost:4111', // Replace with your Mastra backend URL
 });
 ```
 
@@ -69,10 +68,10 @@ This example demonstrates how to get a reference to a Mastra agent, generate sto
 const handleInitialSubmit = async (formData: FormData) => {
   setIsLoading(true);
   try {
-    const agent = mastraClient.getAgent("storyTellerAgent");
+    const agent = mastraClient.getAgent('storyTellerAgent');
     const message = `Current phase: BEGINNING. Story genre: ${formData.genre}, Protagonist name: ${formData.protagonistDetails.name}, Protagonist age: ${formData.protagonistDetails.age}, Protagonist gender: ${formData.protagonistDetails.gender}, Protagonist occupation: ${formData.protagonistDetails.occupation}, Story Setting: ${formData.setting}`;
     const storyResponse = await agent.generate({
-      messages: [{ role: "user", content: message }],
+      messages: [{ role: 'user', content: message }],
       threadId: storyState.threadId,
       resourceId: storyState.resourceId,
     });
@@ -82,13 +81,13 @@ const handleInitialSubmit = async (formData: FormData) => {
     const audioResponse = await agent.voice.speak(storyText);
 
     if (!audioResponse.body) {
-      throw new Error("No audio stream received");
+      throw new Error('No audio stream received');
     }
 
     const audio = await readStream(audioResponse.body);
 
-    setStoryState((prev) => ({
-      phase: "beginning",
+    setStoryState(prev => ({
+      phase: 'beginning',
       threadId: prev.threadId,
       resourceId: prev.resourceId,
       content: {
@@ -100,7 +99,7 @@ const handleInitialSubmit = async (formData: FormData) => {
     setAudioBlob(audio);
     return audio;
   } catch (error) {
-    console.error("Error generating story beginning:", error);
+    console.error('Error generating story beginning:', error);
   } finally {
     setIsLoading(false);
   }
@@ -128,7 +127,7 @@ useEffect(() => {
       await currentAudio.play();
       setIsPlaying(true);
     } catch (error) {
-      console.error("Auto-play failed:", error);
+      console.error('Auto-play failed:', error);
     }
   };
 
@@ -137,7 +136,7 @@ useEffect(() => {
   return () => {
     if (currentAudio) {
       currentAudio.pause();
-      currentAudio.src = "";
+      currentAudio.src = '';
       URL.revokeObjectURL(url);
     }
   };

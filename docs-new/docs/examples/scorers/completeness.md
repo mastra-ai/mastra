@@ -1,8 +1,7 @@
 ---
-title: "Completeness "
+title: 'Completeness '
 description: Example of using the Completeness scorer to evaluate how thoroughly responses address all aspects of a query.
 ---
-
 
 # Completeness Scorer
 
@@ -21,14 +20,14 @@ npm install @mastra/evals
 In this example, the response comprehensively addresses all aspects of the query with detailed information covering multiple dimensions.
 
 ```typescript filename="src/example-high-completeness.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
+import { openai } from '@ai-sdk/openai';
+import { createCompletenessScorer } from '@mastra/evals/scorers/llm';
 
-const scorer = createCompletenessScorer({ model: openai("gpt-4o-mini") });
+const scorer = createCompletenessScorer({ model: openai('gpt-4o-mini') });
 
-const query = "Explain the process of photosynthesis, including the inputs, outputs, and stages involved.";
+const query = 'Explain the process of photosynthesis, including the inputs, outputs, and stages involved.';
 const response =
-  "Photosynthesis is the process by which plants convert sunlight into chemical energy. Inputs: Carbon dioxide (CO2) from the air enters through stomata, water (H2O) is absorbed by roots, and sunlight provides energy captured by chlorophyll. The process occurs in two main stages: 1) Light-dependent reactions in the thylakoids convert light energy to ATP and NADPH while splitting water and releasing oxygen. 2) Light-independent reactions (Calvin cycle) in the stroma use ATP, NADPH, and CO2 to produce glucose. Outputs: Glucose (C6H12O6) serves as food for the plant, and oxygen (O2) is released as a byproduct. The overall equation is: 6CO2 + 6H2O + light energy → C6H12O6 + 6O2.";
+  'Photosynthesis is the process by which plants convert sunlight into chemical energy. Inputs: Carbon dioxide (CO2) from the air enters through stomata, water (H2O) is absorbed by roots, and sunlight provides energy captured by chlorophyll. The process occurs in two main stages: 1) Light-dependent reactions in the thylakoids convert light energy to ATP and NADPH while splitting water and releasing oxygen. 2) Light-independent reactions (Calvin cycle) in the stroma use ATP, NADPH, and CO2 to produce glucose. Outputs: Glucose (C6H12O6) serves as food for the plant, and oxygen (O2) is released as a byproduct. The overall equation is: 6CO2 + 6H2O + light energy → C6H12O6 + 6O2.';
 
 const result = await scorer.run({
   input: [{ role: 'user', content: query }],
@@ -54,14 +53,14 @@ The output receives a high score because it addresses all requested aspects: inp
 In this example, the response addresses some key points but misses important aspects or lacks sufficient detail.
 
 ```typescript filename="src/example-partial-completeness.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
+import { openai } from '@ai-sdk/openai';
+import { createCompletenessScorer } from '@mastra/evals/scorers/llm';
 
-const scorer = createCompletenessScorer({ model: openai("gpt-4o-mini") });
+const scorer = createCompletenessScorer({ model: openai('gpt-4o-mini') });
 
-const query = "What are the benefits and drawbacks of remote work for both employees and employers?";
+const query = 'What are the benefits and drawbacks of remote work for both employees and employers?';
 const response =
-  "Remote work offers several benefits for employees including flexible schedules, no commuting time, and better work-life balance. It also reduces costs for office space and utilities for employers. However, remote work can lead to isolation and communication challenges for employees.";
+  'Remote work offers several benefits for employees including flexible schedules, no commuting time, and better work-life balance. It also reduces costs for office space and utilities for employers. However, remote work can lead to isolation and communication challenges for employees.';
 
 const result = await scorer.run({
   input: [{ role: 'user', content: query }],
@@ -87,12 +86,13 @@ The output receives a moderate score because it covers employee benefits and som
 In this example, the response only partially addresses the query and misses several important aspects.
 
 ```typescript filename="src/example-low-completeness.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
+import { openai } from '@ai-sdk/openai';
+import { createCompletenessScorer } from '@mastra/evals/scorers/llm';
 
-const scorer = createCompletenessScorer({ model: openai("gpt-4o-mini") });
+const scorer = createCompletenessScorer({ model: openai('gpt-4o-mini') });
 
-const query = "Compare renewable and non-renewable energy sources in terms of cost, environmental impact, and sustainability.";
+const query =
+  'Compare renewable and non-renewable energy sources in terms of cost, environmental impact, and sustainability.';
 const response =
   "Renewable energy sources like solar and wind are becoming cheaper. They're better for the environment than fossil fuels.";
 
@@ -124,7 +124,8 @@ const scorer = createCompletenessScorer({ model: openai("gpt-4o-mini"), options:
   scale: 1
 });
 ```
-> See [CompletenessScorer](/reference/scorers/completeness.md) for a full list of configuration options.
+
+> See [CompletenessScorer](/reference/scorers/completeness) for a full list of configuration options.
 
 ## Understanding the results
 
@@ -154,10 +155,13 @@ A completeness score between 0 and 1:
 - **0.0**: Fails to address the query or provides irrelevant information.
 
 ### runId
+
 The unique identifier for this scorer run.
 
 ### extractStepResult
+
 Object with extracted elements and coverage details:
+
 - **inputElements**: Key elements found in the input (e.g., nouns, verbs, topics, terms).
 - **outputElements**: Key elements found in the output.
 - **missingElements**: Input elements not found in the output.

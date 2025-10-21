@@ -1,6 +1,6 @@
 ---
-title: "Reference: Snapshots "
-description: "Technical reference on snapshots in Mastra - the serialized workflow state that enables suspend and resume functionality"
+title: 'Reference: Snapshots '
+description: 'Technical reference on snapshots in Mastra - the serialized workflow state that enables suspend and resume functionality'
 ---
 
 # Snapshots
@@ -43,7 +43,7 @@ export interface LegacyWorkflowRunState {
       string,
       {
         // Step execution results
-        status: "success" | "failed" | "suspended" | "waiting" | "skipped";
+        status: 'success' | 'failed' | 'suspended' | 'waiting' | 'skipped';
         payload?: any; // Step-specific data
         error?: string; // Error info if failed
       }
@@ -76,7 +76,7 @@ Mastra persists snapshots to the configured storage system. By default, snapshot
 The snapshots are stored in the `workflow_snapshots` table and identified uniquely by the `run_id` for the associated run when using libsql.
 Utilizing a persistence layer allows for the snapshots to be persisted across workflow runs, allowing for advanced human-in-the-loop functionality.
 
-Read more about [libsql storage](../storage/libsql.md) and [upstash storage](../storage/upstash.md) here.
+Read more about [libsql storage](../storage/libsql) and [upstash storage](../storage/upstash) here.
 
 ### Saving Snapshots
 
@@ -110,13 +110,13 @@ This means that storage is shared across all workflows registered with the same 
 The default storage option is LibSQL, a SQLite-compatible database:
 
 ```typescript
-import { Mastra } from "@mastra/core/mastra";
-import { DefaultStorage } from "@mastra/core/storage/libsql";
+import { Mastra } from '@mastra/core/mastra';
+import { DefaultStorage } from '@mastra/core/storage/libsql';
 
 const mastra = new Mastra({
   storage: new DefaultStorage({
     config: {
-      url: "file:storage.db", // Local file-based database
+      url: 'file:storage.db', // Local file-based database
       // For production:
       // url: process.env.DATABASE_URL,
       // authToken: process.env.DATABASE_AUTH_TOKEN,
@@ -134,8 +134,8 @@ const mastra = new Mastra({
 For serverless environments:
 
 ```typescript
-import { Mastra } from "@mastra/core/mastra";
-import { UpstashStore } from "@mastra/upstash";
+import { Mastra } from '@mastra/core/mastra';
+import { UpstashStore } from '@mastra/upstash';
 
 const mastra = new Mastra({
   storage: new UpstashStore({
@@ -169,10 +169,10 @@ When suspending a workflow, you can include custom metadata that can help when r
 
 ```typescript
 await suspend({
-  reason: "Waiting for customer approval",
-  requiredApprovers: ["manager", "finance"],
+  reason: 'Waiting for customer approval',
+  requiredApprovers: ['manager', 'finance'],
   requestedBy: currentUser,
-  urgency: "high",
+  urgency: 'high',
   expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
 });
 ```
@@ -185,13 +185,12 @@ You can implement conditional logic based on the suspend payload when resuming:
 
 ```typescript
 run.watch(async ({ activePaths }) => {
-  const isApprovalStepSuspended =
-    activePaths.get("approval")?.status === "suspended";
+  const isApprovalStepSuspended = activePaths.get('approval')?.status === 'suspended';
   if (isApprovalStepSuspended) {
-    const payload = activePaths.get("approval")?.suspendPayload;
-    if (payload.urgency === "high" && currentUser.role === "manager") {
+    const payload = activePaths.get('approval')?.suspendPayload;
+    if (payload.urgency === 'high' && currentUser.role === 'manager') {
       await resume({
-        stepId: "approval",
+        stepId: 'approval',
         context: { approved: true, approver: currentUser.id },
       });
     }
@@ -201,7 +200,7 @@ run.watch(async ({ activePaths }) => {
 
 ## Related
 
-- [Suspend Function Reference](./suspend.md)
-- [Resume Function Reference](./resume.md)
-- [Watch Function Reference](./watch.md)
-- [Suspend and Resume Guide](../../docs/workflows-legacy/suspend-and-resume.md)
+- [Suspend Function Reference](./suspend)
+- [Resume Function Reference](./resume)
+- [Watch Function Reference](./watch)
+- [Suspend and Resume Guide](../../docs/workflows-legacy/suspend-and-resume)

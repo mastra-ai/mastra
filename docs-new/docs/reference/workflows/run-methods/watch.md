@@ -1,5 +1,5 @@
 ---
-title: "Reference: Run.watch() "
+title: 'Reference: Run.watch() '
 description: Documentation for the `Run.watch()` method in workflows, which allows you to monitor the execution of a workflow run.
 ---
 
@@ -12,45 +12,44 @@ The `.watch()` method allows you to monitor the execution of a workflow run, pro
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
 
-run.watch((event) => {
+run.watch(event => {
   console.log(event?.payload?.currentStep?.id);
 });
 
-const result = await run.start({ inputData: { value: "initial data" } });
+const result = await run.start({ inputData: { value: 'initial data' } });
 ```
 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "callback",
-      type: "(event: WatchEvent) => void",
-      description: "A callback function that is called whenever a step is completed or the workflow state changes. The event parameter contains: type ('watch'), payload (currentStep and workflowState), and eventTimestamp",
-      isOptional: false,
-    },
-    {
-      name: "type",
-      type: "'watch' | 'watch-v2'",
-      description: "The type of watch events to listen for. 'watch' for step completion events, 'watch-v2' for data stream events",
-      isOptional: true,
-      defaultValue: "'watch'",
-    },
-  ]}
+content={[
+{
+name: "callback",
+type: "(event: WatchEvent) => void",
+description: "A callback function that is called whenever a step is completed or the workflow state changes. The event parameter contains: type ('watch'), payload (currentStep and workflowState), and eventTimestamp",
+isOptional: false,
+},
+{
+name: "type",
+type: "'watch' | 'watch-v2'",
+description: "The type of watch events to listen for. 'watch' for step completion events, 'watch-v2' for data stream events",
+isOptional: true,
+defaultValue: "'watch'",
+},
+]}
 />
-
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "unwatch",
-      type: "() => void",
-      description:
-        "A function that can be called to stop watching the workflow run",
-    },
-  ]}
+content={[
+{
+name: "unwatch",
+type: "() => void",
+description:
+"A function that can be called to stop watching the workflow run",
+},
+]}
 />
 
 ## Extended usage example
@@ -58,17 +57,17 @@ const result = await run.start({ inputData: { value: "initial data" } });
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
 
-run.watch((event) => {
+run.watch(event => {
   console.log(event?.payload?.currentStep?.id);
-}, "watch");
+}, 'watch');
 
-const result = await run.start({ inputData: { value: "initial data" } });
+const result = await run.start({ inputData: { value: 'initial data' } });
 ```
 
 ## Related
 
 ## Related
 
-- [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
-- [Workflow.createRunAsync()](../create-run.md)
-- [Watch Workflow](../../../docs/workflows/overview.mdx#watch-workflow)
+- [Workflows overview](../../../docs/workflows/overview#run-workflow)
+- [Workflow.createRunAsync()](../create-run)
+- [Watch Workflow](../../../docs/workflows/overview#watch-workflow)

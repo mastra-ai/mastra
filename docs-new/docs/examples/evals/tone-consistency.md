@@ -1,8 +1,7 @@
 ---
-title: "Tone Consistency "
+title: 'Tone Consistency '
 description: Example of using the Tone Consistency metric to evaluate emotional tone patterns and sentiment consistency in text.
 ---
-
 
 # Tone Consistency Evaluation
 
@@ -21,12 +20,12 @@ npm install @mastra/evals
 In this example, the texts exhibit a similar positive sentiment. The metric measures the consistency between the tones, resulting in a high score.
 
 ```typescript filename="src/example-positive-tone.ts" showLineNumbers copy
-import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+import { ToneConsistencyMetric } from '@mastra/evals/nlp';
 
 const metric = new ToneConsistencyMetric();
 
-const query = "This product is fantastic and amazing!";
-const response = "The product is excellent and wonderful!";
+const query = 'This product is fantastic and amazing!';
+const response = 'The product is excellent and wonderful!';
 
 const result = await metric.measure(query, response);
 
@@ -53,12 +52,12 @@ The metric returns a high score reflecting strong sentiment alignment. The `info
 In this example, the text’s internal tone consistency is analyzed by passing an empty response. This signals the metric to evaluate sentiment stability within the single input text, resulting in a score reflecting how uniform the tone is throughout.
 
 ```typescript filename="src/example-stable-tone.ts" showLineNumbers copy
-import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+import { ToneConsistencyMetric } from '@mastra/evals/nlp';
 
 const metric = new ToneConsistencyMetric();
 
-const query = "Great service! Friendly staff. Perfect atmosphere.";
-const response = "";
+const query = 'Great service! Friendly staff. Perfect atmosphere.';
+const response = '';
 
 const result = await metric.measure(query, response);
 
@@ -84,12 +83,12 @@ The metric returns a high score indicating consistent sentiment throughout the i
 In this example, the input and response have different emotional tones. The metric picks up on these variations and gives a lower consistency score.
 
 ```typescript filename="src/example-mixed-tone.ts" showLineNumbers copy
-import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+import { ToneConsistencyMetric } from '@mastra/evals/nlp';
 
 const metric = new ToneConsistencyMetric();
 
-const query = "The interface is frustrating and confusing, though it has potential.";
-const response = "The design shows promise but needs significant improvements to be usable.";
+const query = 'The interface is frustrating and confusing, though it has potential.';
+const response = 'The design shows promise but needs significant improvements to be usable.';
 
 const result = await metric.measure(query, response);
 
@@ -119,8 +118,7 @@ You can create a `ToneConsistencyMetric` instance with default settings. No addi
 const metric = new ToneConsistencyMetric();
 ```
 
-> See [ToneConsistencyMetric](/reference/evals/tone-consistency.md) for a full list of configuration options.
-
+> See [ToneConsistencyMetric](/reference/evals/tone-consistency) for a full list of configuration options.
 
 ## Understanding the results
 
@@ -138,6 +136,7 @@ const metric = new ToneConsistencyMetric();
   }
 }
 ```
+
 ### Tone consistency score
 
 A tone consistency score between 0 and 1:

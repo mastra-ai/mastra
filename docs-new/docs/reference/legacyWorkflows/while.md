@@ -1,6 +1,6 @@
 ---
-title: "Reference: Workflow.while() "
-description: "Documentation for the `.while()` method in Mastra workflows, which repeats a step as long as a specified condition remains true."
+title: 'Reference: Workflow.while() '
+description: 'Documentation for the `.while()` method in Mastra workflows, which repeats a step as long as a specified condition remains true.'
 ---
 
 # Workflow.while()
@@ -16,21 +16,21 @@ workflow.step(incrementStep).while(condition, incrementStep).then(finalStep);
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "condition",
-      type: "Function | ReferenceCondition",
-      description:
-        "A function or reference condition that determines when to continue looping",
-      isOptional: false,
-    },
-    {
-      name: "step",
-      type: "Step",
-      description: "The step to repeat while the condition is true",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "condition",
+type: "Function | ReferenceCondition",
+description:
+"A function or reference condition that determines when to continue looping",
+isOptional: false,
+},
+{
+name: "step",
+type: "Step",
+description: "The step to repeat while the condition is true",
+isOptional: false,
+},
+]}
 />
 
 ## Condition Types
@@ -43,7 +43,7 @@ You can use a function that returns a boolean:
 workflow
   .step(incrementStep)
   .while(async ({ context }) => {
-    const result = context.getStepResult<{ value: number }>("increment");
+    const result = context.getStepResult<{ value: number }>('increment');
     return (result?.value ?? 0) < 10; // Continue as long as value is less than 10
   }, incrementStep)
   .then(finalStep);
@@ -58,7 +58,7 @@ workflow
   .step(incrementStep)
   .while(
     {
-      ref: { step: incrementStep, path: "value" },
+      ref: { step: incrementStep, path: 'value' },
       query: { $lt: 10 }, // Continue as long as value is less than 10
     },
     incrementStep,
@@ -82,33 +82,33 @@ When using reference-based conditions, you can use these comparison operators:
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "LegacyWorkflow",
-      description: "The workflow instance for chaining",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "LegacyWorkflow",
+description: "The workflow instance for chaining",
+},
+]}
 />
 
 ## Example
 
 ```typescript
-import { LegacyWorkflow, LegacyStep } from "@mastra/core/workflows/legacy";
-import { z } from "zod";
+import { LegacyWorkflow, LegacyStep } from '@mastra/core/workflows/legacy';
+import { z } from 'zod';
 
 // Create a step that increments a counter
 const incrementStep = new LegacyStep({
-  id: "increment",
-  description: "Increments the counter by 1",
+  id: 'increment',
+  description: 'Increments the counter by 1',
   outputSchema: z.object({
     value: z.number(),
   }),
   execute: async ({ context }) => {
     // Get current value from previous execution or start at 0
     const currentValue =
-      context.getStepResult<{ value: number }>("increment")?.value ||
-      context.getStepResult<{ startValue: number }>("trigger")?.startValue ||
+      context.getStepResult<{ value: number }>('increment')?.value ||
+      context.getStepResult<{ startValue: number }>('trigger')?.startValue ||
       0;
 
     // Increment the value
@@ -121,12 +121,10 @@ const incrementStep = new LegacyStep({
 
 // Create a final step
 const finalStep = new LegacyStep({
-  id: "final",
-  description: "Final step after loop completes",
+  id: 'final',
+  description: 'Final step after loop completes',
   execute: async ({ context }) => {
-    const finalValue = context.getStepResult<{ value: number }>(
-      "increment",
-    )?.value;
+    const finalValue = context.getStepResult<{ value: number }>('increment')?.value;
     console.log(`Loop completed with final value: ${finalValue}`);
     return { finalValue };
   },
@@ -134,7 +132,7 @@ const finalStep = new LegacyStep({
 
 // Create the workflow
 const counterWorkflow = new LegacyWorkflow({
-  name: "counter-workflow",
+  name: 'counter-workflow',
   triggerSchema: z.object({
     startValue: z.number(),
     targetValue: z.number(),
@@ -146,8 +144,7 @@ counterWorkflow
   .step(incrementStep)
   .while(async ({ context }) => {
     const targetValue = context.triggerData.targetValue;
-    const currentValue =
-      context.getStepResult<{ value: number }>("increment")?.value ?? 0;
+    const currentValue = context.getStepResult<{ value: number }>('increment')?.value ?? 0;
     return currentValue < targetValue;
   }, incrementStep)
   .then(finalStep)
@@ -163,6 +160,6 @@ const result = await run.start({
 
 ## Related
 
-- [.until()](./until.md) - Loop until a condition becomes true
-- [Control Flow Guide](../../docs/workflows-legacy/control-flow.md)
-- [Workflow Class Reference](./workflow.md)
+- [.until()](./until) - Loop until a condition becomes true
+- [Control Flow Guide](../../docs/workflows-legacy/control-flow)
+- [Workflow Class Reference](./workflow)

@@ -64,11 +64,11 @@ This example shows the essentials: initialize a document, create chunks, generat
 
 ## Document Processing
 
-The basic building block of RAG is document processing. Documents can be chunked using various strategies (recursive, sliding window, etc.) and enriched with metadata. See the [chunking and embedding doc](./chunking-and-embedding.md).
+The basic building block of RAG is document processing. Documents can be chunked using various strategies (recursive, sliding window, etc.) and enriched with metadata. See the [chunking and embedding doc](./chunking-and-embedding).
 
 ## Vector Storage
 
-Mastra supports multiple vector stores for embedding persistence and similarity search, including pgvector, Pinecone, Qdrant, and MongoDB. See the [vector database doc](./vector-databases.md).
+Mastra supports multiple vector stores for embedding persistence and similarity search, including pgvector, Pinecone, Qdrant, and MongoDB. See the [vector database doc](./vector-databases).
 
 ## Observability and Debugging
 
@@ -79,9 +79,9 @@ Mastra's RAG system includes observability features to help you optimize your re
 - Analyze query patterns and cache hit rates
 - Export metrics to your observability platform
 
-See the [OTel Configuration](../../reference/observability/otel-config.md) page for more details.
+See the [OTel Configuration](../../reference/observability/otel-config) page for more details.
 
 ## More resources
 
-- [Chain of Thought RAG Example](../../examples/rag/usage/cot-rag.md)
+- [Chain of Thought RAG Example](../../examples/rag/usage/cot-rag)
 - [All RAG Examples](../../examples/) (including different chunking strategies, embedding models, and vector stores)

@@ -1,6 +1,6 @@
 ---
 sidebar_position: 1
-title: "Agents: Chef Michel"
+title: 'Agents: Chef Michel'
 description: Guide on creating a Chef Assistant agent in Mastra to help users cook meals with available ingredients.
 ---
 
@@ -24,22 +24,20 @@ You'll learn how to create the agent and register it with Mastra. Next, you'll i
 
 To create an agent in Mastra use the `Agent` class to define it and then register it with Mastra.
 
-
-
 ### Define the Agent
 
 Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 
 ```ts copy filename="src/mastra/agents/chefAgent.ts"
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
 
 export const chefAgent = new Agent({
-  name: "chef-agent",
+  name: 'chef-agent',
   instructions:
-    "You are Michel, a practical and experienced home chef" +
-    "You help people cook with whatever ingredients they have available.",
-  model: openai("gpt-4o-mini"),
+    'You are Michel, a practical and experienced home chef' +
+    'You help people cook with whatever ingredients they have available.',
+  model: openai('gpt-4o-mini'),
 });
 ```
 
@@ -48,8 +46,8 @@ export const chefAgent = new Agent({
 In your `src/mastra/index.ts` file, register the agent:
 
 ```ts copy filename="src/mastra/index.ts" {2, 5}
-import { Mastra } from "@mastra/core";
-import { chefAgent } from "./agents/chefAgent";
+import { Mastra } from '@mastra/core';
+import { chefAgent } from './agents/chefAgent';
 
 export const mastra = new Mastra({
   agents: { chefAgent },
@@ -60,21 +58,20 @@ export const mastra = new Mastra({
 
 Depending on your requirements you can interact and get responses from the agent in different formats. In the following steps you'll learn how to generate, stream, and get structured output.
 
-
 ### Generating Text Responses
 
 Create a new file `src/index.ts` and add a `main()` function to it. Inside, craft a query to ask the agent and log its response.
 
 ```ts copy filename="src/index.ts"
-import { chefAgent } from "./mastra/agents/chefAgent";
+import { chefAgent } from './mastra/agents/chefAgent';
 
 async function main() {
   const query =
-    "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?";
+    'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?';
   console.log(`Query: ${query}`);
 
-  const response = await chefAgent.generate([{ role: "user", content: query }]);
-  console.log("\n👨‍🍳 Chef Michel:", response.text);
+  const response = await chefAgent.generate([{ role: 'user', content: query }]);
+  console.log('\n👨‍🍳 Chef Michel:', response.text);
 }
 
 main();
@@ -99,22 +96,22 @@ Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some
 In the previous example you might have waited a bit for the response without any sign of progress. To show the agent's output as it creates it you should instead stream its response to the terminal.
 
 ```ts copy filename="src/index.ts"
-import { chefAgent } from "./mastra/agents/chefAgent";
+import { chefAgent } from './mastra/agents/chefAgent';
 
 async function main() {
   const query =
     "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
   console.log(`Query: ${query}`);
 
-  const stream = await chefAgent.stream([{ role: "user", content: query }]);
+  const stream = await chefAgent.stream([{ role: 'user', content: query }]);
 
-  console.log("\n Chef Michel: ");
+  console.log('\n Chef Michel: ');
 
   for await (const chunk of stream.textStream) {
     process.stdout.write(chunk);
   }
 
-  console.log("\n\n✅ Recipe complete!");
+  console.log('\n\n✅ Recipe complete!');
 }
 
 main();
@@ -139,17 +136,16 @@ Great! You can make a comforting chicken curry...
 
 ### Generating a Recipe with Structured Data
 
-Instead of showing the agent's response to a human you might want to pass it along to another part of your code. For these instances your agent should return [structured output](../../docs/agents/overview.mdx#4-structured-output).
+Instead of showing the agent's response to a human you might want to pass it along to another part of your code. For these instances your agent should return [structured output](../../docs/agents/overview#4-structured-output).
 
 Change your `src/index.ts` to the following:
 
 ```ts copy filename="src/index.ts"
-import { chefAgent } from "./mastra/agents/chefAgent";
-import { z } from "zod";
+import { chefAgent } from './mastra/agents/chefAgent';
+import { z } from 'zod';
 
 async function main() {
-  const query =
-    "I want to make lasagna, can you generate a lasagna recipe for me?";
+  const query = 'I want to make lasagna, can you generate a lasagna recipe for me?';
   console.log(`Query: ${query}`);
 
   // Define the Zod schema
@@ -163,16 +159,13 @@ async function main() {
     steps: z.array(z.string()),
   });
 
-  const response = await chefAgent.generate(
-    [{ role: "user", content: query }],
-    { 
-      structuredOutput: {
-        schema
-      },
-      maxSteps: 1
+  const response = await chefAgent.generate([{ role: 'user', content: query }], {
+    structuredOutput: {
+      schema,
     },
-  );
-  console.log("\n👨‍🍳 Chef Michel:", response.object);
+    maxSteps: 1,
+  });
+  console.log('\n👨‍🍳 Chef Michel:', response.object);
 }
 
 main();
@@ -201,7 +194,6 @@ Query: I want to make lasagna, can you generate a lasagna recipe for me?
 
 Learn how to interact with your agent through Mastra's API.
 
-
 ### Using `mastra dev`
 
 You can run your agent as a service using the `mastra dev` command:
@@ -210,7 +202,7 @@ You can run your agent as a service using the `mastra dev` command:
 mastra dev
 ```
 
-This will start a server exposing endpoints to interact with your registered agents. Within the [playground](../../docs/server-db/local-dev-playground.md) you can test your agent through a UI.
+This will start a server exposing endpoints to interact with your registered agents. Within the [playground](../../docs/server-db/local-dev-playground) you can test your agent through a UI.
 
 ### Accessing the Chef Assistant API
 
@@ -244,5 +236,3 @@ curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
   "text": "You can make delicious pancakes! Here's a simple recipe..."
 }
 ```
-
-

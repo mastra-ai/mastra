@@ -1,6 +1,6 @@
 ---
-title: "Reference: Agent.getDefaultGenerateOptions() "
-description: "Documentation for the `Agent.getDefaultGenerateOptions()` method in Mastra agents, which retrieves the default options used for generate calls."
+title: 'Reference: Agent.getDefaultGenerateOptions() '
+description: 'Documentation for the `Agent.getDefaultGenerateOptions()` method in Mastra agents, which retrieves the default options used for generate calls.'
 ---
 
 # Agent.getDefaultGenerateOptions()
@@ -16,52 +16,52 @@ await agent.getDefaultGenerateOptions();
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
-      isOptional: true,
-      defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
-    },
-  ]}
+content={[
+{
+name: "options",
+type: "{ runtimeContext?: RuntimeContext }",
+isOptional: true,
+defaultValue: "{}",
+description: "Optional configuration object containing runtime context.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "defaultOptions",
-      type: "AgentGenerateOptions | Promise<AgentGenerateOptions>",
-      description: "The default generation options configured for the agent, either as a direct object or a promise that resolves to the options.",
-    },
-  ]}
+content={[
+{
+name: "defaultOptions",
+type: "AgentGenerateOptions | Promise<AgentGenerateOptions>",
+description: "The default generation options configured for the agent, either as a direct object or a promise that resolves to the options.",
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript copy
 await agent.getDefaultGenerateOptions({
-  runtimeContext: new RuntimeContext()
+  runtimeContext: new RuntimeContext(),
 });
 ```
 
 ### Options parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      isOptional: true,
-      defaultValue: "new RuntimeContext()",
-      description: "Runtime context for dependency injection and contextual information.",
-    },
-  ]}
+content={[
+{
+name: "runtimeContext",
+type: "RuntimeContext",
+isOptional: true,
+defaultValue: "new RuntimeContext()",
+description: "Runtime context for dependency injection and contextual information.",
+},
+]}
 />
 
 ## Related
 
-- [Agent generation](../../docs/agents/overview.mdx#generate)
-- [Agent Runtime Context](../../docs/agents/runtime-context.md)
+- [Agent generation](../../docs/agents/overview#generate)
+- [Agent Runtime Context](../../docs/agents/runtime-context)

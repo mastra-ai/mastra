@@ -1,6 +1,6 @@
 ---
-title: "Suspend & Resume Workflows (Legacy) "
-description: "Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources."
+title: 'Suspend & Resume Workflows (Legacy) '
+description: 'Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources.'
 ---
 
 # Suspend and Resume in Workflows (Legacy)
@@ -27,15 +27,15 @@ Common scenarios for suspending workflows include:
 Here's a simple workflow that suspends when a value is too low and resumes when given a higher value:
 
 ```typescript
-import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
 
 const stepTwo = new LegacyStep({
-  id: "stepTwo",
+  id: 'stepTwo',
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
   execute: async ({ context, suspend }) => {
-    if (context.steps.stepOne.status !== "success") {
+    if (context.steps.stepOne.status !== 'success') {
       return { incrementedValue: 0 };
     }
 
@@ -69,36 +69,36 @@ Here's an example of a workflow with multiple steps that can suspend:
 ```typescript
 // Define steps with suspend capability
 const promptAgentStep = new LegacyStep({
-  id: "promptAgent",
+  id: 'promptAgent',
   execute: async ({ context, suspend }) => {
     // Some condition that determines if we need to suspend
     if (needHumanInput) {
       // Optionally pass payload data that will be stored with suspended state
-      await suspend({ requestReason: "Need human input for prompt" });
+      await suspend({ requestReason: 'Need human input for prompt' });
       // Code after suspend() will execute when the step is resumed
       return { modelOutput: context.userInput };
     }
-    return { modelOutput: "AI generated output" };
+    return { modelOutput: 'AI generated output' };
   },
   outputSchema: z.object({ modelOutput: z.string() }),
 });
 
 const improveResponseStep = new LegacyStep({
-  id: "improveResponse",
+  id: 'improveResponse',
   execute: async ({ context, suspend }) => {
     // Another condition for suspension
     if (needFurtherRefinement) {
       await suspend();
       return { improvedOutput: context.refinedOutput };
     }
-    return { improvedOutput: "Improved output" };
+    return { improvedOutput: 'Improved output' };
   },
   outputSchema: z.object({ improvedOutput: z.string() }),
 });
 
 // Build the workflow
 const workflow = new LegacyWorkflow({
-  name: "multi-suspend-workflow",
+  name: 'multi-suspend-workflow',
   triggerSchema: z.object({ input: z.string() }),
 });
 
@@ -120,43 +120,42 @@ export const mastra = new Mastra({
 
 ```typescript
 // Get the workflow and create a run
-const wf = mastra.legacy_getWorkflow("multi-suspend-workflow");
+const wf = mastra.legacy_getWorkflow('multi-suspend-workflow');
 const run = wf.createRun();
 
 // Start the workflow
 const initialResult = await run.start({
-  triggerData: { input: "initial input" },
+  triggerData: { input: 'initial input' },
 });
 
-let promptAgentStepResult = initialResult.activePaths.get("promptAgent");
+let promptAgentStepResult = initialResult.activePaths.get('promptAgent');
 let promptAgentResumeResult = undefined;
 
 // Check if a step is suspended
-if (promptAgentStepResult?.status === "suspended") {
-  console.log("Workflow suspended at promptAgent step");
+if (promptAgentStepResult?.status === 'suspended') {
+  console.log('Workflow suspended at promptAgent step');
 
   // Resume the workflow with new context
   const resumeResult = await run.resume({
-    stepId: "promptAgent",
-    context: { userInput: "Human provided input" },
+    stepId: 'promptAgent',
+    context: { userInput: 'Human provided input' },
   });
 
   promptAgentResumeResult = resumeResult;
 }
 
-const improveResponseStepResult =
-  promptAgentResumeResult?.activePaths.get("improveResponse");
+const improveResponseStepResult = promptAgentResumeResult?.activePaths.get('improveResponse');
 
-if (improveResponseStepResult?.status === "suspended") {
-  console.log("Workflow suspended at improveResponse step");
+if (improveResponseStepResult?.status === 'suspended') {
+  console.log('Workflow suspended at improveResponse step');
 
   // Resume again with different context
   const finalResult = await run.resume({
-    stepId: "improveResponse",
-    context: { refinedOutput: "Human refined output" },
+    stepId: 'improveResponse',
+    context: { refinedOutput: 'Human refined output' },
   });
 
-  console.log("Workflow completed:", finalResult?.results);
+  console.log('Workflow completed:', finalResult?.results);
 }
 ```
 
@@ -179,13 +178,13 @@ Here's how it works:
 ```typescript
 // Define steps
 const getUserInput = new LegacyStep({
-  id: "getUserInput",
-  execute: async () => ({ userInput: "initial input" }),
+  id: 'getUserInput',
+  execute: async () => ({ userInput: 'initial input' }),
   outputSchema: z.object({ userInput: z.string() }),
 });
 
 const processApproval = new LegacyStep({
-  id: "processApproval",
+  id: 'processApproval',
   execute: async ({ context }) => {
     // Access the event data from the context
     const approvalData = context.inputData?.resumedEvent;
@@ -202,7 +201,7 @@ const processApproval = new LegacyStep({
 
 // Create workflow with event definition
 const approvalWorkflow = new LegacyWorkflow({
-  name: "approval-workflow",
+  name: 'approval-workflow',
   triggerSchema: z.object({ requestId: z.string() }),
   events: {
     approvalReceived: {
@@ -217,7 +216,7 @@ const approvalWorkflow = new LegacyWorkflow({
 // Build workflow with event-based suspension
 approvalWorkflow
   .step(getUserInput)
-  .afterEvent("approvalReceived") // Workflow will automatically suspend here
+  .afterEvent('approvalReceived') // Workflow will automatically suspend here
   .step(processApproval) // This step runs after the event is received
   .commit();
 ```
@@ -226,15 +225,15 @@ approvalWorkflow
 
 ```typescript
 // Get the workflow
-const workflow = mastra.legacy_getWorkflow("approval-workflow");
+const workflow = mastra.legacy_getWorkflow('approval-workflow');
 const run = workflow.createRun();
 
 // Start the workflow
 const initialResult = await run.start({
-  triggerData: { requestId: "request-123" },
+  triggerData: { requestId: 'request-123' },
 });
 
-console.log("Workflow started, waiting for approval event");
+console.log('Workflow started, waiting for approval event');
 console.log(initialResult.results);
 // Output will show the workflow is suspended at the event step:
 // {
@@ -243,12 +242,12 @@ console.log(initialResult.results);
 // }
 
 // Later, when the approval event occurs:
-const resumeResult = await run.resumeWithEvent("approvalReceived", {
+const resumeResult = await run.resumeWithEvent('approvalReceived', {
   approved: true,
-  approverName: "Jane Doe",
+  approverName: 'Jane Doe',
 });
 
-console.log("Workflow resumed with event data:", resumeResult.results);
+console.log('Workflow resumed with event data:', resumeResult.results);
 // Output will show the completed workflow:
 // {
 //   getUserInput: { status: 'success', output: { userInput: 'initial input' } },
@@ -282,12 +281,12 @@ When a workflow is suspended using `await suspend()`, Mastra automatically persi
 By default, Mastra uses LibSQL as its storage engine:
 
 ```typescript
-import { Mastra } from "@mastra/core/mastra";
-import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from '@mastra/core/mastra';
+import { LibSQLStore } from '@mastra/libsql';
 
 const mastra = new Mastra({
   storage: new LibSQLStore({
-    url: "file:./storage.db", // Local file-based database for development
+    url: 'file:./storage.db', // Local file-based database for development
     // For production, use a persistent URL:
     // url: process.env.DATABASE_URL,
     // authToken: process.env.DATABASE_AUTH_TOKEN, // Optional for authenticated connections
@@ -312,8 +311,8 @@ npm install @mastra/upstash@latest
 ```
 
 ```typescript
-import { Mastra } from "@mastra/core/mastra";
-import { UpstashStore } from "@mastra/upstash";
+import { Mastra } from '@mastra/core/mastra';
+import { UpstashStore } from '@mastra/upstash';
 
 const mastra = new Mastra({
   storage: new UpstashStore({
@@ -335,21 +334,21 @@ const mastra = new Mastra({
 To handle suspended workflows, use the `watch` method to monitor workflow status per run and `resume` to continue execution:
 
 ```typescript
-import { mastra } from "./index";
+import { mastra } from './index';
 
 // Get the workflow
-const myWorkflow = mastra.legacy_getWorkflow("myWorkflow");
+const myWorkflow = mastra.legacy_getWorkflow('myWorkflow');
 const { start, watch, resume } = myWorkflow.createRun();
 
 // Start watching the workflow before executing it
 watch(async ({ activePaths }) => {
-  const isStepTwoSuspended = activePaths.get("stepTwo")?.status === "suspended";
+  const isStepTwoSuspended = activePaths.get('stepTwo')?.status === 'suspended';
   if (isStepTwoSuspended) {
-    console.log("Workflow suspended, resuming with new value");
+    console.log('Workflow suspended, resuming with new value');
 
     // Resume the workflow with new context
     await resume({
-      stepId: "stepTwo",
+      stepId: 'stepTwo',
       context: { secondValue: 100 },
     });
   }
@@ -368,37 +367,36 @@ const { start, watch, resumeWithEvent } = workflow.createRun();
 
 // Watch for suspended event steps
 watch(async ({ activePaths }) => {
-  const isApprovalReceivedSuspended =
-    activePaths.get("__approvalReceived_event")?.status === "suspended";
+  const isApprovalReceivedSuspended = activePaths.get('__approvalReceived_event')?.status === 'suspended';
   if (isApprovalReceivedSuspended) {
-    console.log("Workflow waiting for approval event");
+    console.log('Workflow waiting for approval event');
 
     // In a real scenario, you would wait for the actual event to occur
     // For example, this could be triggered by a webhook or user interaction
     setTimeout(async () => {
-      await resumeWithEvent("approvalReceived", {
+      await resumeWithEvent('approvalReceived', {
         approved: true,
-        approverName: "Auto Approver",
+        approverName: 'Auto Approver',
       });
     }, 5000); // Simulate event after 5 seconds
   }
 });
 
 // Start the workflow
-await start({ triggerData: { requestId: "auto-123" } });
+await start({ triggerData: { requestId: 'auto-123' } });
 ```
 
 ## Further Reading
 
 For a deeper understanding of how suspend and resume works under the hood:
 
-- [Understanding Snapshots in Mastra Workflows](../../reference/legacyWorkflows/snapshots.md) - Learn about the snapshot mechanism that powers suspend and resume functionality
-- [Step Configuration Guide](./steps.md) - Learn more about configuring steps in your workflows
-- [Control Flow Guide](./control-flow.md) - Advanced workflow control patterns
-- [Event-Driven Workflows](../../reference/legacyWorkflows/events.md) - Detailed reference for event-based workflows
+- [Understanding Snapshots in Mastra Workflows](../../reference/legacyWorkflows/snapshots) - Learn about the snapshot mechanism that powers suspend and resume functionality
+- [Step Configuration Guide](./steps) - Learn more about configuring steps in your workflows
+- [Control Flow Guide](./control-flow) - Advanced workflow control patterns
+- [Event-Driven Workflows](../../reference/legacyWorkflows/events) - Detailed reference for event-based workflows
 
 ## Related Resources
 
-- See the [Suspend and Resume Example](../../examples/workflows_legacy/suspend-and-resume.md) for a complete working example
-- Check the [Step Class Reference](../../reference/legacyWorkflows/step-class.md) for suspend/resume API details
-- Review [Workflow Observability](../../reference/observability/otel-config.md) for monitoring suspended workflows
+- See the [Suspend and Resume Example](../../examples/workflows_legacy/suspend-and-resume) for a complete working example
+- Check the [Step Class Reference](../../reference/legacyWorkflows/step-class) for suspend/resume API details
+- Review [Workflow Observability](../../reference/observability/otel-config) for monitoring suspended workflows

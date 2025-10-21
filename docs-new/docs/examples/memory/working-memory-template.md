@@ -1,5 +1,5 @@
 ---
-title: "Working Memory with Template "
+title: 'Working Memory with Template '
 description: Example showing how to use Markdown template to structure working memory data.
 ---
 
@@ -38,13 +38,13 @@ Providing a `template` helps define the structure of what should be remembered. 
 Threads group related messages into conversations. When `generateTitle` is enabled, each thread is automatically given a descriptive name based on its content.
 
 ```typescript filename="src/mastra/agents/example-working-memory-template-agent.ts" showLineNumbers copy
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { LibSQLStore } from "@mastra/libsql";
+import { Memory } from '@mastra/memory';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { LibSQLStore } from '@mastra/libsql';
 
 export const workingMemoryTemplateAgent = new Agent({
-  name: "working-memory-template-agent",
+  name: 'working-memory-template-agent',
   instructions: `
     You are a todo list AI agent.
     Always show the current list when starting a conversation.
@@ -53,10 +53,10 @@ export const workingMemoryTemplateAgent = new Agent({
     Support subtasks with bullet points.
     Ask for time estimates to help with timeboxing.
   `,
-  model: openai("gpt-4o"),
+  model: openai('gpt-4o'),
   memory: new Memory({
     storage: new LibSQLStore({
-      url: "file:working-memory-template.db"
+      url: 'file:working-memory-template.db',
     }),
     options: {
       workingMemory: {
@@ -71,13 +71,13 @@ export const workingMemoryTemplateAgent = new Agent({
             - Estimated Time: 2 hours
 
           ## Completed Items
-          - None yet`
+          - None yet`,
       },
       threads: {
-        generateTitle: true
-      }
-    }
-  })
+        generateTitle: true,
+      },
+    },
+  }),
 });
 ```
 
@@ -90,21 +90,24 @@ This example shows how to interact with an agent that uses a working memory temp
 This example sends a message to the agent with a new task. The response is streamed and includes the updated todo list.
 
 ```typescript filename="src/test-working-memory-template-agent.ts" showLineNumbers copy
-import "dotenv/config";
+import 'dotenv/config';
 
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const threadId = "123";
-const resourceId = "user-456";
+const threadId = '123';
+const resourceId = 'user-456';
 
-const agent = mastra.getAgent("workingMemoryTemplateAgent");
+const agent = mastra.getAgent('workingMemoryTemplateAgent');
 
-const stream = await agent.stream("Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.", {
-  memory: {
-    thread: threadId,
-    resource: resourceId
-  }
-});
+const stream = await agent.stream(
+  'Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.',
+  {
+    memory: {
+      thread: threadId,
+      resource: resourceId,
+    },
+  },
+);
 
 for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
@@ -116,21 +119,24 @@ for await (const chunk of stream.textStream) {
 This example sends a message to the agent with a new task. The response is returned as a single message and includes the updated todo list.
 
 ```typescript filename="src/test-working-memory-template-agent.ts" showLineNumbers copy
-import "dotenv/config";
+import 'dotenv/config';
 
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const threadId = "123";
-const resourceId = "user-456";
+const threadId = '123';
+const resourceId = 'user-456';
 
-const agent = mastra.getAgent("workingMemoryTemplateAgent");
+const agent = mastra.getAgent('workingMemoryTemplateAgent');
 
-const response = await agent.generate("Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.", {
-  memory: {
-    thread: threadId,
-    resource: resourceId
-  }
-});
+const response = await agent.generate(
+  'Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.',
+  {
+    memory: {
+      thread: threadId,
+      resource: resourceId,
+    },
+  },
+);
 
 console.log(response.text);
 ```
@@ -164,14 +170,14 @@ Working memory stores data in `.json` format, which would look similar to the be
       // ...
       "args": {
         "memory": "# Todo List\n## Active Items\n- Task 1: Build a new feature for our app\n  - Due: Next Friday\n  - Description: Build a new feature for our app\n  - Status: Not Started\n  - Estimated Time: 2 hours\n\n## Completed Items\n- None yet"
-      },
+      }
     }
-  ],
+  ]
 }
 ```
 
 ## Related
 
-- [Calling Agents](../agents/calling-agents.mdx#from-the-command-line)
-- [Agent Memory](../../docs/agents/agent-memory.md)
-- [Serverless Deployment](../../docs/deployment/server-deployment.mdx#libsqlstore)
+- [Calling Agents](../agents/calling-agents#from-the-command-line)
+- [Agent Memory](../../docs/agents/agent-memory)
+- [Serverless Deployment](../../docs/deployment/server-deployment#libsqlstore)

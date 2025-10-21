@@ -1,6 +1,6 @@
 ---
-title: "Semantic Recall "
-description: "Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings."
+title: 'Semantic Recall '
+description: 'Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings.'
 ---
 
 # Semantic Recall
@@ -11,7 +11,7 @@ If you ask your friend what they did last weekend, they will search in their mem
 
 ## How Semantic Recall Works
 
-Semantic recall is RAG-based search that helps agents maintain context across longer interactions when messages are no longer within [recent conversation history](./overview.mdx#conversation-history).
+Semantic recall is RAG-based search that helps agents maintain context across longer interactions when messages are no longer within [recent conversation history](./overview#conversation-history).
 
 It uses vector embeddings of messages for similarity search, integrates with various vector stores, and has configurable context windows around retrieved messages.
 
@@ -31,14 +31,14 @@ After getting a response from the LLM, all new messages (user, assistant, and to
 Semantic recall is enabled by default, so if you give your agent memory it will be included:
 
 ```typescript {9}
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
-  name: "SupportAgent",
-  instructions: "You are a helpful support agent.",
-  model: openai("gpt-4o"),
+  name: 'SupportAgent',
+  instructions: 'You are a helpful support agent.',
+  model: openai('gpt-4o'),
   memory: new Memory(),
 });
 ```
@@ -72,19 +72,19 @@ Note: currently, `scope: 'resource'` for semantic recall is supported by the fol
 Semantic recall relies on a [storage and vector db](/reference/memory/Memory#parameters) to store messages and their embeddings.
 
 ```ts {8-17}
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+import { Memory } from '@mastra/memory';
+import { Agent } from '@mastra/core/agent';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 
 const agent = new Agent({
   memory: new Memory({
     // this is the default storage db if omitted
     storage: new LibSQLStore({
-      url: "file:./local.db",
+      url: 'file:./local.db',
     }),
     // this is the default vector db if omitted
     vector: new LibSQLVector({
-      connectionUrl: "file:./local.db",
+      connectionUrl: 'file:./local.db',
     }),
   }),
 });
@@ -109,9 +109,9 @@ npm install @mastra/fastembed
 Then configure it in your memory:
 
 ```ts {3,8}
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { fastembed } from "@mastra/fastembed";
+import { Memory } from '@mastra/memory';
+import { Agent } from '@mastra/core/agent';
+import { fastembed } from '@mastra/fastembed';
 
 const agent = new Agent({
   memory: new Memory({
@@ -124,14 +124,14 @@ const agent = new Agent({
 Alternatively, use a different provider like OpenAI:
 
 ```ts {3,8}
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
+import { Memory } from '@mastra/memory';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
   memory: new Memory({
     // ... other memory options
-    embedder: openai.embedding("text-embedding-3-small"),
+    embedder: openai.embedding('text-embedding-3-small'),
   }),
 });
 ```
@@ -143,8 +143,8 @@ When using PostgreSQL as your vector store, you can optimize semantic recall per
 PostgreSQL supports both IVFFlat and HNSW indexes. By default, Mastra creates an IVFFlat index, but HNSW indexes typically provide better performance, especially with OpenAI embeddings which use inner product distance.
 
 ```typescript {9-18}
-import { Memory } from "@mastra/memory";
-import { PgStore, PgVector } from "@mastra/pg";
+import { Memory } from '@mastra/memory';
+import { PgStore, PgVector } from '@mastra/pg';
 
 const agent = new Agent({
   memory: new Memory({
@@ -159,10 +159,10 @@ const agent = new Agent({
         topK: 5,
         messageRange: 2,
         indexConfig: {
-          type: 'hnsw',           // Use HNSW for better performance
-          metric: 'dotproduct',   // Best for OpenAI embeddings  
-          m: 16,                  // Number of bi-directional links (default: 16)
-          efConstruction: 64,    // Size of candidate list during construction (default: 64)
+          type: 'hnsw', // Use HNSW for better performance
+          metric: 'dotproduct', // Best for OpenAI embeddings
+          m: 16, // Number of bi-directional links (default: 16)
+          efConstruction: 64, // Size of candidate list during construction (default: 64)
         },
       },
     },
@@ -197,4 +197,4 @@ You might want to disable semantic recall in scenarios like:
 
 When tracing is enabled, any messages retrieved via semantic recall will appear in the agent’s trace output, alongside recent conversation history (if configured).
 
-For more info on viewing message traces, see [Viewing Retrieved Messages](./overview.mdx#viewing-retrieved-messages).
+For more info on viewing message traces, see [Viewing Retrieved Messages](./overview#viewing-retrieved-messages).

@@ -1,8 +1,7 @@
 ---
-title: "Faithfulness "
+title: 'Faithfulness '
 description: Example of using the Faithfulness scorer to evaluate how factually accurate responses are compared to context.
 ---
-
 
 # Faithfulness Scorer
 
@@ -140,7 +139,8 @@ const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options:
   scale: 1
 });
 ```
-> See [FaithfulnessScorer](/reference/scorers/faithfulness.md) for a full list of configuration options.
+
+> See [FaithfulnessScorer](/reference/scorers/faithfulness) for a full list of configuration options.
 
 ## Understanding the results
 
@@ -162,6 +162,7 @@ const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options:
 ```
 
 ### score
+
 A faithfulness score between 0 and 1:
 
 - **1.0**: All claims are accurate and directly supported by the context.
@@ -171,25 +172,33 @@ A faithfulness score between 0 and 1:
 - **0.0**: All claims are false or contradict the context.
 
 ### runId
+
 The unique identifier for this scorer run.
 
 ### extractStepResult
+
 Array of extracted claims from the output.
 
 ### extractPrompt
+
 The prompt sent to the LLM for the extract step.
 
 ### analyzeStepResult
+
 Object with verdicts for each claim:
+
 - **verdicts**: Array of objects with `verdict` ('yes', 'no', or 'unsure') and a `reason` for each claim.
 
 ### analyzePrompt
+
 The prompt sent to the LLM for the analyze step.
 
 ### reasonPrompt
+
 The prompt sent to the LLM for the reason step.
 
 ### reason
+
 A detailed explanation of the score, including which claims were supported, contradicted, or marked as unsure.
 
 <GithubLink

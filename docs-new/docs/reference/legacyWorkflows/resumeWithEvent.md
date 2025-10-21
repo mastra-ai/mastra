@@ -1,6 +1,6 @@
 ---
-title: ".resumeWithEvent() Method "
-description: "Reference for the resumeWithEvent method that resumes suspended workflows using event data."
+title: '.resumeWithEvent() Method '
+description: 'Reference for the resumeWithEvent method that resumes suspended workflows using event data.'
 ---
 
 # resumeWithEvent()
@@ -58,17 +58,17 @@ This method is part of Mastra's event-driven workflow capabilities, allowing you
 
 ```typescript
 // Define and start a workflow
-const workflow = mastra.legacy_getWorkflow("approval-workflow");
+const workflow = mastra.legacy_getWorkflow('approval-workflow');
 const run = workflow.createRun();
 
 // Start the workflow
-await run.start({ triggerData: { requestId: "req-123" } });
+await run.start({ triggerData: { requestId: 'req-123' } });
 
 // Later, when the approval event occurs:
-const result = await run.resumeWithEvent("approval", {
+const result = await run.resumeWithEvent('approval', {
   approved: true,
-  approverName: "John Doe",
-  comment: "Looks good to me!",
+  approverName: 'John Doe',
+  comment: 'Looks good to me!',
 });
 
 console.log(result.results);
@@ -78,15 +78,15 @@ console.log(result.results);
 
 ```typescript
 try {
-  const result = await run.resumeWithEvent("paymentReceived", {
+  const result = await run.resumeWithEvent('paymentReceived', {
     amount: 100.5,
-    transactionId: "tx-456",
-    paymentMethod: "credit-card",
+    transactionId: 'tx-456',
+    paymentMethod: 'credit-card',
   });
 
-  console.log("Workflow resumed successfully:", result.results);
+  console.log('Workflow resumed successfully:', result.results);
 } catch (error) {
-  console.error("Failed to resume workflow with event:", error);
+  console.error('Failed to resume workflow with event:', error);
   // Handle error - could be invalid event data, workflow not suspended, etc.
 }
 ```
@@ -99,35 +99,34 @@ const { start, watch, resumeWithEvent } = workflow.createRun();
 
 // Watch for suspended event steps
 watch(async ({ activePaths }) => {
-  const isApprovalEventSuspended =
-    activePaths.get("__approval_event")?.status === "suspended";
+  const isApprovalEventSuspended = activePaths.get('__approval_event')?.status === 'suspended';
   // Check if suspended at the approval event step
   if (isApprovalEventSuspended) {
-    console.log("Workflow waiting for approval");
+    console.log('Workflow waiting for approval');
 
     // In a real scenario, you would wait for the actual event
     // Here we're simulating with a timeout
     setTimeout(async () => {
       try {
-        await resumeWithEvent("approval", {
+        await resumeWithEvent('approval', {
           approved: true,
-          approverName: "Auto Approver",
+          approverName: 'Auto Approver',
         });
       } catch (error) {
-        console.error("Failed to auto-resume workflow:", error);
+        console.error('Failed to auto-resume workflow:', error);
       }
     }, 5000); // Wait 5 seconds before auto-approving
   }
 });
 
 // Start the workflow
-await start({ triggerData: { requestId: "auto-123" } });
+await start({ triggerData: { requestId: 'auto-123' } });
 ```
 
 ## Related
 
-- [Event-Driven Workflows](./events.md)
-- [afterEvent()](./afterEvent.md)
-- [Suspend and Resume](../../docs/workflows-legacy/suspend-and-resume.md)
-- [resume()](./resume.md)
-- [watch()](./watch.md)
+- [Event-Driven Workflows](./events)
+- [afterEvent()](./afterEvent)
+- [Suspend and Resume](../../docs/workflows-legacy/suspend-and-resume)
+- [resume()](./resume)
+- [watch()](./watch)

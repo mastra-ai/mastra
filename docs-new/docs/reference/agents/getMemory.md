@@ -1,6 +1,6 @@
 ---
-title: "Reference: Agent.getMemory() "
-description: "Documentation for the `Agent.getMemory()` method in Mastra agents, which retrieves the memory system associated with the agent."
+title: 'Reference: Agent.getMemory() '
+description: 'Documentation for the `Agent.getMemory()` method in Mastra agents, which retrieves the memory system associated with the agent.'
 ---
 
 # Agent.getMemory()
@@ -16,52 +16,52 @@ await agent.getMemory();
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
-      isOptional: true,
-      defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
-    },
-  ]}
+content={[
+{
+name: "options",
+type: "{ runtimeContext?: RuntimeContext }",
+isOptional: true,
+defaultValue: "{}",
+description: "Optional configuration object containing runtime context.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "memory",
-      type: "Promise<MastraMemory | undefined>",
-      description: "A promise that resolves to the memory system configured for the agent, or undefined if no memory system is configured.",
-    },
-  ]}
+content={[
+{
+name: "memory",
+type: "Promise<MastraMemory | undefined>",
+description: "A promise that resolves to the memory system configured for the agent, or undefined if no memory system is configured.",
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript copy
 await agent.getMemory({
-  runtimeContext: new RuntimeContext()
+  runtimeContext: new RuntimeContext(),
 });
 ```
 
 ### Options parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      isOptional: true,
-      defaultValue: "new RuntimeContext()",
-      description: "Runtime context for dependency injection and contextual information.",
-    },
-  ]}
+content={[
+{
+name: "runtimeContext",
+type: "RuntimeContext",
+isOptional: true,
+defaultValue: "new RuntimeContext()",
+description: "Runtime context for dependency injection and contextual information.",
+},
+]}
 />
 
 ## Related
 
-- [Agent memory](../../docs/agents/agent-memory.md)
-- [Agent Runtime Context](../../docs/agents/runtime-context.md)
+- [Agent memory](../../docs/agents/agent-memory)
+- [Agent Runtime Context](../../docs/agents/runtime-context)

@@ -1,5 +1,5 @@
 ---
-title: "Reference: createVectorQueryTool() "
+title: 'Reference: createVectorQueryTool() '
 description: Documentation for the Vector Query Tool in Mastra, which facilitates semantic search over vector stores with filtering and reranking capabilities.
 ---
 
@@ -13,13 +13,13 @@ The `createVectorQueryTool()` function creates a tool for semantic search over v
 ## Basic Usage
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { createVectorQueryTool } from "@mastra/rag";
+import { openai } from '@ai-sdk/openai';
+import { createVectorQueryTool } from '@mastra/rag';
 
 const queryTool = createVectorQueryTool({
-  vectorStoreName: "pinecone",
-  indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'pinecone',
+  indexName: 'docs',
+  model: openai.embedding('text-embedding-3-small'),
 });
 ```
 
@@ -27,97 +27,97 @@ const queryTool = createVectorQueryTool({
 
 :::note
 
-  **Parameter Requirements:** Most fields can be set at creation as defaults.
-  Some fields can be overridden at runtime via the runtime context or input. If
-  a required field is missing from both creation and runtime, an error will be
-  thrown. Note that `model`, `id`, and `description` can only be set at creation
-  time.
+**Parameter Requirements:** Most fields can be set at creation as defaults.
+Some fields can be overridden at runtime via the runtime context or input. If
+a required field is missing from both creation and runtime, an error will be
+thrown. Note that `model`, `id`, and `description` can only be set at creation
+time.
 
 :::
 
 <PropertiesTable
-  content={[
-    {
-      name: "id",
-      type: "string",
-      description:
-        "Custom ID for the tool. By default: 'VectorQuery {vectorStoreName} {indexName} Tool'. (Set at creation only.)",
-      isOptional: true,
-    },
-    {
-      name: "description",
-      type: "string",
-      description:
-        "Custom description for the tool. By default: 'Access the knowledge base to find information needed to answer user questions' (Set at creation only.)",
-      isOptional: true,
-    },
-    {
-      name: "model",
-      type: "EmbeddingModel",
-      description:
-        "Embedding model to use for vector search. (Set at creation only.)",
-      isOptional: false,
-    },
-    {
-      name: "vectorStoreName",
-      type: "string",
-      description:
-        "Name of the vector store to query. (Can be set at creation or overridden at runtime.)",
-      isOptional: false,
-    },
-    {
-      name: "indexName",
-      type: "string",
-      description:
-        "Name of the index within the vector store. (Can be set at creation or overridden at runtime.)",
-      isOptional: false,
-    },
-    {
-      name: "enableFilter",
-      type: "boolean",
-      description:
-        "Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the runtime context.)",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "includeVectors",
-      type: "boolean",
-      description:
-        "Include the embedding vectors in the results. (Can be set at creation or overridden at runtime.)",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "includeSources",
-      type: "boolean",
-      description:
-        "Include the full retrieval objects in the results. (Can be set at creation or overridden at runtime.)",
-      isOptional: true,
-      defaultValue: "true",
-    },
-    {
-      name: "reranker",
-      type: "RerankConfig",
-      description:
-        "Options for reranking results. (Can be set at creation or overridden at runtime.)",
-      isOptional: true,
-    },
-    {
-      name: "databaseConfig",
-      type: "DatabaseConfig",
-      description:
-        "Database-specific configuration options for optimizing queries. (Can be set at creation or overridden at runtime.)",
-      isOptional: true,
-    },
-    {
-      name: "providerOptions",
-      type: "Record<string, Record<string, any>>",
-      description:
-        "Provider-specific options for the embedding model (e.g., outputDimensionality). **Important**: Only works with AI SDK EmbeddingModelV2 models. For V1 models, configure options when creating the model itself.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "id",
+type: "string",
+description:
+"Custom ID for the tool. By default: 'VectorQuery {vectorStoreName} {indexName} Tool'. (Set at creation only.)",
+isOptional: true,
+},
+{
+name: "description",
+type: "string",
+description:
+"Custom description for the tool. By default: 'Access the knowledge base to find information needed to answer user questions' (Set at creation only.)",
+isOptional: true,
+},
+{
+name: "model",
+type: "EmbeddingModel",
+description:
+"Embedding model to use for vector search. (Set at creation only.)",
+isOptional: false,
+},
+{
+name: "vectorStoreName",
+type: "string",
+description:
+"Name of the vector store to query. (Can be set at creation or overridden at runtime.)",
+isOptional: false,
+},
+{
+name: "indexName",
+type: "string",
+description:
+"Name of the index within the vector store. (Can be set at creation or overridden at runtime.)",
+isOptional: false,
+},
+{
+name: "enableFilter",
+type: "boolean",
+description:
+"Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the runtime context.)",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "includeVectors",
+type: "boolean",
+description:
+"Include the embedding vectors in the results. (Can be set at creation or overridden at runtime.)",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "includeSources",
+type: "boolean",
+description:
+"Include the full retrieval objects in the results. (Can be set at creation or overridden at runtime.)",
+isOptional: true,
+defaultValue: "true",
+},
+{
+name: "reranker",
+type: "RerankConfig",
+description:
+"Options for reranking results. (Can be set at creation or overridden at runtime.)",
+isOptional: true,
+},
+{
+name: "databaseConfig",
+type: "DatabaseConfig",
+description:
+"Database-specific configuration options for optimizing queries. (Can be set at creation or overridden at runtime.)",
+isOptional: true,
+},
+{
+name: "providerOptions",
+type: "Record<string, Record<string, any>>",
+description:
+"Provider-specific options for the embedding model (e.g., outputDimensionality). **Important**: Only works with AI SDK EmbeddingModelV2 models. For V1 models, configure options when creating the model itself.",
+isOptional: true,
+},
+]}
 />
 
 ### DatabaseConfig
@@ -125,129 +125,129 @@ const queryTool = createVectorQueryTool({
 The `DatabaseConfig` type allows you to specify database-specific configurations that are automatically applied to query operations. This enables you to take advantage of unique features and optimizations offered by different vector stores.
 
 <PropertiesTable
-  content={[
-    {
-      name: "pinecone",
-      type: "PineconeConfig",
-      description: "Configuration specific to Pinecone vector store",
-      isOptional: true,
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "namespace",
-              description: "Pinecone namespace for organizing vectors",
-              isOptional: true,
-              type: "string",
-            },
-            {
-              name: "sparseVector",
-              description: "Sparse vector for hybrid search",
-              isOptional: true,
-              type: "{ indices: number[]; values: number[]; }",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "pgvector",
-      type: "PgVectorConfig",
-      description: "Configuration specific to PostgreSQL with pgvector extension",
-      isOptional: true,
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "minScore",
-              description: "Minimum similarity score threshold for results",
-              isOptional: true,
-              type: "number",
-            },
-            {
-              name: "ef",
-              description: "HNSW search parameter - controls accuracy vs speed tradeoff",
-              isOptional: true,
-              type: "number",
-            },
-            {
-              name: "probes",
-              description: "IVFFlat probe parameter - number of cells to visit during search",
-              isOptional: true,
-              type: "number",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "chroma",
-      type: "ChromaConfig",
-      description: "Configuration specific to Chroma vector store",
-      isOptional: true,
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "where",
-              description: "Metadata filtering conditions",
-              isOptional: true,
-              type: "Record<string, any>",
-            },
-            {
-              name: "whereDocument",
-              description: "Document content filtering conditions",
-              isOptional: true,
-              type: "Record<string, any>",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "pinecone",
+type: "PineconeConfig",
+description: "Configuration specific to Pinecone vector store",
+isOptional: true,
+properties: [
+{
+type: "object",
+parameters: [
+{
+name: "namespace",
+description: "Pinecone namespace for organizing vectors",
+isOptional: true,
+type: "string",
+},
+{
+name: "sparseVector",
+description: "Sparse vector for hybrid search",
+isOptional: true,
+type: "{ indices: number[]; values: number[]; }",
+},
+],
+},
+],
+},
+{
+name: "pgvector",
+type: "PgVectorConfig",
+description: "Configuration specific to PostgreSQL with pgvector extension",
+isOptional: true,
+properties: [
+{
+type: "object",
+parameters: [
+{
+name: "minScore",
+description: "Minimum similarity score threshold for results",
+isOptional: true,
+type: "number",
+},
+{
+name: "ef",
+description: "HNSW search parameter - controls accuracy vs speed tradeoff",
+isOptional: true,
+type: "number",
+},
+{
+name: "probes",
+description: "IVFFlat probe parameter - number of cells to visit during search",
+isOptional: true,
+type: "number",
+},
+],
+},
+],
+},
+{
+name: "chroma",
+type: "ChromaConfig",
+description: "Configuration specific to Chroma vector store",
+isOptional: true,
+properties: [
+{
+type: "object",
+parameters: [
+{
+name: "where",
+description: "Metadata filtering conditions",
+isOptional: true,
+type: "Record<string, any>",
+},
+{
+name: "whereDocument",
+description: "Document content filtering conditions",
+isOptional: true,
+type: "Record<string, any>",
+},
+],
+},
+],
+},
+]}
 />
 
 ### RerankConfig
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "MastraLanguageModel",
-      description: "Language model to use for reranking",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "RerankerOptions",
-      description: "Options for the reranking process",
-      isOptional: true,
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "weights",
-              description:
-                "Weights for scoring components (semantic: 0.4, vector: 0.4, position: 0.2)",
-              isOptional: true,
-              type: "WeightConfig",
-            },
-            {
-              name: "topK",
-              description: "Number of top results to return",
-              isOptional: true,
-              type: "number",
-              defaultValue: "3",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "MastraLanguageModel",
+description: "Language model to use for reranking",
+isOptional: false,
+},
+{
+name: "options",
+type: "RerankerOptions",
+description: "Options for the reranking process",
+isOptional: true,
+properties: [
+{
+type: "object",
+parameters: [
+{
+name: "weights",
+description:
+"Weights for scoring components (semantic: 0.4, vector: 0.4, position: 0.2)",
+isOptional: true,
+type: "WeightConfig",
+},
+{
+name: "topK",
+description: "Number of top results to return",
+isOptional: true,
+type: "number",
+defaultValue: "3",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Returns
@@ -255,19 +255,19 @@ The `DatabaseConfig` type allows you to specify database-specific configurations
 The tool returns an object with:
 
 <PropertiesTable
-  content={[
-    {
-      name: "relevantContext",
-      type: "string",
-      description: "Combined text from the most relevant document chunks",
-    },
-    {
-      name: "sources",
-      type: "QueryResult[]",
-      description:
-        "Array of full retrieval result objects. Each object contains all information needed to reference the original document, chunk, and similarity score.",
-    },
-  ]}
+content={[
+{
+name: "relevantContext",
+type: "string",
+description: "Combined text from the most relevant document chunks",
+},
+{
+name: "sources",
+type: "QueryResult[]",
+description:
+"Array of full retrieval result objects. Each object contains all information needed to reference the original document, chunk, and similarity score.",
+},
+]}
 />
 
 ### QueryResult object structure
@@ -298,9 +298,9 @@ The tool determines the number of results to return based on the user's query, w
 
 ```typescript
 const queryTool = createVectorQueryTool({
-  vectorStoreName: "pinecone",
-  indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'pinecone',
+  indexName: 'docs',
+  model: openai.embedding('text-embedding-3-small'),
   enableFilter: true,
 });
 ```
@@ -323,17 +323,17 @@ This agent-driven approach:
 
 For detailed filter syntax and store-specific capabilities, see the [Metadata Filters](../rag/metadata-filters) documentation.
 
-For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](../../../examples/rag/usage/filter-rag.md) example.
+For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](../../../examples/rag/usage/filter-rag) example.
 
 ## Example with Reranking
 
 ```typescript
 const queryTool = createVectorQueryTool({
-  vectorStoreName: "milvus",
-  indexName: "documentation",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'milvus',
+  indexName: 'documentation',
+  model: openai.embedding('text-embedding-3-small'),
   reranker: {
-    model: openai("gpt-4o-mini"),
+    model: openai('gpt-4o-mini'),
     options: {
       weights: {
         semantic: 0.5, // Semantic relevance weight
@@ -359,11 +359,11 @@ The reranker processes the initial vector search results and returns a reordered
 
 ```typescript
 const queryTool = createVectorQueryTool({
-  vectorStoreName: "pinecone",
-  indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'pinecone',
+  indexName: 'docs',
+  model: openai.embedding('text-embedding-3-small'),
   description:
-    "Search through document archives to find relevant information for answering questions about company policies and procedures",
+    'Search through document archives to find relevant information for answering questions about company policies and procedures',
 });
 ```
 
@@ -399,6 +399,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     - **Namespace**: Isolate different data sets within the same index
     - **Sparse Vector**: Combine dense and sparse embeddings for improved search quality
     - **Use Cases**: Multi-tenant applications, hybrid semantic search
+
   </TabItem>
 
   <TabItem value="pgvector-configuration" label="pgVector Configuration">
@@ -424,6 +425,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     - **ef (HNSW)**: Control accuracy vs speed for HNSW indexes
     - **probes (IVFFlat)**: Control recall vs speed for IVFFlat indexes
     - **Use Cases**: Performance tuning, quality filtering
+
   </TabItem>
 
   <TabItem value="chroma-configuration" label="Chroma Configuration">
@@ -452,6 +454,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     - **where**: Filter by metadata fields
     - **whereDocument**: Filter by document content
     - **Use Cases**: Advanced filtering, content-based search
+
   </TabItem>
 
   <TabItem value="multiple-database-configurations" label="Multiple Database Configurations">
@@ -482,6 +485,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     - Support multiple vector stores with one tool
     - Database-specific optimizations are automatically applied
     - Flexible deployment scenarios
+
   </TabItem>
 </Tabs>
 
@@ -493,31 +497,29 @@ You can override database configurations at runtime to adapt to different scenar
 import { RuntimeContext } from '@mastra/core/runtime-context';
 
 const queryTool = createVectorQueryTool({
-  vectorStoreName: "pinecone",
-  indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'pinecone',
+  indexName: 'docs',
+  model: openai.embedding('text-embedding-3-small'),
   databaseConfig: {
     pinecone: {
-      namespace: "development"
-    }
-  }
+      namespace: 'development',
+    },
+  },
 });
 
 // Override at runtime
 const runtimeContext = new RuntimeContext();
 runtimeContext.set('databaseConfig', {
   pinecone: {
-    namespace: 'production'  // Switch to production namespace
-  }
+    namespace: 'production', // Switch to production namespace
+  },
 });
 
-const response = await agent.generate(
-  "Find information about deployment",
-  { runtimeContext }
-);
+const response = await agent.generate('Find information about deployment', { runtimeContext });
 ```
 
 This approach allows you to:
+
 - Switch between environments (dev/staging/prod)
 - Adjust performance parameters based on load
 - Apply different filtering strategies per request
@@ -526,9 +528,9 @@ This approach allows you to:
 
 ```typescript
 const queryTool = createVectorQueryTool({
-  vectorStoreName: "pinecone",
-  indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'pinecone',
+  indexName: 'docs',
+  model: openai.embedding('text-embedding-3-small'),
 });
 ```
 
@@ -542,51 +544,49 @@ const runtimeContext = new RuntimeContext<{
   filter: VectorFilter;
   databaseConfig: DatabaseConfig;
 }>();
-runtimeContext.set("vectorStoreName", "my-store");
-runtimeContext.set("indexName", "my-index");
-runtimeContext.set("topK", 5);
-runtimeContext.set("filter", { category: "docs" });
-runtimeContext.set("databaseConfig", {
-  pinecone: { namespace: "runtime-namespace" }
+runtimeContext.set('vectorStoreName', 'my-store');
+runtimeContext.set('indexName', 'my-index');
+runtimeContext.set('topK', 5);
+runtimeContext.set('filter', { category: 'docs' });
+runtimeContext.set('databaseConfig', {
+  pinecone: { namespace: 'runtime-namespace' },
 });
-runtimeContext.set("model", openai.embedding("text-embedding-3-small"));
+runtimeContext.set('model', openai.embedding('text-embedding-3-small'));
 
-const response = await agent.generate(
-  "Find documentation from the knowledge base.",
-  {
-    runtimeContext,
-  },
-);
+const response = await agent.generate('Find documentation from the knowledge base.', {
+  runtimeContext,
+});
 ```
 
 For more information on runtime context, please see:
 
-- [Agent Runtime Context](../../docs/agents/runtime-context.md)
-- [Tool Runtime Context](../../docs/tools-mcp/runtime-context.md)
+- [Agent Runtime Context](../../docs/agents/runtime-context)
+- [Tool Runtime Context](../../docs/tools-mcp/runtime-context)
 
 ## Usage Without a Mastra Server
 
 The tool can be used by itself to retrieve documents matching a query:
+
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { openai } from "@ai-sdk/openai";
-import { RuntimeContext } from "@mastra/core/runtime-context";
-import { createVectorQueryTool } from "@mastra/rag";
-import { PgVector } from "@mastra/pg";
+import { openai } from '@ai-sdk/openai';
+import { RuntimeContext } from '@mastra/core/runtime-context';
+import { createVectorQueryTool } from '@mastra/rag';
+import { PgVector } from '@mastra/pg';
 
 const pgVector = new PgVector({
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: "pgVector", // optional since we're passing in a store
+  vectorStoreName: 'pgVector', // optional since we're passing in a store
   vectorStore: pgVector,
-  indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  indexName: 'embeddings',
+  model: openai.embedding('text-embedding-3-small'),
 });
 
 const runtimeContext = new RuntimeContext();
 const queryResult = await vectorQueryTool.execute({
-  context: { queryText: "foo", topK: 1 },
+  context: { queryText: 'foo', topK: 1 },
   runtimeContext,
 });
 

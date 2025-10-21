@@ -1,5 +1,5 @@
 ---
-title: "Reference: Workflow.then() "
+title: 'Reference: Workflow.then() '
 description: Documentation for the `.then()` method in workflows, which creates sequential dependencies between steps.
 ---
 
@@ -16,27 +16,27 @@ workflow.step(stepOne).then(stepTwo).then(stepThree);
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "step",
-      type: "Step | string",
-      description:
-        "The step instance or step ID that should execute after the previous step completes",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "step",
+type: "Step | string",
+description:
+"The step instance or step ID that should execute after the previous step completes",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "LegacyWorkflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "LegacyWorkflow",
+description: "The workflow instance for method chaining",
+},
+]}
 />
 
 ## Validation
@@ -66,7 +66,7 @@ try {
 
 ## Related
 
-- [step Reference](./step-class.md)
-- [after Reference](./after.md)
-- [Sequential Steps Example](../../examples/workflows_legacy/sequential-steps.md)
-- [Control Flow Guide](../../docs/workflows-legacy/control-flow.md)
+- [step Reference](./step-class)
+- [after Reference](./after)
+- [Sequential Steps Example](../../examples/workflows_legacy/sequential-steps)
+- [Control Flow Guide](../../docs/workflows-legacy/control-flow)

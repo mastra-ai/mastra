@@ -1,5 +1,5 @@
 ---
-title: "Runtime Context "
+title: 'Runtime Context '
 description: Learn how to use Mastra's RuntimeContext to provide dynamic, request-specific configuration to agents.
 ---
 
@@ -19,7 +19,7 @@ You can access the `runtimeContext` argument from any of the agent’s supported
 
 ```typescript {3,6,9,12} filename="src/dynamic-agent.ts" showLineNumbers copy
 export const dynamicAgent = new Agent({
-  name: "dynamic-agent",
+  name: 'dynamic-agent',
   instructions: async ({ runtimeContext }) => {
     // ...
   },
@@ -37,7 +37,7 @@ export const dynamicAgent = new Agent({
 
 You can also use `runtimeContext` with other parameters like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
 
-> See [Agent](../../reference/agents/agent.md) for a full list of configuration options.
+> See [Agent](../../reference/agents/agent) for a full list of configuration options.
 
 ## Setting values
 
@@ -51,17 +51,17 @@ The `.set()` method takes two arguments:
 After setting the values, pass the `runtimeContext` to `.generate()` or `.stream()` to make them available to the agent.
 
 ```typescript {8,11} filename="src/test-dynamic-agent.ts" showLineNumbers copy
-import { mastra } from "./mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
-import { UserTier } from "./mastra/agents/dynamic-agent"
+import { mastra } from './mastra';
+import { RuntimeContext } from '@mastra/core/runtime-context';
+import { UserTier } from './mastra/agents/dynamic-agent';
 
-const agent = mastra.getAgent("dynamicAgent");
+const agent = mastra.getAgent('dynamicAgent');
 
 const runtimeContext = new RuntimeContext<UserTier>();
-runtimeContext.set("user-tier", "enterprise");
+runtimeContext.set('user-tier', 'enterprise');
 
-const response = await agent.generate("Help plan my day.", {
-  runtimeContext
+const response = await agent.generate('Help plan my day.', {
+  runtimeContext,
 });
 ```
 
@@ -70,34 +70,32 @@ const response = await agent.generate("Help plan my day.", {
 The example below accesses a `user-tier` value from `runtimeContext` to determine which model and instructions to use. The context is typed to provide safety and autocomplete when working with `.get()` and `.set()`.
 
 ```typescript {12,19} filename="src/mastra/agents/dynamic-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 
 export type UserTier = {
-  "user-tier": "enterprise" | "pro";
+  'user-tier': 'enterprise' | 'pro';
 };
 
 export const dynamicAgent = new Agent({
-  name: "dynamic-agent",
+  name: 'dynamic-agent',
   instructions: async ({ runtimeContext }: { runtimeContext: RuntimeContext<UserTier> }) => {
-    const userTier = runtimeContext.get("user-tier");
+    const userTier = runtimeContext.get('user-tier');
 
-    const result = await db.query("SELECT instructions FROM config WHERE tier = ?", [userTier]);
+    const result = await db.query('SELECT instructions FROM config WHERE tier = ?', [userTier]);
 
     return result[0].instructions;
   },
   model: ({ runtimeContext }: { runtimeContext: RuntimeContext<UserTier> }) => {
-    const userTier = runtimeContext.get("user-tier");
+    const userTier = runtimeContext.get('user-tier');
 
-    return userTier === "enterprise"
-      ? openai("gpt-4o-mini")
-      : openai("gpt-4.1-nano");
-  }
+    return userTier === 'enterprise' ? openai('gpt-4o-mini') : openai('gpt-4.1-nano');
+  },
 });
 ```
 
 ## Related
 
-- [Tool Runtime Context](../tools-mcp/runtime-context.md)
-- [Server Middleware Runtime Context](../server-db/middleware.md)
+- [Tool Runtime Context](../tools-mcp/runtime-context)
+- [Server Middleware Runtime Context](../server-db/middleware)

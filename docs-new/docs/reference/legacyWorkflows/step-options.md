@@ -1,5 +1,5 @@
 ---
-title: "Reference: StepOptions "
+title: 'Reference: StepOptions '
 description: Documentation for the step options in workflows, which control variable mapping, execution conditions, and other runtime behavior.
 ---
 
@@ -12,12 +12,12 @@ Configuration options for workflow steps that control variable mapping, executio
 ```typescript
 workflow.step(processOrder, {
   variables: {
-    orderId: { step: "trigger", path: "id" },
-    userId: { step: "auth", path: "user.id" },
+    orderId: { step: 'trigger', path: 'id' },
+    userId: { step: 'auth', path: 'user.id' },
   },
   when: {
-    ref: { step: "auth", path: "status" },
-    query: { $eq: "authenticated" },
+    ref: { step: 'auth', path: 'status' },
+    query: { $eq: 'authenticated' },
   },
 });
 ```
@@ -25,45 +25,45 @@ workflow.step(processOrder, {
 ## Properties
 
 <PropertiesTable
-  content={[
-    {
-      name: "variables",
-      type: "Record<string, VariableRef>",
-      description: "Maps step input variables to values from other steps",
-      isOptional: true,
-    },
-    {
-      name: "when",
-      type: "StepCondition",
-      description: "Condition that must be met for step execution",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "variables",
+type: "Record<string, VariableRef>",
+description: "Maps step input variables to values from other steps",
+isOptional: true,
+},
+{
+name: "when",
+type: "StepCondition",
+description: "Condition that must be met for step execution",
+isOptional: true,
+},
+]}
 />
 
 ### VariableRef
 
 <PropertiesTable
-  content={[
-    {
-      name: "step",
-      type: "string | Step | { id: string }",
-      description: "Source step for the variable value",
-      isOptional: false,
-    },
-    {
-      name: "path",
-      type: "string",
-      description: "Path to the value in the step's output",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "step",
+type: "string | Step | { id: string }",
+description: "Source step for the variable value",
+isOptional: false,
+},
+{
+name: "path",
+type: "string",
+description: "Path to the value in the step's output",
+isOptional: false,
+},
+]}
 />
 
 ## Related
 
-- [Path Comparison](../../docs/workflows-legacy/control-flow.md)
-- [Step Function Reference](./step-function.md)
-- [Step Class Reference](./step-class.md)
-- [Workflow Class Reference](./workflow.md)
-- [Control Flow Guide](../../docs/workflows-legacy/control-flow.md)
+- [Path Comparison](../../docs/workflows-legacy/control-flow)
+- [Step Function Reference](./step-function)
+- [Step Class Reference](./step-class)
+- [Workflow Class Reference](./workflow)
+- [Control Flow Guide](../../docs/workflows-legacy/control-flow)

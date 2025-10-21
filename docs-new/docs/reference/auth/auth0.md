@@ -1,6 +1,6 @@
 ---
-title: "MastraAuthAuth0 Class"
-description: "API reference for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication."
+title: 'MastraAuthAuth0 Class'
+description: 'API reference for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication.'
 ---
 
 # MastraAuthAuth0 Class
@@ -10,7 +10,7 @@ The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It v
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
 
 export const mastra = new Mastra({
@@ -18,7 +18,7 @@ export const mastra = new Mastra({
   server: {
     experimental_auth: new MastraAuthAuth0({
       domain: process.env.AUTH0_DOMAIN,
-      audience: process.env.AUTH0_AUDIENCE
+      audience: process.env.AUTH0_AUDIENCE,
     }),
   },
 });
@@ -29,35 +29,35 @@ export const mastra = new Mastra({
 ## Constructor parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "domain",
-      type: "string",
-      description: "Your Auth0 domain (e.g., your-tenant.auth0.com). This is used to verify JWT tokens issued by your Auth0 tenant.",
-      isOptional: true,
-      defaultValue: "process.env.AUTH0_DOMAIN"
-    },
-    {
-      name: "audience",
-      type: "string",
-      description: "Your Auth0 API identifier/audience. This ensures tokens are intended for your specific API.",
-      isOptional: true,
-      defaultValue: "process.env.AUTH0_AUDIENCE"
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Custom name for the auth provider instance.",
-      isOptional: true,
-      defaultValue: '"auth0"'
-    },
-    {
-      name: "authorizeUser",
-      type: "(user: Auth0User) => Promise<boolean> | boolean",
-      description: "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users with valid tokens.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "domain",
+type: "string",
+description: "Your Auth0 domain (e.g., your-tenant.auth0.com). This is used to verify JWT tokens issued by your Auth0 tenant.",
+isOptional: true,
+defaultValue: "process.env.AUTH0_DOMAIN"
+},
+{
+name: "audience",
+type: "string",
+description: "Your Auth0 API identifier/audience. This ensures tokens are intended for your specific API.",
+isOptional: true,
+defaultValue: "process.env.AUTH0_AUDIENCE"
+},
+{
+name: "name",
+type: "string",
+description: "Custom name for the auth provider instance.",
+isOptional: true,
+defaultValue: '"auth0"'
+},
+{
+name: "authorizeUser",
+type: "(user: Auth0User) => Promise<boolean> | boolean",
+description: "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users with valid tokens.",
+isOptional: true,
+},
+]}
 />
 
 ## Environment Variables
@@ -65,20 +65,20 @@ export const mastra = new Mastra({
 The following environment variables are automatically used when constructor options are not provided:
 
 <PropertiesTable
-  content={[
-    {
-      name: "AUTH0_DOMAIN",
-      type: "string",
-      description: "Your Auth0 domain. Can be found in your Auth0 Dashboard under Applications > Settings.",
-      isOptional: true,
-    },
-    {
-      name: "AUTH0_AUDIENCE",
-      type: "string",
-      description: "Your Auth0 API identifier. This is the identifier you set when creating an API in your Auth0 Dashboard.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "AUTH0_DOMAIN",
+type: "string",
+description: "Your Auth0 domain. Can be found in your Auth0 Dashboard under Applications > Settings.",
+isOptional: true,
+},
+{
+name: "AUTH0_AUDIENCE",
+type: "string",
+description: "Your Auth0 API identifier. This is the identifier you set when creating an API in your Auth0 Dashboard.",
+isOptional: true,
+},
+]}
 />
 
 ## Default Authorization Behavior
@@ -113,5 +113,4 @@ The exact properties available depend on your Auth0 configuration, scopes reques
 
 ## Related
 
-[MastraAuthAuth0 Class](/docs/auth/auth0.md)
-
+[MastraAuthAuth0 Class](/docs/auth/auth0)

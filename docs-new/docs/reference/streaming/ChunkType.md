@@ -1,8 +1,7 @@
 ---
-title: "Reference: ChunkType "
-description: "Documentation for the ChunkType type used in Mastra streaming responses, defining all possible chunk types and their payloads."
+title: 'Reference: ChunkType '
+description: 'Documentation for the ChunkType type used in Mastra streaming responses, defining all possible chunk types and their payloads.'
 ---
-
 
 # ChunkType
 
@@ -13,32 +12,32 @@ The `ChunkType` type defines the mastra format of stream chunks that can be emit
 All chunks include these base properties:
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: "string",
-      description: "The specific chunk type identifier"
-    },
-    {
-      name: "runId",
-      type: "string",
-      description: "Unique identifier for this execution run"
-    },
-    {
-      name: "from",
-      type: "ChunkFrom",
-      description: "Source of the chunk",
-      properties: [{
-        type: "enum",
-        parameters: [
-          { name: "AGENT", type: "'AGENT'", description: "Chunk from agent execution" },
-          { name: "USER", type: "'USER'", description: "Chunk from user input" },
-          { name: "SYSTEM", type: "'SYSTEM'", description: "Chunk from system processes" },
-          { name: "WORKFLOW", type: "'WORKFLOW'", description: "Chunk from workflow execution" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: "string",
+description: "The specific chunk type identifier"
+},
+{
+name: "runId",
+type: "string",
+description: "Unique identifier for this execution run"
+},
+{
+name: "from",
+type: "ChunkFrom",
+description: "Source of the chunk",
+properties: [{
+type: "enum",
+parameters: [
+{ name: "AGENT", type: "'AGENT'", description: "Chunk from agent execution" },
+{ name: "USER", type: "'USER'", description: "Chunk from user input" },
+{ name: "SYSTEM", type: "'SYSTEM'", description: "Chunk from system processes" },
+{ name: "WORKFLOW", type: "'WORKFLOW'", description: "Chunk from workflow execution" }
+]
+}]
+}
+]}
 />
 
 ## Text Chunks
@@ -48,25 +47,25 @@ All chunks include these base properties:
 Signals the beginning of text generation.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"text-start"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "TextStartPayload",
-      description: "Text start information",
-      properties: [{
-        type: "TextStartPayload",
-        parameters: [
-          { name: "id", type: "string", description: "Unique identifier for this text generation" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"text-start"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "TextStartPayload",
+description: "Text start information",
+properties: [{
+type: "TextStartPayload",
+parameters: [
+{ name: "id", type: "string", description: "Unique identifier for this text generation" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ### text-delta
@@ -74,26 +73,26 @@ Signals the beginning of text generation.
 Incremental text content during generation.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"text-delta"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "TextDeltaPayload",
-      description: "Incremental text content",
-      properties: [{
-        type: "TextDeltaPayload",
-        parameters: [
-          { name: "id", type: "string", description: "Unique identifier for this text generation" },
-          { name: "text", type: "string", description: "The incremental text content" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"text-delta"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "TextDeltaPayload",
+description: "Incremental text content",
+properties: [{
+type: "TextDeltaPayload",
+parameters: [
+{ name: "id", type: "string", description: "Unique identifier for this text generation" },
+{ name: "text", type: "string", description: "The incremental text content" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ### text-end
@@ -101,25 +100,25 @@ Incremental text content during generation.
 Signals the end of text generation.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"text-end"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "TextEndPayload",
-      description: "Text end information",
-      properties: [{
-        type: "TextEndPayload",
-        parameters: [
-          { name: "id", type: "string", description: "Unique identifier for this text generation" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"text-end"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "TextEndPayload",
+description: "Text end information",
+properties: [{
+type: "TextEndPayload",
+parameters: [
+{ name: "id", type: "string", description: "Unique identifier for this text generation" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ## Reasoning Chunks
@@ -129,26 +128,26 @@ Signals the end of text generation.
 Signals the beginning of reasoning generation (for models that support reasoning).
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"reasoning-start"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "ReasoningStartPayload",
-      description: "Reasoning start information",
-      properties: [{
-        type: "ReasoningStartPayload",
-        parameters: [
-          { name: "id", type: "string", description: "Unique identifier for this reasoning generation" },
-          { name: "signature", type: "string", isOptional: true, description: "Reasoning signature if available" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"reasoning-start"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "ReasoningStartPayload",
+description: "Reasoning start information",
+properties: [{
+type: "ReasoningStartPayload",
+parameters: [
+{ name: "id", type: "string", description: "Unique identifier for this reasoning generation" },
+{ name: "signature", type: "string", isOptional: true, description: "Reasoning signature if available" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ### reasoning-delta
@@ -156,26 +155,26 @@ Signals the beginning of reasoning generation (for models that support reasoning
 Incremental reasoning text during generation.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"reasoning-delta"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "ReasoningDeltaPayload",
-      description: "Incremental reasoning content",
-      properties: [{
-        type: "ReasoningDeltaPayload",
-        parameters: [
-          { name: "id", type: "string", description: "Unique identifier for this reasoning generation" },
-          { name: "text", type: "string", description: "The incremental reasoning text" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"reasoning-delta"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "ReasoningDeltaPayload",
+description: "Incremental reasoning content",
+properties: [{
+type: "ReasoningDeltaPayload",
+parameters: [
+{ name: "id", type: "string", description: "Unique identifier for this reasoning generation" },
+{ name: "text", type: "string", description: "The incremental reasoning text" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ### reasoning-end
@@ -183,26 +182,26 @@ Incremental reasoning text during generation.
 Signals the end of reasoning generation.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"reasoning-end"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "ReasoningEndPayload",
-      description: "Reasoning end information",
-      properties: [{
-        type: "ReasoningEndPayload",
-        parameters: [
-          { name: "id", type: "string", description: "Unique identifier for this reasoning generation" },
-          { name: "signature", type: "string", isOptional: true, description: "Final reasoning signature if available" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"reasoning-end"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "ReasoningEndPayload",
+description: "Reasoning end information",
+properties: [{
+type: "ReasoningEndPayload",
+parameters: [
+{ name: "id", type: "string", description: "Unique identifier for this reasoning generation" },
+{ name: "signature", type: "string", isOptional: true, description: "Final reasoning signature if available" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ### reasoning-signature
@@ -210,26 +209,26 @@ Signals the end of reasoning generation.
 Contains the reasoning signature from models that support advanced reasoning (like OpenAI's o1 series). The signature represents metadata about the model's internal reasoning process, such as effort level or reasoning approach, but not the actual reasoning content itself.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"reasoning-signature"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "ReasoningSignaturePayload",
-      description: "Metadata about the model's reasoning process characteristics",
-      properties: [{
-        type: "ReasoningSignaturePayload",
-        parameters: [
-          { name: "id", type: "string", description: "Unique identifier for the reasoning session" },
-          { name: "signature", type: "string", description: "Signature describing the reasoning approach or effort level (e.g., reasoning effort settings)" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"reasoning-signature"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "ReasoningSignaturePayload",
+description: "Metadata about the model's reasoning process characteristics",
+properties: [{
+type: "ReasoningSignaturePayload",
+parameters: [
+{ name: "id", type: "string", description: "Unique identifier for the reasoning session" },
+{ name: "signature", type: "string", description: "Signature describing the reasoning approach or effort level (e.g., reasoning effort settings)" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ## Tool Chunks
@@ -239,29 +238,29 @@ Contains the reasoning signature from models that support advanced reasoning (li
 A tool is being called.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"tool-call"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "ToolCallPayload",
-      description: "Tool call information",
-      properties: [{
-        type: "ToolCallPayload",
-        parameters: [
-          { name: "toolCallId", type: "string", description: "Unique identifier for this tool call" },
-          { name: "toolName", type: "string", description: "Name of the tool being called" },
-          { name: "args", type: "Record<string, any>", isOptional: true, description: "Arguments passed to the tool" },
-          { name: "providerExecuted", type: "boolean", isOptional: true, description: "Whether the provider executed the tool" },
-          { name: "output", type: "any", isOptional: true, description: "Tool output if available" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"tool-call"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "ToolCallPayload",
+description: "Tool call information",
+properties: [{
+type: "ToolCallPayload",
+parameters: [
+{ name: "toolCallId", type: "string", description: "Unique identifier for this tool call" },
+{ name: "toolName", type: "string", description: "Name of the tool being called" },
+{ name: "args", type: "Record<string, any>", isOptional: true, description: "Arguments passed to the tool" },
+{ name: "providerExecuted", type: "boolean", isOptional: true, description: "Whether the provider executed the tool" },
+{ name: "output", type: "any", isOptional: true, description: "Tool output if available" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ### tool-result
@@ -269,30 +268,30 @@ A tool is being called.
 Result from a tool execution.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"tool-result"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "ToolResultPayload",
-      description: "Tool execution result",
-      properties: [{
-        type: "ToolResultPayload",
-        parameters: [
-          { name: "toolCallId", type: "string", description: "Unique identifier for the tool call" },
-          { name: "toolName", type: "string", description: "Name of the executed tool" },
-          { name: "result", type: "any", description: "The result of the tool execution" },
-          { name: "isError", type: "boolean", isOptional: true, description: "Whether the result is an error" },
-          { name: "providerExecuted", type: "boolean", isOptional: true, description: "Whether the provider executed the tool" },
-          { name: "args", type: "Record<string, any>", isOptional: true, description: "Arguments that were passed to the tool" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"tool-result"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "ToolResultPayload",
+description: "Tool execution result",
+properties: [{
+type: "ToolResultPayload",
+parameters: [
+{ name: "toolCallId", type: "string", description: "Unique identifier for the tool call" },
+{ name: "toolName", type: "string", description: "Name of the executed tool" },
+{ name: "result", type: "any", description: "The result of the tool execution" },
+{ name: "isError", type: "boolean", isOptional: true, description: "Whether the result is an error" },
+{ name: "providerExecuted", type: "boolean", isOptional: true, description: "Whether the provider executed the tool" },
+{ name: "args", type: "Record<string, any>", isOptional: true, description: "Arguments that were passed to the tool" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ### tool-call-input-streaming-start
@@ -300,28 +299,28 @@ Result from a tool execution.
 Signals the start of streaming tool call arguments.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"tool-call-input-streaming-start"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "ToolCallInputStreamingStartPayload",
-      description: "Tool call input streaming start information",
-      properties: [{
-        type: "ToolCallInputStreamingStartPayload",
-        parameters: [
-          { name: "toolCallId", type: "string", description: "Unique identifier for this tool call" },
-          { name: "toolName", type: "string", description: "Name of the tool being called" },
-          { name: "providerExecuted", type: "boolean", isOptional: true, description: "Whether the provider executed the tool" },
-          { name: "dynamic", type: "boolean", isOptional: true, description: "Whether the tool call is dynamic" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"tool-call-input-streaming-start"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "ToolCallInputStreamingStartPayload",
+description: "Tool call input streaming start information",
+properties: [{
+type: "ToolCallInputStreamingStartPayload",
+parameters: [
+{ name: "toolCallId", type: "string", description: "Unique identifier for this tool call" },
+{ name: "toolName", type: "string", description: "Name of the tool being called" },
+{ name: "providerExecuted", type: "boolean", isOptional: true, description: "Whether the provider executed the tool" },
+{ name: "dynamic", type: "boolean", isOptional: true, description: "Whether the tool call is dynamic" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ### tool-call-delta
@@ -329,27 +328,27 @@ Signals the start of streaming tool call arguments.
 Incremental tool call arguments during streaming.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"tool-call-delta"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "ToolCallDeltaPayload",
-      description: "Incremental tool call arguments",
-      properties: [{
-        type: "ToolCallDeltaPayload",
-        parameters: [
-          { name: "argsTextDelta", type: "string", description: "Incremental text delta for tool arguments" },
-          { name: "toolCallId", type: "string", description: "Unique identifier for this tool call" },
-          { name: "toolName", type: "string", isOptional: true, description: "Name of the tool being called" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"tool-call-delta"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "ToolCallDeltaPayload",
+description: "Incremental tool call arguments",
+properties: [{
+type: "ToolCallDeltaPayload",
+parameters: [
+{ name: "argsTextDelta", type: "string", description: "Incremental text delta for tool arguments" },
+{ name: "toolCallId", type: "string", description: "Unique identifier for this tool call" },
+{ name: "toolName", type: "string", isOptional: true, description: "Name of the tool being called" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ### tool-call-input-streaming-end
@@ -357,25 +356,25 @@ Incremental tool call arguments during streaming.
 Signals the end of streaming tool call arguments.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"tool-call-input-streaming-end"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "ToolCallInputStreamingEndPayload",
-      description: "Tool call input streaming end information",
-      properties: [{
-        type: "ToolCallInputStreamingEndPayload",
-        parameters: [
-          { name: "toolCallId", type: "string", description: "Unique identifier for this tool call" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"tool-call-input-streaming-end"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "ToolCallInputStreamingEndPayload",
+description: "Tool call input streaming end information",
+properties: [{
+type: "ToolCallInputStreamingEndPayload",
+parameters: [
+{ name: "toolCallId", type: "string", description: "Unique identifier for this tool call" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ### tool-error
@@ -383,30 +382,30 @@ Signals the end of streaming tool call arguments.
 An error occurred during tool execution.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"tool-error"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "ToolErrorPayload",
-      description: "Tool error information",
-      properties: [{
-        type: "ToolErrorPayload",
-        parameters: [
-          { name: "id", type: "string", isOptional: true, description: "Optional identifier" },
-          { name: "toolCallId", type: "string", description: "Unique identifier for the tool call" },
-          { name: "toolName", type: "string", description: "Name of the tool that failed" },
-          { name: "args", type: "Record<string, any>", isOptional: true, description: "Arguments that were passed to the tool" },
-          { name: "error", type: "unknown", description: "The error that occurred" },
-          { name: "providerExecuted", type: "boolean", isOptional: true, description: "Whether the provider executed the tool" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"tool-error"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "ToolErrorPayload",
+description: "Tool error information",
+properties: [{
+type: "ToolErrorPayload",
+parameters: [
+{ name: "id", type: "string", isOptional: true, description: "Optional identifier" },
+{ name: "toolCallId", type: "string", description: "Unique identifier for the tool call" },
+{ name: "toolName", type: "string", description: "Name of the tool that failed" },
+{ name: "args", type: "Record<string, any>", isOptional: true, description: "Arguments that were passed to the tool" },
+{ name: "error", type: "unknown", description: "The error that occurred" },
+{ name: "providerExecuted", type: "boolean", isOptional: true, description: "Whether the provider executed the tool" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ## Source and File Chunks
@@ -416,30 +415,30 @@ An error occurred during tool execution.
 Contains source information for content.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"source"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "SourcePayload",
-      description: "Source information",
-      properties: [{
-        type: "SourcePayload",
-        parameters: [
-          { name: "id", type: "string", description: "Unique identifier" },
-          { name: "sourceType", type: "'url' | 'document'", description: "Type of source" },
-          { name: "title", type: "string", description: "Title of the source" },
-          { name: "mimeType", type: "string", isOptional: true, description: "MIME type of the source" },
-          { name: "filename", type: "string", isOptional: true, description: "Filename if applicable" },
-          { name: "url", type: "string", isOptional: true, description: "URL if applicable" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"source"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "SourcePayload",
+description: "Source information",
+properties: [{
+type: "SourcePayload",
+parameters: [
+{ name: "id", type: "string", description: "Unique identifier" },
+{ name: "sourceType", type: "'url' | 'document'", description: "Type of source" },
+{ name: "title", type: "string", description: "Title of the source" },
+{ name: "mimeType", type: "string", isOptional: true, description: "MIME type of the source" },
+{ name: "filename", type: "string", isOptional: true, description: "Filename if applicable" },
+{ name: "url", type: "string", isOptional: true, description: "URL if applicable" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ### file
@@ -447,27 +446,27 @@ Contains source information for content.
 Contains file data.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"file"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "FilePayload",
-      description: "File data",
-      properties: [{
-        type: "FilePayload",
-        parameters: [
-          { name: "data", type: "string | Uint8Array", description: "The file data" },
-          { name: "base64", type: "string", isOptional: true, description: "Base64 encoded data if applicable" },
-          { name: "mimeType", type: "string", description: "MIME type of the file" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"file"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "FilePayload",
+description: "File data",
+properties: [{
+type: "FilePayload",
+parameters: [
+{ name: "data", type: "string | Uint8Array", description: "The file data" },
+{ name: "base64", type: "string", isOptional: true, description: "Base64 encoded data if applicable" },
+{ name: "mimeType", type: "string", description: "MIME type of the file" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ## Control Chunks
@@ -477,24 +476,24 @@ Contains file data.
 Signals the start of streaming.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"start"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "StartPayload",
-      description: "Start information",
-      properties: [{
-        type: "StartPayload",
-        parameters: [
-          { name: "[key: string]", type: "any", description: "Additional start data" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"start"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "StartPayload",
+description: "Start information",
+properties: [{
+type: "StartPayload",
+parameters: [
+{ name: "[key: string]", type: "any", description: "Additional start data" }
+]
+}]
+}
+]}
 />
 
 ### step-start
@@ -502,26 +501,26 @@ Signals the start of streaming.
 Signals the start of a processing step.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"step-start"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "StepStartPayload",
-      description: "Step start information",
-      properties: [{
-        type: "StepStartPayload",
-        parameters: [
-          { name: "messageId", type: "string", isOptional: true, description: "Optional message identifier" },
-          { name: "request", type: "object", description: "Request information including body and other data" },
-          { name: "warnings", type: "LanguageModelV2CallWarning[]", isOptional: true, description: "Any warnings from the language model call" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"step-start"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "StepStartPayload",
+description: "Step start information",
+properties: [{
+type: "StepStartPayload",
+parameters: [
+{ name: "messageId", type: "string", isOptional: true, description: "Optional message identifier" },
+{ name: "request", type: "object", description: "Request information including body and other data" },
+{ name: "warnings", type: "LanguageModelV2CallWarning[]", isOptional: true, description: "Any warnings from the language model call" }
+]
+}]
+}
+]}
 />
 
 ### step-finish
@@ -529,31 +528,31 @@ Signals the start of a processing step.
 Signals the completion of a processing step.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"step-finish"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "StepFinishPayload",
-      description: "Step completion information",
-      properties: [{
-        type: "StepFinishPayload",
-        parameters: [
-          { name: "id", type: "string", isOptional: true, description: "Optional identifier" },
-          { name: "messageId", type: "string", isOptional: true, description: "Optional message identifier" },
-          { name: "stepResult", type: "object", description: "Step execution result with reason, warnings, and continuation info" },
-          { name: "output", type: "object", description: "Output information including usage statistics" },
-          { name: "metadata", type: "object", description: "Execution metadata including request and provider info" },
-          { name: "totalUsage", type: "LanguageModelV2Usage", isOptional: true, description: "Total usage statistics" },
-          { name: "response", type: "LanguageModelV2ResponseMetadata", isOptional: true, description: "Response metadata" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"step-finish"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "StepFinishPayload",
+description: "Step completion information",
+properties: [{
+type: "StepFinishPayload",
+parameters: [
+{ name: "id", type: "string", isOptional: true, description: "Optional identifier" },
+{ name: "messageId", type: "string", isOptional: true, description: "Optional message identifier" },
+{ name: "stepResult", type: "object", description: "Step execution result with reason, warnings, and continuation info" },
+{ name: "output", type: "object", description: "Output information including usage statistics" },
+{ name: "metadata", type: "object", description: "Execution metadata including request and provider info" },
+{ name: "totalUsage", type: "LanguageModelV2Usage", isOptional: true, description: "Total usage statistics" },
+{ name: "response", type: "LanguageModelV2ResponseMetadata", isOptional: true, description: "Response metadata" },
+{ name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "Provider-specific metadata" }
+]
+}]
+}
+]}
 />
 
 ### raw
@@ -561,24 +560,24 @@ Signals the completion of a processing step.
 Contains raw data from the provider.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"raw"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "RawPayload",
-      description: "Raw provider data",
-      properties: [{
-        type: "RawPayload",
-        parameters: [
-          { name: "[key: string]", type: "any", description: "Raw data from the provider" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"raw"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "RawPayload",
+description: "Raw provider data",
+properties: [{
+type: "RawPayload",
+parameters: [
+{ name: "[key: string]", type: "any", description: "Raw data from the provider" }
+]
+}]
+}
+]}
 />
 
 ### finish
@@ -586,27 +585,27 @@ Contains raw data from the provider.
 Stream has completed successfully.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"finish"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "FinishPayload",
-      description: "Completion information",
-      properties: [{
-        type: "FinishPayload",
-        parameters: [
-          { name: "stepResult", type: "object", description: "Step execution result" },
-          { name: "output", type: "object", description: "Output information including usage" },
-          { name: "metadata", type: "object", description: "Execution metadata" },
-          { name: "messages", type: "object", description: "Message history" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"finish"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "FinishPayload",
+description: "Completion information",
+properties: [{
+type: "FinishPayload",
+parameters: [
+{ name: "stepResult", type: "object", description: "Step execution result" },
+{ name: "output", type: "object", description: "Output information including usage" },
+{ name: "metadata", type: "object", description: "Execution metadata" },
+{ name: "messages", type: "object", description: "Message history" }
+]
+}]
+}
+]}
 />
 
 ### error
@@ -614,24 +613,24 @@ Stream has completed successfully.
 An error occurred during streaming.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"error"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "ErrorPayload",
-      description: "Error information",
-      properties: [{
-        type: "ErrorPayload",
-        parameters: [
-          { name: "error", type: "unknown", description: "The error that occurred" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"error"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "ErrorPayload",
+description: "Error information",
+properties: [{
+type: "ErrorPayload",
+parameters: [
+{ name: "error", type: "unknown", description: "The error that occurred" }
+]
+}]
+}
+]}
 />
 
 ### abort
@@ -639,24 +638,24 @@ An error occurred during streaming.
 Stream was aborted.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"abort"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "AbortPayload",
-      description: "Abort information",
-      properties: [{
-        type: "AbortPayload",
-        parameters: [
-          { name: "[key: string]", type: "any", description: "Additional abort data" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"abort"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "AbortPayload",
+description: "Abort information",
+properties: [{
+type: "AbortPayload",
+parameters: [
+{ name: "[key: string]", type: "any", description: "Additional abort data" }
+]
+}]
+}
+]}
 />
 
 ## Object and Output Chunks
@@ -666,18 +665,18 @@ Stream was aborted.
 Emitted when using output generation with defined schemas. Contains partial or complete structured data that conforms to the specified Zod or JSON schema. This chunk is typically skipped in some execution contexts and used for streaming structured object generation.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"object"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "object",
-      type: "PartialSchemaOutput<OUTPUT>",
-      description: "Partial or complete structured data matching the defined schema. The type is determined by the OUTPUT schema parameter."
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"object"',
+description: "Chunk type identifier"
+},
+{
+name: "object",
+type: "PartialSchemaOutput<OUTPUT>",
+description: "Partial or complete structured data matching the defined schema. The type is determined by the OUTPUT schema parameter."
+}
+]}
 />
 
 ### tool-output
@@ -685,24 +684,24 @@ Emitted when using output generation with defined schemas. Contains partial or c
 Contains output from agent or workflow execution, particularly used for tracking usage statistics and completion events. Often wraps other chunk types (like finish chunks) to provide nested execution context.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"tool-output"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "ToolOutputPayload",
-      description: "Wrapped execution output with metadata",
-      properties: [{
-        type: "ToolOutputPayload",
-        parameters: [
-          { name: "output", type: "ChunkType", description: "Nested chunk data, often containing finish events with usage statistics" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"tool-output"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "ToolOutputPayload",
+description: "Wrapped execution output with metadata",
+properties: [{
+type: "ToolOutputPayload",
+parameters: [
+{ name: "output", type: "ChunkType", description: "Nested chunk data, often containing finish events with usage statistics" }
+]
+}]
+}
+]}
 />
 
 ### step-output
@@ -710,24 +709,24 @@ Contains output from agent or workflow execution, particularly used for tracking
 Contains output from workflow step execution, used primarily for usage tracking and step completion events. Similar to tool-output but specifically for individual workflow steps.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"step-output"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "StepOutputPayload",
-      description: "Workflow step execution output with metadata",
-      properties: [{
-        type: "StepOutputPayload",
-        parameters: [
-          { name: "output", type: "ChunkType", description: "Nested chunk data from step execution, typically containing finish events or other step results" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"step-output"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "StepOutputPayload",
+description: "Workflow step execution output with metadata",
+properties: [{
+type: "StepOutputPayload",
+parameters: [
+{ name: "output", type: "ChunkType", description: "Nested chunk data from step execution, typically containing finish events or other step results" }
+]
+}]
+}
+]}
 />
 
 ## Metadata and Special Chunks
@@ -737,25 +736,25 @@ Contains output from workflow step execution, used primarily for usage tracking 
 Contains metadata about the LLM provider's response. Emitted by some providers after text generation to provide additional context like model ID, timestamps, and response headers. This chunk is used internally for state tracking and doesn't affect message assembly.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"response-metadata"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "ResponseMetadataPayload",
-      description: "Provider response metadata for tracking and debugging",
-      properties: [{
-        type: "ResponseMetadataPayload",
-        parameters: [
-          { name: "signature", type: "string", isOptional: true, description: "Response signature if available" },
-          { name: "[key: string]", type: "any", description: "Additional provider-specific metadata fields (e.g., id, modelId, timestamp, headers)" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"response-metadata"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "ResponseMetadataPayload",
+description: "Provider response metadata for tracking and debugging",
+properties: [{
+type: "ResponseMetadataPayload",
+parameters: [
+{ name: "signature", type: "string", isOptional: true, description: "Response signature if available" },
+{ name: "[key: string]", type: "any", description: "Additional provider-specific metadata fields (e.g., id, modelId, timestamp, headers)" }
+]
+}]
+}
+]}
 />
 
 ### watch
@@ -763,26 +762,26 @@ Contains metadata about the LLM provider's response. Emitted by some providers a
 Contains monitoring and observability data from agent execution. Can include workflow state information, execution progress, or other runtime details depending on the context where `stream()` is used.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"watch"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "WatchPayload",
-      description: "Monitoring data for observability and debugging of agent execution",
-      properties: [{
-        type: "WatchPayload",
-        parameters: [
-          { name: "workflowState", type: "object", isOptional: true, description: "Current workflow execution state (when used in workflows)" },
-          { name: "eventTimestamp", type: "number", isOptional: true, description: "Timestamp when the event occurred" },
-          { name: "[key: string]", type: "any", description: "Additional monitoring and execution data" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"watch"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "WatchPayload",
+description: "Monitoring data for observability and debugging of agent execution",
+properties: [{
+type: "WatchPayload",
+parameters: [
+{ name: "workflowState", type: "object", isOptional: true, description: "Current workflow execution state (when used in workflows)" },
+{ name: "eventTimestamp", type: "number", isOptional: true, description: "Timestamp when the event occurred" },
+{ name: "[key: string]", type: "any", description: "Additional monitoring and execution data" }
+]
+}]
+}
+]}
 />
 
 ### tripwire
@@ -790,30 +789,30 @@ Contains monitoring and observability data from agent execution. Can include wor
 Emitted when the stream is forcibly terminated due to content being blocked by output processors. This acts as a safety mechanism to prevent harmful or inappropriate content from being streamed.
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: '"tripwire"',
-      description: "Chunk type identifier"
-    },
-    {
-      name: "payload",
-      type: "TripwirePayload",
-      description: "Information about why the stream was terminated by safety mechanisms",
-      properties: [{
-        type: "TripwirePayload",
-        parameters: [
-          { name: "tripwireReason", type: "string", description: "Explanation of why the content was blocked (e.g., 'Output processor blocked content')" }
-        ]
-      }]
-    }
-  ]}
+content={[
+{
+name: "type",
+type: '"tripwire"',
+description: "Chunk type identifier"
+},
+{
+name: "payload",
+type: "TripwirePayload",
+description: "Information about why the stream was terminated by safety mechanisms",
+properties: [{
+type: "TripwirePayload",
+parameters: [
+{ name: "tripwireReason", type: "string", description: "Explanation of why the content was blocked (e.g., 'Output processor blocked content')" }
+]
+}]
+}
+]}
 />
 
 ## Usage Example
 
 ```typescript
-const stream = await agent.stream("Hello");
+const stream = await agent.stream('Hello');
 
 for await (const chunk of stream.fullStream) {
   switch (chunk.type) {
@@ -847,6 +846,6 @@ for await (const chunk of stream.fullStream) {
 
 ## Related Types
 
-- [.stream()](./stream.md) - Method that returns streams emitting these chunks
-- [MastraModelOutput](./agents/MastraModelOutput.md) - The stream object that emits these chunks
-- [workflow.streamVNext()](./workflows/streamVNext.md) - Method that returns streams emitting these chunks for workflows
+- [.stream()](./stream) - Method that returns streams emitting these chunks
+- [MastraModelOutput](./agents/MastraModelOutput) - The stream object that emits these chunks
+- [workflow.streamVNext()](./workflows/streamVNext) - Method that returns streams emitting these chunks for workflows

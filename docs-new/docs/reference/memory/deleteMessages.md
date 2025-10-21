@@ -1,6 +1,6 @@
 ---
-title: "Reference: Memory.deleteMessages() "
-description: "Documentation for the `Memory.deleteMessages()` method in Mastra, which deletes multiple messages by their IDs."
+title: 'Reference: Memory.deleteMessages() '
+description: 'Documentation for the `Memory.deleteMessages()` method in Mastra, which deletes multiple messages by their IDs.'
 ---
 
 # Memory.deleteMessages()
@@ -10,44 +10,44 @@ The `.deleteMessages()` method deletes multiple messages by their IDs.
 ## Usage Example
 
 ```typescript copy
-await memory?.deleteMessages(["671ae63f-3a91-4082-a907-fe7de78e10ec"]);
+await memory?.deleteMessages(['671ae63f-3a91-4082-a907-fe7de78e10ec']);
 ```
 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "messageIds",
-      type: "string[]",
-      description: "Array of message IDs to delete",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "messageIds",
+type: "string[]",
+description: "Array of message IDs to delete",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "void",
-      type: "Promise<void>",
-      description: "A promise that resolves when all messages are deleted",
-    },
-  ]}
+content={[
+{
+name: "void",
+type: "Promise<void>",
+description: "A promise that resolves when all messages are deleted",
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
-import { mastra } from "./mastra";
-import { UIMessageWithMetadata } from "@mastra/core/agent";
+import { mastra } from './mastra';
+import { UIMessageWithMetadata } from '@mastra/core/agent';
 
-const agent = mastra.getAgent("agent");
+const agent = mastra.getAgent('agent');
 const memory = await agent.getMemory();
 
-const { uiMessages } = await memory!.query({ threadId: "thread-123" });
+const { uiMessages } = await memory!.query({ threadId: 'thread-123' });
 
 const messageIds = uiMessages.map((message: UIMessageWithMetadata) => message.id);
 await memory?.deleteMessages([...messageIds]);
@@ -55,6 +55,6 @@ await memory?.deleteMessages([...messageIds]);
 
 ## Related
 
-- [Memory Class Reference](/reference/memory/Memory.md)
-- [query](/reference/memory/query.md)
-- [Getting Started with Memory](/docs/memory/overview.md)
+- [Memory Class Reference](/reference/memory/Memory)
+- [query](/reference/memory/query)
+- [Getting Started with Memory](/docs/memory/overview)

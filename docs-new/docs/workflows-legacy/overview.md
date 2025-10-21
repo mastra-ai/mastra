@@ -1,20 +1,20 @@
 ---
-title: "Handling Complex LLM Operations "
-description: "Workflows in Mastra help you orchestrate complex sequences of operations with features like branching, parallel execution, resource suspension, and more."
+title: 'Handling Complex LLM Operations '
+description: 'Workflows in Mastra help you orchestrate complex sequences of operations with features like branching, parallel execution, resource suspension, and more.'
 ---
 
 # Handling Complex LLM Operations with Workflows (Legacy)
 
 All the legacy workflow documentation is available on the links below.
 
-- [Steps](/docs/workflows-legacy/steps.md)
-- [Control Flow](/docs/workflows-legacy/control-flow.md)
-- [Variables](/docs/workflows-legacy/variables.md)
-- [Suspend & Resume](/docs/workflows-legacy/suspend-and-resume.md)
-- [Dynamic Workflows](/docs/workflows-legacy/dynamic-workflows.md)
-- [Error Handling](/docs/workflows-legacy/error-handling.md)
-- [Nested Workflows](/docs/workflows-legacy/nested-workflows.md)
-- [Runtime/Dynamic Variables](/docs/workflows-legacy/runtime-variables.md)
+- [Steps](/docs/workflows-legacy/steps)
+- [Control Flow](/docs/workflows-legacy/control-flow)
+- [Variables](/docs/workflows-legacy/variables)
+- [Suspend & Resume](/docs/workflows-legacy/suspend-and-resume)
+- [Dynamic Workflows](/docs/workflows-legacy/dynamic-workflows)
+- [Error Handling](/docs/workflows-legacy/error-handling)
+- [Nested Workflows](/docs/workflows-legacy/nested-workflows)
+- [Runtime/Dynamic Variables](/docs/workflows-legacy/runtime-variables)
 
 Workflows in Mastra help you orchestrate complex sequences of operations with features like branching, parallel execution, resource suspension, and more.
 
@@ -41,10 +41,10 @@ Let's examine each part of the workflow creation process:
 Here's how you define a workflow in Mastra. The `name` field determines the workflow's API endpoint (`/workflows/$NAME/`), while the `triggerSchema` defines the structure of the workflow's trigger data:
 
 ```ts filename="src/mastra/workflow/index.ts"
-import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
 
 const myWorkflow = new LegacyWorkflow({
-  name: "my-workflow",
+  name: 'my-workflow',
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
@@ -57,7 +57,7 @@ Now, we'll define the workflow's steps. Each step can have its own input and out
 
 ```ts filename="src/mastra/workflow/index.ts"
 const stepOne = new LegacyStep({
-  id: "stepOne",
+  id: 'stepOne',
   outputSchema: z.object({
     doubledValue: z.number(),
   }),
@@ -68,7 +68,7 @@ const stepOne = new LegacyStep({
 });
 
 const stepTwo = new LegacyStep({
-  id: "stepTwo",
+  id: 'stepTwo',
   execute: async ({ context }) => {
     const doubledValue = context.getStepResult(stepOne)?.doubledValue;
     if (!doubledValue) {
@@ -94,7 +94,7 @@ myWorkflow.step(stepOne).then(stepTwo).commit();
 Register your workflow with Mastra to enable logging and telemetry:
 
 ```ts showLineNumbers filename="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core';
 
 export const mastra = new Mastra({
   legacy_workflows: { myWorkflow },
@@ -104,13 +104,13 @@ export const mastra = new Mastra({
 The workflow can also have the mastra instance injected into the context in the case where you need to create dynamic workflows:
 
 ```ts filename="src/mastra/workflow/index.ts"
-import { Mastra } from "@mastra/core";
-import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { Mastra } from '@mastra/core';
+import { LegacyWorkflow } from '@mastra/core/workflows/legacy';
 
 const mastra = new Mastra();
 
 const myWorkflow = new LegacyWorkflow({
-  name: "my-workflow",
+  name: 'my-workflow',
   mastra,
 });
 ```
@@ -120,10 +120,10 @@ const myWorkflow = new LegacyWorkflow({
 Execute your workflow programmatically or via API:
 
 ```ts showLineNumbers filename="src/mastra/run-workflow.ts" copy
-import { mastra } from "./index";
+import { mastra } from './index';
 
 // Get the workflow
-const myWorkflow = mastra.legacy_getWorkflow("myWorkflow");
+const myWorkflow = mastra.legacy_getWorkflow('myWorkflow');
 const { runId, start } = myWorkflow.createRun();
 
 // Start the workflow execution
@@ -146,23 +146,23 @@ This example shows the essentials: define your workflow, add steps, commit the w
 
 ## Defining Steps
 
-The basic building block of a workflow [is a step](./steps.md). Steps are defined using schemas for inputs and outputs, and can fetch prior step results.
+The basic building block of a workflow [is a step](./steps). Steps are defined using schemas for inputs and outputs, and can fetch prior step results.
 
 ## Control Flow
 
-Workflows let you define a [control flow](./control-flow.md) to chain steps together in with parallel steps, branching paths, and more.
+Workflows let you define a [control flow](./control-flow) to chain steps together in with parallel steps, branching paths, and more.
 
 ## Workflow Variables
 
-When you need to map data between steps or create dynamic data flows, [workflow variables](./variables.md) provide a powerful mechanism for passing information from one step to another and accessing nested properties within step outputs.
+When you need to map data between steps or create dynamic data flows, [workflow variables](./variables) provide a powerful mechanism for passing information from one step to another and accessing nested properties within step outputs.
 
 ## Suspend and Resume
 
-When you need to pause execution for external data, user input, or asynchronous events, Mastra [supports suspension at any step](./suspend-and-resume.md), persisting the state of the workflow so you can resume it later.
+When you need to pause execution for external data, user input, or asynchronous events, Mastra [supports suspension at any step](./suspend-and-resume), persisting the state of the workflow so you can resume it later.
 
 ## Observability and Debugging
 
-Mastra workflows automatically [log the input and output of each step within a workflow run](../../reference/observability/otel-config.md), allowing you to send this data to your preferred logging, telemetry, or observability tools.
+Mastra workflows automatically [log the input and output of each step within a workflow run](../../reference/observability/otel-config), allowing you to send this data to your preferred logging, telemetry, or observability tools.
 
 You can:
 
@@ -172,9 +172,9 @@ You can:
 
 ## More Resources
 
-- [Sequential Steps workflow example](../../examples/workflows_legacy/sequential-steps.md)
-- [Parallel Steps workflow example](../../examples/workflows_legacy/parallel-steps.md)
-- [Branching Paths workflow example](../../examples/workflows_legacy/branching-paths.md)
-- [Workflow Variables example](../../examples/workflows_legacy/workflow-variables.md)
-- [Cyclical Dependencies workflow example](../../examples/workflows_legacy/cyclical-dependencies.md)
-- [Suspend and Resume workflow example](../../examples/workflows_legacy/suspend-and-resume.md)
+- [Sequential Steps workflow example](../../examples/workflows_legacy/sequential-steps)
+- [Parallel Steps workflow example](../../examples/workflows_legacy/parallel-steps)
+- [Branching Paths workflow example](../../examples/workflows_legacy/branching-paths)
+- [Workflow Variables example](../../examples/workflows_legacy/workflow-variables)
+- [Cyclical Dependencies workflow example](../../examples/workflows_legacy/cyclical-dependencies)
+- [Suspend and Resume workflow example](../../examples/workflows_legacy/suspend-and-resume)

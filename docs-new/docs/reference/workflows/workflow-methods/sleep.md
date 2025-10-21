@@ -1,5 +1,5 @@
 ---
-title: "Reference: Workflow.sleep() "
+title: 'Reference: Workflow.sleep() '
 description: Documentation for the `Workflow.sleep()` method in workflows, which pauses execution for a specified number of milliseconds.
 ---
 
@@ -16,28 +16,28 @@ workflow.sleep(5000);
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "milliseconds",
-      type: "number",
-      description: "The number of milliseconds to pause execution",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "milliseconds",
+type: "number",
+description: "The number of milliseconds to pause execution",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "Workflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "Workflow",
+description: "The workflow instance for method chaining",
+},
+]}
 />
 
 ## Related
 
-- [Sleep & Events](../../../docs/workflows/pausing-execution.md)
+- [Sleep & Events](../../../docs/workflows/pausing-execution)

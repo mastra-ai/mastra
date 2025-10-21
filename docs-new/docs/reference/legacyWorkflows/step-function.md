@@ -1,5 +1,5 @@
 ---
-title: "Reference: Workflow.step() "
+title: 'Reference: Workflow.step() '
 description: Documentation for the `.step()` method in workflows, which adds a new step to the workflow.
 ---
 
@@ -11,7 +11,7 @@ The `.step()` method adds a new step to the workflow, optionally configuring its
 
 ```typescript
 workflow.step({
-  id: "stepTwo",
+  id: 'stepTwo',
   outputSchema: z.object({
     result: z.number(),
   }),
@@ -24,70 +24,70 @@ workflow.step({
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "stepConfig",
-      type: "Step | StepDefinition | string",
-      description:
-        "Step instance, configuration object, or step ID to add to workflow",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "StepOptions",
-      description: "Optional configuration for step execution",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "stepConfig",
+type: "Step | StepDefinition | string",
+description:
+"Step instance, configuration object, or step ID to add to workflow",
+isOptional: false,
+},
+{
+name: "options",
+type: "StepOptions",
+description: "Optional configuration for step execution",
+isOptional: true,
+},
+]}
 />
 
 ### StepDefinition
 
 <PropertiesTable
-  content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for the step",
-      isOptional: false,
-    },
-    {
-      name: "outputSchema",
-      type: "z.ZodSchema",
-      description: "Schema for validating step output",
-      isOptional: true,
-    },
-    {
-      name: "execute",
-      type: "(params: ExecuteParams) => Promise<any>",
-      description: "Function containing step logic",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "id",
+type: "string",
+description: "Unique identifier for the step",
+isOptional: false,
+},
+{
+name: "outputSchema",
+type: "z.ZodSchema",
+description: "Schema for validating step output",
+isOptional: true,
+},
+{
+name: "execute",
+type: "(params: ExecuteParams) => Promise<any>",
+description: "Function containing step logic",
+isOptional: false,
+},
+]}
 />
 
 ### StepOptions
 
 <PropertiesTable
-  content={[
-    {
-      name: "variables",
-      type: "Record<string, VariableRef>",
-      description: "Map of variable names to their source references",
-      isOptional: true,
-    },
-    {
-      name: "when",
-      type: "StepCondition",
-      description: "Condition that must be met for step to execute",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "variables",
+type: "Record<string, VariableRef>",
+description: "Map of variable names to their source references",
+isOptional: true,
+},
+{
+name: "when",
+type: "StepCondition",
+description: "Condition that must be met for step to execute",
+isOptional: true,
+},
+]}
 />
 
 ## Related
 
-- [Basic Usage with Step Instance](../../docs/workflows-legacy/steps.md)
-- [Step Class Reference](./step-class.md)
-- [Workflow Class Reference](./workflow.md)
-- [Control Flow Guide](../../docs/workflows-legacy/control-flow.md)
+- [Basic Usage with Step Instance](../../docs/workflows-legacy/steps)
+- [Step Class Reference](./step-class)
+- [Workflow Class Reference](./workflow)
+- [Control Flow Guide](../../docs/workflows-legacy/control-flow)

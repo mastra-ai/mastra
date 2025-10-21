@@ -1,5 +1,5 @@
 ---
-title: "Reference: Agent.getInstructions() "
+title: 'Reference: Agent.getInstructions() '
 description: "Documentation for the `Agent.getInstructions()` method in Mastra agents, which retrieves the instructions that guide the agent's behavior."
 ---
 
@@ -16,52 +16,52 @@ await agent.getInstructions();
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
-      isOptional: true,
-      defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
-    },
-  ]}
+content={[
+{
+name: "options",
+type: "{ runtimeContext?: RuntimeContext }",
+isOptional: true,
+defaultValue: "{}",
+description: "Optional configuration object containing runtime context.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "instructions",
-      type: "SystemMessage | Promise<SystemMessage>",
-      description: "The instructions configured for the agent. SystemMessage can be: string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]. Returns either directly or as a promise that resolves to the instructions.",
-    },
-  ]}
+content={[
+{
+name: "instructions",
+type: "SystemMessage | Promise<SystemMessage>",
+description: "The instructions configured for the agent. SystemMessage can be: string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]. Returns either directly or as a promise that resolves to the instructions.",
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript copy
 await agent.getInstructions({
-  runtimeContext: new RuntimeContext()
+  runtimeContext: new RuntimeContext(),
 });
 ```
 
 ### Options parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      isOptional: true,
-      defaultValue: "undefined",
-      description: "Runtime context for dependency injection and contextual information.",
-    },
-  ]}
+content={[
+{
+name: "runtimeContext",
+type: "RuntimeContext",
+isOptional: true,
+defaultValue: "undefined",
+description: "Runtime context for dependency injection and contextual information.",
+},
+]}
 />
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview.md)
-- [Agent Runtime Context](../../docs/agents/runtime-context.md)
+- [Agents overview](../../docs/agents/overview)
+- [Agent Runtime Context](../../docs/agents/runtime-context)

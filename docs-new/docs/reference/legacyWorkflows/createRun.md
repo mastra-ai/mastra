@@ -1,6 +1,6 @@
 ---
-title: "Reference: Workflow.createRun() "
-description: "Documentation for the `.createRun()` method in workflows (legacy), which initializes a new workflow run instance."
+title: 'Reference: Workflow.createRun() '
+description: 'Documentation for the `.createRun()` method in workflows (legacy), which initializes a new workflow run instance.'
 ---
 
 # Workflow.createRun()
@@ -20,36 +20,36 @@ const result = await start();
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "Unique identifier for tracking this workflow run",
-    },
-    {
-      name: "start",
-      type: "() => Promise<LegacyWorkflowResult>",
-      description: "Function that begins workflow execution when called",
-    },
-    {
-      name: "watch",
-      type: "(callback: (record: LegacyWorkflowResult) => void) => () => void",
-      description:
-        "Function that accepts a callback function that will be called with each transition of the workflow run",
-    },
-    {
-      name: "resume",
-      type: "({stepId: string, context: Record<string, any>}) => Promise<LegacyWorkflowResult>",
-      description:
-        "Function that resumes a workflow run from a given step ID and context",
-    },
-    {
-      name: "resumeWithEvent",
-      type: "(eventName: string, data: any) => Promise<LegacyWorkflowResult>",
-      description:
-        "Function that resumes a workflow run from a given event name and data",
-    },
-  ]}
+content={[
+{
+name: "runId",
+type: "string",
+description: "Unique identifier for tracking this workflow run",
+},
+{
+name: "start",
+type: "() => Promise<LegacyWorkflowResult>",
+description: "Function that begins workflow execution when called",
+},
+{
+name: "watch",
+type: "(callback: (record: LegacyWorkflowResult) => void) => () => void",
+description:
+"Function that accepts a callback function that will be called with each transition of the workflow run",
+},
+{
+name: "resume",
+type: "({stepId: string, context: Record<string, any>}) => Promise<LegacyWorkflowResult>",
+description:
+"Function that resumes a workflow run from a given step ID and context",
+},
+{
+name: "resumeWithEvent",
+type: "(eventName: string, data: any) => Promise<LegacyWorkflowResult>",
+description:
+"Function that resumes a workflow run from a given event name and data",
+},
+]}
 />
 
 ## Error Handling
@@ -71,6 +71,6 @@ try {
 
 ## Related
 
-- [Workflow Class Reference](./workflow.md)
-- [Step Class Reference](./step-class.md)
-- See the [Creating a Workflow](../../examples/workflows_legacy/creating-a-workflow.md) example for complete usage
+- [Workflow Class Reference](./workflow)
+- [Step Class Reference](./step-class)
+- See the [Creating a Workflow](../../examples/workflows_legacy/creating-a-workflow) example for complete usage

@@ -1,6 +1,6 @@
 ---
-title: "Snapshots "
-description: "Learn how to save and resume workflow execution state with snapshots in Mastra"
+title: 'Snapshots '
+description: 'Learn how to save and resume workflow execution state with snapshots in Mastra'
 ---
 
 # Snapshots
@@ -33,7 +33,6 @@ This mechanism provides a powerful way to implement human-in-the-loop workflows,
 
 Each snapshot includes the `runId`, input, step status (`success`, `suspended`, etc.), any suspend and resume payloads, and the final output. This ensures full context is available when resuming execution.
 
-
 ```json
 {
   "runId": "34904c14-e79e-4a12-9804-9655d4616c50",
@@ -45,7 +44,11 @@ Each snapshot includes the `runId`, input, step status (`success`, `suspended`, 
       "payload": { "value": 100, "user": "Michael", "requiredApprovers": ["manager", "finance"] },
       "startedAt": 1758027577955,
       "status": "success",
-      "suspendPayload": { "message": "Workflow suspended", "requestedBy": "Michael", "approvers": ["manager", "finance"] },
+      "suspendPayload": {
+        "message": "Workflow suspended",
+        "requestedBy": "Michael",
+        "approvers": ["manager", "finance"]
+      },
       "suspendedAt": 1758027578065,
       "resumePayload": { "confirm": true, "approver": "manager" },
       "resumedAt": 1758027578517,
@@ -54,7 +57,9 @@ Each snapshot includes the `runId`, input, step status (`success`, `suspended`, 
     }
   },
   "activePaths": [],
-  "serializedStepGraph": [{ "type": "step", "step": { "id": "approval-step", "description": "Accepts a value, waits for confirmation" } }],
+  "serializedStepGraph": [
+    { "type": "step", "step": { "id": "approval-step", "description": "Accepts a value, waits for confirmation" } }
+  ],
   "suspendedPaths": {},
   "waitingPaths": {},
   "result": { "value": 100, "approved": true },
@@ -68,10 +73,10 @@ Each snapshot includes the `runId`, input, step status (`success`, `suspended`, 
 Snapshots are saved to the configured storage system. By default, they use LibSQL, but you can configure Upstash or PostgreSQL instead. Each snapshot is saved in the `workflow_snapshots` table and identified by the workflow’s `runId`.
 
 Read more about:
-- [LibSQL Storage](../../reference/storage/libsql.md)
-- [Upstash Storage](../../reference/storage/upstash.md)
-- [PostgreSQL Storage](../../reference/storage/postgresql.md)
 
+- [LibSQL Storage](../../reference/storage/libsql)
+- [Upstash Storage](../../reference/storage/upstash)
+- [PostgreSQL Storage](../../reference/storage/postgresql)
 
 ### Saving snapshots
 
@@ -93,13 +98,12 @@ When a workflow is resumed, Mastra retrieves the persisted snapshot with these s
 4. The workflow execution is recreated with the snapshot state
 5. The suspended step is resumed, and execution continues
 
-
 ```typescript
 const storage = mastra.getStorage();
 
 const snapshot = await storage!.loadWorkflowSnapshot({
-  runId: "<run-id>",
-  workflowName: "<workflow-id>"
+  runId: '<run-id>',
+  workflowName: '<workflow-id>',
 });
 
 console.log(snapshot);
@@ -114,14 +118,14 @@ Snapshots are persisted using a `storage` instance configured on the `Mastra` cl
 This example demonstrates how to use snapshots with LibSQL.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from '@mastra/core/mastra';
+import { LibSQLStore } from '@mastra/libsql';
 
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({
-    url: ":memory:"
-  })
+    url: ':memory:',
+  }),
 });
 ```
 
@@ -130,16 +134,16 @@ export const mastra = new Mastra({
 This example demonstrates how to use snapshots with Upstash.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { UpstashStore } from "@mastra/upstash";
+import { Mastra } from '@mastra/core/mastra';
+import { UpstashStore } from '@mastra/upstash';
 
 export const mastra = new Mastra({
   // ...
   storage: new UpstashStore({
-    url: "<upstash-redis-rest-url>",
-    token: "<upstash-redis-rest-token>"
-  })
-})
+    url: '<upstash-redis-rest-url>',
+    token: '<upstash-redis-rest-token>',
+  }),
+});
 ```
 
 ### Postgres `@mastra/pg`
@@ -147,14 +151,14 @@ export const mastra = new Mastra({
 This example demonstrates how to use snapshots with PostgreSQL.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { PostgresStore } from "@mastra/pg";
+import { Mastra } from '@mastra/core/mastra';
+import { PostgresStore } from '@mastra/pg';
 
 export const mastra = new Mastra({
   // ...
   storage: new PostgresStore({
-    connectionString: "<database-url>"
-  })
+    connectionString: '<database-url>',
+  }),
 });
 ```
 
@@ -171,29 +175,29 @@ export const mastra = new Mastra({
 You can attach custom metadata when suspending a workflow by defining a `suspendSchema`. This metadata is stored in the snapshot and made available when the workflow is resumed.
 
 ```typescript {30-34} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
 
 const approvalStep = createStep({
-  id: "approval-step",
-  description: "Accepts a value, waits for confirmation",
+  id: 'approval-step',
+  description: 'Accepts a value, waits for confirmation',
   inputSchema: z.object({
     value: z.number(),
     user: z.string(),
-    requiredApprovers: z.array(z.string())
+    requiredApprovers: z.array(z.string()),
   }),
   suspendSchema: z.object({
     message: z.string(),
     requestedBy: z.string(),
-    approvers: z.array(z.string())
+    approvers: z.array(z.string()),
   }),
   resumeSchema: z.object({
     confirm: z.boolean(),
-    approver: z.string()
+    approver: z.string(),
   }),
   outputSchema: z.object({
     value: z.number(),
-    approved: z.boolean()
+    approved: z.boolean(),
   }),
   execute: async ({ inputData, resumeData, suspend }) => {
     const { value, user, requiredApprovers } = inputData;
@@ -201,17 +205,17 @@ const approvalStep = createStep({
 
     if (!confirm) {
       return await suspend({
-        message: "Workflow suspended",
+        message: 'Workflow suspended',
         requestedBy: user,
-        approvers: [...requiredApprovers]
+        approvers: [...requiredApprovers],
       });
     }
 
     return {
       value,
-      approved: confirm
+      approved: confirm,
     };
-  }
+  },
 });
 ```
 
@@ -220,31 +224,31 @@ const approvalStep = createStep({
 Use `resumeData` to pass structured input when resuming a suspended step. It must match the step’s `resumeSchema`.
 
 ```typescript {14-20} showLineNumbers copy
-const workflow = mastra.getWorkflow("approvalWorkflow");
+const workflow = mastra.getWorkflow('approvalWorkflow');
 
 const run = await workflow.createRunAsync();
 
 const result = await run.start({
   inputData: {
     value: 100,
-    user: "Michael",
-    requiredApprovers: ["manager", "finance"]
-  }
+    user: 'Michael',
+    requiredApprovers: ['manager', 'finance'],
+  },
 });
 
-if (result.status === "suspended") {
+if (result.status === 'suspended') {
   const resumedResult = await run.resume({
-    step: "approval-step",
+    step: 'approval-step',
     resumeData: {
       confirm: true,
-      approver: "manager"
-    }
+      approver: 'manager',
+    },
   });
 }
 ```
 
 ## Related
 
-- [Suspend and resume](../../docs/workflows/suspend-and-resume.md)
-- [Human in the loop example](../../examples/workflows/human-in-the-loop.md)
-- [WorkflowRun.watch()](../../reference/workflows/run-methods/watch.md)
+- [Suspend and resume](../../docs/workflows/suspend-and-resume)
+- [Human in the loop example](../../examples/workflows/human-in-the-loop)
+- [WorkflowRun.watch()](../../reference/workflows/run-methods/watch)

@@ -1,6 +1,6 @@
 ---
-title: "Reference: Mastra.getMCPServers() "
-description: "Documentation for the `Mastra.getMCPServers()` method in Mastra, which retrieves all registered MCP server instances."
+title: 'Reference: Mastra.getMCPServers() '
+description: 'Documentation for the `Mastra.getMCPServers()` method in Mastra, which retrieves all registered MCP server instances.'
 ---
 
 # Mastra.getMCPServers()
@@ -20,16 +20,16 @@ This method does not accept any parameters.
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "servers",
-      type: "Record<string, MCPServerBase> | undefined",
-      description: "A record of all registered MCP server instances, where keys are server IDs and values are MCPServerBase instances, or undefined if no servers are registered.",
-    },
-  ]}
+content={[
+{
+name: "servers",
+type: "Record<string, MCPServerBase> | undefined",
+description: "A record of all registered MCP server instances, where keys are server IDs and values are MCPServerBase instances, or undefined if no servers are registered.",
+},
+]}
 />
 
 ## Related
 
-- [MCP overview](../../docs/tools-mcp/mcp-overview.md)
-- [MCP server reference](../../reference/tools/mcp-server.md)
+- [MCP overview](../../docs/tools-mcp/mcp-overview)
+- [MCP server reference](../../reference/tools/mcp-server)

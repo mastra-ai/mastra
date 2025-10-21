@@ -1,5 +1,5 @@
 ---
-title: "OTLP Providers "
+title: 'OTLP Providers '
 description: Overview of OTLP observability providers.
 ---
 
@@ -7,14 +7,14 @@ description: Overview of OTLP observability providers.
 
 These providers are supported with OTLP-based tracing:
 
-- [Arize AX](./providers/arize-ax.md)
-- [Arize Phoenix](./providers/arize-phoenix.md)
-- [Braintrust](./providers/braintrust.md)
-- [Dash0](./providers/dash0.md)
-- [Laminar](./providers/laminar.md)
-- [Langfuse](./providers/langfuse.md)
-- [Langsmith](./providers/langsmith.md)
-- [LangWatch](./providers/langwatch.md)
-- [New Relic](./providers/new-relic.md)
-- [SigNoz](./providers/signoz.md)
-- [Traceloop](./providers/traceloop.md)
+- [Arize AX](./providers/arize-ax)
+- [Arize Phoenix](./providers/arize-phoenix)
+- [Braintrust](./providers/braintrust)
+- [Dash0](./providers/dash0)
+- [Laminar](./providers/laminar)
+- [Langfuse](./providers/langfuse)
+- [Langsmith](./providers/langsmith)
+- [LangWatch](./providers/langwatch)
+- [New Relic](./providers/new-relic)
+- [SigNoz](./providers/signoz)
+- [Traceloop](./providers/traceloop)

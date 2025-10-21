@@ -1,5 +1,5 @@
 ---
-title: "Reference: Run.cancel() "
+title: 'Reference: Run.cancel() '
 description: Documentation for the `Run.cancel()` method in workflows, which cancels a workflow run.
 ---
 
@@ -18,26 +18,26 @@ await run.cancel();
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "No parameters",
-      type: "void",
-      description: "This method takes no parameters",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "No parameters",
+type: "void",
+description: "This method takes no parameters",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "result",
-      type: "Promise<void>",
-      description: "A promise that resolves when the workflow run has been cancelled",
-    },
-  ]}
+content={[
+{
+name: "result",
+type: "Promise<void>",
+description: "A promise that resolves when the workflow run has been cancelled",
+},
+]}
 />
 
 ## Extended usage example
@@ -46,7 +46,7 @@ await run.cancel();
 const run = await workflow.createRunAsync();
 
 try {
-  const result = await run.start({ inputData: { value: "initial data" } });
+  const result = await run.start({ inputData: { value: 'initial data' } });
 } catch (error) {
   await run.cancel();
 }
@@ -54,5 +54,5 @@ try {
 
 ## Related
 
-- [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
-- [Workflow.createRunAsync()](../create-run.md)
+- [Workflows overview](../../../docs/workflows/overview#run-workflow)
+- [Workflow.createRunAsync()](../create-run)

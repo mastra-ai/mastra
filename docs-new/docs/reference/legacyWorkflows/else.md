@@ -1,6 +1,6 @@
 ---
-title: "Reference: Workflow.else() "
-description: "Documentation for the `.else()` method in Mastra workflows, which creates an alternative branch when an if condition is false."
+title: 'Reference: Workflow.else() '
+description: 'Documentation for the `.else()` method in Mastra workflows, which creates an alternative branch when an if condition is false.'
 ---
 
 # Workflow.else()
@@ -15,7 +15,7 @@ The `.else()` method creates an alternative branch in the workflow that executes
 workflow
   .step(startStep)
   .if(async ({ context }) => {
-    const value = context.getStepResult<{ value: number }>("start")?.value;
+    const value = context.getStepResult<{ value: number }>('start')?.value;
     return value < 10;
   })
   .then(ifBranchStep)
@@ -31,13 +31,13 @@ The `else()` method does not take any parameters.
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "LegacyWorkflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "LegacyWorkflow",
+description: "The workflow instance for method chaining",
+},
+]}
 />
 
 ## Behavior
@@ -62,7 +62,7 @@ try {
 
 ## Related
 
-- [if Reference](./if.md)
-- [then Reference](./then.md)
-- [Control Flow Guide](../../docs/workflows-legacy/control-flow.md)
-- [Step Condition Reference](./step-condition.md)
+- [if Reference](./if)
+- [then Reference](./then)
+- [Control Flow Guide](../../docs/workflows-legacy/control-flow)
+- [Step Condition Reference](./step-condition)

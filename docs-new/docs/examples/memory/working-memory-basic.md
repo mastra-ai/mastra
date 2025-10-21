@@ -1,5 +1,5 @@
 ---
-title: "Basic Working Memory "
+title: 'Basic Working Memory '
 description: Example showing how to enable basic working memory for agents to maintain conversational context.
 ---
 
@@ -36,28 +36,28 @@ Enable working memory by setting `workingMemory.enabled` to `true`. This allows 
 Threads group related messages into distinct conversations. When `generateTitle` is enabled, each thread is automatically named based on its content.
 
 ```typescript filename="src/mastra/agents/example-working-memory-agent.ts" showLineNumbers copy
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { LibSQLStore } from "@mastra/libsql";
+import { Memory } from '@mastra/memory';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { LibSQLStore } from '@mastra/libsql';
 
 export const workingMemoryAgent = new Agent({
-  name: "working-memory-agent",
-  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
+  name: 'working-memory-agent',
+  instructions: 'You are an AI agent with the ability to automatically recall memories from previous interactions.',
+  model: openai('gpt-4o'),
   memory: new Memory({
     storage: new LibSQLStore({
-      url: "file:working-memory.db"
+      url: 'file:working-memory.db',
     }),
     options: {
       workingMemory: {
-        enabled: true
+        enabled: true,
       },
       threads: {
-        generateTitle: true
-      }
-    }
-  })
+        generateTitle: true,
+      },
+    },
+  }),
 });
 ```
 
@@ -70,27 +70,27 @@ This example shows how to interact with an agent that has working memory enabled
 This example sends two messages to the agent within the same thread. The response is streamed and includes information remembered from the first.
 
 ```typescript filename="src/test-working-memory-agent.ts" showLineNumbers copy
-import "dotenv/config";
+import 'dotenv/config';
 
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const threadId = "123";
-const resourceId = "user-456";
+const threadId = '123';
+const resourceId = 'user-456';
 
-const agent = mastra.getAgent("workingMemoryAgent");
+const agent = mastra.getAgent('workingMemoryAgent');
 
-await agent.stream("My name is Mastra", {
+await agent.stream('My name is Mastra', {
   memory: {
     thread: threadId,
-    resource: resourceId
-  }
+    resource: resourceId,
+  },
 });
 
-const stream = await agent.stream("What do you know about me?", {
+const stream = await agent.stream('What do you know about me?', {
   memory: {
     thread: threadId,
-    resource: resourceId
-  }
+    resource: resourceId,
+  },
 });
 
 for await (const chunk of stream.textStream) {
@@ -103,27 +103,27 @@ for await (const chunk of stream.textStream) {
 This example sends two messages to the agent within the same thread. The response is returned as a single message and includes information remembered from the first.
 
 ```typescript filename="src/test-working-memory-agent.ts" showLineNumbers copy
-import "dotenv/config";
+import 'dotenv/config';
 
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const threadId = "123";
-const resourceId = "user-456";
+const threadId = '123';
+const resourceId = 'user-456';
 
-const agent = mastra.getAgent("workingMemoryAgent");
+const agent = mastra.getAgent('workingMemoryAgent');
 
-await agent.generate("My name is Mastra", {
+await agent.generate('My name is Mastra', {
   memory: {
     thread: threadId,
-    resource: resourceId
-  }
+    resource: resourceId,
+  },
 });
 
-const response = await agent.generate("What do you know about me?", {
+const response = await agent.generate('What do you know about me?', {
   memory: {
     thread: threadId,
-    resource: resourceId
-  }
+    resource: resourceId,
+  },
 });
 
 console.log(response.text);
@@ -150,14 +150,14 @@ Working memory stores data in `.json` format, which would look similar to the be
       // ...
       "args": {
         "memory": "# User Information\n- **First Name**: Mastra\n-"
-      },
+      }
     }
-  ],
+  ]
 }
 ```
 
 ## Related
 
-- [Calling Agents](../agents/calling-agents.mdx#from-the-command-line)
-- [Agent Memory](../../docs/agents/agent-memory.md)
-- [Serverless Deployment](../../docs/deployment/server-deployment.mdx#libsqlstore)
+- [Calling Agents](../agents/calling-agents#from-the-command-line)
+- [Agent Memory](../../docs/agents/agent-memory)
+- [Serverless Deployment](../../docs/deployment/server-deployment#libsqlstore)

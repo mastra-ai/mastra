@@ -1,5 +1,5 @@
 ---
-title: "Reference: Run.observeStreamVNext() "
+title: 'Reference: Run.observeStreamVNext() '
 description: Documentation for the `Run.observeStreamVNext()` method in workflows, which enables reopening the stream of an already active workflow run.
 ---
 
@@ -14,7 +14,7 @@ const run = await workflow.createRunAsync();
 
 run.streamVNext({
   inputData: {
-    value: "initial data",
+    value: 'initial data',
   },
 });
 
@@ -41,7 +41,7 @@ The stream emits various event types during workflow execution. Each event has a
 
 ## Related
 
-- [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
-- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run.md)
-- [Run.streamVNext()](./streamVNext.md)
-- [Run.resumeStreamVNext()](./resumeStreamVNext.md)
+- [Workflows overview](../../../docs/workflows/overview#run-workflow)
+- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run)
+- [Run.streamVNext()](./streamVNext)
+- [Run.resumeStreamVNext()](./resumeStreamVNext)

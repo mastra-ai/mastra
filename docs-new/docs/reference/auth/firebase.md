@@ -1,6 +1,6 @@
 ---
-title: "MastraAuthFirebase Class"
-description: "API reference for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication."
+title: 'MastraAuthFirebase Class'
+description: 'API reference for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication.'
 ---
 
 # MastraAuthFirebase Class
@@ -12,7 +12,7 @@ The `MastraAuthFirebase` class provides authentication for Mastra using Firebase
 ### Basic usage with environment variables
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthFirebase } from '@mastra/auth-firebase';
 
 // Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
@@ -27,15 +27,15 @@ export const mastra = new Mastra({
 ### Custom configuration
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthFirebase } from '@mastra/auth-firebase';
 
 export const mastra = new Mastra({
   // ..
   server: {
     experimental_auth: new MastraAuthFirebase({
-      serviceAccount: "/path/to/service-account-key.json",
-      databaseId: "your-database-id"
+      serviceAccount: '/path/to/service-account-key.json',
+      databaseId: 'your-database-id',
     }),
   },
 });
@@ -44,35 +44,35 @@ export const mastra = new Mastra({
 ## Constructor parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "serviceAccount",
-      type: "string",
-      description: "Path to the Firebase service account JSON file. This file contains the credentials needed to verify Firebase ID tokens on the server side.",
-      isOptional: true,
-      defaultValue: "process.env.FIREBASE_SERVICE_ACCOUNT"
-    },
-    {
-      name: "databaseId",
-      type: "string",
-      description: "The Firestore database ID to use. Typically '(default)' for the default database.",
-      isOptional: true,
-      defaultValue: "process.env.FIRESTORE_DATABASE_ID || process.env.FIREBASE_DATABASE_ID"
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Custom name for the auth provider instance.",
-      isOptional: true,
-      defaultValue: '"firebase"'
-    },
-    {
-      name: "authorizeUser",
-      type: "(user: FirebaseUser) => Promise<boolean> | boolean",
-      description: "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, checks for the presence of a document in the 'user_access' collection keyed by the user's UID.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "serviceAccount",
+type: "string",
+description: "Path to the Firebase service account JSON file. This file contains the credentials needed to verify Firebase ID tokens on the server side.",
+isOptional: true,
+defaultValue: "process.env.FIREBASE_SERVICE_ACCOUNT"
+},
+{
+name: "databaseId",
+type: "string",
+description: "The Firestore database ID to use. Typically '(default)' for the default database.",
+isOptional: true,
+defaultValue: "process.env.FIRESTORE_DATABASE_ID || process.env.FIREBASE_DATABASE_ID"
+},
+{
+name: "name",
+type: "string",
+description: "Custom name for the auth provider instance.",
+isOptional: true,
+defaultValue: '"firebase"'
+},
+{
+name: "authorizeUser",
+type: "(user: FirebaseUser) => Promise<boolean> | boolean",
+description: "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, checks for the presence of a document in the 'user_access' collection keyed by the user's UID.",
+isOptional: true,
+},
+]}
 />
 
 ## Environment Variables
@@ -80,26 +80,26 @@ export const mastra = new Mastra({
 The following environment variables are automatically used when constructor options are not provided:
 
 <PropertiesTable
-  content={[
-    {
-      name: "FIREBASE_SERVICE_ACCOUNT",
-      type: "string",
-      description: "Path to Firebase service account JSON file. Used if serviceAccount option is not provided.",
-      isOptional: true,
-    },
-    {
-      name: "FIRESTORE_DATABASE_ID",
-      type: "string",
-      description: "Firestore database ID. Primary environment variable for database configuration.",
-      isOptional: true,
-    },
-    {
-      name: "FIREBASE_DATABASE_ID",
-      type: "string",
-      description: "Alternative environment variable for Firestore database ID. Used if FIRESTORE_DATABASE_ID is not set.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "FIREBASE_SERVICE_ACCOUNT",
+type: "string",
+description: "Path to Firebase service account JSON file. Used if serviceAccount option is not provided.",
+isOptional: true,
+},
+{
+name: "FIRESTORE_DATABASE_ID",
+type: "string",
+description: "Firestore database ID. Primary environment variable for database configuration.",
+isOptional: true,
+},
+{
+name: "FIREBASE_DATABASE_ID",
+type: "string",
+description: "Alternative environment variable for Firestore database ID. Used if FIRESTORE_DATABASE_ID is not set.",
+isOptional: true,
+},
+]}
 />
 
 ## Default Authorization Behavior
@@ -125,4 +125,4 @@ The `FirebaseUser` type used in the `authorizeUser` function corresponds to Fire
 
 ## Related
 
-[MastraAuthFirebase Class](/docs/auth/firebase.md)
+[MastraAuthFirebase Class](/docs/auth/firebase)

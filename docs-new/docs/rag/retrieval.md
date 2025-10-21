@@ -1,5 +1,5 @@
 ---
-title: "Retrieval, Semantic Search, Reranking "
+title: 'Retrieval, Semantic Search, Reranking '
 description: Guide on retrieval processes in Mastra's RAG systems, including semantic search, filtering, and re-ranking.
 ---
 
@@ -27,14 +27,14 @@ Mastra provides flexible retrieval options with support for semantic search, fil
 The simplest approach is direct semantic search. This method uses vector similarity to find chunks that are semantically similar to the query:
 
 ```ts showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { embed } from "ai";
-import { PgVector } from "@mastra/pg";
+import { openai } from '@ai-sdk/openai';
+import { embed } from 'ai';
+import { PgVector } from '@mastra/pg';
 
 // Convert query to embedding
 const { embedding } = await embed({
-  value: "What are the main points in the article?",
-  model: openai.embedding("text-embedding-3-small"),
+  value: 'What are the main points in the article?',
+  model: openai.embedding('text-embedding-3-small'),
 });
 
 // Query vector store
@@ -42,7 +42,7 @@ const pgVector = new PgVector({
   connectionString: process.env.POSTGRES_CONNECTION_STRING,
 });
 const results = await pgVector.query({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   queryVector: embedding,
   topK: 10,
 });
@@ -56,20 +56,20 @@ Results include both the text content and a similarity score:
 ```ts showLineNumbers copy
 [
   {
-    text: "Climate change poses significant challenges...",
+    text: 'Climate change poses significant challenges...',
     score: 0.89,
-    metadata: { source: "article1.txt" },
+    metadata: { source: 'article1.txt' },
   },
   {
-    text: "Rising temperatures affect crop yields...",
+    text: 'Rising temperatures affect crop yields...',
     score: 0.82,
-    metadata: { source: "article1.txt" },
+    metadata: { source: 'article1.txt' },
   },
   // ... more results
 ];
 ```
 
-For an example of how to use the basic retrieval method, see the [Retrieve Results](../../examples/rag/query/retrieve-results.md) example.
+For an example of how to use the basic retrieval method, see the [Retrieve Results](../../examples/rag/query/retrieve-results) example.
 
 ## Advanced Retrieval options
 
@@ -84,17 +84,17 @@ Basic filtering examples:
 ```ts showLineNumbers copy
 // Simple equality filter
 const results = await pgVector.query({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   queryVector: embedding,
   topK: 10,
   filter: {
-    source: "article1.txt",
+    source: 'article1.txt',
   },
 });
 
 // Numeric comparison
 const results = await pgVector.query({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   queryVector: embedding,
   topK: 10,
   filter: {
@@ -104,11 +104,11 @@ const results = await pgVector.query({
 
 // Multiple conditions
 const results = await pgVector.query({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   queryVector: embedding,
   topK: 10,
   filter: {
-    category: "electronics",
+    category: 'electronics',
     price: { $lt: 1000 },
     inStock: true,
   },
@@ -116,21 +116,21 @@ const results = await pgVector.query({
 
 // Array operations
 const results = await pgVector.query({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   queryVector: embedding,
   topK: 10,
   filter: {
-    tags: { $in: ["sale", "new"] },
+    tags: { $in: ['sale', 'new'] },
   },
 });
 
 // Logical operators
 const results = await pgVector.query({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   queryVector: embedding,
   topK: 10,
   filter: {
-    $or: [{ category: "electronics" }, { category: "accessories" }],
+    $or: [{ category: 'electronics' }, { category: 'accessories' }],
     $and: [{ price: { $gt: 50 } }, { price: { $lt: 200 } }],
   },
 });
@@ -145,7 +145,7 @@ Common use cases for metadata filtering:
 - Combine multiple conditions for precise querying
 - Filter by document attributes (e.g., language, author)
 
-For an example of how to use metadata filtering, see the [Hybrid Vector Search](../../examples/rag/query/hybrid-vector-search.md) example.
+For an example of how to use metadata filtering, see the [Hybrid Vector Search](../../examples/rag/query/hybrid-vector-search) example.
 
 ### Vector Query Tool
 
@@ -153,9 +153,9 @@ Sometimes you want to give your agent the ability to query a vector database dir
 
 ```ts showLineNumbers copy
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  model: openai.embedding('text-embedding-3-small'),
 });
 ```
 
@@ -174,58 +174,59 @@ The Vector Query Tool supports database-specific configurations that enable you 
 ```ts showLineNumbers copy
 // Pinecone with namespace
 const pineconeQueryTool = createVectorQueryTool({
-  vectorStoreName: "pinecone",
-  indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'pinecone',
+  indexName: 'docs',
+  model: openai.embedding('text-embedding-3-small'),
   databaseConfig: {
     pinecone: {
-      namespace: "production"  // Isolate data by environment
-    }
-  }
+      namespace: 'production', // Isolate data by environment
+    },
+  },
 });
 
 // pgVector with performance tuning
 const pgVectorQueryTool = createVectorQueryTool({
-  vectorStoreName: "postgres",
-  indexName: "embeddings", 
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'postgres',
+  indexName: 'embeddings',
+  model: openai.embedding('text-embedding-3-small'),
   databaseConfig: {
     pgvector: {
-      minScore: 0.7,    // Filter low-quality results
-      ef: 200,          // HNSW search parameter
-      probes: 10        // IVFFlat probe parameter
-    }
-  }
+      minScore: 0.7, // Filter low-quality results
+      ef: 200, // HNSW search parameter
+      probes: 10, // IVFFlat probe parameter
+    },
+  },
 });
 
 // Chroma with advanced filtering
 const chromaQueryTool = createVectorQueryTool({
-  vectorStoreName: "chroma",
-  indexName: "documents",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'chroma',
+  indexName: 'documents',
+  model: openai.embedding('text-embedding-3-small'),
   databaseConfig: {
     chroma: {
-      where: { "category": "technical" },
-      whereDocument: { "$contains": "API" }
-    }
-  }
+      where: { category: 'technical' },
+      whereDocument: { $contains: 'API' },
+    },
+  },
 });
 
 // LanceDB with table specificity
 const lanceQueryTool = createVectorQueryTool({
-  vectorStoreName: "lance",
-  indexName: "documents",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'lance',
+  indexName: 'documents',
+  model: openai.embedding('text-embedding-3-small'),
   databaseConfig: {
     lance: {
-      tableName: "myVectors",     // Specify which table to query
-      includeAllColumns: true     // Include all metadata columns in results
-    }
-  }
+      tableName: 'myVectors', // Specify which table to query
+      includeAllColumns: true, // Include all metadata columns in results
+    },
+  },
 });
 ```
 
 **Key Benefits:**
+
 - **Pinecone namespaces**: Organize vectors by tenant, environment, or data type
 - **pgVector optimization**: Control search accuracy and speed with ef/probes parameters
 - **Quality filtering**: Set minimum similarity thresholds to improve result relevance
@@ -233,6 +234,7 @@ const lanceQueryTool = createVectorQueryTool({
 - **Runtime flexibility**: Override configurations dynamically based on context
 
 **Common Use Cases:**
+
 - Multi-tenant applications using Pinecone namespaces
 - Performance optimization in high-load scenarios
 - Environment-specific configurations (dev/staging/prod)
@@ -247,14 +249,14 @@ import { RuntimeContext } from '@mastra/core/runtime-context';
 const runtimeContext = new RuntimeContext();
 runtimeContext.set('databaseConfig', {
   pinecone: {
-    namespace: 'runtime-namespace'
-  }
+    namespace: 'runtime-namespace',
+  },
 });
 
 await pineconeQueryTool.execute({
   context: { queryText: 'search query' },
   mastra,
-  runtimeContext
+  runtimeContext,
 });
 ```
 
@@ -265,19 +267,20 @@ For detailed configuration options and advanced usage, see the [Vector Query Too
 Vector store prompts define query patterns and filtering capabilities for each vector database implementation.
 When implementing filtering, these prompts are required in the agent's instructions to specify valid operators and syntax for each vector store implementation.
 
-{/* 
+{/_
 LLM CONTEXT: This Tabs component displays vector store configuration examples for different database providers.
 Each tab shows how to configure a RAG agent with the appropriate prompt for that specific vector store.
 The tabs demonstrate the consistent pattern of importing the store-specific prompt and adding it to agent instructions.
 This helps users understand how to properly configure their RAG agents for different vector database backends.
 The providers include Pg Vector, Pinecone, Qdrant, Chroma, Astra, LibSQL, Upstash, Cloudflare, MongoDB, OpenSearch and S3 Vectors.
-*/}
+_/}
 <Tabs>
 ['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch', 'S3 Vectors']}>
-  <TabItem value="tab-1" label="Tab 1">
+<TabItem value="tab-1" label="Tab 1">
+
 ```ts showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
-import { PGVECTOR_PROMPT } from "@mastra/pg";
+import { PGVECTOR_PROMPT } from '@mastra/pg';
 
 export const ragAgent = new Agent({
   name: 'RAG Agent',
@@ -289,6 +292,7 @@ export const ragAgent = new Agent({
   tools: { vectorQueryTool },
 });
 ```
+
 </TabItem>
 
 <TabItem value="tab-2" label="Tab 2">
@@ -297,15 +301,15 @@ import { openai } from '@ai-sdk/openai';
 import { PINECONE_PROMPT } from "@mastra/pinecone";
 
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
+name: 'RAG Agent',
+model: openai('gpt-4o-mini'),
+instructions: `   Process queries using the provided context. Structure responses to be concise and relevant.
   ${PINECONE_PROMPT}
   `,
-  tools: { vectorQueryTool },
+tools: { vectorQueryTool },
 });
-```
+
+````
 </TabItem>
 
 <TabItem value="tab-3" label="Tab 3">
@@ -322,7 +326,8 @@ export const ragAgent = new Agent({
   `,
   tools: { vectorQueryTool },
 });
-```
+````
+
 </TabItem>
 
 <TabItem value="tab-4" label="Tab 4">
@@ -331,15 +336,15 @@ import { openai } from '@ai-sdk/openai';
 import { CHROMA_PROMPT } from "@mastra/chroma";
 
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
+name: 'RAG Agent',
+model: openai('gpt-4o-mini'),
+instructions: `   Process queries using the provided context. Structure responses to be concise and relevant.
   ${CHROMA_PROMPT}
   `,
-  tools: { vectorQueryTool },
+tools: { vectorQueryTool },
 });
-```
+
+````
 </TabItem>
 
 <TabItem value="tab-5" label="Tab 5">
@@ -356,7 +361,8 @@ export const ragAgent = new Agent({
   `,
   tools: { vectorQueryTool },
 });
-```
+````
+
 </TabItem>
 
 <TabItem value="tab-6" label="Tab 6">
@@ -365,15 +371,15 @@ import { openai } from '@ai-sdk/openai';
 import { LIBSQL_PROMPT } from "@mastra/libsql";
 
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
+name: 'RAG Agent',
+model: openai('gpt-4o-mini'),
+instructions: `   Process queries using the provided context. Structure responses to be concise and relevant.
   ${LIBSQL_PROMPT}
   `,
-  tools: { vectorQueryTool },
+tools: { vectorQueryTool },
 });
-```
+
+````
 </TabItem>
 
 <TabItem value="tab-7" label="Tab 7">
@@ -390,7 +396,8 @@ export const ragAgent = new Agent({
   `,
   tools: { vectorQueryTool },
 });
-```
+````
+
 </TabItem>
 
 <TabItem value="tab-8" label="Tab 8">
@@ -399,15 +406,15 @@ import { openai } from '@ai-sdk/openai';
 import { VECTORIZE_PROMPT } from "@mastra/vectorize";
 
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
+name: 'RAG Agent',
+model: openai('gpt-4o-mini'),
+instructions: `   Process queries using the provided context. Structure responses to be concise and relevant.
   ${VECTORIZE_PROMPT}
   `,
-  tools: { vectorQueryTool },
+tools: { vectorQueryTool },
 });
-```
+
+````
 </TabItem>
 
 <TabItem value="tab-9" label="Tab 9">
@@ -424,7 +431,8 @@ export const ragAgent = new Agent({
   `,
   tools: { vectorQueryTool },
 });
-```
+````
+
 </TabItem>
 
 <TabItem value="tab-10" label="Tab 10">
@@ -433,15 +441,15 @@ import { openai } from '@ai-sdk/openai';
 import { OPENSEARCH_PROMPT } from "@mastra/opensearch";
 
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
+name: 'RAG Agent',
+model: openai('gpt-4o-mini'),
+instructions: `   Process queries using the provided context. Structure responses to be concise and relevant.
   ${OPENSEARCH_PROMPT}
   `,
-  tools: { vectorQueryTool },
+tools: { vectorQueryTool },
 });
-```
+
+````
 </TabItem>
 
 <TabItem value="tab-11" label="Tab 11">
@@ -458,7 +466,8 @@ export const ragAgent = new Agent({
   `,
   tools: { vectorQueryTool },
 });
-```
+````
+
 </TabItem>
 
 </Tabs>
@@ -475,9 +484,9 @@ Here's how to use re-ranking:
 
 ```ts showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
-import { 
-  rerankWithScorer as rerank, 
-  MastraAgentRelevanceScorer 
+import {
+  rerankWithScorer as rerank,
+  MastraAgentRelevanceScorer
 } from "@mastra/rag";
 
 // Get initial results from vector search
@@ -517,7 +526,7 @@ The re-ranked results combine vector similarity with semantic understanding to i
 
 For more details about re-ranking, see the [rerank()](/reference/rag/rerankWithScorer) method.
 
-For an example of how to use the re-ranking method, see the [Re-ranking Results](../../examples/rag/rerank/rerank.md) example.
+For an example of how to use the re-ranking method, see the [Re-ranking Results](../../examples/rag/rerank/rerank) example.
 
 ### Graph-based Retrieval
 
@@ -531,9 +540,9 @@ Example setup:
 
 ```ts showLineNumbers copy
 const graphQueryTool = createGraphQueryTool({
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  model: openai.embedding('text-embedding-3-small'),
   graphOptions: {
     threshold: 0.7,
   },
@@ -542,4 +551,4 @@ const graphQueryTool = createGraphQueryTool({
 
 For more details about graph-based retrieval, see the [GraphRAG](/reference/rag/graph-rag) class and the [createGraphQueryTool()](/reference/tools/graph-rag-tool) function.
 
-For an example of how to use the graph-based retrieval method, see the [Graph-based Retrieval](../../examples/rag/usage/graph-rag.md) example.
+For an example of how to use the graph-based retrieval method, see the [Graph-based Retrieval](../../examples/rag/usage/graph-rag) example.

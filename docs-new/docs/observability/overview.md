@@ -1,5 +1,5 @@
 ---
-title: "Overview "
+title: 'Overview '
 description: Monitor and debug applications with Mastra's Observability features.
 ---
 
@@ -10,19 +10,25 @@ Mastra provides comprehensive observability features designed specifically for A
 ## Key Features
 
 ### Structured Logging
+
 Debug applications with contextual logging:
+
 - **Context propagation**: Automatic correlation with traces
 - **Configurable levels**: Filter by severity in development and production
 
 ### AI Tracing
+
 Specialized tracing for AI operations that captures:
+
 - **LLM interactions**: Token usage, latency, prompts, and completions
 - **Agent execution**: Decision paths, tool calls, and memory operations
 - **Workflow steps**: Branching logic, parallel execution, and step outputs
 - **Automatic instrumentation**: Zero-configuration tracing with decorators
 
 ### OTEL Tracing
+
 Traditional distributed tracing with OpenTelemetry:
+
 - **Standard OTLP protocol**: Compatible with existing observability infrastructure
 - **HTTP and database instrumentation**: Automatic spans for common operations
 - **Provider integrations**: Datadog, New Relic, Jaeger, and other OTLP collectors
@@ -33,9 +39,9 @@ Traditional distributed tracing with OpenTelemetry:
 Configure Observability in your Mastra instance:
 
 ```typescript filename="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { PinoLogger } from "@mastra/core";
-import { LibSqlStorage } from "@mastra/libsql";
+import { Mastra } from '@mastra/core';
+import { PinoLogger } from '@mastra/core';
+import { LibSqlStorage } from '@mastra/libsql';
 
 export const mastra = new Mastra({
   // ... other config
@@ -44,21 +50,21 @@ export const mastra = new Mastra({
     default: { enabled: true }, // Enables AI Tracing
   },
   storage: new LibSQLStore({
-    url: "file:./mastra.db", // Storage is required for tracing
+    url: 'file:./mastra.db', // Storage is required for tracing
   }),
   telemetry: {
     enabled: true, // Enables OTEL Tracing
-  }
+  },
 });
 ```
 
 With this basic setup, you will see Traces and Logs in both the Playground and in Mastra Cloud.
 
-We also support various external tracing providers like Langfuse, Braintrust, and any OpenTelemetry-compatible platform (Datadog, New Relic, SigNoz, etc.). See more about this in the [AI Tracing](/docs/observability/ai-tracing.md) documentation.
+We also support various external tracing providers like Langfuse, Braintrust, and any OpenTelemetry-compatible platform (Datadog, New Relic, SigNoz, etc.). See more about this in the [AI Tracing](/docs/observability/ai-tracing) documentation.
 
 ## What's Next?
 
-- **[Set up AI Tracing](/docs/observability/ai-tracing.md)**: Configure tracing for your application
-- **[Configure Logging](/docs/observability/logging.md)**: Add structured logging
-- **[View Examples](/examples/observability/basic-ai-tracing.md)**: See observability in action
-- **[API Reference](/reference/observability/ai-tracing/ai-tracing.md)**: Detailed configuration options
+- **[Set up AI Tracing](/docs/observability/ai-tracing)**: Configure tracing for your application
+- **[Configure Logging](/docs/observability/logging)**: Add structured logging
+- **[View Examples](/examples/observability/basic-ai-tracing)**: See observability in action
+- **[API Reference](/reference/observability/ai-tracing/ai-tracing)**: Detailed configuration options

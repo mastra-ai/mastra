@@ -13,20 +13,19 @@ Mastra's Voice system provides a unified interface for voice interactions, enabl
 
 ## Adding Voice to Agents
 
-To learn how to integrate voice capabilities into your agents, check out the [Adding Voice to Agents](../agents/adding-voice.md) documentation. This section covers how to use both single and multiple voice providers, as well as real-time interactions.
+To learn how to integrate voice capabilities into your agents, check out the [Adding Voice to Agents](../agents/adding-voice) documentation. This section covers how to use both single and multiple voice providers, as well as real-time interactions.
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { OpenAIVoice } from "@mastra/voice-openai";
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { OpenAIVoice } from '@mastra/voice-openai';
 
 // Initialize OpenAI voice for TTS
 
 const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions:
-    "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
+  name: 'Voice Agent',
+  instructions: 'You are a voice assistant that can help users with their tasks.',
+  model: openai('gpt-4o'),
   voice: new OpenAIVoice(),
 });
 ```
@@ -40,13 +39,13 @@ Choose from multiple providers like OpenAI, ElevenLabs, and more.
 
 For detailed configuration options and advanced features, check out our [Text-to-Speech guide](./text-to-speech).
 
-{/*
+{/_
 LLM CONTEXT: This Tabs component demonstrates Text-to-Speech (TTS) implementation across different voice providers.
 Each tab shows how to set up and use a specific TTS provider (OpenAI, Azure, ElevenLabs, etc.) with Mastra agents.
 The tabs help users compare different TTS providers and choose the one that best fits their needs.
 Each tab includes complete code examples showing agent setup, text generation, and audio playback.
 The providers include OpenAI, Azure, ElevenLabs, PlayAI, Google, Cloudflare, Deepgram, Speechify, Sarvam, and Murf.
-*/}
+_/}
 
 <Tabs>
   <TabItem value="tab-1" label="Tab 1">
@@ -331,12 +330,12 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
 <br />
 <AudioPlayback audio="https://github.com/mastra-ai/realtime-voice-demo/raw/refs/heads/main/how_can_i_help_you.mp3" />
 
-{/*
+{/_
 LLM CONTEXT: This Tabs component demonstrates Speech-to-Text (STT) implementation across different voice providers.
 Each tab shows how to set up and use a specific STT provider for transcribing audio to text.
 The tabs help users understand how to implement speech recognition with different providers.
 Each tab includes code examples showing audio file handling, transcription, and response generation.
-*/}
+_/}
 
 <Tabs>
   <TabItem value="create" label="create">
@@ -588,21 +587,21 @@ import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
 import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
 
 const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new GeminiLiveVoice({
-    // Live API mode
-    apiKey: process.env.GOOGLE_API_KEY,
-    model: 'gemini-2.0-flash-exp',
-    speaker: 'Puck',
-    debug: true,
-    // Vertex AI alternative:
-    // vertexAI: true,
-    // project: 'your-gcp-project',
-    // location: 'us-central1',
-    // serviceAccountKeyFile: '/path/to/service-account.json',
-  }),
+name: "Voice Agent",
+instructions: "You are a voice assistant that can help users with their tasks.",
+model: openai("gpt-4o"),
+voice: new GeminiLiveVoice({
+// Live API mode
+apiKey: process.env.GOOGLE_API_KEY,
+model: 'gemini-2.0-flash-exp',
+speaker: 'Puck',
+debug: true,
+// Vertex AI alternative:
+// vertexAI: true,
+// project: 'your-gcp-project',
+// location: 'us-central1',
+// serviceAccountKeyFile: '/path/to/service-account.json',
+}),
 });
 
 // Connect before using speak/send
@@ -610,12 +609,12 @@ await voiceAgent.voice.connect();
 
 // Listen for agent audio responses
 voiceAgent.voice.on('speaker', ({ audio }) => {
-  playAudio(audio);
+playAudio(audio);
 });
 
 // Listen for text responses and transcriptions
 voiceAgent.voice.on('writing', ({ text, role }) => {
-  console.log(`${role}: ${text}`);
+console.log(`${role}: ${text}`);
 });
 
 // Initiate the conversation
@@ -624,7 +623,8 @@ await voiceAgent.voice.speak('How can I help you today?');
 // Send continuous audio from the microphone
 const micStream = getMicrophoneStream();
 await voiceAgent.voice.send(micStream);
-```
+
+````
 
 Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
 
@@ -661,7 +661,7 @@ const voice = new OpenAIVoice({
   },
   speaker: "alloy", // Example speaker name
 });
-```
+````
 
 Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
 
@@ -885,15 +885,15 @@ This example demonstrates how to create and use two different voice providers in
 Start by creating instances of the voice providers with any necessary configuration.
 
 ```typescript
-import { OpenAIVoice } from "@mastra/voice-openai";
-import { PlayAIVoice } from "@mastra/voice-playai";
-import { CompositeVoice } from "@mastra/core/voice";
-import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+import { OpenAIVoice } from '@mastra/voice-openai';
+import { PlayAIVoice } from '@mastra/voice-playai';
+import { CompositeVoice } from '@mastra/core/voice';
+import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
 
 // Initialize OpenAI voice for STT
 const input = new OpenAIVoice({
   listeningModel: {
-    name: "whisper-1",
+    name: 'whisper-1',
     apiKey: process.env.OPENAI_API_KEY,
   },
 });
@@ -901,7 +901,7 @@ const input = new OpenAIVoice({
 // Initialize PlayAI voice for TTS
 const output = new PlayAIVoice({
   speechModel: {
-    name: "playai-voice",
+    name: 'playai-voice',
     apiKey: process.env.PLAYAI_API_KEY,
   },
 });
@@ -917,12 +917,12 @@ const audioStream = getMicrophoneStream(); // Assume this function gets audio in
 const transcript = await voice.listen(audioStream);
 
 // Log the transcribed text
-console.log("Transcribed text:", transcript);
+console.log('Transcribed text:', transcript);
 
 // Convert text to speech
 const responseAudio = await voice.speak(`You said: ${transcript}`, {
-  speaker: "default", // Optional: specify a speaker,
-  responseFormat: "wav", // Optional: specify a response format
+  speaker: 'default', // Optional: specify a speaker,
+  responseFormat: 'wav', // Optional: specify a response format
 });
 
 // Play the audio response
@@ -933,13 +933,13 @@ For more information on the CompositeVoice, refer to the [CompositeVoice Referen
 
 ## More Resources
 
-- [CompositeVoice](../../reference/voice/composite-voice.md)
-- [MastraVoice](../../reference/voice/mastra-voice.md)
-- [OpenAI Voice](../../reference/voice/openai.md)
-- [OpenAI Realtime Voice](../../reference/voice/openai-realtime.md)
-- [Azure Voice](../../reference/voice/azure.md)
-- [Google Voice](../../reference/voice/google.md)
-- [Google Gemini Live Voice](../../reference/voice/google-gemini-live.md)
-- [Deepgram Voice](../../reference/voice/deepgram.md)
-- [PlayAI Voice](../../reference/voice/playai.md)
-- [Voice Examples](../../examples/voice/text-to-speech.md)
+- [CompositeVoice](../../reference/voice/composite-voice)
+- [MastraVoice](../../reference/voice/mastra-voice)
+- [OpenAI Voice](../../reference/voice/openai)
+- [OpenAI Realtime Voice](../../reference/voice/openai-realtime)
+- [Azure Voice](../../reference/voice/azure)
+- [Google Voice](../../reference/voice/google)
+- [Google Gemini Live Voice](../../reference/voice/google-gemini-live)
+- [Deepgram Voice](../../reference/voice/deepgram)
+- [PlayAI Voice](../../reference/voice/playai)
+- [Voice Examples](../../examples/voice/text-to-speech)

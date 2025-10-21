@@ -1,6 +1,6 @@
 ---
-title: "Reference: Agent.getTools() "
-description: "Documentation for the `Agent.getTools()` method in Mastra agents, which retrieves the tools that the agent can use."
+title: 'Reference: Agent.getTools() '
+description: 'Documentation for the `Agent.getTools()` method in Mastra agents, which retrieves the tools that the agent can use.'
 ---
 
 # Agent.getTools()
@@ -16,52 +16,52 @@ await agent.getTools();
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
-      isOptional: true,
-      defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
-    },
-  ]}
+content={[
+{
+name: "options",
+type: "{ runtimeContext?: RuntimeContext }",
+isOptional: true,
+defaultValue: "{}",
+description: "Optional configuration object containing runtime context.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "tools",
-      type: "TTools | Promise<TTools>",
-      description: "The tools configured for the agent, either as a direct object or a promise that resolves to the tools.",
-    },
-  ]}
+content={[
+{
+name: "tools",
+type: "TTools | Promise<TTools>",
+description: "The tools configured for the agent, either as a direct object or a promise that resolves to the tools.",
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript copy
 await agent.getTools({
-  runtimeContext: new RuntimeContext()
+  runtimeContext: new RuntimeContext(),
 });
 ```
 
 ### Options parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      isOptional: true,
-      defaultValue: "new RuntimeContext()",
-      description: "Runtime context for dependency injection and contextual information.",
-    },
-  ]}
+content={[
+{
+name: "runtimeContext",
+type: "RuntimeContext",
+isOptional: true,
+defaultValue: "new RuntimeContext()",
+description: "Runtime context for dependency injection and contextual information.",
+},
+]}
 />
 
 ## Related
 
-- [Using tools with agents](../../docs/agents/using-tools-and-mcp.md)
-- [Creating tools](../../docs/tools-mcp/overview.md)
+- [Using tools with agents](../../docs/agents/using-tools-and-mcp)
+- [Creating tools](../../docs/tools-mcp/overview)

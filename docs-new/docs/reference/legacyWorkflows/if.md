@@ -1,6 +1,6 @@
 ---
-title: "Reference: Workflow.if() "
-description: "Documentation for the `.if()` method in Mastra workflows, which creates conditional branches based on specified conditions."
+title: 'Reference: Workflow.if() '
+description: 'Documentation for the `.if()` method in Mastra workflows, which creates conditional branches based on specified conditions.'
 ---
 
 # Workflow.if()
@@ -15,7 +15,7 @@ The `.if()` method creates a conditional branch in the workflow, allowing steps 
 workflow
   .step(startStep)
   .if(async ({ context }) => {
-    const value = context.getStepResult<{ value: number }>("start")?.value;
+    const value = context.getStepResult<{ value: number }>('start')?.value;
     return value < 10; // If true, execute the "if" branch
   })
   .then(ifBranchStep)
@@ -27,15 +27,15 @@ workflow
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "condition",
-      type: "Function | ReferenceCondition",
-      description:
-        "A function or reference condition that determines whether to execute the 'if' branch",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "condition",
+type: "Function | ReferenceCondition",
+description:
+"A function or reference condition that determines whether to execute the 'if' branch",
+isOptional: false,
+},
+]}
 />
 
 ## Condition Types
@@ -48,8 +48,8 @@ You can use a function that returns a boolean:
 workflow
   .step(startStep)
   .if(async ({ context }) => {
-    const result = context.getStepResult<{ status: string }>("start");
-    return result?.status === "success"; // Execute "if" branch when status is "success"
+    const result = context.getStepResult<{ status: string }>('start');
+    return result?.status === 'success'; // Execute "if" branch when status is "success"
   })
   .then(successStep)
   .else()
@@ -64,7 +64,7 @@ You can use a reference-based condition with comparison operators:
 workflow
   .step(startStep)
   .if({
-    ref: { step: startStep, path: "value" },
+    ref: { step: startStep, path: 'value' },
     query: { $lt: 10 }, // Execute "if" branch when value is less than 10
   })
   .then(ifBranchStep)
@@ -75,13 +75,13 @@ workflow
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "LegacyWorkflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "LegacyWorkflow",
+description: "The workflow instance for method chaining",
+},
+]}
 />
 
 ## Error Handling
@@ -102,7 +102,7 @@ try {
 
 ## Related
 
-- [else Reference](./else.md)
-- [then Reference](./then.md)
-- [Control Flow Guide](../../docs/workflows-legacy/control-flow.md)
-- [Step Condition Reference](./step-condition.md)
+- [else Reference](./else)
+- [then Reference](./then)
+- [Control Flow Guide](../../docs/workflows-legacy/control-flow)
+- [Step Condition Reference](./step-condition)

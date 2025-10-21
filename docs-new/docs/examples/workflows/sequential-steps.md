@@ -1,5 +1,5 @@
 ---
-title: "Sequential Execution "
+title: 'Sequential Execution '
 description: Example of using Mastra to execute multiple independent tasks in sequence within a workflow.
 ---
 
@@ -12,50 +12,50 @@ Many workflows involve executing steps one after another in a defined order. Thi
 In this example, the workflow runs `step1` and `step2` in sequence, passing the input through each step and returning the final result from `step2`.
 
 ```typescript filename="src/mastra/workflows/example-sequential-steps.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
 
 const step1 = createStep({
-  id: "step-1",
-  description: "passes value from input to output",
+  id: 'step-1',
+  description: 'passes value from input to output',
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   outputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   execute: async ({ inputData }) => {
     const { value } = inputData;
     return {
-      value
+      value,
     };
-  }
+  },
 });
 const step2 = createStep({
-  id: "step-2",
-  description: "passes value from input to output",
+  id: 'step-2',
+  description: 'passes value from input to output',
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   outputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   execute: async ({ inputData }) => {
     const { value } = inputData;
     return {
-      value
+      value,
     };
-  }
+  },
 });
 
 export const sequentialSteps = createWorkflow({
-  id: "sequential-workflow",
+  id: 'sequential-workflow',
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   outputSchema: z.object({
-    value: z.number()
-  })
+    value: z.number(),
+  }),
 })
   .then(step1)
   .then(step2)
@@ -64,4 +64,4 @@ export const sequentialSteps = createWorkflow({
 
 ## Related
 
-- [Running Workflows](./running-workflows.md)
+- [Running Workflows](./running-workflows)

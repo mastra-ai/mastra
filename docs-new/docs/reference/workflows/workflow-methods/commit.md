@@ -1,5 +1,5 @@
 ---
-title: "Reference: Workflow.commit() "
+title: 'Reference: Workflow.commit() '
 description: Documentation for the `Workflow.commit()` method in workflows, which finalizes the workflow and returns the final result.
 ---
 
@@ -16,15 +16,15 @@ workflow.then(step1).commit();
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "Workflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "Workflow",
+description: "The workflow instance for method chaining",
+},
+]}
 />
 
 ## Related
 
-- [Control Flow](../../../docs/workflows/control-flow.md)
+- [Control Flow](../../../docs/workflows/control-flow)

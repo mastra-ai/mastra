@@ -1,5 +1,5 @@
 ---
-title: "Reference: Step "
+title: 'Reference: Step '
 description: Documentation for the Step class, which defines individual units of work within a workflow.
 ---
 
@@ -11,7 +11,7 @@ The Step class defines individual units of work within a workflow, encapsulating
 
 ```typescript
 const processOrder = new LegacyStep({
-  id: "processOrder",
+  id: 'processOrder',
   inputSchema: z.object({
     orderId: z.string(),
     userId: z.string(),
@@ -22,7 +22,7 @@ const processOrder = new LegacyStep({
   }),
   execute: async ({ context, runId }) => {
     return {
-      status: "processed",
+      status: 'processed',
       orderId: context.orderId,
     };
   },
@@ -32,69 +32,69 @@ const processOrder = new LegacyStep({
 ## Constructor Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for the step",
-      required: true,
-    },
-    {
-      name: "inputSchema",
-      type: "z.ZodSchema",
-      description: "Zod schema to validate input data before execution",
-      required: false,
-    },
-    {
-      name: "outputSchema",
-      type: "z.ZodSchema",
-      description: "Zod schema to validate step output data",
-      required: false,
-    },
-    {
-      name: "payload",
-      type: "Record<string, any>",
-      description: "Static data to be merged with variables",
-      required: false,
-    },
-    {
-      name: "execute",
-      type: "(params: ExecuteParams) => Promise<any>",
-      description: "Async function containing step logic",
-      required: true,
-    },
-  ]}
+content={[
+{
+name: "id",
+type: "string",
+description: "Unique identifier for the step",
+required: true,
+},
+{
+name: "inputSchema",
+type: "z.ZodSchema",
+description: "Zod schema to validate input data before execution",
+required: false,
+},
+{
+name: "outputSchema",
+type: "z.ZodSchema",
+description: "Zod schema to validate step output data",
+required: false,
+},
+{
+name: "payload",
+type: "Record<string, any>",
+description: "Static data to be merged with variables",
+required: false,
+},
+{
+name: "execute",
+type: "(params: ExecuteParams) => Promise<any>",
+description: "Async function containing step logic",
+required: true,
+},
+]}
 />
 
 ### ExecuteParams
 
 <PropertiesTable
-  content={[
-    {
-      name: "context",
-      type: "StepContext",
-      description: "Access to workflow context and step results",
-    },
-    {
-      name: "runId",
-      type: "string",
-      description: "Unique identifier for current workflow run",
-    },
-    {
-      name: "suspend",
-      type: "() => Promise<void>",
-      description: "Function to suspend step execution",
-    },
-    {
-      name: "mastra",
-      type: "Mastra",
-      description: "Access to Mastra instance",
-    },
-  ]}
+content={[
+{
+name: "context",
+type: "StepContext",
+description: "Access to workflow context and step results",
+},
+{
+name: "runId",
+type: "string",
+description: "Unique identifier for current workflow run",
+},
+{
+name: "suspend",
+type: "() => Promise<void>",
+description: "Function to suspend step execution",
+},
+{
+name: "mastra",
+type: "Mastra",
+description: "Access to Mastra instance",
+},
+]}
 />
 
 ## Related
 
-- [Workflow Reference](./workflow.md)
-- [Step Configuration Guide](../../docs/workflows-legacy/steps.md)
-- [Control Flow Guide](../../docs/workflows-legacy/control-flow.md)
+- [Workflow Reference](./workflow)
+- [Step Configuration Guide](../../docs/workflows-legacy/steps)
+- [Control Flow Guide](../../docs/workflows-legacy/control-flow)

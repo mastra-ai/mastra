@@ -1,6 +1,6 @@
 ---
-title: "Reference: Mastra.setTelemetry() "
-description: "Documentation for the `Mastra.setTelemetry()` method in Mastra, which sets the telemetry configuration for all components."
+title: 'Reference: Mastra.setTelemetry() '
+description: 'Documentation for the `Mastra.setTelemetry()` method in Mastra, which sets the telemetry configuration for all components.'
 ---
 
 # Mastra.setTelemetry()
@@ -10,19 +10,19 @@ The `.setTelemetry()` method is used to set the telemetry configuration for all 
 ## Usage example
 
 ```typescript copy
-mastra.setTelemetry({ export: { type: "console" } });
+mastra.setTelemetry({ export: { type: 'console' } });
 ```
 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "telemetry",
-      type: "OtelConfig",
-      description: "The telemetry configuration object to set for all components.",
-    },
-  ]}
+content={[
+{
+name: "telemetry",
+type: "OtelConfig",
+description: "The telemetry configuration object to set for all components.",
+},
+]}
 />
 
 ## Returns
@@ -31,5 +31,5 @@ This method does not return a value.
 
 ## Related
 
-- [Logging](../../docs/observability/logging.md)
-- [PinoLogger](../../reference/observability/logger.md)
+- [Logging](../../docs/observability/logging)
+- [PinoLogger](../../reference/observability/logger)

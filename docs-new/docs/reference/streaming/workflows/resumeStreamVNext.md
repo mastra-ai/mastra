@@ -1,8 +1,7 @@
 ---
-title: "Reference: Run.resumeStreamVNext() "
+title: 'Reference: Run.resumeStreamVNext() '
 description: Documentation for the `Run.resumeStreamVNext()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
 ---
-
 
 # Run.resumeStreamVNext() (Experimental)
 
@@ -17,17 +16,17 @@ const run = await workflow.createRunAsync();
 
 const stream = run.streamVNext({
   inputData: {
-    value: "initial data"
-  }
+    value: 'initial data',
+  },
 });
 
 const result = await stream.result;
 
-if (result!.status === "suspended") {
+if (result!.status === 'suspended') {
   const resumedStream = await run.resumeStreamVNext({
     resumeData: {
-      value: "resume data"
-    }
+      value: 'resume data',
+    },
   });
 }
 ```
@@ -35,69 +34,69 @@ if (result!.status === "suspended") {
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "resumeData",
-      type: "z.infer<TInput>",
-      description: "Input data that matches the workflow's input schema",
-      isOptional: true,
-    },
-    {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "Runtime context data to use during workflow execution",
-      isOptional: true,
-    },
-    {
-      name: "step",
-      type: "Step<string, any, any, any, any, TEngineType>",
-      description: "The step to resume execution from",
-      isOptional: true,
-    },
-    {
-      name: "tracingOptions",
-      type: "TracingOptions",
-      isOptional: true,
-      description: "Options for AI tracing configuration.",
-      properties: [
-        {
-          parameters: [{
-            name: "metadata",
-            type: "Record<string, any>",
-            isOptional: true,
-            description: "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags."
-          }]
-        }
-      ]
-    },
-  ]}
+content={[
+{
+name: "resumeData",
+type: "z.infer<TInput>",
+description: "Input data that matches the workflow's input schema",
+isOptional: true,
+},
+{
+name: "runtimeContext",
+type: "RuntimeContext",
+description: "Runtime context data to use during workflow execution",
+isOptional: true,
+},
+{
+name: "step",
+type: "Step<string, any, any, any, any, TEngineType>",
+description: "The step to resume execution from",
+isOptional: true,
+},
+{
+name: "tracingOptions",
+type: "TracingOptions",
+isOptional: true,
+description: "Options for AI tracing configuration.",
+properties: [
+{
+parameters: [{
+name: "metadata",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags."
+}]
+}
+]
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "stream",
-      type: "MastraWorkflowStream<ChunkType>",
-      description: "A custom stream that extends ReadableStream<ChunkType> with additional workflow-specific properties",
-    },
-    {
-      name: "stream.status",
-      type: "Promise<RunStatus>",
-      description: "A promise that resolves to the current workflow run status",
-    },
-    {
-      name: "stream.result",
-      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
-      description: "A promise that resolves to the final workflow result",
-    },
-    {
-      name: "stream.usage",
-      type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cacheInputTokens?: number }>",
-      description: "A promise that resolves to token usage statistics",
-    },
-  ]}
+content={[
+{
+name: "stream",
+type: "MastraWorkflowStream<ChunkType>",
+description: "A custom stream that extends ReadableStream<ChunkType> with additional workflow-specific properties",
+},
+{
+name: "stream.status",
+type: "Promise<RunStatus>",
+description: "A promise that resolves to the current workflow run status",
+},
+{
+name: "stream.result",
+type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+description: "A promise that resolves to the final workflow result",
+},
+{
+name: "stream.usage",
+type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cacheInputTokens?: number }>",
+description: "A promise that resolves to token usage statistics",
+},
+]}
 />
 
 ## Stream Events
@@ -112,6 +111,6 @@ The stream emits various event types during workflow execution. Each event has a
 
 ## Related
 
-- [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
-- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run.md)
-- [Run.streamVNext()](./streamVNext.md)
+- [Workflows overview](../../../docs/workflows/overview#run-workflow)
+- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run)
+- [Run.streamVNext()](./streamVNext)

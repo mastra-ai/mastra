@@ -1,5 +1,5 @@
 ---
-title: "Reference: Workflow.sleepUntil() "
+title: 'Reference: Workflow.sleepUntil() '
 description: Documentation for the `Workflow.sleepUntil()` method in workflows, which pauses execution until a specified date.
 ---
 
@@ -16,26 +16,26 @@ workflow.sleepUntil(new Date(Date.now() + 5000));
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "dateOrCallback",
-      type: "Date | ((params: ExecuteFunctionParams) => Promise<Date>)",
-      description: "Either a Date object or a callback function that returns a Date. The callback receives execution context and can compute the target time dynamically based on input data.",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "dateOrCallback",
+type: "Date | ((params: ExecuteFunctionParams) => Promise<Date>)",
+description: "Either a Date object or a callback function that returns a Date. The callback receives execution context and can compute the target time dynamically based on input data.",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "Workflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "Workflow",
+description: "The workflow instance for method chaining",
+},
+]}
 />
 
 ## Extended usage example
@@ -48,4 +48,4 @@ workflow.sleepUntil(async ({ inputData }) => {
 
 ## Related
 
-- [Sleep & Events](../../../docs/workflows/pausing-execution.md)
+- [Sleep & Events](../../../docs/workflows/pausing-execution)

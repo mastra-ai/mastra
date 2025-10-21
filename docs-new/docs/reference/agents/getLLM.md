@@ -1,6 +1,6 @@
 ---
-title: "Reference: Agent.getLLM() "
-description: "Documentation for the `Agent.getLLM()` method in Mastra agents, which retrieves the language model instance."
+title: 'Reference: Agent.getLLM() '
+description: 'Documentation for the `Agent.getLLM()` method in Mastra agents, which retrieves the language model instance.'
 ---
 
 # Agent.getLLM()
@@ -16,27 +16,27 @@ await agent.getLLM();
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "options",
-      type: "{ runtimeContext?: RuntimeContext; model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel> }",
-      isOptional: true,
-      defaultValue: "{}",
-      description: "Optional configuration object containing runtime context and optional model override.",
-    },
-  ]}
+content={[
+{
+name: "options",
+type: "{ runtimeContext?: RuntimeContext; model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel> }",
+isOptional: true,
+defaultValue: "{}",
+description: "Optional configuration object containing runtime context and optional model override.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "llm",
-      type: "MastraLLMV1 | Promise<MastraLLMV1>",
-      description: "The language model instance configured for the agent, either as a direct instance or a promise that resolves to the LLM.",
-    },
-  ]}
+content={[
+{
+name: "llm",
+type: "MastraLLMV1 | Promise<MastraLLMV1>",
+description: "The language model instance configured for the agent, either as a direct instance or a promise that resolves to the LLM.",
+},
+]}
 />
 
 ## Extended usage example
@@ -44,31 +44,31 @@ await agent.getLLM();
 ```typescript copy
 await agent.getLLM({
   runtimeContext: new RuntimeContext(),
-  model: openai('gpt-4')
+  model: openai('gpt-4'),
 });
 ```
 
 ### Options parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      isOptional: true,
-      defaultValue: "new RuntimeContext()",
-      description: "Runtime context for dependency injection and contextual information.",
-    },
-    {
-      name: "model",
-      type: "MastraLanguageModel | DynamicArgument<MastraLanguageModel>",
-      isOptional: true,
-      description: "Optional model override. If provided, this model will be used used instead of the agent's configured model.",
-    },
-  ]}
+content={[
+{
+name: "runtimeContext",
+type: "RuntimeContext",
+isOptional: true,
+defaultValue: "new RuntimeContext()",
+description: "Runtime context for dependency injection and contextual information.",
+},
+{
+name: "model",
+type: "MastraLanguageModel | DynamicArgument<MastraLanguageModel>",
+isOptional: true,
+description: "Optional model override. If provided, this model will be used used instead of the agent's configured model.",
+},
+]}
 />
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview.md)
-- [Agent Runtime Context](../../docs/agents/runtime-context.md)
+- [Agents overview](../../docs/agents/overview)
+- [Agent Runtime Context](../../docs/agents/runtime-context)

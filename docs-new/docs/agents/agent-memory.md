@@ -33,7 +33,7 @@ export const testAgent = new Agent({
 });
 ```
 
-This basic setup uses the default settings. Visit the [Memory documentation](../memory/overview.md) for more configuration info.
+This basic setup uses the default settings. Visit the [Memory documentation](../memory/overview) for more configuration info.
 
 ## Memory in agent calls
 
@@ -66,7 +66,7 @@ const response = await testAgent.generate("What's my favorite color?", {
 
 ## Memory with `RuntimeContext`
 
-You can configure memory dynamically using [RuntimeContext](./runtime-context.md), just like `instructions`, `models`, and `tools`. This gives you fine-grained control over memory behavior. For example, you can select different memory systems per user, enable features conditionally, or adapt configurations across environments.
+You can configure memory dynamically using [RuntimeContext](./runtime-context), just like `instructions`, `models`, and `tools`. This gives you fine-grained control over memory behavior. For example, you can select different memory systems per user, enable features conditionally, or adapt configurations across environments.
 
 ### Agent configuration
 
@@ -151,6 +151,6 @@ export const testAgent = new Agent({
 
 ## Related
 
-- [Working Memory](../memory/working-memory.md)
-- [Semantic Recall](../memory/semantic-recall.md)
-- [Threads and Resources](../memory/threads-and-resources.md)
+- [Working Memory](../memory/working-memory)
+- [Semantic Recall](../memory/semantic-recall)
+- [Threads and Resources](../memory/threads-and-resources)

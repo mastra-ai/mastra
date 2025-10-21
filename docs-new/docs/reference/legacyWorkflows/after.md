@@ -1,5 +1,5 @@
 ---
-title: "Reference: .after() "
+title: 'Reference: .after() '
 description: Documentation for the `after()` method in workflows (legacy), enabling branching and merging paths.
 ---
 
@@ -34,27 +34,27 @@ workflow
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "steps",
-      type: "Step | Step[]",
-      description:
-        "A single step or array of steps that must complete before continuing",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "steps",
+type: "Step | Step[]",
+description:
+"A single step or array of steps that must complete before continuing",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "LegacyWorkflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "LegacyWorkflow",
+description: "The workflow instance for method chaining",
+},
+]}
 />
 
 ## Examples
@@ -83,7 +83,7 @@ workflow
 
 ## Related
 
-- [Branching Paths example](../../examples/workflows_legacy/branching-paths.md)
-- [Workflow Class Reference](./workflow.md)
-- [Step Reference](./step-class.md)
-- [Control Flow Guide](../../docs/workflows-legacy/control-flow.md)
+- [Branching Paths example](../../examples/workflows_legacy/branching-paths)
+- [Workflow Class Reference](./workflow)
+- [Step Reference](./step-class)
+- [Control Flow Guide](../../docs/workflows-legacy/control-flow)

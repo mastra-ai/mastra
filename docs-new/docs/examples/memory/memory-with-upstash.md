@@ -1,5 +1,5 @@
 ---
-title: "Memory with Upstash "
+title: 'Memory with Upstash '
 description: Example for how to use Mastra's memory system with Upstash Redis storage and vector capabilities.
 ---
 
@@ -32,29 +32,28 @@ npm install @mastra/upstash
 To add Upstash memory to an agent use the `Memory` class and create a new `storage` key using `UpstashStore` and a new `vector` key using `UpstashVector`. The configuration can point to either a remote service or a local setup.
 
 ```typescript filename="src/mastra/agents/example-upstash-agent.ts" showLineNumbers copy
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { UpstashStore } from "@mastra/upstash";
+import { Memory } from '@mastra/memory';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { UpstashStore } from '@mastra/upstash';
 
 export const upstashAgent = new Agent({
-  name: "upstash-agent",
-  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
+  name: 'upstash-agent',
+  instructions: 'You are an AI agent with the ability to automatically recall memories from previous interactions.',
+  model: openai('gpt-4o'),
   memory: new Memory({
     storage: new UpstashStore({
       url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
     }),
     options: {
       threads: {
-        generateTitle: true
-      }
-    }
-  })
+        generateTitle: true,
+      },
+    },
+  }),
 });
 ```
-
 
 ## Local embeddings with fastembed
 
@@ -69,34 +68,34 @@ npm install @mastra/fastembed
 Add the following to your agent:
 
 ```typescript filename="src/mastra/agents/example-upstash-agent.ts" showLineNumbers copy
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { UpstashStore, UpstashVector } from "@mastra/upstash";
-import { fastembed } from "@mastra/fastembed";
+import { Memory } from '@mastra/memory';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { UpstashStore, UpstashVector } from '@mastra/upstash';
+import { fastembed } from '@mastra/fastembed';
 
 export const upstashAgent = new Agent({
-  name: "upstash-agent",
-  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
+  name: 'upstash-agent',
+  instructions: 'You are an AI agent with the ability to automatically recall memories from previous interactions.',
+  model: openai('gpt-4o'),
   memory: new Memory({
     storage: new UpstashStore({
       url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
     }),
     vector: new UpstashVector({
       url: process.env.UPSTASH_VECTOR_REST_URL!,
-      token: process.env.UPSTASH_VECTOR_REST_TOKEN!
+      token: process.env.UPSTASH_VECTOR_REST_TOKEN!,
     }),
     embedder: fastembed,
     options: {
       lastMessages: 10,
       semanticRecall: {
         topK: 3,
-        messageRange: 2
-      }
-    }
-  })
+        messageRange: 2,
+      },
+    },
+  }),
 });
 ```
 
@@ -105,20 +104,20 @@ export const upstashAgent = new Agent({
 Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
 
 ```typescript filename="src/test-upstash-agent.ts" showLineNumbers copy
-import "dotenv/config";
+import 'dotenv/config';
 
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const threadId = "123";
-const resourceId = "user-456";
+const threadId = '123';
+const resourceId = 'user-456';
 
-const agent = mastra.getAgent("upstashAgent");
+const agent = mastra.getAgent('upstashAgent');
 
-const message = await agent.stream("My name is Mastra", {
+const message = await agent.stream('My name is Mastra', {
   memory: {
     thread: threadId,
-    resource: resourceId
-  }
+    resource: resourceId,
+  },
 });
 
 await message.textStream.pipeTo(new WritableStream());
@@ -126,15 +125,15 @@ await message.textStream.pipeTo(new WritableStream());
 const stream = await agent.stream("What's my name?", {
   memory: {
     thread: threadId,
-    resource: resourceId
+    resource: resourceId,
   },
   memoryOptions: {
     lastMessages: 5,
     semanticRecall: {
       topK: 3,
-      messageRange: 2
-    }
-  }
+      messageRange: 2,
+    },
+  },
 });
 
 for await (const chunk of stream.textStream) {
@@ -144,4 +143,4 @@ for await (const chunk of stream.textStream) {
 
 ## Related
 
-- [Calling Agents](../agents/calling-agents.md)
+- [Calling Agents](../agents/calling-agents)

@@ -1,8 +1,7 @@
 ---
-title: "Hallucination "
+title: 'Hallucination '
 description: Example of using the Hallucination scorer to evaluate factual contradictions in responses.
 ---
-
 
 # Hallucination Scorer
 
@@ -143,7 +142,7 @@ const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options
 });
 ```
 
-> See [HallucinationScorer](/reference/scorers/hallucination.md) for a full list of configuration options.
+> See [HallucinationScorer](/reference/scorers/hallucination) for a full list of configuration options.
 
 ## Understanding the results
 
@@ -165,6 +164,7 @@ const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options
 ```
 
 ### score
+
 A hallucination score between 0 and 1:
 
 - **0.0**: No hallucination — all claims match the context.
@@ -174,26 +174,35 @@ A hallucination score between 0 and 1:
 - **0.9–1.0**: Complete hallucination — most or all claims contradict the context.
 
 ### runId
+
 The unique identifier for this scorer run.
 
 ### extractStepResult
+
 Object with extracted claims from the output:
+
 - **claims**: Array of factual statements to be checked against the context.
 
 ### extractPrompt
+
 The prompt sent to the LLM for the extract step.
 
 ### analyzeStepResult
+
 Object with verdicts for each claim:
+
 - **verdicts**: Array of objects with `statement`, `verdict` ('yes' or 'no'), and a `reason` for each claim.
 
 ### analyzePrompt
+
 The prompt sent to the LLM for the analyze step.
 
 ### reasonPrompt
+
 The prompt sent to the LLM for the reason step.
 
 ### reason
+
 Detailed explanation of the score and identified contradictions.
 
 <GithubLink

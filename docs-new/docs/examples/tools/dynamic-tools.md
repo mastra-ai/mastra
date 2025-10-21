@@ -12,47 +12,47 @@ Dynamic tools adapt their behavior and capabilities at runtime based on contextu
 Create a tool that fetches exchange rate data using a dynamic value provided via `runtimeContext`.
 
 ```typescript filename="src/mastra/tools/example-exchange-rates-tool.ts" showLineNumbers copy
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
 export const getExchangeRatesTool = createTool({
-  id: "get-exchange-rates-tool",
-  description: "Gets exchanges rates for a currency",
+  id: 'get-exchange-rates-tool',
+  description: 'Gets exchanges rates for a currency',
   inputSchema: z.null(),
   outputSchema: z.object({
     base: z.string(),
     date: z.string(),
-    rates: z.record(z.number())
+    rates: z.record(z.number()),
   }),
   execute: async ({ runtimeContext }) => {
-    const currency = runtimeContext.get("currency");
+    const currency = runtimeContext.get('currency');
 
     const response = await fetch(`https://api.frankfurter.dev/v1/latest?base=${currency}`);
 
     const { base, date, rates } = await response.json();
 
     return { base, date, rates };
-  }
+  },
 });
 ```
 
-> See [createTool()](../../reference/tools//create-tool.md) for a full list of configuration options.
+> See [createTool()](../../reference/tools//create-tool) for a full list of configuration options.
 
 ## Example usage
 
 Set `RuntimeContext` using `set()`, then call `execute()` passing in the `runtimeContext`.
 
 ```typescript filename="src/test-exchange-rate.ts" showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/runtime-context";
-import { getExchangeRatesTool } from "../src/mastra/tools/example-exchange-rates-tool";
+import { RuntimeContext } from '@mastra/core/runtime-context';
+import { getExchangeRatesTool } from '../src/mastra/tools/example-exchange-rates-tool';
 
 const runtimeContext = new RuntimeContext();
 
-runtimeContext.set("currency", "USD");
+runtimeContext.set('currency', 'USD');
 
 const result = await getExchangeRatesTool.execute({
   context: null,
-  runtimeContext
+  runtimeContext,
 });
 
 console.log(result);
@@ -60,4 +60,4 @@ console.log(result);
 
 ## Related
 
-- [Calling Tools](./calling-tools.mdx#from-the-command-line)
+- [Calling Tools](./calling-tools#from-the-command-line)

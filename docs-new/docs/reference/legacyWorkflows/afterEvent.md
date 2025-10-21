@@ -1,6 +1,6 @@
 ---
-title: ".afterEvent() Method "
-description: "Reference for the afterEvent method in Mastra workflows that creates event-based suspension points."
+title: '.afterEvent() Method '
+description: 'Reference for the afterEvent method in Mastra workflows that creates event-based suspension points.'
 ---
 
 # afterEvent()
@@ -48,11 +48,11 @@ This method is part of Mastra's event-driven workflow capabilities, allowing you
 ### Basic Usage
 
 ```typescript
-import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { LegacyWorkflow } from '@mastra/core/workflows/legacy';
 
 // Define workflow with events
 const workflow = new LegacyWorkflow({
-  name: "approval-workflow",
+  name: 'approval-workflow',
   events: {
     approval: {
       schema: z.object({
@@ -66,14 +66,14 @@ const workflow = new LegacyWorkflow({
 // Build workflow with event suspension point
 workflow
   .step(submitRequest)
-  .afterEvent("approval") // Workflow suspends here
+  .afterEvent('approval') // Workflow suspends here
   .step(processApproval) // This step runs after the event occurs
   .commit();
 ```
 
 ## Related
 
-- [Event-Driven Workflows](./events.md)
-- [resumeWithEvent()](./resumeWithEvent.md)
-- [Suspend and Resume](../../docs/workflows-legacy/suspend-and-resume.md)
-- [Workflow Class](./workflow.md)
+- [Event-Driven Workflows](./events)
+- [resumeWithEvent()](./resumeWithEvent)
+- [Suspend and Resume](../../docs/workflows-legacy/suspend-and-resume)
+- [Workflow Class](./workflow)

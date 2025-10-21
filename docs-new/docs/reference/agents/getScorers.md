@@ -1,6 +1,6 @@
 ---
-title: "Reference: Agent.getScorers() "
-description: "Documentation for the `Agent.getScorers()` method in Mastra agents, which retrieves the scoring configuration."
+title: 'Reference: Agent.getScorers() '
+description: 'Documentation for the `Agent.getScorers()` method in Mastra agents, which retrieves the scoring configuration.'
 ---
 
 # Agent.getScorers()
@@ -16,52 +16,52 @@ await agent.getScorers();
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
-      isOptional: true,
-      defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
-    },
-  ]}
+content={[
+{
+name: "options",
+type: "{ runtimeContext?: RuntimeContext }",
+isOptional: true,
+defaultValue: "{}",
+description: "Optional configuration object containing runtime context.",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "scorers",
-      type: "MastraScorers | Promise<MastraScorers>",
-      description: "The scoring configuration configured for the agent, either as a direct object or a promise that resolves to the scorers.",
-    },
-  ]}
+content={[
+{
+name: "scorers",
+type: "MastraScorers | Promise<MastraScorers>",
+description: "The scoring configuration configured for the agent, either as a direct object or a promise that resolves to the scorers.",
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript copy
 await agent.getScorers({
-  runtimeContext: new RuntimeContext()
+  runtimeContext: new RuntimeContext(),
 });
 ```
 
 ### Options parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      isOptional: true,
-      defaultValue: "new RuntimeContext()",
-      description: "Runtime context for dependency injection and contextual information.",
-    },
-  ]}
+content={[
+{
+name: "runtimeContext",
+type: "RuntimeContext",
+isOptional: true,
+defaultValue: "new RuntimeContext()",
+description: "Runtime context for dependency injection and contextual information.",
+},
+]}
 />
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview.md)
-- [Agent Runtime Context](../../docs/agents/runtime-context.md)
+- [Agents overview](../../docs/agents/overview)
+- [Agent Runtime Context](../../docs/agents/runtime-context)

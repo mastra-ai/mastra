@@ -1,5 +1,5 @@
 ---
-title: "Reference: Workflow.waitForEvent() "
+title: 'Reference: Workflow.waitForEvent() '
 description: Documentation for the `Workflow.waitForEvent()` method in workflows, which pauses execution until an event is received.
 ---
 
@@ -16,34 +16,34 @@ workflow.waitForEvent('event-name', step1);
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "eventName",
-      type: "string",
-      description: "The name of the event to wait for",
-      isOptional: false,
-    },
-    {
-      name: "step",
-      type: "Step",
-      description: "The step to resume after the event is received",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "eventName",
+type: "string",
+description: "The name of the event to wait for",
+isOptional: false,
+},
+{
+name: "step",
+type: "Step",
+description: "The step to resume after the event is received",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "Workflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "Workflow",
+description: "The workflow instance for method chaining",
+},
+]}
 />
 
 ## Related
 
-- [Sleep & Events](../../../docs/workflows/pausing-execution.md)
+- [Sleep & Events](../../../docs/workflows/pausing-execution)

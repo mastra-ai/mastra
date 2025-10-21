@@ -1,5 +1,5 @@
 ---
-title: "Inspecting agents and workflows with mastra dev "
+title: 'Inspecting agents and workflows with mastra dev '
 description: Documentation for the Mastra local development environment for Mastra applications.
 ---
 
@@ -100,7 +100,6 @@ Key features:
 - **Input & Responses**: Send sample inputs to see how the tool responds.
 - **Tool Usage**: Find out which agents rely on this tool and how they’re using it.
 
-
 ### MCP Servers
 
 Explore connection details, tool usage, and IDE configuration for local MCP server development.
@@ -110,9 +109,8 @@ Explore connection details, tool usage, and IDE configuration for local MCP serv
 Key features:
 
 - **Connection Details**: Access the endpoints and config needed to wire up your MCP environment.
-- **Available Tools**:  See all tools currently published, including their names, versions, and which agents use them.
+- **Available Tools**: See all tools currently published, including their names, versions, and which agents use them.
 - **IDE Configuration**: Grab ready-to-use config you can drop into your local setup for testing and publishing tools.
-
 
 ## REST API Endpoints
 
@@ -127,13 +125,13 @@ The local development server includes an OpenAPI specification available at: [ht
 To include OpenAPI documentation in your production server, enable it in the Mastra instance:
 
 ```typescript {6} filename="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra({
   server: {
     build: {
-      openAPIDocs: true
-    }
+      openAPIDocs: true,
+    },
   },
 });
 ```
@@ -145,12 +143,12 @@ The local development server includes an interactive Swagger UI - API explorer a
 To include Swagger UI in your production server, enable it in the Mastra instance:
 
 ```typescript {6} filename="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra({
   server: {
     build: {
-      swaggerUI: true
+      swaggerUI: true,
     },
   },
 });
@@ -171,12 +169,12 @@ This setup lets you start developing immediately with production-like behavior, 
 By default, the server runs on port `4111`. You can customize the `host` and `port` through the Mastra server configuration.
 
 ```typescript {5,6} filename="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra({
   server: {
     port: 8080,
-    host: "0.0.0.0",
+    host: '0.0.0.0',
   },
 });
 ```
@@ -192,15 +190,15 @@ mastra dev --https
 You can provide your own key and cert file by specifying the `server.https` option in the Mastra server configuration.
 
 ```typescript {2,6-9} filename="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
-import fs from 'node:fs'
+import { Mastra } from '@mastra/core/mastra';
+import fs from 'node:fs';
 
 export const mastra = new Mastra({
   server: {
     https: {
       key: fs.readFileSync('path/to/key.pem'),
-      cert: fs.readFileSync('path/to/cert.pem')
-    }
+      cert: fs.readFileSync('path/to/cert.pem'),
+    },
   },
 });
 ```
@@ -212,19 +210,18 @@ When you provide both `--https` and `server.https` the latter will take preceden
 Use `transpilePackages` to compile TypeScript packages or libraries. Use `externals` to exclude dependencies resolved at runtime, and `sourcemap` to emit readable stack traces.
 
 ```typescript filename="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra({
   bundler: {
-    transpilePackages: ["utils"],
-    externals: ["ui"],
-    sourcemap: true
-  }
+    transpilePackages: ['utils'],
+    externals: ['ui'],
+    sourcemap: true,
+  },
 });
 ```
 
-> See [Mastra Class](../../reference/core/mastra-class.md) for more configuration options.
-
+> See [Mastra Class](../../reference/core/mastra-class) for more configuration options.
 
 ## Next steps
 

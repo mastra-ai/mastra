@@ -1,6 +1,6 @@
 ---
-title: "MastraAuthAuth0 Class"
-description: "Documentation for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication."
+title: 'MastraAuthAuth0 Class'
+description: 'Documentation for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication.'
 ---
 
 import Tabs from '@theme/Tabs';
@@ -41,7 +41,7 @@ npm install @mastra/auth-auth0@latest
 ### Basic usage with environment variables
 
 ```typescript {2,7} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
 
 export const mastra = new Mastra({
@@ -55,7 +55,7 @@ export const mastra = new Mastra({
 ### Custom configuration
 
 ```typescript {2,7-10} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
 
 export const mastra = new Mastra({
@@ -63,7 +63,7 @@ export const mastra = new Mastra({
   server: {
     experimental_auth: new MastraAuthAuth0({
       domain: process.env.AUTH0_DOMAIN,
-      audience: process.env.AUTH0_AUDIENCE
+      audience: process.env.AUTH0_AUDIENCE,
     }),
   },
 });
@@ -86,14 +86,14 @@ To customize user authorization, provide a custom `authorizeUser` function:
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
 
 const auth0Provider = new MastraAuthAuth0({
-  authorizeUser: async (user) => {
+  authorizeUser: async user => {
     // Custom authorization logic
     return user.email?.endsWith('@yourcompany.com') || false;
-  }
+  },
 });
 ```
 
-> See the [MastraAuthAuth0](/reference/auth/auth0.md) API reference for all available configuration options.
+> See the [MastraAuthAuth0](/reference/auth/auth0) API reference for all available configuration options.
 
 ## Client-side setup
 
@@ -156,21 +156,21 @@ export const useAuth0Token = () => {
 When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Auth0 access token in the `Authorization` header:
 
 ```typescript filename="lib/mastra/mastra-client.ts" showLineNumbers copy
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js';
 
 export const createMastraClient = (accessToken: string) => {
   return new MastraClient({
-    baseUrl: "https://<mastra-api-url>",
+    baseUrl: 'https://<mastra-api-url>',
     headers: {
-      Authorization: `Bearer ${accessToken}`
-    }
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
 };
 ```
 
 > **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/server-db/mastra-client.md) for more configuration options.
+> See [Mastra Client SDK](/docs/server-db/mastra-client) for more configuration options.
 
 ### Making authenticated requests
 
@@ -221,6 +221,7 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
       );
     };
     ```
+
   </Tab>
   <Tab>
     ```bash copy
@@ -233,4 +234,3 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
     ```
   </Tab>
 </Tabs>
-

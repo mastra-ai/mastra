@@ -1,5 +1,5 @@
 ---
-title: "Calling an Agent from a Workflow "
+title: 'Calling an Agent from a Workflow '
 description: Example of using Mastra to call an AI agent from within a workflow step.
 ---
 
@@ -12,14 +12,14 @@ Workflows can call agents to generate dynamic responses from within a step. This
 Create a simple agent that returns facts about a city.
 
 ```typescript filename="src/mastra/agents/example-city-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
 
 export const cityAgent = new Agent({
-  name: "city-agent",
-  description: "Create facts for a city",
+  name: 'city-agent',
+  description: 'Create facts for a city',
   instructions: `Return an interesting fact based on the city provided`,
-  model: openai("gpt-4o")
+  model: openai('gpt-4o'),
 });
 ```
 
@@ -28,8 +28,8 @@ export const cityAgent = new Agent({
 To call an agent from a workflow, the agent must be registered in the Mastra instance.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { cityAgent } from "./agents/example-city-agent";
+import { Mastra } from '@mastra/core/mastra';
+import { cityAgent } from './agents/example-city-agent';
 
 export const mastra = new Mastra({
   // ...
@@ -42,38 +42,38 @@ export const mastra = new Mastra({
 Get a reference to the registered agent using `getAgent()`, then call `.generate()` inside the step, passing in the input data.
 
 ```typescript filename="src/mastra/workflows/example-call-agent.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
 
 const step1 = createStep({
-  id: "step-1",
-  description: "passes value from input to agent",
+  id: 'step-1',
+  description: 'passes value from input to agent',
   inputSchema: z.object({
-    city: z.string()
+    city: z.string(),
   }),
   outputSchema: z.object({
-    facts: z.string()
+    facts: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
     const { city } = inputData;
 
-    const agent = mastra.getAgent("cityAgent");
+    const agent = mastra.getAgent('cityAgent');
     const response = await agent.generate(`Create an interesting fact about ${city}`);
 
     return {
-      facts: response.text
+      facts: response.text,
     };
-  }
+  },
 });
 
 export const callAgent = createWorkflow({
-  id: "agent-workflow",
+  id: 'agent-workflow',
   inputSchema: z.object({
-    city: z.string()
+    city: z.string(),
   }),
   outputSchema: z.object({
-    facts: z.string()
-  })
+    facts: z.string(),
+  }),
 })
   .then(step1)
   .commit();
@@ -81,4 +81,4 @@ export const callAgent = createWorkflow({
 
 ## Related
 
-- [Running Workflows](./running-workflows.md)
+- [Running Workflows](./running-workflows)

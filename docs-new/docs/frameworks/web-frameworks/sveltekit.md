@@ -1,5 +1,5 @@
 ---
-title: "Getting Started with Mastra and SvelteKit "
+title: 'Getting Started with Mastra and SvelteKit '
 description: A step-by-step guide to integrating Mastra with SvelteKit.
 ---
 
@@ -19,16 +19,15 @@ Use this guide to scaffold and integrate Mastra with your SvelteKit project.
 <Tabs>
   <TabItem value="install-mastra" label="Install Mastra">
 
-  
 ## Install Mastra
 
 Install the required Mastra packages:
-{/*
+{/_
 LLM CONTEXT: This Tabs component shows commands for integrating a new Mastra backend project using different package managers.
 Each tab displays the command for that specific package manager to create an integrated Mastra backend service.
 This is part of the "Integrated Backend Integration" approach for SvelteKit projects.
 All commands create the same Mastra project but use different package manager syntax.
-*/}
+_/}
 
 <Tabs>
   <TabItem value="install" label="install">
@@ -173,15 +172,14 @@ import type { Actions } from './$types';
 import { mastra } from '../../mastra';
 
 export const actions = {
-	default: async (event) => {
-		const city = (await event.request.formData()).get('city')!.toString();
-		const agent = mastra.getAgent('weatherAgent');
+  default: async event => {
+    const city = (await event.request.formData()).get('city')!.toString();
+    const agent = mastra.getAgent('weatherAgent');
 
-		const result = await agent.generate(`What's the weather like in ${city}?`);
-		return { result: result.text };
-	}
+    const result = await agent.generate(`What's the weather like in ${city}?`);
+    return { result: result.text };
+  },
 } satisfies Actions;
-
 ```
 
 ### Create Test Page
@@ -226,21 +224,20 @@ The current weather in London is as follows:
 
 If you need more details or information about a different location, feel free to ask!
 ```
-  
+
   </TabItem>
 
   <TabItem value="server-endpoints" label="Server Endpoints">
 
-
 ## Install Mastra
 
 Install the required Mastra packages:
-{/*
+{/_
 LLM CONTEXT: This Tabs component shows commands for integrating a new Mastra backend project using different package managers.
 Each tab displays the command for that specific package manager to create an integrated Mastra backend service.
 This is part of the "Integrated Framework Integration" approach for SvelteKit projects.
 All commands create the same Mastra project but use different package manager syntax.
-*/}
+_/}
 
 <Tabs>
   <TabItem value="install" label="install">
@@ -385,15 +382,12 @@ import { json } from '@sveltejs/kit';
 import { mastra } from '../../mastra';
 
 export async function POST({ request }) {
-	const { city } = await request.json();
+  const { city } = await request.json();
 
-	const response = await mastra
-		.getAgent('weatherAgent')
-		.generate(`What's the weather like in ${city}?`);
+  const response = await mastra.getAgent('weatherAgent').generate(`What's the weather like in ${city}?`);
 
-	return json({ result: response.text });
+  return json({ result: response.text });
 }
-
 ```
 
 ### Create Test Page
@@ -436,7 +430,6 @@ touch src/routes/weather-api-test/+page.svelte
 {/if}
 ```
 
-
 > You can now navigate to `/weather-api-test` in your browser to try it out.
 
 Submitting **London** as the city would return a result similar to:
@@ -452,11 +445,10 @@ The current weather in London is as follows:
 
 If you need more details or information about a different location, feel free to ask!
 ```
-  
+
   </TabItem>
 </Tabs>
 
-
 ## Next steps
 
-- [Monorepo Deployment](../../deployment/monorepo.md)
+- [Monorepo Deployment](../../deployment/monorepo)

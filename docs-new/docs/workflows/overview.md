@@ -1,6 +1,6 @@
 ---
-title: "Handling Complex LLM Operations "
-description: "Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more."
+title: 'Handling Complex LLM Operations '
+description: 'Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more.'
 ---
 
 # Workflows overview
@@ -21,7 +21,7 @@ For example, you might want to perform a sequence of tasks:
 
 Each of these tasks is created as a **step** in a workflow, giving you fine-grained control over data flow, execution order, and side effects.
 
-> **📹 Watch**:  → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
+> **📹 Watch**: → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
 
 ## Building workflows
 
@@ -35,8 +35,7 @@ This structure provides full type safety and runtime validation, ensuring data i
 
 ### Visual testing
 
-Use the [Playground](../server-db/local-dev-playground.mdx#workflows) to visualize workflow execution in real time. It shows which steps are running, completed, or suspended.
-
+Use the [Playground](../server-db/local-dev-playground#workflows) to visualize workflow execution in real time. It shows which steps are running, completed, or suspended.
 
 ## Getting started
 
@@ -49,8 +48,8 @@ npm install @mastra/core
 Import the necessary functions from the `workflows` subpath:
 
 ```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
 ```
 
 ### Create step
@@ -61,7 +60,7 @@ Steps are the building blocks of workflows. Create a step using `createStep`:
 const step1 = createStep({...});
 ```
 
-> See [createStep](../../reference/workflows/step.md) for more information.
+> See [createStep](../../reference/workflows/step) for more information.
 
 ### Create workflow
 
@@ -87,7 +86,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> See [workflow](../../reference/workflows/workflow.md) for more information.
+> See [workflow](../../reference/workflows/workflow) for more information.
 
 #### Composing steps
 
@@ -115,7 +114,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> Steps can be composed using a number of different methods. See [Control Flow](./control-flow.md)  for more information.
+> Steps can be composed using a number of different methods. See [Control Flow](./control-flow) for more information.
 
 #### Cloning steps
 
@@ -150,51 +149,50 @@ export const testWorkflow = createWorkflow({
 Register a workflow using `workflows` in the main Mastra instance:
 
 ```typescript {8} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { PinoLogger } from "@mastra/loggers";
-import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from '@mastra/core/mastra';
+import { PinoLogger } from '@mastra/loggers';
+import { LibSQLStore } from '@mastra/libsql';
 
-import { testWorkflow } from "./workflows/test-workflow";
+import { testWorkflow } from './workflows/test-workflow';
 
 export const mastra = new Mastra({
   workflows: { testWorkflow },
   storage: new LibSQLStore({
     // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
-    url: ":memory:"
+    url: ':memory:',
   }),
   logger: new PinoLogger({
-    name: "Mastra",
-    level: "info"
-  })
+    name: 'Mastra',
+    level: 'info',
+  }),
 });
 ```
 
 ## Testing workflows locally
+
 There are two ways to run and test workflows.
-
-
 
 ### Mastra Playground
 
 With the Mastra Dev Server running you can run the workflow from the Mastra Playground by visiting [http://localhost:4111/workflows](http://localhost:4111/workflows) in your browser.
 
-> For more information, see the [Local Dev Playground](../server-db/local-dev-playground.md) documentation.
+> For more information, see the [Local Dev Playground](../server-db/local-dev-playground) documentation.
 
 ### Command line
 
 Create a workflow run instance using `createRunAsync` and `start`:
 
 ```typescript {3,5} filename="src/test-workflow.ts" showLineNumbers copy
-import "dotenv/config";
+import 'dotenv/config';
 
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+const run = await mastra.getWorkflow('testWorkflow').createRunAsync();
 
 const result = await run.start({
   inputData: {
-    city: "London"
-  }
+    city: 'London',
+  },
 });
 
 console.log(result);
@@ -203,15 +201,14 @@ if (result.status === 'success') {
   console.log(result.result.output);
 }
 ```
-> see [createRunAsync](../../reference/workflows/run.md) and [start](../../reference/workflows/run-methods/start.md) for more information.
+
+> see [createRunAsync](/reference/workflows/run) and [start](/reference/workflows/run-methods/start) for more information.
 
 To trigger this workflow, run the following:
 
 ```bash copy
 npx tsx src/test-workflow.ts
 ```
-
-
 
 ### Run workflow results
 
@@ -226,7 +223,7 @@ The result of running a workflow using either `start()` or `resume()` will look 
     // ...
     "step-1": {
       // ...
-      "status": "success",
+      "status": "success"
     }
   },
   "result": {
@@ -240,7 +237,6 @@ The result of running a workflow using either `start()` or `resume()` will look 
 - **status**: Shows the outcome of each individual step
 - **result**: Includes the final output of the workflow, typed according to the `outputSchema`
 
-
 #### Status suspended
 
 ```json
@@ -250,14 +246,10 @@ The result of running a workflow using either `start()` or `resume()` will look 
     // ...
     "step-1": {
       // ...
-      "status": "suspended",
+      "status": "suspended"
     }
   },
-  "suspended": [
-    [
-      "step-1"
-    ]
-  ]
+  "suspended": [["step-1"]]
 }
 ```
 
@@ -273,12 +265,13 @@ The result of running a workflow using either `start()` or `resume()` will look 
     "step-1": {
       // ...
       "status": "failed",
-      "error": "Test error",
+      "error": "Test error"
     }
   },
   "error": "Test error"
 }
 ```
+
 - **error**: An optional field that includes the error message if the workflow fails
 
 ## Stream workflow
@@ -286,14 +279,14 @@ The result of running a workflow using either `start()` or `resume()` will look 
 Similar to the run method shown above, workflows can also be streamed:
 
 ```typescript {5} filename="src/test-workflow.ts" showLineNumbers copy
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+const run = await mastra.getWorkflow('testWorkflow').createRunAsync();
 
 const result = await run.stream({
   inputData: {
-    city: "London"
-  }
+    city: 'London',
+  },
 });
 
 for await (const chunk of result.stream) {
@@ -301,40 +294,38 @@ for await (const chunk of result.stream) {
 }
 ```
 
-> See [stream](../../reference/workflows/run-methods/stream.md) for more information.
+> See [stream](/reference/streaming/workflows/stream) for more information.
 
 ## Watch Workflow
 
 A workflow can also be watched, allowing you to inspect each event that is emitted.
 
 ```typescript {5} filename="src/test-workflow.ts" showLineNumbers copy
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+const run = await mastra.getWorkflow('testWorkflow').createRunAsync();
 
-run.watch((event) => {
+run.watch(event => {
   console.log(event);
 });
 
 const result = await run.start({
   inputData: {
-    city: "London"
-  }
+    city: 'London',
+  },
 });
 ```
 
-> See [watch](../../reference/workflows/run-methods/watch.md) for more information.
+> See [watch](/reference/workflows/run-methods/watch) for more information.
 
 ## Related
 
-- The [Workflow Guide](../../guides/guide/ai-recruiter.md) in the Guides section is a tutorial that covers the main concepts.
-- [Parallel Steps workflow example](../../examples/workflows/parallel-steps.md)
-- [Conditional Branching workflow example](../../examples/workflows/conditional-branching.md)
-- [Inngest workflow example](../../examples/workflows/inngest-workflow.md)
-- [Suspend and Resume workflow example](../../examples/workflows/human-in-the-loop.md)
-
+- The [Workflow Guide](/guides/ai-recruiter) in the Guides section is a tutorial that covers the main concepts.
+- [Parallel Steps workflow example](/examples/workflows/parallel-steps)
+- [Conditional Branching workflow example](/examples/workflows/conditional-branching)
+- [Inngest workflow example](/examples/workflows/inngest-workflow)
+- [Suspend and Resume workflow example](/examples/workflows/human-in-the-loop)
 
 ## Workflows (Legacy)
 
-For legacy workflow documentation, see [Workflows (Legacy)](../workflows-legacy/overview.md).
-
+For legacy workflow documentation, see [Workflows (Legacy)](/workflows-legacy/overview).

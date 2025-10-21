@@ -1,6 +1,6 @@
 ---
-title: "Reference: Mastra.getStorage() "
-description: "Documentation for the `Mastra.getStorage()` method in Mastra, which retrieves the configured storage instance."
+title: 'Reference: Mastra.getStorage() '
+description: 'Documentation for the `Mastra.getStorage()` method in Mastra, which retrieves the configured storage instance.'
 ---
 
 # Mastra.getStorage()
@@ -20,16 +20,16 @@ This method does not accept any parameters.
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "storage",
-      type: "MastraStorage | undefined",
-      description: "The configured storage instance, or undefined if no storage has been configured.",
-    },
-  ]}
+content={[
+{
+name: "storage",
+type: "MastraStorage | undefined",
+description: "The configured storage instance, or undefined if no storage has been configured.",
+},
+]}
 />
 
 ## Related
 
-- [Storage overview](../../docs/server-db/storage.md)
-- [Storage reference](../../reference/storage/libsql.md)
+- [Storage overview](../../docs/server-db/storage)
+- [Storage reference](../../reference/storage/libsql)

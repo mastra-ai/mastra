@@ -1,6 +1,6 @@
 ---
-title: "OTEL Tracing "
-description: "Set up OpenTelemetry tracing for Mastra applications"
+title: 'OTEL Tracing '
+description: 'Set up OpenTelemetry tracing for Mastra applications'
 ---
 
 # OTEL Tracing
@@ -15,14 +15,14 @@ Here's a simple example of enabling telemetry:
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: "my-app",
+    serviceName: 'my-app',
     enabled: true,
     sampling: {
-      type: "always_on",
+      type: 'always_on',
     },
     export: {
-      type: "otlp",
-      endpoint: "http://localhost:4318", // SigNoz local endpoint
+      type: 'otlp',
+      endpoint: 'http://localhost:4318', // SigNoz local endpoint
     },
   },
 });
@@ -42,7 +42,7 @@ type OtelConfig = {
 
   // Control how many traces are sampled
   sampling?: {
-    type: "ratio" | "always_on" | "always_off" | "parent_based";
+    type: 'ratio' | 'always_on' | 'always_off' | 'parent_based';
     probability?: number; // For ratio sampling
     root?: {
       probability: number; // For parent_based sampling
@@ -51,14 +51,14 @@ type OtelConfig = {
 
   // Where to send telemetry data
   export?: {
-    type: "otlp" | "console";
+    type: 'otlp' | 'console';
     endpoint?: string;
     headers?: Record<string, string>;
   };
 };
 ```
 
-See the [OtelConfig reference documentation](../../reference/observability/otel-config.md) for more details.
+See the [OtelConfig reference documentation](../../reference/observability/otel-config) for more details.
 
 ### Environment Variables
 
@@ -75,10 +75,10 @@ Then in your config:
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: "my-app",
+    serviceName: 'my-app',
     enabled: true,
     export: {
-      type: "otlp",
+      type: 'otlp',
       // endpoint and headers will be picked up from env vars
     },
   },
@@ -102,8 +102,9 @@ You can define custom instrumentation files in your Mastra project by placing th
 #### Supported File Types
 
 Mastra looks for instrumentation files with these extensions:
+
 - `instrumentation.js`
-- `instrumentation.ts` 
+- `instrumentation.ts`
 - `instrumentation.mjs`
 
 #### Example

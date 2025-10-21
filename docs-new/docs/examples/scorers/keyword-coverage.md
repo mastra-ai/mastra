@@ -1,8 +1,7 @@
 ---
-title: "Keyword Coverage "
+title: 'Keyword Coverage '
 description: Example of using the Keyword Coverage scorer to evaluate how well responses cover important keywords from input text.
 ---
-
 
 # Keyword Coverage Scorer
 
@@ -21,7 +20,7 @@ npm install @mastra/evals
 In this example, the response fully reflects the key terms from the input. All required keywords are present, resulting in complete coverage with no omissions.
 
 ```typescript filename="src/example-full-keyword-coverage.ts" showLineNumbers copy
-import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
+import { createKeywordCoverageScorer } from '@mastra/evals/scorers/code';
 
 const scorer = createKeywordCoverageScorer();
 
@@ -56,7 +55,7 @@ A score of 1 indicates that all expected keywords were found in the response. Th
 In this example, the response includes some, but not all, of the important keywords from the input. The score reflects partial coverage, with key terms either missing or only partially matched.
 
 ```typescript filename="src/example-partial-keyword-coverage.ts" showLineNumbers copy
-import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
+import { createKeywordCoverageScorer } from '@mastra/evals/scorers/code';
 
 const scorer = createKeywordCoverageScorer();
 
@@ -91,7 +90,7 @@ A score of 0.5 indicates that only half of the expected keywords were found in t
 In this example, the response includes very few of the important keywords from the input. The score reflects minimal coverage, with most key terms missing or unaccounted for.
 
 ```typescript filename="src/example-minimal-keyword-coverage.ts" showLineNumbers copy
-import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
+import { createKeywordCoverageScorer } from '@mastra/evals/scorers/code';
 
 const scorer = createKeywordCoverageScorer();
 
@@ -129,7 +128,7 @@ You can create a `KeywordCoverageMetric` instance with default settings. No addi
 const metric = new KeywordCoverageMetric();
 ```
 
-> See [KeywordCoverageScorer](/reference/scorers/keyword-coverage.md) for a full list of configuration options.
+> See [KeywordCoverageScorer](/reference/scorers/keyword-coverage) for a full list of configuration options.
 
 ## Understanding the results
 
@@ -151,6 +150,7 @@ const metric = new KeywordCoverageMetric();
 ```
 
 ### score
+
 A coverage score between 0 and 1:
 
 - **1.0**: Complete coverage – all keywords present.
@@ -160,18 +160,22 @@ A coverage score between 0 and 1:
 - **0.0**: No coverage – no keywords found.
 
 ### runId
+
 The unique identifier for this scorer run.
 
 ### extractStepResult
+
 Object with extracted keywords:
+
 - **referenceKeywords**: Set of keywords extracted from the input.
 - **responseKeywords**: Set of keywords extracted from the output.
 
 ### analyzeStepResult
+
 Object with keyword coverage statistics:
+
 - **totalKeywords**: The number of keywords expected (from the input).
 - **matchedKeywords**: The number of keywords found in the response.
-
 
 <GithubLink
   marginTop='mt-16'

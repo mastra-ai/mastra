@@ -1,5 +1,5 @@
 ---
-title: "Reference: Workflow.foreach() "
+title: 'Reference: Workflow.foreach() '
 description: Documentation for the `Workflow.foreach()` method in workflows, which creates a loop that executes a step for each item in an array.
 ---
 
@@ -16,45 +16,45 @@ workflow.foreach(step1, { concurrency: 2 });
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "step",
-      type: "Step",
-      description:
-        "The step instance to execute in the loop. The previous step must return an array type.",
-      isOptional: false,
-    },
-    {
-      name: "opts",
-      type: "object",
-      description:
-        "Optional configuration for the loop. The concurrency option controls how many iterations can run in parallel (default: 1)",
-      isOptional: true,
-      properties: [
-        {
-          name: "concurrency",
-          type: "number",
-          description:
-            "The number of concurrent iterations allowed (default: 1)",
-          isOptional: true,
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "step",
+type: "Step",
+description:
+"The step instance to execute in the loop. The previous step must return an array type.",
+isOptional: false,
+},
+{
+name: "opts",
+type: "object",
+description:
+"Optional configuration for the loop. The concurrency option controls how many iterations can run in parallel (default: 1)",
+isOptional: true,
+properties: [
+{
+name: "concurrency",
+type: "number",
+description:
+"The number of concurrent iterations allowed (default: 1)",
+isOptional: true,
+},
+],
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "Workflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "Workflow",
+description: "The workflow instance for method chaining",
+},
+]}
 />
 
 ## Related
 
-- [Repeating with foreach](../../../docs/workflows/control-flow.mdx#repeating-with-foreach)
+- [Repeating with foreach](../../../docs/workflows/control-flow#repeating-with-foreach)

@@ -1,5 +1,5 @@
 ---
-title: "Runtime context "
+title: 'Runtime context '
 description: Learn how to use Mastra's RuntimeContext to provide dynamic, request-specific configuration to tools.
 ---
 
@@ -18,46 +18,44 @@ The dependency injection system allows you to:
 
 :::note
 
-  **Note:** `RuntimeContext` is primarily used for passing data *into* tool
-  executions. It's distinct from agent memory, which handles conversation
-  history and state persistence across multiple calls.
+**Note:** `RuntimeContext` is primarily used for passing data _into_ tool
+executions. It's distinct from agent memory, which handles conversation
+history and state persistence across multiple calls.
 
 :::
-
 
 ## Accessing `runtimeContext` in tools
 
 Tools can access the same `runtimeContext` used by their parent agent, allowing them to adjust behavior based on runtime configuration. In this example, the `temperature-unit` is retrieved within the tool’s `execute` function to ensure consistent formatting with the agent’s instructions.
 
 ```typescript {14-15} filename="src/mastra/tools/test-weather-tool" showLineNumbers copy
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
 type WeatherRuntimeContext = {
-  "temperature-unit": "celsius" | "fahrenheit";
+  'temperature-unit': 'celsius' | 'fahrenheit';
 };
 
 export const testWeatherTool = createTool({
-  id: "getWeather",
-  description: "Get the current weather for a location",
+  id: 'getWeather',
+  description: 'Get the current weather for a location',
   inputSchema: z.object({
-    location: z.string().describe("The location to get weather for")
+    location: z.string().describe('The location to get weather for'),
   }),
   execute: async ({ context, runtimeContext }) => {
-    const temperatureUnit = runtimeContext.get("temperature-unit") as WeatherRuntimeContext["temperature-unit"];
+    const temperatureUnit = runtimeContext.get('temperature-unit') as WeatherRuntimeContext['temperature-unit'];
 
     const weather = await fetchWeather(context.location, temperatureUnit);
 
     return { result: weather };
-  }
+  },
 });
 
-async function fetchWeather(location: string, temperatureUnit: WeatherRuntimeContext["temperature-unit"]) {
+async function fetchWeather(location: string, temperatureUnit: WeatherRuntimeContext['temperature-unit']) {
   // ...
 }
 ```
 
-
 ## Related
 
-[Agent Runtime Context](../agents/runtime-context.md)
+[Agent Runtime Context](../agents/runtime-context)

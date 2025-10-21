@@ -1,6 +1,6 @@
 ---
-title: "Suspend & Resume Workflows "
-description: "Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources."
+title: 'Suspend & Resume Workflows '
+description: 'Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources.'
 ---
 
 # Suspend & Resume
@@ -37,15 +37,15 @@ To pause execution at a specific step until user input is received, use the `⁠
 
 ```typescript {16} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
-  id: "step-1",
+  id: 'step-1',
   inputSchema: z.object({
-    input: z.string()
+    input: z.string(),
   }),
   outputSchema: z.object({
-    output: z.string()
+    output: z.string(),
   }),
   resumeSchema: z.object({
-    city: z.string()
+    city: z.string(),
   }),
   execute: async ({ resumeData, suspend }) => {
     const { city } = resumeData ?? {};
@@ -54,8 +54,8 @@ const step1 = createStep({
       return await suspend({});
     }
 
-    return { output: "" };
-  }
+    return { output: '' };
+  },
 });
 
 export const testWorkflow = createWorkflow({
@@ -65,31 +65,31 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> For more details, check out the [Suspend workflow example](../../examples/workflows/human-in-the-loop.mdx#suspend-workflow).
+> For more details, check out the [Suspend workflow example](/examples/workflows/human-in-the-loop#suspend-workflow).
 
 ### Identifying suspended steps
 
 To resume a suspended workflow, inspect the `suspended` array in the result to determine which step needs input:
 
 ```typescript {15} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+const run = await mastra.getWorkflow('testWorkflow').createRunAsync();
 
 const result = await run.start({
   inputData: {
-    city: "London"
-  }
+    city: 'London',
+  },
 });
 
 console.log(JSON.stringify(result, null, 2));
 
-if (result.status === "suspended") {
+if (result.status === 'suspended') {
   const resumedResult = await run.resume({
     step: result.suspended[0],
     resumeData: {
-      city: "Berlin"
-    }
+      city: 'Berlin',
+    },
   });
 }
 ```
@@ -103,52 +103,48 @@ In this case, the logic resumes the first step listed in the `suspended` array. 
     // ...
     "step-1": {
       // ...
-      "status": "suspended",
+      "status": "suspended"
     }
   },
-  "suspended": [
-    [
-      "step-1"
-    ]
-  ]
+  "suspended": [["step-1"]]
 }
 ```
 
-> See [Run Workflow Results](./overview.mdx#run-workflow-results) for more details.
+> See [Run Workflow Results](./overview#run-workflow-results) for more details.
 
 ## Providing user feedback with suspend
 
 When a workflow is suspended, feedback can be surfaced to the user through the `suspendSchema`. Include a reason in the `suspend` payload to explain why the workflow paused.
 
 ```typescript {13,23} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
 
 const step1 = createStep({
-  id: "step-1",
+  id: 'step-1',
   inputSchema: z.object({
-    value: z.string()
+    value: z.string(),
   }),
   resumeSchema: z.object({
-    confirm: z.boolean()
+    confirm: z.boolean(),
   }),
   suspendSchema: z.object({
-    reason: z.string()
+    reason: z.string(),
   }),
   outputSchema: z.object({
-    value: z.string()
+    value: z.string(),
   }),
   execute: async ({ resumeData, suspend }) => {
     const { confirm } = resumeData ?? {};
 
     if (!confirm) {
       return await suspend({
-        reason: "Confirm to continue"
+        reason: 'Confirm to continue',
       });
     }
 
-    return { value: "" };
-  }
+    return { value: '' };
+  },
 });
 
 export const testWorkflow = createWorkflow({
@@ -156,7 +152,6 @@ export const testWorkflow = createWorkflow({
 })
   .then(step1)
   .commit();
-
 ```
 
 In this case, the reason provided explains that the user must confirm to continue.
@@ -168,36 +163,36 @@ In this case, the reason provided explains that the user must confirm to continu
     "status": "suspended",
     "suspendPayload": {
       "reason": "Confirm to continue"
-    },
+    }
   }
 }
 ```
 
-> See [Run Workflow Results](./overview.mdx#run-workflow-results) for more details.
+> See [Run Workflow Results](./overview#run-workflow-results) for more details.
 
 ## Resuming a workflow with `resume()`
 
 A workflow can be resumed by calling `resume` and providing the required `resumeData`. You can either explicitly specify which step to resume from, or when exactly one step is suspended, omit the `step` parameter and the workflow will automatically resume that step.
 
 ```typescript {16-18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+const run = await mastra.getWorkflow('testWorkflow').createRunAsync();
 
 const result = await run.start({
-   inputData: {
-    city: "London"
-  }
+  inputData: {
+    city: 'London',
+  },
 });
 
 console.log(JSON.stringify(result, null, 2));
 
-if (result.status === "suspended") {
+if (result.status === 'suspended') {
   const resumedResult = await run.resume({
     step: 'step-1',
     resumeData: {
-      city: "Berlin"
-    }
+      city: 'Berlin',
+    },
   });
 
   console.log(JSON.stringify(resumedResult, null, 2));
@@ -209,7 +204,7 @@ You can also omit the `step` parameter when exactly one step is suspended:
 ```typescript {5} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const resumedResult = await run.resume({
   resumeData: {
-    city: "Berlin"
+    city: 'Berlin',
   },
   // step parameter omitted - automatically resumes the single suspended step
 });
@@ -250,7 +245,7 @@ const dowhileWorkflow = createWorkflow({
 const run = await dowhileWorkflow.createRunAsync();
 const result = await run.start({ inputData: { value: 0 } });
 
-if (result.status === "suspended") {
+if (result.status === 'suspended') {
   const resumedResult = await run.resume({
     resumeData: { value: 2 },
     step: ['simple-resume-workflow', 'resume'],
@@ -266,22 +261,22 @@ When using suspend/resume with `RuntimeContext`, you can create the instance you
 `RuntimeContext` is not automatically shared on a workflow run.
 
 ```typescript {1,4,9,16} filename="src/mastra/workflows/test-workflow.tss" showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/di";
-import { mastra } from "./mastra";
+import { RuntimeContext } from '@mastra/core/di';
+import { mastra } from './mastra';
 
 const runtimeContext = new RuntimeContext();
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+const run = await mastra.getWorkflow('testWorkflow').createRunAsync();
 
 const result = await run.start({
-  inputData: { suggestions: ["London", "Paris", "New York"] },
-  runtimeContext
+  inputData: { suggestions: ['London', 'Paris', 'New York'] },
+  runtimeContext,
 });
 
-if (result.status === "suspended") {
+if (result.status === 'suspended') {
   const resumedResult = await run.resume({
     step: 'step-1',
-    resumeData: { city: "New York" },
-    runtimeContext
+    resumeData: { city: 'New York' },
+    runtimeContext,
   });
 }
 ```

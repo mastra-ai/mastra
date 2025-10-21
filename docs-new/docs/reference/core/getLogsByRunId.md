@@ -1,6 +1,6 @@
 ---
-title: "Reference: Mastra.getLogsByRunId() "
-description: "Documentation for the `Mastra.getLogsByRunId()` method in Mastra, which retrieves logs for a specific run ID and transport ID."
+title: 'Reference: Mastra.getLogsByRunId() '
+description: 'Documentation for the `Mastra.getLogsByRunId()` method in Mastra, which retrieves logs for a specific run ID and transport ID.'
 ---
 
 # Mastra.getLogsByRunId()
@@ -10,75 +10,75 @@ The `.getLogsByRunId()` method is used to retrieve logs for a specific run ID an
 ## Usage example
 
 ```typescript copy
-mastra.getLogsByRunId({ runId: "123", transportId: "456" });
+mastra.getLogsByRunId({ runId: '123', transportId: '456' });
 ```
 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The run ID to retrieve logs for.",
-    },
-    {
-      name: "transportId",
-      type: "string",
-      description: "The transport ID to retrieve logs from.",
-    },
-    {
-      name: "fromDate",
-      type: "Date",
-      description: "Optional start date for filtering logs. e.g., new Date('2024-01-01').",
-      optional: true,
-    },
-    {
-      name: "toDate",
-      type: "Date",
-      description: "Optional end date for filtering logs. e.g., new Date('2024-01-31').",
-      optional: true,
-    },
-    {
-      name: "logLevel",
-      type: "LogLevel",
-      description: "Optional log level to filter by.",
-      optional: true,
-    },
-    {
-      name: "filters",
-      type: "Record<string, any>",
-      description: "Optional additional filters to apply to the log query.",
-      optional: true,
-    },
-    {
-      name: "page",
-      type: "number",
-      description: "Optional page number for pagination.",
-      optional: true,
-    },
-    {
-      name: "perPage",
-      type: "number",
-      description: "Optional number of logs per page for pagination.",
-      optional: true,
-    },
-  ]}
+content={[
+{
+name: "runId",
+type: "string",
+description: "The run ID to retrieve logs for.",
+},
+{
+name: "transportId",
+type: "string",
+description: "The transport ID to retrieve logs from.",
+},
+{
+name: "fromDate",
+type: "Date",
+description: "Optional start date for filtering logs. e.g., new Date('2024-01-01').",
+optional: true,
+},
+{
+name: "toDate",
+type: "Date",
+description: "Optional end date for filtering logs. e.g., new Date('2024-01-31').",
+optional: true,
+},
+{
+name: "logLevel",
+type: "LogLevel",
+description: "Optional log level to filter by.",
+optional: true,
+},
+{
+name: "filters",
+type: "Record<string, any>",
+description: "Optional additional filters to apply to the log query.",
+optional: true,
+},
+{
+name: "page",
+type: "number",
+description: "Optional page number for pagination.",
+optional: true,
+},
+{
+name: "perPage",
+type: "number",
+description: "Optional number of logs per page for pagination.",
+optional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "logs",
-      type: "Promise<any>",
-      description: "A promise that resolves to the logs for the specified run ID and transport ID.",
-    },
-  ]}
+content={[
+{
+name: "logs",
+type: "Promise<any>",
+description: "A promise that resolves to the logs for the specified run ID and transport ID.",
+},
+]}
 />
 
 ## Related
 
-- [Logging overview](../../docs/observability/logging.md)
-- [Logger reference](../../reference/observability/logger.md)
+- [Logging overview](../../docs/observability/logging)
+- [Logger reference](../../reference/observability/logger)

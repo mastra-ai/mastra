@@ -1,6 +1,6 @@
 ---
 sidebar_position: 3
-title: "Workflows: AI Recruiter"
+title: 'Workflows: AI Recruiter'
 description: Guide on building a recruiter workflow in Mastra to gather and process candidate information using LLMs.
 ---
 
@@ -20,18 +20,16 @@ You'll create a workflow that gathers information from a candidate's resume, the
 
 Set up the Workflow, define steps to extract and classify candidate data, and then ask suitable follow-up questions.
 
-
-
 ### Define the Workflow
 
 Create a new file `src/mastra/workflows/candidate-workflow.ts` and define your workflow:
 
 ```ts copy filename="src/mastra/workflows/candidate-workflow.ts"
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
 
 export const candidateWorkflow = createWorkflow({
-  id: "candidate-workflow",
+  id: 'candidate-workflow',
   inputSchema: z.object({
     resumeText: z.string(),
   }),
@@ -53,17 +51,17 @@ You want to extract candidate details from the resume text and classify the pers
 To the existing `src/mastra/workflows/candidate-workflow.ts` file add the following:
 
 ```ts copy filename="src/mastra/workflows/candidate-workflow.ts"
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
 
 const recruiter = new Agent({
-  name: "Recruiter Agent",
+  name: 'Recruiter Agent',
   instructions: `You are a recruiter.`,
-  model: openai("gpt-4o-mini"),
+  model: openai('gpt-4o-mini'),
 });
 
 const gatherCandidateInfo = createStep({
-  id: "gatherCandidateInfo",
+  id: 'gatherCandidateInfo',
   inputSchema: z.object({
     resumeText: z.string(),
   }),
@@ -86,9 +84,9 @@ const gatherCandidateInfo = createStep({
           isTechnical: z.boolean(),
           specialty: z.string(),
           resumeText: z.string(),
-        })
+        }),
       },
-      maxSteps: 1
+      maxSteps: 1,
     });
 
     return res.object;
@@ -106,7 +104,7 @@ To the existing `src/mastra/workflows/candidate-workflow.ts` file add the follow
 
 ```ts copy filename="src/mastra/workflows/candidate-workflow.ts"
 const askAboutSpecialty = createStep({
-  id: "askAboutSpecialty",
+  id: 'askAboutSpecialty',
   inputSchema: z.object({
     candidateName: z.string(),
     isTechnical: z.boolean(),
@@ -122,7 +120,7 @@ for ${candidateInfo?.candidateName} about how they got into "${candidateInfo?.sp
 Resume: ${candidateInfo?.resumeText}`;
     const res = await recruiter.generate(prompt);
 
-    return { question: res?.text?.trim() || "" };
+    return { question: res?.text?.trim() || '' };
   },
 });
 ```
@@ -135,7 +133,7 @@ To the existing `src/mastra/workflows/candidate-workflow.ts` file add the follow
 
 ```ts filename="src/mastra/workflows/candidate-workflow.ts" copy
 const askAboutRole = createStep({
-  id: "askAboutRole",
+  id: 'askAboutRole',
   inputSchema: z.object({
     candidateName: z.string(),
     isTechnical: z.boolean(),
@@ -150,7 +148,7 @@ const askAboutRole = createStep({
 for ${candidateInfo?.candidateName} asking what interests them most about this role.
 Resume: ${candidateInfo?.resumeText}`;
     const res = await recruiter.generate(prompt);
-    return { question: res?.text?.trim() || "" };
+    return { question: res?.text?.trim() || '' };
   },
 });
 ```
@@ -163,7 +161,7 @@ To the existing `src/mastra/workflows/candidate-workflow.ts` file change the `ca
 
 ```ts filename="src/mastra/workflows/candidate-workflow.ts" copy {10-14}
 export const candidateWorkflow = createWorkflow({
-  id: "candidate-workflow",
+  id: 'candidate-workflow',
   inputSchema: z.object({
     resumeText: z.string(),
   }),
@@ -189,19 +187,17 @@ export const candidateWorkflow = createWorkflow({
 In your `src/mastra/index.ts` file, register the workflow:
 
 ```ts copy filename="src/mastra/index.ts" {2, 5}
-import { Mastra } from "@mastra/core";
-import { candidateWorkflow } from "./workflows/candidate-workflow";
+import { Mastra } from '@mastra/core';
+import { candidateWorkflow } from './workflows/candidate-workflow';
 
 export const mastra = new Mastra({
   workflows: { candidateWorkflow },
 });
 ```
 
-
-
 ## Testing the Workflow
 
-You can test your workflow inside Mastra's [playground](../../docs/server-db/local-dev-playground.md) by starting the development server:
+You can test your workflow inside Mastra's [playground](../../docs/server-db/local-dev-playground) by starting the development server:
 
 ```bash copy
 mastra dev
@@ -215,17 +211,17 @@ Knowledgeable Software Engineer with more than 10 years of experience in softwar
 
 After entering the resume text, press the **Run** button. You should now see two status boxes (`GatherCandidateInfo` and `AskAboutSpecialty`) which contain the output of the workflow steps.
 
-You can also test the workflow programmatically by calling [`.createRunAsync()`](../../reference/workflows/create-run.md) and [`.start()`](../../reference/workflows/run-methods/start.md). Create a new file `src/test-workflow.ts` and add the following:
+You can also test the workflow programmatically by calling [`.createRunAsync()`](../../reference/workflows/create-run) and [`.start()`](../../reference/workflows/run-methods/start). Create a new file `src/test-workflow.ts` and add the following:
 
 ```ts copy filename="src/test-workflow.ts"
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const run = await mastra.getWorkflow("candidateWorkflow").createRunAsync();
+const run = await mastra.getWorkflow('candidateWorkflow').createRunAsync();
 
 const res = await run.start({
   inputData: {
     resumeText:
-      "Knowledgeable Software Engineer with more than 10 years of experience in software development. Proven expertise in the design and development of software databases and optimization of user interfaces.",
+      'Knowledgeable Software Engineer with more than 10 years of experience in software development. Proven expertise in the design and development of software databases and optimization of user interfaces.',
   },
 });
 
@@ -233,7 +229,7 @@ const res = await run.start({
 console.log(JSON.stringify(res, null, 2));
 
 // Get the workflow output value
-if (res.status === "success") {
+if (res.status === 'success') {
   const question = res.result.askAboutRole?.question ?? res.result.askAboutSpecialty?.question;
 
   console.log(`Output value: ${question}`);

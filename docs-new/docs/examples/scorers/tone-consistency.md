@@ -1,8 +1,7 @@
 ---
-title: "Tone Consistency "
+title: 'Tone Consistency '
 description: Example of using the Tone Consistency scorer to evaluate emotional tone patterns and sentiment consistency in text.
 ---
-
 
 # Tone Consistency Scorer
 
@@ -21,7 +20,7 @@ npm install @mastra/evals
 In this example, the texts exhibit a similar positive sentiment. The scorer measures the consistency between the tones, resulting in a high score.
 
 ```typescript filename="src/example-positive-tone.ts" showLineNumbers copy
-import { createToneScorer } from "@mastra/evals/scorers/code";
+import { createToneScorer } from '@mastra/evals/scorers/code';
 
 const scorer = createToneScorer();
 
@@ -57,7 +56,7 @@ The scorer returns a high score reflecting strong sentiment alignment. The `anal
 In this example, the text’s internal tone consistency is analyzed by passing an empty response. This signals the scorer to evaluate sentiment stability within the single input text, resulting in a score reflecting how uniform the tone is throughout.
 
 ```typescript filename="src/example-stable-tone.ts" showLineNumbers copy
-import { createToneScorer } from "@mastra/evals/scorers/code";
+import { createToneScorer } from '@mastra/evals/scorers/code';
 
 const scorer = createToneScorer();
 
@@ -92,7 +91,7 @@ The scorer returns a high score indicating consistent sentiment throughout the i
 In this example, the input and response have different emotional tones. The scorer picks up on these variations and gives a lower consistency score.
 
 ```typescript filename="src/example-mixed-tone.ts" showLineNumbers copy
-import { createToneScorer } from "@mastra/evals/scorers/code";
+import { createToneScorer } from '@mastra/evals/scorers/code';
 
 const scorer = createToneScorer();
 
@@ -131,7 +130,7 @@ You can create a `ToneConsistencyScorer` instance with default settings. No addi
 const scorer = createToneScorer();
 ```
 
-> See [ToneConsistencyScorer](/reference/scorers/tone-consistency.md) for a full list of configuration options.
+> See [ToneConsistencyScorer](/reference/scorers/tone-consistency) for a full list of configuration options.
 
 ## Understanding the results
 
@@ -152,6 +151,7 @@ const scorer = createToneScorer();
 ```
 
 ### score
+
 A tone consistency score between 0 and 1:
 
 - **0.8–1.0**: Very consistent tone.
@@ -160,10 +160,13 @@ A tone consistency score between 0 and 1:
 - **0.0–0.3**: Conflicting tone.
 
 ### runId
+
 The unique identifier for this scorer run.
 
 ### analyzeStepResult
+
 Object with tone metrics:
+
 - **responseSentiment**: Sentiment score for the response (comparison mode).
 - **referenceSentiment**: Sentiment score for the input/reference (comparison mode).
 - **difference**: Absolute difference between sentiment scores (comparison mode).

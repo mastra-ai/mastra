@@ -1,8 +1,7 @@
 ---
-title: "Summarization "
+title: 'Summarization '
 description: Example of using the Summarization metric to evaluate how well LLM-generated summaries capture content while maintaining factual accuracy.
 ---
-
 
 # Summarization Evaluation
 
@@ -21,15 +20,15 @@ npm install @mastra/evals
 In this example, the summary accurately preserves all important facts from the source while maintaining faithful phrasing. The score reflects both complete coverage and perfect factual alignment.
 
 ```typescript filename="src/example-accurate-summary.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { SummarizationMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { SummarizationMetric } from '@mastra/evals/llm';
 
-const metric = new SummarizationMetric(openai("gpt-4o-mini"));
+const metric = new SummarizationMetric(openai('gpt-4o-mini'));
 
 const query =
   "The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car, the Roadster, was launched in 2008.";
 const response =
-  "Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car, the Roadster, in 2008. Elon Musk joined as the largest investor in 2004 and became CEO in 2008.";
+  'Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car, the Roadster, in 2008. Elon Musk joined as the largest investor in 2004 and became CEO in 2008.';
 
 const result = await metric.measure(query, response);
 ```
@@ -54,19 +53,21 @@ A high score indicates that the summary captures all key details from the input 
 In this example, the summary is factually accurate but leaves out several key points from the source. The score reflects incomplete coverage despite strong alignment.
 
 ```typescript filename="src/example-partial-summary.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { SummarizationMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { SummarizationMetric } from '@mastra/evals/llm';
 
-const metric = new SummarizationMetric(openai("gpt-4o-mini"));
+const metric = new SummarizationMetric(openai('gpt-4o-mini'));
 
 const query =
-  "The Python programming language was created by Guido van Rossum and was first released in 1991. It emphasizes code readability with its notable use of significant whitespace. Python is dynamically typed and garbage-collected. It supports multiple programming paradigms, including structured, object-oriented, and functional programming.";
-const response = "Python, created by Guido van Rossum, is a programming language known for its readable code and use of whitespace. It was released in 1991.";
+  'The Python programming language was created by Guido van Rossum and was first released in 1991. It emphasizes code readability with its notable use of significant whitespace. Python is dynamically typed and garbage-collected. It supports multiple programming paradigms, including structured, object-oriented, and functional programming.';
+const response =
+  'Python, created by Guido van Rossum, is a programming language known for its readable code and use of whitespace. It was released in 1991.';
 
 const result = await metric.measure(query, response);
 
 console.log(result);
 ```
+
 ### Partial summary output
 
 The summary receives a moderate score due to missing key information from the input. The `info` field confirms factual alignment but highlights gaps in content coverage.
@@ -87,14 +88,15 @@ The summary receives a moderate score due to missing key information from the in
 In this example, the summary includes factual errors and misrepresents key details from the source. The score reflects poor alignment, even if some information is partially covered.
 
 ```typescript filename="src/example-inaccurate-summary.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { SummarizationMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { SummarizationMetric } from '@mastra/evals/llm';
 
-const metric = new SummarizationMetric(openai("gpt-4o-mini"));
+const metric = new SummarizationMetric(openai('gpt-4o-mini'));
 
 const query =
-  "The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN. He published the first website in 1991. Berners-Lee made the Web freely available, with no patent and no royalties due.";
-const response = "The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went on to commercialize the technology through patents.";
+  'The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN. He published the first website in 1991. Berners-Lee made the Web freely available, with no patent and no royalties due.';
+const response =
+  'The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went on to commercialize the technology through patents.';
 
 const result = await metric.measure(query, response);
 
@@ -121,10 +123,10 @@ The summary receives a low score due to factual inaccuracies and misalignment wi
 You can create a `SummarizationMetric` instance by providing a model. No additional configuration is required.
 
 ```typescript showLineNumbers copy
-const metric = new SummarizationMetric(openai("gpt-4o-mini"));
+const metric = new SummarizationMetric(openai('gpt-4o-mini'));
 ```
 
-> See [SummarizationMetric](/reference/evals/summarization.md) for a full list of configuration options.
+> See [SummarizationMetric](/reference/evals/summarization) for a full list of configuration options.
 
 ## Understanding the results
 

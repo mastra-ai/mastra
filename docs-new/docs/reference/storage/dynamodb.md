@@ -1,6 +1,6 @@
 ---
-title: "DynamoDB Storage "
-description: "Documentation for the DynamoDB storage implementation in Mastra, using a single-table design with ElectroDB."
+title: 'DynamoDB Storage '
+description: 'Documentation for the DynamoDB storage implementation in Mastra, using a single-table design with ElectroDB.'
 ---
 
 # DynamoDB Storage
@@ -30,22 +30,22 @@ yarn add @mastra/dynamodb@latest
 
 Before using this package, you **must** create a DynamoDB table with a specific structure, including primary keys and Global Secondary Indexes (GSIs). This adapter expects the DynamoDB table and its GSIs to be provisioned externally.
 
-Detailed instructions for setting up the table using AWS CloudFormation or AWS CDK are available in [TABLE_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md). Please ensure your table is configured according to those instructions before proceeding.
+Detailed instructions for setting up the table using AWS CloudFormation or AWS CDK are available in [TABLE_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP). Please ensure your table is configured according to those instructions before proceeding.
 
 ## Usage
 
 ### Basic Usage
 
 ```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
-import { DynamoDBStore } from "@mastra/dynamodb";
+import { Memory } from '@mastra/memory';
+import { DynamoDBStore } from '@mastra/dynamodb';
 
 // Initialize the DynamoDB storage
 const storage = new DynamoDBStore({
-  name: "dynamodb", // A name for this storage instance
+  name: 'dynamodb', // A name for this storage instance
   config: {
-    tableName: "mastra-single-table", // Name of your DynamoDB table
-    region: "us-east-1", // Optional: AWS region, defaults to 'us-east-1'
+    tableName: 'mastra-single-table', // Name of your DynamoDB table
+    region: 'us-east-1', // Optional: AWS region, defaults to 'us-east-1'
     // endpoint: "http://localhost:8000", // Optional: For local DynamoDB
     // credentials: { accessKeyId: "YOUR_ACCESS_KEY", secretAccessKey: "YOUR_SECRET_KEY" } // Optional
   },
@@ -73,14 +73,14 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
 2.  **Configure `DynamoDBStore` to use the local endpoint:**
 
     ```typescript copy showLineNumbers
-    import { DynamoDBStore } from "@mastra/dynamodb";
+    import { DynamoDBStore } from '@mastra/dynamodb';
 
     const storage = new DynamoDBStore({
-      name: "dynamodb-local",
+      name: 'dynamodb-local',
       config: {
-        tableName: "mastra-single-table", // Ensure this table is created in your local DynamoDB
-        region: "localhost", // Can be any string for local, 'localhost' is common
-        endpoint: "http://localhost:8000",
+        tableName: 'mastra-single-table', // Ensure this table is created in your local DynamoDB
+        region: 'localhost', // Can be any string for local, 'localhost' is common
+        endpoint: 'http://localhost:8000',
         // For DynamoDB Local, credentials are not typically required unless configured.
         // If you've configured local credentials:
         // credentials: { accessKeyId: "fakeMyKeyId", secretAccessKey: "fakeSecretAccessKey" }
@@ -93,41 +93,41 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "name",
-      type: "string",
-      description: "A name for the storage instance.",
-      isOptional: false,
-    },
-    {
-      name: "config.tableName",
-      type: "string",
-      description: "The name of your DynamoDB table.",
-      isOptional: false,
-    },
-    {
-      name: "config.region",
-      type: "string",
-      description:
-        "AWS region. Defaults to 'us-east-1'. For local development, can be set to 'localhost' or similar.",
-      isOptional: true,
-    },
-    {
-      name: "config.endpoint",
-      type: "string",
-      description:
-        "Custom endpoint for DynamoDB (e.g., 'http://localhost:8000' for local development).",
-      isOptional: true,
-    },
-    {
-      name: "config.credentials",
-      type: "object",
-      description:
-        "AWS credentials object with `accessKeyId` and `secretAccessKey`. If not provided, the AWS SDK will attempt to source credentials from environment variables, IAM roles (e.g., for EC2/Lambda), or the shared AWS credentials file.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "name",
+type: "string",
+description: "A name for the storage instance.",
+isOptional: false,
+},
+{
+name: "config.tableName",
+type: "string",
+description: "The name of your DynamoDB table.",
+isOptional: false,
+},
+{
+name: "config.region",
+type: "string",
+description:
+"AWS region. Defaults to 'us-east-1'. For local development, can be set to 'localhost' or similar.",
+isOptional: true,
+},
+{
+name: "config.endpoint",
+type: "string",
+description:
+"Custom endpoint for DynamoDB (e.g., 'http://localhost:8000' for local development).",
+isOptional: true,
+},
+{
+name: "config.credentials",
+type: "object",
+description:
+"AWS credentials object with `accessKeyId` and `secretAccessKey`. If not provided, the AWS SDK will attempt to source credentials from environment variables, IAM roles (e.g., for EC2/Lambda), or the shared AWS credentials file.",
+isOptional: true,
+},
+]}
 />
 
 ## AWS IAM Permissions
@@ -164,7 +164,7 @@ The IAM role or user executing the code needs appropriate permissions to interac
 
 Before diving into the architectural details, keep these key points in mind when working with the DynamoDB storage adapter:
 
-- **External Table Provisioning:** This adapter _requires_ you to create and configure the DynamoDB table and its Global Secondary Indexes (GSIs) yourself, prior to using the adapter. Follow the guide in [TABLE_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md).
+- **External Table Provisioning:** This adapter _requires_ you to create and configure the DynamoDB table and its Global Secondary Indexes (GSIs) yourself, prior to using the adapter. Follow the guide in [TABLE_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP).
 - **Single-Table Design:** All Mastra data (threads, messages, etc.) is stored in one DynamoDB table. This is a deliberate design choice optimized for DynamoDB, differing from relational database approaches.
 - **Understanding GSIs:** Familiarity with how the GSIs are structured (as per `TABLE_SETUP.md`) is important for understanding data retrieval and potential query patterns.
 - **ElectroDB:** The adapter uses ElectroDB to manage interactions with DynamoDB, providing a layer of abstraction and type safety over raw DynamoDB operations.
@@ -176,7 +176,7 @@ This storage adapter utilizes a **single-table design pattern** leveraging [Elec
 Key aspects of this approach:
 
 - **DynamoDB Native:** The single-table design is optimized for DynamoDB's key-value and query capabilities, often leading to better performance and scalability compared to mimicking relational models.
-- **External Table Management:** Unlike some adapters that might offer helper functions to create tables via code, this adapter **expects the DynamoDB table and its associated Global Secondary Indexes (GSIs) to be provisioned externally** before use. Please refer to [TABLE_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md) for detailed instructions using tools like AWS CloudFormation or CDK. The adapter focuses solely on interacting with the pre-existing table structure.
+- **External Table Management:** Unlike some adapters that might offer helper functions to create tables via code, this adapter **expects the DynamoDB table and its associated Global Secondary Indexes (GSIs) to be provisioned externally** before use. Please refer to [TABLE_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP) for detailed instructions using tools like AWS CloudFormation or CDK. The adapter focuses solely on interacting with the pre-existing table structure.
 - **Consistency via Interface:** While the underlying storage model differs, this adapter adheres to the same `MastraStorage` interface as other adapters, ensuring it can be used interchangeably within the Mastra `Memory` component.
 
 ### Mastra Data in the Single Table

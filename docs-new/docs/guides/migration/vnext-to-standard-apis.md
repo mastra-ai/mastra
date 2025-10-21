@@ -81,8 +81,8 @@ Only support **AI SDK v5** models (`specificationVersion: 'v2'`)
 
 See the following API references for more information:
 
-- [Agent.generateLegacy()](../../reference/agents/generateLegacy.mdx)
-- [Agent.streamLegacy()](../../reference/streaming/agents/streamLegacy.mdx)
+- [Agent.generateLegacy()](../../reference/agents/generateLegacy)
+- [Agent.streamLegacy()](../../reference/streaming/agents/streamLegacy)
 
 **Standard APIs**
 
@@ -97,8 +97,8 @@ See the following API references for more information:
 
 See the following API references for more information:
 
-- [Agent.generate()](../../reference/agents/generate.mdx)
-- [Agent.stream()](../../reference/streaming/agents/stream.mdx)
+- [Agent.generate()](../../reference/agents/generate)
+- [Agent.stream()](../../reference/streaming/agents/stream)
 
 ### 3. Format control
 
@@ -339,8 +339,8 @@ const result = await agent.generate(messages, {
 
 See the following API references for more information:
 
-- [Agent.generateLegacy()](../../reference/agents/generateLegacy.mdx)
-- [Agent.streamLegacy()](../../reference/streaming/agents/streamLegacy.mdx)
+- [Agent.generateLegacy()](../../reference/agents/generateLegacy)
+- [Agent.streamLegacy()](../../reference/streaming/agents/streamLegacy)
 
 **Standard APIs**
 
@@ -361,5 +361,5 @@ type ToolChoice<TOOLS extends Record<string, unknown>> =
 
 See the following API references for more information:
 
-- [Agent.generate()](../../reference/agents/generate.mdx)
-- [Agent.stream()](../../reference/streaming/agents/stream.mdx)
+- [Agent.generate()](../../reference/agents/generate)
+- [Agent.stream()](../../reference/streaming/agents/stream)

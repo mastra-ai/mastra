@@ -1,8 +1,7 @@
 ---
-title: "Hallucination "
+title: 'Hallucination '
 description: Example of using the Hallucination metric to evaluate factual contradictions in responses.
 ---
-
 
 ## Hallucination Evaluation
 
@@ -21,19 +20,20 @@ npm install @mastra/evals
 In this example, the response is fully aligned with the provided context. All claims are factually correct and directly supported by the source material, resulting in a low hallucination score.
 
 ```typescript filename="src/example-no-hallucination.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { HallucinationMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { HallucinationMetric } from '@mastra/evals/llm';
 
-const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
+const metric = new HallucinationMetric(openai('gpt-4o-mini'), {
   context: [
-    "The iPhone was first released in 2007.",
-    "Steve Jobs unveiled it at Macworld.",
-    "The original model had a 3.5-inch screen."
-  ]
+    'The iPhone was first released in 2007.',
+    'Steve Jobs unveiled it at Macworld.',
+    'The original model had a 3.5-inch screen.',
+  ],
 });
 
-const query = "When was the first iPhone released?";
-const response = "The iPhone was first released in 2007, when Steve Jobs unveiled it at Macworld. The original iPhone featured a 3.5-inch screen.";
+const query = 'When was the first iPhone released?';
+const response =
+  'The iPhone was first released in 2007, when Steve Jobs unveiled it at Macworld. The original iPhone featured a 3.5-inch screen.';
 
 const result = await metric.measure(query, response);
 
@@ -58,20 +58,21 @@ The response receives a score of 0 because there are no contradictions. Every st
 In this example, the response includes both accurate and inaccurate claims. Some details align with the context, while others directly contradict it—such as inflated numbers or incorrect locations. These contradictions increase the hallucination score.
 
 ```typescript filename="src/example-mixed-hallucination.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { HallucinationMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { HallucinationMetric } from '@mastra/evals/llm';
 
-const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
+const metric = new HallucinationMetric(openai('gpt-4o-mini'), {
   context: [
-    "The first Star Wars movie was released in 1977.",
-    "It was directed by George Lucas.",
-    "The film earned $775 million worldwide.",
-    "The movie was filmed in Tunisia and England."
-  ]
+    'The first Star Wars movie was released in 1977.',
+    'It was directed by George Lucas.',
+    'The film earned $775 million worldwide.',
+    'The movie was filmed in Tunisia and England.',
+  ],
 });
 
-const query = "Tell me about the first Star Wars movie.";
-const response = "The first Star Wars movie came out in 1977 and was directed by George Lucas. It made over $1 billion at the box office and was filmed entirely in California.";
+const query = 'Tell me about the first Star Wars movie.';
+const response =
+  'The first Star Wars movie came out in 1977 and was directed by George Lucas. It made over $1 billion at the box office and was filmed entirely in California.';
 
 const result = await metric.measure(query, response);
 
@@ -96,24 +97,24 @@ The metric assigns a mid-range score because parts of the response conflict with
 In this example, the response contradicts every key fact in the context. None of the claims can be verified, and all presented details are factually incorrect.
 
 ```typescript filename="src/example-complete-hallucination.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { HallucinationMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { HallucinationMetric } from '@mastra/evals/llm';
 
-const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
+const metric = new HallucinationMetric(openai('gpt-4o-mini'), {
   context: [
-    "The Wright brothers made their first flight in 1903.",
-    "The flight lasted 12 seconds.",
-    "It covered a distance of 120 feet."
-  ]
+    'The Wright brothers made their first flight in 1903.',
+    'The flight lasted 12 seconds.',
+    'It covered a distance of 120 feet.',
+  ],
 });
 
-const query = "When did the Wright brothers first fly?";
-const response = "The Wright brothers achieved their historic first flight in 1908. The flight lasted about 2 minutes and covered nearly a mile.";
+const query = 'When did the Wright brothers first fly?';
+const response =
+  'The Wright brothers achieved their historic first flight in 1908. The flight lasted about 2 minutes and covered nearly a mile.';
 
 const result = await metric.measure(query, response);
 
 console.log(result);
-
 ```
 
 ### Complete hallucination output
@@ -134,13 +135,13 @@ The metric assigns a score of 1 because every statement in the response conflict
 You can create a `HallucinationMetric` instance by providing a `context` array that represents the factual source material. You can also configure optional parameters such as `scale` to control the maximum score.
 
 ```typescript
-const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
-  context: [""],
-  scale: 1
+const metric = new HallucinationMetric(openai('gpt-4o-mini'), {
+  context: [''],
+  scale: 1,
 });
 ```
 
-> See [HallucinationMetric](/reference/evals/hallucination.md) for a full list of configuration options.
+> See [HallucinationMetric](/reference/evals/hallucination) for a full list of configuration options.
 
 ## Understanding the results
 

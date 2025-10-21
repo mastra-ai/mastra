@@ -1,6 +1,6 @@
 ---
-title: "Reference: Mastra.getLogger() "
-description: "Documentation for the `Mastra.getLogger()` method in Mastra, which retrieves the configured logger instance."
+title: 'Reference: Mastra.getLogger() '
+description: 'Documentation for the `Mastra.getLogger()` method in Mastra, which retrieves the configured logger instance.'
 ---
 
 # Mastra.getLogger()
@@ -20,16 +20,16 @@ This method does not accept any parameters.
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "logger",
-      type: "TLogger",
-      description: "The configured logger instance used for logging across all components (agents, workflows, etc.).",
-    },
-  ]}
+content={[
+{
+name: "logger",
+type: "TLogger",
+description: "The configured logger instance used for logging across all components (agents, workflows, etc.).",
+},
+]}
 />
 
 ## Related
 
-- [Logging overview](../../docs/observability/logging.md)
-- [Logger reference](../../reference/observability/logger.md)
+- [Logging overview](../../docs/observability/logging)
+- [Logger reference](../../reference/observability/logger)

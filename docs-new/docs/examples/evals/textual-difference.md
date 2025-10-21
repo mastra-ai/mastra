@@ -1,8 +1,7 @@
 ---
-title: "Textual Difference "
+title: 'Textual Difference '
 description: Example of using the Textual Difference metric to evaluate similarity between text strings by analyzing sequence differences and changes.
 ---
-
 
 # Textual Difference Evaluation
 
@@ -20,14 +19,13 @@ npm install @mastra/evals
 
 In this example, the texts are exactly the same. The metric identifies complete similarity with a perfect score and no detected changes.
 
-
 ```typescript filename="src/example-no-differences.ts" showLineNumbers copy
-import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+import { TextualDifferenceMetric } from '@mastra/evals/nlp';
 
 const metric = new TextualDifferenceMetric();
 
-const query = "The quick brown fox jumps over the lazy dog.";
-const response = "The quick brown fox jumps over the lazy dog.";
+const query = 'The quick brown fox jumps over the lazy dog.';
+const response = 'The quick brown fox jumps over the lazy dog.';
 
 const result = await metric.measure(query, response);
 
@@ -49,17 +47,18 @@ The metric returns a high score, indicating the texts are identical. The detaile
   }
 }
 ```
+
 ## Minor differences example
 
 In this example, the texts have small variations. The metric detects these minor differences and returns a moderate similarity score.
 
 ```typescript filename="src/example-minor-differences.ts" showLineNumbers copy
-import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+import { TextualDifferenceMetric } from '@mastra/evals/nlp';
 
 const metric = new TextualDifferenceMetric();
 
-const query = "Hello world! How are you?";
-const response = "Hello there! How is it going?";
+const query = 'Hello world! How are you?';
+const response = 'Hello there! How is it going?';
 
 const result = await metric.measure(query, response);
 
@@ -87,12 +86,12 @@ The metric returns a moderate score reflecting the small variations between the 
 In this example, the texts differ significantly. The metric detects extensive changes and returns a low similarity score.
 
 ```typescript filename="src/example-major-differences.ts" showLineNumbers copy
-import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+import { TextualDifferenceMetric } from '@mastra/evals/nlp';
 
 const metric = new TextualDifferenceMetric();
 
-const query = "Python is a high-level programming language.";
-const response = "JavaScript is used for web development";
+const query = 'Python is a high-level programming language.';
+const response = 'JavaScript is used for web development';
 
 const result = await metric.measure(query, response);
 
@@ -123,7 +122,7 @@ You can create a `TextualDifferenceMetric` instance with default settings. No ad
 const metric = new TextualDifferenceMetric();
 ```
 
-> See [TextualDifferenceMetric](/reference/evals/textual-difference.md) for a full list of configuration options.
+> See [TextualDifferenceMetric](/reference/evals/textual-difference) for a full list of configuration options.
 
 ## Understanding the results
 

@@ -1,6 +1,6 @@
 ---
-title: "Reference: Mastra.getWorkflows() "
-description: "Documentation for the `Mastra.getWorkflows()` method in Mastra, which retrieves all configured workflows."
+title: 'Reference: Mastra.getWorkflows() '
+description: 'Documentation for the `Mastra.getWorkflows()` method in Mastra, which retrieves all configured workflows.'
 ---
 
 # Mastra.getWorkflows()
@@ -16,28 +16,28 @@ mastra.getWorkflows();
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "options",
-      type: "{ serialized?: boolean }",
-      description: "Optional configuration object. When `serialized` is true, returns simplified workflow objects with only the name property instead of full workflow instances.",
-      optional: true,
-    },
-  ]}
+content={[
+{
+name: "options",
+type: "{ serialized?: boolean }",
+description: "Optional configuration object. When `serialized` is true, returns simplified workflow objects with only the name property instead of full workflow instances.",
+optional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflows",
-      type: "Record<string, Workflow>",
-      description: "A record of all configured workflows, where keys are workflow IDs and values are workflow instances (or simplified objects if serialized is true).",
-    },
-  ]}
+content={[
+{
+name: "workflows",
+type: "Record<string, Workflow>",
+description: "A record of all configured workflows, where keys are workflow IDs and values are workflow instances (or simplified objects if serialized is true).",
+},
+]}
 />
 
 ## Related
 
-- [Workflows overview](../../docs/workflows/overview.md)
+- [Workflows overview](../../docs/workflows/overview)

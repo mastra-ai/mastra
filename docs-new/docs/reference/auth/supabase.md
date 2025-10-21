@@ -1,6 +1,6 @@
 ---
-title: "MastraAuthSupabase Class"
-description: "API reference for the MastraAuthSupabase class, which authenticates Mastra applications using Supabase Auth."
+title: 'MastraAuthSupabase Class'
+description: 'API reference for the MastraAuthSupabase class, which authenticates Mastra applications using Supabase Auth.'
 ---
 
 # MastraAuthSupabase Class
@@ -10,7 +10,7 @@ The `MastraAuthSupabase` class provides authentication for Mastra using Supabase
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthSupabase } from '@mastra/auth-supabase';
 
 export const mastra = new Mastra({
@@ -18,7 +18,7 @@ export const mastra = new Mastra({
   server: {
     experimental_auth: new MastraAuthSupabase({
       url: process.env.SUPABASE_URL,
-      anonKey: process.env.SUPABASE_ANON_KEY
+      anonKey: process.env.SUPABASE_ANON_KEY,
     }),
   },
 });
@@ -27,36 +27,36 @@ export const mastra = new Mastra({
 ## Constructor parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "url",
-      type: "string",
-      description: "The URL of your Supabase project. Can be found in your Supabase project settings.",
-      isOptional: true,
-      defaultValue: "process.env.SUPABASE_URL"
-    },
-    {
-      name: "anonKey",
-      type: "string",
-      description: "The anonymous/public key for your Supabase project. Used for client-side authentication.",
-      isOptional: true,
-      defaultValue: "process.env.SUPABASE_ANON_KEY"
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Custom name for the auth provider instance.",
-      isOptional: true,
-    },
-    {
-      name: "authorizeUser",
-      type: "(user: User, request: HoneRequest) => Promise<boolean> | boolean",
-      description: "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, checks the 'isAdmin' column in the 'users' table.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "url",
+type: "string",
+description: "The URL of your Supabase project. Can be found in your Supabase project settings.",
+isOptional: true,
+defaultValue: "process.env.SUPABASE_URL"
+},
+{
+name: "anonKey",
+type: "string",
+description: "The anonymous/public key for your Supabase project. Used for client-side authentication.",
+isOptional: true,
+defaultValue: "process.env.SUPABASE_ANON_KEY"
+},
+{
+name: "name",
+type: "string",
+description: "Custom name for the auth provider instance.",
+isOptional: true,
+},
+{
+name: "authorizeUser",
+type: "(user: User, request: HoneRequest) => Promise<boolean> | boolean",
+description: "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, checks the 'isAdmin' column in the 'users' table.",
+isOptional: true,
+},
+]}
 />
 
 ## Related
 
-[MastraAuthSupabase](/docs/auth/supabase.md)
+[MastraAuthSupabase](/docs/auth/supabase)

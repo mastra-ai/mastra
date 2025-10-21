@@ -1,6 +1,6 @@
 ---
-title: "Reference: Memory.createThread() "
-description: "Documentation for the `Memory.createThread()` method in Mastra, which creates a new conversation thread in the memory system."
+title: 'Reference: Memory.createThread() '
+description: 'Documentation for the `Memory.createThread()` method in Mastra, which creates a new conversation thread in the memory system.'
 ---
 
 # Memory.createThread()
@@ -10,101 +10,101 @@ The `.createThread()` method creates a new conversation thread in the memory sys
 ## Usage Example
 
 ```typescript copy
-await memory?.createThread({ resourceId: "user-123" });
+await memory?.createThread({ resourceId: 'user-123' });
 ```
 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "resourceId",
-      type: "string",
-      description:
-        "Identifier for the resource this thread belongs to (e.g., user ID, project ID)",
-      isOptional: false,
-    },
-    {
-      name: "threadId",
-      type: "string",
-      description:
-        "Optional custom ID for the thread. If not provided, one will be generated.",
-      isOptional: true,
-    },
-    {
-      name: "title",
-      type: "string",
-      description: "Optional title for the thread",
-      isOptional: true,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, unknown>",
-      description: "Optional metadata to associate with the thread",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "resourceId",
+type: "string",
+description:
+"Identifier for the resource this thread belongs to (e.g., user ID, project ID)",
+isOptional: false,
+},
+{
+name: "threadId",
+type: "string",
+description:
+"Optional custom ID for the thread. If not provided, one will be generated.",
+isOptional: true,
+},
+{
+name: "title",
+type: "string",
+description: "Optional title for the thread",
+isOptional: true,
+},
+{
+name: "metadata",
+type: "Record<string, unknown>",
+description: "Optional metadata to associate with the thread",
+isOptional: true,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier of the created thread",
-    },
-    {
-      name: "resourceId",
-      type: "string",
-      description: "Resource ID associated with the thread",
-    },
-    {
-      name: "title",
-      type: "string",
-      description: "Title of the thread (if provided)",
-    },
-    {
-      name: "createdAt",
-      type: "Date",
-      description: "Timestamp when the thread was created",
-    },
-    {
-      name: "updatedAt",
-      type: "Date",
-      description: "Timestamp when the thread was last updated",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, unknown>",
-      description: "Additional metadata associated with the thread",
-    },
-  ]}
+content={[
+{
+name: "id",
+type: "string",
+description: "Unique identifier of the created thread",
+},
+{
+name: "resourceId",
+type: "string",
+description: "Resource ID associated with the thread",
+},
+{
+name: "title",
+type: "string",
+description: "Title of the thread (if provided)",
+},
+{
+name: "createdAt",
+type: "Date",
+description: "Timestamp when the thread was created",
+},
+{
+name: "updatedAt",
+type: "Date",
+description: "Timestamp when the thread was last updated",
+},
+{
+name: "metadata",
+type: "Record<string, unknown>",
+description: "Additional metadata associated with the thread",
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const agent = mastra.getAgent("agent");
+const agent = mastra.getAgent('agent');
 const memory = await agent.getMemory();
 
 const thread = await memory?.createThread({
-  resourceId: "user-123",
-  title: "Memory Test Thread",
+  resourceId: 'user-123',
+  title: 'Memory Test Thread',
   metadata: {
-    source: "test-script",
-    purpose: "memory-testing"
-  }
+    source: 'test-script',
+    purpose: 'memory-testing',
+  },
 });
 
-const response = await agent.generate("message for agent", {
+const response = await agent.generate('message for agent', {
   memory: {
     thread: thread!.id,
-    resource: thread!.resourceId
-  }
+    resource: thread!.resourceId,
+  },
 });
 
 console.log(response.text);
@@ -112,8 +112,8 @@ console.log(response.text);
 
 ### Related
 
-- [Memory Class Reference](/reference/memory/Memory.md)
-- [Getting Started with Memory](/docs/memory/overview.md) (Covers threads concept)
-- [getThreadById](/reference/memory/getThreadById.md)
-- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId.md)
-- [query](/reference/memory/query.md)
+- [Memory Class Reference](/reference/memory/Memory)
+- [Getting Started with Memory](/docs/memory/overview) (Covers threads concept)
+- [getThreadById](/reference/memory/getThreadById)
+- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId)
+- [query](/reference/memory/query)

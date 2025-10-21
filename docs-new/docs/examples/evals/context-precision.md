@@ -1,8 +1,7 @@
 ---
-title: "Context Precision "
+title: 'Context Precision '
 description: Example of using the Context Precision metric to evaluate how precisely context information is used.
 ---
-
 
 # Context Precision Evaluation
 
@@ -21,20 +20,21 @@ npm install @mastra/evals
 In this example, the response draws only from context that is directly relevant to the query. Every piece of context supports the answer, resulting in a high precision score.
 
 ```typescript filename="src/example-high-precision.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { ContextPrecisionMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { ContextPrecisionMetric } from '@mastra/evals/llm';
 
-const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
+const metric = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
   context: [
-    "Photosynthesis converts sunlight into energy.",
-    "Plants use chlorophyll for photosynthesis.",
-    "Photosynthesis produces oxygen as a byproduct.",
-    "The process requires sunlight and chlorophyll."
-  ]
+    'Photosynthesis converts sunlight into energy.',
+    'Plants use chlorophyll for photosynthesis.',
+    'Photosynthesis produces oxygen as a byproduct.',
+    'The process requires sunlight and chlorophyll.',
+  ],
 });
 
-const query = "What is photosynthesis and how does it work?";
-const response = "Photosynthesis is a process where plants convert sunlight into energy using chlorophyll, producing oxygen as a byproduct.";
+const query = 'What is photosynthesis and how does it work?';
+const response =
+  'Photosynthesis is a process where plants convert sunlight into energy using chlorophyll, producing oxygen as a byproduct.';
 
 const result = await metric.measure(query, response);
 
@@ -53,25 +53,26 @@ The output receives a perfect score because all context statements directly cont
   }
 }
 ```
+
 ## Mixed precision example
 
 In this example, the response uses one or more relevant context items, but also includes unrelated or distracting information. This reduces the overall precision score.
 
 ```typescript filename="src/example-mixed-precision.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { ContextPrecisionMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { ContextPrecisionMetric } from '@mastra/evals/llm';
 
-const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
+const metric = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
   context: [
     "Volcanoes are openings in the Earth's crust.",
-    "Volcanoes can be active, dormant, or extinct.",
-    "Hawaii has many active volcanoes.",
-    "The Pacific Ring of Fire has many volcanoes."
-  ]
+    'Volcanoes can be active, dormant, or extinct.',
+    'Hawaii has many active volcanoes.',
+    'The Pacific Ring of Fire has many volcanoes.',
+  ],
 });
 
-const query = "What are the different types of volcanoes?";
-const response = "Volcanoes can be classified as active, dormant, or extinct based on their activity status.";
+const query = 'What are the different types of volcanoes?';
+const response = 'Volcanoes can be classified as active, dormant, or extinct based on their activity status.';
 
 const result = await metric.measure(query, response);
 
@@ -96,20 +97,20 @@ The output receives a mid-range score because the response uses relevant context
 In this example, the response uses only a small portion of the provided context. Most of the context is unrelated to the query, resulting in a low precision score.
 
 ```typescript filename="src/example-low-precision.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { ContextPrecisionMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { ContextPrecisionMetric } from '@mastra/evals/llm';
 
-const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
+const metric = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
   context: [
-    "The Nile River is in Africa.",
-    "The Nile is the longest river.",
-    "Ancient Egyptians used the Nile.",
-    "The Nile flows north."
-  ]
+    'The Nile River is in Africa.',
+    'The Nile is the longest river.',
+    'Ancient Egyptians used the Nile.',
+    'The Nile flows north.',
+  ],
 });
 
-const query = "Which direction does the Nile River flow?";
-const response = "The Nile River flows northward.";
+const query = 'Which direction does the Nile River flow?';
+const response = 'The Nile River flows northward.';
 
 const result = await metric.measure(query, response);
 
@@ -134,13 +135,13 @@ The output receives a low score because only one piece of context is relevant to
 You can create a `ContextPrecisionMetric` instance by providing a `context` array that represents the relevant background information. You can also configure optional parameters such as `scale` to set the maximum possible score.
 
 ```typescript showLineNumbers copy
-const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
-  context: [""],
-  scale: 1
+const metric = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
+  context: [''],
+  scale: 1,
 });
 ```
 
-> See [ContextPrecisionMetric](/reference/evals/context-precision.md) for a full list of configuration options.
+> See [ContextPrecisionMetric](/reference/evals/context-precision) for a full list of configuration options.
 
 ## Understanding the results
 
