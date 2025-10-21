@@ -26,7 +26,7 @@ export class ToolStream<T> extends WritableStream<T> {
           await writer?.write({
             type: `${prefix}-output`,
             runId,
-            from: 'AGENT',
+            from: 'USER',
             payload: {
               output: chunk,
               ...(prefix === 'workflow-step'
