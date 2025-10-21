@@ -8,7 +8,7 @@ description: "Use AIHubMix models with Mastra. 23 models available."
 import { ProviderModelsTable } from "@/components/provider-models-table";
 import { PropertiesTable } from "@/components/properties-table";
 import { Callout } from "nextra/components";
-
+import { Tabs, Tab } from "@/components/tabs";
 
 # <img src="https://models.dev/logos/aihubmix.svg" alt="AIHubMix logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />AIHubMix
 
@@ -55,9 +55,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 200000,
-    "maxOutput": 8192,
-    "inputCost": 0.8,
-    "outputCost": 4
+    "maxOutput": 64000,
+    "inputCost": 1.1,
+    "outputCost": 5.5
   },
   {
     "model": "aihubmix/claude-opus-4-1",
@@ -80,8 +80,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 64000,
-    "inputCost": 3,
-    "outputCost": 15
+    "inputCost": 3.3,
+    "outputCost": 16.5
   },
   {
     "model": "aihubmix/DeepSeek-V3.2-Exp",
@@ -115,7 +115,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 1000000,
-    "maxOutput": 8192,
+    "maxOutput": 65000,
     "inputCost": 0.075,
     "outputCost": 0.3
   },
@@ -139,9 +139,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 0.6,
-    "outputCost": 2.2
+    "maxOutput": 204800,
+    "inputCost": 0.27,
+    "outputCost": 1.1
   },
   {
     "model": "aihubmix/gpt-4.1",
@@ -296,8 +296,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.15,
-    "outputCost": 0.6
+    "inputCost": 0.28,
+    "outputCost": 1.12
   },
   {
     "model": "aihubmix/qwen3-235b-a22b-thinking-2507",
@@ -308,8 +308,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.15,
-    "outputCost": 0.6
+    "inputCost": 0.28,
+    "outputCost": 2.8
   },
   {
     "model": "aihubmix/qwen3-coder-480b-a35b-instruct",
@@ -359,3 +359,13 @@ const agent = new Agent({
 ```
 
 
+
+## Direct Provider Installation
+
+This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@aihubmix/ai-sdk-provider) for more details.
+
+```bash npm2yarn copy
+npm install @aihubmix/ai-sdk-provider
+```
+
+For detailed provider-specific documentation, see the [AI SDK AIHubMix provider docs](https://ai-sdk.dev/providers/community-providers/aihubmix).
