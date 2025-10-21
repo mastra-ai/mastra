@@ -83,7 +83,7 @@ const __dirname = path.dirname(__filename);
 const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 'mistral', 'xai'];
 
 // Providers that are actually gateways (aggregate multiple model providers)
-const GATEWAY_PROVIDERS = ['vercel', 'openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai', 'netlify'];
+const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel'];
 
 interface ProviderInfo {
   id: string;
@@ -194,18 +194,20 @@ async function fetchProviderInfo(providerId: string): Promise<{ models: any[]; p
 
     if (!provider?.models) return { models: [] };
 
-    const models = Object.entries(provider.models).map(([modelId, model]: [string, any]) => ({
-      model: `${providerId}/${modelId}`,
-      imageInput: model.modalities?.input?.includes('image') || false,
-      audioInput: model.modalities?.input?.includes('audio') || false,
-      videoInput: model.modalities?.input?.includes('video') || false,
-      toolUsage: model.tool_call !== false,
-      reasoning: model.reasoning === true,
-      contextWindow: model.limit?.context || null,
-      maxOutput: model.limit?.output || null,
-      inputCost: model.cost?.input || null,
-      outputCost: model.cost?.output || null,
-    }));
+    const models = Object.entries(provider.models)
+      .map(([modelId, model]: [string, any]) => ({
+        model: `${providerId}/${modelId}`,
+        imageInput: model.modalities?.input?.includes('image') || false,
+        audioInput: model.modalities?.input?.includes('audio') || false,
+        videoInput: model.modalities?.input?.includes('video') || false,
+        toolUsage: model.tool_call !== false,
+        reasoning: model.reasoning === true,
+        contextWindow: model.limit?.context || null,
+        maxOutput: model.limit?.output || null,
+        inputCost: model.cost?.input || null,
+        outputCost: model.cost?.output || null,
+      }))
+      .sort((a, b) => a.model.localeCompare(b.model));
 
     return {
       models,
@@ -457,8 +459,8 @@ function generateGatewayPage(
 Learn more in the [${displayName} documentation](${docUrl}).`
     : `${gatewayDescription} Access ${totalModels} models through Mastra's model router.`;
 
-  // Create model table for all models
-  const allModels = providers.flatMap(p => p.models);
+  // Create model table for all models (sorted alphabetically)
+  const allModels = providers.flatMap(p => p.models).sort((a, b) => a.localeCompare(b));
   const modelTable =
     allModels.length > 0
       ? `
@@ -466,12 +468,7 @@ Learn more in the [${displayName} documentation](${docUrl}).`
 
 | Model |
 |-------|
-${allModels
-  .map(m => `| \`${m}\` |`)
-  .join(
-    '\
-',
-  )}
+${allModels.map(m => `| \`${m}\` |`).join('\n')}
 `
       : '';
 
@@ -830,8 +827,8 @@ You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accept
 }
 
 function generateGatewaysIndexPage(grouped: GroupedProviders): string {
-  const orderedGateways = ['openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai', 'vercel', 'netlify'];
-  const gatewaysList = orderedGateways.filter(g => grouped.gateways.has(g));
+  // Sort gateways alphabetically
+  const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
   const hasNetlify = gatewaysList.includes('netlify');
   const logoImport = hasNetlify
@@ -987,10 +984,10 @@ npm install ${packageName}
 }
 
 function generateGatewaysMeta(grouped: GroupedProviders): string {
-  const orderedGateways = ['openrouter', 'fireworks-ai', 'groq', 'huggingface', 'togetherai', 'vercel', 'netlify'];
-  const gatewaysList = orderedGateways.filter(g => grouped.gateways.has(g));
+  // Sort gateways alphabetically
+  const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
-  // Build the meta object with index first, then all gateways in order
+  // Build the meta object with index first, then all gateways in alphabetical order
   const metaEntries = ['  index: \"Overview\"'];
 
   for (const gatewayId of gatewaysList) {
