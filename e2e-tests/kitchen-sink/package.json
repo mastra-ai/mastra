@@ -27,7 +27,7 @@
   "dependencies": {
     "nanoid": "^5.1.6",
     "npm-cli-login": "^1.0.0",
-    "playwright": "^1.56.0",
+    "playwright": "^1.56.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tsx": "^4.20.6",
