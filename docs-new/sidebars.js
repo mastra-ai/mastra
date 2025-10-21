@@ -15,7 +15,7 @@
 const sidebars = {
   // Docs sidebar - main documentation
   docsSidebar: [
-    'intro',
+    'index',
     {
       type: 'category',
       label: 'Getting Started',

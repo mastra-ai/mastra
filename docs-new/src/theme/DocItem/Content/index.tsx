@@ -29,15 +29,19 @@ function useSyntheticTitle(): string | null {
 
 export default function DocItemContent({ children }: Props): ReactNode {
   const syntheticTitle = useSyntheticTitle();
+  const { frontMatter } = useDoc();
+  const shouldShowCopyButton = !frontMatter.hide_table_of_contents;
 
   return (
     <div className={clsx(ThemeClassNames.docs.docMarkdown, 'markdown')}>
-      {/* Always show the copy button in top-right corner */}
-      <div className="relative">
-        <div className="absolute right-0 top-0 z-10">
-          <CopyPageButton />
+      {/* Show copy button unless hide_table_of_contents is true */}
+      {shouldShowCopyButton && (
+        <div className="relative">
+          <div className="absolute right-0 top-0 z-10">
+            <CopyPageButton />
+          </div>
         </div>
-      </div>
+      )}
 
       {syntheticTitle && (
         <header>
