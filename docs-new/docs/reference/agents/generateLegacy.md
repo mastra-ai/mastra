@@ -441,7 +441,7 @@ description: "The arguments passed to the tool."
 
 ## Migration to New API
 
-:::info
+:::note Deprecation Notice
 
 The new `.generate()` method offers enhanced capabilities including AI SDK v5 compatibility, better structured output handling, and improved streaming support. See the [migration guide](./migration-guide) for detailed migration instructions.
 

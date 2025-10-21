@@ -1,6 +1,6 @@
 ---
-title: "AI Tracing "
-description: "Set up AI tracing for Mastra applications"
+title: 'AI Tracing '
+description: 'Set up AI tracing for Mastra applications'
 ---
 
 # AI Tracing
@@ -28,12 +28,13 @@ export const mastra = new Mastra({
     default: { enabled: true }, // Enables DefaultExporter and CloudExporter
   },
   storage: new LibSQLStore({
-    url: "file:./mastra.db", // Storage is required for tracing
+    url: 'file:./mastra.db', // Storage is required for tracing
   }),
 });
 ```
 
 When enabled, the default configuration automatically includes:
+
 - **Service Name**: `"mastra"`
 - **Sampling**: `"always"`- Sample (100% of traces)
 - **Exporters**:
@@ -53,24 +54,18 @@ export const mastra = new Mastra({
   observability: {
     configs: {
       default: {
-        serviceName: "mastra",
+        serviceName: 'mastra',
         sampling: { type: 'always' },
-        processors: [
-          new SensitiveDataFilter(),
-        ],
-        exporters: [
-          new CloudExporter(),
-          new DefaultExporter(),
-        ],
-      }
-    }
+        processors: [new SensitiveDataFilter()],
+        exporters: [new CloudExporter(), new DefaultExporter()],
+      },
+    },
   },
   storage: new LibSQLStore({
-    url: "file:./mastra.db", // Storage is required for tracing
+    url: 'file:./mastra.db', // Storage is required for tracing
   }),
 });
 ```
-
 
 ## Exporters
 
@@ -102,20 +97,27 @@ Sampling allows you to control which traces are collected, helping you balance b
 Mastra supports four sampling strategies:
 
 ### Always Sample
+
 Collects 100% of traces. Best for development, debugging, or low-traffic scenarios where you need complete visibility.
 
 ```ts
-sampling: { type: 'always' }
+sampling: {
+  type: 'always';
+}
 ```
 
 ### Never Sample
+
 Disables tracing entirely. Useful for specific environments where tracing adds no value or when you need to temporarily disable tracing without removing configuration.
 
 ```ts
-sampling: { type: 'never' }
+sampling: {
+  type: 'never';
+}
 ```
 
 ### Ratio-Based Sampling
+
 Randomly samples a percentage of traces. Ideal for production environments where you want statistical insights without the cost of full tracing. The probability value ranges from 0 (no traces) to 1 (all traces).
 
 ```ts
@@ -126,6 +128,7 @@ sampling: {
 ```
 
 ### Custom Sampling
+
 Implements your own sampling logic based on runtime context, metadata, or business rules. Perfect for complex scenarios like sampling based on user tier, request type, or error conditions.
 
 ```ts
@@ -149,15 +152,15 @@ sampling: {
 export const mastra = new Mastra({
   observability: {
     configs: {
-      "10_percent": {
+      '10_percent': {
         serviceName: 'my-service',
         // Sample 10% of traces
         sampling: {
           type: 'ratio',
-          probability: 0.1
+          probability: 0.1,
         },
         exporters: [new DefaultExporter()],
-      }
+      },
     },
   },
 });
@@ -168,15 +171,16 @@ export const mastra = new Mastra({
 Complex applications often require different tracing configurations for different scenarios. You might want detailed traces with full sampling during development, sampled traces sent to external providers in production, and specialized configurations for specific features or customer segments. The `configSelector` function enables dynamic configuration selection at runtime, allowing you to route traces based on request context, environment variables, feature flags, or any custom logic.
 
 This approach is particularly valuable when:
+
 - Running A/B tests with different observability requirements
 - Providing enhanced debugging for specific customers or support cases
 - Gradually rolling out new tracing providers without affecting existing monitoring
 - Optimizing costs by using different sampling rates for different request types
 - Maintaining separate trace streams for compliance or data residency requirements
 
-:::info
+:::note
 
-Note that only a single config can be used for a specific execution. But a single config can send data to multiple exporters simultaneously.
+Only a single config can be used for a specific execution. But a single config can send data to multiple exporters simultaneously.
 
 :::
 
@@ -281,17 +285,21 @@ export const mastra = new Mastra({
 **Solutions:**
 
 1. **Disable the default** and use only custom configs:
+
 ```ts
 observability: {
   // comment out or remove this line to disable the default config
   // default: { enabled: true },
   configs: {
-    langfuse: { /* ... */ }
+    langfuse: {
+      /* ... */
+    }
   }
 }
 ```
 
 2. **Use a configSelector** to choose between configs:
+
 ```ts
 observability: {
   default: { enabled: true },
@@ -321,8 +329,8 @@ export const mastra = new Mastra({
         serviceName: 'my-service',
         exporters: [
           new LangfuseExporter(), // External exporter
-          new DefaultExporter(),  // Keep Playground access
-          new CloudExporter(),    // Keep Cloud access
+          new DefaultExporter(), // Keep Playground access
+          new CloudExporter(), // Keep Cloud access
         ],
       },
     },
@@ -331,13 +339,14 @@ export const mastra = new Mastra({
 ```
 
 This configuration sends traces to all three destinations simultaneously:
+
 - **Langfuse** for external observability
 - **DefaultExporter** for local Playground access
 - **CloudExporter** for Mastra Cloud dashboard
 
-:::info
+:::tip
 
-Remember: A single trace can be sent to multiple exporters. You don't need separate configs for each exporter unless you want different sampling rates or processors.
+A single trace can be sent to multiple exporters. You don't need separate configs for each exporter unless you want different sampling rates or processors.
 
 :::
 
@@ -360,11 +369,11 @@ execute: async ({ inputData, tracingContext }) => {
       responseTimeMs: Date.now() - startTime,
       userTier: inputData.userTier,
       region: process.env.AWS_REGION,
-    }
+    },
   });
 
   return await response.json();
-}
+};
 ```
 
 Metadata set here will be shown in all configured exporters.
@@ -392,18 +401,18 @@ execute: async ({ input, tracingContext }) => {
       metadata: {
         rowsReturned: results.length,
         queryTimeMs: results.executionTime,
-        cacheHit: results.fromCache
-      }
+        cacheHit: results.fromCache,
+      },
     });
     return results;
   } catch (error) {
     querySpan?.error({
       error,
-      metadata: { retryable: isRetryableError(error) }
+      metadata: { retryable: isRetryableError(error) },
     });
     throw error;
   }
-}
+};
 ```
 
 Child spans automatically inherit the trace context from their parent, maintaining the relationship hierarchy in your observability platform.
@@ -414,7 +423,7 @@ Span processors allow you to transform, filter, or enrich trace data before it's
 
 ### Built-in Processors
 
-* [Sensitive Data Filter](/docs/observability/ai-tracing/processors/sensitive-data-filter) redacts sensitive information. It is enabled in the default observability config.
+- [Sensitive Data Filter](/docs/observability/ai-tracing/processors/sensitive-data-filter) redacts sensitive information. It is enabled in the default observability config.
 
 ### Creating Custom Processors
 
@@ -427,7 +436,7 @@ export class LowercaseInputProcessor implements AISpanProcessor {
   name = 'lowercase-processor';
 
   process(span: AnyAISpan): AnyAISpan {
-    span.input = `${span.input}`.toLowerCase()
+    span.input = `${span.input}`.toLowerCase();
     return span;
   }
 
@@ -441,10 +450,7 @@ export const mastra = new Mastra({
   observability: {
     configs: {
       development: {
-        processors: [
-          new LowercaseInputProcessor(),
-          new SensitiveDataFilter(),
-        ],
+        processors: [new LowercaseInputProcessor(), new SensitiveDataFilter()],
         exporters: [new DefaultExporter()],
       },
     },
@@ -453,6 +459,7 @@ export const mastra = new Mastra({
 ```
 
 Processors are executed in the order they're defined, allowing you to chain multiple transformations. Common use cases for custom processors include:
+
 - Adding environment-specific metadata
 - Filtering out spans based on criteria
 - Normalizing data formats
@@ -470,14 +477,14 @@ Both `generate` and `stream` methods return the trace ID in their response:
 ```ts showLineNumbers copy
 // Using generate
 const result = await agent.generate({
-  messages: [{ role: 'user', content: 'Hello' }]
+  messages: [{ role: 'user', content: 'Hello' }],
 });
 
 console.log('Trace ID:', result.traceId);
 
 // Using stream
 const streamResult = await agent.stream({
-  messages: [{ role: 'user', content: 'Tell me a story' }]
+  messages: [{ role: 'user', content: 'Tell me a story' }],
 });
 
 console.log('Trace ID:', streamResult.traceId);
@@ -493,14 +500,14 @@ const run = await mastra.getWorkflow('myWorkflow').createRunAsync();
 
 // Start the workflow
 const result = await run.start({
-  inputData: { data: 'process this' }
+  inputData: { data: 'process this' },
 });
 
 console.log('Trace ID:', result.traceId);
 
 // Or stream the workflow
 const { stream, getWorkflowState } = run.stream({
-  inputData: { data: 'process this' }
+  inputData: { data: 'process this' },
 });
 
 // Get the final state which includes the trace ID
@@ -524,12 +531,14 @@ The trace ID is only available when tracing is enabled. If tracing is disabled o
 Mastra automatically creates spans for:
 
 ### Agent Operations
+
 - **Agent runs** - Complete execution with instructions and tools
 - **LLM calls** - Model interactions with tokens and parameters
 - **Tool executions** - Function calls with inputs and outputs
 - **Memory operations** - Thread and semantic recall
 
 ### Workflow Operations
+
 - **Workflow runs** - Full execution from start to finish
 - **Individual steps** - Step processing with inputs/outputs
 - **Control flow** - Conditionals, loops, parallel execution
@@ -547,15 +556,18 @@ Traces are available in multiple locations:
 ## See Also
 
 ### Examples
+
 - [Basic AI Tracing Example](/examples/observability/basic-ai-tracing) - Working implementation
 
 ### Reference Documentation
+
 - [Configuration API](/reference/observability/ai-tracing/configuration) - ObservabilityConfig details
 - [AITracing Classes](/reference/observability/ai-tracing/ai-tracing) - Core classes and methods
 - [Span Interfaces](/reference/observability/ai-tracing/span) - Span types and lifecycle
 - [Type Definitions](/reference/observability/ai-tracing/interfaces) - Complete interface reference
 
 ### Exporters
+
 - [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - Storage persistence
 - [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud integration
 - [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - Debug output
@@ -564,4 +576,5 @@ Traces are available in multiple locations:
 - [OpenTelemetry](/reference/observability/ai-tracing/exporters/otel) - OTEL-compatible platforms
 
 ### Processors
+
 - [Sensitive Data Filter](/docs/observability/ai-tracing/processors/sensitive-data-filter) - Data redaction

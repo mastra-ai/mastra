@@ -1,6 +1,6 @@
 ---
-title: "Contributing Templates"
-description: "How to contribute your own templates to the Mastra ecosystem"
+title: 'Contributing Templates'
+description: 'How to contribute your own templates to the Mastra ecosystem'
 ---
 
 # Contributing Templates
@@ -186,7 +186,7 @@ Ready to contribute a template?
 4. **Build and test** - Create a working, well-documented template
 5. **Submit for review** - Use the contribution form to submit your template
 
-:::info
+:::note
 
 Your contributions help grow the Mastra ecosystem and provide valuable resources for the entire community. We look forward to seeing your innovative templates!
 

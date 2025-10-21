@@ -19,9 +19,9 @@ const aiSdkStream = await agent.stream('message for agent', {
 });
 ```
 
-:::info
+:::note Model Compatibility
 
-**Model Compatibility**: This method is designed for V2 models. V1 models should use the [`.streamLegacy()`](./streamLegacy) method. The framework automatically detects your model version and will throw an error if there's a mismatch.
+This method is designed for V2 models. V1 models should use the [`.streamLegacy()`](./streamLegacy) method. The framework automatically detects your model version and will throw an error if there's a mismatch.
 
 :::
 

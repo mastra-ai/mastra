@@ -1,6 +1,6 @@
 ---
 title: Using with Assistant UI
-description: "Learn how to integrate Assistant UI with Mastra"
+description: 'Learn how to integrate Assistant UI with Mastra'
 ---
 
 # Using with Assistant UI
@@ -8,7 +8,7 @@ description: "Learn how to integrate Assistant UI with Mastra"
 [Assistant UI](https://assistant-ui.com) is the TypeScript/React library for AI Chat.
 Built on shadcn/ui and Tailwind CSS, it enables developers to create beautiful, enterprise-grade chat experiences in minutes.
 
-:::info
+:::tip Alternative Approach
 
 For a full-stack integration approach where Mastra runs directly in your Next.js API routes, see the [Full-Stack Integration Guide](https://www.assistant-ui.com/docs/runtimes/mastra/full-stack-integration) on Assistant UI's documentation site.
 
@@ -17,7 +17,6 @@ For a full-stack integration approach where Mastra runs directly in your Next.js
 ## Integration Guide
 
 Run Mastra as a standalone server and connect your Next.js frontend (with Assistant UI) to its API endpoints.
-
 
 ### Create Standalone Mastra Server
 
@@ -73,14 +72,11 @@ The default Assistant UI setup configures the chat runtime to use a local API ro
 Find the `useChatRuntime` hook in the `assistant-ui` project, typically at `app/assistant.tsx` and change the `api` property to the full URL of your Mastra agent's stream endpoint:
 
 ```typescript showLineNumbers copy filename="app/assistant.tsx" {6}
-import {
-  useChatRuntime,
-  AssistantChatTransport,
-} from "@assistant-ui/react-ai-sdk";
+import { useChatRuntime, AssistantChatTransport } from '@assistant-ui/react-ai-sdk';
 
 const runtime = useChatRuntime({
   transport: new AssistantChatTransport({
-    api: "MASTRA_ENDPOINT",
+    api: 'MASTRA_ENDPOINT',
   }),
 });
 ```
@@ -96,7 +92,5 @@ npm run dev
 ```
 
 You should now be able to chat with your agent in the browser.
-
-
 
 Congratulations! You have successfully integrated Mastra with Assistant UI using a separate server approach. Your Assistant UI frontend now communicates with a standalone Mastra agent server.

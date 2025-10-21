@@ -481,7 +481,7 @@ await agent.streamLegacy('message for agent', {
 
 ## Migration to New API
 
-:::info
+:::note Deprecation Notice
 
 The new `.stream()` method offers enhanced capabilities including AI SDK v5 compatibility, better structured output handling, and improved callback system. See the [migration guide](../../agents/migration-guide) for detailed migration instructions.
 

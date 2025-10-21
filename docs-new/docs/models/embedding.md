@@ -90,7 +90,7 @@ const agent = new Agent({
 });
 ```
 
-:::info
+:::note
 The `embedder` field accepts:
 
 - `EmbeddingModelId` (string with autocomplete)

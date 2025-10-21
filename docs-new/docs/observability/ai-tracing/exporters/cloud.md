@@ -1,6 +1,6 @@
 ---
-title: "Cloud Exporter "
-description: "Send traces to Mastra Cloud for production monitoring"
+title: 'Cloud Exporter '
+description: 'Send traces to Mastra Cloud for production monitoring'
 ---
 
 # Cloud Exporter
@@ -10,6 +10,7 @@ The `CloudExporter` sends traces to Mastra Cloud for centralized monitoring and 
 ## When to Use CloudExporter
 
 CloudExporter is ideal for:
+
 - **Production monitoring** - Centralized trace visualization
 - **Team collaboration** - Share traces across your organization
 - **Advanced analytics** - Insights and performance metrics
@@ -30,8 +31,8 @@ MASTRA_CLOUD_ACCESS_TOKEN=mst_xxxxxxxxxxxxxxxx
 ### Basic Setup
 
 ```typescript filename="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { CloudExporter } from "@mastra/core/ai-tracing";
+import { Mastra } from '@mastra/core';
+import { CloudExporter } from '@mastra/core/ai-tracing';
 
 export const mastra = new Mastra({
   observability: {
@@ -39,7 +40,7 @@ export const mastra = new Mastra({
       production: {
         serviceName: 'my-service',
         exporters: [
-          new CloudExporter(),  // Uses MASTRA_CLOUD_ACCESS_TOKEN env var
+          new CloudExporter(), // Uses MASTRA_CLOUD_ACCESS_TOKEN env var
         ],
       },
     },
@@ -54,7 +55,7 @@ When using the default observability configuration, CloudExporter is automatical
 ```typescript
 export const mastra = new Mastra({
   observability: {
-    default: { enabled: true },  // Automatically includes CloudExporter if token exists
+    default: { enabled: true }, // Automatically includes CloudExporter if token exists
   },
 });
 ```
@@ -70,12 +71,12 @@ new CloudExporter({
   endpoint: 'https://cloud.your-domain.com',
 
   // Batching configuration
-  maxBatchSize: 1000,     // Max spans per batch
-  maxBatchWaitMs: 5000,   // Max wait before sending batch
+  maxBatchSize: 1000, // Max spans per batch
+  maxBatchWaitMs: 5000, // Max wait before sending batch
 
   // Diagnostic logging
-  logLevel: 'info',  // debug | info | warn | error
-})
+  logLevel: 'info', // debug | info | warn | error
+});
 ```
 
 ## Viewing Traces
@@ -100,9 +101,9 @@ new CloudExporter({
 
 ## Performance
 
-:::info
+:::note Performance Optimization
 
-  CloudExporter uses intelligent batching to optimize network usage. Traces are buffered and sent in batches, reducing overhead while maintaining near real-time visibility.
+CloudExporter uses intelligent batching to optimize network usage. Traces are buffered and sent in batches, reducing overhead while maintaining near real-time visibility.
 
 :::
 

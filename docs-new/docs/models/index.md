@@ -146,7 +146,7 @@ You can also discover models directly in your editor. Mastra provides full autoc
 
 Alternatively, browse and test models in the [Playground](/docs/server-db/local-dev-playground) UI.
 
-:::info
+:::note Development Behavior
 In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Playground stay up-to-date with the latest models. To disable, set `MASTRA_AUTO_REFRESH_PROVIDERS=false`. Auto-refresh is disabled by default in production.
 :::
 
@@ -241,7 +241,7 @@ const agent = new Agent({
 });
 ```
 
-:::info
+:::note
 Configuration differs by provider. See the provider pages in the left navigation for details on custom headers.
 :::
 

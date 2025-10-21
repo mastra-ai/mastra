@@ -159,7 +159,7 @@ Add the following configuration:
 }
 ```
 
-:::info
+:::note
 Mastra requires modern `module` and `moduleResolution` settings. Using `CommonJS` or `node` will cause resolution errors.
 :::
 
@@ -212,7 +212,7 @@ export const weatherTool = createTool({
 });
 ```
 
-:::info
+:::note
 We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/examples/agents/using-a-tool).
 :::
 

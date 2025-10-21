@@ -1,5 +1,5 @@
 ---
-title: "Reference: CLI Commands"
+title: 'Reference: CLI Commands'
 description: Documentation for the Mastra CLI to develop, build, and start your project.
 ---
 
@@ -103,7 +103,7 @@ MASTRA_CONCURRENCY=2 mastra build
 
 ## `mastra start`
 
-:::info
+:::note
 
 You need to run `mastra build` before using `mastra start`.
 

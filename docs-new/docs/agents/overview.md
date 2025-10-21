@@ -152,11 +152,9 @@ You can call agents from workflow steps, tools, the Mastra Client, or the comman
 const testAgent = mastra.getAgent('testAgent');
 ```
 
-:::info
+:::tip Best Practice
 
-  <p>
-    `mastra.getAgent()` is preferred over a direct import, since it preserves the Mastra instance configuration (tools registered, telemetry, vector stores configuration for agent memory, etc.)
-  </p>
+`mastra.getAgent()` is preferred over a direct import, since it preserves the Mastra instance configuration (tools registered, telemetry, vector stores configuration for agent memory, etc.)
 
 :::
 

@@ -1,5 +1,5 @@
 ---
-title: "Templates "
+title: 'Templates '
 description: Pre-built project structures that demonstrate common Mastra use cases and patterns
 ---
 
@@ -48,14 +48,17 @@ npx create-mastra@latest --template text-to-sql
 After installation:
 
 1. **Navigate to your project**:
+
    ```bash copy
    cd your-project-name
    ```
 
 2. **Configure environment variables**:
+
    ```bash copy
    cp .env.example .env
    ```
+
    Edit `.env` with your API keys as specified in the template's README.
 
 3. **Start development**:
@@ -63,9 +66,9 @@ After installation:
    npm run dev
    ```
 
-:::info
+:::note
 
-  Each template includes a comprehensive README with specific setup instructions and usage examples.
+Each template includes a comprehensive README with specific setup instructions and usage examples.
 
 :::
 

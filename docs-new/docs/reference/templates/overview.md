@@ -1,6 +1,6 @@
 ---
-title: "Templates Reference"
-description: "Complete guide to creating, using, and contributing Mastra templates"
+title: 'Templates Reference'
+description: 'Complete guide to creating, using, and contributing Mastra templates'
 ---
 
 import Tabs from '@theme/Tabs';
@@ -203,8 +203,8 @@ Templates must demonstrate:
 
 For information on contributing your own templates to the Mastra ecosystem, see the [Contributing Templates](/docs/community/contributing-templates) guide in the community section.
 
-:::info
+:::note
 
-  Templates provide an excellent way to learn Mastra patterns and accelerate development. Contributing templates helps the entire community build better AI applications.
+Templates provide an excellent way to learn Mastra patterns and accelerate development. Contributing templates helps the entire community build better AI applications.
 
 :::

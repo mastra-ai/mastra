@@ -1,6 +1,6 @@
 ---
-title: "OpenTelemetry Exporter "
-description: "Send AI traces to any OpenTelemetry-compatible observability platform"
+title: 'OpenTelemetry Exporter '
+description: 'Send AI traces to any OpenTelemetry-compatible observability platform'
 ---
 
 # OpenTelemetry Exporter
@@ -16,6 +16,7 @@ The OpenTelemetry (OTEL) exporter sends your AI traces to any OTEL-compatible ob
 ## When to Use OTEL Exporter
 
 The OTEL exporter is ideal when you need:
+
 - **Platform flexibility** - Send traces to any OTEL-compatible backend
 - **Standards compliance** - Follow OpenTelemetry GenAI semantic conventions
 - **Multi-vendor support** - Configure once, switch providers easily
@@ -51,8 +52,8 @@ npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-http
 [Dash0](https://www.dash0.com/) provides real-time observability with automatic insights.
 
 ```typescript filename="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { OtelExporter } from "@mastra/otel-exporter";
+import { Mastra } from '@mastra/core';
+import { OtelExporter } from '@mastra/otel-exporter';
 
 export const mastra = new Mastra({
   observability: {
@@ -66,7 +67,7 @@ export const mastra = new Mastra({
                 apiKey: process.env.DASH0_API_KEY,
                 endpoint: process.env.DASH0_ENDPOINT, // e.g., 'ingress.us-west-2.aws.dash0.com:4317'
                 dataset: 'production', // Optional dataset name
-              }
+              },
             },
           }),
         ],
@@ -76,7 +77,7 @@ export const mastra = new Mastra({
 });
 ```
 
-:::info
+:::note
 
 Get your Dash0 endpoint from your dashboard. It should be in the format `ingress.{region}.aws.dash0.com:4317`.
 
@@ -93,9 +94,9 @@ new OtelExporter({
       apiKey: process.env.SIGNOZ_API_KEY,
       region: 'us', // 'us' | 'eu' | 'in'
       // endpoint: 'https://my-signoz.example.com', // For self-hosted
-    }
+    },
   },
-})
+});
 ```
 
 ### New Relic
@@ -108,9 +109,9 @@ new OtelExporter({
     newrelic: {
       apiKey: process.env.NEW_RELIC_LICENSE_KEY,
       // endpoint: 'https://otlp.eu01.nr-data.net', // For EU region
-    }
+    },
   },
-})
+});
 ```
 
 ### Traceloop
@@ -123,9 +124,9 @@ new OtelExporter({
     traceloop: {
       apiKey: process.env.TRACELOOP_API_KEY,
       destinationId: 'my-destination', // Optional
-    }
+    },
   },
-})
+});
 ```
 
 ### Laminar
@@ -138,9 +139,9 @@ new OtelExporter({
     laminar: {
       apiKey: process.env.LMNR_PROJECT_API_KEY,
       // teamId: process.env.LAMINAR_TEAM_ID, // Optional, for backwards compatibility
-    }
+    },
   },
-})
+});
 ```
 
 ### Custom/Generic OTEL Endpoints
@@ -156,9 +157,9 @@ new OtelExporter({
       headers: {
         'x-api-key': process.env.API_KEY,
       },
-    }
+    },
   },
-})
+});
 ```
 
 ## Configuration Options
@@ -173,12 +174,12 @@ new OtelExporter({
   },
 
   // Export configuration
-  timeout: 30000,        // Export timeout in milliseconds
-  batchSize: 100,        // Number of spans per batch
+  timeout: 30000, // Export timeout in milliseconds
+  batchSize: 100, // Number of spans per batch
 
   // Debug options
-  logLevel: 'info',      // 'debug' | 'info' | 'warn' | 'error'
-})
+  logLevel: 'info', // 'debug' | 'info' | 'warn' | 'error'
+});
 ```
 
 ## OpenTelemetry Semantic Conventions
@@ -186,12 +187,14 @@ new OtelExporter({
 The exporter follows [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/), ensuring compatibility with observability platforms:
 
 ### Span Naming
+
 - **LLM Operations**: `chat {model}` or `tool_selection {model}`
 - **Tool Execution**: `tool.execute {tool_name}`
 - **Agent Runs**: `agent.{agent_id}`
 - **Workflow Runs**: `workflow.{workflow_id}`
 
 ### Key Attributes
+
 - `gen_ai.operation.name` - Operation type (chat, tool.execute, etc.)
 - `gen_ai.system` - AI provider (openai, anthropic, etc.)
 - `gen_ai.request.model` - Model identifier
@@ -203,6 +206,7 @@ The exporter follows [OpenTelemetry Semantic Conventions for GenAI](https://open
 ## Buffering Strategy
 
 The exporter buffers spans until a trace is complete:
+
 1. Collects all spans for a trace
 2. Waits 5 seconds after root span completes
 3. Exports complete trace with preserved parent-child relationships
@@ -212,14 +216,14 @@ The exporter buffers spans until a trace is complete:
 
 Choose the right protocol package based on your provider:
 
-| Provider | Protocol | Required Package |
-|----------|----------|------------------|
-| Dash0 | gRPC | `@opentelemetry/exporter-trace-otlp-grpc` |
-| SigNoz | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| Provider  | Protocol      | Required Package                           |
+| --------- | ------------- | ------------------------------------------ |
+| Dash0     | gRPC          | `@opentelemetry/exporter-trace-otlp-grpc`  |
+| SigNoz    | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
 | New Relic | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
-| Traceloop | HTTP/JSON | `@opentelemetry/exporter-trace-otlp-http` |
-| Laminar | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
-| Custom | Varies | Depends on your collector |
+| Traceloop | HTTP/JSON     | `@opentelemetry/exporter-trace-otlp-http`  |
+| Laminar   | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| Custom    | Varies        | Depends on your collector                  |
 
 :::warning
 
@@ -232,6 +236,7 @@ Make sure to install the correct protocol package for your provider. The exporte
 ### Missing Dependency Error
 
 If you see an error like:
+
 ```
 HTTP/Protobuf exporter is not installed (required for signoz).
 To use HTTP/Protobuf export, install the required package:
