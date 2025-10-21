@@ -26,7 +26,9 @@ export class DefaultAISpan<TType extends AISpanType> extends BaseAISpan<TType> {
     } else if (options.externalTraceId) {
       // Root span with external trace ID
       if (!isValidTraceId(options.externalTraceId)) {
-        throw new Error(`Invalid externalTraceId: must be 32 hexadecimal characters, got "${options.externalTraceId}"`);
+        throw new Error(
+          `Invalid externalTraceId: must be 1-32 hexadecimal characters, got "${options.externalTraceId}"`,
+        );
       }
       this.traceId = options.externalTraceId;
     } else {
@@ -38,7 +40,7 @@ export class DefaultAISpan<TType extends AISpanType> extends BaseAISpan<TType> {
     if (!options.parent && options.externalParentSpanId) {
       if (!isValidSpanId(options.externalParentSpanId)) {
         throw new Error(
-          `Invalid externalParentSpanId: must be 16 hexadecimal characters, got "${options.externalParentSpanId}"`,
+          `Invalid externalParentSpanId: must be 1-16 hexadecimal characters, got "${options.externalParentSpanId}"`,
         );
       }
       this.externalParentSpanId = options.externalParentSpanId;
@@ -169,15 +171,15 @@ function generateTraceId(): string {
 }
 
 /**
- * Validate OpenTelemetry-compatible trace ID (32 hex characters)
+ * Validate OpenTelemetry-compatible trace ID (1-32 hex characters)
  */
 function isValidTraceId(traceId: string): boolean {
-  return /^[0-9a-f]{32}$/i.test(traceId);
+  return /^[0-9a-f]{1,32}$/i.test(traceId);
 }
 
 /**
- * Validate OpenTelemetry-compatible span ID (16 hex characters)
+ * Validate OpenTelemetry-compatible span ID (1-16 hex characters)
  */
 function isValidSpanId(spanId: string): boolean {
-  return /^[0-9a-f]{16}$/i.test(spanId);
+  return /^[0-9a-f]{1,16}$/i.test(spanId);
 }

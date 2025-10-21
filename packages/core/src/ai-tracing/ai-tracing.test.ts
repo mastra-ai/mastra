@@ -1041,7 +1041,27 @@ describe('AI Tracing', () => {
           },
           externalTraceId: 'invalid-trace-id',
         });
-      }).toThrow('Invalid externalTraceId: must be 32 hexadecimal characters');
+      }).toThrow('Invalid externalTraceId: must be 1-32 hexadecimal characters');
+    });
+
+    it('should throw error for trace ID that is too long', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      expect(() => {
+        aiTracing.startSpan({
+          type: AISpanType.AGENT_RUN,
+          name: 'agent with too long trace',
+          attributes: {
+            agentId: 'agent-1',
+          },
+          externalTraceId: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0',
+        });
+      }).toThrow('Invalid externalTraceId: must be 1-32 hexadecimal characters');
     });
 
     it('should throw error for invalid external parent span ID', () => {
@@ -1062,7 +1082,55 @@ describe('AI Tracing', () => {
           externalTraceId: '0123456789abcdef0123456789abcdef',
           externalParentSpanId: 'invalid-span-id',
         });
-      }).toThrow('Invalid externalParentSpanId: must be 16 hexadecimal characters');
+      }).toThrow('Invalid externalParentSpanId: must be 1-16 hexadecimal characters');
+    });
+
+    it('should throw error for parent span ID that is too long', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      expect(() => {
+        aiTracing.startSpan({
+          type: AISpanType.AGENT_RUN,
+          name: 'agent with too long parent',
+          attributes: {
+            agentId: 'agent-1',
+          },
+          externalTraceId: '0123456789abcdef0123456789abcdef',
+          externalParentSpanId: '0123456789abcdef0123456789abcdef',
+        });
+      }).toThrow('Invalid externalParentSpanId: must be 1-16 hexadecimal characters');
+    });
+
+    it('should accept shorter trace and span IDs', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const shortTraceId = 'abc123'; // 6 chars
+      const shortSpanId = 'def456'; // 6 chars
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with short IDs',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        externalTraceId: shortTraceId,
+        externalParentSpanId: shortSpanId,
+      });
+
+      expect(span.traceId).toBe(shortTraceId);
+      expect(span.getParentSpanId()).toBe(shortSpanId);
+
+      span.end();
     });
 
     it('should create child spans with inherited trace ID from external trace', () => {
