@@ -1049,6 +1049,70 @@ describe('Tool Input Validation', () => {
 describe('CoreToolBuilder - Execute Signature Tests (isVercelTool bug)', () => {
   const runtimeContext = new RuntimeContext();
 
+  describe('Real model test - v5 tool with actual API call', () => {
+    it('should execute v5 tool with real model to verify actual behavior', async () => {
+      if (!process.env.OPENAI_API_KEY) {
+        console.log('Skipping real model test - OPENAI_API_KEY not set');
+        return;
+      }
+
+      let receivedFirstParam: any;
+
+      const v5Tool = {
+        description: 'V5 tool that returns what it receives',
+        inputSchema: z.object({ query: z.string() }),
+        execute: vi.fn(async (firstParam: any) => {
+          receivedFirstParam = firstParam;
+          // Real v5 tools expect args directly: firstParam.query
+          // If bug exists, firstParam is { context: { query: ... }, mastra, ... }
+          // So firstParam.query will be UNDEFINED!
+          return {
+            success: true,
+            receivedQuery: firstParam.query, // This will be undefined if bug exists
+            receivedStructure: Object.keys(firstParam),
+          };
+        }),
+      };
+
+      const agent = new Agent({
+        name: 'real-v5-test-agent',
+        instructions: 'You are a test agent. Call the v5TestTool with query="test search".',
+        model: openai('gpt-4o-mini'),
+        tools: { v5TestTool: v5Tool },
+      });
+
+      const response = await agent.generateLegacy('Call the v5TestTool with query="test search"', {
+        toolChoice: 'required',
+        maxSteps: 1,
+      });
+
+      // Verify tool was called
+      expect(v5Tool.execute).toHaveBeenCalledTimes(1);
+
+      // Check what the tool actually received
+      console.log('Real model test - receivedFirstParam:', receivedFirstParam);
+
+      // THIS IS THE KEY CHECK - does v5 tool get args directly or wrapped in context?
+      if (receivedFirstParam.context) {
+        console.log('BUG CONFIRMED: v5 tool received Mastra signature with context wrapper');
+        console.log('receivedFirstParam.query:', receivedFirstParam.query); // Will be undefined
+        console.log('receivedFirstParam.context.query:', receivedFirstParam.context.query); // Will have value
+      } else {
+        console.log('v5 tool received AI SDK signature correctly');
+        console.log('receivedFirstParam.query:', receivedFirstParam.query); // Will have value
+      }
+
+      // Check the tool result
+      const toolResult = response.toolResults?.[0];
+      console.log('Tool result:', toolResult?.result);
+
+      // If bug exists, receivedQuery will be undefined even though the model passed the query
+      if (toolResult?.result.receivedQuery === undefined && receivedFirstParam.context) {
+        console.log('FUNCTIONAL BUG CONFIRMED: Tool returned undefined query due to wrong signature');
+      }
+    }, 30000);
+  });
+
   describe('v4 tool execution (with parameters)', () => {
     it('should call v4 tool execute with (args, options) signature', async () => {
       let receivedFirstParam: any;

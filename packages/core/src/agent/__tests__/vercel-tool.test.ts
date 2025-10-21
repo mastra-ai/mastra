@@ -12,8 +12,8 @@ import { Agent } from '../agent';
 import { createTool } from '../../tools';
 
 describe('Agent Integration - isVercelTool bug impact', () => {
-  // Mock model for testing - doesn't need to actually call tools
-  const mockModel = new MockLanguageModelV1({
+  // Simple mock model that doesn't call tools (for property tests)
+  const simpleMockModel = new MockLanguageModelV1({
     doGenerate: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop',
@@ -35,7 +35,7 @@ describe('Agent Integration - isVercelTool bug impact', () => {
       const agent = new Agent({
         name: 'v4-agent',
         instructions: 'Test agent for v4 tools',
-        model: mockModel,
+        model: simpleMockModel,
         tools: {
           v4Tool,
         },
@@ -68,7 +68,7 @@ describe('Agent Integration - isVercelTool bug impact', () => {
       const agent = new Agent({
         name: 'v5-agent',
         instructions: 'Test agent for v5 tools',
-        model: mockModel,
+        model: simpleMockModel,
         tools: {
           v5Tool,
         },
@@ -101,7 +101,7 @@ describe('Agent Integration - isVercelTool bug impact', () => {
       const agent = new Agent({
         name: 'provider-agent',
         instructions: 'Test agent for provider tools',
-        model: mockModel,
+        model: simpleMockModel,
         tools: {
           googleSearchTool,
         },
@@ -134,7 +134,7 @@ describe('Agent Integration - isVercelTool bug impact', () => {
       const agent = new Agent({
         name: 'mastra-agent',
         instructions: 'Test agent for Mastra tools',
-        model: mockModel,
+        model: simpleMockModel,
         tools: {
           mastraTool,
         },
@@ -177,7 +177,7 @@ describe('Agent Integration - isVercelTool bug impact', () => {
       const agent = new Agent({
         name: 'mixed-agent',
         instructions: 'Test agent for mixed tools',
-        model: mockModel,
+        model: simpleMockModel,
         tools: {
           v4Tool,
           v5Tool,
@@ -206,6 +206,236 @@ describe('Agent Integration - isVercelTool bug impact', () => {
       // Mastra already has id
       expect(testTool3).toBeDefined();
       expect(testTool3.id).toBe('test.mastra');
+    });
+  });
+
+  describe('Agent tool execution - Execute Signature Tests', () => {
+    /**
+     * These tests verify that tools are called with the correct execute signature
+     * when actually executed through an agent.
+     */
+
+    describe('Real model test - v5 tool with actual API call', () => {
+      it('should execute v5 tool with real OpenAI model to verify actual behavior', async () => {
+        if (!process.env.OPENAI_API_KEY) {
+          console.log('Skipping real model test - OPENAI_API_KEY not set');
+          return;
+        }
+
+        const { openai } = await import('@ai-sdk/openai');
+
+        let receivedFirstParam: any;
+
+        const v5Tool = {
+          description: 'V5 tool that returns what it receives',
+          inputSchema: z.object({ query: z.string() }),
+          execute: vi.fn(async (firstParam: any) => {
+            receivedFirstParam = firstParam;
+            // Real v5 tools expect args directly: firstParam.query
+            // If bug exists, firstParam is { context: { query: ... }, mastra, ... }
+            // So firstParam.query will be UNDEFINED!
+            return {
+              success: true,
+              receivedQuery: firstParam.query, // This will be undefined if bug exists
+              receivedStructure: Object.keys(firstParam),
+            };
+          }),
+        };
+
+        const agent = new Agent({
+          name: 'real-v5-agent-test',
+          instructions: 'You are a test agent. Call the v5TestTool with query="test search".',
+          model: openai('gpt-4o-mini'),
+          tools: { v5TestTool: v5Tool },
+        });
+
+        const response = await agent.generateLegacy('Call the v5TestTool with query="test search"', {
+          toolChoice: 'required',
+          maxSteps: 1,
+        });
+
+        // Verify tool was called
+        expect(v5Tool.execute).toHaveBeenCalledTimes(1);
+
+        // Check what the tool actually received
+        console.log('Real agent model test - receivedFirstParam:', receivedFirstParam);
+
+        // THIS IS THE KEY CHECK - does v5 tool get args directly or wrapped in context?
+        if (receivedFirstParam.context) {
+          console.log('BUG CONFIRMED: v5 tool received Mastra signature with context wrapper');
+          console.log('receivedFirstParam.query:', receivedFirstParam.query); // Will be undefined
+          console.log('receivedFirstParam.context.query:', receivedFirstParam.context.query); // Will have value
+        } else {
+          console.log('v5 tool received AI SDK signature correctly');
+          console.log('receivedFirstParam.query:', receivedFirstParam.query); // Will have value
+        }
+
+        // Check the tool result
+        const toolResult = response.toolResults?.[0];
+        console.log('Tool result:', toolResult?.result);
+
+        // If bug exists, receivedQuery will be undefined even though the model passed the query
+        if (toolResult?.result.receivedQuery === undefined && receivedFirstParam.context) {
+          console.log('FUNCTIONAL BUG CONFIRMED: Tool returned undefined query due to wrong signature');
+        }
+      }, 30000);
+    });
+
+    it('should execute v4 tools with AI SDK signature (args, options)', async () => {
+      let receivedFirstParam: any;
+      let receivedSecondParam: any;
+
+      const v4Tool = {
+        description: 'V4 test tool',
+        parameters: z.object({ input: z.string() }),
+        execute: vi.fn(async (firstParam: any, secondParam: any) => {
+          receivedFirstParam = firstParam;
+          receivedSecondParam = secondParam;
+          return { result: firstParam.input };
+        }),
+      };
+
+      // Mock model that triggers a tool call
+      const mockModelWithToolCall = new MockLanguageModelV1({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          toolCalls: [
+            {
+              toolCallType: 'function',
+              toolCallId: 'call-1',
+              toolName: 'v4Tool',
+              args: JSON.stringify({ input: 'test-value' }),
+            },
+          ],
+        }),
+      });
+
+      const agent = new Agent({
+        name: 'v4-execute-agent',
+        instructions: 'Test agent for v4 tool execution',
+        model: mockModelWithToolCall,
+        tools: { v4Tool },
+      });
+
+      await agent.generateLegacy('test prompt', { maxSteps: 1 });
+
+      // Verify tool was called
+      expect(v4Tool.execute).toHaveBeenCalledTimes(1);
+
+      // V4 tool should receive AI SDK signature: (args, options)
+      expect(receivedFirstParam).toEqual({ input: 'test-value' });
+      expect(receivedFirstParam).not.toHaveProperty('context');
+      expect(receivedSecondParam).toBeDefined();
+      expect(receivedSecondParam).toHaveProperty('abortSignal');
+    });
+
+    it('should execute v5 tools with AI SDK signature - BUG TEST', async () => {
+      let receivedFirstParam: any;
+
+      const v5Tool = {
+        description: 'V5 test tool',
+        inputSchema: z.object({ query: z.string() }),
+        execute: vi.fn(async (firstParam: any) => {
+          receivedFirstParam = firstParam;
+          // This simulates real v5 tool behavior - accessing firstParam.query directly
+          // If bug exists, firstParam is { context: {query: ...}, mastra, ... }
+          // So firstParam.query is UNDEFINED!
+          return { results: [firstParam.query] };
+        }),
+      };
+
+      // Mock model that triggers a tool call
+      const mockModelWithToolCall = new MockLanguageModelV1({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          toolCalls: [
+            {
+              toolCallType: 'function',
+              toolCallId: 'call-2',
+              toolName: 'v5Tool',
+              args: JSON.stringify({ query: 'test-query' }),
+            },
+          ],
+        }),
+      });
+
+      const agent = new Agent({
+        name: 'v5-execute-agent',
+        instructions: 'Test agent for v5 tool execution',
+        model: mockModelWithToolCall,
+        tools: { v5Tool },
+      });
+
+      const response = await agent.generateLegacy('test prompt', { maxSteps: 1 });
+
+      // Verify tool was called
+      expect(v5Tool.execute).toHaveBeenCalledTimes(1);
+
+      // THIS WILL FAIL - v5 tool should receive AI SDK signature but receives Mastra signature
+      // Expected: { query: 'test-query' }
+      // Actual: { context: { query: 'test-query' }, mastra, threadId, ... }
+      expect(receivedFirstParam).toEqual({ query: 'test-query' });
+      expect(receivedFirstParam).not.toHaveProperty('context');
+      expect(receivedFirstParam).not.toHaveProperty('mastra');
+      expect(receivedFirstParam).not.toHaveProperty('threadId');
+
+      // CRITICAL: Because of wrong signature, the tool's response is broken!
+      // Tool tried to access firstParam.query but it's actually at firstParam.context.query
+      // So firstParam.query is UNDEFINED
+      const toolResult = response.toolResults?.[0];
+      expect(toolResult?.result).toEqual({ results: ['test-query'] }); // THIS WILL FAIL
+      // Actual result will be: { results: [undefined] }
+    });
+
+    it('should execute Mastra tools with Mastra signature (context object)', async () => {
+      let receivedContext: any;
+      const executeFn = vi.fn(async ({ context }: any) => {
+        receivedContext = context;
+        return { processed: context.data };
+      });
+
+      const mastraTool = createTool({
+        id: 'test.execute',
+        description: 'Mastra test tool for execution',
+        inputSchema: z.object({ data: z.string() }),
+        execute: executeFn,
+      });
+
+      // Mock model that triggers a tool call
+      const mockModelWithToolCall = new MockLanguageModelV1({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          toolCalls: [
+            {
+              toolCallType: 'function',
+              toolCallId: 'call-3',
+              toolName: 'mastraTool', // Must match the key in tools object
+              args: JSON.stringify({ data: 'test-data' }),
+            },
+          ],
+        }),
+      });
+
+      const agent = new Agent({
+        name: 'mastra-execute-agent',
+        instructions: 'Test agent for Mastra tool execution',
+        model: mockModelWithToolCall,
+        tools: { mastraTool },
+      });
+
+      await agent.generateLegacy('test prompt', { maxSteps: 1 });
+
+      // Verify tool was called
+      expect(executeFn).toHaveBeenCalledTimes(1);
+
+      // Mastra tools should receive context object with the args
+      expect(receivedContext).toEqual({ data: 'test-data' });
     });
   });
 });
