@@ -3,7 +3,7 @@ import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { TracingContext } from '../../ai-tracing';
-import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { Processor } from '../index';
 
 /**
@@ -40,7 +40,7 @@ export interface LanguageDetectionResult {
  */
 export interface LanguageDetectorOptions {
   /** Model configuration for the detection/translation agent */
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
 
   /**
    * Target language(s) for the project.
