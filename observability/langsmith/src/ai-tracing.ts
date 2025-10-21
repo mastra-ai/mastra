@@ -6,22 +6,17 @@
  * Events are handled as zero-duration RunTrees with matching start/end times.
  */
 
-import type {
-  AITracingExporter,
-  AITracingEvent,
-  AnyExportedAISpan,
-  LLMGenerationAttributes,
-} from '@mastra/core/ai-tracing';
+import type { AITracingEvent, AnyExportedAISpan, LLMGenerationAttributes } from '@mastra/core/ai-tracing';
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
-import { ConsoleLogger } from '@mastra/core/logger';
+import { BaseAITracingExporter } from '@mastra/core/ai-tracing/exporters';
+import type { BaseExporterConfig } from '@mastra/core/ai-tracing/exporters';
+import { LogLevel } from '@mastra/core/logger';
 import type { ClientConfig, RunTreeConfig } from 'langsmith';
 import { Client, RunTree } from 'langsmith';
 import type { KVMap } from 'langsmith/schemas';
 import { normalizeUsageMetrics } from './metrics';
 
-export interface LangSmithExporterConfig extends ClientConfig {
-  /** Logger level for diagnostic messages (default: 'warn') */
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+export interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
   /** LangSmith client instance */
   client?: Client;
 }
@@ -53,22 +48,30 @@ function isKVMap(value: unknown): value is KVMap {
   return value != null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date);
 }
 
-export class LangSmithExporter implements AITracingExporter {
+export class LangSmithExporter extends BaseAITracingExporter {
   name = 'langsmith';
   private traceMap = new Map<string, SpanData>();
-  private logger: ConsoleLogger;
   private config: LangSmithExporterConfig;
   private client: Client;
 
   constructor(config: LangSmithExporterConfig) {
-    this.logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
+    // Map string log level to LogLevel enum for base class
+    const logLevelMap: Record<string, LogLevel> = {
+      debug: LogLevel.DEBUG,
+      info: LogLevel.INFO,
+      warn: LogLevel.WARN,
+      error: LogLevel.ERROR,
+    };
+
+    super({
+      ...config,
+      logLevel: config.logLevel ? logLevelMap[config.logLevel] : LogLevel.WARN,
+    });
 
     config.apiKey = config.apiKey ?? process.env.LANGSMITH_API_KEY;
 
     if (!config.apiKey) {
-      this.logger.error('LangSmithExporter: Missing required credentials, exporter will be disabled', {
-        hasApiKey: !!config.apiKey,
-      });
+      this.setDisabled(`Missing required credentials (apiKey: ${!!config.apiKey})`);
       this.config = null as any;
       this.client = null as any;
       return;
@@ -369,5 +372,6 @@ export class LangSmithExporter implements AITracingExporter {
       }
     }
     this.traceMap.clear();
+    await super.shutdown();
   }
 }
