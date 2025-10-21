@@ -1,5 +1,6 @@
 import React, { type ReactNode } from 'react';
 import clsx from 'clsx';
+import BrowserOnly from '@docusaurus/BrowserOnly';
 import { ThemeClassNames } from '@docusaurus/theme-common';
 import { useDoc } from '@docusaurus/plugin-content-docs/client';
 import Heading from '@theme/Heading';
@@ -36,7 +37,7 @@ export default function DocItemContent({ children }: Props): ReactNode {
       {shouldShowCopyButton && (
         <div className="relative">
           <div className="absolute right-0 top-0 z-10">
-            <CopyPageButton />
+            <BrowserOnly fallback={<div />}>{() => <CopyPageButton />}</BrowserOnly>
           </div>
         </div>
       )}
