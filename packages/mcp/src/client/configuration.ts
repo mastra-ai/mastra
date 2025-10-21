@@ -37,7 +37,6 @@ export interface MCPClientOptions {
  * ```typescript
  * import { MCPClient } from '@mastra/mcp';
  * import { Agent } from '@mastra/core/agent';
- * import { openai } from '@ai-sdk/openai';
  *
  * const mcp = new MCPClient({
  *   servers: {
@@ -56,7 +55,7 @@ export interface MCPClientOptions {
  * const agent = new Agent({
  *   name: 'Multi-tool Agent',
  *   instructions: 'You have access to multiple tools.',
- *   model: openai('gpt-4'),
+ *   model: 'openai/gpt-4o',
  *   tools: await mcp.getTools(),
  * });
  * ```
@@ -686,7 +685,7 @@ To fix this you have three different options:
    * const agent = new Agent({
    *   name: 'Multi-tool Agent',
    *   instructions: 'You have access to weather and stock tools.',
-   *   model: openai('gpt-4'),
+   *   model: 'openai/gpt-4',
    *   tools: await mcp.getTools(), // weather_getWeather, stockPrice_getPrice
    * });
    * ```
@@ -729,7 +728,7 @@ To fix this you have three different options:
    * const agent = new Agent({
    *   name: 'Dynamic Agent',
    *   instructions: 'You can use tools dynamically.',
-   *   model: openai('gpt-4'),
+   *   model: 'openai/gpt-4',
    * });
    *
    * const response = await agent.stream(prompt, {
@@ -875,47 +874,3 @@ To fix this you have three different options:
   }
 }
 
-/**
- * @deprecated MCPConfigurationOptions is deprecated and will be removed in a future release. Use {@link MCPClientOptions} instead.
- *
- * This interface has been renamed to MCPClientOptions. The API is identical.
- */
-export interface MCPConfigurationOptions {
-  /** @deprecated Use MCPClientOptions.id instead */
-  id?: string;
-  /** @deprecated Use MCPClientOptions.servers instead */
-  servers: Record<string, MastraMCPServerDefinition>;
-  /** @deprecated Use MCPClientOptions.timeout instead */
-  timeout?: number;
-}
-
-/**
- * @deprecated MCPConfiguration is deprecated and will be removed in a future release. Use {@link MCPClient} instead.
- *
- * This class has been renamed to MCPClient. The API is identical but the class name changed
- * for clarity and consistency.
- *
- * @example
- * ```typescript
- * // Old way (deprecated)
- * const config = new MCPConfiguration({
- *   servers: { myServer: { command: 'npx', args: ['tsx', 'server.ts'] } }
- * });
- *
- * // New way (recommended)
- * const client = new MCPClient({
- *   servers: { myServer: { command: 'npx', args: ['tsx', 'server.ts'] } }
- * });
- * ```
- */
-export class MCPConfiguration extends MCPClient {
-  /**
-   * @deprecated Use MCPClient constructor instead
-   */
-  constructor(args: MCPClientOptions) {
-    super(args);
-    this.logger.warn(
-      `MCPConfiguration has been renamed to MCPClient and MCPConfiguration is deprecated. The API is identical but the MCPConfiguration export will be removed in the future. Update your imports now to prevent future errors.`,
-    );
-  }
-}
