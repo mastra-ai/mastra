@@ -11,7 +11,7 @@ describe('DefaultConsoleExporter', () => {
       debug: vi.fn(),
     };
 
-    const exporter = new ConsoleExporter(logger as any);
+    const exporter = new ConsoleExporter({ logger } as any);
 
     const mockSpan = {
       id: 'test-span-1',
@@ -52,7 +52,7 @@ describe('DefaultConsoleExporter', () => {
       debug: vi.fn(),
     };
 
-    const exporter = new ConsoleExporter(logger as any);
+    const exporter = new ConsoleExporter({ logger } as any);
 
     await exporter.exportEvent({
       type: 'unknown_event' as any,
