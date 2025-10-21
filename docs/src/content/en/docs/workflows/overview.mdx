@@ -89,34 +89,102 @@ Workflows can be composed using a number of different methods. The method you ch
 
 When using `.then()`, steps run sequentially. The `inputSchema` of each step must match the `outputSchema` of the step before it. The final step’s `outputSchema` doesn’t need to match the workflow’s `outputSchema`, which can be defined independently.
 
-```typescript {4,7,14,17,24,27} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {12,28,39} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
-  //...
+  id: "step-1",
   inputSchema: z.object({
     message: z.string()
   }),
   outputSchema: z.object({
     formatted: z.string()
-  })
+  }),
+  execute: async ({ inputData }) => {
+    const { message } = inputData;
+    return {
+      formatted: message.toUpperCase()
+    };
+  }
 });
 
 const step2 = createStep({
-  // ...
+  id: "step-2",
   inputSchema: z.object({
     formatted: z.string()
   }),
   outputSchema: z.object({
     emphasized: z.string()
-  })
+  }),
+  execute: async ({ inputData }) => {
+    const { formatted } = inputData;
+    return {
+      emphasized: `${formatted}!!!`
+    };
+  }
 });
 
 export const testWorkflow = createWorkflow({
-  // ...
+  id: "test-workflow",
   inputSchema: z.object({
     message: z.string()
   }),
   outputSchema: z.object({
     output: z.string()
+  })
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+```
+
+### Workflow state
+
+Workflow state lets you share values across steps without passing and defining them explicitly using `inputSchema` and `outputSchema`. Define all state values in the workflow’s `stateSchema`, but each step only needs to declare the values it uses. To set initial values, use `initialState` when running the workflow. See [Running workflows](#running-workflows) for details.
+
+```typescript  filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  // ...
+  stateSchema: z.object({
+    processedItems: z.array(z.string())
+  }),
+  execute: async ({ inputData, state, setState }) => {
+    const { message } = inputData;
+    const { processedItems } = state;
+
+    setState({
+      ...state,
+      processedItems: [...processedItems, "item-1", "item-2"]
+    });
+
+    return {
+      formatted: message.toUpperCase()
+    };
+  }
+});
+
+const step2 = createStep({
+  // ...
+  stateSchema: z.object({
+    metadata: z.object({
+      processedBy: z.string()
+    })
+  }),
+  execute: async ({ inputData, state }) => {
+    const { formatted } = inputData;
+    const { metadata } = state;
+
+    return {
+      emphasized: `${formatted}!! ${metadata.processedBy}`
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  stateSchema: z.object({
+    processedItems: z.array(z.string()),
+    metadata: z.object({
+      processedBy: z.string()
+    })
   })
 })
   .then(step1)
@@ -159,7 +227,7 @@ Workflows can be run in two modes: start waits for all steps to complete before 
 
 <Tabs items={["Start", "Stream"]}>
   <Tabs.Tab>
-Create a workflow run instance using `createRunAsync()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. The workflow executes all steps and returns the final result.
+Create a workflow run with `createRunAsync()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. To initialize workflow state, include `initialState` alongside `inputData`. The workflow runs all steps and returns the final result.
 
 ```typescript showLineNumbers copy
 const run = await testWorkflow.createRunAsync();
@@ -167,14 +235,24 @@ const run = await testWorkflow.createRunAsync();
 const result = await run.start({
   inputData: {
     message: "Hello world"
+  },
+  initialState: {
+    processedItems: [],
+    metadata: {
+      processedBy: "ADMIN"
+    }
+  },
+  outputOptions: {
+    includeState: true
   }
 });
 
 console.log(result);
 ```
+Set `includeState: true` in `outputOptions` to include state values in the final result.
   </Tabs.Tab>
   <Tabs.Tab>
-Create a workflow run instance using `.createRunAsync()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
+Create a workflow run with `createRunAsync()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. To initialize workflow state, include `initialState` alongside `inputData`. The workflow emits events as steps run, allowing you to monitor progress in real time.
 
 ```typescript showLineNumbers copy
 const run = await testWorkflow.createRunAsync();
@@ -182,6 +260,15 @@ const run = await testWorkflow.createRunAsync();
 const result = await run.stream({
   inputData: {
     message: "Hello world"
+  },
+  initialState: {
+    processedItems: [],
+    metadata: {
+      processedBy: "ADMIN"
+    }
+  },
+  outputOptions: {
+    includeState: true
   }
 });
 
@@ -189,6 +276,7 @@ for await (const chunk of result.stream) {
   console.log(chunk);
 }
 ```
+Set `includeState: true` in `outputOptions` to include state values in the final result.
   </Tabs.Tab>
 </Tabs>
 
