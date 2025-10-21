@@ -346,6 +346,12 @@ const response = await agent.generate("Hello!", {
         "type": "{ type: \"ephemeral\"; ttl?: \"5m\" | \"1h\" | undefined; } | undefined",
         "description": "",
         "isOptional": true
+    },
+    {
+        "name": "container",
+        "type": "{ id?: string | undefined; skills?: { type: \"anthropic\" | \"custom\"; skillId: string; version?: string | undefined; }[] | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
     }
 ]}
 />
