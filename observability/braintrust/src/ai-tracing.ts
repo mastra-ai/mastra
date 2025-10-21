@@ -8,7 +8,7 @@
 
 import type { AITracingEvent, AnyExportedAISpan, LLMGenerationAttributes } from '@mastra/core/ai-tracing';
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
-import { BaseAITracingExporter } from '@mastra/core/ai-tracing/exporters';
+import { BaseExporter } from '@mastra/core/ai-tracing/exporters';
 import type { BaseExporterConfig } from '@mastra/core/ai-tracing/exporters';
 import { LogLevel } from '@mastra/core/logger';
 import { initLogger } from 'braintrust';
@@ -50,7 +50,7 @@ function mapSpanType(spanType: AISpanType): 'llm' | 'score' | 'function' | 'eval
   return (SPAN_TYPE_EXCEPTIONS[spanType] as any) ?? DEFAULT_SPAN_TYPE;
 }
 
-export class BraintrustExporter extends BaseAITracingExporter {
+export class BraintrustExporter extends BaseExporter {
   name = 'braintrust';
   private traceMap = new Map<string, SpanData>();
   private config: BraintrustExporterConfig;

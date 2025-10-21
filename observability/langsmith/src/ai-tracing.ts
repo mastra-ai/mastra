@@ -8,7 +8,7 @@
 
 import type { AITracingEvent, AnyExportedAISpan, LLMGenerationAttributes } from '@mastra/core/ai-tracing';
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
-import { BaseAITracingExporter } from '@mastra/core/ai-tracing/exporters';
+import { BaseExporter } from '@mastra/core/ai-tracing/exporters';
 import type { BaseExporterConfig } from '@mastra/core/ai-tracing/exporters';
 import { LogLevel } from '@mastra/core/logger';
 import type { ClientConfig, RunTreeConfig } from 'langsmith';
@@ -48,7 +48,7 @@ function isKVMap(value: unknown): value is KVMap {
   return value != null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date);
 }
 
-export class LangSmithExporter extends BaseAITracingExporter {
+export class LangSmithExporter extends BaseExporter {
   name = 'langsmith';
   private traceMap = new Map<string, SpanData>();
   private config: LangSmithExporterConfig;

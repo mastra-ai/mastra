@@ -14,7 +14,7 @@
 
 import type { AITracingEvent, AnyExportedAISpan, LLMGenerationAttributes } from '@mastra/core/ai-tracing';
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
-import { BaseAITracingExporter } from '@mastra/core/ai-tracing/exporters';
+import { BaseExporter } from '@mastra/core/ai-tracing/exporters';
 import type { BaseExporterConfig } from '@mastra/core/ai-tracing/exporters';
 import { LogLevel } from '@mastra/core/logger';
 import { Langfuse } from 'langfuse';
@@ -106,7 +106,7 @@ interface NormalizedUsage {
   promptCacheMiss?: number;
 }
 
-export class LangfuseExporter extends BaseAITracingExporter {
+export class LangfuseExporter extends BaseExporter {
   name = 'langfuse';
   private client: Langfuse;
   private realtime: boolean;
