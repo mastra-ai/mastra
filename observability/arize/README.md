@@ -1,6 +1,8 @@
-# ArizeExporter - OpenTelemetry + OpenInference AI Tracing Exporter
+# @mastra/arize - OpenTelemetry + OpenInference AI Tracing Exporter
 
 Export Mastra AI traces to any OpenTelemetry observability platform that supports OpenInference, like [Arize AX](https://arize.com/generative-ai/), or [Phoenix](https://phoenix.arize.com/).
+
+For more information on OpenInference, see the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) specification.
 
 ## Installation
 
@@ -9,6 +11,8 @@ npm install @mastra/arize
 ```
 
 ## Configuration
+
+You can add `ArizeExporter` to your Mastra configuration to export traces to Arize AX or Phoenix, or any other OpenTelemetry compatible observability platform that supports OpenInference.
 
 ### Phoenix
 
@@ -89,7 +93,9 @@ const mastra = new Mastra({
 > [!TIP]
 > Need an Arize AX API key? [Get one here](https://app.arize.com/).
 
-### Optional Configuration
+## Optional Configuration
+
+You can configure the `ArizeExporter` to tweak the underlying OpenTelemetry `BatchSpanProcessor`, or add additional resource attributes to each span.
 
 ```typescript
 import { ArizeExporter } from '@mastra/arize';
