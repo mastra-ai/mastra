@@ -55,6 +55,18 @@ export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
       };
     }
   }
+
+  /**
+   * Clears accumulated state to prevent memory leaks.
+   * Called when processor execution completes.
+   *
+   * Fixes: Issue #6322 - Memory leak from unbounded ProcessorState accumulation
+   */
+  finalize(): void {
+    this.streamParts = [];
+    this.accumulatedText = '';
+    this.customState = {};
+  }
 }
 
 export class ProcessorRunner {
@@ -243,6 +255,8 @@ export class ProcessorRunner {
             };
             state.span.end({ output: finalOutput });
           }
+          // Clear accumulated state to prevent memory leaks (Fix 2 for #6322)
+          state.finalize();
         }
       }
 

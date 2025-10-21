@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { MastraModelOutput } from './stream/base/output';
 import { MessageList } from './agent/message-list';
-import { ProcessorState } from './processors/runner';
+import { ProcessorState, ProcessorRunner } from './processors/runner';
 import { ChunkFrom, type ChunkType } from './stream/types';
 import { ReadableStream, type ReadableStreamDefaultController } from 'stream/web';
 
@@ -154,7 +154,7 @@ describe('Memory Leak Tests - Issue #6322', () => {
           memoryUsed: `${memoryUsed.toFixed(2)} MB`,
         });
 
-        // processorState.finalize();
+        processorState.finalize();
 
         expect(processorState.streamParts.length).toBe(0);
 
@@ -185,7 +185,7 @@ describe('Memory Leak Tests - Issue #6322', () => {
             stepState.addPart(chunk);
           }
 
-          // stepState.finalize();
+          stepState.finalize();
 
           allStates.push(stepState);
           console.log(`Step ${step + 1}: ${stepState.streamParts.length} parts (should be 0)`);
@@ -225,10 +225,103 @@ describe('Memory Leak Tests - Issue #6322', () => {
         const customStateSize = JSON.stringify(processorState.customState).length;
         console.log(`Custom state size before cleanup: ${(customStateSize / 1024 / 1024).toFixed(2)} MB`);
 
-        // processorState.finalize();
+        processorState.finalize();
 
         expect(Object.keys(processorState.customState).length).toBe(0);
         expect(processorState.customState.largeArray || []).toHaveLength(0);
+      });
+
+      it('automatically clears state when stream completes (integration test)', async () => {
+        /**
+         * Integration test that validates ProcessorState.finalize() is called
+         * automatically by ProcessorRunner when the finish chunk is processed.
+         *
+         * Unlike the unit tests above, this test goes through the full streaming
+         * pipeline to ensure automatic cleanup works in production.
+         */
+
+        const processorStates = new Map<string, ProcessorState<undefined>>();
+        const logger = {
+          debug: () => {},
+          info: () => {},
+          warn: () => {},
+          error: () => {},
+        };
+
+        const runner = new ProcessorRunner({
+          outputProcessors: [
+            {
+              name: 'test-processor',
+              processOutputStream: async ({ part, streamParts, state }) => {
+                // Processor that uses state
+                state.processedCount = (state.processedCount || 0) + 1;
+                return part;
+              },
+            },
+          ],
+          logger: logger as any,
+          agentName: 'test-agent',
+        });
+
+        // Process 100 chunks through the pipeline
+        for (let i = 0; i < 100; i++) {
+          const chunk: ChunkType<undefined> = {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'text-delta',
+            payload: {
+              id: `text-${i}`,
+              text: 'x'.repeat(200),
+            },
+          };
+
+          await runner.processPart(chunk, processorStates);
+        }
+
+        // Get the state before finish chunk
+        const state = processorStates.get('test-processor');
+        expect(state).toBeDefined();
+        expect(state!.streamParts.length).toBe(100);
+        expect(state!.customState.processedCount).toBe(100);
+
+        console.log('Before finish chunk:', {
+          streamParts: state!.streamParts.length,
+          customStateKeys: Object.keys(state!.customState).length,
+        });
+
+        // Process finish chunk - this should trigger automatic cleanup
+        const finishChunk: ChunkType<undefined> = {
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          type: 'finish',
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: {
+              usage: {
+                inputTokens: 100,
+                outputTokens: 100,
+                totalTokens: 200,
+              },
+            },
+            metadata: {},
+            messages: {
+              all: [],
+              user: [],
+              nonUser: [],
+            },
+          },
+        };
+
+        await runner.processPart(finishChunk, processorStates);
+
+        // After finish chunk, state should be cleared automatically
+        console.log('After finish chunk:', {
+          streamParts: state!.streamParts.length,
+          customStateKeys: Object.keys(state!.customState).length,
+        });
+
+        expect(state!.streamParts.length).toBe(0);
+        expect(Object.keys(state!.customState).length).toBe(0);
       });
     });
 
