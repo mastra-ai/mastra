@@ -54,10 +54,7 @@ export class LangSmithExporter extends BaseExporter {
   private client: Client;
 
   constructor(config: LangSmithExporterConfig) {
-    super({
-      ...config,
-      logLevel: config.logLevel ?? 'warn',
-    });
+    super(config);
 
     config.apiKey = config.apiKey ?? process.env.LANGSMITH_API_KEY;
 

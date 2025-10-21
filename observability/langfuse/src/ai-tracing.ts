@@ -112,10 +112,7 @@ export class LangfuseExporter extends BaseExporter {
   private traceMap = new Map<string, TraceData>();
 
   constructor(config: LangfuseExporterConfig) {
-    super({
-      ...config,
-      logLevel: config.logLevel ?? 'warn',
-    });
+    super(config);
 
     this.realtime = config.realtime ?? false;
 

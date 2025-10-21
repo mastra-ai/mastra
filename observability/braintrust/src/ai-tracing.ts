@@ -55,10 +55,7 @@ export class BraintrustExporter extends BaseExporter {
   private config: BraintrustExporterConfig;
 
   constructor(config: BraintrustExporterConfig) {
-    super({
-      ...config,
-      logLevel: config.logLevel ?? 'warn',
-    });
+    super(config);
 
     if (!config.apiKey) {
       this.setDisabled(`Missing required credentials (apiKey: ${!!config.apiKey})`);

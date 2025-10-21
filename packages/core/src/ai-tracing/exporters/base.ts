@@ -112,7 +112,7 @@ export abstract class BaseExporter implements AITracingExporter {
    */
   protected setDisabled(reason: string): void {
     this.isDisabled = true;
-    this.logger.debug(`${this.name} disabled: ${reason}`);
+    this.logger.warn(`${this.name} disabled: ${reason}`);
   }
 
   /**
