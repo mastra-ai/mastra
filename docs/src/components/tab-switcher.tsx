@@ -22,7 +22,7 @@ const docsTabs = [
   },
   {
     id: "Guides",
-    label: "Guides",
+    label: "Guides and Migrations",
     href: "guides",
   },
   {
