@@ -298,6 +298,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
       if (toolPartIndex !== -1) {
         const toolPart = parts[toolPartIndex];
+        console.log('toolPart=====', toolPart);
 
         if (toolPart.type === 'dynamic-tool') {
           if (chunk.payload.isError) {
@@ -317,7 +318,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             if (isWorkflow) {
               output = (chunk.payload.result as any)?.result;
             } else if (isAgent) {
-              output = (parts[toolPartIndex] as any).output;
+              output = (parts[toolPartIndex] as any).output ?? chunk.payload.result;
             } else {
               output = chunk.payload.result;
             }
