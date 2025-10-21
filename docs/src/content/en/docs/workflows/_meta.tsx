@@ -3,7 +3,7 @@ import { Tag } from "@/components/tag";
 const meta = {
   overview: "Overview",
   "control-flow": "Control Flow",
-  "using-with-agents-and-tools": "Agents and Tools",
+  "agents-and-tools": "Agents & Tools",
   "suspend-and-resume": "Suspend & Resume",
   "error-handling": "Error Handling",
   "input-data-mapping": "Input Data Mapping",

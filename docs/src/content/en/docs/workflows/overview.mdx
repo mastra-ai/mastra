@@ -58,7 +58,7 @@ const step1 = createStep({
 
 ### Using agents and tools
 
-Workflow steps can also call registered agents or import and execute tools directly, visit the [Agents and Tools](./using-with-agents-and-tools.mdx) page for more information.
+Workflow steps can also call registered agents or import and execute tools directly, visit the [Agents and Tools](./agents-and-tools.mdx) page for more information.
 
 ## Creating a workflow
 
@@ -92,7 +92,7 @@ Workflows can be composed using a number of different methods. The method you ch
 
 #### Composing workflow steps
 
-When using `.then()`, steps run sequentially. The `inputSchema` of each step must match the `outputSchema` of the step before it. The final step’s `outputSchema` doesn’t need to match the workflow’s `outputSchema`, which can be defined independently.
+When using `.then()`, steps run sequentially. Each step’s `inputSchema` must match the `outputSchema` of the previous step. The final step’s `outputSchema` should match the workflow’s `outputSchema` to ensure end-to-end type safety.
 
 ```typescript {4,7,14,17,24,27} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
@@ -121,7 +121,7 @@ export const testWorkflow = createWorkflow({
     message: z.string()
   }),
   outputSchema: z.object({
-    output: z.string()
+    emphasized: z.string()
   })
 })
   .then(step1)

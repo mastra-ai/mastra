@@ -1263,4 +1263,9 @@ export const redirectList = [
     destination: "/:locale/docs/workflows/suspend-and-resume",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/workflows/using-with-agents-and-tools",
+    destination: "/:locale/docs/workflows/agents-and-tools",
+    permanent: true,
+  },
 ];
