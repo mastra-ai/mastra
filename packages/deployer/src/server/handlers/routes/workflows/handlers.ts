@@ -255,7 +255,7 @@ export async function observeStreamVNextWorkflowHandler(c: Context) {
         }
       },
       async err => {
-        logger.error('Error in workflow VNext observe stream: ' + err?.message);
+        logger.error('Error in workflow observe stream: ' + err?.message);
       },
     );
   } catch (error) {
