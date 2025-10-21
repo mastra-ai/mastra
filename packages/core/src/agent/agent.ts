@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
+import slugify from '@sindresorhus/slugify';
 import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
@@ -1347,6 +1348,10 @@ export class Agent<
     }
   }
 
+  public __setMemory(memory: DynamicArgument<MastraMemory>) {
+    this.#memory = memory;
+  }
+
   /* @deprecated use agent.getMemory() and query memory directly */
   async fetchMemory({
     threadId,
@@ -1887,6 +1892,8 @@ export class Agent<
 
         const agentOutputSchema = z.object({
           text: z.string().describe('The response from the agent'),
+          subAgentThreadId: z.string().describe('The thread ID of the agent').optional(),
+          subAgentResourceId: z.string().describe('The resource ID of the agent').optional(),
         });
 
         const modelVersion = (await agent.getModel()).specificationVersion;
@@ -1924,9 +1931,23 @@ export class Agent<
                 });
                 result = { text: generateResult.text };
               } else if ((methodType === 'stream' || methodType === 'streamLegacy') && modelVersion === 'v2') {
+                if (!agent.hasOwnMemory() && this.#memory) {
+                  agent.__setMemory(this.#memory);
+                }
+                const subAgentThreadId = randomUUID();
+                const subAgentResourceId = `${slugify(this.id)}-${agentName}`;
+
                 const streamResult = await agent.stream((context as any).prompt, {
                   runtimeContext,
                   tracingContext: innerTracingContext,
+                  ...(resourceId && threadId
+                    ? {
+                        memory: {
+                          resource: subAgentResourceId,
+                          thread: subAgentThreadId,
+                        },
+                      }
+                    : {}),
                 });
 
                 // Collect full text
@@ -1941,7 +1962,7 @@ export class Agent<
                   }
                 }
 
-                result = { text: fullText };
+                result = { text: fullText, subAgentThreadId, subAgentResourceId };
               } else {
                 // streamLegacy
                 const streamResult = await agent.streamLegacy((context as any).prompt, {
