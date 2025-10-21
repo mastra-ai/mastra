@@ -457,6 +457,16 @@ export interface CreateSpanOptions<TType extends AISpanType> extends CreateBaseO
   parent?: AnyAISpan;
   /** Is an event span? */
   isEvent?: boolean;
+  /**
+   * Trace ID to use for this span (1-32 hexadecimal characters).
+   * Only used for root spans without a parent.
+   */
+  traceId?: string;
+  /**
+   * Parent span ID to use for this span (1-16 hexadecimal characters).
+   * Only used for root spans without a parent.
+   */
+  parentSpanId?: string;
 }
 
 /**
@@ -558,6 +568,16 @@ export interface TracingPolicy {
 export interface TracingOptions {
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>;
+  /**
+   * Trace ID to use for this execution (1-32 hexadecimal characters).
+   * If provided, this trace will be part of the specified trace rather than starting a new one.
+   */
+  traceId?: string;
+  /**
+   * Parent span ID to use for this execution (1-16 hexadecimal characters).
+   * If provided, the root span will be created as a child of this span.
+   */
+  parentSpanId?: string;
 }
 
 /**
