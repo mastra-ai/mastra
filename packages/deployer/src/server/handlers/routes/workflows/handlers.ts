@@ -259,7 +259,7 @@ export async function observeStreamVNextWorkflowHandler(c: Context) {
       },
     );
   } catch (error) {
-    return handleError(error, 'Error observing vNext workflow stream');
+    return handleError(error, 'Error observing workflow stream');
   }
 }
 
