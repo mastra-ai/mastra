@@ -16,7 +16,6 @@ export class DefaultAISpan<TType extends AISpanType> extends BaseAISpan<TType> {
   constructor(options: CreateSpanOptions<TType>, aiTracing: AITracing) {
     super(options, aiTracing);
 
-    // Set span ID: use external ID if provided, otherwise generate new
     this.id = generateSpanId();
 
     // Set trace ID based on context:
