@@ -76,11 +76,12 @@ export class Memory extends MastraMemory {
   }
 
   protected checkStorageFeatureSupport(config: MemoryConfig) {
-    if (
-      typeof config.semanticRecall === `object` &&
-      config.semanticRecall.scope !== `thread` &&
-      !this.storage.supports.selectByIncludeResourceScope
-    ) {
+    const resourceScope =
+      (typeof config.semanticRecall === 'object' && config.semanticRecall.scope !== 'thread') ||
+      // resource scope is now default
+      config.semanticRecall === true;
+
+    if (resourceScope && !this.storage.supports.selectByIncludeResourceScope) {
       throw new Error(
         `Memory error: Attached storage adapter "${this.storage.name || 'unknown'}" doesn't support semanticRecall: { scope: "resource" } yet and currently only supports per-thread semantic recall.`,
       );

@@ -163,7 +163,9 @@ export function createPrepareMemoryStep<
 
       const config = memory.getMergedThreadConfig(memoryConfig || {});
       const hasResourceScopeSemanticRecall =
-        typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === 'resource';
+        (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread') ||
+        // resource scope is now default
+        config?.semanticRecall === true;
       let [memoryMessages, memorySystemMessage] = await Promise.all([
         existingThread || hasResourceScopeSemanticRecall
           ? capabilities.getMemoryMessages({
