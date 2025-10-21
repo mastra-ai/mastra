@@ -467,6 +467,8 @@ interface CreateBaseOptions<TType extends AISpanType> {
   type: TType;
   /** Policy-level tracing configuration */
   tracingPolicy?: TracingPolicy;
+  /** Runtime context for metadata extraction */
+  runtimeContext?: RuntimeContext;
 }
 
 /**
@@ -505,8 +507,6 @@ export interface StartSpanOptions<TType extends AISpanType> extends CreateSpanOp
   customSamplerOptions?: CustomSamplerOptions;
   /** Tracing options for this execution */
   tracingOptions?: TracingOptions;
-  /** Runtime context for metadata extraction */
-  runtimeContext?: RuntimeContext;
 }
 
 /**

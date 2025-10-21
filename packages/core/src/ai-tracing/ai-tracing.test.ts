@@ -1405,6 +1405,68 @@ describe('AI Tracing', () => {
       rootSpan.end();
     });
 
+    it('should extract metadata in child spans when runtimeContext is passed', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        metadataFromRuntimeContext: ['userId', 'sessionId'],
+        exporters: [testExporter],
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('userId', 'user-123');
+      runtimeContext.set('sessionId', 'session-456');
+      runtimeContext.set('requestId', 'request-789');
+
+      // Create root span with RuntimeContext
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        runtimeContext,
+      });
+
+      // Root span should have extracted metadata
+      expect(rootSpan.metadata).toEqual({
+        userId: 'user-123',
+        sessionId: 'session-456',
+      });
+
+      // Create child span WITH runtimeContext passed
+      const childSpan = rootSpan.createChildSpan({
+        type: AISpanType.TOOL_CALL,
+        name: 'tool-call',
+        attributes: {
+          toolId: 'tool-1',
+        },
+        runtimeContext, // Pass RuntimeContext to child
+      });
+
+      // Child span should also have extracted metadata
+      expect(childSpan.metadata).toEqual({
+        userId: 'user-123',
+        sessionId: 'session-456',
+      });
+      expect(childSpan.traceState).toEqual(rootSpan.traceState);
+
+      // Create another child WITHOUT runtimeContext
+      const childSpanNoContext = rootSpan.createChildSpan({
+        type: AISpanType.LLM_GENERATION,
+        name: 'llm-call',
+        attributes: {
+          model: 'gpt-4',
+        },
+      });
+
+      // This child should NOT have extracted metadata
+      expect(childSpanNoContext.metadata).toBeUndefined();
+      expect(childSpanNoContext.traceState).toEqual(rootSpan.traceState);
+
+      rootSpan.end();
+    });
+
     it('should prioritize explicit metadata over extracted metadata', () => {
       const aiTracing = new DefaultAITracing({
         serviceName: 'test-service',
