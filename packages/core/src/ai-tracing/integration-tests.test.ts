@@ -1881,4 +1881,87 @@ describe('AI Tracing Integration Tests', () => {
 
     testExporter.finalExpectations();
   });
+
+  it('should propagate tracingContext to agent steps in workflows', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'response-metadata', id: '1' },
+          { type: 'text-delta', id: '1', delta: 'Test response from agent' },
+          {
+            type: 'finish',
+            id: '1',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+
+    const testAgent = new Agent({
+      name: 'Workflow Agent',
+      instructions: 'You are an agent in a workflow',
+      model: mockModel,
+    });
+
+    const testWorkflow = createWorkflow({
+      id: 'testWorkflow',
+      inputSchema: z.object({ query: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+    });
+
+    const agentStep = createStep(testAgent);
+
+    testWorkflow
+      .map(async ({ inputData }) => ({ prompt: inputData.query }))
+      .then(agentStep)
+      .map(async ({ inputData }) => ({ text: inputData.text }))
+      .commit();
+
+    const mastra = new Mastra({
+      ...getBaseMastraConfig(testExporter),
+      agents: { testAgent },
+      workflows: { testWorkflow },
+    });
+
+    const workflow = mastra.getWorkflow('testWorkflow');
+    const run = await workflow.createRunAsync();
+    const result = await run.start({ inputData: { query: 'test query' } });
+
+    expect(result.status).toBe('success');
+
+    // Verify spans were created
+    const workflowRunSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
+    const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
+    const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
+    const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+
+    // Should have one workflow run
+    expect(workflowRunSpans.length).toBe(1);
+
+    // Should have workflow steps (including the agent step)
+    expect(workflowStepSpans.length).toBeGreaterThan(0);
+
+    // Should have one agent run
+    expect(agentRunSpans.length).toBe(1);
+
+    // Should have one LLM generation
+    expect(llmGenerationSpans.length).toBe(1);
+
+    // Verify proper nesting: agent run should be child of workflow
+    const workflowRunSpan = workflowRunSpans[0];
+    const agentRunSpan = agentRunSpans[0];
+    const llmGenSpan = llmGenerationSpans[0];
+
+    expect(workflowRunSpan?.traceId).toBeDefined();
+    expect(agentRunSpan?.traceId).toBe(workflowRunSpan?.traceId);
+    expect(llmGenSpan?.traceId).toBe(workflowRunSpan?.traceId);
+
+    // Verify parent-child relationship
+    expect(agentRunSpan?.parentSpanId).toBeDefined();
+    expect(llmGenSpan?.parentSpanId).toBe(agentRunSpan?.id);
+
+    testExporter.finalExpectations();
+  });
 });
