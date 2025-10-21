@@ -12894,9 +12894,6 @@ describe('Workflow', () => {
     });
 
     it('should propagate tracingContext to agent steps created with createStep', async () => {
-      // Track whether tracingContext was passed to the agent's stream method
-      let receivedTracingContext: any = null;
-
       // Create a mock agent with v2 model
       const agent = new Agent({
         name: 'test-agent',
@@ -12921,11 +12918,7 @@ describe('Workflow', () => {
       });
 
       // Spy on the agent's stream method to capture tracingContext
-      const originalStream = agent.stream.bind(agent);
-      agent.stream = vi.fn(async (prompt: any, options?: any) => {
-        receivedTracingContext = options?.tracingContext;
-        return originalStream(prompt, options);
-      }) as any;
+      const streamSpy = vi.spyOn(agent, 'stream');
 
       const workflow = createWorkflow({
         id: 'tracing-test-workflow',
@@ -12944,15 +12937,15 @@ describe('Workflow', () => {
       const run = await workflow.createRunAsync();
       await run.start({ inputData: { query: 'test query' } });
 
-      // Verify that tracingContext was passed to the agent's stream method
-      expect(receivedTracingContext).toBeDefined();
-      expect(receivedTracingContext.currentSpan).toBeDefined();
+      // Verify that stream was called and tracingContext was passed
+      expect(streamSpy).toHaveBeenCalled();
+      const callArgs = streamSpy.mock.calls[0];
+      expect(callArgs).toBeDefined();
+      expect(callArgs[1]?.tracingContext).toBeDefined();
+      expect(callArgs[1]?.tracingContext.currentSpan).toBeDefined();
     });
 
     it('should propagate tracingContext to agent steps with v1 models', async () => {
-      // Track whether tracingContext was passed to the agent's streamLegacy method
-      let receivedTracingContext: any = null;
-
       // Create a mock agent with v1 model
       const agent = new Agent({
         name: 'test-agent-v1',
@@ -12976,11 +12969,7 @@ describe('Workflow', () => {
       });
 
       // Spy on the agent's streamLegacy method to capture tracingContext
-      const originalStreamLegacy = agent.streamLegacy.bind(agent);
-      agent.streamLegacy = vi.fn(async (prompt: any, options?: any) => {
-        receivedTracingContext = options?.tracingContext;
-        return originalStreamLegacy(prompt, options);
-      }) as any;
+      const streamLegacySpy = vi.spyOn(agent, 'streamLegacy');
 
       const workflow = createWorkflow({
         id: 'tracing-test-workflow-v1',
@@ -12999,9 +12988,12 @@ describe('Workflow', () => {
       const run = await workflow.createRunAsync();
       await run.start({ inputData: { query: 'test query' } });
 
-      // Verify that tracingContext was passed to the agent's streamLegacy method
-      expect(receivedTracingContext).toBeDefined();
-      expect(receivedTracingContext.currentSpan).toBeDefined();
+      // Verify that streamLegacy was called and tracingContext was passed
+      expect(streamLegacySpy).toHaveBeenCalled();
+      const callArgs = streamLegacySpy.mock.calls[0];
+      expect(callArgs).toBeDefined();
+      expect(callArgs[1]?.tracingContext).toBeDefined();
+      expect(callArgs[1]?.tracingContext.currentSpan).toBeDefined();
     });
   });
 });
