@@ -212,7 +212,7 @@ export const complexWorkflow = createWorkflow({
   .commit();
 
 export const lessComplexWorkflow = createWorkflow({
-  id: 'less-complex-workflow',
+  id: 'lessComplexWorkflow',
   inputSchema: z.object({
     text: z.string(),
   }),
