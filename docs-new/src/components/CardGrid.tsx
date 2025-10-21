@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
 import styles from './CardGrid.module.css';
+import { cn } from '../css/utils';
 
 export interface CardGridItemProps {
   title: string;
@@ -10,7 +11,7 @@ export interface CardGridItemProps {
 
 export function CardGridItem({ title, description, href }: CardGridItemProps) {
   return (
-    <Link to={href} className={styles.cardGridItem}>
+    <Link to={href} className={cn(styles.cardGridItem, '!shadow-none !rounded-[10px]')}>
       <h3>{title}</h3>
       <p>{description}</p>
     </Link>
