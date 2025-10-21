@@ -2,9 +2,7 @@ import { ToolCallMessagePartProps } from '@assistant-ui/react';
 
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
-import { useWorkflow } from '@/hooks/use-workflows';
 import { WorkflowRunProvider } from '@/domains/workflows';
-import { LoadingBadge } from './badges/loading-badge';
 import { MastraUIMessage } from '@mastra/react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 
@@ -32,21 +30,17 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, ...props }: ToolF
   const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
 
   useWorkflowStream(result);
-  const { data: workflow, isLoading } = useWorkflow(workflowToolName, isWorkflow);
 
   if (isAgent) {
     return <AgentBadgeWrapper agentId={agentToolName} result={result} metadata={metadata} />;
   }
 
-  if (isLoading) return <LoadingBadge />;
-
-  if (workflow) {
+  if (isWorkflow) {
     const isStreaming = metadata?.mode === 'stream' || metadata?.mode === 'network';
 
     return (
       <WorkflowBadge
         workflowId={workflowToolName}
-        workflow={workflow}
         isStreaming={isStreaming}
         runId={result?.runId}
         metadata={metadata}

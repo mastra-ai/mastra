@@ -13,16 +13,18 @@ import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
 import { MastraUIMessage } from '@mastra/react';
+import { LoadingBadge } from './loading-badge';
+import { useWorkflow } from '@/hooks';
 
 export interface WorkflowBadgeProps {
-  workflow: GetWorkflowResponse;
   workflowId: string;
   runId?: string;
   isStreaming?: boolean;
   metadata?: MastraUIMessage['metadata'];
 }
 
-export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming, metadata }: WorkflowBadgeProps) => {
+export const WorkflowBadge = ({ runId, workflowId, isStreaming, metadata }: WorkflowBadgeProps) => {
+  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
   const { data: runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, {
     enabled: Boolean(runId) && !isStreaming,
   });
@@ -33,6 +35,8 @@ export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming, metada
 
   const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
+
+  if (isWorkflowLoading || !workflow) return <LoadingBadge />;
 
   return (
     <BadgeWrapper
