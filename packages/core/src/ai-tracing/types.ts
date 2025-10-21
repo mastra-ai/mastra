@@ -572,12 +572,12 @@ export interface TracingOptions {
    * External trace ID to use for this execution (1-32 hexadecimal characters).
    * If provided, this trace will be part of the external trace rather than starting a new one.
    */
-  traceId?: string;
+  externalTraceId?: string;
   /**
    * External parent span ID to use for this execution (1-16 hexadecimal characters).
    * If provided, the root span will be created as a child of this external span.
    */
-  parentSpanId?: string;
+  externalParentSpanId?: string;
 }
 
 /**

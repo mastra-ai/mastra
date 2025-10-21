@@ -146,8 +146,8 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
     attributes,
     ...rest,
     metadata,
-    externalTraceId: rest.tracingOptions?.traceId,
-    externalParentSpanId: rest.tracingOptions?.parentSpanId,
+    externalTraceId: rest.tracingOptions?.externalTraceId,
+    externalParentSpanId: rest.tracingOptions?.externalParentSpanId,
     customSamplerOptions: {
       runtimeContext,
       metadata,
