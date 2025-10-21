@@ -1,6 +1,7 @@
-import type { ToolCallOptions, ToolSet } from 'ai-v5';
+import type { ToolSet } from 'ai-v5';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { ChunkFrom } from '../../../stream/types';
+import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { createStep } from '../../../workflows';
 import { assembleOperationName, getTracer } from '../../telemetry';
 import type { OuterLLMRun } from '../../types';
@@ -139,7 +140,7 @@ export function createToolCallStep<
           }
         }
 
-        const result = await tool.execute(inputData.args, {
+        const toolOptions: MastraToolInvocationOptions = {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
           messages: messageList.get.input.aiV5.model(),
@@ -158,7 +159,9 @@ export function createToolCallStep<
             });
           },
           resumeData,
-        } as ToolCallOptions);
+        };
+
+        const result = await tool.execute(inputData.args, toolOptions);
 
         span.setAttributes({
           'stream.toolCall.result': JSON.stringify(result),
