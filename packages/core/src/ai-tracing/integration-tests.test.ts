@@ -460,10 +460,10 @@ function getToolCallFromPrompt(prompt: string): { toolName: string; toolCallId: 
 
   // Direct workflow detection
   if (lowerPrompt.includes('execute workflows that exist in your config')) {
-    if (!toolsCalled.has('simpleWorkflow')) {
-      toolsCalled.add('simpleWorkflow');
+    if (!toolsCalled.has('workflow-simpleWorkflow')) {
+      toolsCalled.add('workflow-simpleWorkflow');
       return {
-        toolName: 'simpleWorkflow',
+        toolName: 'workflow-simpleWorkflow',
         toolCallId: 'call-workflow-1',
         args: { input: 'test input' },
       };
