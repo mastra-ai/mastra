@@ -1,4 +1,4 @@
-import { EventEmitter } from 'stream';
+import EventEmitter from 'events';
 import { ReadableStream } from 'stream/web';
 import type { LanguageModelUsage } from 'ai-v5';
 import type { WorkflowResult, WorkflowRunStatus } from '../workflows';
