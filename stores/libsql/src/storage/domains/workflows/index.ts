@@ -163,6 +163,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             activePaths: [],
             timestamp: Date.now(),
             suspendedPaths: {},
+            resumeLabels: {},
             serializedStepGraph: [],
             value: {},
             waitingPaths: {},

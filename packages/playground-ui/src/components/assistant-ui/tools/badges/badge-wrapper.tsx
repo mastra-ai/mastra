@@ -11,6 +11,7 @@ export interface BadgeWrapperProps {
   icon?: React.ReactNode;
   collapsible?: boolean;
   extraInfo?: React.ReactNode;
+  'data-testid'?: string;
 }
 
 export const BadgeWrapper = ({
@@ -20,11 +21,12 @@ export const BadgeWrapper = ({
   title,
   collapsible = true,
   extraInfo,
+  'data-testid': dataTestId,
 }: BadgeWrapperProps) => {
   const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
 
   return (
-    <div className="mb-4">
+    <div className="mb-4" data-testid={dataTestId}>
       <div className="flex flex-row gap-2 items-center justify-between">
         <button
           onClick={collapsible ? () => setIsCollapsed(s => !s) : undefined}

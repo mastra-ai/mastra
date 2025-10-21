@@ -12,7 +12,7 @@ import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent';
 import type { TracingContext } from '../../ai-tracing';
 import type { LoopOptions } from '../../loop/types';
-import type { StructuredOutputOptions, OutputProcessor } from '../../processors';
+import type { OutputProcessor } from '../../processors';
 import type { RuntimeContext } from '../../runtime-context';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { inferOutput } from './shared.types';
@@ -36,7 +36,6 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
 
 export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT extends OutputSchema = undefined> = {
   messages?: UIMessage[] | ModelMessage[];
-  structuredOutput?: OUTPUT extends OutputSchema ? StructuredOutputOptions<OUTPUT> : never;
   outputProcessors?: OutputProcessor[];
   runtimeContext: RuntimeContext;
   tracingContext: TracingContext;

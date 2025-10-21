@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'path';
 import { Deployer } from '@mastra/deployer';
-import { copy, readJSON } from 'fs-extra';
+import { copy, readJSON } from 'fs-extra/esm';
 
 import { getAuthEntrypoint } from './utils/auth.js';
 import { MASTRA_DIRECTORY, BUILD_ID, PROJECT_ID, TEAM_ID } from './utils/constants.js';
@@ -22,10 +22,10 @@ export class CloudDeployer extends Deployer {
     await copy(join(__dirname, '../templates', 'instrumentation-template.js'), instrumentationFile);
   }
   async writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
-    const { versions } = (await readJSON(join(dirname(fileURLToPath(import.meta.url)), '../versions.json'))) as {
-      versions: Record<string, string>;
-    };
-    for (const [pkgName, version] of Object.entries(versions)) {
+    const versions = (await readJSON(join(dirname(fileURLToPath(import.meta.url)), '../versions.json'))) as
+      | Record<string, string>
+      | undefined;
+    for (const [pkgName, version] of Object.entries(versions || {})) {
       dependencies.set(pkgName, version);
     }
 

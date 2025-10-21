@@ -1,5 +1,75 @@
 # create-mastra
 
+## 0.17.1-alpha.0
+
+## 0.17.0
+
+### Patch Changes
+
+- Pin `@rollup/*` dependencies to fixed versions (instead of using `^`) to: ([#8900](https://github.com/mastra-ai/mastra/pull/8900))
+  - Hotfix a bug inside `@rollup/plugin-commonjs`
+  - Have more control over the versions in the future to not have breakages over night
+
+## 0.17.0-alpha.0
+
+### Patch Changes
+
+- Pin `@rollup/*` dependencies to fixed versions (instead of using `^`) to: ([#8900](https://github.com/mastra-ai/mastra/pull/8900))
+  - Hotfix a bug inside `@rollup/plugin-commonjs`
+  - Have more control over the versions in the future to not have breakages over night
+
+## 0.16.0
+
+### Patch Changes
+
+- Use model-router in create-mastra starter template ([#8631](https://github.com/mastra-ai/mastra/pull/8631))
+
+- Fix auto tab for model picker in playground-ui, the UI no longer auto tabs to the next selector when selecting a model/provider. ([#8680](https://github.com/mastra-ai/mastra/pull/8680))
+
+- Create unified Sidebar component to use on Playground and Cloud ([#8655](https://github.com/mastra-ai/mastra/pull/8655))
+
+- Adds reset button to model picker to reset to original model set on the agent. ([#8633](https://github.com/mastra-ai/mastra/pull/8633))
+
+- Use only zod validation in dynamic form ([#8802](https://github.com/mastra-ai/mastra/pull/8802))
+
+- Add div wrapper around entity tables to fix table vertical position ([#8758](https://github.com/mastra-ai/mastra/pull/8758))
+
+- Customize AITraces type to seamlessly work on Cloud too ([#8759](https://github.com/mastra-ai/mastra/pull/8759))
+
+- Refactor EntryList component and Scorer and Observability pages ([#8652](https://github.com/mastra-ai/mastra/pull/8652))
+
+- Stream finalResult from network loop ([#8795](https://github.com/mastra-ai/mastra/pull/8795))
+
+- Improve README ([#8819](https://github.com/mastra-ai/mastra/pull/8819))
+
+## 0.16.0-alpha.1
+
+### Patch Changes
+
+- Fix auto tab for model picker in playground-ui, the UI no longer auto tabs to the next selector when selecting a model/provider. ([#8680](https://github.com/mastra-ai/mastra/pull/8680))
+
+- Create unified Sidebar component to use on Playground and Cloud ([#8655](https://github.com/mastra-ai/mastra/pull/8655))
+
+- Use only zod validation in dynamic form ([#8802](https://github.com/mastra-ai/mastra/pull/8802))
+
+- Add div wrapper around entity tables to fix table vertical position ([#8758](https://github.com/mastra-ai/mastra/pull/8758))
+
+- Customize AITraces type to seamlessly work on Cloud too ([#8759](https://github.com/mastra-ai/mastra/pull/8759))
+
+- Stream finalResult from network loop ([#8795](https://github.com/mastra-ai/mastra/pull/8795))
+
+- Improve README ([#8819](https://github.com/mastra-ai/mastra/pull/8819))
+
+## 0.15.2-alpha.0
+
+### Patch Changes
+
+- Use model-router in create-mastra starter template ([#8631](https://github.com/mastra-ai/mastra/pull/8631))
+
+- Adds reset button to model picker to reset to original model set on the agent. ([#8633](https://github.com/mastra-ai/mastra/pull/8633))
+
+- Refactor EntryList component and Scorer and Observability pages ([#8652](https://github.com/mastra-ai/mastra/pull/8652))
+
 ## 0.15.1
 
 ### Patch Changes

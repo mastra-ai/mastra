@@ -19,7 +19,7 @@ import { PropertiesTable } from "@/components/properties-table";
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
+      type: "MastraModelConfig",
       description: "コンテキスト関連性の評価に使用する言語モデル",
       required: true,
     },
@@ -162,7 +162,7 @@ Final Score = max(0, Base Score - Usage Penalty - Missing Penalty) × scale
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
   options: {
     context: ['アインシュタインは光電効果の研究でノーベル賞を受賞した'],
     scale: 1,
@@ -174,7 +174,7 @@ const scorer = createContextRelevanceScorerLLM({
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
   options: {
     context: ['コンテキスト情報...'],
     penalties: {
@@ -191,7 +191,7 @@ const scorer = createContextRelevanceScorerLLM({
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
   options: {
     contextExtractor: (input, output) => {
       // クエリに基づいてコンテキストを抽出

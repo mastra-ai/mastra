@@ -89,13 +89,13 @@
   },
   "resolutions": {
     "typescript": "^5.8.3",
-    "@types/node": "^20.17.57",
+    "@types/node": "^20.19.21",
     "cookie": ">=0.7.2",
     "tmp": ">=0.2.5",
     "jsondiffpatch": ">=0.7.3"
   },
   "license": "Apache-2.0",
-  "packageManager": "pnpm@10.12.4",
+  "packageManager": "pnpm@10.18.2",
   "dependencies": {
     "globby": "^14.1.0",
     "resolve-from": "^5.0.0"

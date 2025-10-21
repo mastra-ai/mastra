@@ -7,8 +7,6 @@ description: Documentation for the Keyword Coverage Scorer in Mastra, which eval
 
 The `createKeywordCoverageScorer()` function evaluates how well an LLM's output covers the important keywords from the input. It analyzes keyword presence and matches while ignoring common words and stop words.
 
-For a usage example, see the [Keyword Coverage Examples](/examples/scorers/keyword-coverage).
-
 ## Parameters
 
 The `createKeywordCoverageScorer()` function does not take any options.
@@ -42,6 +40,23 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
   ]}
 />
 
+`.run()` returns a result in the following shape:
+
+```typescript
+{
+  runId: string,
+  extractStepResult: {
+    referenceKeywords: Set<string>,
+    responseKeywords: Set<string>
+  },
+  analyzeStepResult: {
+    totalKeywords: number,
+    matchedKeywords: number
+  },
+  score: number
+}
+```
+
 ## Scoring Details
 
 The scorer evaluates keyword coverage by matching keywords with the following features:
@@ -66,15 +81,15 @@ Final score: `(matched_keywords / total_keywords) * scale`
 
 ### Score interpretation
 
-(0 to scale, default 0-1)
+A coverage score between 0 and 1:
 
-- 1.0: Perfect keyword coverage
-- 0.7-0.9: Good coverage with most keywords present
-- 0.4-0.6: Moderate coverage with some keywords missing
-- 0.1-0.3: Poor coverage with many keywords missing
-- 0.0: No keyword matches
+- **1.0**: Complete coverage – all keywords present.
+- **0.7–0.9**: High coverage – most keywords included.
+- **0.4–0.6**: Partial coverage – some keywords present.
+- **0.1–0.3**: Low coverage – few keywords matched.
+- **0.0**: No coverage – no keywords found.
 
-## Special Cases
+### Special Cases
 
 The scorer handles several special cases:
 
@@ -83,6 +98,123 @@ The scorer handles several special cases:
 - Technical terms: Preserves compound technical terms (e.g., "React.js", "machine learning")
 - Case differences: "JavaScript" matches "javascript"
 - Common words: Ignored in scoring to focus on meaningful keywords
+
+## Examples
+
+### Full coverage example
+
+In this example, the response fully reflects the key terms from the input. All required keywords are present, resulting in complete coverage with no omissions.
+
+```typescript filename="src/example-full-keyword-coverage.ts" showLineNumbers copy
+import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
+
+const scorer = createKeywordCoverageScorer();
+
+const input = 'JavaScript frameworks like React and Vue';
+const output = 'Popular JavaScript frameworks include React and Vue for web development';
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: input }],
+  output: { role: 'assistant', text: output },
+});
+
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
+```
+
+#### Full coverage output
+
+A score of 1 indicates that all expected keywords were found in the response. The `analyzeStepResult` field confirms that the number of matched keywords equals the total number extracted from the input.
+
+```typescript
+{
+  score: 1,
+  analyzeStepResult: {
+    totalKeywords: 4,
+    matchedKeywords: 4
+  }
+}
+```
+
+### Partial coverage example
+
+In this example, the response includes some, but not all, of the important keywords from the input. The score reflects partial coverage, with key terms either missing or only partially matched.
+
+```typescript filename="src/example-partial-keyword-coverage.ts" showLineNumbers copy
+import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
+
+const scorer = createKeywordCoverageScorer();
+
+const input = 'TypeScript offers interfaces, generics, and type inference';
+const output = 'TypeScript provides type inference and some advanced features';
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: input }],
+  output: { role: 'assistant', text: output },
+});
+
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
+```
+
+#### Partial coverage output
+
+A score of 0.5 indicates that only half of the expected keywords were found in the response. The `analyzeStepResult` field shows how many terms were matched compared to the total identified in the input.
+
+```typescript
+{
+  score: 0.5,
+  analyzeStepResult: {
+    totalKeywords: 6,
+    matchedKeywords: 3
+  }
+}
+```
+
+### Minimal coverage example
+
+In this example, the response includes very few of the important keywords from the input. The score reflects minimal coverage, with most key terms missing or unaccounted for.
+
+```typescript filename="src/example-minimal-keyword-coverage.ts" showLineNumbers copy
+import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
+
+const scorer = createKeywordCoverageScorer();
+
+const input = 'Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning';
+const output = 'Data preparation is important for models';
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: input }],
+  output: { role: 'assistant', text: output },
+});
+
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
+```
+
+#### Minimal coverage output
+
+A low score indicates that only a small number of the expected keywords were present in the response. The `analyzeStepResult` field highlights the gap between total and matched keywords, signaling insufficient coverage.
+
+```typescript
+{
+  score: 0.2,
+  analyzeStepResult: {
+    totalKeywords: 10,
+    matchedKeywords: 2
+  }
+}
+```
+
+### Metric configuration
+
+You can create a `KeywordCoverageMetric` instance with default settings. No additional configuration is required.
+
+```typescript
+const metric = new KeywordCoverageMetric();
+```
+
+> See [KeywordCoverageScorer](/reference/scorers/keyword-coverage.mdx) for a full list of configuration options.
 
 ## Related
 

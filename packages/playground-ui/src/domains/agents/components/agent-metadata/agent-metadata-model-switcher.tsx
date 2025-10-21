@@ -208,7 +208,7 @@ export const AgentMetadataModelSwitcher = ({
       setHighlightedModelIndex(0);
     }
 
-    // Only auto-focus model input if provider is connected
+    // Auto-focus model input if provider is connected
     if (provider.connected) {
       setTimeout(() => {
         modelInputRef.current?.focus();
@@ -361,6 +361,7 @@ export const AgentMetadataModelSwitcher = ({
                 </>
               )}
               <Input
+                aria-label="Search providers"
                 spellCheck="false"
                 ref={providerInputRef}
                 className={`w-full ${!isSearchingProvider && currentModelProvider ? 'pl-8 pr-8' : ''}`}
@@ -411,23 +412,6 @@ export const AgentMetadataModelSwitcher = ({
                           handleProviderSelect(provider);
                         }
                         break;
-                      case 'Tab':
-                        // Only prevent default and handle Tab if NOT shift+tab
-                        if (!e.shiftKey) {
-                          e.preventDefault();
-                          if (highlightedProviderIndex >= 0 && highlightedProviderIndex < filteredProviders.length) {
-                            const provider = filteredProviders[highlightedProviderIndex];
-                            handleProviderSelect(provider);
-                          } else {
-                            // If no provider is highlighted, just close dropdown and let tab proceed
-                            setShowProviderSuggestions(false);
-                            setIsSearchingProvider(false);
-                            setProviderSearch('');
-                            setHighlightedProviderIndex(-1);
-                          }
-                        }
-                        // If shift+tab, let it proceed normally
-                        break;
                       case 'Escape':
                         e.preventDefault();
                         setIsSearchingProvider(false);
@@ -436,9 +420,6 @@ export const AgentMetadataModelSwitcher = ({
                         setShowProviderSuggestions(false);
                         break;
                     }
-                  } else if (e.key === 'Tab') {
-                    // Handle Tab when dropdown is closed - just let it proceed normally
-                    return;
                   }
                 }}
                 onFocus={() => {
@@ -533,6 +514,7 @@ export const AgentMetadataModelSwitcher = ({
         >
           <PopoverTrigger asChild>
             <Input
+              aria-label="Search models"
               spellCheck="false"
               ref={modelInputRef}
               className="w-full xl:w-3/5"
@@ -594,7 +576,6 @@ export const AgentMetadataModelSwitcher = ({
                     }, 0);
                     break;
                   case 'Enter':
-                  case 'Tab':
                     e.preventDefault();
                     if (highlightedModelIndex >= 0 && highlightedModelIndex < filteredModels.length) {
                       // User selected a model from the list

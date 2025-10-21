@@ -160,13 +160,11 @@ export function MastraRuntimeProvider({
   );
 
   const {
-    setMessages,
     messages,
-    generate,
-    stream,
-    network,
+    sendMessage,
     cancelRun,
     isRunning: isRunningStream,
+    setMessages,
   } = useChat({
     agentId,
     initializeMessages: () => initialMessages || [],
@@ -220,9 +218,7 @@ export function MastraRuntimeProvider({
     const attachments = await convertToAIAttachments(message.attachments);
 
     const input = message.content[0].text;
-    if (isVNext) {
-      setMessages(s => [...s, { role: 'user', parts: [{ type: 'text', text: input }] }] as MastraUIMessage[]);
-    } else {
+    if (!isVNext) {
       setLegacyMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
     }
 
@@ -241,14 +237,10 @@ export function MastraRuntimeProvider({
     try {
       if (isVNext) {
         if (chatWithNetwork) {
-          await network({
-            coreUserMessages: [
-              {
-                role: 'user',
-                content: input,
-              },
-              ...attachments,
-            ],
+          await sendMessage({
+            message: input,
+            mode: 'network',
+            coreUserMessages: attachments,
             runtimeContext: runtimeContextInstance,
             threadId,
             modelSettings: modelSettingsArgs,
@@ -263,38 +255,40 @@ export function MastraRuntimeProvider({
               ) {
                 refreshWorkingMemory?.();
               }
+
+              if (chunk.type === 'network-execution-event-step-finish') {
+                refreshThreadList?.();
+              }
             },
           });
         } else {
           if (chatWithGenerate) {
-            await generate({
-              coreUserMessages: [
-                {
-                  role: 'user',
-                  content: input,
-                },
-                ...attachments,
-              ],
+            await sendMessage({
+              message: input,
+              mode: 'generate',
+              coreUserMessages: attachments,
               runtimeContext: runtimeContextInstance,
               threadId,
               modelSettings: modelSettingsArgs,
               signal: controller.signal,
             });
 
+            await refreshThreadList?.();
+
             return;
           } else {
-            await stream({
-              coreUserMessages: [
-                {
-                  role: 'user',
-                  content: input,
-                },
-                ...attachments,
-              ],
+            await sendMessage({
+              message: input,
+              mode: 'stream',
+              coreUserMessages: attachments,
               runtimeContext: runtimeContextInstance,
               threadId,
               modelSettings: modelSettingsArgs,
               onChunk: async chunk => {
+                if (chunk.type === 'finish') {
+                  await refreshThreadList?.();
+                }
+
                 if (
                   chunk.type === 'tool-result' &&
                   chunk.payload?.toolName === 'updateWorkingMemory' &&

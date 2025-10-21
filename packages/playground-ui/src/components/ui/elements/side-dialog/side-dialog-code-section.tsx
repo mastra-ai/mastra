@@ -1,12 +1,13 @@
-import { cn } from '@/lib/utils';
 import ReactCodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { json } from '@codemirror/lang-json';
 import { CopyButton } from '../../copy-button';
 import { useMemo, useState } from 'react';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import { tags as t } from '@lezer/highlight';
-import { Button } from '../buttons';
+import { Button } from '@/components/ui/elements/buttons';
 import { AlignJustifyIcon, AlignLeftIcon } from 'lucide-react';
+import { ButtonsGroup } from '@/components/ui/containers';
+import { Section } from '@/components/ui/elements/section';
 
 const useCodemirrorTheme = () => {
   return useMemo(
@@ -28,11 +29,12 @@ const useCodemirrorTheme = () => {
 
 export type SideDialogCodeSectionProps = {
   title: string;
+  icon?: React.ReactNode;
   codeStr?: string;
   simplified?: boolean;
 };
 
-export function SideDialogCodeSection({ codeStr = '', title, simplified = false }: SideDialogCodeSectionProps) {
+export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = false }: SideDialogCodeSectionProps) {
   const theme = useCodemirrorTheme();
   const [showAsMultilineText, setShowAsMultilineText] = useState(false);
   const hasMultilineText = useMemo(() => {
@@ -40,47 +42,44 @@ export function SideDialogCodeSection({ codeStr = '', title, simplified = false 
       const parsed = JSON.parse(codeStr);
       return containsInnerNewline(parsed || '');
     } catch {
-      return false; // or handle differently
+      return false;
     }
   }, [codeStr]);
 
   const finalCodeStr = showAsMultilineText ? codeStr?.replace(/\\n/g, '\n') : codeStr;
 
   return (
-    <section className="border border-border1 rounded-lg">
-      <div className="border-b border-border1 last:border-b-0 grid">
-        <div className="p-[1rem] px-[1.5rem] border-b border-border1 grid grid-cols-[1fr_auto]">
-          <h3>{title}</h3>
-          <div className="flex gap-2 items-center justify-end">
-            <CopyButton content={codeStr || 'No content'} />
-            {hasMultilineText && (
-              <Button variant="ghost" onClick={() => setShowAsMultilineText(!showAsMultilineText)}>
-                {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
-              </Button>
-            )}
-          </div>
-        </div>
-        <div
-          className={cn('bg-surface3 p-[1rem] overflow-auto text-icon4 text-[0.875rem] [&>div]:border-none break-all')}
-        >
-          {codeStr && (
-            <>
-              {simplified ? (
-                <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
-                  <pre className="text-wrap">{codeStr}</pre>
-                </div>
-              ) : (
-                <ReactCodeMirror extensions={[json(), EditorView.lineWrapping]} theme={theme} value={finalCodeStr} />
-              )}
-            </>
+    <Section>
+      <Section.Header>
+        <Section.Heading>
+          {icon}
+          {title}
+        </Section.Heading>
+        <ButtonsGroup>
+          <CopyButton content={codeStr || 'No content'} />
+          {hasMultilineText && (
+            <Button variant="ghost" onClick={() => setShowAsMultilineText(!showAsMultilineText)}>
+              {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
+            </Button>
+          )}
+        </ButtonsGroup>
+      </Section.Header>
+      {codeStr && (
+        <div className="bg-black/20 p-[1rem] overflow-hidden rounded-xl border border-white/10 text-icon4 text-[0.875rem] break-all">
+          {simplified ? (
+            <div className="text-icon4 font-mono break-all px-[0.5rem]">
+              <pre className="text-wrap">{codeStr}</pre>
+            </div>
+          ) : (
+            <ReactCodeMirror extensions={[json(), EditorView.lineWrapping]} theme={theme} value={finalCodeStr} />
           )}
         </div>
-      </div>
-    </section>
+      )}
+    </Section>
   );
 }
 
-function containsInnerNewline(obj: unknown): boolean {
+export function containsInnerNewline(obj: unknown): boolean {
   if (typeof obj === 'string') {
     const idx = obj.indexOf('\n');
     return idx !== -1 && idx !== obj.length - 1;

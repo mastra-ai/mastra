@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "0.16.0",
+  "version": "0.17.0-alpha.0",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
   "dependencies": {
     "@inngest/realtime": "^0.4.4",
     "@opentelemetry/api": "^1.9.0",
-    "inngest": "^3.40.3"
+    "inngest": "^3.44.2"
   },
   "devDependencies": {
     "inngest-cli": "1.8.2",
@@ -44,7 +44,7 @@
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
     "ai": "^4.3.19",
-    "eslint": "^9.36.0",
+    "eslint": "^9.37.0",
     "execa": "^9.6.0",
     "get-port": "7.1.0",
     "hono": "^4.9.7",
@@ -54,7 +54,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.20.2-0 <0.22.0-0",
+    "@mastra/core": ">=0.21.2-0 <0.23.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",

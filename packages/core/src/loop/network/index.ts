@@ -1,11 +1,13 @@
 import z from 'zod';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
-import { Agent } from '../../agent/index';
+import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraMessageV2, MessageListInput } from '../../agent/message-list';
+import type { TracingContext } from '../../ai-tracing/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { RuntimeContext } from '../../runtime-context';
+import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import { createStep, createWorkflow } from '../../workflows';
@@ -108,6 +110,8 @@ export async function prepareMemoryStep({
   routingAgent,
   runtimeContext,
   generateId,
+  tracingContext,
+  memoryConfig,
 }: {
   threadId: string;
   resourceId: string;
@@ -115,31 +119,43 @@ export async function prepareMemoryStep({
   routingAgent: Agent;
   runtimeContext: RuntimeContext;
   generateId: () => string;
+  tracingContext?: TracingContext;
+  memoryConfig?: any;
 }) {
   const memory = await routingAgent.getMemory({ runtimeContext });
   let thread = await memory?.getThreadById({ threadId });
   if (!thread) {
     thread = await memory?.createThread({
       threadId,
-      title: '',
+      title: `New Thread ${new Date().toISOString()}`,
       resourceId,
     });
   }
+  let userMessage: string | undefined;
+
+  // Parallelize async operations
+  const promises: Promise<any>[] = [];
+
   if (typeof messages === 'string') {
-    await memory?.saveMessages({
-      messages: [
-        {
-          id: generateId(),
-          type: 'text',
-          role: 'user',
-          content: { parts: [{ type: 'text', text: messages }], format: 2 },
-          createdAt: new Date(),
-          threadId: thread?.id,
-          resourceId: thread?.resourceId,
-        },
-      ] as MastraMessageV2[],
-      format: 'v2',
-    });
+    userMessage = messages;
+    if (memory) {
+      promises.push(
+        memory.saveMessages({
+          messages: [
+            {
+              id: generateId(),
+              type: 'text',
+              role: 'user',
+              content: { parts: [{ type: 'text', text: messages }], format: 2 },
+              createdAt: new Date(),
+              threadId: thread?.id,
+              resourceId: thread?.resourceId,
+            },
+          ] as MastraMessageV2[],
+          format: 'v2',
+        }),
+      );
+    }
   } else {
     const messageList = new MessageList({
       threadId: thread?.id,
@@ -148,11 +164,57 @@ export async function prepareMemoryStep({
     messageList.add(messages, 'user');
     const messagesToSave = messageList.get.all.v2();
 
-    await memory?.saveMessages({
-      messages: messagesToSave,
-      format: 'v2',
-    });
+    if (memory) {
+      promises.push(
+        memory.saveMessages({
+          messages: messagesToSave,
+          format: 'v2',
+        }),
+      );
+    }
+
+    // Get the user message for title generation
+    const uiMessages = messageList.get.all.ui();
+    const mostRecentUserMessage = routingAgent.getMostRecentUserMessage(uiMessages);
+    userMessage = mostRecentUserMessage?.content;
   }
+
+  // Add title generation to promises if needed (non-blocking)
+  if (thread?.title?.startsWith('New Thread') && memory) {
+    const config = memory.getMergedThreadConfig(memoryConfig || {});
+
+    const {
+      shouldGenerate,
+      model: titleModel,
+      instructions: titleInstructions,
+    } = routingAgent.resolveTitleGenerationConfig(config?.threads?.generateTitle);
+
+    if (shouldGenerate && userMessage) {
+      promises.push(
+        routingAgent
+          .genTitle(
+            userMessage,
+            runtimeContext,
+            tracingContext || { currentSpan: undefined },
+            titleModel,
+            titleInstructions,
+          )
+          .then(title => {
+            if (title) {
+              return memory.createThread({
+                threadId: thread.id,
+                resourceId: thread.resourceId,
+                memoryConfig,
+                title,
+                metadata: thread.metadata,
+              });
+            }
+          }),
+      );
+    }
+  }
+
+  await Promise.all(promises);
 
   return { thread };
 }
@@ -213,11 +275,14 @@ export async function createNetworkLoop({
       await writer.write({
         type: 'routing-agent-start',
         payload: {
+          agentId: routingAgent.id,
+          runId: runId,
           inputData: {
             ...inputData,
             iteration: iterationCount,
           },
         },
+        from: ChunkFrom.NETWORK,
       });
 
       if (inputData.primitiveType !== 'none' && inputData?.result) {
@@ -239,7 +304,7 @@ export async function createNetworkLoop({
                           }
                       `;
 
-        completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
+        const completionStream = await tryStreamWithJsonFallback(routingAgent, completionPrompt, {
           structuredOutput: {
             schema: completionSchema,
           },
@@ -253,6 +318,39 @@ export async function createNetworkLoop({
           ...routingAgentOptions,
         });
 
+        let currentText = '';
+        let currentTextIdx = 0;
+
+        await writer.write({
+          type: 'routing-agent-text-start',
+          payload: {
+            runId: runId,
+          },
+          from: ChunkFrom.NETWORK,
+          runId,
+        });
+
+        for await (const chunk of completionStream.objectStream) {
+          if (chunk?.finalResult) {
+            currentText = chunk.finalResult;
+          }
+
+          const currentSlice = currentText.slice(currentTextIdx);
+          if (chunk?.isComplete && currentSlice.length) {
+            await writer.write({
+              type: 'routing-agent-text-delta',
+              payload: {
+                text: currentSlice,
+              },
+              from: ChunkFrom.NETWORK,
+              runId,
+            });
+            currentTextIdx = currentText.length;
+          }
+        }
+
+        completionResult = await completionStream.getFullOutput();
+
         if (completionResult?.object?.isComplete) {
           const endPayload = {
             task: inputData.task,
@@ -263,11 +361,13 @@ export async function createNetworkLoop({
             isComplete: true,
             selectionReason: completionResult.object.completionReason || '',
             iteration: iterationCount,
+            runId: runId,
           };
 
           await writer.write({
             type: 'routing-agent-end',
             payload: endPayload,
+            from: ChunkFrom.NETWORK,
           });
 
           const memory = await agent.getMemory({ runtimeContext: runtimeContext });
@@ -353,7 +453,7 @@ export async function createNetworkLoop({
         ...routingAgentOptions,
       };
 
-      const result = await routingAgent.generate(prompt, options);
+      const result = await tryGenerateWithJsonFallback(routingAgent, prompt, options);
 
       const object = result.object;
 
@@ -366,11 +466,13 @@ export async function createNetworkLoop({
         isComplete: object.primitiveId === 'none' && object.primitiveType === 'none',
         selectionReason: object.selectionReason,
         iteration: iterationCount,
+        runId: runId,
       };
 
       await writer.write({
         type: 'routing-agent-end',
         payload: endPayload,
+        from: ChunkFrom.NETWORK,
       });
 
       return endPayload;
@@ -426,6 +528,7 @@ export async function createNetworkLoop({
           args: inputData,
           runId,
         },
+        from: ChunkFrom.NETWORK,
       });
 
       const result = await agentForStep.stream(inputData.prompt, {
@@ -439,6 +542,8 @@ export async function createNetworkLoop({
         await writer.write({
           type: `agent-execution-event-${chunk.type}`,
           payload: chunk,
+          runId: chunk.runId,
+          from: ChunkFrom.NETWORK,
         });
       }
 
@@ -488,6 +593,8 @@ export async function createNetworkLoop({
       await writer.write({
         type: 'agent-execution-end',
         payload: endPayload,
+        from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return {
@@ -559,16 +666,17 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      const run = await wf.createRunAsync();
+      const run = await wf.createRunAsync({ runId });
       const toolData = {
         name: wf.name,
         args: inputData,
-        runId: run.runId,
+        runId: runId,
       };
 
       await writer?.write({
         type: 'workflow-execution-start',
         payload: toolData,
+        from: ChunkFrom.NETWORK,
       });
 
       // await emitter.emit('watch-v2', {
@@ -589,6 +697,8 @@ export async function createNetworkLoop({
         await writer?.write({
           type: `workflow-execution-event-${chunk.type}`,
           payload: chunk,
+          runId: chunk.runId,
+          from: ChunkFrom.NETWORK,
         });
       }
 
@@ -638,11 +748,14 @@ export async function createNetworkLoop({
         result: finalResult,
         isComplete: false,
         iteration: inputData.iteration,
+        name: wf.name,
       };
 
       await writer?.write({
         type: 'workflow-execution-end',
         payload: endPayload,
+        from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return endPayload;
@@ -736,6 +849,7 @@ export async function createNetworkLoop({
           },
           runId,
         },
+        from: ChunkFrom.NETWORK,
       });
 
       const finalResult = await tool.execute(
@@ -798,6 +912,8 @@ export async function createNetworkLoop({
       await writer?.write({
         type: 'tool-execution-end',
         payload: endPayload,
+        from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return endPayload;
@@ -834,11 +950,13 @@ export async function createNetworkLoop({
         result: endResult,
         isComplete: !!inputData.isComplete,
         iteration: inputData.iteration,
+        runId: runId,
       };
 
       await writer?.write({
         type: 'network-execution-event-step-finish',
         payload: endPayload,
+        from: ChunkFrom.NETWORK,
       });
 
       return endPayload;
@@ -972,12 +1090,14 @@ export async function networkLoop<
     });
   }
 
+  const { memory: routingAgentMemoryOptions, ...routingAgentOptionsWithoutMemory } = routingAgentOptions || {};
+
   const { networkWorkflow } = await createNetworkLoop({
     networkName,
     runtimeContext,
     runId,
     agent: routingAgent,
-    routingAgentOptions,
+    routingAgentOptions: routingAgentOptionsWithoutMemory,
     generateId,
   });
 
@@ -1048,6 +1168,8 @@ export async function networkLoop<
     messages,
     routingAgent,
     generateId,
+    tracingContext: routingAgentOptions?.tracingContext,
+    memoryConfig: routingAgentMemoryOptions?.options,
   });
 
   const task = getLastMessage(messages);

@@ -57,6 +57,12 @@ interface OtelExporterConfig {
       description: "Logger level (default: 'warn')",
       required: false,
     },
+    {
+      name: "resourceAttributes",
+      type: "DetectedResourceAttributes",
+      description: "Optional OpenTelemetry Resource Attributes (values here override any defaults)",
+      required: false,
+    }
   ]}
 />
 

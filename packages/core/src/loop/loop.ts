@@ -132,7 +132,10 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     ...rest,
   };
 
-  const stream = workflowLoopStream(workflowLoopProps);
+  const baseStream = workflowLoopStream(workflowLoopProps);
+
+  // Apply chunk tracing transform to track LLM_STEP and LLM_CHUNK spans
+  const stream = rest.modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
 
   modelOutput = new MastraModelOutput({
     model: {
@@ -151,7 +154,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
       includeRawChunks: !!includeRawChunks,
-      output: rest.output,
+      structuredOutput: rest.structuredOutput,
       outputProcessors,
       returnScorerData,
       tracingContext: { currentSpan: llmAISpan },

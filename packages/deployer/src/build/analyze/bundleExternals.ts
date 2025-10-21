@@ -13,8 +13,10 @@ import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
 import * as resolve from 'resolve.exports';
-import { getPackageInfo } from 'local-pkg';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
+import { readFile } from 'node:fs/promises';
+import { getPackageInfo } from 'local-pkg';
+import { ErrorCategory, ErrorDomain, MastraBaseError } from '@mastra/core/error';
 
 type VirtualDependency = {
   name: string;
@@ -30,11 +32,17 @@ function prepareEntryFileName(name: string, rootDir: string) {
  */
 export function createVirtualDependencies(
   depsToOptimize: Map<string, DependencyMetadata>,
-  { projectRoot, workspaceRoot, outputDir }: { workspaceRoot: string | null; projectRoot: string; outputDir: string },
+  {
+    projectRoot,
+    workspaceRoot,
+    outputDir,
+    bundlerOptions,
+  }: { workspaceRoot: string | null; projectRoot: string; outputDir: string; bundlerOptions?: { isDev?: boolean } },
 ): {
   optimizedDependencyEntries: Map<string, VirtualDependency>;
   fileNameToDependencyMap: Map<string, string>;
 } {
+  const { isDev = false } = bundlerOptions || {};
   const fileNameToDependencyMap = new Map<string, string>();
   const optimizedDependencyEntries = new Map<string, VirtualDependency>();
   const rootDir = workspaceRoot || projectRoot;
@@ -75,25 +83,26 @@ export function createVirtualDependencies(
 
   // For workspace packages, we still want the dependencies to be imported from the original path
   // We rewrite the path to the original folder inside node_modules/.cache
-  for (const [dep, { isWorkspace, rootPath }] of depsToOptimize.entries()) {
-    if (!isWorkspace || !rootPath || !workspaceRoot) {
-      continue;
+  if (isDev) {
+    for (const [dep, { isWorkspace, rootPath }] of depsToOptimize.entries()) {
+      if (!isWorkspace || !rootPath || !workspaceRoot) {
+        continue;
+      }
+
+      const currentDepPath = optimizedDependencyEntries.get(dep);
+      if (!currentDepPath) {
+        continue;
+      }
+
+      const fileName = basename(currentDepPath.name);
+      const entryName = prepareEntryFileName(getCompiledDepCachePath(rootPath, fileName), rootDir);
+
+      fileNameToDependencyMap.set(entryName, dep);
+      optimizedDependencyEntries.set(dep, {
+        ...currentDepPath,
+        name: entryName,
+      });
     }
-
-    const currentDepPath = optimizedDependencyEntries.get(dep);
-
-    if (!currentDepPath) {
-      continue;
-    }
-
-    const fileName = basename(currentDepPath.name);
-    const entryName = prepareEntryFileName(getCompiledDepCachePath(rootPath, fileName), rootDir);
-
-    fileNameToDependencyMap.set(entryName, dep);
-    optimizedDependencyEntries.set(dep, {
-      ...currentDepPath,
-      name: entryName,
-    });
   }
 
   return { optimizedDependencyEntries, fileNameToDependencyMap };
@@ -162,18 +171,21 @@ async function getInputPlugins(
             }
 
             const info = virtualDependencies.get(id)!;
-            const pkgJson = await getPackageInfo(path.join(rootDir, info.name));
+            // go from ./node_modules/.cache/index.js to ./pkg
+            const packageRootPath = path.join(rootDir, path.dirname(path.dirname(path.dirname(info.name))));
+            const pkgJsonBuffer = await readFile(path.join(packageRootPath, 'package.json'), 'utf-8');
+            const pkgJson = JSON.parse(pkgJsonBuffer);
             if (!pkgJson) {
               return null;
             }
 
-            const pkgName = pkgJson.packageJson.name || '';
-            let resolvedPath: string | undefined = resolve.exports(pkgJson.packageJson, id.replace(pkgName, '.'))?.[0];
+            const pkgName = pkgJson.name || '';
+            let resolvedPath: string | undefined = resolve.exports(pkgJson, id.replace(pkgName, '.'))?.[0];
             if (!resolvedPath) {
-              resolvedPath = pkgJson!.packageJson.main ?? 'index.js';
+              resolvedPath = pkgJson!.main ?? 'index.js';
             }
 
-            return await this.resolve(path.posix.join(pkgJson!.rootPath, resolvedPath), importer, options);
+            return await this.resolve(path.posix.join(packageRootPath, resolvedPath!), importer, options);
           },
         } satisfies Plugin)
       : null,
@@ -186,10 +198,46 @@ async function getInputPlugins(
       ignoreTryCatch: false,
     }),
     bundlerOptions.isDev ? null : nodeResolve(),
-    bundlerOptions.enableEsmShim ? esmShim() : undefined,
+    bundlerOptions.isDev ? esmShim() : null,
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
     json(),
+    {
+      name: 'not-found-resolver',
+      resolveId: {
+        order: 'post',
+        async handler(id, importer) {
+          if (!importer) {
+            return null;
+          }
+
+          if (!id.endsWith('.node')) {
+            return null;
+          }
+
+          const pkgInfo = await getPackageInfo(importer);
+          const packageName = pkgInfo?.packageJson?.name || id;
+          throw new MastraBaseError({
+            id: 'DEPLOYER_BUNDLE_EXTERNALS_MISSING_NATIVE_BUILD',
+            domain: ErrorDomain.DEPLOYER,
+            category: ErrorCategory.USER,
+            details: {
+              importFile: importer,
+              packageName,
+            },
+            text: `We found a possible binary dependency in your bundle. ${id} was not found when imported at ${importer}.
+            
+Please consider adding \`${packageName}\` to your externals, or updating this import to not end with ".node".
+  
+export const mastra = new Mastra({
+  bundler: {
+    externals: ["${packageName}"],
+  }
+})`,
+          });
+        },
+      },
+    } satisfies Plugin,
   ].filter(Boolean);
 }
 
@@ -253,7 +301,47 @@ async function buildExternalDependencies(
      * Rollup creates chunks for common dependencies, but these chunks are by default written to the root directory instead of respecting the entryFileNames structure.
      * So we want to write them to the `.mastra/output` folder as well.
      */
-    chunkFileNames: `${outputDirRelative}/[name].mjs`,
+    chunkFileNames: chunkInfo => {
+      /**
+       * This whole bunch of logic directly below is for the edge case shown in the e2e-tests/monorepo with "tinyrainbow" package. It's used in multiple places in the package and as such Rollup creates a shared chunk for it. During 'mastra dev', we don't want that chunk to show up in the '.mastra/output' folder (outputDirRelative) but inside <pkg>/node_modules/.cache instead.
+       * We only care about this during 'mastra dev'!
+       */
+      if (bundlerOptions.isDev) {
+        const importedFromPackages = new Set<string>();
+
+        for (const moduleId of chunkInfo.moduleIds) {
+          const normalized = slash(moduleId);
+          for (const [pkgName, pkgInfo] of workspaceMap.entries()) {
+            const location = slash(pkgInfo.location);
+            if (normalized.startsWith(location)) {
+              importedFromPackages.add(pkgName);
+              break;
+            }
+          }
+        }
+
+        if (importedFromPackages.size > 1) {
+          throw new MastraBaseError({
+            id: 'DEPLOYER_BUNDLE_EXTERNALS_SHARED_CHUNK',
+            domain: ErrorDomain.DEPLOYER,
+            category: ErrorCategory.USER,
+            details: {
+              chunkName: chunkInfo.name,
+              packages: JSON.stringify(Array.from(importedFromPackages)),
+            },
+            text: `Please open an issue. We found a shared chunk "${chunkInfo.name}" used by multiple workspace packages: ${Array.from(importedFromPackages).join(', ')}.`,
+          });
+        }
+
+        if (importedFromPackages.size === 1) {
+          const [pkgName] = importedFromPackages;
+          const workspaceLocation = workspaceMap.get(pkgName!)!.location;
+          return prepareEntryFileName(getCompiledDepCachePath(workspaceLocation, '[name].mjs'), rootDir);
+        }
+      }
+
+      return `${outputDirRelative}/[name].mjs`;
+    },
     hoistTransitiveImports: false,
   });
 
@@ -333,6 +421,9 @@ export async function bundleExternals(
     workspaceRoot,
     outputDir,
     projectRoot,
+    bundlerOptions: {
+      isDev,
+    },
   });
 
   const output = await buildExternalDependencies(optimizedDependencyEntries, {

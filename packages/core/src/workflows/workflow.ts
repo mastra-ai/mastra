@@ -224,7 +224,7 @@ export function createStep<
           stream = modelOutput.fullStream;
         }
 
-        if (streamFormat === 'aisdk') {
+        if (streamFormat === 'legacy') {
           await emitter.emit('watch-v2', {
             type: 'tool-call-streaming-start',
             ...(toolData ?? {}),
@@ -1043,6 +1043,7 @@ export class Workflow<
           activePaths: [],
           serializedStepGraph: this.serializedStepGraph,
           suspendedPaths: {},
+          resumeLabels: {},
           waitingPaths: {},
           result: undefined,
           error: undefined,
@@ -1590,7 +1591,7 @@ export class Run<
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
-    format?: 'aisdk' | 'mastra' | undefined;
+    format?: 'legacy' | 'vnext' | undefined;
     outputOptions?: {
       includeState?: boolean;
     };
@@ -1602,6 +1603,10 @@ export class Run<
       input: inputData,
       attributes: {
         workflowId: this.workflowId,
+      },
+      metadata: {
+        resourceId: this.resourceId,
+        runId: this.runId,
       },
       tracingPolicy: this.tracingPolicy,
       tracingOptions,
@@ -1689,7 +1694,7 @@ export class Run<
       writableStream,
       tracingContext,
       tracingOptions,
-      format: 'aisdk',
+      format: 'legacy',
       outputOptions,
     });
   }
@@ -1699,7 +1704,7 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  stream({
+  streamLegacy({
     inputData,
     runtimeContext,
     onChunk,
@@ -1764,7 +1769,7 @@ export class Run<
     this.executionResults = this._start({
       inputData,
       runtimeContext,
-      format: 'aisdk',
+      format: 'legacy',
       tracingContext,
       tracingOptions,
     }).then(result => {
@@ -1782,10 +1787,30 @@ export class Run<
   }
 
   /**
+   * Starts the workflow execution with the provided input as a stream
+   * @param input The input data for the workflow
+   * @returns A promise that resolves to the workflow output
+   */
+  stream(
+    args: {
+      inputData?: z.input<TInput>;
+      runtimeContext?: RuntimeContext;
+      tracingContext?: TracingContext;
+      onChunk?: (chunk: StreamEvent) => Promise<unknown>;
+      tracingOptions?: TracingOptions;
+    } = {},
+  ): ReturnType<typeof this.streamLegacy> {
+    console.warn(
+      "Deprecation NOTICE: stream method will switch to use streamVNext implementation October 21st, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+    );
+    return this.streamLegacy(args);
+  }
+
+  /**
    * Observe the workflow stream
    * @returns A readable stream of the workflow events
    */
-  observeStream(): {
+  observeStreamLegacy(): {
     stream: ReadableStream<StreamEvent>;
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
@@ -1816,6 +1841,19 @@ export class Run<
     return {
       stream: readable,
     };
+  }
+
+  /**
+   * Observe the workflow stream
+   * @returns A readable stream of the workflow events
+   */
+  observeStream(): {
+    stream: ReadableStream<StreamEvent>;
+  } {
+    console.warn(
+      "Deprecation NOTICE: observeStream method will switch to use observeStreamVNext implementation October 21st, 2025. Please use observeStreamLegacy if you don't want to upgrade just yet.",
+    );
+    return this.observeStreamLegacy();
   }
 
   /**
@@ -1902,17 +1940,17 @@ export class Run<
     runtimeContext,
     tracingContext,
     tracingOptions,
-    format,
     closeOnSuspend = true,
     onChunk,
+    initialState,
   }: {
     inputData?: z.input<TInput>;
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
-    format?: 'aisdk' | 'mastra' | undefined;
     closeOnSuspend?: boolean;
     onChunk?: (chunk: ChunkType) => Promise<unknown>;
+    initialState?: z.input<TState>;
   } = {}): MastraWorkflowStream<TState, TInput, TOutput, TSteps> {
     if (this.closeStreamAction && this.activeStream) {
       return this.activeStream;
@@ -1991,7 +2029,7 @@ export class Run<
           tracingContext,
           tracingOptions,
           writableStream: writable,
-          format,
+          initialState,
         }).then(result => {
           if (closeOnSuspend) {
             // always close stream, even if the workflow is suspended
@@ -2023,7 +2061,6 @@ export class Run<
     runtimeContext,
     tracingContext,
     tracingOptions,
-    format,
     onChunk,
   }: {
     resumeData?: z.input<TInput>;
@@ -2035,7 +2072,6 @@ export class Run<
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
-    format?: 'aisdk' | 'mastra' | undefined;
     onChunk?: (chunk: ChunkType) => Promise<unknown>;
   } = {}) {
     this.closeStreamAction = async () => {};
@@ -2112,7 +2148,6 @@ export class Run<
           tracingContext,
           tracingOptions,
           writableStream: writable,
-          format,
           isVNext: true,
         }).then(result => {
           // always close stream, even if the workflow is suspended
@@ -2207,6 +2242,7 @@ export class Run<
         ]
       | string
       | string[];
+    label?: string;
     runtimeContext?: RuntimeContext;
     runCount?: number;
     tracingContext?: TracingContext;
@@ -2229,12 +2265,13 @@ export class Run<
         ]
       | string
       | string[];
+    label?: string;
     runtimeContext?: RuntimeContext;
     runCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     writableStream?: WritableStream<ChunkType>;
-    format?: 'aisdk' | 'mastra' | undefined;
+    format?: 'legacy' | 'vnext' | undefined;
     isVNext?: boolean;
     outputOptions?: {
       includeState?: boolean;
@@ -2249,10 +2286,12 @@ export class Run<
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
     }
 
+    const stepParam = params.label ? snapshot?.resumeLabels?.[params.label] : params.step;
+
     // Auto-detect suspended steps if no step is provided
     let steps: string[];
-    if (params.step) {
-      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
+    if (stepParam) {
+      steps = (Array.isArray(stepParam) ? stepParam : [stepParam]).map(step =>
         typeof step === 'string' ? step : step?.id,
       );
     } else {
@@ -2336,6 +2375,10 @@ export class Run<
       input: resumeDataToUse,
       attributes: {
         workflowId: this.workflowId,
+      },
+      metadata: {
+        resourceId: this.resourceId,
+        runId: this.runId,
       },
       tracingPolicy: this.tracingPolicy,
       tracingOptions: params.tracingOptions,

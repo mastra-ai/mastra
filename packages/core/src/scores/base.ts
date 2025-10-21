@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { Agent } from '../agent';
+import { tryGenerateWithJsonFallback } from '../agent/utils';
 import { InternalSpans } from '../ai-tracing';
 import type { TracingContext } from '../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
@@ -539,15 +540,18 @@ class MastraScorer<
 
     // GenerateScore output must be a number
     if (scorerStep.name === 'generateScore') {
+      const schema = z.object({ score: z.number() });
       let result;
       if (resolvedModel.specificationVersion === 'v2') {
-        result = await judge.generate(prompt, {
-          output: z.object({ score: z.number() }),
+        result = await tryGenerateWithJsonFallback(judge, prompt, {
+          structuredOutput: {
+            schema,
+          },
           tracingContext,
         });
       } else {
         result = await judge.generateLegacy(prompt, {
-          output: z.object({ score: z.number() }),
+          output: schema,
           tracingContext,
         });
       }
@@ -566,8 +570,10 @@ class MastraScorer<
       const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
       let result;
       if (resolvedModel.specificationVersion === 'v2') {
-        result = await judge.generate(prompt, {
-          output: promptStep.outputSchema,
+        result = await tryGenerateWithJsonFallback(judge, prompt, {
+          structuredOutput: {
+            schema: promptStep.outputSchema,
+          },
           tracingContext,
         });
       } else {

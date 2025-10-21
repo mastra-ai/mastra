@@ -1,6 +1,6 @@
 import type { ChunkType } from '@mastra/core';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
-import type { PartialSchemaOutput, OutputSchema } from '@mastra/core/stream';
+import type { PartialSchemaOutput, OutputSchema, DataChunkType } from '@mastra/core/stream';
 
 import type { InferUIMessageChunk, ObjectStreamPart, TextStreamPart, ToolSet, UIMessage } from 'ai';
 
@@ -10,6 +10,8 @@ export type OutputChunkType<OUTPUT extends OutputSchema = undefined> =
   | undefined;
 
 export type ToolAgentChunkType = { type: 'tool-agent'; toolCallId: string; payload: any };
+export type ToolWorkflowChunkType = { type: 'tool-workflow'; toolCallId: string; payload: any };
+export type ToolNetworkChunkType = { type: 'tool-network'; toolCallId: string; payload: any };
 
 export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefined>({
   chunk,
@@ -225,6 +227,9 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
           ...(chunk.payload || {}),
         } as OutputChunkType<OUTPUT>;
       }
+      if ('type' in chunk && chunk.type?.startsWith('data-')) {
+        return chunk as any;
+      }
       return;
   }
 }
@@ -239,7 +244,8 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   sendFinish,
   responseMessageId,
 }: {
-  part: TextStreamPart<ToolSet> | { type: 'tool-output'; toolCallId: string; output: any };
+  // tool-output is a custom mastra chunk type used in ToolStream
+  part: TextStreamPart<ToolSet> | DataChunkType | { type: 'tool-output'; toolCallId: string; output: any };
   messageMetadataValue?: unknown;
   sendReasoning?: boolean;
   sendSources?: boolean;
@@ -247,8 +253,8 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   sendStart?: boolean;
   sendFinish?: boolean;
   responseMessageId?: string;
-}): InferUIMessageChunk<UI_MESSAGE> | ToolAgentChunkType | undefined {
-  const partType = part.type;
+}): InferUIMessageChunk<UI_MESSAGE> | ToolAgentChunkType | ToolWorkflowChunkType | ToolNetworkChunkType | undefined {
+  const partType = part?.type;
 
   switch (partType) {
     case 'text-start': {
@@ -383,6 +389,18 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
           toolCallId: part.toolCallId,
           payload: part.output,
         };
+      } else if (part.output.from === 'WORKFLOW') {
+        return {
+          type: 'tool-workflow',
+          toolCallId: part.toolCallId,
+          payload: part.output,
+        };
+      } else if (part.output.from === 'NETWORK') {
+        return {
+          type: 'tool-network',
+          toolCallId: part.toolCallId,
+          payload: part.output,
+        };
       }
       return;
     }
@@ -448,8 +466,16 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     default: {
-      const exhaustiveCheck: never = partType;
-      throw new Error(`Unknown chunk type: ${exhaustiveCheck}`);
+      // return the chunk as is if it's not a known type
+      if ('type' in part && part.type?.startsWith('data-')) {
+        if (!('data' in part)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(part)}`,
+          );
+        }
+        return part;
+      }
+      return;
     }
   }
 }

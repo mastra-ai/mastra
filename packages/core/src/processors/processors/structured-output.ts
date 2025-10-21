@@ -1,8 +1,8 @@
 import type { TransformStreamDefaultController } from 'stream/web';
 import { Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
-import { InternalSpans } from '../../ai-tracing';
-import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { TracingContext } from '../../ai-tracing';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
 import type { InferSchemaOutput } from '../../stream/base/schema';
@@ -33,24 +33,35 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: InferSchemaOutput<OUTPUT>;
   private isStructuringAgentStreamStarted = false;
+  private jsonPromptInjection?: boolean;
 
-  constructor(options: StructuredOutputOptions<OUTPUT>, fallbackModel?: MastraLanguageModel) {
+  constructor(options: StructuredOutputOptions<OUTPUT>) {
+    if (!options.schema) {
+      throw new MastraError({
+        id: 'STRUCTURED_OUTPUT_PROCESSOR_SCHEMA_REQUIRED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'StructuredOutputProcessor requires a schema to be provided',
+      });
+    }
+    if (!options.model) {
+      throw new MastraError({
+        id: 'STRUCTURED_OUTPUT_PROCESSOR_MODEL_REQUIRED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'StructuredOutputProcessor requires a model to be provided either in options or as fallback',
+      });
+    }
+
     this.schema = options.schema;
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
-
-    // Use provided model or fallback model
-    const modelToUse = options.model || fallbackModel;
-    if (!modelToUse) {
-      throw new Error('StructuredOutputProcessor requires a model to be provided either in options or as fallback');
-    }
-
+    this.jsonPromptInjection = options.jsonPromptInjection;
     // Create internal structuring agent
     this.structuringAgent = new Agent({
       name: 'structured-output-structurer',
       instructions: options.instructions || this.generateInstructions(),
-      model: modelToUse,
-      options: { tracingPolicy: { internal: InternalSpans.ALL } },
+      model: options.model,
     });
   }
 
@@ -61,8 +72,9 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
       controller: TransformStreamDefaultController<ChunkType<OUTPUT>>;
     };
     abort: (reason?: string) => never;
+    tracingContext?: TracingContext;
   }): Promise<ChunkType | null | undefined> {
-    const { part, state, streamParts, abort } = args;
+    const { part, state, streamParts, abort, tracingContext } = args;
     const controller = state.controller;
 
     switch (part.type) {
@@ -71,7 +83,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
         // - enqueue the structuring agent stream chunks into the main stream
         // - when the structuring agent stream is finished, enqueue the final chunk into the main stream
 
-        await this.processAndEmitStructuredOutput(streamParts, controller, abort);
+        await this.processAndEmitStructuredOutput(streamParts, controller, abort, tracingContext);
         return part;
 
       default:
@@ -83,6 +95,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     streamParts: ChunkType[],
     controller: TransformStreamDefaultController<ChunkType<OUTPUT>>,
     abort: (reason?: string) => never,
+    tracingContext?: TracingContext,
   ): Promise<void> {
     if (this.isStructuringAgentStreamStarted) return;
     this.isStructuringAgentStreamStarted = true;
@@ -90,8 +103,13 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
       const structuringPrompt = this.buildStructuringPrompt(streamParts);
       const prompt = `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n${structuringPrompt}`;
 
+      // Use structuredOutput in 'direct' mode (no model) since this agent already has a model
       const structuringAgentStream = await this.structuringAgent.stream(prompt, {
-        output: this.schema,
+        structuredOutput: {
+          schema: this.schema as OUTPUT extends OutputSchema ? OUTPUT : never,
+          jsonPromptInjection: this.jsonPromptInjection,
+        },
+        tracingContext,
       });
 
       const excludedChunkTypes = [
@@ -106,7 +124,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
 
       // Stream object chunks directly into the main stream
       for await (const chunk of structuringAgentStream.fullStream) {
-        if (excludedChunkTypes.includes(chunk.type)) {
+        if (excludedChunkTypes.includes(chunk.type) || chunk.type.startsWith('data-')) {
           continue;
         }
         if (chunk.type === 'error') {

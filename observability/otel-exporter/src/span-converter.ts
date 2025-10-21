@@ -18,28 +18,18 @@ import type { Resource } from '@opentelemetry/resources';
 import { MastraReadableSpan } from './mastra-span.js';
 
 // Map Mastra span types to OpenTelemetry span kinds following OTEL conventions
-const SPAN_KIND_MAPPING: Record<AISpanType, SpanKind> = {
+// Only non-INTERNAL mappings are specified - all others default to SpanKind.INTERNAL
+const SPAN_KIND_MAPPING: Partial<Record<AISpanType, SpanKind>> = {
   // LLM operations are CLIENT spans (calling external AI services)
   [AISpanType.LLM_GENERATION]: SpanKind.CLIENT,
   [AISpanType.LLM_CHUNK]: SpanKind.CLIENT,
 
-  // Tool calls can be CLIENT (external) or INTERNAL based on context
-  [AISpanType.TOOL_CALL]: SpanKind.INTERNAL,
+  // MCP tool calls are CLIENT (external service calls)
   [AISpanType.MCP_TOOL_CALL]: SpanKind.CLIENT,
 
   // Root spans for agent/workflow are SERVER (entry points)
   [AISpanType.AGENT_RUN]: SpanKind.SERVER,
   [AISpanType.WORKFLOW_RUN]: SpanKind.SERVER,
-
-  // Internal workflow operations
-  [AISpanType.WORKFLOW_STEP]: SpanKind.INTERNAL,
-  [AISpanType.WORKFLOW_LOOP]: SpanKind.INTERNAL,
-  [AISpanType.WORKFLOW_PARALLEL]: SpanKind.INTERNAL,
-  [AISpanType.WORKFLOW_CONDITIONAL]: SpanKind.INTERNAL,
-  [AISpanType.WORKFLOW_CONDITIONAL_EVAL]: SpanKind.INTERNAL,
-  [AISpanType.WORKFLOW_SLEEP]: SpanKind.INTERNAL,
-  [AISpanType.WORKFLOW_WAIT_EVENT]: SpanKind.INTERNAL,
-  [AISpanType.GENERIC]: SpanKind.INTERNAL,
 };
 
 export class SpanConverter {
@@ -285,6 +275,7 @@ export class SpanConverter {
       const agentAttrs = aiSpan.attributes as AgentRunAttributes;
       if (agentAttrs.agentId) {
         attributes['agent.id'] = agentAttrs.agentId;
+        attributes['gen_ai.agent.id'] = agentAttrs.agentId;
       }
       if (agentAttrs.maxSteps) {
         attributes['agent.max_steps'] = agentAttrs.maxSteps;

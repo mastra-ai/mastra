@@ -963,4 +963,307 @@ describe('AI Tracing', () => {
       rootSpan.end();
     });
   });
+
+  describe('External Trace and Parent Span IDs', () => {
+    it('should accept external trace ID for root spans', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const traceId = '0123456789abcdef0123456789abcdef';
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with external trace',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId,
+      });
+
+      expect(span.traceId).toBe(traceId);
+      expect(span.id).toBeValidSpanId();
+      expect(span.getParentSpanId()).toBeUndefined();
+
+      span.end();
+    });
+
+    it('should accept external parent span ID for root spans', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const traceId = '0123456789abcdef0123456789abcdef';
+      const parentSpanId = '0123456789abcdef';
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with external parent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId,
+        parentSpanId,
+      });
+
+      expect(span.traceId).toBe(traceId);
+      expect(span.id).toBeValidSpanId();
+      expect(span.getParentSpanId()).toBe(parentSpanId);
+
+      span.end();
+
+      // Verify it's exported correctly
+      const endEvent = testExporter.events.find(e => e.type === AITracingEventType.SPAN_ENDED);
+      expect(endEvent).toBeDefined();
+      expect(endEvent?.exportedSpan.parentSpanId).toBe(parentSpanId);
+    });
+
+    it('should log error and generate new trace ID for invalid trace ID', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with invalid trace',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId: 'invalid-trace-id',
+      });
+
+      // Should log error
+      expect(mockConsole.error).toHaveBeenCalledWith(expect.stringContaining('[Mastra Tracing] Invalid traceId'));
+
+      // Should generate a new valid trace ID
+      expect(span.traceId).toBeValidTraceId();
+      expect(span.traceId).not.toBe('invalid-trace-id');
+
+      span.end();
+    });
+
+    it('should log error and generate new trace ID for trace ID that is too long', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const tooLongTraceId = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0';
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with too long trace',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId: tooLongTraceId,
+      });
+
+      // Should log error
+      expect(mockConsole.error).toHaveBeenCalledWith(expect.stringContaining('[Mastra Tracing] Invalid traceId'));
+
+      // Should generate a new valid trace ID
+      expect(span.traceId).toBeValidTraceId();
+      expect(span.traceId).not.toBe(tooLongTraceId);
+
+      span.end();
+    });
+
+    it('should log error and ignore invalid parent span ID', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const validTraceId = '0123456789abcdef0123456789abcdef';
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with invalid parent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId: validTraceId,
+        parentSpanId: 'invalid-span-id',
+      });
+
+      // Should log error
+      expect(mockConsole.error).toHaveBeenCalledWith(expect.stringContaining('[Mastra Tracing] Invalid parentSpanId'));
+
+      // Should use the valid trace ID
+      expect(span.traceId).toBe(validTraceId);
+
+      // Should ignore the invalid parent span ID
+      expect(span.getParentSpanId()).toBeUndefined();
+
+      span.end();
+    });
+
+    it('should log error and ignore parent span ID that is too long', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const validTraceId = '0123456789abcdef0123456789abcdef';
+      const tooLongParentSpanId = '0123456789abcdef0123456789abcdef';
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with too long parent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId: validTraceId,
+        parentSpanId: tooLongParentSpanId,
+      });
+
+      // Should log error
+      expect(mockConsole.error).toHaveBeenCalledWith(expect.stringContaining('[Mastra Tracing] Invalid parentSpanId'));
+
+      // Should use the valid trace ID
+      expect(span.traceId).toBe(validTraceId);
+
+      // Should ignore the invalid parent span ID
+      expect(span.getParentSpanId()).toBeUndefined();
+
+      span.end();
+    });
+
+    it('should accept shorter trace and span IDs', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const shortTraceId = 'abc123'; // 6 chars
+      const shortSpanId = 'def456'; // 6 chars
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with short IDs',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId: shortTraceId,
+        parentSpanId: shortSpanId,
+      });
+
+      expect(span.traceId).toBe(shortTraceId);
+      expect(span.getParentSpanId()).toBe(shortSpanId);
+
+      span.end();
+    });
+
+    it('should create child spans with inherited trace ID from external trace', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const traceId = 'fedcba9876543210fedcba9876543210';
+
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'root with external trace',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId,
+      });
+
+      const childSpan = rootSpan.createChildSpan({
+        type: AISpanType.LLM_GENERATION,
+        name: 'child llm call',
+        attributes: {
+          model: 'gpt-4',
+        },
+      });
+
+      expect(rootSpan.traceId).toBe(traceId);
+      expect(childSpan.traceId).toBe(traceId);
+      expect(childSpan.getParentSpanId()).toBe(rootSpan.id);
+
+      childSpan.end();
+      rootSpan.end();
+    });
+
+    it('should allow parent span ID without trace ID (generates new trace)', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const parentSpanId = 'fedcba9876543210';
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.WORKFLOW_RUN,
+        name: 'workflow with external parent only',
+        attributes: {
+          workflowId: 'workflow-1',
+        },
+        parentSpanId,
+      });
+
+      // Should generate a new trace ID
+      expect(span.traceId).toBeValidTraceId();
+      // Should use the external parent span ID
+      expect(span.getParentSpanId()).toBe(parentSpanId);
+
+      span.end();
+    });
+
+    it('should ignore external IDs when span has a parent object', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'root span',
+        attributes: {
+          agentId: 'agent-1',
+        },
+      });
+
+      const childSpan = rootSpan.createChildSpan({
+        type: AISpanType.LLM_GENERATION,
+        name: 'child span',
+        attributes: {
+          model: 'gpt-4',
+        },
+      });
+
+      // Child should use parent's trace ID, not external IDs
+      expect(childSpan.traceId).toBe(rootSpan.traceId);
+      expect(childSpan.getParentSpanId()).toBe(rootSpan.id);
+
+      childSpan.end();
+      rootSpan.end();
+    });
+  });
 });
