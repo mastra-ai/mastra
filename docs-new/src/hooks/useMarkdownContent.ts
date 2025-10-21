@@ -2,6 +2,15 @@ import { useDoc } from '@docusaurus/plugin-content-docs/client';
 import { useLocation } from '@docusaurus/router';
 import { useCallback } from 'react';
 
+/**
+ * Hook for extracting markdown content from doc pages.
+ *
+ * ⚠️ WARNING: This hook MUST only be used in doc page components (routes under /docs/).
+ * It requires the <DocProvider> context which is only available on doc pages.
+ *
+ * If you see "Hook useDoc is called outside the <DocProvider>" error,
+ * it means this hook is being called on a non-doc page (homepage, showcase, etc.).
+ */
 export const useMarkdownContent = () => {
   const { metadata, frontMatter } = useDoc();
   const location = useLocation();
