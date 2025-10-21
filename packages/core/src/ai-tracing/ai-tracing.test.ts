@@ -1409,7 +1409,7 @@ describe('AI Tracing', () => {
       const aiTracing = new DefaultAITracing({
         serviceName: 'test-service',
         name: 'test',
-        metadataFromRuntimeContext: ['userId', 'sessionId'],
+        runtimeContextKeys: ['userId', 'sessionId'],
         exporters: [testExporter],
       });
 

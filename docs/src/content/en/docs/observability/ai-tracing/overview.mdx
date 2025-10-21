@@ -381,7 +381,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'my-service',
-        metadataFromRuntimeContext: ['userId', 'environment', 'tenantId'],
+        runtimeContextKeys: ['userId', 'environment', 'tenantId'],
         exporters: [new DefaultExporter()],
       },
     },
@@ -434,7 +434,7 @@ export const mastra = new Mastra({
   observability: {
     configs: {
       default: {
-        metadataFromRuntimeContext: ['user.id', 'session.data.experimentId'],
+        runtimeContextKeys: ['user.id', 'session.data.experimentId'],
         exporters: [new DefaultExporter()],
       },
     },
