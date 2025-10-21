@@ -72,7 +72,7 @@ export class LangSmithExporter extends BaseExporter {
     this.config = config;
   }
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
+  protected async _exportEvent(event: AITracingEvent): Promise<void> {
     if (!this.config) {
       return;
     }

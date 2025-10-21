@@ -136,7 +136,7 @@ export class LangfuseExporter extends BaseExporter {
     });
   }
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
+  protected async _exportEvent(event: AITracingEvent): Promise<void> {
     if (!this.client) {
       // Exporter is disabled due to missing credentials
       return;

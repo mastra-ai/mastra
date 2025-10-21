@@ -106,9 +106,24 @@ export abstract class BaseExporter implements AITracingExporter {
   }
 
   /**
-   * Export a tracing event - must be implemented by subclasses
+   * Export a tracing event
+   *
+   * This method checks if the exporter is disabled before calling _exportEvent.
+   * Subclasses should implement _exportEvent instead of overriding this method.
    */
-  abstract exportEvent(event: AITracingEvent): Promise<void>;
+  async exportEvent(event: AITracingEvent): Promise<void> {
+    if (this.isDisabled) {
+      return;
+    }
+    await this._exportEvent(event);
+  }
+
+  /**
+   * Export a tracing event - must be implemented by subclasses
+   *
+   * This method is called by exportEvent after checking if the exporter is disabled.
+   */
+  protected abstract _exportEvent(event: AITracingEvent): Promise<void>;
 
   /**
    * Optional initialization hook called after Mastra is fully configured

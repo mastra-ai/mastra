@@ -77,12 +77,7 @@ export class CloudExporter extends BaseExporter {
     };
   }
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
-    // Skip if disabled due to missing token
-    if (this.isDisabled) {
-      return;
-    }
-
+  protected async _exportEvent(event: AITracingEvent): Promise<void> {
     // Cloud AI Observability only process SPAN_ENDED events
     if (event.type !== AITracingEventType.SPAN_ENDED) {
       return;
