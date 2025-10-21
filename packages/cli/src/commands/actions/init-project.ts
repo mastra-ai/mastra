@@ -3,14 +3,14 @@ import type { CLI_ORIGIN } from '../../analytics';
 import { init } from '../init/init';
 import type { Editor } from '../init/mcp-docs-server-install';
 import { checkAndInstallCoreDeps, checkForPkgJson, interactivePrompt } from '../init/utils';
-import type { Components, LLMProvider } from '../init/utils';
+import type { Component, LLMProvider } from '../init/utils';
 
 const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
 
 interface InitArgs {
   default?: boolean;
   dir?: string;
-  components?: Components[];
+  components?: Component[];
   llm?: LLMProvider;
   llmApiKey?: string;
   example?: boolean;
