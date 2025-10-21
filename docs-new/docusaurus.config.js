@@ -42,7 +42,7 @@ const config = {
     algoliaSearchApiKey: process.env.ALGOLIA_SEARCH_API_KEY,
     hsPortalId: process.env.HS_PORTAL_ID,
     hsFormGuid: process.env.HS_FORM_GUID,
-   mastraWebsite: process.env.MASTRA_WEBSITE,
+    mastraWebsite: process.env.MASTRA_WEBSITE,
   },
 
   // Preconnect to Google Fonts
@@ -62,6 +62,30 @@ const config = {
         crossorigin: 'anonymous',
       },
     },
+  ],
+
+  plugins: [
+    // PostHog analytics (only enabled if POSTHOG_API_KEY is set)
+    ...(process.env.POSTHOG_API_KEY
+      ? [
+          [
+            'posthog-docusaurus',
+            {
+              apiKey: process.env.POSTHOG_API_KEY,
+              appUrl: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+              enableInDevelopment: false,
+            },
+          ],
+        ]
+      : []),
+    // Vercel Analytics (automatically enabled in production on Vercel)
+    [
+      '@docusaurus/plugin-vercel-analytics',
+      {
+        debug: false,
+        mode: 'auto',
+      },
+    ],
   ],
 
   presets: [
