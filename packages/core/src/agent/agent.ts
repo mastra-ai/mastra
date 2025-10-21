@@ -1403,7 +1403,7 @@ export class Agent<
                   vectorMessageSearch: messageList.getLatestUserContent() || '',
                 })
                 .then((r: any) => r.messagesV2),
-              memory.getSystemMessage({ threadId, memoryConfig }),
+              memory.getSystemMessage({ threadId, resourceId, memoryConfig }),
             ])
           : [[], null];
 

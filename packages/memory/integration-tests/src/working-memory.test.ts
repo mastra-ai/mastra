@@ -133,7 +133,7 @@ describe('Working Memory Tests', () => {
     });
 
     it('should initialize with default working memory template', async () => {
-      const systemInstruction = await memory.getSystemMessage({ threadId: thread.id });
+      const systemInstruction = await memory.getSystemMessage({ threadId: thread.id, resourceId });
       expect(systemInstruction).not.toBeNull();
       if (systemInstruction) {
         // Should match our Markdown template
