@@ -1,6 +1,6 @@
 import type { Mastra } from '../mastra';
 import type { ZodLikeSchema } from '../types/zod-compat';
-import type { ToolAction, ToolExecutionContext, ToolInvocationOptions } from './types';
+import type { ToolAction, ToolExecutionContext, MastraToolInvocationOptions } from './types';
 import { validateToolInput } from './validation';
 
 /**
@@ -133,11 +133,8 @@ export class Tool<
     // Wrap the execute function with validation if it exists
     if (opts.execute) {
       const originalExecute = opts.execute;
-      this.execute = async (context: TContext, options?: ToolInvocationOptions) => {
-        const { resumeData, suspend } = (options ?? {}) as {
-          resumeData?: any;
-          suspend?: (suspendPayload: any) => Promise<any>;
-        };
+      this.execute = async (context: TContext, options?: MastraToolInvocationOptions) => {
+        const { resumeData, suspend } = options ?? {};
         // Validate input if schema exists
         const { data, error } = validateToolInput(this.inputSchema, context, this.id);
         if (error) {
@@ -251,7 +248,7 @@ export function createTool<
   ? Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
       inputSchema: TSchemaIn;
       outputSchema: TSchemaOut;
-      execute: (context: TContext, options: ToolInvocationOptions) => Promise<any>;
+      execute: (context: TContext, options: MastraToolInvocationOptions) => Promise<any>;
     }
   : Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> {
   return new Tool(opts) as any;
