@@ -257,7 +257,7 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
     this.#consumptionStarted = true;
 
     try {
-      await this.consumeStream({
+      await consumeStreamFn({
         stream: this.#baseStream as globalThis.ReadableStream,
         onError: options?.onError,
       });
