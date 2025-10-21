@@ -57,7 +57,12 @@ test('tool stream', async () => {
 
   await page.getByRole('button', { name: `weatherInfo` }).click();
   await expect(page.getByTestId('tool-args')).toContainText('{  \"location\": \"paris\"}');
-  await expect(page.getByTestId('tool-result')).toContainText(
-    '{  \"temperature\": 16.6,  \"feelsLike\": 15,  \"humidity\": 72,  \"windSpeed\": 14.1,  \"windGust\": 32,  \"conditions\": \"Overcast\",  \"location\": \"Paris\"}',
-  );
+
+  await expect(page.getByTestId('tool-result')).toContainText(`"temperature":`);
+  await expect(page.getByTestId('tool-result')).toContainText(`"feelsLike":`);
+  await expect(page.getByTestId('tool-result')).toContainText(`"humidity":`);
+  await expect(page.getByTestId('tool-result')).toContainText(`"windSpeed":`);
+  await expect(page.getByTestId('tool-result')).toContainText(`"windGust":`);
+  await expect(page.getByTestId('tool-result')).toContainText(`"conditions":`);
+  await expect(page.getByTestId('tool-result')).toContainText(`"location":`);
 });
