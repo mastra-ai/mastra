@@ -1846,7 +1846,7 @@ export class Run<
         pull(controller) {
           controller.close();
         },
-        cancel() {
+        cancel(controller) {
           controller.close();
         },
       });
