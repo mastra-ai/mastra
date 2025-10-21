@@ -68,7 +68,8 @@ export abstract class BaseExporter implements AITracingExporter {
   constructor(config: BaseExporterConfig = {}) {
     // Map string log level to LogLevel enum if needed
     const logLevel = this.resolveLogLevel(config.logLevel);
-    this.logger = config.logger ?? new ConsoleLogger({ level: logLevel, name: `Exporter` });
+    // Use constructor name as fallback since this.name isn't set yet (subclass initializes it)
+    this.logger = config.logger ?? new ConsoleLogger({ level: logLevel, name: this.constructor.name });
   }
 
   /**
@@ -76,6 +77,7 @@ export abstract class BaseExporter implements AITracingExporter {
    */
   __setLogger(logger: IMastraLogger): void {
     this.logger = logger;
+    // Use this.name here since it's guaranteed to be set by the subclass at this point
     this.logger.debug(`Logger updated for exporter [name=${this.name}]`);
   }
 
