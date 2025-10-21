@@ -319,7 +319,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             if (isWorkflow) {
               output = (chunk.payload.result as any)?.result;
             } else if (isAgent) {
-              output = (parts[toolPartIndex] as any).output;
+              output = (parts[toolPartIndex] as any).output ?? chunk.payload.result;
             } else {
               output = chunk.payload.result;
             }
