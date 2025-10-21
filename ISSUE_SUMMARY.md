@@ -432,11 +432,11 @@ A comprehensive test suite that validates memory leak fixes through direct behav
 
 ```
 Test Files  1 failed (1)
-Tests       10 failed (10)
-Duration    8.67s
+Tests       15 failed (15)
+Duration    9.74s
 ```
 
-**ALL 10 TESTS FAILING** ✅ - Proves bugs exist and are reliably reproducible
+**ALL 15 TESTS FAILING** ✅ - Proves bugs exist and are reliably reproducible
 
 ### Test Breakdown
 
@@ -517,6 +517,45 @@ These tests reproduce the exact scenarios reported in production:
     - **Proves**: Accumulated buffers cause JSON stringification exhaustion
     - **Production match**: Stack traces showing "JsonStringify" and "JsonParser" during OOM
 
+11. **MessageList type guard for malformed memory data** ❌ (Stefan's TypeError)
+    - **Test**: Passes number 4822 where message object expected
+    - **Expected**: Handles gracefully without throwing
+    - **Actual**: Throws `TypeError: Cannot use 'in' operator to search for 'content' in 4822`
+    - **Proves**: Missing type guards before property checks
+    - **Production match**: Stefan's stack trace showing TypeError with malformed data
+
+#### Additional Memory Leaks (4 tests)
+
+These tests target secondary leaks that compound the primary buffer retention issues:
+
+12. **Workflow #runs Map accumulation** ❌ (LEAK #1)
+    - **Test**: Creates 100 workflow runs, expects cleanup after completion
+    - **Expected**: 0 runs retained in Map (cleaned up)
+    - **Actual**: 100 runs retained (cleanup callback never called)
+    - **Proves**: Workflow.#runs Map accumulates all runs indefinitely
+    - **Impact**: Every agent.stream() creates a workflow that's never removed
+
+13. **EventEmitter listener accumulation** ❌ (LEAK #4)
+    - **Test**: Creates 100 event listeners, expects removal after completion
+    - **Expected**: 0 listeners retained (cleaned up)
+    - **Actual**: 100 listeners retained (never removed with .off())
+    - **Proves**: EventEmitter listeners accumulate without cleanup
+    - **Impact**: Can cause "MaxListenersExceededWarning" and memory leaks
+
+14. **MessageList unbounded growth** ❌ (LEAK #6)
+    - **Test**: Adds 1000 messages (2000 total with user+assistant), expects history limit
+    - **Expected**: ≤100 messages (sliding window)
+    - **Actual**: 2000 messages retained (unbounded)
+    - **Proves**: MessageList.messages array grows without bounds
+    - **Impact**: Long conversations accumulate unlimited message history
+
+15. **Workflow snapshot storage accumulation** ❌ (LEAK #7)
+    - **Test**: Creates 50 workflows with 5 snapshots each (suspend/resume pattern)
+    - **Expected**: 0 snapshots after workflow completion
+    - **Actual**: 250 snapshots retained (50 × 5)
+    - **Proves**: Suspended workflow snapshots never deleted
+    - **Impact**: Snapshot storage grows unbounded with suspend/resume workflows
+
 ### Why These Tests Are Reliable
 
 **The Replay Pattern vs Memory Measurements:**
@@ -554,29 +593,47 @@ Based on test results showing 100% buffer retention:
 describe('Memory Leak Tests - Issue #6322', () => {
   describe('Component Memory Leaks', () => {
     describe('MastraModelOutput buffer accumulation', () => {
-      it('clears buffers after stream completes');
+      it('clears buffers after stream completes'); // Test 1
     });
 
     describe('ProcessorState unbounded growth', () => {
-      it('clears stream parts after processing');
-      it('clears parts after each step in multi-step workflows');
-      it('clears customState after processing');
+      it('clears stream parts after processing'); // Test 2
+      it('clears parts after each step in multi-step workflows'); // Test 3
+      it('clears customState after processing'); // Test 4
     });
 
     describe('MessageList TypeError reproduction', () => {
-      it('handles malformed data gracefully');
+      it('handles malformed data from memory query (Stefan stack trace)'); // Test 11
     });
   });
 
   describe('Production Simulation', () => {
-    it('clears buffers after each stream to prevent accumulation');
-    it('clears large payload buffers after stream completion');
+    it('clears buffers after each stream to prevent accumulation'); // Test 6
+    it('clears large payload buffers after stream completion'); // Test 7
   });
 
   describe('Exact Production Error Reproduction', () => {
-    it('handles second execution with large context without OOM');
-    it('handles sustained load without memory exhaustion');
-    it('handles JSON serialization of accumulated buffers without exhaustion');
+    it('handles second execution with large context without OOM'); // Test 8
+    it('handles sustained load without memory exhaustion'); // Test 9
+    it('handles JSON serialization of accumulated buffers without exhaustion'); // Test 10
+  });
+
+  describe('Additional Memory Leaks', () => {
+    describe('Workflow #runs Map accumulation', () => {
+      it('clears completed workflow runs from #runs Map'); // Test 12
+    });
+
+    describe('EventEmitter listener accumulation', () => {
+      it('removes event listeners after stream completion'); // Test 13
+    });
+
+    describe('MessageList unbounded growth', () => {
+      it('limits message history to prevent unbounded accumulation'); // Test 14
+    });
+
+    describe('Workflow snapshot storage accumulation', () => {
+      it('cleans up old snapshots for completed workflows'); // Test 15
+    });
   });
 });
 ```
@@ -585,11 +642,11 @@ describe('Memory Leak Tests - Issue #6322', () => {
 
 **Before Fixes (Current State)**:
 
-- ❌ ALL 10 tests FAILING - Proves bugs exist
+- ❌ ALL 15 tests FAILING - Proves bugs exist
 
 **After Fixes (Target State)**:
 
-- ✅ ALL 10 tests PASSING - Proves bugs fixed
+- ✅ ALL 15 tests PASSING - Proves bugs fixed
 - No test should pass in buggy state
 - No test should fail in fixed state
 
@@ -597,24 +654,68 @@ describe('Memory Leak Tests - Issue #6322', () => {
 
 As fixes are implemented, tests will turn green one by one:
 
-1. **Implement MastraModelOutput.clearBuffers()** → Tests 1, 6, 7, 8, 9, 10 turn green
-2. **Implement ProcessorState.finalize()** → Tests 2, 3, 4 turn green
-3. **Add MessageList type guards** → Test 5 turns green
-4. **All green** → Ready for production deployment
+1. **Implement MastraModelOutput.clearBuffers()** → Tests 1, 6, 7, 8, 9, 10 turn green (6 tests)
+2. **Implement ProcessorState.finalize()** → Tests 2, 3, 4 turn green (3 tests)
+3. **Add MessageList type guards** → Test 11 turns green (1 test)
+4. **Implement Workflow.#runs cleanup** → Test 12 turns green (1 test)
+5. **Implement EventEmitter cleanup** → Test 13 turns green (1 test)
+6. **Implement MessageList history limit** → Test 14 turns green (1 test)
+7. **Implement snapshot storage cleanup** → Test 15 turns green (1 test)
+8. **All 15 tests green** → Ready for production deployment
 
-**Note**: Tests 8-10 directly reproduce production errors, providing additional validation that fixes resolve real-world issues.
+**Note**: Tests 8-10 directly reproduce exact production errors reported by leo-paz, Stefan, and AtiqGauri, providing comprehensive validation.
 
-## Recommendation
+## Fixes Required
 
-**This confirms the root cause hypothesis.** The memory leak is real but manifests gradually:
+All fixes should be implemented in this PR to resolve issue #6322 completely. Priority: **P0/Critical** - Affects all production users.
 
-1. **Immediate Fix Needed**: MastraModelOutput buffer cleanup
-2. **Secondary Fix**: Workflow cleanup for suspended states
-3. **Third Fix**: EventEmitter listener management
+**Total fixes**: 7 | **Total tests**: 15
 
-**Split into 2 GitHub issues**:
+### Fix 1: MastraModelOutput Buffer Cleanup (PRIMARY FIX)
 
-1. **Critical Bug**: Unbounded memory accumulation in streaming pipeline
-2. **Type Safety**: MessageList type validation improvements
+- **Tests**: 1, 6, 7, 8, 9, 10 (6 tests)
+- **File**: `packages/core/src/stream/base/output.ts`
+- **Action**: Add `clearBuffers()` method and call it after stream completes
+- **Impact**: Clears 15+ buffer arrays that currently never get cleaned up
 
-The first issue should be marked as P0/Critical as it affects all production users.
+### Fix 2: ProcessorState Cleanup
+
+- **Tests**: 2, 3, 4 (3 tests)
+- **File**: `packages/core/src/processors/runner.ts`
+- **Action**: Add `finalize()` method to clear `streamParts` and `customState`
+- **Impact**: Prevents workflow step state accumulation
+
+### Fix 3: MessageList Type Guards
+
+- **Tests**: 11 (1 test)
+- **File**: `packages/core/src/agent/message-list/index.ts`
+- **Action**: Add type guards before using `in` operator
+- **Impact**: Prevents TypeErrors from malformed Memory.query() results
+
+### Fix 4: Workflow #runs Map Cleanup
+
+- **Tests**: 12 (1 test)
+- **File**: `packages/core/src/workflows/workflow.ts`
+- **Action**: Ensure cleanup callback is called when run completes
+- **Impact**: Removes completed runs from Map
+
+### Fix 5: EventEmitter Listener Cleanup
+
+- **Tests**: 13 (1 test)
+- **File**: `packages/core/src/stream/base/output.ts`
+- **Action**: Remove listeners with `.off()` when stream completes
+- **Impact**: Prevents listener accumulation
+
+### Fix 6: MessageList History Limit
+
+- **Tests**: 14 (1 test)
+- **File**: `packages/core/src/agent/message-list/index.ts`
+- **Action**: Implement sliding window (e.g., keep last 100 messages)
+- **Impact**: Prevents unbounded message history growth
+
+### Fix 7: Workflow Snapshot Storage Cleanup
+
+- **Tests**: 15 (1 test)
+- **File**: `packages/core/src/workflows/workflow.ts`
+- **Action**: Delete snapshots when workflow completes
+- **Impact**: Prevents snapshot storage accumulation

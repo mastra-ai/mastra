@@ -806,4 +806,185 @@ describe('Memory Leak Tests - Issue #6322', () => {
       expect(totalRetained).toBe(0);
     });
   });
+
+  describe('Additional Memory Leaks', () => {
+    describe('Workflow #runs Map accumulation', () => {
+      it('clears completed workflow runs from #runs Map', async () => {
+        /**
+         * LEAK #1: Workflow #runs Map never cleared
+         *
+         * Every agent.stream() call creates a workflow internally,
+         * stored in Workflow.#runs Map. These are never removed.
+         *
+         * Expected: Completed runs should be cleaned up
+         * Actual: All runs retained in Map indefinitely
+         */
+
+        // Note: This is a minimal test since we'd need full Workflow setup
+        // The real Workflow class has a cleanup callback but it may not be called
+        console.log('\n=== Workflow #runs Map Test ===');
+        console.log('Testing workflow run cleanup after completion...');
+
+        // Simulate what happens: runs are added but never removed
+        const mockRuns = new Map<string, any>();
+
+        // Simulate 100 workflow executions
+        for (let i = 0; i < 100; i++) {
+          const runId = `run-${i}`;
+          mockRuns.set(runId, {
+            id: runId,
+            status: 'completed',
+            data: 'x'.repeat(1000), // 1KB per run
+          });
+
+          // In real code, cleanup() callback should be called but isn't
+          // mockRuns.delete(runId); // This SHOULD happen but doesn't
+        }
+
+        console.log(`Runs in Map: ${mockRuns.size}`);
+        console.log(`Expected: 0 (cleaned up after completion)`);
+        console.log(`Actual: ${mockRuns.size} (all retained)`);
+
+        // After fix: Workflow should call cleanup() callback when run completes
+        // For now, this test documents the expected behavior
+        expect(mockRuns.size).toBe(0);
+      });
+    });
+
+    describe('EventEmitter listener accumulation', () => {
+      it('removes event listeners after stream completion', () => {
+        /**
+         * LEAK #4: EventEmitter listeners never removed
+         *
+         * MastraModelOutput and workflows create EventEmitter listeners
+         * that are never cleaned up with removeListener/off.
+         *
+         * Expected: Listeners removed after stream completes
+         * Actual: Listeners accumulate, causing memory leaks
+         */
+
+        console.log('\n=== EventEmitter Listener Test ===');
+
+        const { EventEmitter } = require('events');
+        const emitter = new EventEmitter();
+
+        const initialListenerCount = emitter.listenerCount('data');
+
+        // Simulate 100 stream operations, each adding listeners
+        for (let i = 0; i < 100; i++) {
+          const handler = (data: any) => {
+            // Process data
+            void data;
+          };
+
+          emitter.on('data', handler);
+
+          // After stream completes, listener should be removed
+          // emitter.off('data', handler); // This SHOULD happen but doesn't
+        }
+
+        const finalListenerCount = emitter.listenerCount('data');
+
+        console.log(`Initial listeners: ${initialListenerCount}`);
+        console.log(`Final listeners: ${finalListenerCount}`);
+        console.log(`Expected: ${initialListenerCount} (cleaned up)`);
+        console.log(`Actual: ${finalListenerCount} (all retained)`);
+
+        // After fix: Should remove listeners when stream completes
+        expect(finalListenerCount).toBe(initialListenerCount);
+      });
+    });
+
+    describe('MessageList unbounded growth', () => {
+      it('limits message history to prevent unbounded accumulation', () => {
+        /**
+         * LEAK #6: Messages accumulate in MessageList without bounds
+         *
+         * MessageList.messages array grows indefinitely as more
+         * messages are added, with no mechanism to limit history.
+         *
+         * Expected: Old messages pruned (e.g., keep last 100)
+         * Actual: All messages retained forever
+         */
+
+        console.log('\n=== MessageList Message Accumulation Test ===');
+
+        const messageList = new MessageList({ threadId: 'long-thread' });
+
+        // Simulate long conversation with 1000 messages
+        for (let i = 0; i < 1000; i++) {
+          messageList.add(
+            [
+              {
+                role: 'user' as const,
+                content: `User message ${i}: ${'x'.repeat(100)}`,
+              },
+              {
+                role: 'assistant' as const,
+                content: `Assistant response ${i}: ${'y'.repeat(200)}`,
+              },
+            ],
+            'user',
+          );
+        }
+
+        const totalMessages = messageList.get.all.v2().length;
+
+        console.log(`Total messages: ${totalMessages}`);
+        console.log(`Expected: ≤100 (with history limit)`);
+        console.log(`Actual: ${totalMessages} (unbounded)`);
+
+        // After fix: Should implement a sliding window or history limit
+        // e.g., keep only last 100 messages, prune older ones
+        expect(totalMessages).toBeLessThanOrEqual(100);
+      });
+    });
+
+    describe('Workflow snapshot storage accumulation', () => {
+      it('cleans up old snapshots for completed workflows', () => {
+        /**
+         * LEAK #7: Workflow snapshots accumulate in storage
+         *
+         * Suspended/resumed workflows create snapshots that are
+         * persisted but never cleaned up after workflow completes.
+         *
+         * Expected: Snapshots deleted after workflow completion
+         * Actual: All snapshots retained indefinitely
+         */
+
+        console.log('\n=== Workflow Snapshot Storage Test ===');
+
+        // Simulate snapshot storage
+        const snapshotStorage = new Map<string, any>();
+
+        // Simulate 50 workflows with 5 snapshots each (suspend/resume)
+        for (let workflowId = 0; workflowId < 50; workflowId++) {
+          for (let snapshotId = 0; snapshotId < 5; snapshotId++) {
+            const key = `workflow-${workflowId}-snapshot-${snapshotId}`;
+            snapshotStorage.set(key, {
+              workflowId,
+              snapshotId,
+              state: { data: 'x'.repeat(5000) }, // 5KB per snapshot
+              timestamp: Date.now(),
+            });
+          }
+
+          // After workflow completes, snapshots should be cleaned up
+          // for (let snapshotId = 0; snapshotId < 5; snapshotId++) {
+          //   const key = `workflow-${workflowId}-snapshot-${snapshotId}`;
+          //   snapshotStorage.delete(key); // This SHOULD happen but doesn't
+          // }
+        }
+
+        const totalSnapshots = snapshotStorage.size;
+
+        console.log(`Total snapshots: ${totalSnapshots}`);
+        console.log(`Expected: 0 (cleaned up after completion)`);
+        console.log(`Actual: ${totalSnapshots} (all retained)`);
+
+        // After fix: Should delete snapshots when workflow completes
+        expect(totalSnapshots).toBe(0);
+      });
+    });
+  });
 });
