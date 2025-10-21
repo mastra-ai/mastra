@@ -22,7 +22,7 @@ To get started, run Playground locally using the instructions below, or [deploy 
 
 If you created your application with `create mastra`, start the local development server using the `dev` script. You can also run it directly with `mastra dev`.
 
-<Tabs items={["npm", "pnpm", "yarn", "bun", "mastra dev"]}>
+<Tabs items={["npm", "pnpm", "yarn", "bun", "mastra"]}>
   <Tab>
     ```bash copy
     npm run dev
@@ -50,7 +50,7 @@ If you created your application with `create mastra`, start the local developmen
   </Tab>
 </Tabs>
 
-Once it's running, you can:
+Once the server's running, you can:
 
 - Open the Playground UI at http://localhost:4111/ to test your agent interactively.
 - Visit  http://localhost:4111/swagger-ui to discover and interact with the underlying REST API.
@@ -108,17 +108,21 @@ The Scorers tab displays the results of your agent's scorers as they run. When m
 
 ## REST API
 
-The local development server exposes a complete set of REST API routes, allowing you to programmatically interact with your agents, workflows, and tools during development.
+The local development server exposes a complete set of REST API routes, allowing you to programmatically interact with your agents, workflows, and tools during development. This is particularly helpful if you plan to deploy the Mastra server because the local development server uses the exact same REST API routes as the [production environment](/docs/server-db/production-server).
 
-You can explore all available endpoints in the OpenAPI specification at `http://localhost:4111/openapi.json`, which details every endpoint and its request and response schemas.
+You can explore all available endpoints in the OpenAPI specification at `http://localhost:4111/openapi.json`, which details every endpoint and its request/response schemas.
 
-To explore the API interactively, visit the Swagger UI at `http://localhost:4111/swagger-ui`, where you can test endpoints directly from your browser.
+To explore the API interactively, visit the Swagger UI at `http://localhost:4111/swagger-ui`. Here, you can discover endpoints and test them directly from your browser.
+
+<Callout type="info">
+OpenAPI and Swagger endpoints are disabled in production by default. To enable them, set `server.build.openAPIDocs` and `server.build.swaggerUI` to `true`, respectively.
+</Callout>
 
 ## Configuration
 
 ### Port
 
-By default, the development server runs on port `4111`, but you can customize both the host and port through the Mastra server configuration: 
+By default, the development server runs at http://localhost4111, but you can change the `host` and `port` in the Mastra server configuration:
 
 ```typescript
 import { Mastra } from "@mastra/core/mastra";
