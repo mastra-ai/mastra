@@ -538,6 +538,7 @@ ${getGeneratedComment()}
 import { CardGrid, CardGridItem } from "@/components/cards/card-grid";
 import { Tab, Tabs } from "@/components/tabs";
 import { Callout } from "nextra/components";
+import { NetlifyLogo } from "@/components/logos/NetlifyLogo";
 
 # Model Providers
 
@@ -645,8 +646,15 @@ ${(() => {
       if (gatewayId === 'vercel') {
         displayName = 'Vercel';
       }
+
+      // Use NetlifyLogo component for Netlify, img tag for others
+      const logoMarkup =
+        gatewayId === 'netlify'
+          ? `<NetlifyLogo className="w-4 h-4" />`
+          : `<img src="${getLogoUrl(gatewayId)}" alt="${displayName}" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />`;
+
       return `          <div className="flex items-center gap-2 text-sm">
-            <img src="${getLogoUrl(gatewayId)}" alt="${displayName}" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            ${logoMarkup}
             <span>${displayName}</span>
           </div>`;
     })
