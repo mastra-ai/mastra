@@ -1942,6 +1942,7 @@ export class Run<
     tracingOptions,
     closeOnSuspend = true,
     onChunk,
+    initialState,
   }: {
     inputData?: z.input<TInput>;
     runtimeContext?: RuntimeContext;
@@ -1949,6 +1950,7 @@ export class Run<
     tracingOptions?: TracingOptions;
     closeOnSuspend?: boolean;
     onChunk?: (chunk: ChunkType) => Promise<unknown>;
+    initialState?: z.input<TState>;
   } = {}): MastraWorkflowStream<TState, TInput, TOutput, TSteps> {
     if (this.closeStreamAction && this.activeStream) {
       return this.activeStream;
@@ -2027,6 +2029,7 @@ export class Run<
           tracingContext,
           tracingOptions,
           writableStream: writable,
+          initialState,
         }).then(result => {
           if (closeOnSuspend) {
             // always close stream, even if the workflow is suspended

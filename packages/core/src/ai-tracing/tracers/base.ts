@@ -50,9 +50,18 @@ export abstract class BaseAITracing extends MastraBase implements AITracing {
 
   /**
    * Override setLogger to add AI tracing specific initialization log
+   * and propagate logger to exporters
    */
   __setLogger(logger: IMastraLogger) {
     super.__setLogger(logger);
+
+    // Propagate logger to all exporters that support it
+    this.exporters.forEach(exporter => {
+      if (typeof exporter.__setLogger === 'function') {
+        exporter.__setLogger(logger);
+      }
+    });
+
     // Log AI tracing initialization details after logger is properly set
     this.logger.debug(
       `[AI Tracing] Initialized [service=${this.config.serviceName}] [instance=${this.config.name}] [sampling=${this.config.sampling.type}]`,
