@@ -31,7 +31,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
               runId: rest.runId,
               from: ChunkFrom.AGENT,
               payload: {
-                error: toolCall.error?.stack ?? toolCall.error,
+                error: toolCall.error,
                 args: toolCall.args,
                 toolCallId: toolCall.toolCallId,
                 toolName: toolCall.toolName,
