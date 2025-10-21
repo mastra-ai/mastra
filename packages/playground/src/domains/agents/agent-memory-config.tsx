@@ -62,7 +62,9 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
                   value:
                     typeof semanticRecall.messageRange === 'object'
                       ? `${semanticRecall.messageRange.before || 1} before, ${semanticRecall.messageRange.after || 1} after`
-                      : `${semanticRecall.messageRange || 4} messages`,
+                      : semanticRecall.messageRange !== undefined
+                        ? `${semanticRecall.messageRange} before, ${semanticRecall.messageRange} after`
+                        : '1 before, 1 after',
                 },
               ]
             : []),
