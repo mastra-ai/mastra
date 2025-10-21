@@ -2041,15 +2041,11 @@ export class Run<
       },
     });
 
-    if (!this.#streamOutput) {
-      this.#streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
-        runId: this.runId,
-        workflowId: this.workflowId,
-        stream,
-      });
-    } else {
-      this.#streamOutput.resume(stream);
-    }
+    this.#streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      stream,
+    });
 
     return this.#streamOutput;
   }
