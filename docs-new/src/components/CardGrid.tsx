@@ -13,7 +13,7 @@ export function CardGridItem({ title, description, href }: CardGridItemProps) {
   return (
     <Link to={href} className={cn(styles.cardGridItem, '!shadow-none !rounded-[10px]')}>
       <h3>{title}</h3>
-      <p>{description}</p>
+      <p className=" line-clamp-3">{description}</p>
     </Link>
   );
 }
