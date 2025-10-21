@@ -1,94 +1,67 @@
-import path from 'path';
-import { Project } from 'ts-morph';
 import { describe, it, expect } from 'vitest';
+import { generateProviderOptionsSection } from '../../../scripts/generate-provider-options-docs';
 
 describe('Provider Options Documentation Generation', () => {
-  const project = new Project({
-    tsConfigFilePath: path.join(__dirname, '..', '..', '..', 'tsconfig.json'),
-  });
-
-  const getProviderOptionsType = (providerName: string) => {
-    const sourceFile = project.addSourceFileAtPath(path.join(__dirname, 'provider-options.ts'));
-
-    const exportedDeclarations = sourceFile.getExportedDeclarations();
-    const typeExport = exportedDeclarations.get(providerName);
-
-    if (!typeExport || typeExport.length === 0) {
-      return null;
-    }
-
-    const declaration = typeExport[0];
-    return declaration.getType();
-  };
-
   describe('Anthropic Provider Options', () => {
-    it('should extract properties from AnthropicProviderOptions', () => {
-      const type = getProviderOptionsType('AnthropicProviderOptions');
-      expect(type).toBeDefined();
-
-      const properties = type!.getProperties();
-      expect(properties.length).toBeGreaterThan(0);
-
-      const propertyNames = properties.map(p => p.getName());
+    it('should generate documentation with Anthropic-specific properties', () => {
+      const markdown = generateProviderOptionsSection('anthropic');
+      
+      expect(markdown).toBeTruthy();
+      expect(markdown).toContain('## Provider Options');
+      expect(markdown).toContain('Anthropic supports the following provider-specific options');
+      expect(markdown).toContain('providerOptions');
+      
       // Check for known Anthropic-specific properties
-      expect(propertyNames).toContain('thinking');
+      expect(markdown).toContain('thinking');
+      expect(markdown).toContain('sendReasoning');
     });
   });
 
   describe('xAI Provider Options', () => {
-    it('should extract properties from XaiProviderOptions', () => {
-      const type = getProviderOptionsType('XaiProviderOptions');
-      expect(type).toBeDefined();
-
-      const properties = type!.getProperties();
-      expect(properties.length).toBeGreaterThan(0);
-
-      const propertyNames = properties.map(p => p.getName());
+    it('should generate documentation with xAI-specific properties', () => {
+      const markdown = generateProviderOptionsSection('xai');
+      
+      expect(markdown).toBeTruthy();
+      expect(markdown).toContain('## Provider Options');
+      expect(markdown).toContain('xAI supports the following provider-specific options');
+      
       // Check for known xAI-specific properties
-      expect(propertyNames).toContain('reasoningEffort');
+      expect(markdown).toContain('reasoningEffort');
     });
   });
 
   describe('Google Provider Options', () => {
-    it('should extract properties from GoogleProviderOptions', () => {
-      const type = getProviderOptionsType('GoogleProviderOptions');
-      expect(type).toBeDefined();
-
-      const properties = type!.getProperties();
-      expect(properties.length).toBeGreaterThan(0);
-
-      const propertyNames = properties.map(p => p.getName());
+    it('should generate documentation with Google-specific properties', () => {
+      const markdown = generateProviderOptionsSection('google');
+      
+      expect(markdown).toBeTruthy();
+      expect(markdown).toContain('## Provider Options');
+      expect(markdown).toContain('Google supports the following provider-specific options');
+      
       // Check for known Google-specific properties
-      expect(propertyNames).toContain('cachedContent');
+      expect(markdown).toContain('cachedContent');
+      expect(markdown).toContain('thinkingConfig');
     });
   });
 
   describe('OpenAI Provider Options', () => {
-    it('should extract properties from OpenAIProviderOptions', () => {
-      const type = getProviderOptionsType('OpenAIProviderOptions');
-      expect(type).toBeDefined();
-
-      const properties = type!.getProperties();
-      expect(properties.length).toBeGreaterThan(0);
-
-      const propertyNames = properties.map(p => p.getName());
+    it('should generate documentation with OpenAI-specific properties', () => {
+      const markdown = generateProviderOptionsSection('openai');
+      
+      expect(markdown).toBeTruthy();
+      expect(markdown).toContain('## Provider Options');
+      expect(markdown).toContain('OpenAI supports the following provider-specific options');
+      
       // Check for known OpenAI-specific properties (Responses API)
-      expect(propertyNames).toContain('instructions');
+      expect(markdown).toContain('instructions');
     });
   });
 
-  describe('Provider Options Type Structure', () => {
-    it('should have all provider option types exported', () => {
-      const sourceFile = project.addSourceFileAtPath(path.join(__dirname, 'provider-options.ts'));
-
-      const exports = sourceFile.getExportedDeclarations();
-      const exportedTypeNames = Array.from(exports.keys());
-
-      expect(exportedTypeNames).toContain('AnthropicProviderOptions');
-      expect(exportedTypeNames).toContain('GoogleProviderOptions');
-      expect(exportedTypeNames).toContain('OpenAIProviderOptions');
-      expect(exportedTypeNames).toContain('XaiProviderOptions');
-      expect(exportedTypeNames).toContain('ProviderOptions');
+  describe('Unsupported Provider', () => {
+    it('should return empty string for providers without options', () => {
+      const markdown = generateProviderOptionsSection('unsupported-provider');
+      
+      expect(markdown).toBe('');
     });
   });
 });
