@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test('has overall information', async ({ page }) => {
   await page.goto('http://localhost:4111/agents');
 
-  await expect(page).toHaveTitle(/Mastra Playground/);
+  await expect(page).toHaveTitle(/Mastra Studio/);
   await expect(page.locator('h1')).toHaveText('Agents');
   await expect(page.locator('text=Agents documentation')).toHaveAttribute(
     'href',
