@@ -367,6 +367,95 @@ execute: async ({ inputData, tracingContext }) => {
 
 Metadata set here will be shown in all configured exporters.
 
+### Automatic Metadata from RuntimeContext
+
+Instead of manually adding metadata to each span, you can configure Mastra to automatically extract values from RuntimeContext and attach them as metadata to all spans in a trace. This is useful for consistently tracking user identifiers, environment information, feature flags, or any request-scoped data across your entire trace.
+
+#### Configuration-Level Extraction
+
+Define which RuntimeContext keys to extract in your tracing configuration. These keys will be automatically included as metadata for all spans created with this configuration:
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      default: {
+        serviceName: 'my-service',
+        metadataFromRuntimeContext: ['userId', 'environment', 'tenantId'],
+        exporters: [new DefaultExporter()],
+      },
+    },
+  },
+});
+```
+
+Now when you execute agents or workflows with a RuntimeContext, these values are automatically extracted:
+
+```ts showLineNumbers copy
+const runtimeContext = new RuntimeContext();
+runtimeContext.set('userId', 'user-123');
+runtimeContext.set('environment', 'production');
+runtimeContext.set('tenantId', 'tenant-456');
+
+// All spans in this trace automatically get userId, environment, and tenantId metadata
+const result = await agent.generate({
+  messages: [{ role: 'user', content: 'Hello' }],
+  runtimeContext,
+});
+```
+
+#### Per-Request Additions
+
+You can add trace-specific keys using `tracingOptions.runtimeContextKeys`. These are merged with the configuration-level keys:
+
+```ts showLineNumbers copy
+const runtimeContext = new RuntimeContext();
+runtimeContext.set('userId', 'user-123');
+runtimeContext.set('environment', 'production');
+runtimeContext.set('experimentId', 'exp-789');
+
+const result = await agent.generate({
+  messages: [{ role: 'user', content: 'Hello' }],
+  runtimeContext,
+  tracingOptions: {
+    runtimeContextKeys: ['experimentId'], // Adds to configured keys
+  },
+});
+
+// All spans now have: userId, environment, AND experimentId
+```
+
+#### Nested Value Extraction
+
+Use dot notation to extract nested values from RuntimeContext:
+
+```ts showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      default: {
+        metadataFromRuntimeContext: ['user.id', 'session.data.experimentId'],
+        exporters: [new DefaultExporter()],
+      },
+    },
+  },
+});
+
+const runtimeContext = new RuntimeContext();
+runtimeContext.set('user', { id: 'user-456', name: 'John Doe' });
+runtimeContext.set('session', { data: { experimentId: 'exp-999' } });
+
+// Metadata will include: { user: { id: 'user-456' }, session: { data: { experimentId: 'exp-999' } } }
+```
+
+#### How It Works
+
+1. **TraceState Computation**: At the start of a trace (root span creation), Mastra computes which keys to extract by merging configuration-level and per-request keys
+2. **Automatic Inheritance**: Child spans automatically inherit the TraceState from their parent, ensuring consistent metadata across the entire trace
+3. **Metadata Precedence**: Explicit metadata passed to span options always takes precedence over extracted metadata
+
+This approach ensures that all spans in a trace—including agent runs, LLM calls, tool executions, and workflow steps—receive the same contextual metadata without manual intervention.
+
 ## Creating Child Spans
 
 Child spans allow you to track fine-grained operations within your workflow steps or tools. They provide visibility into sub-operations like database queries, API calls, file operations, or complex calculations. This hierarchical structure helps you identify performance bottlenecks and understand the exact sequence of operations.
