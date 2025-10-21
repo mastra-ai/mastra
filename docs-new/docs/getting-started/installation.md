@@ -25,13 +25,6 @@ You can run `create mastra` anywhere on your machine.
 
 The wizard will guide you through setup, create a new directory for your project, and generate a weather agent with example workflows and tools to get you started.
 
-{/_
-LLM CONTEXT: This Tabs component shows different package manager commands for creating a new Mastra project.
-Each tab displays the equivalent command for that specific package manager (npx, npm, yarn, pnpm, bun).
-This helps users choose their preferred package manager while following the same installation process.
-All commands achieve the same result - creating a new Mastra project with the interactive setup.
-_/}
-
 <Tabs>
   <TabItem value="npm" label="npm" default>
     ```bash copy
@@ -61,7 +54,7 @@ You can use flags with `create mastra` like `--no-example` to skip the example w
 
 ### Test your agent
 
-Once setup is complete, follow the instructions in your terminal to start the Mastra dev server, then open the Playground at http://localhost:4111.
+Once setup is complete, follow the instructions in your terminal to start the Mastra dev server, then open the Playground at `http://localhost:4111.`
 
 Try asking about the weather. If your API key is set up correctly, you'll get a response:
 
@@ -95,13 +88,6 @@ mkdir my-first-agent && cd my-first-agent
 ```
 
 Initialize a TypeScript project and install the following dependencies:
-
-{/_
-LLM CONTEXT: This Tabs component shows manual installation commands for different package managers.
-Each tab displays the complete setup process for that package manager including project initialization,
-dev dependencies installation, and core Mastra packages installation.
-This helps users manually set up a Mastra project with their preferred package manager.
-_/}
 
 <Tabs>
   <TabItem value="npm" label="npm" default>
