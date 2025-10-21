@@ -56,5 +56,8 @@ test('tool stream', async () => {
   await expect(page.getByTestId('thread-wrapper').getByText(expectedTextResult)).toBeVisible({ timeout: 20000 });
 
   await page.getByRole('button', { name: `weatherInfo` }).click();
-  await expect(page.getByTestId('tool-args')).toContainText('{  \"city\": \"paris\"}');
+  await expect(page.getByTestId('tool-args')).toContainText('{  \"location\": \"paris\"}');
+  await expect(page.getByTestId('tool-result')).toContainText(
+    '{  \"temperature\": 16.6,  \"feelsLike\": 15,  \"humidity\": 72,  \"windSpeed\": 14.1,  \"windGust\": 32,  \"conditions\": \"Overcast\",  \"location\": \"Paris\"}',
+  );
 });
