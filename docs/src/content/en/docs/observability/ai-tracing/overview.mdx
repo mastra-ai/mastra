@@ -517,6 +517,109 @@ Once you have a trace ID, you can:
 
 The trace ID is only available when tracing is enabled. If tracing is disabled or sampling excludes the request, `traceId` will be `undefined`.
 
+## Integrating with External Tracing Systems
+
+When running Mastra agents or workflows within applications that have existing distributed tracing (OpenTelemetry, Datadog, etc.), you can connect Mastra traces to your parent trace context. This creates a unified view of your entire request flow, making it easier to understand how Mastra operations fit into the broader system.
+
+### Passing External Trace IDs
+
+Use the `tracingOptions` parameter to specify the trace context from your parent system:
+
+```ts showLineNumbers copy
+// Get trace context from your existing tracing system
+const parentTraceId = getCurrentTraceId(); // Your tracing system
+const parentSpanId = getCurrentSpanId();   // Your tracing system
+
+// Execute Mastra operations as part of the parent trace
+const result = await agent.generate('Analyze this data', {
+  tracingOptions: {
+    traceId: parentTraceId,
+    parentSpanId: parentSpanId,
+  }
+});
+
+// The Mastra trace will now appear as a child in your distributed trace
+```
+
+### OpenTelemetry Integration
+
+Integration with OpenTelemetry allows Mastra traces to appear seamlessly in your existing observability platform:
+
+```ts showLineNumbers copy
+import { trace } from '@opentelemetry/api';
+
+// Get the current OpenTelemetry span
+const currentSpan = trace.getActiveSpan();
+const spanContext = currentSpan?.spanContext();
+
+if (spanContext) {
+  const result = await agent.generate(userMessage, {
+    tracingOptions: {
+      traceId: spanContext.traceId,
+      parentSpanId: spanContext.spanId,
+    }
+  });
+}
+```
+
+### Workflow Integration
+
+Workflows support the same pattern for trace propagation:
+
+```ts showLineNumbers copy
+const workflow = mastra.getWorkflow('data-pipeline');
+const run = await workflow.createRunAsync();
+
+const result = await run.start({
+  inputData: { data: '...' },
+  tracingOptions: {
+    traceId: externalTraceId,
+    parentSpanId: externalSpanId,
+  }
+});
+```
+
+### ID Format Requirements
+
+Mastra validates trace and span IDs to ensure compatibility:
+
+- **Trace IDs**: 1-32 hexadecimal characters (OpenTelemetry uses 32)
+- **Span IDs**: 1-16 hexadecimal characters (OpenTelemetry uses 16)
+
+Invalid IDs are handled gracefully — Mastra logs an error and continues:
+- Invalid trace ID → generates a new trace ID
+- Invalid parent span ID → ignores the parent relationship
+
+This ensures tracing never crashes your application, even with malformed input.
+
+### Example: Express Middleware
+
+Here's a complete example showing trace propagation in an Express application:
+
+```ts showLineNumbers copy
+import { trace } from '@opentelemetry/api';
+import express from 'express';
+
+const app = express();
+
+app.post('/api/analyze', async (req, res) => {
+  // Get current OpenTelemetry context
+  const currentSpan = trace.getActiveSpan();
+  const spanContext = currentSpan?.spanContext();
+
+  const result = await agent.generate(req.body.message, {
+    tracingOptions: spanContext ? {
+      traceId: spanContext.traceId,
+      parentSpanId: spanContext.spanId,
+    } : undefined,
+  });
+
+  res.json(result);
+});
+```
+
+This creates a single distributed trace that includes both the HTTP request handling and the Mastra agent execution, viewable in your observability platform of choice.
+
 ## What Gets Traced
 
 Mastra automatically creates spans for:

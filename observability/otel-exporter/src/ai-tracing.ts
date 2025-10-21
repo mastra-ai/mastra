@@ -53,7 +53,8 @@ export class OtelExporter implements AITracingExporter {
   }
 
   private async setupExporter() {
-    if (this.isSetup) return;
+    // already setup or exporter already set
+    if (this.isSetup || this.exporter) return;
 
     // Provider configuration is required
     if (!this.config.provider) {
@@ -71,6 +72,12 @@ export class OtelExporter implements AITracingExporter {
       // Configuration validation failed, disable tracing
       this.isDisabled = true;
       this.isSetup = true;
+      return;
+    }
+
+    // user provided an instantiated SpanExporter, use it
+    if (this.config.exporter) {
+      this.exporter = this.config.exporter;
       return;
     }
 
@@ -136,6 +143,10 @@ export class OtelExporter implements AITracingExporter {
       this.isSetup = true;
       return;
     }
+  }
+
+  private async setupProcessor() {
+    if (this.processor || this.isSetup) return;
 
     // Create resource with service name from TracingConfig
     let resource = resourceFromAttributes({
@@ -154,7 +165,7 @@ export class OtelExporter implements AITracingExporter {
       );
     }
 
-    // Store the resource for the span converter
+    // Store the resource in the genai span converter
     this.spanConverter = new SpanConverter(resource);
 
     // Always use BatchSpanProcessor for production
@@ -169,6 +180,12 @@ export class OtelExporter implements AITracingExporter {
     this.logger.debug(
       `[OtelExporter] Using BatchSpanProcessor (batch size: ${this.config.batchSize || 512}, delay: 5s)`,
     );
+  }
+
+  private async setup() {
+    if (this.isSetup) return;
+    await this.setupExporter();
+    await this.setupProcessor();
     this.isSetup = true;
   }
 
@@ -191,7 +208,7 @@ export class OtelExporter implements AITracingExporter {
   private async exportSpan(span: AnyExportedAISpan): Promise<void> {
     // Ensure exporter is set up
     if (!this.isSetup) {
-      await this.setupExporter();
+      await this.setup();
     }
 
     // Skip if disabled

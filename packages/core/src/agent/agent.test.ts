@@ -6949,10 +6949,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const agentToolCall =
         version === 'v1'
-          ? toolCalls.find((tc: any) => tc.toolName === 'researchAgent')
-          : toolCalls.find((tc: any) => tc.payload?.toolName === 'researchAgent');
+          ? toolCalls.find((tc: any) => tc.toolName === 'agent-researchAgent')
+          : toolCalls.find((tc: any) => tc.payload?.toolName === 'agent-researchAgent');
 
       expect(version === 'v1' ? toolCalls[0]?.result : toolCalls[0]?.payload?.result).toStrictEqual({
+        ...(version === 'v1' ? {} : { subAgentResourceId: expect.any(String), subAgentThreadId: expect.any(String) }),
         text: 'Dummy response',
       });
 
