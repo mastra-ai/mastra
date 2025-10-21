@@ -1671,15 +1671,7 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  async start({
-    inputData,
-    initialState,
-    runtimeContext,
-    writableStream,
-    tracingContext,
-    tracingOptions,
-    outputOptions,
-  }: {
+  async start(args: {
     inputData?: z.input<TInput>;
     initialState?: z.input<TState>;
     runtimeContext?: RuntimeContext;
@@ -1690,16 +1682,9 @@ export class Run<
       includeState?: boolean;
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    return this._start({
-      inputData,
-      initialState,
-      runtimeContext,
-      writableStream,
-      tracingContext,
-      tracingOptions,
-      format: 'legacy',
-      outputOptions,
-    });
+    const streamResult = await this.streamVNext(args);
+
+    return streamResult.result;
   }
 
   /**
@@ -1857,7 +1842,14 @@ export class Run<
    */
   observeStreamVNext(): ReadableStream<WorkflowStreamEvent> {
     if (!this.#streamOutput) {
-      throw new Error('Stream has not been started yet. Please start the stream first.');
+      return new ReadableStream<WorkflowStreamEvent>({
+        pull(controller) {
+          controller.close();
+        },
+        cancel() {
+          controller.close();
+        },
+      });
     }
 
     return this.#streamOutput.fullStream;
