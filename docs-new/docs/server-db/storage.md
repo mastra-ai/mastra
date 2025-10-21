@@ -44,14 +44,6 @@ configuration either on `Mastra` or directly within `new Memory()`.
 
 ## Data Schema
 
-{/_
-LLM CONTEXT: This Tabs component displays the database schema for different data types stored by Mastra.
-Each tab shows the table structure and column definitions for a specific data entity (Messages, Threads, Workflows, etc.).
-The tabs help users understand the data model and relationships between different storage entities.
-Each tab includes detailed column information with types, constraints, and example data structures.
-The data types include Messages, Threads, Workflows, Eval Datasets, and Traces.
-_/}
-
 <Tabs>
 ['Messages', 'Threads', 'Resources', 'Workflows', 'Eval Datasets', 'Traces']}>
   <TabItem value="stores-conversation-messages-and-their-metadata" label="Stores conversation messages and their metadata">

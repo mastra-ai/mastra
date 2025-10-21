@@ -39,14 +39,6 @@ Choose from multiple providers like OpenAI, ElevenLabs, and more.
 
 For detailed configuration options and advanced features, check out our [Text-to-Speech guide](./text-to-speech).
 
-{/_
-LLM CONTEXT: This Tabs component demonstrates Text-to-Speech (TTS) implementation across different voice providers.
-Each tab shows how to set up and use a specific TTS provider (OpenAI, Azure, ElevenLabs, etc.) with Mastra agents.
-The tabs help users compare different TTS providers and choose the one that best fits their needs.
-Each tab includes complete code examples showing agent setup, text generation, and audio playback.
-The providers include OpenAI, Azure, ElevenLabs, PlayAI, Google, Cloudflare, Deepgram, Speechify, Sarvam, and Murf.
-_/}
-
 <Tabs>
   <TabItem value="tab-1" label="Tab 1">
 ```typescript
@@ -330,13 +322,6 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
 <br />
 <AudioPlayback audio="https://github.com/mastra-ai/realtime-voice-demo/raw/refs/heads/main/how_can_i_help_you.mp3" />
 
-{/_
-LLM CONTEXT: This Tabs component demonstrates Speech-to-Text (STT) implementation across different voice providers.
-Each tab shows how to set up and use a specific STT provider for transcribing audio to text.
-The tabs help users understand how to implement speech recognition with different providers.
-Each tab includes code examples showing audio file handling, transcription, and response generation.
-_/}
-
 <Tabs>
   <TabItem value="create" label="create">
 ```typescript
@@ -542,12 +527,6 @@ Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information
 Create conversational experiences with speech-to-speech capabilities. The unified API enables real-time voice interactions between users and AI agents.
 For detailed configuration options and advanced features, check out [Speech to Speech](./speech-to-speech).
 
-{/*
-  LLM CONTEXT: This Tabs component demonstrates Speech-to-Speech (STS) implementation for real-time voice interactions.
-  Currently only shows OpenAI's realtime voice implementation for bidirectional voice conversations.
-  The tab shows how to set up real-time voice communication with event handling for audio responses.
-  This enables conversational AI experiences with continuous audio streaming.
-*/}
 <Tabs>
   <TabItem value="tab-1" label="Tab 1">
 ```typescript
@@ -634,13 +613,6 @@ Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) fo
 ## Voice Configuration
 
 Each voice provider can be configured with different models and options. Below are the detailed configuration options for all supported providers:
-
-{/*
-LLM CONTEXT: This Tabs component shows detailed configuration options for all supported voice providers.
-Each tab demonstrates how to configure a specific voice provider with all available options and settings.
-The tabs help users understand the full configuration capabilities of each provider including models, languages, and advanced settings.
-Each tab shows both speech and listening model configurations where applicable.
-*/}
 
 <Tabs>
   <TabItem value="tab-1" label="Tab 1">

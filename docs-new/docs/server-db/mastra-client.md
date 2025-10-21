@@ -26,14 +26,6 @@ The Mastra Client SDK is designed for browser environments and uses the native `
 
 To use the Mastra Client SDK, install the required dependencies:
 
-{/_
-LLM CONTEXT:
-This Tabs component shows installation commands for the Mastra Client SDK using different package managers.
-Each tab displays the installation command for that specific package manager (npm, yarn, pnpm).
-This helps users install the client SDK with their preferred package manager.
-All commands install the same @mastra/client-js package but use different package manager syntax.
-_/}
-
 <Tabs>
   <TabItem value="install" label="install">
     ```bash copy

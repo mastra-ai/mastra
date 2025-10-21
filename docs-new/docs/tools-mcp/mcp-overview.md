@@ -185,13 +185,6 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
 
 MCP servers can be discovered through registries. Here's how to connect to some popular ones using `MCPClient`:
 
-{/_
-LLM CONTEXT: This Tabs component shows how to connect to different MCP (Model Context Protocol) registries.
-Each tab demonstrates the configuration for a specific MCP registry service (mcp.run, Composio.dev, Smithery.ai).
-The tabs help users understand how to connect to various MCP server providers and their different authentication methods.
-Each tab shows the specific URL patterns and configuration needed for that registry service.
-_/}
-
 <Tabs>
   <TabItem value="tab-1" label="Tab 1">
     [Klavis AI](https://klavis.ai) provides hosted, enterprise-authenticated, high-quality MCP servers.

@@ -1,5 +1,5 @@
 ---
-title: "Upsert Embeddings "
+title: 'Upsert Embeddings '
 description: Examples of using Mastra to store embeddings in various vector databases for similarity search.
 ---
 
@@ -9,14 +9,6 @@ import TabItem from '@theme/TabItem';
 # Upsert Embeddings
 
 After generating embeddings, you need to store them in a database that supports vector similarity search. This example shows how to store embeddings in various vector databases for later retrieval.
-
-{/*
-LLM CONTEXT: This Tabs component demonstrates how to upsert (insert/update) embeddings into different vector databases.
-Each tab shows a complete example of storing embeddings in a specific vector database provider.
-The tabs help users understand the consistent API pattern across different vector stores while showing provider-specific configuration.
-Each tab includes document chunking, embedding generation, index creation, and data insertion for that specific database.
-The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upstash, Cloudflare, MongoDB, OpenSearch, and Couchbase.
-*/}
 
 <Tabs>
 ['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch', 'Couchbase', 'LanceDB']}>
@@ -403,6 +395,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
       metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
     });
     ```
+
   </TabItem>
 
   <TabItem value="the-couchbasevector-class-provides-methods-to-cre" label="The `CouchbaseVector` class provides methods to cre">
@@ -442,6 +435,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
+
   </TabItem>
 
   <TabItem value="the-lancevectorstore-class-provides-methods-to-cr" label="The `LanceVectorStore` class provides methods to cr">
@@ -476,5 +470,6 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
+
   </TabItem>
 </Tabs>

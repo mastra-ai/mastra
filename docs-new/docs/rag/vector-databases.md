@@ -12,14 +12,6 @@ After generating embeddings, you need to store them in a database that supports 
 
 ## Supported Databases
 
-{/_
-LLM CONTEXT: This Tabs component showcases different vector database implementations supported by Mastra.
-Each tab demonstrates the setup and configuration for a specific vector database provider.
-The tabs show consistent API patterns across different databases, helping users understand how to switch between providers.
-Each tab includes import statements, initialization code, and basic operations (createIndex, upsert) for that specific database.
-The providers include Pg Vector, Pinecone, Qdrant, Chroma, Astra, LibSQL, Upstash, Cloudflare, MongoDB, OpenSearch, Couchbase and S3 Vectors.
-_/}
-
 <Tabs>
 ['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch', 'Couchbase', 'LanceDB', 'S3 Vectors']}>
   <TabItem value="create" label="create">
@@ -356,13 +348,6 @@ The dimension size must match the output dimension of your chosen embedding mode
 ### Naming Rules for Databases
 
 Each vector database enforces specific naming conventions for indexes and collections to ensure compatibility and prevent conflicts.
-
-{/_
-LLM CONTEXT: This Tabs component displays naming convention rules for different vector databases.
-Each tab explains the specific naming requirements and restrictions for that database provider.
-This helps users understand the constraints and avoid naming conflicts when creating indexes or collections.
-The tabs provide examples of valid and invalid names to clarify the rules for each database.
-_/}
 
 <Tabs>
 ['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch', 'S3 Vectors']}>

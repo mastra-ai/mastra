@@ -26,34 +26,27 @@ your project, e.g., `app`.
 ## Install Mastra
 
 Install the required Mastra packages:
-{/_
-LLM CONTEXT: This Tabs component shows commands for integrating a new Mastra backend project using different package managers.
-Each tab displays the command for that specific package manager to create an integrated Mastra backend service.
-This is part of the "Integrated Backend Integration" approach for Vite/React projects.
-All commands create the same Mastra project but use different package manager syntax.
-_/}
-
 <Tabs>
-  <TabItem value="install" label="install">
-    ```bash copy
+<TabItem value="install" label="install">
+`bash copy
     npm install mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
-    ```
-  </TabItem>
-  <TabItem value="tab-2" label="Tab 2">
-    ```bash copy
+    `
+</TabItem>
+<TabItem value="tab-2" label="Tab 2">
+`bash copy
     yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
-    ```
-  </TabItem>
-  <TabItem value="tab-3" label="Tab 3">
-    ```bash copy
+    `
+</TabItem>
+<TabItem value="tab-3" label="Tab 3">
+`bash copy
     pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
-    ```
-  </TabItem>
-  <TabItem value="tab-4" label="Tab 4">
-    ```bash copy
+    `
+</TabItem>
+<TabItem value="tab-4" label="Tab 4">
+`bash copy
     bun add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
-    ```
-  </TabItem>
+    `
+</TabItem>
 </Tabs>
 
 ## Integrate Mastra

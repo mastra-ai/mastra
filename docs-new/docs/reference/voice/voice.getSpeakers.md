@@ -1,6 +1,6 @@
 ---
-title: "Reference: voice.getSpeakers() "
-description: "Documentation for the getSpeakers() method available in voice providers, which retrieves available voice options."
+title: 'Reference: voice.getSpeakers() '
+description: 'Documentation for the getSpeakers() method available in voice providers, which retrieves available voice options.'
 ---
 
 import Tabs from '@theme/Tabs';
@@ -13,8 +13,8 @@ The `getSpeakers()` method retrieves a list of available voice options (speakers
 ## Usage Example
 
 ```typescript
-import { OpenAIVoice } from "@mastra/voice-openai";
-import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+import { OpenAIVoice } from '@mastra/voice-openai';
+import { ElevenLabsVoice } from '@mastra/voice-elevenlabs';
 
 // Initialize voice providers
 const openaiVoice = new OpenAIVoice();
@@ -24,16 +24,16 @@ const elevenLabsVoice = new ElevenLabsVoice({
 
 // Get available speakers from OpenAI
 const openaiSpeakers = await openaiVoice.getSpeakers();
-console.log("OpenAI voices:", openaiSpeakers);
+console.log('OpenAI voices:', openaiSpeakers);
 // Example output: [{ voiceId: "alloy" }, { voiceId: "echo" }, { voiceId: "fable" }, ...]
 
 // Get available speakers from ElevenLabs
 const elevenLabsSpeakers = await elevenLabsVoice.getSpeakers();
-console.log("ElevenLabs voices:", elevenLabsSpeakers);
+console.log('ElevenLabs voices:', elevenLabsSpeakers);
 // Example output: [{ voiceId: "21m00Tcm4TlvDq8ikWAM", name: "Rachel" }, ...]
 
 // Use a specific voice for speech
-const text = "Hello, this is a test of different voices.";
+const text = 'Hello, this is a test of different voices.';
 await openaiVoice.speak(text, { speaker: openaiSpeakers[2].voiceId });
 await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
 ```
@@ -45,27 +45,19 @@ This method does not accept any parameters.
 ## Return Value
 
 <PropertiesTable
-  content={[
-    {
-      name: "Promise<Array<{ voiceId: string } & TSpeakerMetadata>>",
-      type: "Promise",
-      description:
-        "A promise that resolves to an array of voice options, where each option contains at least a voiceId property and may include additional provider-specific metadata.",
-    },
-  ]}
+content={[
+{
+name: "Promise<Array<{ voiceId: string } & TSpeakerMetadata>>",
+type: "Promise",
+description:
+"A promise that resolves to an array of voice options, where each option contains at least a voiceId property and may include additional provider-specific metadata.",
+},
+]}
 />
 
 ## Provider-Specific Metadata
 
 Different voice providers return different metadata for their voices:
-
-{/*
-LLM CONTEXT: This Tabs component shows the different metadata structures returned by various voice providers' getSpeakers() method.
-Each tab displays the specific properties and data types returned by that voice provider when listing available speakers/voices.
-The tabs help users understand what information is available for each provider and how to access voice-specific metadata.
-Each tab includes property tables showing voiceId and provider-specific metadata like name, language, gender, accent, etc.
-The providers include OpenAI, OpenAI Realtime, Deepgram, ElevenLabs, Google, Murf, PlayAI, Sarvam, Speechify, and Azure.
-*/}
 
 <Tabs>
   <TabItem label="OpenAI">

@@ -267,13 +267,6 @@ For detailed configuration options and advanced usage, see the [Vector Query Too
 Vector store prompts define query patterns and filtering capabilities for each vector database implementation.
 When implementing filtering, these prompts are required in the agent's instructions to specify valid operators and syntax for each vector store implementation.
 
-{/_
-LLM CONTEXT: This Tabs component displays vector store configuration examples for different database providers.
-Each tab shows how to configure a RAG agent with the appropriate prompt for that specific vector store.
-The tabs demonstrate the consistent pattern of importing the store-specific prompt and adding it to agent instructions.
-This helps users understand how to properly configure their RAG agents for different vector database backends.
-The providers include Pg Vector, Pinecone, Qdrant, Chroma, Astra, LibSQL, Upstash, Cloudflare, MongoDB, OpenSearch and S3 Vectors.
-_/}
 <Tabs>
 ['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch', 'S3 Vectors']}>
 <TabItem value="tab-1" label="Tab 1">

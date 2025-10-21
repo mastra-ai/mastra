@@ -28,12 +28,6 @@ This guide assumes you're using Astro's Actions with React and the Vercel adapte
 ## Install Mastra
 
 Install the required Mastra packages:
-{/_
-LLM CONTEXT: This Tabs component shows commands for integrating a new Mastra backend project using different package managers.
-Each tab displays the command for that specific package manager to create an integrated Mastra backend service.
-This is part of the "Integrated Backend Integration" approach for Astro projects.
-All commands create the same Mastra project but use different package manager syntax.
-_/}
 
 <Tabs>
   <TabItem value="install" label="install">
@@ -282,12 +276,6 @@ Before proceeding, ensure your Astro project is configured as follows:
 ## Install Mastra
 
 Install the required Mastra packages:
-{/_
-LLM CONTEXT: This Tabs component shows commands for integrating a new Mastra backend project using different package managers.
-Each tab displays the command for that specific package manager to create an integrated Mastra backend service.
-This is part of the "Integrated Backend Integration" approach for Astro projects.
-All commands create the same Mastra project but use different package manager syntax.
-_/}
 
 <Tabs>
   <TabItem value="install" label="install">
