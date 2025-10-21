@@ -34,6 +34,34 @@ describe('provider-defined tools', () => {
     expect((result.providerMetadata?.google?.groundingMetadata as any)?.webSearchQueries?.length).toBeGreaterThan(0);
   });
 
+  it('should handle Google URL context tool', async () => {
+    const agent = new Agent({
+      name: 'test-google-url-agent',
+      instructions: 'You are a helpful AI assistant.',
+      model: google('gemini-2.0-flash-exp'),
+      tools: {
+        url_context: google.tools.urlContext({}),
+      },
+    });
+
+    expect(agent).toBeDefined();
+    expect(agent.name).toBe('test-google-url-agent');
+  });
+
+  it('should handle Google code execution tool', async () => {
+    const agent = new Agent({
+      name: 'test-google-code-agent',
+      instructions: 'You are a helpful AI assistant.',
+      model: google('gemini-2.0-flash-exp'),
+      tools: {
+        code_execution: google.tools.codeExecution({}),
+      },
+    });
+
+    expect(agent).toBeDefined();
+    expect(agent.name).toBe('test-google-code-agent');
+  });
+
   it('should handle openai web search tool', { timeout: 30000 }, async () => {
     const tool = openai.tools.webSearch({});
 
