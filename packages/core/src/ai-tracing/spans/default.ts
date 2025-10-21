@@ -23,10 +23,14 @@ export class DefaultAISpan<TType extends AISpanType> extends BaseAISpan<TType> {
       this.traceId = options.parent.traceId;
     } else if (options.traceId) {
       // Root span with provided trace ID
-      if (!isValidTraceId(options.traceId)) {
-        throw new Error(`Invalid traceId: must be 1-32 hexadecimal characters, got "${options.traceId}"`);
+      if (isValidTraceId(options.traceId)) {
+        this.traceId = options.traceId;
+      } else {
+        console.error(
+          `[Mastra Tracing] Invalid traceId: must be 1-32 hexadecimal characters, got "${options.traceId}". Generating new trace ID.`,
+        );
+        this.traceId = generateTraceId();
       }
-      this.traceId = options.traceId;
     } else {
       // Root span without provided trace ID - generate new
       this.traceId = generateTraceId();
@@ -34,10 +38,13 @@ export class DefaultAISpan<TType extends AISpanType> extends BaseAISpan<TType> {
 
     // Set parent span ID if provided
     if (!options.parent && options.parentSpanId) {
-      if (!isValidSpanId(options.parentSpanId)) {
-        throw new Error(`Invalid parentSpanId: must be 1-16 hexadecimal characters, got "${options.parentSpanId}"`);
+      if (isValidSpanId(options.parentSpanId)) {
+        this.parentSpanId = options.parentSpanId;
+      } else {
+        console.error(
+          `[Mastra Tracing] Invalid parentSpanId: must be 1-16 hexadecimal characters, got "${options.parentSpanId}". Ignoring parent span ID.`,
+        );
       }
-      this.parentSpanId = options.parentSpanId;
     }
   }
 

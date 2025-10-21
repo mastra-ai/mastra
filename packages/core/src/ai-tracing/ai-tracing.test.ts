@@ -1024,7 +1024,7 @@ describe('AI Tracing', () => {
       expect(endEvent?.exportedSpan.parentSpanId).toBe(parentSpanId);
     });
 
-    it('should throw error for invalid external trace ID', () => {
+    it('should log error and generate new trace ID for invalid trace ID', () => {
       const aiTracing = new DefaultAITracing({
         serviceName: 'test-tracing',
         name: 'test-instance',
@@ -1032,19 +1032,26 @@ describe('AI Tracing', () => {
         exporters: [testExporter],
       });
 
-      expect(() => {
-        aiTracing.startSpan({
-          type: AISpanType.AGENT_RUN,
-          name: 'agent with invalid trace',
-          attributes: {
-            agentId: 'agent-1',
-          },
-          traceId: 'invalid-trace-id',
-        });
-      }).toThrow('Invalid traceId: must be 1-32 hexadecimal characters');
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with invalid trace',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId: 'invalid-trace-id',
+      });
+
+      // Should log error
+      expect(mockConsole.error).toHaveBeenCalledWith(expect.stringContaining('[Mastra Tracing] Invalid traceId'));
+
+      // Should generate a new valid trace ID
+      expect(span.traceId).toBeValidTraceId();
+      expect(span.traceId).not.toBe('invalid-trace-id');
+
+      span.end();
     });
 
-    it('should throw error for trace ID that is too long', () => {
+    it('should log error and generate new trace ID for trace ID that is too long', () => {
       const aiTracing = new DefaultAITracing({
         serviceName: 'test-tracing',
         name: 'test-instance',
@@ -1052,19 +1059,28 @@ describe('AI Tracing', () => {
         exporters: [testExporter],
       });
 
-      expect(() => {
-        aiTracing.startSpan({
-          type: AISpanType.AGENT_RUN,
-          name: 'agent with too long trace',
-          attributes: {
-            agentId: 'agent-1',
-          },
-          traceId: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0',
-        });
-      }).toThrow('Invalid traceId: must be 1-32 hexadecimal characters');
+      const tooLongTraceId = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0';
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with too long trace',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId: tooLongTraceId,
+      });
+
+      // Should log error
+      expect(mockConsole.error).toHaveBeenCalledWith(expect.stringContaining('[Mastra Tracing] Invalid traceId'));
+
+      // Should generate a new valid trace ID
+      expect(span.traceId).toBeValidTraceId();
+      expect(span.traceId).not.toBe(tooLongTraceId);
+
+      span.end();
     });
 
-    it('should throw error for invalid external parent span ID', () => {
+    it('should log error and ignore invalid parent span ID', () => {
       const aiTracing = new DefaultAITracing({
         serviceName: 'test-tracing',
         name: 'test-instance',
@@ -1072,20 +1088,31 @@ describe('AI Tracing', () => {
         exporters: [testExporter],
       });
 
-      expect(() => {
-        aiTracing.startSpan({
-          type: AISpanType.AGENT_RUN,
-          name: 'agent with invalid parent',
-          attributes: {
-            agentId: 'agent-1',
-          },
-          traceId: '0123456789abcdef0123456789abcdef',
-          parentSpanId: 'invalid-span-id',
-        });
-      }).toThrow('Invalid parentSpanId: must be 1-16 hexadecimal characters');
+      const validTraceId = '0123456789abcdef0123456789abcdef';
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with invalid parent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId: validTraceId,
+        parentSpanId: 'invalid-span-id',
+      });
+
+      // Should log error
+      expect(mockConsole.error).toHaveBeenCalledWith(expect.stringContaining('[Mastra Tracing] Invalid parentSpanId'));
+
+      // Should use the valid trace ID
+      expect(span.traceId).toBe(validTraceId);
+
+      // Should ignore the invalid parent span ID
+      expect(span.getParentSpanId()).toBeUndefined();
+
+      span.end();
     });
 
-    it('should throw error for parent span ID that is too long', () => {
+    it('should log error and ignore parent span ID that is too long', () => {
       const aiTracing = new DefaultAITracing({
         serviceName: 'test-tracing',
         name: 'test-instance',
@@ -1093,17 +1120,29 @@ describe('AI Tracing', () => {
         exporters: [testExporter],
       });
 
-      expect(() => {
-        aiTracing.startSpan({
-          type: AISpanType.AGENT_RUN,
-          name: 'agent with too long parent',
-          attributes: {
-            agentId: 'agent-1',
-          },
-          traceId: '0123456789abcdef0123456789abcdef',
-          parentSpanId: '0123456789abcdef0123456789abcdef',
-        });
-      }).toThrow('Invalid parentSpanId: must be 1-16 hexadecimal characters');
+      const validTraceId = '0123456789abcdef0123456789abcdef';
+      const tooLongParentSpanId = '0123456789abcdef0123456789abcdef';
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with too long parent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId: validTraceId,
+        parentSpanId: tooLongParentSpanId,
+      });
+
+      // Should log error
+      expect(mockConsole.error).toHaveBeenCalledWith(expect.stringContaining('[Mastra Tracing] Invalid parentSpanId'));
+
+      // Should use the valid trace ID
+      expect(span.traceId).toBe(validTraceId);
+
+      // Should ignore the invalid parent span ID
+      expect(span.getParentSpanId()).toBeUndefined();
+
+      span.end();
     });
 
     it('should accept shorter trace and span IDs', () => {
