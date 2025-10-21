@@ -295,24 +295,28 @@ export async function watchWorkflowHandler({
     let asyncRef: NodeJS.Immediate | null = null;
     const stream = new ReadableStream<string>({
       start(controller) {
-        unwatch = _run.watch((event: any) => {
-          const { type, payload, eventTimestamp } = event;
-          controller.enqueue(JSON.stringify({ type, payload, eventTimestamp, runId }));
+        unwatch = _run.watch(
+          (event: any) => {
+            const { type, payload, eventTimestamp } = event;
+            controller.enqueue(JSON.stringify({ type, payload, eventTimestamp, runId }));
 
-          if (asyncRef) {
-            clearImmediate(asyncRef);
-            asyncRef = null;
-          }
-
-          // a run is finished if the status is not running
-          asyncRef = setImmediate(async () => {
-            const runDone = eventType === 'watch' ? payload.workflowState.status !== 'running' : type === 'finish';
-            if (runDone) {
-              controller.close();
-              unwatch?.();
+            if (asyncRef) {
+              clearImmediate(asyncRef);
+              asyncRef = null;
             }
-          });
-        }, eventType);
+
+            // a run is finished if the status is not running
+            asyncRef = setImmediate(async () => {
+              const runDone = eventType === 'watch' ? payload.workflowState.status !== 'running' : type === 'finish';
+              if (runDone) {
+                controller.close();
+                unwatch?.();
+              }
+            });
+          },
+          // @ts-expect-error - fix error later
+          eventType,
+        );
       },
       cancel() {
         if (asyncRef) {
@@ -464,15 +468,19 @@ export async function streamVNextWorkflowHandler({
       inputData,
       runtimeContext,
       closeOnSuspend,
-      onChunk: async chunk => {
-        if (serverCache) {
-          const cacheKey = runId;
-          await serverCache.listPush(cacheKey, chunk);
-        }
-      },
       tracingOptions,
     });
-    return result;
+    return result.fullStream.pipeThrough(
+      new TransformStream<ChunkType, ChunkType>({
+        transform(chunk, controller) {
+          if (serverCache) {
+            const cacheKey = runId;
+            serverCache.listPush(cacheKey, chunk).catch(() => {});
+          }
+          controller.enqueue(chunk);
+        },
+      }),
+    );
   } catch (error) {
     return handleError(error, 'Error streaming workflow');
   }
@@ -704,18 +712,25 @@ export async function resumeStreamWorkflowHandler({
     const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
     const serverCache = mastra.getServerCache();
 
-    const stream = _run.resumeStreamVNext({
-      step: body.step,
-      resumeData: body.resumeData,
-      runtimeContext,
-      tracingOptions,
-      onChunk: async chunk => {
-        if (serverCache) {
-          const cacheKey = runId;
-          await serverCache.listPush(cacheKey, chunk);
-        }
-      },
-    });
+    const stream = _run
+      .resumeStreamVNext({
+        step: body.step,
+        resumeData: body.resumeData,
+        runtimeContext,
+        tracingOptions,
+      })
+      .fullStream.pipeThrough(
+        new TransformStream<ChunkType, ChunkType>({
+          transform(chunk, controller) {
+            if (serverCache) {
+              const cacheKey = runId;
+              serverCache.listPush(cacheKey, chunk).catch(() => {});
+            }
+
+            controller.enqueue(chunk);
+          },
+        }),
+      );
 
     return stream;
   } catch (error) {
