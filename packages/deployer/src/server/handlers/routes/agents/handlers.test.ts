@@ -361,6 +361,64 @@ describe('Handlers', () => {
   });
 
   describe('approveToolCallHandler', () => {
+    beforeEach(async () => {
+      vi.clearAllMocks();
+
+      mockLogger = {
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+        getTransports: vi.fn(() => []),
+        getLogs: vi.fn(() => []),
+        getLogsByRunId: vi.fn(() => []),
+        trackException: vi.fn(),
+      };
+
+      mockAgent = {} as Agent;
+      mockAgent.name = 'test-agent';
+      mockAgent.stream = vi.fn();
+      mockAgent.approveToolCall = vi.fn();
+      mockAgent.declineToolCall = vi.fn();
+      mockAgent.network = vi.fn();
+      mockAgent.getMemory = vi.fn();
+
+      mockMastra = {
+        getAgent: vi.fn((id: string) => (id === 'test-agent' ? mockAgent : undefined)),
+        getLogger: vi.fn(() => mockLogger),
+      } as any;
+
+      mockContext = {
+        req: {
+          param: vi.fn((key: string) => (key === 'agentId' ? 'test-agent' : undefined)),
+          json: vi.fn().mockResolvedValue({
+            messages: [{ role: 'user', content: 'test message' }],
+            runId: 'test-run-id',
+            toolCallId: 'test-tool-call-id',
+          }),
+          raw: {
+            signal: new AbortController().signal,
+          } as any,
+        } as any,
+        get: vi.fn((key: string) => {
+          if (key === 'mastra') return mockMastra;
+          if (key === 'runtimeContext') return new RuntimeContext();
+          return undefined;
+        }),
+        header: vi.fn(),
+        json: vi.fn((data: any, status?: number) => {
+          return new Response(JSON.stringify(data), {
+            status: status || 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }) as any,
+        newResponse: vi.fn((body: any, init?: any) => {
+          return new Response(body, init);
+        }) as any,
+      };
+
+      originalApproveToolCallHandler = handlers.approveToolCallHandler;
+    });
     it('should return HTTP 429 when rate limit error occurs before streaming', async () => {
       const rateLimitError = createAI_APICallError({
         message: 'Rate limit exceeded',
@@ -402,6 +460,64 @@ describe('Handlers', () => {
   });
 
   describe('declineToolCallHandler', () => {
+    beforeEach(async () => {
+      vi.clearAllMocks();
+
+      mockLogger = {
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+        getTransports: vi.fn(() => []),
+        getLogs: vi.fn(() => []),
+        getLogsByRunId: vi.fn(() => []),
+        trackException: vi.fn(),
+      };
+
+      mockAgent = {} as Agent;
+      mockAgent.name = 'test-agent';
+      mockAgent.stream = vi.fn();
+      mockAgent.approveToolCall = vi.fn();
+      mockAgent.declineToolCall = vi.fn();
+      mockAgent.network = vi.fn();
+      mockAgent.getMemory = vi.fn();
+
+      mockMastra = {
+        getAgent: vi.fn((id: string) => (id === 'test-agent' ? mockAgent : undefined)),
+        getLogger: vi.fn(() => mockLogger),
+      } as any;
+
+      mockContext = {
+        req: {
+          param: vi.fn((key: string) => (key === 'agentId' ? 'test-agent' : undefined)),
+          json: vi.fn().mockResolvedValue({
+            messages: [{ role: 'user', content: 'test message' }],
+            runId: 'test-run-id',
+            toolCallId: 'test-tool-call-id',
+          }),
+          raw: {
+            signal: new AbortController().signal,
+          } as any,
+        } as any,
+        get: vi.fn((key: string) => {
+          if (key === 'mastra') return mockMastra;
+          if (key === 'runtimeContext') return new RuntimeContext();
+          return undefined;
+        }),
+        header: vi.fn(),
+        json: vi.fn((data: any, status?: number) => {
+          return new Response(JSON.stringify(data), {
+            status: status || 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }) as any,
+        newResponse: vi.fn((body: any, init?: any) => {
+          return new Response(body, init);
+        }) as any,
+      };
+
+      originalDeclineToolCallHandler = handlers.declineToolCallHandler;
+    });
     it('should return HTTP 500 when provider error occurs before streaming', async () => {
       const providerError = createAI_APICallError({
         message: 'Provider error',
