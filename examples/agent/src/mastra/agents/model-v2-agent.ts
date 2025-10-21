@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
+import { logDataMiddleware } from '../../model-middleware';
+import { wrapLanguageModel } from 'ai-v5';
 import { cookingTool } from '../tools';
 
 export const weatherInfo = createTool({
@@ -39,7 +41,10 @@ export const chefModelV2Agent = new Agent({
       `,
     role: 'system',
   },
-  model: openai_v5('gpt-4o-mini'),
+  model: wrapLanguageModel({
+    model: openai_v5('gpt-4o-mini'),
+    middleware: logDataMiddleware,
+  }),
 
   tools: {
     weatherInfo,
