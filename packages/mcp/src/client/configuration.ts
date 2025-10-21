@@ -874,3 +874,52 @@ To fix this you have three different options:
   }
 }
 
+/**
+ * @deprecated MCPConfigurationOptions is deprecated and will be removed in a future release. Use {@link MCPClientOptions} instead.
+ *
+ * This interface has been renamed to MCPClientOptions. The API is identical.
+ */
+export interface MCPConfigurationOptions {
+  /** @deprecated Use MCPClientOptions.id instead */
+  id?: string;
+  /** @deprecated Use MCPClientOptions.servers instead */
+  servers: Record<string, MastraMCPServerDefinition>;
+  /** @deprecated Use MCPClientOptions.timeout instead */
+  timeout?: number;
+}
+
+/**
+ * @deprecated MCPConfiguration is deprecated and will be removed in a future release. Use {@link MCPClient} instead.
+ *
+ * This class has been renamed to MCPClient. The API is identical but the class name changed
+ * for clarity and consistency.
+ *
+ * @example
+ * ```typescript
+ * // Old way (deprecated)
+ * const config = new MCPConfiguration({
+ *   servers: { myServer: { command: 'npx', args: ['tsx', 'server.ts'] } }
+ * });
+ *
+ * // New way (recommended)
+ * const client = new MCPClient({
+ *   servers: { myServer: { command: 'npx', args: ['tsx', 'server.ts'] } }
+ * });
+ * ```
+ */
+export class MCPConfiguration extends MCPClient {
+  /**
+   * @deprecated Use MCPClient constructor instead
+   */
+  constructor(args: MCPClientOptions) {
+    super(args);
+    throw new MastraError(
+      {
+        id: 'MCP_CLIENT_CONFIGURATION_DEPRECATED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        text: '[DEPRECATION] MCPConfiguration has been renamed to MCPClient and MCPConfiguration is deprecated. The API is identical but the MCPConfiguration export will be removed in the future. Update your imports now to prevent future errors.',
+      },
+    );
+  }
+}
