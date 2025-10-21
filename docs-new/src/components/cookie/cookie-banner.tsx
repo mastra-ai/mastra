@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import useIsBrowser from '@docusaurus/useIsBrowser';
 import { Button } from '../ui/button';
-import { useFeatureFlagEnabled } from 'posthog-js/react';
 
 declare global {
   interface Window {
@@ -11,16 +10,53 @@ declare global {
   }
 }
 
+// Simple EU timezone detection (not 100% accurate but good enough for cookie consent)
+function detectEUTimezone(): boolean {
+  const euTimezones = [
+    'Europe/London',
+    'Europe/Paris',
+    'Europe/Berlin',
+    'Europe/Madrid',
+    'Europe/Rome',
+    'Europe/Amsterdam',
+    'Europe/Brussels',
+    'Europe/Vienna',
+    'Europe/Stockholm',
+    'Europe/Copenhagen',
+    'Europe/Oslo',
+    'Europe/Helsinki',
+    'Europe/Warsaw',
+    'Europe/Prague',
+    'Europe/Budapest',
+    'Europe/Athens',
+    'Europe/Bucharest',
+    'Europe/Sofia',
+    'Europe/Zagreb',
+    'Europe/Dublin',
+    'Europe/Lisbon',
+  ];
+
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return euTimezones.some(tz => timezone.startsWith(tz.split('/')[0]));
+  } catch {
+    // If timezone detection fails, show banner to be safe
+    return true;
+  }
+}
+
 export function CookieBanner({ onConsentChange }: { onConsentChange: (consent: boolean) => void }) {
   const [showBanner, setShowBanner] = useState(false);
   const isBrowser = useIsBrowser();
 
-  // PostHog hook is safe to call - returns undefined during SSR
-  // The posthog-docusaurus plugin provides PostHogProvider
-  const isEUFlag = useFeatureFlagEnabled('cookie-banner');
+  // Detect if user is in EU timezone
+  const [isEU, setIsEU] = useState<boolean | undefined>(undefined);
 
-  // Only trust the flag value when in browser
-  const isEU = isBrowser ? isEUFlag : undefined;
+  useEffect(() => {
+    if (isBrowser) {
+      setIsEU(detectEUTimezone());
+    }
+  }, [isBrowser]);
 
   useEffect(() => {
     if (isEU === undefined) return;
