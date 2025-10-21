@@ -1110,7 +1110,7 @@ importers:
         version: 20.19.21
       ai:
         specifier: ^4.3.19
-        version: 4.3.19(react@19.1.1)(zod@3.25.76)
+        version: 4.3.19(react@19.2.0)(zod@3.25.76)
       eslint:
         specifier: ^9.36.0
         version: 9.37.0(jiti@2.6.0)
