@@ -12892,5 +12892,110 @@ describe('Workflow', () => {
 
       expect(typedStep).toBeDefined();
     });
+
+    it('should propagate tracingContext to agent steps created with createStep', async () => {
+      // Track whether tracingContext was passed to the agent
+      let receivedTracingContext: any = null;
+
+      // Create a mock agent with v2 model that captures the tracingContext
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'test instructions',
+        model: new MockLanguageModelV2({
+          doStream: async ({ tracingContext }: any) => {
+            // Capture the tracingContext passed to the agent
+            receivedTracingContext = tracingContext;
+            return {
+              stream: simulateReadableStream({
+                chunks: [
+                  { type: 'text-start', id: '1' },
+                  { type: 'text-delta', id: '1', delta: 'Test response' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    logprobs: undefined,
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ],
+              }),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+            };
+          },
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'tracing-test-workflow',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ text: z.string() }),
+      });
+
+      const agentStep = createStep(agent);
+
+      workflow
+        .map(async ({ inputData }) => ({ prompt: inputData.query }))
+        .then(agentStep)
+        .map(async ({ inputData }) => ({ text: inputData.text }))
+        .commit();
+
+      const run = await workflow.createRunAsync();
+      await run.start({ inputData: { query: 'test query' } });
+
+      // Verify that tracingContext was passed to the agent
+      expect(receivedTracingContext).toBeDefined();
+      expect(receivedTracingContext.currentSpan).toBeDefined();
+    });
+
+    it('should propagate tracingContext to agent steps with v1 models', async () => {
+      // Track whether tracingContext was passed to the agent
+      let receivedTracingContext: any = null;
+
+      // Create a mock agent with v1 model that captures the tracingContext
+      const agent = new Agent({
+        name: 'test-agent-v1',
+        instructions: 'test instructions',
+        model: new MockLanguageModelV1({
+          doStream: async ({ tracingContext }: any) => {
+            // Capture the tracingContext passed to the agent
+            receivedTracingContext = tracingContext;
+            return {
+              stream: simulateReadableStream({
+                chunks: [
+                  { type: 'text-delta', textDelta: 'Test response' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    logprobs: undefined,
+                    usage: { completionTokens: 10, promptTokens: 3 },
+                  },
+                ],
+              }),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+            };
+          },
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'tracing-test-workflow-v1',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ text: z.string() }),
+      });
+
+      const agentStep = createStep(agent);
+
+      workflow
+        .map(async ({ inputData }) => ({ prompt: inputData.query }))
+        .then(agentStep)
+        .map(async ({ inputData }) => ({ text: inputData.text }))
+        .commit();
+
+      const run = await workflow.createRunAsync();
+      await run.start({ inputData: { query: 'test query' } });
+
+      // Verify that tracingContext was passed to the agent
+      expect(receivedTracingContext).toBeDefined();
+      expect(receivedTracingContext.currentSpan).toBeDefined();
+    });
   });
 });
