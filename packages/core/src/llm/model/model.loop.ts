@@ -12,7 +12,7 @@ import type { Schema, ModelMessage, ToolSet } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives } from '../../action';
-import { AISpanType } from '../../ai-tracing';
+import { AISpanType, ModelSpanTracker } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
@@ -204,6 +204,9 @@ export class MastraLLMVNext extends MastraBase {
       tracingPolicy: this.#options?.tracingPolicy,
     });
 
+    // Create model span tracker that will be shared across all LLM execution steps
+    const modelSpanTracker = new ModelSpanTracker(llmAISpan);
+
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
         mastra: this.#mastra,
@@ -226,6 +229,7 @@ export class MastraLLMVNext extends MastraBase {
         outputProcessors,
         returnScorerData,
         llmAISpan,
+        modelSpanTracker,
         requireToolApproval,
         agentId,
         options: {

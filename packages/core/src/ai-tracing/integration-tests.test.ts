@@ -79,9 +79,7 @@ class TestExporter implements AITracingExporter {
       ).toBe(false);
       state.hasStart = true;
     } else if (event.type === AITracingEventType.SPAN_ENDED) {
-      // Detect event spans (zero duration) - only check this in SPAN_ENDED where we have final timestamps
-      const isEventSpan = event.exportedSpan.startTime === event.exportedSpan.endTime;
-      if (isEventSpan) {
+      if (event.exportedSpan.isEvent) {
         // Event spans should only emit SPAN_ENDED, no SPAN_STARTED or SPAN_UPDATED
         expect(
           state.hasStart,
@@ -612,14 +610,29 @@ const mockModelV2 = new MockLanguageModelV2({
     const toolCall = getToolCallFromPrompt(prompt);
 
     if (toolCall) {
+      const argsJson = JSON.stringify(toolCall.args);
       return {
         stream: convertArrayToReadableStream([
+          {
+            type: 'tool-input-start',
+            id: toolCall.toolCallId,
+            toolName: toolCall.toolName,
+          },
+          {
+            type: 'tool-input-delta',
+            id: toolCall.toolCallId,
+            delta: argsJson,
+          },
+          {
+            type: 'tool-input-end',
+            id: toolCall.toolCallId,
+          },
           {
             type: 'tool-call',
             toolCallId: toolCall.toolCallId,
             toolName: toolCall.toolName,
-            args: toolCall.args,
-            input: JSON.stringify(toolCall.args),
+            args: argsJson,
+            input: argsJson,
           },
           { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 } },
         ]),
@@ -1120,6 +1133,8 @@ describe('AI Tracing Integration Tests', () => {
 
         const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
         const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+        const llmStepSpans = testExporter.getSpansByType(AISpanType.LLM_STEP);
+        const llmChunkSpans = testExporter.getSpansByType(AISpanType.LLM_CHUNK);
         const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
         const workflowSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
         const workflowSteps = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
@@ -1129,6 +1144,26 @@ describe('AI Tracing Integration Tests', () => {
         expect(toolCallSpans.length).toBe(1); // one tool call (calculator)
         expect(workflowSpans.length).toBe(0); // no workflows
         expect(workflowSteps.length).toBe(0); // no workflows
+
+        // For non-legacy methods: we track all chunks including tool-call, step-start, step-finish, finish, etc.
+        // For legacy methods: no chunk tracking
+        if (name.includes('Legacy')) {
+          expect(llmChunkSpans.length).toBe(0);
+          expect(llmStepSpans.length).toBe(0); // no step tracking in legacy
+        } else {
+          // VNext tracks chunks - verify we have at least tool-call chunk
+          expect(llmChunkSpans.length).toBeGreaterThan(0);
+          const toolCallChunk = llmChunkSpans.find(s => s.name === "chunk: 'tool-call'");
+          expect(toolCallChunk).toBeDefined();
+
+          // Verify tool-call chunk output structure
+          expect(toolCallChunk?.output).toBeDefined();
+          expect(toolCallChunk?.output?.toolName).toBeDefined();
+          expect(typeof toolCallChunk?.output?.toolName).toBe('string');
+          expect(toolCallChunk?.output?.toolCallId).toBeDefined();
+          expect(toolCallChunk?.output?.toolInput).toBeDefined();
+          expect(typeof toolCallChunk?.output?.toolInput).toBe('object');
+        }
 
         const agentRunSpan = agentRunSpans[0];
         const llmGenerationSpan = llmGenerationSpans[0];
@@ -1140,7 +1175,13 @@ describe('AI Tracing Integration Tests', () => {
 
         // verify span nesting
         expect(llmGenerationSpan?.parentSpanId).toEqual(agentRunSpan?.id);
-        expect(toolCallSpan?.parentSpanId).toEqual(agentRunSpan?.id);
+        if (name.includes('Legacy')) {
+          expect(toolCallSpan?.parentSpanId).toEqual(agentRunSpan?.id);
+        } else {
+          const llmStepSpan = llmStepSpans[0];
+          expect(llmStepSpan).toBeDefined();
+          expect(toolCallSpan?.parentSpanId).toEqual(llmStepSpan?.id);
+        }
 
         expect(llmGenerationSpan?.name).toBe("llm: 'mock-model-id'");
         expect(llmGenerationSpan?.input.messages).toHaveLength(2);
@@ -1192,6 +1233,7 @@ describe('AI Tracing Integration Tests', () => {
 
         const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
         const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+        const llmChunkSpans = testExporter.getSpansByType(AISpanType.LLM_CHUNK);
         const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
         const workflowSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
         const workflowSteps = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
@@ -1199,6 +1241,25 @@ describe('AI Tracing Integration Tests', () => {
         expect(agentRunSpans.length).toBe(1); // one agent run
         expect(llmGenerationSpans.length).toBe(1); // tool call
         expect(toolCallSpans.length).toBe(1); // one tool call (calculator)
+
+        // For non-legacy methods: we track all chunks including tool-call, step-start, step-finish, finish, etc.
+        // For legacy methods: no chunk tracking
+        if (name.includes('Legacy')) {
+          expect(llmChunkSpans.length).toBe(0);
+        } else {
+          // VNext tracks chunks - verify we have at least tool-call chunk
+          expect(llmChunkSpans.length).toBeGreaterThan(0);
+          const toolCallChunk = llmChunkSpans.find(s => s.name === "chunk: 'tool-call'");
+          expect(toolCallChunk).toBeDefined();
+
+          // Verify tool-call chunk output structure
+          expect(toolCallChunk?.output).toBeDefined();
+          expect(toolCallChunk?.output?.toolName).toBeDefined();
+          expect(typeof toolCallChunk?.output?.toolName).toBe('string');
+          expect(toolCallChunk?.output?.toolCallId).toBeDefined();
+          expect(toolCallChunk?.output?.toolInput).toBeDefined();
+          expect(typeof toolCallChunk?.output?.toolInput).toBe('object');
+        }
 
         const agentRunSpan = agentRunSpans[0];
         const llmGenerationSpan = llmGenerationSpans[0];
@@ -1269,6 +1330,7 @@ describe('AI Tracing Integration Tests', () => {
 
         const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
         const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+        const llmStepSpans = testExporter.getSpansByType(AISpanType.LLM_STEP);
         const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
         const workflowSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
         const workflowSteps = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
@@ -1287,7 +1349,13 @@ describe('AI Tracing Integration Tests', () => {
 
         // verify span nesting
         expect(llmGenerationSpan?.parentSpanId).toEqual(agentRunSpan?.id);
-        expect(toolCallSpan?.parentSpanId).toEqual(agentRunSpan?.id);
+        if (name.includes('Legacy')) {
+          expect(toolCallSpan?.parentSpanId).toEqual(agentRunSpan?.id);
+        } else {
+          const llmStepSpan = llmStepSpans[0];
+          expect(llmStepSpan).toBeDefined();
+          expect(toolCallSpan?.parentSpanId).toEqual(llmStepSpan?.id);
+        }
 
         expect(llmGenerationSpan?.name).toBe("llm: 'mock-model-id'");
         expect(llmGenerationSpan?.input.messages).toHaveLength(2);
@@ -1343,6 +1411,7 @@ describe('AI Tracing Integration Tests', () => {
 
         const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
         const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+        const llmChunkSpans = testExporter.getSpansByType(AISpanType.LLM_CHUNK);
         const processorRunSpans = testExporter.getSpansByType(AISpanType.PROCESSOR_RUN);
         const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
         const workflowSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
@@ -1361,6 +1430,11 @@ describe('AI Tracing Integration Tests', () => {
         expect(toolCallSpans.length).toBe(0); // no tools
         expect(workflowSpans.length).toBe(0); // no workflows
         expect(workflowSteps.length).toBe(0); // no workflows
+        // For structured output: we now track object chunks
+        expect(llmChunkSpans.length).toBeGreaterThan(0);
+        // Verify we have object chunks (from both Test Agent and structured-output processor agent)
+        const hasObjectChunks = llmChunkSpans.some(s => s.name?.includes('object'));
+        expect(hasObjectChunks).toBe(true);
 
         // Identify the Test Agent spans vs processor agent spans
         const testAgentSpan = agentRunSpans.find(span => span.name?.includes('Test Agent'));
