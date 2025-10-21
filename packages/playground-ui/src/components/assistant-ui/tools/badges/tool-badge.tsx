@@ -6,18 +6,14 @@ import { SyntaxHighlighter } from '../../../ui/syntax-highlighter';
 import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import { MastraUIMessage } from '@mastra/react';
+import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
 
-export interface ToolBadgeProps {
+export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   toolName: string;
   args: Record<string, unknown> | string;
   result: any;
   metadata?: MastraUIMessage['metadata'];
   toolOutput: Array<{ toolId: string }>;
-  requiresApproval?: boolean;
-  onApprove?: () => void;
-  onDecline?: () => void;
-  isRunning?: boolean;
-  toolCallApprovalStatus?: 'approved' | 'declined';
 }
 
 export const ToolBadge = ({
@@ -26,11 +22,8 @@ export const ToolBadge = ({
   result,
   metadata,
   toolOutput,
-  requiresApproval,
-  onApprove,
-  onDecline,
-  isRunning,
-  toolCallApprovalStatus,
+  toolCallId,
+  toolApprovalMetadata,
 }: ToolBadgeProps) => {
   let argSlot = null;
 
@@ -53,6 +46,8 @@ export const ToolBadge = ({
 
   const toolCalled = result || toolOutput.length > 0;
 
+  console.log('requiresApproval===', toolApprovalMetadata);
+
   return (
     <BadgeWrapper
       data-testid="tool-badge"
@@ -66,7 +61,7 @@ export const ToolBadge = ({
           />
         )
       }
-      initialCollapsed={!requiresApproval}
+      initialCollapsed={!!toolApprovalMetadata}
     >
       <div className="space-y-4">
         <div>
@@ -91,33 +86,11 @@ export const ToolBadge = ({
           </div>
         )}
 
-        {requiresApproval && !toolCalled && (
-          <div>
-            <p className="font-medium pb-2">Tool approval required</p>
-            <div className="flex gap-2 items-center">
-              <Button
-                onClick={onApprove}
-                disabled={isRunning || !!toolCallApprovalStatus}
-                className={toolCallApprovalStatus === 'approved' ? '!text-accent1' : ''}
-              >
-                <Icon>
-                  <Check />
-                </Icon>
-                Approve
-              </Button>
-              <Button
-                onClick={onDecline}
-                disabled={isRunning || !!toolCallApprovalStatus}
-                className={toolCallApprovalStatus === 'declined' ? '!text-accent2' : ''}
-              >
-                <Icon>
-                  <X />
-                </Icon>
-                Decline
-              </Button>
-            </div>
-          </div>
-        )}
+        <ToolApprovalButtons
+          toolCalled={toolCalled}
+          toolCallId={toolCallId}
+          toolApprovalMetadata={toolApprovalMetadata}
+        />
       </div>
     </BadgeWrapper>
   );

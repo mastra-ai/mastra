@@ -27,29 +27,26 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const isAgent = (metadata?.mode === 'network' && metadata.from === 'AGENT') || toolName.startsWith('agent-');
   const isWorkflow = (metadata?.mode === 'network' && metadata.from === 'WORKFLOW') || toolName.startsWith('workflow-');
 
-  const { approveToolcall, declineToolcall, isRunning, toolCallApprovals } = useToolCall();
-
-  const handleApprove = (toolCallId: string) => {
-    approveToolcall(toolCallId);
-  };
-
-  const handleDecline = (toolCallId: string) => {
-    declineToolcall(toolCallId);
-  };
-
   const agentToolName = toolName.startsWith('agent-') ? toolName.substring('agent-'.length) : toolName;
   const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
-
-  useWorkflowStream(result);
-
-  if (isAgent) {
-    return <AgentBadgeWrapper agentId={agentToolName} result={result} metadata={metadata} />;
-  }
 
   const requireApprovalMetadata = metadata?.mode === 'stream' && metadata?.requireApprovalMetadata;
 
   const toolApprovalMetadata = requireApprovalMetadata ? requireApprovalMetadata?.[toolCallId] : undefined;
-  const toolCallApprovalStatus = toolCallApprovals?.[toolCallId]?.status;
+
+  useWorkflowStream(result);
+
+  if (isAgent) {
+    return (
+      <AgentBadgeWrapper
+        agentId={agentToolName}
+        result={result}
+        metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+      />
+    );
+  }
 
   if (isWorkflow) {
     const isStreaming = metadata?.mode === 'stream' || metadata?.mode === 'network';
@@ -58,8 +55,10 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
       <WorkflowBadge
         workflowId={workflowToolName}
         isStreaming={isStreaming}
-        runId={result?.runId}
+        result={result}
         metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
       />
     );
   }
@@ -71,11 +70,8 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
       result={result}
       toolOutput={result?.toolOutput || []}
       metadata={metadata}
-      requiresApproval={!!toolApprovalMetadata}
-      onApprove={() => handleApprove(toolApprovalMetadata?.toolCallId ?? '')}
-      onDecline={() => handleDecline(toolApprovalMetadata?.toolCallId ?? '')}
-      isRunning={isRunning}
-      toolCallApprovalStatus={toolCallApprovalStatus}
+      toolCallId={toolCallId}
+      toolApprovalMetadata={toolApprovalMetadata}
     />
   );
 };
