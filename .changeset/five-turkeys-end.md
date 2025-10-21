@@ -1,5 +1,4 @@
 ---
-'@mastra/ai-sdk': patch
 '@mastra/inngest': patch
 '@mastra/server': patch
 '@mastra/core': patch
