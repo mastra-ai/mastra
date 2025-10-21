@@ -487,7 +487,7 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "serviceTier",
-        "type": "\"auto\" | \"flex\" | \"priority\" | null | undefined",
+        "type": "\"default\" | \"auto\" | \"flex\" | \"priority\" | null | undefined",
         "description": "",
         "isOptional": true
     },
@@ -506,6 +506,12 @@ const response = await agent.generate("Hello!", {
     {
         "name": "textVerbosity",
         "type": "\"low\" | \"medium\" | \"high\" | null | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "truncation",
+        "type": "\"auto\" | \"disabled\" | null | undefined",
         "description": "",
         "isOptional": true
     },

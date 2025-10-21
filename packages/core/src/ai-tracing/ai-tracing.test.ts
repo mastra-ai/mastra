@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraError } from '../error';
+import { RuntimeContext } from '../runtime-context';
 import { clearAITracingRegistry } from './registry';
 import { DefaultAITracing } from './tracers';
 import type { AITracingEvent, AITracingExporter, LLMGenerationAttributes, AITracing, ExportedAISpan } from './types';
@@ -961,6 +962,594 @@ describe('AI Tracing', () => {
       expect(eventSpan.errorInfo).toBeUndefined();
 
       rootSpan.end();
+    });
+  });
+
+  describe('External Trace and Parent Span IDs', () => {
+    it('should accept external trace ID for root spans', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const traceId = '0123456789abcdef0123456789abcdef';
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with external trace',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId,
+      });
+
+      expect(span.traceId).toBe(traceId);
+      expect(span.id).toBeValidSpanId();
+      expect(span.getParentSpanId()).toBeUndefined();
+
+      span.end();
+    });
+
+    it('should accept external parent span ID for root spans', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const traceId = '0123456789abcdef0123456789abcdef';
+      const parentSpanId = '0123456789abcdef';
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with external parent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId,
+        parentSpanId,
+      });
+
+      expect(span.traceId).toBe(traceId);
+      expect(span.id).toBeValidSpanId();
+      expect(span.getParentSpanId()).toBe(parentSpanId);
+
+      span.end();
+
+      // Verify it's exported correctly
+      const endEvent = testExporter.events.find(e => e.type === AITracingEventType.SPAN_ENDED);
+      expect(endEvent).toBeDefined();
+      expect(endEvent?.exportedSpan.parentSpanId).toBe(parentSpanId);
+    });
+
+    it('should log error and generate new trace ID for invalid trace ID', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with invalid trace',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId: 'invalid-trace-id',
+      });
+
+      // Should log error
+      expect(mockConsole.error).toHaveBeenCalledWith(expect.stringContaining('[Mastra Tracing] Invalid traceId'));
+
+      // Should generate a new valid trace ID
+      expect(span.traceId).toBeValidTraceId();
+      expect(span.traceId).not.toBe('invalid-trace-id');
+
+      span.end();
+    });
+
+    it('should log error and generate new trace ID for trace ID that is too long', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const tooLongTraceId = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0';
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with too long trace',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId: tooLongTraceId,
+      });
+
+      // Should log error
+      expect(mockConsole.error).toHaveBeenCalledWith(expect.stringContaining('[Mastra Tracing] Invalid traceId'));
+
+      // Should generate a new valid trace ID
+      expect(span.traceId).toBeValidTraceId();
+      expect(span.traceId).not.toBe(tooLongTraceId);
+
+      span.end();
+    });
+
+    it('should log error and ignore invalid parent span ID', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const validTraceId = '0123456789abcdef0123456789abcdef';
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with invalid parent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId: validTraceId,
+        parentSpanId: 'invalid-span-id',
+      });
+
+      // Should log error
+      expect(mockConsole.error).toHaveBeenCalledWith(expect.stringContaining('[Mastra Tracing] Invalid parentSpanId'));
+
+      // Should use the valid trace ID
+      expect(span.traceId).toBe(validTraceId);
+
+      // Should ignore the invalid parent span ID
+      expect(span.getParentSpanId()).toBeUndefined();
+
+      span.end();
+    });
+
+    it('should log error and ignore parent span ID that is too long', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const validTraceId = '0123456789abcdef0123456789abcdef';
+      const tooLongParentSpanId = '0123456789abcdef0123456789abcdef';
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with too long parent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId: validTraceId,
+        parentSpanId: tooLongParentSpanId,
+      });
+
+      // Should log error
+      expect(mockConsole.error).toHaveBeenCalledWith(expect.stringContaining('[Mastra Tracing] Invalid parentSpanId'));
+
+      // Should use the valid trace ID
+      expect(span.traceId).toBe(validTraceId);
+
+      // Should ignore the invalid parent span ID
+      expect(span.getParentSpanId()).toBeUndefined();
+
+      span.end();
+    });
+
+    it('should accept shorter trace and span IDs', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const shortTraceId = 'abc123'; // 6 chars
+      const shortSpanId = 'def456'; // 6 chars
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent with short IDs',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId: shortTraceId,
+        parentSpanId: shortSpanId,
+      });
+
+      expect(span.traceId).toBe(shortTraceId);
+      expect(span.getParentSpanId()).toBe(shortSpanId);
+
+      span.end();
+    });
+
+    it('should create child spans with inherited trace ID from external trace', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const traceId = 'fedcba9876543210fedcba9876543210';
+
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'root with external trace',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        traceId,
+      });
+
+      const childSpan = rootSpan.createChildSpan({
+        type: AISpanType.LLM_GENERATION,
+        name: 'child llm call',
+        attributes: {
+          model: 'gpt-4',
+        },
+      });
+
+      expect(rootSpan.traceId).toBe(traceId);
+      expect(childSpan.traceId).toBe(traceId);
+      expect(childSpan.getParentSpanId()).toBe(rootSpan.id);
+
+      childSpan.end();
+      rootSpan.end();
+    });
+
+    it('should allow parent span ID without trace ID (generates new trace)', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const parentSpanId = 'fedcba9876543210';
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.WORKFLOW_RUN,
+        name: 'workflow with external parent only',
+        attributes: {
+          workflowId: 'workflow-1',
+        },
+        parentSpanId,
+      });
+
+      // Should generate a new trace ID
+      expect(span.traceId).toBeValidTraceId();
+      // Should use the external parent span ID
+      expect(span.getParentSpanId()).toBe(parentSpanId);
+
+      span.end();
+    });
+
+    it('should ignore external IDs when span has a parent object', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'root span',
+        attributes: {
+          agentId: 'agent-1',
+        },
+      });
+
+      const childSpan = rootSpan.createChildSpan({
+        type: AISpanType.LLM_GENERATION,
+        name: 'child span',
+        attributes: {
+          model: 'gpt-4',
+        },
+      });
+
+      // Child should use parent's trace ID, not external IDs
+      expect(childSpan.traceId).toBe(rootSpan.traceId);
+      expect(childSpan.getParentSpanId()).toBe(rootSpan.id);
+
+      childSpan.end();
+      rootSpan.end();
+    });
+  });
+  describe('TraceState and metadata extraction from RuntimeContext', () => {
+    it('should extract metadata from RuntimeContext using configured keys', () => {
+      // Create AI tracing with configured metadata keys
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        runtimeContextKeys: ['userId', 'environment'],
+        exporters: [testExporter],
+      });
+
+      // Create runtime context with test data
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('userId', 'user-123');
+      runtimeContext.set('environment', 'production');
+      runtimeContext.set('otherData', 'not-extracted');
+
+      // Start span with runtime context
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        runtimeContext,
+      });
+
+      // Verify metadata was extracted
+      expect(span.metadata).toEqual({
+        userId: 'user-123',
+        environment: 'production',
+      });
+
+      span.end();
+    });
+
+    it('should merge configured keys with per-request keys', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        runtimeContextKeys: ['userId', 'environment'],
+        exporters: [testExporter],
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('userId', 'user-123');
+      runtimeContext.set('environment', 'production');
+      runtimeContext.set('experimentId', 'exp-789');
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        runtimeContext,
+        tracingOptions: {
+          runtimeContextKeys: ['experimentId'],
+        },
+      });
+
+      // Verify both configured and per-request keys were extracted
+      expect(span.metadata).toEqual({
+        userId: 'user-123',
+        environment: 'production',
+        experimentId: 'exp-789',
+      });
+
+      span.end();
+    });
+
+    it('should support nested value extraction using dot notation', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        runtimeContextKeys: ['user.id', 'session.data.experimentId'],
+        exporters: [testExporter],
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('user', { id: 'user-456', name: 'Test User' });
+      runtimeContext.set('session', { data: { experimentId: 'exp-999' } });
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        runtimeContext,
+      });
+
+      // Verify nested values were extracted
+      expect(span.metadata).toEqual({
+        user: { id: 'user-456' },
+        session: { data: { experimentId: 'exp-999' } },
+      });
+
+      span.end();
+    });
+
+    it('should inherit TraceState in child spans', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        runtimeContextKeys: ['userId'],
+        exporters: [testExporter],
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('userId', 'user-123');
+      runtimeContext.set('toolData', 'tool-specific');
+
+      // Create root span
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        runtimeContext,
+      });
+
+      // Create child span - should inherit TraceState
+      const childSpan = rootSpan.createChildSpan({
+        type: AISpanType.TOOL_CALL,
+        name: 'tool-call',
+        attributes: {
+          toolId: 'tool-1',
+        },
+      });
+
+      // Verify TraceState was inherited
+      expect(childSpan.traceState).toEqual(rootSpan.traceState);
+      expect(childSpan.traceState?.runtimeContextKeys).toEqual(['userId']);
+
+      rootSpan.end();
+    });
+
+    it('should extract metadata in child spans when runtimeContext is passed', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        runtimeContextKeys: ['userId', 'sessionId'],
+        exporters: [testExporter],
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('userId', 'user-123');
+      runtimeContext.set('sessionId', 'session-456');
+      runtimeContext.set('requestId', 'request-789');
+
+      // Create root span with RuntimeContext
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        runtimeContext,
+      });
+
+      // Root span should have extracted metadata
+      expect(rootSpan.metadata).toEqual({
+        userId: 'user-123',
+        sessionId: 'session-456',
+      });
+
+      // Create child span WITH runtimeContext passed
+      const childSpan = rootSpan.createChildSpan({
+        type: AISpanType.TOOL_CALL,
+        name: 'tool-call',
+        attributes: {
+          toolId: 'tool-1',
+        },
+        runtimeContext, // Pass RuntimeContext to child
+      });
+
+      // Child span should also have extracted metadata
+      expect(childSpan.metadata).toEqual({
+        userId: 'user-123',
+        sessionId: 'session-456',
+      });
+      expect(childSpan.traceState).toEqual(rootSpan.traceState);
+
+      // Create another child WITHOUT runtimeContext
+      const childSpanNoContext = rootSpan.createChildSpan({
+        type: AISpanType.LLM_GENERATION,
+        name: 'llm-call',
+        attributes: {
+          model: 'gpt-4',
+        },
+      });
+
+      // This child should NOT have extracted metadata
+      expect(childSpanNoContext.metadata).toBeUndefined();
+      expect(childSpanNoContext.traceState).toEqual(rootSpan.traceState);
+
+      rootSpan.end();
+    });
+
+    it('should prioritize explicit metadata over extracted metadata', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        runtimeContextKeys: ['userId'],
+        exporters: [testExporter],
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('userId', 'user-from-context');
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        runtimeContext,
+        metadata: {
+          userId: 'user-explicit',
+          customField: 'custom-value',
+        },
+      });
+
+      // Verify explicit metadata takes precedence
+      expect(span.metadata).toEqual({
+        userId: 'user-explicit',
+        customField: 'custom-value',
+      });
+
+      span.end();
+    });
+
+    it('should handle missing RuntimeContext gracefully', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        runtimeContextKeys: ['userId'],
+        exporters: [testExporter],
+      });
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        // No runtimeContext provided
+      });
+
+      // Should not have metadata from RuntimeContext
+      expect(span.metadata).toBeUndefined();
+
+      span.end();
+    });
+
+    it('should skip undefined values in RuntimeContext', () => {
+      const aiTracing = new DefaultAITracing({
+        serviceName: 'test-service',
+        name: 'test',
+        runtimeContextKeys: ['userId', 'missingKey'],
+        exporters: [testExporter],
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('userId', 'user-123');
+      // missingKey is not set
+
+      const span = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        runtimeContext,
+      });
+
+      // Should only include userId
+      expect(span.metadata).toEqual({
+        userId: 'user-123',
+      });
+
+      span.end();
     });
   });
 });
