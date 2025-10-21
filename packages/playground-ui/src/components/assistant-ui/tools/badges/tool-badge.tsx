@@ -46,8 +46,6 @@ export const ToolBadge = ({
 
   const toolCalled = result || toolOutput.length > 0;
 
-  console.log('requiresApproval===', toolApprovalMetadata);
-
   return (
     <BadgeWrapper
       data-testid="tool-badge"
