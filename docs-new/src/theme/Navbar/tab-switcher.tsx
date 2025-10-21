@@ -6,7 +6,7 @@ const docsTabs = [
   {
     id: 'Docs',
     label: 'Docs',
-    href: '/docs/intro',
+    href: '/docs',
     basePath: '/docs',
   },
   {
