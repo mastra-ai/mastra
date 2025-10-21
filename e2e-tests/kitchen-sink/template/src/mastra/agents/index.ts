@@ -1,12 +1,19 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
 import { weatherInfo } from '../tools';
 import { simulateReadableStream } from 'ai';
 import * as aiTest from 'ai/test';
 import { fixtures } from '../../../fixtures';
 import { Fixtures } from '../../../types';
 
-const memory = new Memory();
+const memory = new Memory({
+  // ...
+  storage: new LibSQLStore({
+    url: 'file:../mastra.db',
+  }),
+  // ...
+});
 
 let count = 0;
 
