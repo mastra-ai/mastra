@@ -113,7 +113,7 @@ export const convertMastraMessagesToGenAIMessages = (inputOutputString: string):
           const role = m.role;
           let parts: GenAIMessagePart[] = [];
           if (Array.isArray(m.content)) {
-            parts = m.content.map((c: any) => {
+            parts = m.content.map(c => {
               switch (c.type) {
                 case 'text':
                   return {
