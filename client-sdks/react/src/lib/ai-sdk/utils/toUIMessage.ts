@@ -298,7 +298,6 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
       if (toolPartIndex !== -1) {
         const toolPart = parts[toolPartIndex];
-        console.log('toolPart=====', toolPart);
 
         if (toolPart.type === 'dynamic-tool') {
           if (chunk.payload.isError) {
