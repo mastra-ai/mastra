@@ -108,21 +108,21 @@ The Scorers tab displays the results of your agent's scorers as they run. When m
 
 ## REST API
 
-The local development server exposes a complete set of REST API routes, allowing you to programmatically interact with your agents, workflows, and tools during development. This is particularly helpful if you plan to deploy the Mastra server because the local development server uses the exact same REST API routes as the [production environment](/docs/server-db/production-server).
+The local development server exposes a complete set of REST API routes, allowing you to programmatically interact with your agents, workflows, and tools during development. This is particularly helpful if you plan to deploy the Mastra server, since the local development server uses the exact same REST API routes as the [production server](/docs/server-db/production-server), allowing you to develop and test against it with full parity.
 
-You can explore all available endpoints in the OpenAPI specification at `http://localhost:4111/openapi.json`, which details every endpoint and its request/response schemas.
+You can explore all available endpoints in the OpenAPI specification at http://localhost:4111/openapi.json, which details every endpoint and its request/response schemas. 
 
-To explore the API interactively, visit the Swagger UI at `http://localhost:4111/swagger-ui`. Here, you can discover endpoints and test them directly from your browser.
+To explore the API interactively, visit the Swagger UI at http://localhost:4111/swagger-ui. Here, you can discover endpoints and test them directly from your browser.
 
 <Callout type="info">
-OpenAPI and Swagger endpoints are disabled in production by default. To enable them, set `server.build.openAPIDocs` and `server.build.swaggerUI` to `true`, respectively.
+OpenAPI and Swagger endpoints are disabled in production by default. To enable them, set `server.build.openAPIDocs` and `server.build.swaggerUI` to `true` respectively.
 </Callout>
 
 ## Configuration
 
 ### Port
 
-By default, the development server runs at http://localhost:4111, but you can change the `host` and `port` in the Mastra server configuration:
+By default, the development server runs at http://localhost:4111. You can change the `host` and `port` in the Mastra server configuration:
 
 ```typescript
 import { Mastra } from "@mastra/core/mastra";
@@ -152,12 +152,7 @@ export const mastra = new Mastra({
   },
 });
 ```
-
-<Callout type="info">
-When both the `--https` flag and `server.https` configuration are provided, the configuration takes precedence.
-</Callout>
-
 ## Next steps
 
-- Learn more about Mastra's [Project Structure](/docs/getting-started/project-structure)
-- Integrate Mastra with your frontend framework: [Next.js](/docs/frameworks/web-frameworks/next-js), [React](/docs/frameworks/web-frameworks/vite-react), or [Astro](/docs/frameworks/web-frameworks/astro).
+- Learn more about Mastra's suggested [project structure](/docs/getting-started/project-structure)
+- Integrate Mastra with your frontend framework of choice - [Next.js](/docs/frameworks/web-frameworks/next-js), [React](/docs/frameworks/web-frameworks/vite-react), or [Astro](/docs/frameworks/web-frameworks/astro).
