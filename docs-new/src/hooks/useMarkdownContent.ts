@@ -14,6 +14,15 @@ export const useMarkdownContent = () => {
       return '';
     }
 
+    // Clone the article to avoid modifying the DOM
+    const clonedArticle = articleElement.cloneNode(true) as HTMLElement;
+
+    // Remove unwanted elements
+    const elementsToRemove = clonedArticle.querySelectorAll(
+      '[data-copy-page-button], .theme-edit-this-page, .pagination-nav',
+    );
+    elementsToRemove.forEach(el => el.remove());
+
     // Extract text content while preserving structure
     let markdownText = '';
 
@@ -99,7 +108,11 @@ export const useMarkdownContent = () => {
             // Already handled in ul/ol
             break;
           case 'blockquote':
-            const quoteText = element.textContent?.trim().split('\n').map(line => `> ${line}`).join('\n');
+            const quoteText = element.textContent
+              ?.trim()
+              .split('\n')
+              .map(line => `> ${line}`)
+              .join('\n');
             result += `\n${quoteText}\n\n`;
             break;
           case 'a':
@@ -130,7 +143,7 @@ export const useMarkdownContent = () => {
     };
 
     // Convert the article content to markdown
-    articleElement.childNodes.forEach(node => {
+    clonedArticle.childNodes.forEach(node => {
       markdownText += convertNodeToMarkdown(node);
     });
 

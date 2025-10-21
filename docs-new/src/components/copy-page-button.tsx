@@ -1,41 +1,24 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { cn } from '@site/src/css/utils';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useMarkdownContent } from '../hooks/useMarkdownContent';
 import { ChatGPTIcon, ChevronDownIcon, ClaudeIcon, CopyPageIcon, ExternalLinkIcon } from './copy-page-icons';
-import { toast } from './custom-toast';
 import { Button } from './ui/button';
 
 export const CopyPageButton = () => {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const { getMarkdownContent } = useMarkdownContent();
+  const content = getMarkdownContent();
 
-  const getMarkdownContent = () => {
-    const articleElement = document.querySelector('article .markdown');
+  console.log(content);
 
-    if (!articleElement) {
-      return 'No content found';
-    }
-
-    const title = document.querySelector('article h1')?.textContent || '';
-    const content = articleElement.textContent || '';
-
-    return `# ${title}\n\n${content}`;
-  };
-
-  const handleCopyPage = async () => {
-    try {
-      const content = getMarkdownContent();
-      await navigator.clipboard.writeText(content);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-      toast({
-        title: 'Error',
-        description: 'Failed to copy content to clipboard',
-      });
-    }
-  };
+  const handleCopyPage = useCallback(async () => {
+    const content = getMarkdownContent();
+    await navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [content]);
 
   const handleOpenInChatGPT = () => {
     const currentUrl = window.location.href;
@@ -52,7 +35,7 @@ export const CopyPageButton = () => {
   };
 
   return (
-    <div className="flex items-center">
+    <div className="flex items-center" data-copy-page-button>
       <Button
         variant="ghost"
         onClick={handleCopyPage}
