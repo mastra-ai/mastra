@@ -29,6 +29,7 @@ import type {
   ExecutionEngineOptions,
   StepWithComponent,
   SuspendOptions,
+  WorkflowStreamEvent,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -332,7 +333,12 @@ export class InngestRun<
     return result;
   }
 
-  watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
+  watch(cb: (event: WatchEvent) => void, type: 'watch'): () => void;
+  watch(cb: (event: WorkflowStreamEvent) => void, type: 'watch-v2'): () => void;
+  watch(
+    cb: ((event: WatchEvent) => void) | ((event: WorkflowStreamEvent) => void),
+    type: 'watch' | 'watch-v2' = 'watch',
+  ): () => void {
     let active = true;
     const streamPromise = subscribe(
       {

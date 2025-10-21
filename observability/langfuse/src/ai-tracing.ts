@@ -12,18 +12,14 @@
  * - Adapts to v5 streaming protocol changes
  */
 
-import type {
-  AITracingExporter,
-  AITracingEvent,
-  AnyExportedAISpan,
-  LLMGenerationAttributes,
-} from '@mastra/core/ai-tracing';
+import type { AITracingEvent, AnyExportedAISpan, LLMGenerationAttributes } from '@mastra/core/ai-tracing';
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
-import { ConsoleLogger } from '@mastra/core/logger';
+import { BaseExporter } from '@mastra/core/ai-tracing/exporters';
+import type { BaseExporterConfig } from '@mastra/core/ai-tracing/exporters';
 import { Langfuse } from 'langfuse';
 import type { LangfuseTraceClient, LangfuseSpanClient, LangfuseGenerationClient, LangfuseEventClient } from 'langfuse';
 
-export interface LangfuseExporterConfig {
+export interface LangfuseExporterConfig extends BaseExporterConfig {
   /** Langfuse API key */
   publicKey?: string;
   /** Langfuse secret key */
@@ -32,8 +28,6 @@ export interface LangfuseExporterConfig {
   baseUrl?: string;
   /** Enable realtime mode - flushes after each event for immediate visibility */
   realtime?: boolean;
-  /** Logger level for diagnostic messages (default: 'warn') */
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Additional options to pass to the Langfuse client */
   options?: any;
 }
@@ -111,22 +105,21 @@ interface NormalizedUsage {
   promptCacheMiss?: number;
 }
 
-export class LangfuseExporter implements AITracingExporter {
+export class LangfuseExporter extends BaseExporter {
   name = 'langfuse';
   private client: Langfuse;
   private realtime: boolean;
   private traceMap = new Map<string, TraceData>();
-  private logger: ConsoleLogger;
 
   constructor(config: LangfuseExporterConfig) {
+    super(config);
+
     this.realtime = config.realtime ?? false;
-    this.logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
 
     if (!config.publicKey || !config.secretKey) {
-      this.logger.error('LangfuseExporter: Missing required credentials, exporter will be disabled', {
-        hasPublicKey: !!config.publicKey,
-        hasSecretKey: !!config.secretKey,
-      });
+      this.setDisabled(
+        `Missing required credentials (publicKey: ${!!config.publicKey}, secretKey: ${!!config.secretKey})`,
+      );
       // Create a no-op client to prevent runtime errors
       this.client = null as any;
       return;
@@ -140,12 +133,7 @@ export class LangfuseExporter implements AITracingExporter {
     });
   }
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
-    if (!this.client) {
-      // Exporter is disabled due to missing credentials
-      return;
-    }
-
+  protected async _exportEvent(event: AITracingEvent): Promise<void> {
     if (event.exportedSpan.isEvent) {
       await this.handleEventSpan(event.exportedSpan);
       return;
@@ -513,5 +501,6 @@ export class LangfuseExporter implements AITracingExporter {
       await this.client.shutdownAsync();
     }
     this.traceMap.clear();
+    await super.shutdown();
   }
 }

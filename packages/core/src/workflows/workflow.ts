@@ -1,7 +1,6 @@
 import EventEmitter from 'events';
 import { randomUUID } from 'node:crypto';
-import type { ReadableStream, WritableStream } from 'node:stream/web';
-import { TransformStream } from 'node:stream/web';
+import { WritableStream, ReadableStream, TransformStream } from 'node:stream/web';
 import { z } from 'zod';
 import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
@@ -12,7 +11,7 @@ import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
 import type { MastraScorers } from '../scores';
-import { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
+import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
@@ -42,6 +41,7 @@ import type {
   WorkflowResult,
   WorkflowRunState,
   WorkflowRunStatus,
+  WorkflowStreamEvent,
 } from './types';
 
 export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
@@ -180,6 +180,7 @@ export function createStep<
         [EMITTER_SYMBOL]: emitter,
         [STREAM_FORMAT_SYMBOL]: streamFormat,
         runtimeContext,
+        tracingContext,
         abortSignal,
         abort,
         writer,
@@ -206,6 +207,7 @@ export function createStep<
             // resourceId: inputData.resourceId,
             // threadId: inputData.threadId,
             runtimeContext,
+            tracingContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
             },
@@ -215,6 +217,7 @@ export function createStep<
         } else {
           const modelOutput = await params.stream(inputData.prompt, {
             runtimeContext,
+            tracingContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
             },
@@ -1427,8 +1430,8 @@ export class Run<
     return this.#mastra;
   }
 
+  #streamOutput?: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   protected closeStreamAction?: () => Promise<void>;
-  protected activeStream?: MastraWorkflowStream<TState, TInput, TOutput, TSteps>;
   protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   protected stateSchema?: z.ZodObject<any>;
 
@@ -1603,6 +1606,10 @@ export class Run<
       input: inputData,
       attributes: {
         workflowId: this.workflowId,
+      },
+      metadata: {
+        resourceId: this.resourceId,
+        runId: this.runId,
       },
       tracingPolicy: this.tracingPolicy,
       tracingOptions,
@@ -1857,63 +1864,11 @@ export class Run<
    * @returns A readable stream of the workflow events
    */
   observeStreamVNext(): ReadableStream<ChunkType> {
-    const { readable, writable } = new TransformStream<ChunkType, ChunkType>({
-      transform(chunk, controller) {
-        controller.enqueue(chunk);
-      },
-    });
+    if (!this.#streamOutput) {
+      throw new Error('Stream has not been started yet. Please start the stream first.');
+    }
 
-    let buffer: ChunkType[] = [];
-    let isWriting = false;
-    const tryWrite = async () => {
-      const chunkToWrite = buffer;
-      buffer = [];
-
-      if (chunkToWrite.length === 0 || isWriting) {
-        return;
-      }
-      isWriting = true;
-
-      let watchWriter = writable.getWriter();
-
-      try {
-        for (const chunk of chunkToWrite) {
-          await watchWriter.write(chunk);
-        }
-      } finally {
-        watchWriter.releaseLock();
-      }
-      isWriting = false;
-
-      setImmediate(tryWrite);
-    };
-
-    // TODO: fix this, watch-v2 doesn't have a type
-    // @ts-ignore
-    const unwatch = this.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
-      buffer.push({
-        type,
-        runId: this.runId,
-        from,
-        payload: {
-          stepName: (payload as unknown as { id: string }).id,
-          ...payload,
-        },
-      });
-
-      await tryWrite();
-    }, 'watch-v2');
-
-    this.#observerHandlers.push(async () => {
-      unwatch();
-      try {
-        await writable.close();
-      } catch (err) {
-        console.error('Error closing stream:', err);
-      }
-    });
-
-    return readable;
+    return this.#streamOutput.fullStream;
   }
 
   async streamAsync({
@@ -1937,110 +1892,84 @@ export class Run<
     tracingContext,
     tracingOptions,
     closeOnSuspend = true,
-    onChunk,
+    initialState,
   }: {
     inputData?: z.input<TInput>;
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     closeOnSuspend?: boolean;
-    onChunk?: (chunk: ChunkType) => Promise<unknown>;
-  } = {}): MastraWorkflowStream<TState, TInput, TOutput, TSteps> {
-    if (this.closeStreamAction && this.activeStream) {
-      return this.activeStream;
+    initialState?: z.input<TState>;
+  } = {}): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    if (this.closeStreamAction && this.#streamOutput) {
+      return this.#streamOutput;
     }
 
     this.closeStreamAction = async () => {};
 
-    this.activeStream = new MastraWorkflowStream<TState, TInput, TOutput, TSteps>({
-      run: this,
-      createStream: () => {
-        const { readable, writable } = new TransformStream<ChunkType, ChunkType>({
-          transform(chunk, controller) {
-            controller.enqueue(chunk);
-          },
-        });
-
-        let buffer: ChunkType[] = [];
-        let isWriting = false;
-        const tryWrite = async () => {
-          const chunkToWrite = buffer;
-          buffer = [];
-
-          if (chunkToWrite.length === 0 || isWriting) {
-            return;
-          }
-          isWriting = true;
-
-          let watchWriter = writable.getWriter();
-
-          try {
-            for (const chunk of chunkToWrite) {
-              await watchWriter.write(chunk);
-              if (onChunk) {
-                await onChunk(chunk);
-              }
-            }
-          } finally {
-            watchWriter.releaseLock();
-          }
-          isWriting = false;
-
-          setImmediate(tryWrite);
-        };
-
+    const self = this;
+    const stream = new ReadableStream<WorkflowStreamEvent>({
+      async start(controller) {
         // TODO: fix this, watch-v2 doesn't have a type
         // @ts-ignore
-        const unwatch = this.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
-          buffer.push({
+        const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
+          controller.enqueue({
             type,
-            runId: this.runId,
+            runId: self.runId,
             from,
             payload: {
               stepName: (payload as unknown as { id: string }).id,
               ...payload,
             },
-          });
-
-          await tryWrite();
+          } as WorkflowStreamEvent);
         }, 'watch-v2');
 
-        this.closeStreamAction = async () => {
+        self.closeStreamAction = async () => {
           unwatch();
-          await Promise.all(this.#observerHandlers.map(handler => handler()));
-          this.#observerHandlers = [];
 
           try {
-            await writable.close();
+            await controller.close();
           } catch (err) {
             console.error('Error closing stream:', err);
           }
         };
-
-        const executionResults = this._start({
+        const executionResultsPromise = self._start({
           inputData,
           runtimeContext,
           tracingContext,
           tracingOptions,
-          writableStream: writable,
-        }).then(result => {
-          if (closeOnSuspend) {
-            // always close stream, even if the workflow is suspended
-            // this will trigger a finish event with workflow status set to suspended
-            this.closeStreamAction?.().catch(() => {});
-          } else if (result.status !== 'suspended') {
-            this.closeStreamAction?.().catch(() => {});
-          }
-
-          return result;
+          initialState,
+          writableStream: new WritableStream<WorkflowStreamEvent>({
+            write(chunk) {
+              controller.enqueue(chunk);
+            },
+          }),
         });
-        this.executionResults = executionResults;
 
-        return readable;
+        const executionResults = await executionResultsPromise;
+
+        if (closeOnSuspend) {
+          // always close stream, even if the workflow is suspended
+          // this will trigger a finish event with workflow status set to suspended
+          self.closeStreamAction?.().catch(() => {});
+        } else if (executionResults.status !== 'suspended') {
+          self.closeStreamAction?.().catch(() => {});
+        }
+        if (self.#streamOutput) {
+          self.#streamOutput.updateResults(
+            executionResults as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>,
+          );
+        }
       },
     });
 
-    return this.activeStream;
+    this.#streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      stream,
+    });
+
+    return this.#streamOutput;
   }
 
   /**
@@ -2054,7 +1983,6 @@ export class Run<
     runtimeContext,
     tracingContext,
     tracingOptions,
-    onChunk,
   }: {
     resumeData?: z.input<TInput>;
     step?:
@@ -2065,103 +1993,82 @@ export class Run<
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
-    onChunk?: (chunk: ChunkType) => Promise<unknown>;
   } = {}) {
     this.closeStreamAction = async () => {};
 
-    this.activeStream = new MastraWorkflowStream({
-      run: this,
-      createStream: () => {
-        const { readable, writable } = new TransformStream<ChunkType, ChunkType>({
-          transform(chunk, controller) {
-            controller.enqueue(chunk);
-          },
-        });
-
-        let buffer: ChunkType[] = [];
-        let isWriting = false;
-        const tryWrite = async () => {
-          const chunkToWrite = buffer;
-          buffer = [];
-
-          if (chunkToWrite.length === 0 || isWriting) {
-            return;
-          }
-          isWriting = true;
-
-          let watchWriter = writable.getWriter();
-
-          try {
-            for (const chunk of chunkToWrite) {
-              await watchWriter.write(chunk);
-              if (onChunk) {
-                await onChunk(chunk);
-              }
-            }
-          } finally {
-            watchWriter.releaseLock();
-          }
-          isWriting = false;
-
-          setImmediate(tryWrite);
-        };
-
+    const self = this;
+    const stream = new ReadableStream<WorkflowStreamEvent>({
+      async start(controller) {
         // TODO: fix this, watch-v2 doesn't have a type
         // @ts-ignore
-        const unwatch = this.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
-          buffer.push({
+        const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
+          controller.enqueue({
             type,
-            runId: this.runId,
+            runId: self.runId,
             from,
             payload: {
               stepName: (payload as unknown as { id: string }).id,
               ...payload,
             },
-          });
-
-          await tryWrite();
+          } as WorkflowStreamEvent);
         }, 'watch-v2');
 
-        this.closeStreamAction = async () => {
+        self.closeStreamAction = async () => {
           unwatch();
-          await Promise.all(this.#observerHandlers.map(handler => handler()));
-          this.#observerHandlers = [];
 
           try {
-            await writable.close();
+            await controller.close();
           } catch (err) {
             console.error('Error closing stream:', err);
           }
         };
-
-        const executionResults = this._resume({
+        const executionResultsPromise = self._resume({
           resumeData,
           step,
           runtimeContext,
           tracingContext,
           tracingOptions,
-          writableStream: writable,
+          writableStream: new WritableStream<WorkflowStreamEvent>({
+            write(chunk) {
+              controller.enqueue(chunk);
+            },
+          }),
           isVNext: true,
-        }).then(result => {
-          // always close stream, even if the workflow is suspended
-          // this will trigger a finish event with workflow status set to suspended
-          this.closeStreamAction?.().catch(() => {});
-
-          return result;
         });
-        this.executionResults = executionResults;
 
-        return readable;
+        self.executionResults = executionResultsPromise;
+
+        const executionResults = await executionResultsPromise;
+        self.closeStreamAction?.().catch(() => {});
+
+        if (self.#streamOutput) {
+          self.#streamOutput.updateResults(executionResults);
+        }
       },
     });
 
-    return this.activeStream;
+    this.#streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      stream,
+    });
+
+    return this.#streamOutput;
   }
 
-  watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
+  watch(cb: (event: WatchEvent) => void, type: 'watch'): () => void;
+  watch(cb: (event: WorkflowStreamEvent) => void, type: 'watch-v2'): () => void;
+  watch(
+    cb: ((event: WatchEvent) => void) | ((event: WorkflowStreamEvent) => void),
+    type: 'watch' | 'watch-v2' = 'watch',
+  ): () => void {
     const watchCb = (event: WatchEvent) => {
       this.updateState(event.payload);
-      cb({ type: event.type, payload: this.getState() as any, eventTimestamp: event.eventTimestamp });
+      (cb as (event: WatchEvent) => void)({
+        type: event.type,
+        payload: this.getState() as any,
+        eventTimestamp: event.eventTimestamp,
+      });
     };
 
     const nestedWatchCb = ({ event, workflowId }: { event: WatchEvent; workflowId: string }) => {
@@ -2183,7 +2090,7 @@ export class Run<
           },
         };
         this.updateState(newPayload);
-        cb({ type, payload: this.getState() as any, eventTimestamp: eventTimestamp });
+        (cb as (event: WatchEvent) => void)({ type, payload: this.getState() as any, eventTimestamp: eventTimestamp });
       } catch (e) {
         console.error(e);
       }
@@ -2221,8 +2128,14 @@ export class Run<
     };
   }
 
-  async watchAsync(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): Promise<() => void> {
-    return this.watch(cb, type);
+  async watchAsync(cb: (event: WatchEvent) => void, type: 'watch'): Promise<() => void>;
+  async watchAsync(cb: (event: WorkflowStreamEvent) => void, type: 'watch-v2'): Promise<() => void>;
+  async watchAsync(
+    cb: ((event: WatchEvent) => void) | ((event: WorkflowStreamEvent) => void),
+    type: 'watch' | 'watch-v2' = 'watch',
+  ): Promise<() => void> {
+    // @ts-ignore
+    return this.watch(cb as (event: WatchEvent) => void, type);
   }
 
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
@@ -2369,6 +2282,10 @@ export class Run<
       attributes: {
         workflowId: this.workflowId,
       },
+      metadata: {
+        resourceId: this.resourceId,
+        runId: this.runId,
+      },
       tracingPolicy: this.tracingPolicy,
       tracingOptions: params.tracingOptions,
       tracingContext: params.tracingContext,
@@ -2424,7 +2341,11 @@ export class Run<
 
     this.executionResults = executionResultPromise;
 
-    return executionResultPromise;
+    return executionResultPromise.then(result => {
+      this.#streamOutput?.updateResults(result as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>);
+
+      return result;
+    });
   }
 
   /**
@@ -2452,7 +2373,7 @@ export class Run<
    * @returns The execution results of the workflow run
    */
   _getExecutionResults(): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> | undefined {
-    return this.executionResults;
+    return this.executionResults ?? this.#streamOutput?.result;
   }
 }
 
