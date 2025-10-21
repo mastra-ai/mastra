@@ -1,8 +1,13 @@
-import type { MastraModelOutput, ChunkType, OutputSchema, MastraAgentNetworkStream } from '@mastra/core/stream';
+import type {
+  MastraModelOutput,
+  ChunkType,
+  OutputSchema,
+  MastraAgentNetworkStream,
+  WorkflowRunOutput,
+} from '@mastra/core/stream';
 import type { MastraWorkflowStream, Step, WorkflowResult } from '@mastra/core/workflows';
 import type { InferUIMessageChunk, UIMessage } from 'ai';
 import type { ZodObject, ZodType } from 'zod';
-import type { WorkflowRunOutput } from '../../../packages/core/dist/stream/RunOutput';
 import {
   AgentNetworkToAISDKTransformer,
   AgentStreamToAISDKTransformer,

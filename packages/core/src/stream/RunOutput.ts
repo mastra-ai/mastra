@@ -4,7 +4,7 @@ import type { LanguageModelUsage } from 'ai-v5';
 import type { WorkflowResult, WorkflowRunStatus } from '../workflows';
 import { DelayedPromise } from './aisdk/v5/compat';
 import type { MastraBaseStream } from './base/base';
-import type { consumeStream } from './base/consume-stream';
+import { consumeStream } from './base/consume-stream';
 import { ChunkFrom } from './types';
 import type { WorkflowStreamEvent } from './types';
 
@@ -257,7 +257,7 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
     this.#consumptionStarted = true;
 
     try {
-      await consumeStreamFn({
+      await consumeStream({
         stream: this.#baseStream as globalThis.ReadableStream,
         onError: options?.onError,
       });

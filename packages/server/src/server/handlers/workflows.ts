@@ -2,7 +2,14 @@ import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { TracingOptions } from '@mastra/core/ai-tracing';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { WorkflowRuns } from '@mastra/core/storage';
-import type { Workflow, WatchEvent, WorkflowInfo, StreamEvent, ChunkType } from '@mastra/core/workflows';
+import type {
+  Workflow,
+  WatchEvent,
+  WorkflowInfo,
+  StreamEvent,
+  ChunkType,
+  WorkflowStreamEvent,
+} from '@mastra/core/workflows';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
@@ -295,8 +302,8 @@ export async function watchWorkflowHandler({
     let asyncRef: NodeJS.Immediate | null = null;
     const stream = new ReadableStream<string>({
       start(controller) {
-        unwatch = _run.watch(
-          (event: any) => {
+        if (eventType === 'watch') {
+          unwatch = _run.watch((event: WatchEvent) => {
             const { type, payload, eventTimestamp } = event;
             controller.enqueue(JSON.stringify({ type, payload, eventTimestamp, runId }));
 
@@ -307,16 +314,33 @@ export async function watchWorkflowHandler({
 
             // a run is finished if the status is not running
             asyncRef = setImmediate(async () => {
-              const runDone = eventType === 'watch' ? payload.workflowState.status !== 'running' : type === 'finish';
+              const runDone = (payload as WatchEvent['payload']).workflowState?.status !== 'running';
               if (runDone) {
                 controller.close();
                 unwatch?.();
               }
             });
-          },
-          // @ts-expect-error - fix error later
-          eventType,
-        );
+          }, eventType);
+        } else {
+          unwatch = _run.watch((event: WorkflowStreamEvent) => {
+            const { type, payload } = event;
+            controller.enqueue(JSON.stringify({ type, payload, runId }));
+
+            if (asyncRef) {
+              clearImmediate(asyncRef);
+              asyncRef = null;
+            }
+
+            // a run is finished if the status is not running
+            asyncRef = setImmediate(async () => {
+              const runDone = type === 'workflow-finish';
+              if (runDone) {
+                controller.close();
+                unwatch?.();
+              }
+            });
+          }, eventType);
+        }
       },
       cancel() {
         if (asyncRef) {
