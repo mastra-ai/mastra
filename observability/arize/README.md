@@ -63,7 +63,7 @@ const mastra = new Mastra({
   ...,
   observability: {
     configs: {
-      otel: {
+      arize: {
         serviceName: PROJECT_NAME,
         exporters: [
           new ArizeExporter({
@@ -91,7 +91,7 @@ const mastra = new Mastra({
   ...,
   observability: {
     configs: {
-      otel: {
+      arize: {
         serviceName: 'mastra-service',
         exporters: [
           new ArizeExporter({
@@ -121,7 +121,7 @@ const mastra = new Mastra({
 });
 ```
 
-## OpenTelemetry Semantic Conventions
+## OpenInference Semantic Conventions
 
 This exporter follows the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) for generative AI applications.
 
