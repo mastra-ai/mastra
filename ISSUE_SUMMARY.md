@@ -418,65 +418,158 @@ Through our investigation, we discovered:
 3. **Memory retention**: No cleanup, everything accumulates
 4. **v0.13.2 → v0.21.1 changes**: Likely streaming pipeline refactor introduced unbounded buffers
 
-## Test Results
+## Test Suite
 
-### Comprehensive Test Suite Created
+### Overview
 
-**File**: `memory-leak-comprehensive.test.ts` - Complete test suite validating all hypotheses
+**File**: `packages/core/src/memory-leak-comprehensive.test.ts`
 
-The test suite is organized in 4 parts:
+A comprehensive test suite that validates memory leak fixes through direct behavioral testing. All tests use the **replay pattern** - attempting to read buffered data after stream completion to prove whether buffers are retained or cleared.
 
-1. **Simple Patterns** - Demonstrates fundamental memory accumulation patterns
-2. **Component Tests** - Tests actual Mastra components (MastraModelOutput, ProcessorState, etc.)
-3. **Production Simulation** - Simulates real-world usage patterns
-4. **Validation** - Confirms all hypotheses from the investigation
+**Key Principle**: Tests are written to FAIL in the buggy state and PASS only after fixes are applied.
 
-### Test Results Summary
+### Current Test Results
 
-**Test Execution**: 14 tests total, 9 passing, 5 failing due to streaming timeouts
+```
+Test Files  1 failed (1)
+Tests       7 failed (7)
+Duration    1.91s
+```
 
-All hypotheses from the investigation were **CONFIRMED**:
+**ALL 7 TESTS FAILING** ✅ - Proves bugs exist and are reliably reproducible
 
-✅ **Pattern 1: Unbounded Array Growth** - Arrays accumulate without cleanup (~0.04 MB per iteration)
-✅ **Pattern 2: Map Retention** - 50% of workflow runs stay in memory when suspended (~0.02 MB per suspended run)
-✅ **Pattern 3: EventEmitter Leaks** - Listeners accumulate linearly with each stream access (~0.01 MB per listener set)
-✅ **Component: ProcessorState** - Accumulates all stream parts unboundedly (confirmed via direct inspection)
-✅ **Component: MessageList TypeError** - Confirmed number 4822 causes TypeError (exact error reproduced)
-✅ **Production Impact: Linear Growth** - Memory grows consistently with each request
-✅ **Production Impact: Large Payloads** - 20k token payloads amplify the leak
+### Test Breakdown
 
-#### Memory Impact Measurements (Actual Test Results)
+#### Component Tests (5 tests)
 
-- **Simple patterns**: 0.04 MB retained per iteration (measured via global.gc())
-- **Map retention**: 0.02 MB per suspended workflow
-- **EventEmitter**: 0.01 MB per listener set
-- **MastraModelOutput tests**: Timeout after 10s (streaming implementation issues)
-- **Production projection** (based on actual measurements):
-  - 1,000 requests = ~40 MB leak (confirmed)
-  - 10,000 requests = ~400 MB leak (confirmed)
-  - With 20k tokens: 5x-10x amplification (estimated based on payload size)
-- **Real-world impact**: Explains crashes after 30 minutes under load
+These tests directly verify that specific components clean up after themselves:
 
-### Important Discovery
+1. **MastraModelOutput buffer retention** ❌
+   - **Test**: Attempts to replay stream after completion
+   - **Expected**: 0 chunks replayed (buffers cleared)
+   - **Actual**: 101 chunks replayed (buffers retained)
+   - **Proves**: `#bufferedChunks` array never cleared
 
-The tests show that the memory IS actually retained but at a lower rate than initially hypothesized:
+2. **ProcessorState parts retention** ❌
+   - **Test**: Adds 500 chunks, expects cleanup
+   - **Expected**: 0 parts retained
+   - **Actual**: 500 parts retained
+   - **Proves**: `streamParts` array has no cleanup mechanism
 
-- The patterns are real and reproducible
-- Memory accumulates linearly with requests
-- The issue compounds with:
-  - Larger payloads (20k tokens vs test's small strings)
-  - Multiple steps (multiplies the accumulation)
-  - Concurrent requests (parallel accumulation)
+3. **Multi-step workflow retention** ❌
+   - **Test**: 10 steps × 100 chunks each
+   - **Expected**: 0 total parts (cleared after each step)
+   - **Actual**: 1000 total parts (all retained)
+   - **Proves**: Steps never clear their state
 
-### Test Implementation Notes
+4. **CustomState retention** ❌
+   - **Test**: Adds 1000 large objects to customState
+   - **Expected**: 0 keys after cleanup
+   - **Actual**: 2 keys retained
+   - **Proves**: customState never cleared
 
-Type corrections required for the test suite:
+5. **MessageList TypeError** ❌
+   - **Test**: Passes number 4822 where message object expected
+   - **Expected**: Handles gracefully (no throw)
+   - **Actual**: Throws TypeError "Cannot use 'in' operator to search for 'content' in 4822"
+   - **Proves**: No type guard before 'in' operator
 
-- `OutputProcessor` is not generic (no `<undefined>` parameter)
-- `ProcessorRunner` requires `logger` and `agentName` in constructor
-- `processOutputStream` signature: `async ({ part }) => { return part; }`
-- `ProcessorState.accumulatedText` is private (accessed via type assertion)
-- MastraModelOutput streaming tests timeout due to implementation complexity
+#### Production Simulation Tests (2 tests)
+
+These tests simulate real-world usage patterns and prove buffer accumulation at scale:
+
+6. **Sustained load buffer accumulation** ❌
+   - **Test**: 20 streams, each with 56 chunks (50 text + 5 tool-call + 1 finish)
+   - **Expected**: 0 chunks replayed (all cleared)
+   - **Actual**: 1120 chunks replayed (20 × 56 = complete retention)
+   - **Proves**: Buffers accumulate unboundedly across multiple operations
+   - **Production impact**: With 1000 requests, this would retain 56,000 chunks
+
+7. **Large payload buffer accumulation** ❌
+   - **Test**: 5 streams with 80KB payloads each (simulating 20k token responses)
+   - **Expected**: 0 chunks replayed
+   - **Actual**: 405 chunks replayed (5 × 81 = complete retention)
+   - **Proves**: Large payloads amplify buffer retention
+   - **Production impact**: 20k token responses create massive buffer accumulation
+
+### Why These Tests Are Reliable
+
+**The Replay Pattern vs Memory Measurements:**
+
+Previous attempts to measure memory growth failed because:
+
+- ❌ Garbage Collector (GC) can hide leaks by cleaning up unreferenced data
+- ❌ Memory measurements vary between test runs
+- ❌ Tests would PASS even when buffers were retained (false negatives)
+
+The replay pattern works because:
+
+- ✅ Tests actual behavior: "Can we replay the stream?"
+- ✅ GC-proof: Actively uses buffered data, so GC cannot interfere
+- ✅ Precise: Counts exact chunks retained, not fuzzy memory estimates
+- ✅ Reliable: Consistent pass/fail across runs
+- ✅ Direct: Tests root cause (buffer retention) not symptoms (memory growth)
+
+### Projected Production Impact
+
+Based on test results showing 100% buffer retention:
+
+| Scenario                    | Chunks Retained  | Memory Impact  |
+| --------------------------- | ---------------- | -------------- |
+| 100 agent.stream() calls    | 5,600 chunks     | ~5-10 MB       |
+| 1,000 agent.stream() calls  | 56,000 chunks    | ~50-100 MB     |
+| 10,000 agent.stream() calls | 560,000 chunks   | ~500 MB - 1 GB |
+| With 20k token responses    | 5-10x multiplier | Up to 10 GB    |
+
+**Real-world validation**: Stefan's production service crashed every 5-30 minutes, consistent with these projections under load.
+
+### Test Organization
+
+```typescript
+describe('Memory Leak Tests - Issue #6322', () => {
+  describe('Component Memory Leaks', () => {
+    describe('MastraModelOutput buffer accumulation', () => {
+      it('clears buffers after stream completes');
+    });
+
+    describe('ProcessorState unbounded growth', () => {
+      it('clears stream parts after processing');
+      it('clears parts after each step in multi-step workflows');
+      it('clears customState after processing');
+    });
+
+    describe('MessageList TypeError reproduction', () => {
+      it('handles malformed data gracefully');
+    });
+  });
+
+  describe('Production Simulation', () => {
+    it('clears buffers after each stream to prevent accumulation');
+    it('clears large payload buffers after stream completion');
+  });
+});
+```
+
+### Success Criteria
+
+**Before Fixes (Current State)**:
+
+- ❌ ALL 7 tests FAILING - Proves bugs exist
+
+**After Fixes (Target State)**:
+
+- ✅ ALL 7 tests PASSING - Proves bugs fixed
+- No test should pass in buggy state
+- No test should fail in fixed state
+
+### Fix Validation Plan
+
+As fixes are implemented, tests will turn green one by one:
+
+1. **Implement MastraModelOutput.clearBuffers()** → Tests 1, 6, 7 turn green
+2. **Implement ProcessorState.finalize()** → Tests 2, 3, 4 turn green
+3. **Add MessageList type guards** → Test 5 turns green
+4. **All green** → Ready for production deployment
 
 ## Recommendation
 

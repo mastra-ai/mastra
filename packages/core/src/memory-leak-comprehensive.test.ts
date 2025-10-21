@@ -1,22 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { MastraModelOutput } from './stream/base/output';
 import { MessageList } from './agent/message-list';
-import { ProcessorState, ProcessorRunner } from './processors/runner';
+import { ProcessorState } from './processors/runner';
 import { ChunkFrom, type ChunkType } from './stream/types';
-import type { OutputProcessor } from './processors';
-import { noopLogger } from './logger/noop-logger';
-import { ReadableStream, type ReadableStreamDefaultController, type ReadableStreamDefaultReader } from 'stream/web';
+import { ReadableStream, type ReadableStreamDefaultController } from 'stream/web';
 
 /**
- * Comprehensive Memory Leak Tests for Issue #6322
+ * Memory Leak Tests for Issue #6322
  *
- * This test suite demonstrates and validates the memory leak issues reported in:
- * https://github.com/mastra-ai/mastra/issues/6322
+ * Tests validate proper cleanup of buffers, state, and data structures
+ * to prevent unbounded memory growth during streaming operations.
  *
- * Tests progress from simple patterns to complex real-world scenarios to:
- * 1. Demonstrate the fundamental memory accumulation patterns
- * 2. Show how these patterns manifest in actual Mastra components
- * 3. Prove the connection between all reported symptoms
+ * @see https://github.com/mastra-ai/mastra/issues/6322
  */
 
 // Helper to measure memory usage
@@ -25,16 +20,6 @@ function getMemoryUsage(): number {
     global.gc(); // Force garbage collection if available (run with --expose-gc)
   }
   return process.memoryUsage().heapUsed / 1024 / 1024; // MB
-}
-
-// Helper to create a mock ReadableStream
-function createMockStream<T = any>(): ReadableStream<T> {
-  return new ReadableStream({
-    start(controller) {
-      // Mock stream that immediately closes
-      controller.close();
-    },
-  });
 }
 
 // Helper to create a streaming chunk generator
@@ -50,148 +35,10 @@ function createChunkStream(chunks: ChunkType<undefined>[]): ReadableStream<Chunk
   });
 }
 
-describe('Memory Leak Comprehensive Tests - Issue #6322', () => {
-  /**
-   * PART 1: Simple Pattern Demonstrations
-   * These tests show the fundamental patterns that cause memory leaks
-   */
-  describe('Part 1: Simple Memory Accumulation Patterns', () => {
-    it('Pattern 1: Unbounded array growth (simulates bufferedChunks)', () => {
-      // This demonstrates what happens in MastraModelOutput with #bufferedChunks
-      class StreamBuffer {
-        private bufferedChunks: any[] = [];
-        private bufferedText: string[] = [];
-        private accumulatedText: string = '';
-
-        addChunk(chunk: any) {
-          this.bufferedChunks.push(chunk); // Never cleared!
-
-          if (chunk.type === 'text-delta') {
-            this.bufferedText.push(chunk.payload.text);
-            this.accumulatedText += chunk.payload.text; // Grows forever!
-          }
-        }
-
-        getStats() {
-          return {
-            chunkCount: this.bufferedChunks.length,
-            textCount: this.bufferedText.length,
-            textLength: this.accumulatedText.length,
-          };
-        }
-      }
-
-      const buffer = new StreamBuffer();
-
-      // Simulate streaming 1000 chunks
-      for (let i = 0; i < 1000; i++) {
-        buffer.addChunk({
-          type: 'text-delta',
-          payload: { text: `Chunk ${i} ` },
-        });
-      }
-
-      const stats = buffer.getStats();
-      console.log('Buffer stats after 1000 chunks:', stats);
-
-      expect(stats.chunkCount).toBe(1000);
-      expect(stats.textCount).toBe(1000);
-      expect(stats.textLength).toBeGreaterThan(5000); // Each chunk is ~8 chars
-
-      // Key insight: No cleanup method exists!
-    });
-
-    it('Pattern 2: Map retention (simulates Workflow #runs)', () => {
-      class WorkflowSimulator {
-        private runs: Map<string, any> = new Map();
-
-        createRun(runId: string, status: 'running' | 'suspended' | 'completed') {
-          const run = {
-            id: runId,
-            status,
-            data: new Array(100).fill(`Data for ${runId}`),
-            cleanup: () => this.runs.delete(runId),
-          };
-
-          this.runs.set(runId, run);
-
-          // Simulate workflow.ts line 1659 - only cleanup if not suspended
-          if (status !== 'suspended') {
-            run.cleanup();
-          }
-
-          return run;
-        }
-
-        getRunCount() {
-          return this.runs.size;
-        }
-      }
-
-      const workflow = new WorkflowSimulator();
-
-      // Create 100 runs, half suspended
-      for (let i = 0; i < 100; i++) {
-        const status = i % 2 === 0 ? 'suspended' : 'completed';
-        workflow.createRun(`run-${i}`, status);
-      }
-
-      console.log('Workflow runs retained:', workflow.getRunCount());
-      expect(workflow.getRunCount()).toBe(50); // Only suspended runs remain
-    });
-
-    it('Pattern 3: EventEmitter listener accumulation', () => {
-      class EventEmitterSimulator {
-        private listeners: Map<string, Function[]> = new Map();
-
-        on(event: string, handler: Function) {
-          if (!this.listeners.has(event)) {
-            this.listeners.set(event, []);
-          }
-          this.listeners.get(event)!.push(handler);
-        }
-
-        createStreamReader() {
-          // Simulates what happens in MastraModelOutput#createEventedStream
-          const chunkHandler = () => {};
-          const finishHandler = () => {};
-
-          this.on('chunk', chunkHandler);
-          this.on('finish', finishHandler);
-
-          // Note: Listeners are never removed unless explicitly done
-        }
-
-        getListenerCount(event: string) {
-          return this.listeners.get(event)?.length || 0;
-        }
-      }
-
-      const emitter = new EventEmitterSimulator();
-
-      // Simulate 50 stream reader creations
-      for (let i = 0; i < 50; i++) {
-        emitter.createStreamReader();
-      }
-
-      console.log('Listeners accumulated:', {
-        chunk: emitter.getListenerCount('chunk'),
-        finish: emitter.getListenerCount('finish'),
-      });
-
-      expect(emitter.getListenerCount('chunk')).toBe(50);
-      expect(emitter.getListenerCount('finish')).toBe(50);
-    });
-  });
-
-  /**
-   * PART 2: Component-Level Tests
-   * These tests demonstrate the issues in actual Mastra components
-   */
-  describe('Part 2: Mastra Component Memory Leaks', () => {
+describe('Memory Leak Tests - Issue #6322', () => {
+  describe('Component Memory Leaks', () => {
     describe('MastraModelOutput buffer accumulation', () => {
-      it('should accumulate chunks without cleanup', async () => {
-        // Create test chunks with all required fields
+      it('clears buffers after stream completes', async () => {
         const chunks: ChunkType<undefined>[] = [];
         for (let i = 0; i < 100; i++) {
           chunks.push({
@@ -228,7 +75,6 @@ describe('Memory Leak Comprehensive Tests - Issue #6322', () => {
           },
         });
 
-        // Create MastraModelOutput with proper setup
         const messageList = new MessageList({ threadId: 'test-thread' });
         const stream = createChunkStream(chunks);
 
@@ -247,46 +93,39 @@ describe('Memory Leak Comprehensive Tests - Issue #6322', () => {
           },
         });
 
-        // Process the stream
-        const reader = output.fullStream.getReader();
-        let chunkCount = 0;
+        // First read: consume the stream
+        const reader1 = output.fullStream.getReader();
+        let firstReadCount = 0;
 
         while (true) {
-          const { done, value } = await reader.read();
+          const { done, value } = await reader1.read();
           if (done) break;
-          chunkCount++;
+          firstReadCount++;
         }
-        reader.releaseLock();
+        reader1.releaseLock();
 
-        console.log(`Processed ${chunkCount} chunks`);
+        console.log(`First read: Processed ${firstReadCount} chunks`);
 
-        // Check memory impact of buffer accumulation
-        // Note: Private fields are not directly accessible, so we observe memory behavior
-        const initialMemory = getMemoryUsage();
+        // Second read: buffers should be cleared, replay should return nothing
+        const reader2 = output.fullStream.getReader();
+        let secondReadCount = 0;
 
-        // Create multiple stream readers to show listener accumulation
-        const readers: ReadableStreamDefaultReader<ChunkType<undefined>>[] = [];
-        for (let i = 0; i < 10; i++) {
-          const stream = output.fullStream;
-          readers.push(stream.getReader());
+        while (true) {
+          const { done, value } = await reader2.read();
+          if (done) break;
+          secondReadCount++;
         }
+        reader2.releaseLock();
 
-        const afterMultipleReaders = getMemoryUsage();
-        const memoryIncrease = afterMultipleReaders - initialMemory;
+        console.log(`Second read (replay): Got ${secondReadCount} chunks`);
 
-        console.log(`Memory after creating 10 readers: +${memoryIncrease.toFixed(2)} MB`);
-
-        // Clean up
-        for (const reader of readers) {
-          reader.releaseLock();
-        }
-
-        expect(chunkCount).toBeGreaterThan(0);
+        expect(secondReadCount).toBe(0);
+        expect(firstReadCount).toBe(101);
       });
     });
 
     describe('ProcessorState unbounded growth', () => {
-      it('should accumulate all stream parts', () => {
+      it('clears stream parts after processing', () => {
         const processorState = new ProcessorState<undefined>({
           processorName: 'test-processor',
           processorIndex: 0,
@@ -294,7 +133,6 @@ describe('Memory Leak Comprehensive Tests - Issue #6322', () => {
 
         const initialMemory = getMemoryUsage();
 
-        // Add 500 chunks
         for (let i = 0; i < 500; i++) {
           const chunk: ChunkType<undefined> = {
             runId: 'test-run-id',
@@ -316,91 +154,24 @@ describe('Memory Leak Comprehensive Tests - Issue #6322', () => {
           memoryUsed: `${memoryUsed.toFixed(2)} MB`,
         });
 
-        expect(processorState.streamParts.length).toBe(500);
-        // Note: accumulatedText is a private field, so we can't directly test it
-        // but we can observe its effect through memory usage
-        expect(memoryUsed).toBeGreaterThan(0); // Some memory should be used
+        // processorState.finalize();
+
+        expect(processorState.streamParts.length).toBe(0);
+
+        const afterCleanup = getMemoryUsage();
+        const retained = afterCleanup - initialMemory;
+        expect(retained).toBeLessThan(0.05);
       });
 
-      it('should accumulate across multiple processors', async () => {
-        const processors: OutputProcessor[] = [
-          {
-            name: 'processor-1',
-            processOutputStream: async ({ part }) => {
-              // Just pass through the part
-              return part;
-            },
-          },
-          {
-            name: 'processor-2',
-            processOutputStream: async ({ part }) => {
-              // Just pass through the part
-              return part;
-            },
-          },
-        ];
-
-        const runner = new ProcessorRunner({
-          outputProcessors: processors,
-          logger: noopLogger,
-          agentName: 'test-agent',
-        });
-
-        const processorStates = new Map<string, ProcessorState<undefined>>();
-        processors.forEach((p, index) => {
-          processorStates.set(
-            p.name,
-            new ProcessorState<undefined>({
-              processorName: p.name,
-              processorIndex: index,
-            }),
-          );
-        });
-
-        // Process 100 chunks through all processors
-        for (let i = 0; i < 100; i++) {
-          const chunk: ChunkType<undefined> = {
-            runId: 'test-run-id',
-            from: ChunkFrom.AGENT,
-            type: 'text-delta',
-            payload: {
-              id: `text-${i}`,
-              text: `Chunk ${i} `,
-            },
-          };
-
-          // Process through runner (this internally adds to states)
-          await runner.processPart(chunk, processorStates);
-
-          // Also manually add to demonstrate accumulation
-          for (const state of processorStates.values()) {
-            state.addPart(chunk);
-          }
-        }
-
-        // Check accumulation
-        let totalParts = 0;
-        for (const [name, state] of processorStates.entries()) {
-          totalParts += state.streamParts.length;
-          console.log(`${name}: ${state.streamParts.length} parts`);
-        }
-
-        // We're adding twice (once in processPart, once manually) so expect 400
-        expect(totalParts).toBe(400); // 2 processors × 100 chunks × 2 (double add)
-      });
-
-      it('should demonstrate memory growth with nested processor execution', () => {
-        // This simulates what happens in a multi-step agent
+      it('clears parts after each step in multi-step workflows', () => {
         const allStates: ProcessorState<undefined>[] = [];
 
-        // Simulate 10 agent steps
         for (let step = 0; step < 10; step++) {
           const stepState = new ProcessorState<undefined>({
             processorName: `step-${step}`,
             processorIndex: step,
           });
 
-          // Each step processes 100 chunks
           for (let i = 0; i < 100; i++) {
             const chunk: ChunkType<undefined> = {
               runId: `run-${step}`,
@@ -414,35 +185,34 @@ describe('Memory Leak Comprehensive Tests - Issue #6322', () => {
             stepState.addPart(chunk);
           }
 
+          // stepState.finalize();
+
           allStates.push(stepState);
-          console.log(`Step ${step + 1}: ${stepState.streamParts.length} parts`);
+          console.log(`Step ${step + 1}: ${stepState.streamParts.length} parts (should be 0)`);
         }
 
-        // Calculate total accumulation
         const totalParts = allStates.reduce((sum, state) => sum + state.streamParts.length, 0);
-        console.log(`Total parts across ${allStates.length} steps: ${totalParts}`);
+        console.log(`Total parts across ${allStates.length} steps: ${totalParts} (should be 0)`);
 
-        expect(totalParts).toBe(1000); // 10 steps × 100 chunks
-        expect(allStates.every(state => state.streamParts.length === 100)).toBe(true);
+        expect(totalParts).toBe(0);
+        expect(allStates.every(state => state.streamParts.length === 0)).toBe(true);
       });
 
-      it('should show impact of custom state accumulation', () => {
+      it('clears customState after processing', () => {
         const processorState = new ProcessorState<undefined>({
           processorName: 'custom-state-test',
           processorIndex: 0,
         });
 
-        // Simulate accumulating large objects in customState
         processorState.customState = {
           largeArray: [],
           metadata: {},
         };
 
-        // Add large data to custom state
         for (let i = 0; i < 1000; i++) {
           processorState.customState.largeArray.push({
             id: i,
-            data: 'x'.repeat(1000), // 1KB per object
+            data: 'x'.repeat(1000),
             timestamp: Date.now(),
             metadata: {
               index: i,
@@ -453,92 +223,42 @@ describe('Memory Leak Comprehensive Tests - Issue #6322', () => {
         }
 
         const customStateSize = JSON.stringify(processorState.customState).length;
-        console.log(`Custom state size: ${(customStateSize / 1024 / 1024).toFixed(2)} MB`);
+        console.log(`Custom state size before cleanup: ${(customStateSize / 1024 / 1024).toFixed(2)} MB`);
 
-        // Add reference to controller (common pattern that prevents GC)
-        processorState.customState.controller = {
-          enqueue: () => {},
-          close: () => {},
-          error: () => {},
-        };
+        // processorState.finalize();
 
-        // This creates a closure that might prevent GC
-        processorState.customState.callback = () => {
-          return processorState.customState.largeArray;
-        };
-
-        expect(processorState.customState.largeArray.length).toBe(1000);
-        expect(customStateSize).toBeGreaterThan(1000000); // > 1MB
+        expect(Object.keys(processorState.customState).length).toBe(0);
+        expect(processorState.customState.largeArray || []).toHaveLength(0);
       });
     });
 
     describe('MessageList TypeError reproduction', () => {
-      it('should throw TypeError when receiving number instead of message', () => {
+      it('handles malformed data gracefully', () => {
         const messageList = new MessageList({ threadId: 'test' });
-
-        // This simulates the actual error from production
         const malformedData: any = 4822;
 
         expect(() => {
           MessageList.isMastraMessageV2(malformedData);
-        }).toThrow("Cannot use 'in' operator");
+        }).not.toThrow();
 
-        // Test array with mixed types
-        const mixedData: any[] = [
-          { role: 'user', content: 'Hello' },
-          4822, // Number that causes TypeError
-          { role: 'assistant', content: 'Response' },
-        ];
+        const mixedData: any[] = [{ role: 'user', content: 'Hello' }, 4822, { role: 'assistant', content: 'Response' }];
 
         expect(() => {
           messageList.add(mixedData, 'memory');
-        }).toThrow();
-      });
-
-      it('should handle malformed vector metadata', () => {
-        // Simulate corrupted vector results
-        const vectorResults = [
-          { id: 'msg-1', metadata: { message_id: 'abc' } },
-          { id: 'msg-2', metadata: {} }, // Missing message_id
-          { id: 'msg-3', metadata: { message_id: undefined } }, // Undefined ID
-          { id: 'msg-4', metadata: { count: 4822 } }, // Has count but no message_id
-        ];
-
-        const messageIds = vectorResults.map(r => r.metadata.message_id);
-        console.log('Extracted IDs:', messageIds);
-
-        expect(messageIds).toContain(undefined);
-        expect(messageIds.filter(id => id === undefined).length).toBe(3);
-      });
-    });
-
-    describe('Workflow run retention', () => {
-      it.skip('should retain suspended workflow runs', async () => {
-        // Skipping this test as workflows require complex setup with proper steps
-        // The memory leak pattern is already demonstrated in other tests
+        }).not.toThrow();
       });
     });
   });
 
-  /**
-   * PART 3: Integrated Memory Growth Test
-   * This test simulates production usage patterns
-   */
-  describe('Part 3: Production Simulation', () => {
-    it('should demonstrate cumulative memory growth over repeated operations', async () => {
-      const initialMemory = getMemoryUsage();
+  describe('Production Simulation', () => {
+    it('clears buffers after each stream to prevent accumulation', async () => {
       console.log(`\n=== Production Simulation ===`);
-      console.log(`Initial memory: ${initialMemory.toFixed(2)} MB`);
 
       const outputs: MastraModelOutput<undefined>[] = [];
-      const memorySnapshots: number[] = [initialMemory];
 
-      // Simulate 20 streaming operations (scaled down from production)
       for (let i = 0; i < 20; i++) {
-        // Create chunks for this stream
         const chunks: ChunkType<undefined>[] = [];
 
-        // Simulate a conversation with 50 chunks
         for (let j = 0; j < 50; j++) {
           chunks.push({
             runId: `run-${i}`,
@@ -546,12 +266,11 @@ describe('Memory Leak Comprehensive Tests - Issue #6322', () => {
             type: 'text-delta',
             payload: {
               id: `text-${i}-${j}`,
-              text: 'x'.repeat(100), // 100 bytes per chunk
+              text: 'x'.repeat(100),
             },
           });
         }
 
-        // Add tool calls to simulate complex agents
         for (let j = 0; j < 5; j++) {
           chunks.push({
             runId: `run-${i}`,
@@ -588,7 +307,6 @@ describe('Memory Leak Comprehensive Tests - Issue #6322', () => {
           },
         });
 
-        // Create MastraModelOutput
         const messageList = new MessageList({ threadId: `thread-${i}` });
         const stream = createChunkStream(chunks);
 
@@ -609,86 +327,44 @@ describe('Memory Leak Comprehensive Tests - Issue #6322', () => {
 
         outputs.push(output);
 
-        // Process the stream
         const reader = output.fullStream.getReader();
         while (true) {
           const { done } = await reader.read();
           if (done) break;
         }
         reader.releaseLock();
-
-        // Take memory snapshot every 5 operations
-        if ((i + 1) % 5 === 0) {
-          const currentMemory = getMemoryUsage();
-          memorySnapshots.push(currentMemory);
-          const totalGrowth = currentMemory - initialMemory;
-          console.log(`After ${i + 1} streams: ${currentMemory.toFixed(2)} MB (+${totalGrowth.toFixed(2)} MB)`);
-        }
       }
 
-      const finalMemory = memorySnapshots[memorySnapshots.length - 1];
-      const totalGrowth = finalMemory - initialMemory;
-      const averageGrowthPerStream = totalGrowth / 20;
+      console.log(`Created ${outputs.length} outputs, testing buffer retention via replay...`);
 
-      console.log(`\n=== Results ===`);
-      console.log(`Total memory growth: ${totalGrowth.toFixed(2)} MB`);
-      console.log(`Average per stream: ${averageGrowthPerStream.toFixed(3)} MB`);
-      console.log(`Projected for 1000 streams: ${(averageGrowthPerStream * 1000).toFixed(0)} MB`);
-      console.log(`Projected for 10000 streams: ${(averageGrowthPerStream * 10000).toFixed(0)} MB`);
+      let totalReplayedChunks = 0;
 
-      // Check if memory is growing linearly
-      let isLinearGrowth = true;
-      for (let i = 1; i < memorySnapshots.length; i++) {
-        if (memorySnapshots[i] < memorySnapshots[i - 1]) {
-          isLinearGrowth = false;
-          break;
+      for (let i = 0; i < outputs.length; i++) {
+        const replayReader = outputs[i].fullStream.getReader();
+        let replayCount = 0;
+
+        while (true) {
+          const { done } = await replayReader.read();
+          if (done) break;
+          replayCount++;
         }
+        replayReader.releaseLock();
+
+        totalReplayedChunks += replayCount;
       }
 
-      console.log(`Linear growth pattern: ${isLinearGrowth ? 'YES (LEAK!)' : 'NO'}`);
+      console.log(`Replayed chunks: ${totalReplayedChunks} (expected: 0)`);
 
-      // Verify memory behavior
-      // Note: totalGrowth can be negative if GC is effective
-      // The test demonstrates the pattern, even if GC mitigates it
-      console.log(`Memory behavior: ${totalGrowth > 0 ? 'Growth detected' : 'GC is effective'}`);
-
-      // We expect some memory activity (either growth or GC cleanup)
-      expect(Math.abs(totalGrowth)).toBeGreaterThan(0.1); // Some memory activity occurred
-
-      // Clear references and check GC
-      outputs.length = 0;
-
-      if (global.gc) {
-        global.gc();
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        const afterGC = getMemoryUsage();
-        const recovered = finalMemory - afterGC;
-        const recoveryRate = (recovered / totalGrowth) * 100;
-
-        console.log(`\n=== Garbage Collection ===`);
-        console.log(`Memory after GC: ${afterGC.toFixed(2)} MB`);
-        console.log(`Memory recovered: ${recovered.toFixed(2)} MB (${recoveryRate.toFixed(1)}%)`);
-
-        if (recoveryRate > 80) {
-          console.log('✓ Most memory recovered - issue is reference holding');
-        } else {
-          console.log('✗ Poor recovery - true memory leak detected!');
-        }
-      }
+      expect(totalReplayedChunks).toBe(0);
     });
 
-    it('should show impact with large payloads (simulating 20k token requests)', async () => {
+    it('clears large payload buffers after stream completion', async () => {
       console.log(`\n=== Large Payload Simulation ===`);
 
-      const initialMemory = getMemoryUsage();
-      console.log(`Initial memory: ${initialMemory.toFixed(2)} MB`);
+      const outputs: MastraModelOutput<undefined>[] = [];
 
-      // Create just 5 streams with large payloads
       for (let i = 0; i < 5; i++) {
         const chunks: ChunkType<undefined>[] = [];
-
-        // Simulate 20k tokens (~80KB of text)
         const largeText = 'x'.repeat(80000);
         const chunkSize = 1000;
 
@@ -746,7 +422,8 @@ describe('Memory Leak Comprehensive Tests - Issue #6322', () => {
           },
         });
 
-        // Process stream
+        outputs.push(output);
+
         const reader = output.fullStream.getReader();
         let totalText = '';
         while (true) {
@@ -761,42 +438,27 @@ describe('Memory Leak Comprehensive Tests - Issue #6322', () => {
         console.log(`Stream ${i + 1}: Processed ${totalText.length} chars`);
       }
 
-      const finalMemory = getMemoryUsage();
-      const totalGrowth = finalMemory - initialMemory;
+      console.log(`\nTesting buffer retention via replay...`);
 
-      console.log(`\nMemory growth with large payloads: ${totalGrowth.toFixed(2)} MB`);
-      console.log(`Average per large stream: ${(totalGrowth / 5).toFixed(2)} MB`);
+      let totalReplayedChunks = 0;
 
-      // Large payloads should show significant growth
-      expect(totalGrowth).toBeGreaterThan(1); // At least 1MB for 5 large streams
-    });
-  });
+      for (let i = 0; i < outputs.length; i++) {
+        const replayReader = outputs[i].fullStream.getReader();
+        let replayCount = 0;
 
-  /**
-   * PART 4: Summary Test
-   * Validates our understanding of the complete issue
-   */
-  describe('Part 4: Issue Summary Validation', () => {
-    it('should confirm all hypotheses from Issue #6322', () => {
-      const results = {
-        bufferedChunksAccumulates: true, // Confirmed in Part 1 & 2
-        workflowRunsRetained: true, // Confirmed in Part 1 & 2
-        eventListenersLeak: true, // Confirmed in Part 1
-        processorStateGrows: true, // Confirmed in Part 2
-        typeErrorFromMalformedData: true, // Confirmed in Part 2
-        memoryGrowsLinearly: true, // Confirmed in Part 3
-        largePayloadsAmplify: true, // Confirmed in Part 3
-      };
+        while (true) {
+          const { done } = await replayReader.read();
+          if (done) break;
+          replayCount++;
+        }
+        replayReader.releaseLock();
 
-      console.log('\n=== Issue #6322 Hypothesis Validation ===');
-      for (const [hypothesis, confirmed] of Object.entries(results)) {
-        console.log(`${confirmed ? '✓' : '✗'} ${hypothesis}`);
-        expect(confirmed).toBe(true);
+        totalReplayedChunks += replayCount;
       }
 
-      console.log('\nConclusion: All memory leak hypotheses are CONFIRMED');
-      console.log('Root cause: Unbounded buffer accumulation in streaming pipeline');
-      console.log('Impact: Linear memory growth leading to OOM after sustained load');
+      console.log(`Replayed chunks: ${totalReplayedChunks} (expected: 0)`);
+
+      expect(totalReplayedChunks).toBe(0);
     });
   });
 });
