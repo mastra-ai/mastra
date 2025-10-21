@@ -227,7 +227,7 @@ async function getInputPlugins(
             },
             text: `We found a possible binary dependency in your bundle. ${id} was not found when imported at ${importer}.
             
-Please consider adding \`${packageName}\` to your externals, or updating this import.
+Please consider adding \`${packageName}\` to your externals, or updating this import to not end with ".node".
   
 export const mastra = new Mastra({
   bundler: {
