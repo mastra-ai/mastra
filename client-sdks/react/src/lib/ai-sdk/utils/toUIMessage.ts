@@ -375,7 +375,8 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             };
           } else if (
             chunk.payload.output?.from === 'AGENT' ||
-            (chunk.payload.output?.from === 'USER' && chunk.payload.output?.type?.startsWith('workflow-'))
+            (chunk.payload.output?.from === 'USER' &&
+              chunk.payload.output?.payload?.output?.type?.startsWith('workflow-'))
           ) {
             return toUIMessageFromAgent(chunk.payload.output, conversation, metadata);
           } else {

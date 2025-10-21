@@ -28,8 +28,8 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, ...props }: ToolF
   const isAgent = (metadata?.mode === 'network' && metadata.from === 'AGENT') || toolName.startsWith('agent-');
   const isWorkflow = (metadata?.mode === 'network' && metadata.from === 'WORKFLOW') || toolName.startsWith('workflow-');
 
-  const agentToolName = toolName.startsWith('agent-') ? toolName?.split('agent-')[1] : toolName;
-  const workflowToolName = toolName.startsWith('workflow-') ? toolName?.split('workflow-')[1] : toolName;
+  const agentToolName = toolName.startsWith('agent-') ? toolName.substring('agent-'.length) : toolName;
+  const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
 
   useWorkflowStream(result);
   const { data: workflow, isLoading } = useWorkflow(workflowToolName, isWorkflow);

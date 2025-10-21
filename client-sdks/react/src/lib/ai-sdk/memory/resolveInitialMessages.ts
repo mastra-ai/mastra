@@ -171,7 +171,7 @@ export const resolveToChildMessages = (messages: MastraUIMessage[]): ChildMessag
   for (const part of parts) {
     const toolPart = part as any;
     if (part.type.startsWith('tool-')) {
-      const toolName = part.type.substring(5);
+      const toolName = part.type.substring('tool-'.length);
       const isWorkflow = toolName.startsWith('workflow-');
       childMessages.push({
         type: 'tool',
