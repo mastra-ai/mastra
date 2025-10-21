@@ -4,15 +4,6 @@ import type { ToolsInput, Agent } from '../agent';
 import type { InternalCoreTool } from '../tools';
 import type { Workflow } from '../workflows';
 
-export type ConvertedTool = {
-  name: string;
-  description?: string;
-  parameters: InternalCoreTool['parameters'];
-  execute: InternalCoreTool['execute'];
-  toolType?: MCPToolType;
-  outputSchema?: InternalCoreTool['parameters'];
-};
-
 interface MCPServerSSEOptionsBase {
   /**
    * Parsed URL of the incoming request
@@ -273,10 +264,3 @@ export interface ServerDetailInfo extends ServerInfo {
   /** Information about remote access points for this server. */
   remotes?: RemoteInfo[];
 }
-
-/**
- * The type of tool registered with the MCP server.
- * This is used to categorize tools in the MCP Server playground.
- * If not specified, it defaults to a regular tool.
- */
-export type MCPToolType = 'agent' | 'workflow';

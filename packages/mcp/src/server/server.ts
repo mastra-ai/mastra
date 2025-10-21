@@ -7,14 +7,12 @@ import type {
   MCPServerConfig,
   ServerInfo,
   ServerDetailInfo,
-  ConvertedTool,
   MCPServerHonoSSEOptions,
   MCPServerSSEOptions,
-  MCPToolType,
 } from '@mastra/core/mcp';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { createTool } from '@mastra/core/tools';
-import type { InternalCoreTool } from '@mastra/core/tools';
+import type { InternalCoreTool, MCPToolType, MCPToolInvocationOptions } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -351,7 +349,7 @@ export class MCPServer extends MCPServerBase {
       return {
         tools: Object.values(this.convertedTools).map(tool => {
           const toolSpec: any = {
-            name: tool.name,
+            name: tool.id || 'unknown',
             description: tool.description,
             inputSchema: tool.parameters.jsonSchema,
           };
@@ -367,7 +365,7 @@ export class MCPServer extends MCPServerBase {
     serverInstance.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       const startTime = Date.now();
       try {
-        const tool = this.convertedTools[request.params.name] as MCPTool;
+        const tool = this.convertedTools[request.params.name];
         if (!tool) {
           this.logger.warn(`CallTool: Unknown tool '${request.params.name}' requested.`);
           return {
@@ -417,12 +415,13 @@ export class MCPServer extends MCPServerBase {
           },
         };
 
-        const result = await tool.execute(validation?.value ?? request.params.arguments ?? {}, {
+        const mcpOptions: MCPToolInvocationOptions = {
           messages: [],
           toolCallId: '',
           elicitation: sessionElicitation,
           extra,
-        });
+        };
+        const result = await tool.execute(validation?.value ?? request.params.arguments ?? {}, mcpOptions);
 
         this.logger.debug(`CallTool: Tool '${request.params.name}' executed successfully with result:`, result);
         const duration = Date.now() - startTime;
@@ -712,9 +711,9 @@ export class MCPServer extends MCPServerBase {
 
   private convertAgentsToTools(
     agentsConfig?: Record<string, Agent>,
-    definedConvertedTools?: Record<string, ConvertedTool>,
-  ): Record<string, ConvertedTool> {
-    const agentTools: Record<string, ConvertedTool> = {};
+    definedConvertedTools?: Record<string, InternalCoreTool>,
+  ): Record<string, InternalCoreTool> {
+    const agentTools: Record<string, InternalCoreTool> = {};
     if (!agentsConfig) {
       return agentTools;
     }
@@ -773,12 +772,12 @@ export class MCPServer extends MCPServerBase {
       const coreTool = makeCoreTool(agentToolDefinition, options) as InternalCoreTool;
 
       agentTools[agentToolName] = {
-        name: agentToolName,
-        description: coreTool.description,
-        parameters: coreTool.parameters,
-        execute: coreTool.execute!,
-        toolType: 'agent',
-      };
+        ...coreTool,
+        id: agentToolName,
+        mcp: {
+          toolType: 'agent',
+        },
+      } as InternalCoreTool;
       this.logger.info(`Registered agent '${agent.name}' (key: '${agentKey}') as tool: '${agentToolName}'`);
     }
     return agentTools;
@@ -786,9 +785,9 @@ export class MCPServer extends MCPServerBase {
 
   private convertWorkflowsToTools(
     workflowsConfig?: Record<string, Workflow>,
-    definedConvertedTools?: Record<string, ConvertedTool>,
-  ): Record<string, ConvertedTool> {
-    const workflowTools: Record<string, ConvertedTool> = {};
+    definedConvertedTools?: Record<string, InternalCoreTool>,
+  ): Record<string, InternalCoreTool> {
+    const workflowTools: Record<string, InternalCoreTool> = {};
     if (!workflowsConfig) {
       return workflowTools;
     }
@@ -854,13 +853,12 @@ export class MCPServer extends MCPServerBase {
       const coreTool = makeCoreTool(workflowToolDefinition, options) as InternalCoreTool;
 
       workflowTools[workflowToolName] = {
-        name: workflowToolName,
-        description: coreTool.description,
-        parameters: coreTool.parameters,
-        outputSchema: coreTool.outputSchema,
-        execute: coreTool.execute!,
-        toolType: 'workflow',
-      };
+        ...coreTool,
+        id: workflowToolName,
+        mcp: {
+          toolType: 'workflow',
+        },
+      } as InternalCoreTool;
       this.logger.info(`Registered workflow '${workflow.id}' (key: '${workflowKey}') as tool: '${workflowToolName}'`);
     }
     return workflowTools;
@@ -878,8 +876,8 @@ export class MCPServer extends MCPServerBase {
     tools: ToolsInput,
     agentsConfig?: Record<string, Agent>,
     workflowsConfig?: Record<string, Workflow>,
-  ): Record<string, ConvertedTool> {
-    const definedConvertedTools: Record<string, ConvertedTool> = {};
+  ): Record<string, InternalCoreTool> {
+    const definedConvertedTools: Record<string, InternalCoreTool> = {};
 
     for (const toolName of Object.keys(tools)) {
       const toolInstance = tools[toolName];
@@ -905,18 +903,15 @@ export class MCPServer extends MCPServerBase {
       const coreTool = makeCoreTool(toolInstance, options) as InternalCoreTool;
 
       definedConvertedTools[toolName] = {
-        name: toolName,
-        description: coreTool.description,
-        parameters: coreTool.parameters,
-        outputSchema: coreTool.outputSchema,
-        execute: coreTool.execute!,
-      };
+        ...coreTool,
+        id: toolName,
+      } as InternalCoreTool;
       this.logger.info(`Registered explicit tool: '${toolName}'`);
     }
     this.logger.info(`Total defined tools registered: ${Object.keys(definedConvertedTools).length}`);
 
-    let agentDerivedTools: Record<string, ConvertedTool> = {};
-    let workflowDerivedTools: Record<string, ConvertedTool> = {};
+    let agentDerivedTools: Record<string, InternalCoreTool> = {};
+    let workflowDerivedTools: Record<string, InternalCoreTool> = {};
     try {
       agentDerivedTools = this.convertAgentsToTools(agentsConfig, definedConvertedTools);
       workflowDerivedTools = this.convertWorkflowsToTools(workflowsConfig, definedConvertedTools);
@@ -1642,11 +1637,11 @@ export class MCPServer extends MCPServerBase {
     return {
       tools: Object.entries(this.convertedTools).map(([toolId, tool]) => ({
         id: toolId,
-        name: tool.name,
+        name: tool.id || toolId,
         description: tool.description,
         inputSchema: tool.parameters?.jsonSchema || tool.parameters,
         outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
-        toolType: tool.toolType,
+        toolType: tool.mcp?.toolType,
       })),
     };
   }
@@ -1679,11 +1674,11 @@ export class MCPServer extends MCPServerBase {
     }
     this.logger.debug(`Getting info for tool '${toolId}' on MCPServer '${this.name}'`);
     return {
-      name: tool.name,
+      name: tool.id || toolId,
       description: tool.description,
       inputSchema: tool.parameters?.jsonSchema || tool.parameters,
       outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
-      toolType: tool.toolType,
+      toolType: tool.mcp?.toolType,
     };
   }
 
