@@ -17,12 +17,13 @@ export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 
 /**
  * Extended version of ToolInvocationOptions that includes Mastra-specific properties
- * for suspend/resume functionality and stream writing.
+ * for suspend/resume functionality, stream writing, and tracing context.
  */
 export type MastraToolInvocationOptions = ToolInvocationOptions & {
   suspend?: (suspendPayload: any) => Promise<any>;
   resumeData?: any;
   writableStream?: WritableStream<any> | ToolStream<any>;
+  tracingContext?: TracingContext;
 };
 
 // Define CoreTool as a discriminated union to match the AI SDK's Tool type
