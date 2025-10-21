@@ -1,5 +1,5 @@
 ---
-title: "Example: Adding Tools to Agents "
+title: "Adding Tools to Agents "
 description: Example of creating an AI agent in Mastra that uses a dedicated tool to provide weather information.
 ---
 

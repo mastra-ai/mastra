@@ -1,5 +1,5 @@
 ---
-title: "Example: Adjusting The Chunk Size "
+title: "Adjusting The Chunk Size "
 description: Adjust chunk size in Mastra to better match your content and memory requirements.
 ---
 

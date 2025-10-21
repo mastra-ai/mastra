@@ -1,5 +1,5 @@
 ---
-title: "Example: Suspend and Resume "
+title: "Suspend and Resume "
 description: Example of using Mastra to suspend and resume legacy workflow steps during execution.
 ---
 

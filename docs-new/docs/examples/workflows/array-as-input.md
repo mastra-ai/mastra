@@ -1,5 +1,5 @@
 ---
-title: "Example: Array as Input (.foreach()) "
+title: "Array as Input (.foreach()) "
 description: Example of using Mastra to process an array using .foreach() in a workflow.
 ---
 

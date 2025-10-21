@@ -1,5 +1,5 @@
 ---
-title: "Example: Working Memory with Template "
+title: "Working Memory with Template "
 description: Example showing how to use Markdown template to structure working memory data.
 ---
 

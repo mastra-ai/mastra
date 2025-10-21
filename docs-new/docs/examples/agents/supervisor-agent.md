@@ -1,5 +1,5 @@
 ---
-title: "Example: Supervisor agent "
+title: "Supervisor agent "
 description: Example of creating a supervisor agent using Mastra, where agents interact through tool functions.
 ---
 

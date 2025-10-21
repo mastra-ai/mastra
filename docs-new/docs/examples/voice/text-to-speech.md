@@ -1,5 +1,5 @@
 ---
-title: "Example: Text to Speech "
+title: "Text to Speech "
 description: Example of using Mastra to create a text to speech application.
 ---
 

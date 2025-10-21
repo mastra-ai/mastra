@@ -1,5 +1,5 @@
 ---
-title: "Example: Memory Processors "
+title: "Memory Processors "
 description: Example showing how to use memory processors to limit tokens, filter tool calls, and create custom filters.
 ---
 

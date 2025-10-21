@@ -1,5 +1,5 @@
 ---
-title: "Example: Hybrid Vector Search "
+title: "Hybrid Vector Search "
 description: Example of using metadata filters with PGVector to enhance vector search results in Mastra.
 ---
 

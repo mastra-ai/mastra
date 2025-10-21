@@ -1,5 +1,5 @@
 ---
-title: "Example: Answer Similarity "
+title: "Answer Similarity "
 description: Example of using the Answer Similarity scorer to compare agent outputs against ground truth answers for CI/CD testing.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: "Example: Adding Workflows to Agents "
+title: "Adding Workflows to Agents "
 description: Example of creating an AI agent in Mastra that uses a dedicated workflow to provide soccer fixture information.
 ---
 

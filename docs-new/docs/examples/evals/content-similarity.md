@@ -1,5 +1,5 @@
 ---
-title: "Example: Content Similarity "
+title: "Content Similarity "
 description: Example of using the Content Similarity metric to evaluate text similarity between content.
 ---
 

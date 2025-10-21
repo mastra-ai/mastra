@@ -1,5 +1,5 @@
 ---
-title: "Example: Using the Vector Query Tool "
+title: "Using the Vector Query Tool "
 description: Example of implementing a basic RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 

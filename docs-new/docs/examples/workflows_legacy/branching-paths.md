@@ -1,5 +1,5 @@
 ---
-title: "Example: Branching Paths "
+title: "Branching Paths "
 description: Example of using Mastra to create legacy workflows with branching paths based on intermediate results.
 ---
 

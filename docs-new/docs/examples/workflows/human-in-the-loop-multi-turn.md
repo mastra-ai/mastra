@@ -1,5 +1,5 @@
 ---
-title: "Example: Multi-Turn Human in the Loop "
+title: "Multi-Turn Human in the Loop "
 description: Example of using Mastra to create workflows with multi-turn human/agent interaction points using suspend/resume and dountil methods.
 ---
 

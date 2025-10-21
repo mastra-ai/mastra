@@ -1,5 +1,5 @@
 ---
-title: "Example: Parallel Execution "
+title: "Parallel Execution "
 description: Example of using Mastra to execute multiple independent tasks in parallel within a workflow.
 ---
 

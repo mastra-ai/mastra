@@ -1,5 +1,5 @@
 ---
-title: "Example: Reranking with ZeroEntropy "
+title: "Reranking with ZeroEntropy "
 description: Example of using Mastra to improve document retrieval relevance with ZeroEntropy's reranking service.
 ---
 

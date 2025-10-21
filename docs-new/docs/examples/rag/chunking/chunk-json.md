@@ -1,5 +1,5 @@
 ---
-title: "Example: Semantically Chunking JSON "
+title: "Semantically Chunking JSON "
 description: Chunk JSON data in Mastra to semantically chunk the document.
 ---
 

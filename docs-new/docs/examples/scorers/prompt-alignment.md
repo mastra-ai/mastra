@@ -1,5 +1,5 @@
 ---
-title: "Example: Prompt Alignment "
+title: "Prompt Alignment "
 description: Example of using the Prompt Alignment scorer to evaluate how well responses align with user prompt intent and requirements.
 ---
 

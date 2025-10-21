@@ -1,5 +1,5 @@
 ---
-title: "Example: Answer Relevancy "
+title: "Answer Relevancy "
 description: Example of using the Answer Relevancy scorer to evaluate response relevancy to queries.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: "Example: Keyword Coverage "
+title: "Keyword Coverage "
 description: Example of using the Keyword Coverage metric to evaluate how well responses cover important keywords from input text.
 ---
 

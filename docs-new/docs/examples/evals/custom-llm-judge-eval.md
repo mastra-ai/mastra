@@ -1,5 +1,5 @@
 ---
-title: "Example: Real World Countries "
+title: "Real World Countries "
 description: Example of creating a custom LLM-based evaluation metric.
 ---
 

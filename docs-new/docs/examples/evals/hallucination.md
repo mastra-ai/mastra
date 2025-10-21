@@ -1,5 +1,5 @@
 ---
-title: "Example: Hallucination "
+title: "Hallucination "
 description: Example of using the Hallucination metric to evaluate factual contradictions in responses.
 ---
 

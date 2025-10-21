@@ -1,5 +1,5 @@
 ---
-title: "Example: Chain of Thought Prompting "
+title: "Chain of Thought Prompting "
 description: Example of implementing a RAG system in Mastra with chain-of-thought reasoning using OpenAI and PGVector.
 ---
 

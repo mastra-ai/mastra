@@ -1,5 +1,5 @@
 ---
-title: "Example: Calling an Agent from a Workflow "
+title: "Calling an Agent from a Workflow "
 description: Example of using Mastra to call an AI agent from within a workflow step.
 ---
 

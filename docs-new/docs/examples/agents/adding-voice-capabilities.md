@@ -1,5 +1,5 @@
 ---
-title: "Example: Adding Voice Capabilities "
+title: "Adding Voice Capabilities "
 description: "Example of adding voice capabilities to Mastra agents, enabling them to speak and listen using different voice providers."
 ---
 

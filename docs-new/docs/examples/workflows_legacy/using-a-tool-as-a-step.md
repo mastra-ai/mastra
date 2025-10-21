@@ -1,5 +1,5 @@
 ---
-title: "Example: Using a Tool as a Step "
+title: "Using a Tool as a Step "
 description: Example of using Mastra to integrate a custom tool as a step in a legacy workflow.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: "Example: Context Relevancy "
+title: "Context Relevancy "
 description: Example of using the Context Relevancy metric to evaluate how relevant context information is to a query.
 ---
 

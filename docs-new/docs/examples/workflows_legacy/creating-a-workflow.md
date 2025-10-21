@@ -1,5 +1,5 @@
 ---
-title: "Example: Creating a Workflow "
+title: "Creating a Workflow "
 description: Example of using Mastra to define and execute a simple workflow with a single step.
 ---
 

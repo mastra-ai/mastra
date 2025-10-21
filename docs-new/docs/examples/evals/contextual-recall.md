@@ -1,5 +1,5 @@
 ---
-title: "Example: Contextual Recall "
+title: "Contextual Recall "
 description: Example of using the Contextual Recall metric to evaluate how well responses incorporate context information.
 ---
 

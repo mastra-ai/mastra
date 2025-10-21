@@ -1,5 +1,5 @@
 ---
-title: "Example: Embedding Text with Cohere "
+title: "Embedding Text with Cohere "
 description: Example of using Mastra to generate embeddings using Cohere's embedding model.
 ---
 

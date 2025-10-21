@@ -1,5 +1,5 @@
 ---
-title: "Example: Summarization "
+title: "Summarization "
 description: Example of using the Summarization metric to evaluate how well LLM-generated summaries capture content while maintaining factual accuracy.
 ---
 

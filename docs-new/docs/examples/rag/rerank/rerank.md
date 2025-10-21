@@ -1,5 +1,5 @@
 ---
-title: "Example: Re-ranking Results "
+title: "Re-ranking Results "
 description: Example of implementing semantic re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 

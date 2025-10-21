@@ -1,5 +1,5 @@
 ---
-title: "Example: WhatsApp Chat Bot "
+title: "WhatsApp Chat Bot "
 description: Example of creating a WhatsApp chat bot using Mastra agents and workflows to handle incoming messages and respond naturally via text messages.
 ---
 

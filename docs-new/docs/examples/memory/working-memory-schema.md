@@ -1,5 +1,5 @@
 ---
-title: "Example: Working Memory with Schema "
+title: "Working Memory with Schema "
 description: Example showing how to use Zod schema to structure and validate working memory data.
 ---
 

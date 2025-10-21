@@ -1,5 +1,5 @@
 ---
-title: "Example: Tone Consistency "
+title: "Tone Consistency "
 description: Example of using the Tone Consistency scorer to evaluate emotional tone patterns and sentiment consistency in text.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: "Example: Context Precision "
+title: "Context Precision "
 description: Example of using the Context Precision metric to evaluate how precisely context information is used.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: "Example: Word Inclusion "
+title: "Word Inclusion "
 description: Example of creating a custom native JavaScript evaluation metric.
 ---
 

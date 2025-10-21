@@ -1,5 +1,5 @@
 ---
-title: "Example: Retrieving Top-K Results "
+title: "Retrieving Top-K Results "
 description: Example of using Mastra to query a vector database and retrieve semantically similar chunks.
 ---
 

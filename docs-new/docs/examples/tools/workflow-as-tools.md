@@ -1,5 +1,5 @@
 ---
-title: "Example: Workflows as Tools "
+title: "Workflows as Tools "
 description: Example of using workflows as tools, demonstrating how to create reusable workflow components that can be called like tools.
 ---
 

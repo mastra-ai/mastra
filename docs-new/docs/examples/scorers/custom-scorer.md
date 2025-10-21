@@ -1,5 +1,5 @@
 ---
-title: "Example: Custom Judge "
+title: "Custom Judge "
 description: Example of creating a custom based scorer using createScorer with prompt objects.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: "Example: Memory with PostgreSQL "
+title: "Memory with PostgreSQL "
 description: Example for how to use Mastra's memory system with PostgreSQL storage and vector capabilities.
 ---
 

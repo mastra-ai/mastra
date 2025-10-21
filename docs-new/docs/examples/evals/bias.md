@@ -1,5 +1,5 @@
 ---
-title: "Example: Bias "
+title: "Bias "
 description: Example of using the Bias metric to evaluate responses for various forms of bias.
 ---
 

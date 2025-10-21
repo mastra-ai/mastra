@@ -1,5 +1,5 @@
 ---
-title: "Example: Metadata Extraction "
+title: "Metadata Extraction "
 description: Example of extracting and utilizing metadata from documents in Mastra for enhanced document processing and retrieval.
 ---
 

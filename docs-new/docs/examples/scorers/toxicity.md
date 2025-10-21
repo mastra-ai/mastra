@@ -1,5 +1,5 @@
 ---
-title: "Example: Toxicity "
+title: "Toxicity "
 description: Example of using the Toxicity scorer to evaluate responses for harmful content and toxic language.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: "Example: Agent-Driven Metadata Filtering "
+title: "Agent-Driven Metadata Filtering "
 description: Example of using a Mastra agent in a RAG system to construct and apply metadata filters for document retrieval.
 ---
 

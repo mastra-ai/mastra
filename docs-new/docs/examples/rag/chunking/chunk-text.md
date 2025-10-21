@@ -1,5 +1,5 @@
 ---
-title: "Example: Semantically Chunking Text "
+title: "Semantically Chunking Text "
 description: Example of using Mastra to split large text documents into smaller chunks for processing.
 ---
 

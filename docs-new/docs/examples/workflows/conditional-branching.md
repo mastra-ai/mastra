@@ -1,5 +1,5 @@
 ---
-title: "Example: Conditional Branching "
+title: "Conditional Branching "
 description: Example of using Mastra to create conditional branches in workflows using the `branch` statement .
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: "Example: Context Relevance Scorer "
+title: "Context Relevance Scorer "
 description: Example of using the Context Relevance scorer to evaluate how relevant and useful provided context is for generating agent responses.
 ---
 

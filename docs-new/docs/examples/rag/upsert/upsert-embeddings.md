@@ -1,5 +1,5 @@
 ---
-title: "Example: Upsert Embeddings "
+title: "Upsert Embeddings "
 description: Examples of using Mastra to store embeddings in various vector databases for similarity search.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: "Example: Human in the Loop "
+title: "Human in the Loop "
 description: Example of using Mastra to create legacy workflows with human intervention points.
 ---
 

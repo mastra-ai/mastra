@@ -1,5 +1,5 @@
 ---
-title: "Example: Re-ranking Results with Tools "
+title: "Re-ranking Results with Tools "
 description: Example of implementing a RAG system with re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 

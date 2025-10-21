@@ -1,5 +1,5 @@
 ---
-title: "Example: Cyclical Dependencies "
+title: "Cyclical Dependencies "
 description: Example of using Mastra to create legacy workflows with cyclical dependencies and conditional loops.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: "Example: Context Position "
+title: "Context Position "
 description: Example of using the Context Position metric to evaluate sequential ordering in responses.
 ---
 

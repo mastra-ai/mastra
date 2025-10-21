@@ -1,5 +1,5 @@
 ---
-title: "Example: Structured Reasoning with Workflows "
+title: "Structured Reasoning with Workflows "
 description: Example of implementing structured reasoning in a RAG system using Mastra's workflow capabilities.
 ---
 

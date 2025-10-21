@@ -1,5 +1,5 @@
 ---
-title: "Example: Content Similarity "
+title: "Content Similarity "
 description: Example of using the Content Similarity scorer to evaluate text similarity between content.
 ---
 

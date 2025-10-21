@@ -1,5 +1,5 @@
 ---
-title: "Example: Semantically Chunking Markdown "
+title: "Semantically Chunking Markdown "
 description: Example of using Mastra to chunk markdown documents for search or retrieval purposes.
 ---
 

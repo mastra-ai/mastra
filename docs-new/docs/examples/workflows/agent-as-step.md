@@ -1,5 +1,5 @@
 ---
-title: "Example: Using an Agent as a Step "
+title: "Using an Agent as a Step "
 description: Example of using Mastra to integrate an agent as a step in a workflow.
 ---
 

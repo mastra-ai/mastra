@@ -1,5 +1,5 @@
 ---
-title: "Example: Adjusting Chunk Delimiters "
+title: "Adjusting Chunk Delimiters "
 description: Adjust chunk delimiters in Mastra to better match your content structure.
 ---
 

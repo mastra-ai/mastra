@@ -1,5 +1,5 @@
 ---
-title: "Example: Calling an Agent from a Workflow (Legacy) "
+title: "Calling an Agent from a Workflow (Legacy) "
 description: Example of using Mastra to call an AI agent from within a legacy workflow step.
 ---
 

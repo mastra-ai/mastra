@@ -1,5 +1,5 @@
 ---
-title: "Example: Embedding Text Chunks "
+title: "Embedding Text Chunks "
 description: Example of using Mastra to generate an embedding for a single text chunk for similarity search.
 ---
 

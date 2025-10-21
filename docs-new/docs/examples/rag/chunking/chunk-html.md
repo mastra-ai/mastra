@@ -1,5 +1,5 @@
 ---
-title: "Example: Semantically Chunking HTML "
+title: "Semantically Chunking HTML "
 description: Chunk HTML content in Mastra to semantically chunk the document.
 ---
 

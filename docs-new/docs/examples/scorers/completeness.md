@@ -1,5 +1,5 @@
 ---
-title: "Example: Completeness "
+title: "Completeness "
 description: Example of using the Completeness scorer to evaluate how thoroughly responses address all aspects of a query.
 ---
 

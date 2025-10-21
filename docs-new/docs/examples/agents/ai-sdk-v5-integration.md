@@ -1,5 +1,5 @@
 ---
-title: "Example: AI SDK v5 Integration "
+title: "AI SDK v5 Integration "
 description: Example of integrating Mastra agents with AI SDK v5 for streaming chat interfaces with memory and tool integration.
 ---
 

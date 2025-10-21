@@ -1,5 +1,5 @@
 ---
-title: "Example: Sequential Steps "
+title: "Sequential Steps "
 description: Example of using Mastra to chain legacy workflow steps in a specific sequence, passing data between them.
 ---
 

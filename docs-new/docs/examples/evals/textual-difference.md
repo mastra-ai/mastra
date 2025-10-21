@@ -1,5 +1,5 @@
 ---
-title: "Example: Textual Difference "
+title: "Textual Difference "
 description: Example of using the Textual Difference metric to evaluate similarity between text strings by analyzing sequence differences and changes.
 ---
 

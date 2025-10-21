@@ -1,5 +1,5 @@
 ---
-title: "Example: Noise Sensitivity Scorer (CI/Testing) "
+title: "Noise Sensitivity Scorer (CI/Testing) "
 description: CI/testing examples for evaluating agent robustness against noise, distractions, and misinformation in controlled test environments.
 ---
 

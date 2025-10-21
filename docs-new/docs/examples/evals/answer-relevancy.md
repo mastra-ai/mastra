@@ -1,5 +1,5 @@
 ---
-title: "Example: Answer Relevancy "
+title: "Answer Relevancy "
 description: Example of using the Answer Relevancy metric to evaluate response relevancy to queries.
 ---
 

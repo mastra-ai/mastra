@@ -1,5 +1,5 @@
 ---
-title: "Example: Image Analysis Agent "
+title: "Image Analysis Agent "
 description: Example of using a Mastra AI Agent to analyze images from Unsplash to identify objects, determine species, and describe locations.
 ---
 

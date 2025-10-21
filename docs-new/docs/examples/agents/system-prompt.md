@@ -1,5 +1,5 @@
 ---
-title: "Example: Agents with a System Prompt "
+title: "Agents with a System Prompt "
 description: Example of creating an AI agent in Mastra with a system prompt to define its personality and capabilities.
 ---
 

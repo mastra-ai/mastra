@@ -1,6 +1,7 @@
 ---
-title: "Examples List: Workflows, Agents, RAG "
+title: Overview 
 description: "Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini."
+sidebar_position: 1
 ---
 
 import Tabs from '@theme/Tabs';

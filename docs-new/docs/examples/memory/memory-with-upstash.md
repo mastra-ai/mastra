@@ -1,5 +1,5 @@
 ---
-title: "Example: Memory with Upstash "
+title: "Memory with Upstash "
 description: Example for how to use Mastra's memory system with Upstash Redis storage and vector capabilities.
 ---
 

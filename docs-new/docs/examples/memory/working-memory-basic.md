@@ -1,5 +1,5 @@
 ---
-title: "Example: Basic Working Memory "
+title: "Basic Working Memory "
 description: Example showing how to enable basic working memory for agents to maintain conversational context.
 ---
 

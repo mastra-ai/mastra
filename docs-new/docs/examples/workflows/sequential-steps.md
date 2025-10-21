@@ -1,5 +1,5 @@
 ---
-title: "Example: Sequential Execution "
+title: "Sequential Execution "
 description: Example of using Mastra to execute multiple independent tasks in sequence within a workflow.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: "Example: Completeness "
+title: "Completeness "
 description: Example of using the Completeness metric to evaluate how thoroughly responses cover input elements.
 ---
 

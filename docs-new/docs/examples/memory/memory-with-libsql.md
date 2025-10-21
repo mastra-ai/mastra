@@ -1,5 +1,5 @@
 ---
-title: "Example: Memory with LibSQL "
+title: "Memory with LibSQL "
 description: Example for how to use Mastra's memory system with LibSQL storage and vector database backend.
 ---
 

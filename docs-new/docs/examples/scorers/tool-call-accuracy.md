@@ -1,5 +1,5 @@
 ---
-title: "Example: Tool Call Accuracy "
+title: "Tool Call Accuracy "
 description: Examples of using the Tool Call Accuracy scorers to evaluate whether LLMs select the correct tools for specific tasks.
 ---
 

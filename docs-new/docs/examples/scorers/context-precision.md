@@ -1,5 +1,5 @@
 ---
-title: "Example: Context Precision Scorer "
+title: "Context Precision Scorer "
 description: Example of using the Context Precision scorer to evaluate the relevance and positioning of retrieved context for RAG systems using Mean Average Precision.
 ---
 

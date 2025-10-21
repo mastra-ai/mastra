@@ -1,5 +1,5 @@
 ---
-title: "Example: Faithfulness "
+title: "Faithfulness "
 description: Example of using the Faithfulness metric to evaluate how factually accurate responses are compared to context.
 ---
 

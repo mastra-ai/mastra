@@ -1,5 +1,5 @@
 ---
-title: "Example: Prompt Alignment "
+title: "Prompt Alignment "
 description: Example of using the Prompt Alignment metric to evaluate instruction adherence in responses.
 ---
 

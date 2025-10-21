@@ -1,5 +1,5 @@
 ---
-title: "Example: Deploying an MCPServer "
+title: "Deploying an MCPServer "
 description: Example of setting up, building, and deploying a Mastra MCPServer using the stdio transport and publishing it to NPM.
 ---
 
