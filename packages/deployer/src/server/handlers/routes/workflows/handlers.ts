@@ -251,7 +251,7 @@ export async function observeStreamVNextWorkflowHandler(c: Context) {
             await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
           }
         } catch (err) {
-          logger.error('Error in workflow VNext observe stream: ' + ((err as Error)?.message ?? 'Unknown error'));
+          logger.error('Error in workflow observe stream: ' + ((err as Error)?.message ?? 'Unknown error'));
         }
       },
       async err => {
