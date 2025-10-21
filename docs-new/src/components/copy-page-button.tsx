@@ -11,8 +11,6 @@ export const CopyPageButton = () => {
   const { getMarkdownContent } = useMarkdownContent();
   const content = getMarkdownContent();
 
-  console.log(content);
-
   const handleCopyPage = useCallback(async () => {
     const content = getMarkdownContent();
     await navigator.clipboard.writeText(content);
