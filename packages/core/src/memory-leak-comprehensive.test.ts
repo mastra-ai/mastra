@@ -247,6 +247,31 @@ describe('Memory Leak Tests - Issue #6322', () => {
           messageList.add(mixedData, 'memory');
         }).not.toThrow();
       });
+
+      it('handles malformed data from memory query (Stefan stack trace)', () => {
+        const messageList = new MessageList({ threadId: 'test' });
+
+        const malformedMemoryResults: any[] = [
+          { role: 'user', content: 'Previous message' },
+          4822,
+          { role: 'assistant', content: 'Response' },
+          undefined,
+          null,
+        ];
+
+        expect(() => {
+          messageList.add(malformedMemoryResults, 'memory');
+        }).not.toThrow();
+
+        const numberOnly: any = 4822;
+        expect(() => {
+          MessageList.isMastraMessageV2(numberOnly);
+        }).not.toThrow();
+
+        expect(() => {
+          MessageList.isMastraMessageV1(numberOnly);
+        }).not.toThrow();
+      });
     });
   });
 
@@ -459,6 +484,326 @@ describe('Memory Leak Tests - Issue #6322', () => {
       console.log(`Replayed chunks: ${totalReplayedChunks} (expected: 0)`);
 
       expect(totalReplayedChunks).toBe(0);
+    });
+  });
+
+  describe('Exact Production Error Reproduction', () => {
+    it('handles second execution with large context without OOM', { timeout: 30000 }, async () => {
+      console.log(`\n=== Second Execution OOM Reproduction (leo-paz) ===`);
+
+      const largeContext = {
+        deal: {
+          id: 'deal-123',
+          description: 'x'.repeat(20000),
+          history: Array.from({ length: 100 }, (_, i) => ({
+            id: i,
+            timestamp: Date.now(),
+            action: 'x'.repeat(200),
+            metadata: { data: 'x'.repeat(100) },
+          })),
+        },
+      };
+
+      const createWorkflowExecution = async (executionNum: number) => {
+        const chunks: ChunkType<undefined>[] = [];
+
+        for (let step = 0; step < 3; step++) {
+          for (let i = 0; i < 100; i++) {
+            chunks.push({
+              runId: `execution-${executionNum}-step-${step}`,
+              from: ChunkFrom.AGENT,
+              type: 'text-delta',
+              payload: {
+                id: `text-${executionNum}-${step}-${i}`,
+                text: JSON.stringify(largeContext).slice(i * 100, (i + 1) * 100),
+              },
+            });
+          }
+
+          chunks.push({
+            runId: `execution-${executionNum}-step-${step}`,
+            from: ChunkFrom.AGENT,
+            type: 'finish',
+            payload: {
+              stepResult: { reason: 'stop' },
+              output: {
+                usage: {
+                  inputTokens: 20000,
+                  outputTokens: 500,
+                  totalTokens: 20500,
+                },
+              },
+              metadata: { context: largeContext },
+              messages: { all: [], user: [], nonUser: [] },
+            },
+          });
+        }
+
+        const messageList = new MessageList({ threadId: `workflow-${executionNum}` });
+        const stream = createChunkStream(chunks);
+
+        const output = new MastraModelOutput({
+          model: {
+            modelId: 'gpt-4',
+            provider: 'openai',
+            version: 'v2' as const,
+          },
+          stream,
+          messageList,
+          messageId: `msg-${executionNum}`,
+          options: {
+            runId: `execution-${executionNum}`,
+            returnScorerData: false,
+          },
+        });
+
+        const reader = output.fullStream.getReader();
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+        }
+        reader.releaseLock();
+
+        return output;
+      };
+
+      console.log('First execution...');
+      const firstOutput = await createWorkflowExecution(1);
+
+      console.log('Second execution (this is where OOM occurs in production)...');
+      const secondOutput = await createWorkflowExecution(2);
+
+      console.log('Testing buffer retention after both executions...');
+
+      let totalRetained = 0;
+      for (const output of [firstOutput, secondOutput]) {
+        const reader = output.fullStream.getReader();
+        let count = 0;
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+          count++;
+        }
+        reader.releaseLock();
+        totalRetained += count;
+      }
+
+      console.log(`Total chunks retained: ${totalRetained} (expected: 0)`);
+      console.log(`If this test doesn't OOM, buffers will be cleared after fix`);
+
+      expect(totalRetained).toBe(0);
+    });
+
+    it('handles sustained load without memory exhaustion', { timeout: 30000 }, async () => {
+      console.log(`\n=== Sustained Load Reproduction (Stefan - 30min crashes) ===`);
+
+      const outputs: MastraModelOutput<undefined>[] = [];
+      const targetIterations = 30;
+
+      console.log(`Simulating ${targetIterations} agent.stream() calls...`);
+
+      for (let i = 0; i < targetIterations; i++) {
+        const chunks: ChunkType<undefined>[] = [];
+
+        for (let j = 0; j < 100; j++) {
+          chunks.push({
+            runId: `sustained-${i}`,
+            from: ChunkFrom.AGENT,
+            type: 'text-delta',
+            payload: {
+              id: `text-${i}-${j}`,
+              text: 'Response chunk with typical content length. '.repeat(5),
+            },
+          });
+        }
+
+        chunks.push({
+          runId: `sustained-${i}`,
+          from: ChunkFrom.AGENT,
+          type: 'finish',
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: {
+              usage: {
+                inputTokens: 500,
+                outputTokens: 1000,
+                totalTokens: 1500,
+              },
+            },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        });
+
+        const messageList = new MessageList({ threadId: `sustained-${i}` });
+        const stream = createChunkStream(chunks);
+
+        const output = new MastraModelOutput({
+          model: {
+            modelId: 'gpt-4',
+            provider: 'openai',
+            version: 'v2' as const,
+          },
+          stream,
+          messageList,
+          messageId: `msg-${i}`,
+          options: {
+            runId: `sustained-${i}`,
+            returnScorerData: false,
+          },
+        });
+
+        outputs.push(output);
+
+        const reader = output.fullStream.getReader();
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+        }
+        reader.releaseLock();
+
+        if ((i + 1) % 10 === 0) {
+          console.log(`  Completed ${i + 1}/${targetIterations} streams`);
+        }
+      }
+
+      console.log(`Testing buffer retention across all ${targetIterations} streams...`);
+
+      let totalRetained = 0;
+      for (const output of outputs) {
+        const reader = output.fullStream.getReader();
+        let count = 0;
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+          count++;
+        }
+        reader.releaseLock();
+        totalRetained += count;
+      }
+
+      console.log(`Total chunks retained: ${totalRetained} (expected: 0)`);
+      console.log(`With ${targetIterations} streams × 101 chunks = ${targetIterations * 101} potential retention`);
+
+      expect(totalRetained).toBe(0);
+    });
+
+    it('handles JSON serialization of accumulated buffers without exhaustion', { timeout: 30000 }, async () => {
+      console.log(`\n=== JSON Serialization Exhaustion (AtiqGauri, sccorby) ===`);
+
+      const outputs: MastraModelOutput<undefined>[] = [];
+
+      for (let i = 0; i < 10; i++) {
+        const chunks: ChunkType<undefined>[] = [];
+
+        for (let j = 0; j < 200; j++) {
+          const complexObject = {
+            id: `obj-${i}-${j}`,
+            timestamp: Date.now(),
+            data: 'x'.repeat(500),
+            nested: {
+              level1: { level2: { level3: { data: 'y'.repeat(200) } } },
+            },
+            array: Array.from({ length: 50 }, (_, k) => ({ index: k, value: 'z'.repeat(100) })),
+          };
+
+          chunks.push({
+            runId: `json-test-${i}`,
+            from: ChunkFrom.AGENT,
+            type: 'text-delta',
+            payload: {
+              id: `text-${i}-${j}`,
+              text: JSON.stringify(complexObject),
+            },
+          });
+        }
+
+        chunks.push({
+          runId: `json-test-${i}`,
+          from: ChunkFrom.AGENT,
+          type: 'finish',
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: {
+              usage: {
+                inputTokens: 1000,
+                outputTokens: 5000,
+                totalTokens: 6000,
+              },
+            },
+            metadata: {
+              complexData: {
+                nested: Array.from({ length: 100 }, (_, k) => ({
+                  id: k,
+                  data: 'x'.repeat(200),
+                })),
+              },
+            },
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        });
+
+        const messageList = new MessageList({ threadId: `json-test-${i}` });
+        const stream = createChunkStream(chunks);
+
+        const output = new MastraModelOutput({
+          model: {
+            modelId: 'gpt-4',
+            provider: 'openai',
+            version: 'v2' as const,
+          },
+          stream,
+          messageList,
+          messageId: `json-msg-${i}`,
+          options: {
+            runId: `json-test-${i}`,
+            returnScorerData: false,
+          },
+        });
+
+        outputs.push(output);
+
+        const reader = output.fullStream.getReader();
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+        }
+        reader.releaseLock();
+      }
+
+      console.log(`Attempting JSON serialization of all outputs (reproduces stack trace)...`);
+
+      let totalSize = 0;
+
+      try {
+        for (const output of outputs) {
+          const serialized = JSON.stringify(output);
+          totalSize += serialized.length;
+        }
+        console.log(`Successfully serialized ${totalSize} bytes`);
+      } catch (error: any) {
+        console.log(`JSON serialization failed: ${error.message}`);
+        console.log(`This reproduces the "JsonStringify" error from production`);
+      }
+
+      console.log(`Testing buffer cleanup to prevent JSON exhaustion...`);
+
+      let totalRetained = 0;
+      for (const output of outputs) {
+        const reader = output.fullStream.getReader();
+        let count = 0;
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+          count++;
+        }
+        reader.releaseLock();
+        totalRetained += count;
+      }
+
+      console.log(`Total chunks retained: ${totalRetained} (expected: 0)`);
+
+      expect(totalRetained).toBe(0);
     });
   });
 });

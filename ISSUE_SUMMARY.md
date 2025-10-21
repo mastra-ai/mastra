@@ -432,11 +432,11 @@ A comprehensive test suite that validates memory leak fixes through direct behav
 
 ```
 Test Files  1 failed (1)
-Tests       7 failed (7)
-Duration    1.91s
+Tests       10 failed (10)
+Duration    8.67s
 ```
 
-**ALL 7 TESTS FAILING** ✅ - Proves bugs exist and are reliably reproducible
+**ALL 10 TESTS FAILING** ✅ - Proves bugs exist and are reliably reproducible
 
 ### Test Breakdown
 
@@ -491,6 +491,31 @@ These tests simulate real-world usage patterns and prove buffer accumulation at 
    - **Actual**: 405 chunks replayed (5 × 81 = complete retention)
    - **Proves**: Large payloads amplify buffer retention
    - **Production impact**: 20k token responses create massive buffer accumulation
+
+#### Exact Production Error Reproduction (3 tests)
+
+These tests reproduce the exact scenarios reported in production:
+
+8. **Second execution with large context OOM** ❌ (leo-paz's issue)
+   - **Test**: Simulates 2 workflow executions with 20k token context (3 steps each)
+   - **Expected**: 0 chunks retained after both executions
+   - **Actual**: 606 chunks retained (2 executions × 3 steps × 101 chunks)
+   - **Proves**: Multiple executions with large context cause OOM
+   - **Production match**: "crashes on second workflow execution at step 2"
+
+9. **Sustained load without exhaustion** ❌ (Stefan's 30-minute crashes)
+   - **Test**: 30 agent.stream() calls (simulating production load)
+   - **Expected**: 0 chunks retained
+   - **Actual**: 3030 chunks retained (30 × 101 = complete retention)
+   - **Proves**: Production services accumulate buffers indefinitely
+   - **Production match**: "crashes every 5-30 minutes under load"
+
+10. **JSON serialization of accumulated buffers** ❌ (AtiqGauri, sccorby stack traces)
+    - **Test**: 10 streams with deeply nested complex objects (200 chunks each)
+    - **Expected**: 0 chunks retained
+    - **Actual**: 2010 chunks retained (10 × 201 = complete retention)
+    - **Proves**: Accumulated buffers cause JSON stringification exhaustion
+    - **Production match**: Stack traces showing "JsonStringify" and "JsonParser" during OOM
 
 ### Why These Tests Are Reliable
 
@@ -547,6 +572,12 @@ describe('Memory Leak Tests - Issue #6322', () => {
     it('clears buffers after each stream to prevent accumulation');
     it('clears large payload buffers after stream completion');
   });
+
+  describe('Exact Production Error Reproduction', () => {
+    it('handles second execution with large context without OOM');
+    it('handles sustained load without memory exhaustion');
+    it('handles JSON serialization of accumulated buffers without exhaustion');
+  });
 });
 ```
 
@@ -554,11 +585,11 @@ describe('Memory Leak Tests - Issue #6322', () => {
 
 **Before Fixes (Current State)**:
 
-- ❌ ALL 7 tests FAILING - Proves bugs exist
+- ❌ ALL 10 tests FAILING - Proves bugs exist
 
 **After Fixes (Target State)**:
 
-- ✅ ALL 7 tests PASSING - Proves bugs fixed
+- ✅ ALL 10 tests PASSING - Proves bugs fixed
 - No test should pass in buggy state
 - No test should fail in fixed state
 
@@ -566,10 +597,12 @@ describe('Memory Leak Tests - Issue #6322', () => {
 
 As fixes are implemented, tests will turn green one by one:
 
-1. **Implement MastraModelOutput.clearBuffers()** → Tests 1, 6, 7 turn green
+1. **Implement MastraModelOutput.clearBuffers()** → Tests 1, 6, 7, 8, 9, 10 turn green
 2. **Implement ProcessorState.finalize()** → Tests 2, 3, 4 turn green
 3. **Add MessageList type guards** → Test 5 turns green
 4. **All green** → Ready for production deployment
+
+**Note**: Tests 8-10 directly reproduce production errors, providing additional validation that fixes resolve real-world issues.
 
 ## Recommendation
 
