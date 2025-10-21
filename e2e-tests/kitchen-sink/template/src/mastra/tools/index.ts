@@ -13,8 +13,8 @@ interface WeatherResponse {
   };
 }
 
-export const weatherTool = createTool({
-  id: 'get-weather',
+export const weatherInfo = createTool({
+  id: 'weatherInfo',
   description: 'Get current weather for a location',
   inputSchema: z.object({
     location: z.string().describe('City name'),
