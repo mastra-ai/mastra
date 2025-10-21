@@ -594,7 +594,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           for await (const _chunk of stream.fullStream) {
           }
           await new Promise(resolve => setTimeout(resolve, 1000));
-          const resumeStream = await agentOne.resumeStreamVNext({ name: 'Dero Israel' }, { runId: stream.runId });
+          const resumeStream = await agentOne.resumeStream({ name: 'Dero Israel' }, { runId: stream.runId });
           for await (const _chunk of resumeStream.fullStream) {
           }
 
@@ -664,10 +664,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               }
             }
             await new Promise(resolve => setTimeout(resolve, 1000));
-            const resumeStream = await agentOne.resumeStreamVNext(
-              { approved: true },
-              { runId: stream.runId, toolCallId },
-            );
+            const resumeStream = await agentOne.resumeStream({ approved: true }, { runId: stream.runId, toolCallId });
             let secondText = '';
             for await (const chunk of resumeStream.fullStream) {
               if (chunk.type === 'text-delta') {

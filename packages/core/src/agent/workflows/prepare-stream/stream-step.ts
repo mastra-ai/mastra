@@ -15,7 +15,10 @@ interface StreamStepOptions<FORMAT extends 'aisdk' | 'mastra' | undefined = unde
    */
   format?: FORMAT;
   requireToolApproval?: boolean;
-  resumeContext?: any;
+  resumeContext?: {
+    resumeData: any;
+    snapshot: any;
+  };
   agentId: string;
   toolCallId?: string;
 }

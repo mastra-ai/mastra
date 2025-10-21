@@ -3425,10 +3425,24 @@ export class Agent<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
   >({ methodType, format = 'mastra', resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
+    const existingSnapshot = resumeContext?.snapshot;
+    let snapshotMemoryInfo;
+    if (existingSnapshot) {
+      for (const key in existingSnapshot?.context) {
+        const step = existingSnapshot?.context[key];
+        if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
+          snapshotMemoryInfo = step.suspendPayload?.__streamState?.messageList?.memoryInfo;
+          break;
+        }
+      }
+    }
     const runtimeContext = options.runtimeContext || new RuntimeContext();
-    const threadFromArgs = resolveThreadIdFromArgs({ threadId: options.threadId, memory: options.memory });
+    const threadFromArgs = resolveThreadIdFromArgs({
+      threadId: options.threadId || snapshotMemoryInfo?.threadId,
+      memory: options.memory,
+    });
 
-    const resourceId = options.memory?.resource || options.resourceId;
+    const resourceId = options.memory?.resource || options.resourceId || snapshotMemoryInfo?.resourceId;
     const memoryConfig = options.memory?.options;
 
     if (resourceId && threadFromArgs && !this.hasOwnMemory()) {
@@ -3964,11 +3978,11 @@ export class Agent<
    * );
    * ```
    */
-  async resumeStreamVNext<
+  async resumeStream<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
-    resumeContext: any,
+    resumeData: any,
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> & { toolCallId?: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
@@ -3994,10 +4008,18 @@ export class Agent<
       });
     }
 
+    const existingSnapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+      workflowName: 'agentic-loop',
+      runId: streamOptions?.runId ?? '',
+    });
+
     const result = await this.#execute({
       ...mergedStreamOptions,
       messages: [],
-      resumeContext,
+      resumeContext: {
+        resumeData,
+        snapshot: existingSnapshot,
+      },
       methodType: 'stream',
     } as InnerAgentExecutionOptions<OUTPUT, FORMAT>);
 
@@ -4045,7 +4067,7 @@ export class Agent<
   >(
     options: AgentExecutionOptions<OUTPUT, FORMAT> & { runId: string; toolCallId?: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    return this.resumeStreamVNext({ approved: true }, options);
+    return this.resumeStream({ approved: true }, options);
   }
 
   /**
@@ -4069,7 +4091,7 @@ export class Agent<
   >(
     options: AgentExecutionOptions<OUTPUT, FORMAT> & { runId: string; toolCallId?: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    return this.resumeStreamVNext({ approved: false }, options);
+    return this.resumeStream({ approved: false }, options);
   }
 
   /**

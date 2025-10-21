@@ -38,7 +38,10 @@ interface CreatePrepareStreamWorkflowOptions<
   saveQueueManager: SaveQueueManager;
   returnScorerData?: boolean;
   requireToolApproval?: boolean;
-  resumeContext?: any;
+  resumeContext?: {
+    resumeData: any;
+    snapshot: any;
+  };
   agentId: string;
   toolCallId?: string;
 }

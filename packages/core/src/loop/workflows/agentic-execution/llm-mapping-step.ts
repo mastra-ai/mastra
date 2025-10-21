@@ -67,9 +67,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
 
       if (inputData?.length) {
         for (const toolCall of inputData) {
-          if (toolCall.__mastra_toolCallDeclined === true) {
-            continue;
-          }
           const chunk: ChunkType = {
             type: 'tool-result',
             runId: rest.runId,

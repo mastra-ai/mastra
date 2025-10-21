@@ -154,5 +154,4 @@ export const toolCallInputSchema = z.object({
 export const toolCallOutputSchema = toolCallInputSchema.extend({
   result: z.any(),
   error: z.any().optional(),
-  __mastra_toolCallDeclined: z.boolean().optional(),
 });

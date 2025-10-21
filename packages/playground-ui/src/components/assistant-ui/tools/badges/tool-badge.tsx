@@ -97,7 +97,7 @@ export const ToolBadge = ({
             <div className="flex gap-2 items-center">
               <Button
                 onClick={onApprove}
-                disabled={isRunning}
+                disabled={isRunning || !!toolCallApprovalStatus}
                 className={toolCallApprovalStatus === 'approved' ? '!text-accent1' : ''}
               >
                 <Icon>
@@ -107,7 +107,7 @@ export const ToolBadge = ({
               </Button>
               <Button
                 onClick={onDecline}
-                disabled={isRunning}
+                disabled={isRunning || !!toolCallApprovalStatus}
                 className={toolCallApprovalStatus === 'declined' ? '!text-accent2' : ''}
               >
                 <Icon>

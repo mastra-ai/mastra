@@ -126,20 +126,6 @@ export function workflowLoopStream<
         });
       }
 
-      const existingSnapshot = await rest.mastra?.getStorage()?.loadWorkflowSnapshot({
-        workflowName: 'agentic-loop',
-        runId,
-      });
-      if (existingSnapshot) {
-        for (const key in existingSnapshot?.context) {
-          const step = existingSnapshot?.context[key];
-          if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
-            streamState.deserialize(step.suspendPayload?.__streamState);
-            break;
-          }
-        }
-      }
-
       const run = await agenticLoopWorkflow.createRunAsync({
         runId,
       });
@@ -152,7 +138,7 @@ export function workflowLoopStream<
 
       const executionResult = resumeContext
         ? await run.resume({
-            resumeData: resumeContext,
+            resumeData: resumeContext.resumeData,
             tracingContext: { currentSpan: llmAISpan },
             label: toolCallId,
           })

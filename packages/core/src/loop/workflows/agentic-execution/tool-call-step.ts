@@ -129,9 +129,11 @@ export function createToolCallStep<
           } else {
             if (!resumeData.approved) {
               span.end();
+              span.setAttributes({
+                'stream.toolCall.result': 'Tool call was not approved by the user',
+              });
               return {
-                result: {},
-                __mastra_toolCallDeclined: true,
+                result: 'Tool call was not approved by the user',
                 ...inputData,
               };
             }

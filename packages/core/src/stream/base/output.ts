@@ -168,6 +168,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     messageList,
     options,
     messageId,
+    initialState,
   }: {
     model: {
       modelId: string | undefined;
@@ -178,6 +179,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     messageList: MessageList;
     options: MastraModelOutputOptions<OUTPUT>;
     messageId: string;
+    initialState?: any;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     this.#options = options;
@@ -813,6 +815,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         tracingContext: options?.tracingContext,
       },
     });
+
+    if (initialState) {
+      this.deserializeState(initialState);
+    }
   }
 
   #getDelayedPromise<T>(promise: DelayedPromise<T>): Promise<T> {
@@ -1304,7 +1310,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   }
 
   serializeState() {
-    console.log('serializing state', this.messageList.serialize());
     return {
       status: this.#status,
       bufferedSteps: this.#bufferedSteps,
@@ -1349,7 +1354,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#usageCount = state.usageCount;
     this.#tripwire = state.tripwire;
     this.#tripwireReason = state.tripwireReason;
-    console.log('deserializing state', state.messageList);
     this.messageList = this.messageList.deserialize(state.messageList);
   }
 }

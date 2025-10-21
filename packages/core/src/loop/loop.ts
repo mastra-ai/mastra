@@ -133,6 +133,18 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   };
 
   const stream = workflowLoopStream(workflowLoopProps);
+  const existingSnapshot = resumeContext?.snapshot;
+  let initialStreamState: any;
+
+  if (existingSnapshot) {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
+        initialStreamState = step.suspendPayload?.__streamState;
+        break;
+      }
+    }
+  }
 
   modelOutput = new MastraModelOutput({
     model: {
@@ -156,6 +168,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       returnScorerData,
       tracingContext: { currentSpan: llmAISpan },
     },
+    initialState: initialStreamState,
   });
 
   return createDestructurableOutput(modelOutput);
