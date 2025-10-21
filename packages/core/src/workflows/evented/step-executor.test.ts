@@ -216,7 +216,7 @@ describe('StepExecutor', () => {
 
     const emitter = new EventEmitterPubSub();
 
-    // Act: Execute the step
+    // Execute the step
     const result = await stepExecutor.execute({
       workflowId: 'test-workflow',
       step: failingStep,
@@ -228,7 +228,7 @@ describe('StepExecutor', () => {
       runtimeContext,
     });
 
-    // Assert: Verify the result is a failure
+    // Verify the result is a failure
     expect(result.status).toBe('failed');
 
     // Type guard to access error property
@@ -236,7 +236,7 @@ describe('StepExecutor', () => {
       // EXPECTED BEHAVIOR: Error should be just the message with "Error: " prefix
       expect(result.error).toBe('Error: ' + errorMessage);
 
-      // Verify NO stack trace is present (no "at " which appears in stack traces)
+      // Verify NO stack trace is present
       expect(String(result.error)).not.toContain('at Object.execute');
       expect(String(result.error)).not.toContain('at ');
       expect(String(result.error)).not.toContain('\n');
