@@ -716,6 +716,9 @@ export interface AITracingExporter {
   /** Initialize exporter with tracing configuration */
   init?(config: TracingConfig): void;
 
+  /** Set logger (called by AITracing during initialization) */
+  __setLogger?(logger: IMastraLogger): void;
+
   /** Export tracing events */
   exportEvent(event: AITracingEvent): Promise<void>;
 
