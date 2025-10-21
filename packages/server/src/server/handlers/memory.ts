@@ -21,7 +21,6 @@ async function getMemoryFromContext({
   agentId,
   runtimeContext,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'runtimeContext'>): Promise<MastraMemory | null | undefined> {
-  console.log('Getting memory from context', { agentId });
   const logger = mastra.getLogger();
   let agent;
   if (agentId) {
@@ -31,27 +30,19 @@ async function getMemoryFromContext({
       logger.debug('Error getting agent from mastra, searching agents for agent', error);
     }
   }
-  console.log('Agent found====', agent);
   if (agentId && !agent) {
-    console.log('Agent not found, searching agents for agent', { agentId });
     logger.debug('Agent not found, searching agents for agent', { agentId });
     const agents = mastra.getAgents();
-    console.log('Agents in mastra', Object.keys(agents));
     if (Object.keys(agents || {}).length) {
       for (const [_, ag] of Object.entries(agents)) {
-        console.log('Agent', ag.name);
         try {
-          console.log('Listing agents for agent', ag.name);
           const agents = await ag.listAgents();
-
-          console.log(`Agents in agent ${ag.name}`, Object.keys(agents));
 
           if (agents[agentId]) {
             agent = agents[agentId];
             break;
           }
         } catch (error) {
-          console.log('Error getting agent from agent', error);
           logger.debug('Error getting agent from agent', error);
         }
       }
@@ -122,7 +113,6 @@ export async function getThreadsHandler({
   sortDirection,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'runtimeContext'> & ThreadSortOptions) {
   try {
-    console.log('Getting threads for agent', agentId);
     const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
 
     if (!memory) {
