@@ -33,3 +33,18 @@ export async function validateStepInput({
 
   return { inputData, validationError };
 }
+
+export function getResumeLabelsByStepId(
+  resumeLabels: Record<string, { stepId: string; foreachIndex?: number }>,
+  stepId: string,
+) {
+  return Object.entries(resumeLabels)
+    .filter(([_, value]) => value.stepId === stepId)
+    .reduce(
+      (acc, [key, value]) => {
+        acc[key] = value;
+        return acc;
+      },
+      {} as Record<string, { stepId: string; foreachIndex?: number }>,
+    );
+}

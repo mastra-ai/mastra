@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 0.22.2
+
+### Patch Changes
+
+- Fix nested workflow events and networks ([#9132](https://github.com/mastra-ai/mastra/pull/9132))
+
+## 0.22.2-alpha.0
+
+### Patch Changes
+
+- Fix nested workflow events and networks ([#9132](https://github.com/mastra-ai/mastra/pull/9132))
+
 ## 0.22.1
 
 ## 0.22.1-alpha.0
