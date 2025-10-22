@@ -1,5 +1,12 @@
 # @mastra/client-js
 
+## 0.16.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/core@0.22.1
+
 ## 0.16.3-alpha.0
 
 ### Patch Changes

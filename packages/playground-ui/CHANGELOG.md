@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 6.6.1
+
+### Patch Changes
+
+- Fix subagent link not working in agents overview pane ([#9099](https://github.com/mastra-ai/mastra/pull/9099))
+
+- Fix wrong MCP link in playground ([#9103](https://github.com/mastra-ai/mastra/pull/9103))
+
+- Updated dependencies []:
+  - @mastra/core@0.22.1
+  - @mastra/client-js@0.16.3
+  - @mastra/react@0.0.9
+
 ## 6.6.1-alpha.0
 
 ### Patch Changes
