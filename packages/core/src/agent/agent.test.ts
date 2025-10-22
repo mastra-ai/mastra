@@ -5,7 +5,7 @@ import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import type { CoreMessage, LanguageModelV1, CoreSystemMessage } from 'ai';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
-import { stepCountIs } from 'ai-v5';
+import { APICallError, stepCountIs } from 'ai-v5';
 import type { SystemModelMessage } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { config } from 'dotenv';
@@ -4555,6 +4555,185 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(errorCaught).toBe(true);
         expect(caughtError).toBeDefined();
         expect(caughtError.message).toMatch(/Simulated stream error/);
+      });
+
+      it.todo('should expose APICallError in fullStream chunk, onError callback, and result.error', async () => {
+        const testAPICallError = new APICallError({
+          message: 'Test API error',
+          url: 'https://test.api.com',
+          requestBodyValues: {
+            test: 'test',
+          },
+          statusCode: 401,
+          isRetryable: false,
+          responseBody: 'Test API error response',
+        });
+      });
+
+      it.todo('should keep error cause in fullStream error chunks, onError callback, and result.error', async () => {
+        const testErrorCauseMessage = 'Test error cause message';
+        const testErrorCause = new Error(testErrorCauseMessage);
+
+        const testErrorMessage = 'Test API error';
+        const testErrorStatusCode = 401;
+        const testErrorRequestId = 'req_123';
+        const testError = new Error(testErrorMessage, { cause: testErrorCause });
+        // Add some custom properties to verify they're preserved
+        (testError as any).statusCode = testErrorStatusCode;
+        (testError as any).requestId = testErrorRequestId;
+
+        const errorModel = new MockLanguageModelV2({
+          doStream: async () => {
+            throw testError;
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-error-consistency',
+          name: 'Test Error Consistency',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let onErrorCallbackError: any = null;
+        let fullStreamError: any = null;
+
+        const result = await agent.stream('Hello', {
+          onError: ({ error }) => {
+            console.log('====');
+            console.log('onErrorCallbackError', error);
+            console.log('====');
+
+            onErrorCallbackError = error;
+          },
+          modelSettings: {
+            maxRetries: 0,
+          },
+        });
+
+        // Consume fullStream to capture error chunk
+        for await (const chunk of result.fullStream) {
+          if (chunk.type === 'error') {
+            console.log('====');
+            console.log('fullStreamError chunk.payload.error', chunk.payload.error);
+            console.log('====');
+
+            fullStreamError = chunk.payload.error;
+          }
+        }
+
+        // Get result.error
+        const resultError = result.error;
+        console.log('====');
+        console.log('resultError', resultError);
+        console.log('====');
+
+        // All three should be defined
+        expect(onErrorCallbackError).toBeDefined();
+        expect(fullStreamError).toBeDefined();
+        expect(resultError).toBeDefined();
+
+        // All three should be Error instances
+        expect(onErrorCallbackError instanceof Error).toBe(true);
+        expect(fullStreamError instanceof Error).toBe(true);
+        expect(resultError instanceof Error).toBe(true);
+
+        // All three should have the same message
+        expect(onErrorCallbackError.message).toBe(testErrorMessage);
+        expect(fullStreamError.message).toBe(testErrorMessage);
+        expect((resultError as Error).message).toBe(testErrorMessage);
+
+        // All three should preserve custom properties
+        expect(onErrorCallbackError.statusCode).toBe(testErrorStatusCode);
+        expect(onErrorCallbackError.requestId).toBe(testErrorRequestId);
+        expect(fullStreamError.statusCode).toBe(testErrorStatusCode);
+        expect(fullStreamError.requestId).toBe(testErrorRequestId);
+        expect((resultError as any).statusCode).toBe(testErrorStatusCode);
+        expect((resultError as any).requestId).toBe(testErrorRequestId);
+
+        // All three should preserve the error cause
+        expect(onErrorCallbackError.cause).toBe(testErrorCause);
+        expect(fullStreamError.cause).toBe(testErrorCause);
+        expect((resultError as Error).cause).toBe(testErrorCause);
+      });
+
+      it.only('should expose the same error in fullStream error chunks, onError callback, and result.error', async () => {
+        const testErrorMessage = 'Test API error';
+        const testErrorStatusCode = 401;
+        const testErrorRequestId = 'req_123';
+        const testError = new Error(testErrorMessage);
+        // Add some custom properties to verify they're preserved
+        (testError as any).statusCode = testErrorStatusCode;
+        (testError as any).requestId = testErrorRequestId;
+
+        const errorModel = new MockLanguageModelV2({
+          doStream: async () => {
+            throw testError;
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-error-consistency',
+          name: 'Test Error Consistency',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let onErrorCallbackError: any = null;
+        let fullStreamError: any = null;
+
+        const result = await agent.stream('Hello', {
+          onError: ({ error }) => {
+            console.log('====');
+            console.log('onErrorCallbackError', error);
+            console.log('====');
+
+            onErrorCallbackError = error;
+          },
+          modelSettings: {
+            maxRetries: 0,
+          },
+        });
+
+        // Consume fullStream to capture error chunk
+        for await (const chunk of result.fullStream) {
+          if (chunk.type === 'error') {
+            console.log('====');
+            console.log('fullStreamError chunk.payload.error', chunk.payload.error);
+            console.log('====');
+
+            fullStreamError = chunk.payload.error;
+          }
+        }
+
+        // Get result.error
+        const resultError = result.error;
+        console.log('====');
+        console.log('resultError', resultError);
+        console.log('====');
+
+        // All three should be defined
+        expect(onErrorCallbackError).toBeDefined();
+        expect(fullStreamError).toBeDefined();
+        expect(resultError).toBeDefined();
+
+        // All three should be Error instances
+        expect(onErrorCallbackError instanceof Error).toBe(true);
+        expect(fullStreamError instanceof Error).toBe(true);
+        expect(resultError instanceof Error).toBe(true);
+
+        // All three should have the same message
+        expect(onErrorCallbackError.message).toBe(testErrorMessage);
+        expect(fullStreamError.message).toBe(testErrorMessage);
+        expect((resultError as Error).message).toBe(testErrorMessage);
+
+        // All three should preserve custom properties
+        expect(onErrorCallbackError.statusCode).toBe(testErrorStatusCode);
+        expect(onErrorCallbackError.requestId).toBe(testErrorRequestId);
+        expect(fullStreamError.statusCode).toBe(testErrorStatusCode);
+        expect(fullStreamError.requestId).toBe(testErrorRequestId);
+        expect((resultError as any).statusCode).toBe(testErrorStatusCode);
+        expect((resultError as any).requestId).toBe(testErrorRequestId);
       });
 
       it('should call options.onChunk when streaming in stream', async () => {
