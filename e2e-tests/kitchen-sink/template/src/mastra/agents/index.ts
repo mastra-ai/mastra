@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
+
 import { weatherInfo } from '../tools';
 import { simulateReadableStream } from 'ai';
 import * as aiTest from 'ai/test';
@@ -16,6 +17,12 @@ const memory = new Memory({
 });
 
 let count = 0;
+
+const subAgent = new Agent({
+  name: 'Sub Agent',
+  instructions: `You are a helpful sub agent that provides accurate weather information.`,
+  model: 'google/gemini-2.5-pro',
+});
 
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
@@ -53,5 +60,6 @@ export const weatherAgent = new Agent({
     });
   },
   tools: { weatherInfo },
+  agents: { subAgent },
   memory,
 });
