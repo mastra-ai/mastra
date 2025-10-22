@@ -37,6 +37,19 @@ export const testAgent = new Agent({
 
 In this example, `step1` uses the `testAgent` to generate an interesting fact about the country based on a given city.
 
+Mastra agents use a default schema that expects a prompt string as input and returns a text string as output.
+
+```json
+{
+  inputSchema: {
+    prompt: string
+  },
+  outputSchema: {
+    text: string
+  }
+}
+```
+
 The `.map` method transforms the workflow input into a `prompt` string compatible with the `testAgent`.
 
 The step is composed into the workflow using `.then()`, allowing it to receive the mapped input and return the agent's structured output. The workflow is finalized with `.commit()`.
@@ -156,11 +169,30 @@ The step is added to the workflow using the sequential `.then()` method, allowin
 import { testTool } from "../tools/test-tool";
 
 const step1 = createStep(testTool);
-
-export const testWorkflow = createWorkflow({...})
+ 
+export const testWorkflow = createWorkflow({
+  id: "tool-step-workflow",
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    country: z.string()
+  })
+})
+  .map(async ({ inputData }) => {
+    const { city } = inputData;
+ 
+    return {
+      input: city
+    };
+  })
   .then(step1)
   .commit();
 ```
+
+Note that using `.map()` is optional because tools define their own input and output schemas, but can be helpful when the workflow `inputSchema` doesn't match the tool's `inputSchema`.
+
+In this example, the workflow accepts a `city`, which is mapped to the tool's input. The tool returns an output string, which is passed directly to the workflow's output without any extra transformation.
 
 ### Calling a tool with `.execute()`
 
@@ -220,7 +252,7 @@ export const mastra = new Mastra({
 });
 ```
 
-Once a workflow has been registered it can be referenced using `getWorkflow` from withing a tool.
+Once a workflow has been registered it can be referenced using `getWorkflow` from within a tool.
 
 ```typescript {10,17-27} filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
 export const cityCoordinatesTool = createTool({
