@@ -70,17 +70,20 @@ export function getErrorFromUnknown(
         : undefined;
 
     error = new Error(errorMessage, { cause: errorCause });
+    error.stack = 'stack' in unknown && typeof unknown.stack === 'string' ? unknown.stack : undefined;
     Object.assign(error as Error, unknown);
     return error;
   }
 
   if (unknown && typeof unknown === 'string') {
     error = new Error(unknown);
+    error.stack = undefined;
     return error;
   }
 
   if (!error) {
     error = new Error(fallbackErrorMessage);
+    error.stack = undefined;
   }
   return error;
 }
