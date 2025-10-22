@@ -115,7 +115,7 @@ async function validateOutput(
         } | null = null;
 
         if (err.message.includes('[ERR_MODULE_NOT_FOUND]')) {
-          moduleName = file.moduleIds[file.moduleIds.length - 2];
+          moduleName = file.moduleIds.length >= 2 ? file.moduleIds[file.moduleIds.length - 2] : undefined;
           errorConfig = {
             id: 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND',
             messagePrefix: "Mastra wasn't able to build your project. Please add",
