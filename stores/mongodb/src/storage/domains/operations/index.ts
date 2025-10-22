@@ -156,16 +156,22 @@ export class StoreOperationsMongoDB extends StoreOperations {
     }
   }
 
-  async update({ tableName, keys, data }: { tableName: TABLE_NAMES; keys: Record<string, any>; data: Record<string, any> }): Promise<void> {
+  async update({
+    tableName,
+    keys,
+    data,
+  }: {
+    tableName: TABLE_NAMES;
+    keys: Record<string, any>;
+    data: Record<string, any>;
+  }): Promise<void> {
     try {
       const collection = await this.getCollection(tableName);
       const processedData = this.processJsonbFields(tableName, data);
-      
+
       // Filter out undefined values to prevent MongoDB from removing fields
-      const cleanData = Object.fromEntries(
-        Object.entries(processedData).filter(([_, value]) => value !== undefined)
-      );
-      
+      const cleanData = Object.fromEntries(Object.entries(processedData).filter(([_, value]) => value !== undefined));
+
       await collection.updateOne(keys, { $set: cleanData });
     } catch (error) {
       throw new MastraError(
@@ -180,8 +186,11 @@ export class StoreOperationsMongoDB extends StoreOperations {
     }
   }
 
-  async batchUpdate({ tableName, updates }: { 
-    tableName: TABLE_NAMES; 
+  async batchUpdate({
+    tableName,
+    updates,
+  }: {
+    tableName: TABLE_NAMES;
     updates: Array<{
       keys: Record<string, any>;
       data: Record<string, any>;
@@ -195,11 +204,9 @@ export class StoreOperationsMongoDB extends StoreOperations {
       const collection = await this.getCollection(tableName);
       const bulkOps = updates.map(({ keys, data }) => {
         const processedData = this.processJsonbFields(tableName, data);
-        
+
         // Filter out undefined values to prevent MongoDB from removing fields
-        const cleanData = Object.fromEntries(
-          Object.entries(processedData).filter(([_, value]) => value !== undefined)
-        );
+        const cleanData = Object.fromEntries(Object.entries(processedData).filter(([_, value]) => value !== undefined));
 
         return {
           updateOne: {

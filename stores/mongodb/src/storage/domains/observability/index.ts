@@ -14,11 +14,7 @@ import type { StoreOperationsMongoDB } from '../operations';
 export class ObservabilityMongoDB extends ObservabilityStorage {
   private operations: StoreOperationsMongoDB;
 
-  constructor({
-    operations,
-  }: {
-    operations: StoreOperationsMongoDB;
-  }) {
+  constructor({ operations }: { operations: StoreOperationsMongoDB }) {
     super();
     this.operations = operations;
   }
@@ -69,10 +65,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     try {
       const collection = await this.operations.getCollection(TABLE_AI_SPANS);
 
-      const spans = await collection
-        .find({ traceId })
-        .sort({ startedAt: -1 })
-        .toArray();
+      const spans = await collection.find({ traceId }).sort({ startedAt: -1 }).toArray();
 
       if (!spans || spans.length === 0) {
         return null;
@@ -163,14 +156,16 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       if (pagination?.dateRange) {
         const dateFilter: Record<string, any> = {};
         if (pagination.dateRange.start) {
-          dateFilter.$gte = pagination.dateRange.start instanceof Date 
-            ? pagination.dateRange.start.toISOString() 
-            : pagination.dateRange.start;
+          dateFilter.$gte =
+            pagination.dateRange.start instanceof Date
+              ? pagination.dateRange.start.toISOString()
+              : pagination.dateRange.start;
         }
         if (pagination.dateRange.end) {
-          dateFilter.$lte = pagination.dateRange.end instanceof Date 
-            ? pagination.dateRange.end.toISOString() 
-            : pagination.dateRange.end;
+          dateFilter.$lte =
+            pagination.dateRange.end instanceof Date
+              ? pagination.dateRange.end.toISOString()
+              : pagination.dateRange.end;
         }
         if (Object.keys(dateFilter).length > 0) {
           mongoFilter.startedAt = dateFilter;
@@ -286,7 +281,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
         tableName: TABLE_AI_SPANS,
         updates: args.records.map(record => {
           const data: Partial<UpdateAISpanRecord> = { ...record.updates };
-          
+
           if (data.endedAt instanceof Date) {
             data.endedAt = data.endedAt.toISOString() as any;
           }
@@ -321,7 +316,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
   async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
     try {
       const collection = await this.operations.getCollection(TABLE_AI_SPANS);
-      
+
       await collection.deleteMany({
         traceId: { $in: args.traceIds },
       });
@@ -343,7 +338,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
   private transformSpanFromMongo(doc: any): AISpanRecord {
     // Remove MongoDB's _id field and return clean span record
     const { _id, ...span } = doc;
-    
+
     // Ensure dates are properly formatted
     if (span.startedAt && typeof span.startedAt === 'string') {
       span.startedAt = span.startedAt;

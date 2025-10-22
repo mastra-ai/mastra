@@ -64,7 +64,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       driverInfo: {
         name: 'mastra-vector',
         version: packageJson.version || '0.0.0',
-      }
+      },
     });
     this.client = client;
     this.db = this.client.db(dbName);

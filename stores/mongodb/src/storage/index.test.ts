@@ -144,9 +144,7 @@ describe('MongoDB Specific Tests', () => {
       };
 
       // MongoDB should handle this flexible schema without issues
-      await expect(
-        store.insert({ tableName: 'mastra_threads' as any, record: customData })
-      ).resolves.not.toThrow();
+      await expect(store.insert({ tableName: 'mastra_threads' as any, record: customData })).resolves.not.toThrow();
 
       const retrieved = await store.load({
         tableName: 'mastra_threads' as any,
@@ -290,12 +288,7 @@ describe('MongoDB Specific Tests', () => {
               totalTokens: 225,
             },
             reasoning: {
-              steps: [
-                'Parse user request',
-                'Identify location',
-                'Call weather API',
-                'Format response',
-              ],
+              steps: ['Parse user request', 'Identify location', 'Call weather API', 'Format response'],
               confidence: 0.95,
             },
           },
@@ -306,7 +299,7 @@ describe('MongoDB Specific Tests', () => {
 
       // MongoDB should handle this complex nested structure naturally
       await expect(
-        store.insert({ tableName: 'mastra_messages' as any, record: complexMessage })
+        store.insert({ tableName: 'mastra_messages' as any, record: complexMessage }),
       ).resolves.not.toThrow();
 
       const retrieved = await store.load({
@@ -371,9 +364,7 @@ describe('MongoDB Specific Tests', () => {
       };
 
       // This should work without explicitly creating the collection first
-      await expect(
-        store.insert({ tableName: testCollectionName, record: testDoc })
-      ).resolves.not.toThrow();
+      await expect(store.insert({ tableName: testCollectionName, record: testDoc })).resolves.not.toThrow();
 
       const retrieved = await store.load({
         tableName: testCollectionName,
@@ -385,14 +376,10 @@ describe('MongoDB Specific Tests', () => {
 
     it('should handle collection operations gracefully', async () => {
       // Test drop on non-existent collection
-      await expect(
-        store.dropTable({ tableName: 'non_existent_collection' as any })
-      ).resolves.not.toThrow();
+      await expect(store.dropTable({ tableName: 'non_existent_collection' as any })).resolves.not.toThrow();
 
       // Test clear on non-existent collection
-      await expect(
-        store.clearTable({ tableName: 'non_existent_collection' as any })
-      ).resolves.not.toThrow();
+      await expect(store.clearTable({ tableName: 'non_existent_collection' as any })).resolves.not.toThrow();
     });
   });
 
@@ -422,7 +409,7 @@ describe('MongoDB Specific Tests', () => {
       // MongoDB should handle this batch efficiently
       const startTime = Date.now();
       await expect(
-        store.batchInsert({ tableName: 'mastra_threads' as any, records: batchData })
+        store.batchInsert({ tableName: 'mastra_threads' as any, records: batchData }),
       ).resolves.not.toThrow();
       const endTime = Date.now();
 
@@ -482,9 +469,7 @@ describe('MongoDB Specific Tests', () => {
           },
         },
         input: {
-          messages: [
-            { role: 'user', content: 'Test prompt for MongoDB' },
-          ],
+          messages: [{ role: 'user', content: 'Test prompt for MongoDB' }],
         },
         output: {
           message: { role: 'assistant', content: 'MongoDB response' },
@@ -497,9 +482,7 @@ describe('MongoDB Specific Tests', () => {
         error: null,
       };
 
-      await expect(
-        store.createAISpan(aiSpan)
-      ).resolves.not.toThrow();
+      await expect(store.createAISpan(aiSpan)).resolves.not.toThrow();
 
       // Verify the span was created
       const trace = await store.getAITrace('mongodb-trace-1');
@@ -568,7 +551,7 @@ describe('MongoDB Specific Tests', () => {
           spanId: 'update-span-1',
           traceId: 'update-trace-1',
           updates,
-        })
+        }),
       ).resolves.not.toThrow();
 
       // Verify updates were applied
@@ -585,13 +568,11 @@ describe('MongoDB Specific Tests', () => {
         id: 'test',
         // MongoDB should handle most field names, but let's test edge cases
         'field.with.dots': 'this might cause issues in some contexts',
-        'field$with$dollar': 'dollar signs in field names',
+        field$with$dollar: 'dollar signs in field names',
       };
 
       // MongoDB should actually handle these field names fine
-      await expect(
-        store.insert({ tableName: 'test_collection' as any, record: invalidData })
-      ).resolves.not.toThrow();
+      await expect(store.insert({ tableName: 'test_collection' as any, record: invalidData })).resolves.not.toThrow();
     });
 
     it('should handle connection issues gracefully', async () => {
@@ -604,9 +585,7 @@ describe('MongoDB Specific Tests', () => {
       });
 
       // This should eventually timeout and provide a meaningful error
-      await expect(
-        badStore.insert({ tableName: 'test' as any, record: { id: 'test' } })
-      ).rejects.toThrow();
+      await expect(badStore.insert({ tableName: 'test' as any, record: { id: 'test' } })).rejects.toThrow();
     });
   });
 });

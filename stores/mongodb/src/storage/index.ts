@@ -516,7 +516,9 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.observability.getAITrace(traceId);
   }
 
-  async getAITracesPaginated(args: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
+  async getAITracesPaginated(
+    args: AITracesPaginatedArg,
+  ): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
