@@ -85,6 +85,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2-instruct-0905',
     'nvidia/cosmos-nemotron-34b',
     'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+    'nvidia/llama-embed-nemotron-8b',
     'nvidia/nemoretriever-ocr-v1',
     'nvidia/parakeet-tdt-0.6b-v2',
     'openai/gpt-oss-120b',
@@ -436,6 +437,8 @@ export type ProviderModelsMap = {
   readonly huggingface: readonly [
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+    'Qwen/Qwen3-Embedding-4B',
+    'Qwen/Qwen3-Embedding-8B',
     'Qwen/Qwen3-Next-80B-A3B-Instruct',
     'Qwen/Qwen3-Next-80B-A3B-Thinking',
     'deepseek-ai/DeepSeek-R1-0528',
@@ -498,6 +501,7 @@ export type ProviderModelsMap = {
     'gemini-2.5-pro-preview-05-06',
     'gemini-2.5-pro-preview-06-05',
     'gemini-2.5-pro-preview-tts',
+    'gemini-embedding-001',
     'gemini-flash-latest',
     'gemini-flash-lite-latest',
     'gemini-live-2.5-flash',
@@ -544,6 +548,9 @@ export type ProviderModelsMap = {
     'o3-pro',
     'o4-mini',
     'o4-mini-deep-research',
+    'text-embedding-3-large',
+    'text-embedding-3-small',
+    'text-embedding-ada-002',
   ];
   readonly 'zhipuai-coding-plan': readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'];
   readonly perplexity: readonly ['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro'];
