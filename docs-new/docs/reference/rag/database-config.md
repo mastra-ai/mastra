@@ -1,5 +1,5 @@
 ---
-title: 'Reference: DatabaseConfig '
+title: 'DatabaseConfig '
 description: API reference for database-specific configuration types used with vector query tools in Mastra RAG systems.
 ---
 
@@ -157,8 +157,7 @@ whereDocument: { "$contains": "API documentation" }
 ## Usage Examples
 
 <Tabs>
-['Basic Usage', 'Runtime Override', 'Multi-Database', 'Performance Tuning']}>
-  <TabItem value="basic-database-configuration" label="Basic Database Configuration">
+  <TabItem value="basic-database-configuration" label="Basic Usage">
     ### Basic Database Configuration
 
     ```typescript
@@ -178,7 +177,7 @@ whereDocument: { "$contains": "API documentation" }
 
   </TabItem>
 
-  <TabItem value="runtime-configuration-override" label="Runtime Configuration Override">
+  <TabItem value="runtime-configuration-override" label="Runtime Override">
     ### Runtime Configuration Override
 
     ```typescript
@@ -213,7 +212,7 @@ whereDocument: { "$contains": "API documentation" }
 
   </TabItem>
 
-  <TabItem value="multi-database-configuration" label="Multi-Database Configuration">
+  <TabItem value="multi-database-configuration" label="Multi-Database">
     ### Multi-Database Configuration
 
     ```typescript
@@ -243,7 +242,7 @@ whereDocument: { "$contains": "API documentation" }
 :::
 </TabItem>
 
-  <TabItem value="performance-tuning" label="Performance Tuning">
+  <TabItem value="performance-tuning" label="Performance">
     ### Performance Tuning
 
     ```typescript

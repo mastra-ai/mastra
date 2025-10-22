@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Mastra.getVector() '
+title: 'Mastra.getVector() '
 description: 'Documentation for the `Mastra.getVector()` method in Mastra, which retrieves a vector store by name.'
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: createTool() '
+title: 'createTool() '
 description: Documentation for the `createTool()` function in Mastra, used to define custom tools for agents.
 ---
 

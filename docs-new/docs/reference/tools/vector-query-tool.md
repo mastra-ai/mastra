@@ -1,5 +1,5 @@
 ---
-title: 'Reference: createVectorQueryTool() '
+title: 'createVectorQueryTool() '
 description: Documentation for the Vector Query Tool in Mastra, which facilitates semantic search over vector stores with filtering and reranking capabilities.
 ---
 
@@ -374,8 +374,7 @@ This example shows how to customize the tool description for a specific use case
 The `databaseConfig` parameter allows you to leverage unique features and optimizations specific to each vector database. These configurations are automatically applied during query execution.
 
 <Tabs>
-['Pinecone', 'pgVector', 'Chroma', 'Multiple Configs']}>
-  <TabItem value="pinecone-configuration" label="Pinecone Configuration">
+  <TabItem value="pinecone-configuration" label="Pinecone">
     ### Pinecone Configuration
 
     ```typescript
@@ -402,7 +401,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
 
   </TabItem>
 
-  <TabItem value="pgvector-configuration" label="pgVector Configuration">
+  <TabItem value="pgvector-configuration" label="pgVector">
     ### pgVector Configuration
 
     ```typescript
@@ -428,7 +427,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
 
   </TabItem>
 
-  <TabItem value="chroma-configuration" label="Chroma Configuration">
+  <TabItem value="chroma-configuration" label="Chroma">
     ### Chroma Configuration
 
     ```typescript
@@ -457,7 +456,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
 
   </TabItem>
 
-  <TabItem value="multiple-database-configurations" label="Multiple Database Configurations">
+  <TabItem value="multiple-database-configurations" label="Multiple Configs">
     ### Multiple Database Configurations
 
     ```typescript

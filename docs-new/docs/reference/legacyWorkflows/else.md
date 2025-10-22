@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Workflow.else() '
+title: 'Workflow.else() '
 description: 'Documentation for the `.else()` method in Mastra workflows, which creates an alternative branch when an if condition is false.'
 ---
 

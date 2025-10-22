@@ -131,24 +131,24 @@ const agent = new Agent({
 This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@perplexity-ai/sdk) for more details.
 
 <Tabs>
-  <Tab>
+  <TabItem value="npm" label="npm">
     ```bash copy
     npm install @perplexity-ai/sdk
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
     ```bash copy
     yarn add @perplexity-ai/sdk
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
     ```bash copy
     pnpm add @perplexity-ai/sdk
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="bun" label="bun">
     ```bash copy
     bun add @perplexity-ai/sdk
     ```
-  </Tab>
+  </TabItem>
 </Tabs>

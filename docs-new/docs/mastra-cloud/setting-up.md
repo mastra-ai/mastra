@@ -7,7 +7,11 @@ description: Configuration steps for Mastra Cloud projects
 
 This page explains how to set up a project on [Mastra Cloud](https://mastra.ai/cloud) with automatic deployments using our GitHub integration.
 
-<MastraCloudCallout />
+:::tip Mastra Cloud
+
+Deploy your Mastra application to [Mastra Cloud](https://mastra.ai/cloud) for automated deployment, monitoring, and management.
+
+:::
 
 ## Prerequisites
 
@@ -17,8 +21,6 @@ This page explains how to set up a project on [Mastra Cloud](https://mastra.ai/c
 > See our [Getting started](/docs/getting-started/installation) guide to scaffold out a new Mastra project with sensible defaults.
 
 ## Setup and Deploy process
-
-
 
 ### Sign in to Mastra Cloud
 
@@ -58,17 +60,15 @@ Mastra Cloud automatically detects the right build settings, but you can customi
 - **Mastra directory**: Where Mastra files are located
 - **Environment variables**: Add environment variables used by the application
 - **Build and Store settings**:
-   - **Install command**: Runs pre-build to install project dependencies
-   - **Project setup command**: Runs pre-build to prepare any external dependencies
-   - **Port**: The network port the server will use
-   - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/docs/storage/overview) storage
+  - **Install command**: Runs pre-build to install project dependencies
+  - **Project setup command**: Runs pre-build to prepare any external dependencies
+  - **Port**: The network port the server will use
+  - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/docs/storage/overview) storage
 - **Deploy Project**: Starts the deployment process
 
 ### Deploy project
 
 Click **Deploy Project** to create and deploy your application using the configuration you’ve set.
-
-
 
 ## Successful deployment
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: suspend() '
+title: 'suspend() '
 description: 'Documentation for the suspend function in Mastra workflows, which pauses execution until resumed.'
 ---
 

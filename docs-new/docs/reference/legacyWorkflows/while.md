@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Workflow.while() '
+title: 'Workflow.while() '
 description: 'Documentation for the `.while()` method in Mastra workflows, which repeats a step as long as a specified condition remains true.'
 ---
 

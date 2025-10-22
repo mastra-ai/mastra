@@ -5,7 +5,11 @@ description: Example of using the Faithfulness metric to evaluate how factually 
 
 ## Faithfulness Evaluation
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 Use `FaithfulnessMetric` to evaluate whether the response makes claims that are supported by the provided context. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 

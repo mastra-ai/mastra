@@ -51,22 +51,22 @@ refer to our [getting started guide](./../../getting-started/installation)
 - **Configure Build Command**: You need to add a custom build command for the app platform to build your Mastra project successfully. Set the build command based on your package manager:
 
 <Tabs>
-  <TabItem value="build" label="build">
+  <TabItem value="npm" label="npm">
     ```
     npm run build
     ```
   </TabItem>
-  <TabItem value="build" label="build">
+  <TabItem value="pnpm" label="pnpm">
     ```
     pnpm build
     ```
   </TabItem>
-  <TabItem value="build" label="build">
+  <TabItem value="yarn" label="yarn">
     ```
     yarn build
     ```
   </TabItem>
-  <TabItem value="build" label="build">
+  <TabItem value="bun" label="bun">
     ```
     bun run build
     ```

@@ -1,5 +1,5 @@
 ---
-title: "Reference: create-mastra "
+title: 'create-mastra '
 description: Documentation for the create-mastra command, which creates a new Mastra project with interactive setup options.
 ---
 
@@ -13,51 +13,51 @@ The `create-mastra` command **creates** a new standalone Mastra project. Use thi
 ## Usage
 
 <Tabs>
-  <Tab>
+  <TabItem value="npm" label="npm">
     ```bash copy
     npx create-mastra@latest
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
     ```bash copy
     yarn dlx create-mastra@latest
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
     ```bash copy
     pnpm create mastra@latest
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="bun" label="bun">
     ```bash copy
     bun create mastra@latest
     ```
-  </Tab>
+  </TabItem>
 </Tabs>
 
 `create-mastra` automatically runs in _interactive_ mode, but you can also specify your project name and template with command line arguments.
 
 <Tabs>
-  <Tab>
+  <TabItem value="npm-template" label="npm">
     ```bash copy
     npx create-mastra@latest my-mastra-project -- --template coding-agent
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="yarn-template" label="yarn">
     ```bash copy
     yarn dlx create-mastra@latest --template coding-agent
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="pnpm-template" label="pnpm">
     ```bash copy
     pnpm create mastra@latest --template coding-agent
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="bun-template" label="bun">
     ```bash copy
     bun create mastra@latest --template coding-agent
     ```
-  </Tab>
+  </TabItem>
 </Tabs>
 
 Check out the [full list](https://mastra.ai/api/templates.json) of templates and use the `slug` as input to the `--template` CLI flag.
@@ -73,90 +73,90 @@ npx create-mastra@latest my-mastra-project -- --template mastra-ai/template-codi
 Instead of an interactive prompt you can also define these CLI flags.
 
 <PropertiesTable
-  content={[
-    {
-      name: "--version",
-      type: "boolean",
-      description: "Output the version number",
-      isOptional: true,
-    },
-    {
-      name: "--project-name",
-      type: "string",
-      description:
-        "Project name that will be used in package.json and as the project directory name",
-      isOptional: true,
-    },
-    {
-      name: "--default",
-      type: "boolean",
-      description: "Quick start with defaults (src, OpenAI, no examples)",
-      isOptional: true,
-    },
-    {
-      name: "--components",
-      type: "string",
-      description:
-        "Comma-separated list of components (agents, tools, workflows)",
-      isOptional: true,
-    },
-    {
-      name: "--llm",
-      type: "string",
-      description:
-        "Default model provider (openai, anthropic, groq, google, or cerebras)",
-      isOptional: true,
-    },
-    {
-      name: "--llm-api-key",
-      type: "string",
-      description: "API key for the model provider",
-      isOptional: true,
-    },
-    {
-      name: "--example",
-      type: "boolean",
-      description: "Include example code",
-      isOptional: true,
-    },
-    {
-      name: "--no-example",
-      type: "boolean",
-      description: "Do not include example code",
-      isOptional: true,
-    },
-    {
-      name: "--template",
-      type: "string",
-      description:
-        "Create project from a template (use template name, public GitHub URL, or leave blank to select from list)",
-      isOptional: true,
-    },
-    {
-      name: "--timeout",
-      type: "number",
-      description:
-        "Configurable timeout for package installation, defaults to 60000 ms",
-      isOptional: true,
-    },
-    {
-      name: "--dir",
-      type: "string",
-      description: "Target directory for Mastra source code (default: src/)",
-      isOptional: true,
-    },
-    {
-      name: "--mcp",
-      type: "string",
-      description:
-        "MCP Server for code editor (cursor, cursor-global, windsurf, vscode)",
-      isOptional: true,
-    },
-    {
-      name: "--help",
-      type: "boolean",
-      description: "Display help for command",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "--version",
+type: "boolean",
+description: "Output the version number",
+isOptional: true,
+},
+{
+name: "--project-name",
+type: "string",
+description:
+"Project name that will be used in package.json and as the project directory name",
+isOptional: true,
+},
+{
+name: "--default",
+type: "boolean",
+description: "Quick start with defaults (src, OpenAI, no examples)",
+isOptional: true,
+},
+{
+name: "--components",
+type: "string",
+description:
+"Comma-separated list of components (agents, tools, workflows)",
+isOptional: true,
+},
+{
+name: "--llm",
+type: "string",
+description:
+"Default model provider (openai, anthropic, groq, google, or cerebras)",
+isOptional: true,
+},
+{
+name: "--llm-api-key",
+type: "string",
+description: "API key for the model provider",
+isOptional: true,
+},
+{
+name: "--example",
+type: "boolean",
+description: "Include example code",
+isOptional: true,
+},
+{
+name: "--no-example",
+type: "boolean",
+description: "Do not include example code",
+isOptional: true,
+},
+{
+name: "--template",
+type: "string",
+description:
+"Create project from a template (use template name, public GitHub URL, or leave blank to select from list)",
+isOptional: true,
+},
+{
+name: "--timeout",
+type: "number",
+description:
+"Configurable timeout for package installation, defaults to 60000 ms",
+isOptional: true,
+},
+{
+name: "--dir",
+type: "string",
+description: "Target directory for Mastra source code (default: src/)",
+isOptional: true,
+},
+{
+name: "--mcp",
+type: "string",
+description:
+"MCP Server for code editor (cursor, cursor-global, windsurf, vscode)",
+isOptional: true,
+},
+{
+name: "--help",
+type: "boolean",
+description: "Display help for command",
+isOptional: true,
+},
+]}
 />

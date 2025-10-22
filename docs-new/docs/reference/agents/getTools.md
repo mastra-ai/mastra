@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Agent.getTools() '
+title: 'Agent.getTools() '
 description: 'Documentation for the `Agent.getTools()` method in Mastra agents, which retrieves the tools that the agent can use.'
 ---
 

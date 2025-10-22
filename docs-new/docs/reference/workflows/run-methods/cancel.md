@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Run.cancel() '
+title: 'Run.cancel() '
 description: Documentation for the `Run.cancel()` method in workflows, which cancels a workflow run.
 ---
 

@@ -1,12 +1,15 @@
 ---
-title: "Overview"
-description: "Understanding how to evaluate and measure AI agent quality using Mastra evals."
+title: 'Overview'
+description: 'Understanding how to evaluate and measure AI agent quality using Mastra evals.'
 ---
-
 
 # Testing your agents with evals
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 While traditional software tests have clear pass/fail conditions, AI outputs are non-deterministic — they can vary with the same input. Evals help bridge this gap by providing quantifiable metrics for measuring agent quality.
 
@@ -35,19 +38,16 @@ npm install @mastra/evals@latest
 Evals need to be added to an agent. Here's an example using the summarization, content similarity, and tone consistency metrics:
 
 ```typescript copy showLineNumbers filename="src/mastra/agents/index.ts"
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { SummarizationMetric } from "@mastra/evals/llm";
-import {
-  ContentSimilarityMetric,
-  ToneConsistencyMetric,
-} from "@mastra/evals/nlp";
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { SummarizationMetric } from '@mastra/evals/llm';
+import { ContentSimilarityMetric, ToneConsistencyMetric } from '@mastra/evals/nlp';
 
-const model = openai("gpt-4o");
+const model = openai('gpt-4o');
 
 export const myAgent = new Agent({
-  name: "ContentWriter",
-  instructions: "You are a content writer that creates accurate summaries",
+  name: 'ContentWriter',
+  instructions: 'You are a content writer that creates accurate summaries',
   model,
   evals: {
     summarization: new SummarizationMetric(model),

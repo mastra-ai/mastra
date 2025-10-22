@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Agent.getDefaultGenerateOptions() '
+title: 'Agent.getDefaultGenerateOptions() '
 description: 'Documentation for the `Agent.getDefaultGenerateOptions()` method in Mastra agents, which retrieves the default options used for generate calls.'
 ---
 

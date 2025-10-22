@@ -58,7 +58,7 @@ export const mastraClient = new MastraClient({
 Once `MastraClient` is configured, you can send authenticated requests from your frontend application, or use `curl` for quick local testing:
 
 <Tabs>
-  <Tab>
+  <TabItem value="react" label="React">
     ```tsx filename="src/components/test-agent.tsx" showLineNumbers copy
     import { mastraClient } from "../../lib/mastra-client";
 
@@ -77,8 +77,8 @@ Once `MastraClient` is configured, you can send authenticated requests from your
     };
     ```
 
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -87,7 +87,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
         "messages": "Weather in London"
       }'
     ```
-  </Tab>
+  </TabItem>
 </Tabs>
 
 ## Creating a JWT

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Run.resume() '
+title: 'Run.resume() '
 description: Documentation for the `Run.resume()` method in workflows, which resumes a suspended workflow run with new data.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Mastra.getAgents() '
+title: 'Mastra.getAgents() '
 description: 'Documentation for the `Mastra.getAgents()` method in Mastra, which retrieves all configured agents.'
 ---
 

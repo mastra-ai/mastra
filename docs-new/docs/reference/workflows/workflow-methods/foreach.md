@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Workflow.foreach() '
+title: 'Workflow.foreach() '
 description: Documentation for the `Workflow.foreach()` method in workflows, which creates a loop that executes a step for each item in an array.
 ---
 

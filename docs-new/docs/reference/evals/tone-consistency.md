@@ -1,32 +1,32 @@
 ---
-title: "Reference: Tone Consistency "
+title: 'Reference: Tone Consistency '
 description: Documentation for the Tone Consistency Metric in Mastra, which evaluates emotional tone and sentiment consistency in text.
 ---
 
-
 # ToneConsistencyMetric
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 The `ToneConsistencyMetric` class evaluates the text's emotional tone and sentiment consistency. It can operate in two modes: comparing tone between input/output pairs or analyzing tone stability within a single text.
 
 ## Basic Usage
 
 ```typescript
-import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+import { ToneConsistencyMetric } from '@mastra/evals/nlp';
 
 const metric = new ToneConsistencyMetric();
 
 // Compare tone between input and output
-const result1 = await metric.measure(
-  "I love this amazing product!",
-  "This product is wonderful and fantastic!",
-);
+const result1 = await metric.measure('I love this amazing product!', 'This product is wonderful and fantastic!');
 
 // Analyze tone stability in a single text
 const result2 = await metric.measure(
-  "The service is excellent. The staff is friendly. The atmosphere is perfect.",
-  "", // Empty string for single-text analysis
+  'The service is excellent. The staff is friendly. The atmosphere is perfect.',
+  '', // Empty string for single-text analysis
 );
 
 console.log(result1.score); // Tone consistency score from 0-1
@@ -36,77 +36,77 @@ console.log(result2.score); // Tone stability score from 0-1
 ## measure() Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string",
-      description: "The text to analyze for tone",
-      isOptional: false,
-    },
-    {
-      name: "output",
-      type: "string",
-      description:
-        "Reference text for tone comparison (empty string for stability analysis)",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string",
+description: "The text to analyze for tone",
+isOptional: false,
+},
+{
+name: "output",
+type: "string",
+description:
+"Reference text for tone comparison (empty string for stability analysis)",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "score",
-      type: "number",
-      description: "Tone consistency/stability score (0-1)",
-    },
-    {
-      name: "info",
-      type: "object",
-      description: "Detailed tone info",
-    },
-  ]}
+content={[
+{
+name: "score",
+type: "number",
+description: "Tone consistency/stability score (0-1)",
+},
+{
+name: "info",
+type: "object",
+description: "Detailed tone info",
+},
+]}
 />
 
 ### info Object (Tone Comparison)
 
 <PropertiesTable
-  content={[
-    {
-      name: "responseSentiment",
-      type: "number",
-      description: "Sentiment score for the input text",
-    },
-    {
-      name: "referenceSentiment",
-      type: "number",
-      description: "Sentiment score for the output text",
-    },
-    {
-      name: "difference",
-      type: "number",
-      description: "Absolute difference between sentiment scores",
-    },
-  ]}
+content={[
+{
+name: "responseSentiment",
+type: "number",
+description: "Sentiment score for the input text",
+},
+{
+name: "referenceSentiment",
+type: "number",
+description: "Sentiment score for the output text",
+},
+{
+name: "difference",
+type: "number",
+description: "Absolute difference between sentiment scores",
+},
+]}
 />
 
 ### info Object (Tone Stability)
 
 <PropertiesTable
-  content={[
-    {
-      name: "avgSentiment",
-      type: "number",
-      description: "Average sentiment score across sentences",
-    },
-    {
-      name: "sentimentVariance",
-      type: "number",
-      description: "Variance in sentiment between sentences",
-    },
-  ]}
+content={[
+{
+name: "avgSentiment",
+type: "number",
+description: "Average sentiment score across sentences",
+},
+{
+name: "sentimentVariance",
+type: "number",
+description: "Variance in sentiment between sentences",
+},
+]}
 />
 
 ## Scoring Details
@@ -116,20 +116,17 @@ The metric evaluates sentiment consistency through tone pattern analysis and mod
 ### Scoring Process
 
 1. Analyzes tone patterns:
-
    - Extracts sentiment features
    - Computes sentiment scores
    - Measures tone variations
 
 2. Calculates mode-specific score:
    **Tone Consistency** (input and output):
-
    - Compares sentiment between texts
    - Calculates sentiment difference
    - Score = 1 - (sentiment_difference / max_difference)
 
    **Tone Stability** (single input):
-
    - Analyzes sentiment across sentences
    - Calculates sentiment variance
    - Score = 1 - (sentiment_variance / max_variance)
@@ -149,14 +146,14 @@ Final score: `mode_specific_score * scale`
 ## Example with Both Modes
 
 ```typescript
-import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+import { ToneConsistencyMetric } from '@mastra/evals/nlp';
 
 const metric = new ToneConsistencyMetric();
 
 // Tone Consistency Mode
 const consistencyResult = await metric.measure(
-  "This product is fantastic and amazing!",
-  "The product is excellent and wonderful!",
+  'This product is fantastic and amazing!',
+  'The product is excellent and wonderful!',
 );
 // Example output:
 // {
@@ -169,10 +166,7 @@ const consistencyResult = await metric.measure(
 // }
 
 // Tone Stability Mode
-const stabilityResult = await metric.measure(
-  "Great service! Friendly staff. Perfect atmosphere.",
-  "",
-);
+const stabilityResult = await metric.measure('Great service! Friendly staff. Perfect atmosphere.', '');
 // Example output:
 // {
 //   score: 0.9,

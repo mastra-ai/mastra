@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Agent.generateLegacy() (Legacy) '
+title: 'Agent.generateLegacy() (Legacy) '
 description: 'Documentation for the legacy `Agent.generateLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version.'
 ---
 

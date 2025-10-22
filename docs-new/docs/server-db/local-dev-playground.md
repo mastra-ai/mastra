@@ -6,6 +6,7 @@ description: Documentation for the Mastra local development environment for Mast
 import YouTube from '@site/src/components/YouTube';
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
+import { VideoPlayer } from '@site/src/components/video-player';
 
 # Playground
 
@@ -14,31 +15,31 @@ Mastra provides a local development environment where you can test your agents, 
 Start the local development server by running:
 
 <Tabs>
-  <Tab>
+  <TabItem value="npm" label="npm">
     ```bash copy
     npm run dev
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
     ```bash copy
     yarn run dev
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
     ```bash copy
     pnpm run dev
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="bun" label="bun">
     ```bash copy
     bun run dev
     ```
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="mastra" label="mastra">
     ```bash copy
     mastra dev
     ```
-  </Tab>
+  </TabItem>
 </Tabs>
 
 The local development server provides access to the following interfaces:

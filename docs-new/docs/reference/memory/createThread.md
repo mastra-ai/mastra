@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Memory.createThread() '
+title: 'Memory.createThread() '
 description: 'Documentation for the `Memory.createThread()` method in Mastra, which creates a new conversation thread in the memory system.'
 ---
 

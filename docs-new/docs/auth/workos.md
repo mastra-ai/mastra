@@ -1,6 +1,6 @@
 ---
-title: "MastraAuthWorkos Class"
-description: "Documentation for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication."
+title: 'MastraAuthWorkos Class'
+description: 'Documentation for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication.'
 ---
 
 import Tabs from '@theme/Tabs';
@@ -41,7 +41,7 @@ npm install @mastra/auth-workos@latest
 ### Basic usage with environment variables
 
 ```typescript {2,7} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 
 export const mastra = new Mastra({
@@ -55,7 +55,7 @@ export const mastra = new Mastra({
 ### Custom configuration
 
 ```typescript {2,7-10} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 
 export const mastra = new Mastra({
@@ -63,7 +63,7 @@ export const mastra = new Mastra({
   server: {
     experimental_auth: new MastraAuthWorkos({
       apiKey: process.env.WORKOS_API_KEY,
-      clientId: process.env.WORKOS_CLIENT_ID
+      clientId: process.env.WORKOS_CLIENT_ID,
     }),
   },
 });
@@ -88,7 +88,7 @@ import { MastraAuthWorkos } from '@mastra/auth-workos';
 const workosAuth = new MastraAuthWorkos({
   apiKey: process.env.WORKOS_API_KEY,
   clientId: process.env.WORKOS_CLIENT_ID,
-  authorizeUser: async (user) => {
+  authorizeUser: async user => {
     return !!user;
   },
 });
@@ -134,14 +134,14 @@ export const authenticateWithWorkos = async (code: string, clientId: string) => 
 When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid WorkOS access token in the `Authorization` header:
 
 ```typescript filename="lib/mastra/mastra-client.ts" showLineNumbers copy
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js';
 
 export const createMastraClient = (accessToken: string) => {
   return new MastraClient({
-    baseUrl: "https://<mastra-api-url>",
+    baseUrl: 'https://<mastra-api-url>',
     headers: {
-      Authorization: `Bearer ${accessToken}`
-    }
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
 };
 ```
@@ -155,7 +155,7 @@ export const createMastraClient = (accessToken: string) => {
 Once `MastraClient` is configured with the WorkOS access token, you can send authenticated requests:
 
 <Tabs>
-  <Tab>
+  <TabItem value="react" label="React">
     ```typescript filename="src/api/agents.ts" showLineNumbers copy
     import { WorkOS } from '@workos-inc/node';
     import { MastraClient } from '@mastra/client-js';
@@ -185,8 +185,9 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
       return response.text;
     };
     ```
-  </Tab>
-  <Tab>
+
+  </TabItem>
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -195,5 +196,5 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
         "messages": "Weather in London"
       }'
     ```
-  </Tab>
+  </TabItem>
 </Tabs>

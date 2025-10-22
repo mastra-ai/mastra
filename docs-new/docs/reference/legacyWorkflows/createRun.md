@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Workflow.createRun() '
+title: 'Workflow.createRun() '
 description: 'Documentation for the `.createRun()` method in workflows (legacy), which initializes a new workflow run instance.'
 ---
 

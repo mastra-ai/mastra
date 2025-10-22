@@ -1,12 +1,15 @@
 ---
-title: "Word Inclusion "
+title: 'Word Inclusion '
 description: Example of creating a custom native JavaScript evaluation metric.
 ---
 
-
 # Custom Native JavaScript Evaluation
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 This example shows how to create a custom evaluation metric using JavaScript logic. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing the total and matched words.
 
@@ -21,7 +24,7 @@ npm install @mastra/evals
 A custom eval in Mastra can use native JavaScript methods to evaluate conditions.
 
 ```typescript filename="src/mastra/evals/example-word-inclusion.ts" showLineNumbers copy
-import { Metric, type MetricResult } from "@mastra/core";
+import { Metric, type MetricResult } from '@mastra/core';
 
 export class WordInclusionMetric extends Metric {
   constructor() {
@@ -34,7 +37,7 @@ export class WordInclusionMetric extends Metric {
     const referenceWords = [...new Set(tokenize(input))];
     const outputText = output.toLowerCase();
 
-    const matchedWords = referenceWords.filter((word) => outputText.includes(word));
+    const matchedWords = referenceWords.filter(word => outputText.includes(word));
 
     const totalWords = referenceWords.length;
     const score = totalWords > 0 ? matchedWords.length / totalWords : 0;
@@ -43,8 +46,8 @@ export class WordInclusionMetric extends Metric {
       score,
       info: {
         totalWords,
-        matchedWords: matchedWords.length
-      }
+        matchedWords: matchedWords.length,
+      },
     };
   }
 }
@@ -55,12 +58,12 @@ export class WordInclusionMetric extends Metric {
 In this example, the response contains all the words listed in the input query. The metric returns a high score indicating complete word inclusion.
 
 ```typescript filename="src/example-high-word-inclusion.ts" showLineNumbers copy
-import { WordInclusionMetric } from "./mastra/evals/example-word-inclusion";
+import { WordInclusionMetric } from './mastra/evals/example-word-inclusion';
 
 const metric = new WordInclusionMetric();
 
-const query = "apple, banana, orange";
-const response = "My favorite fruits are: apple, banana, and orange.";
+const query = 'apple, banana, orange';
+const response = 'My favorite fruits are: apple, banana, and orange.';
 
 const result = await metric.measure(query, response);
 
@@ -86,12 +89,12 @@ The output receives a high score because all the unique words from the input are
 In this example, the response includes some but not all of the words from the input query. The metric returns a partial score reflecting this incomplete word coverage.
 
 ```typescript filename="src/example-partial-word-inclusion.ts" showLineNumbers copy
-import { WordInclusionMetric } from "./mastra/evals/example-word-inclusion";
+import { WordInclusionMetric } from './mastra/evals/example-word-inclusion';
 
 const metric = new WordInclusionMetric();
 
-const query = "cats, dogs, rabbits";
-const response = "I like dogs and rabbits";
+const query = 'cats, dogs, rabbits';
+const response = 'I like dogs and rabbits';
 
 const result = await metric.measure(query, response);
 
@@ -117,11 +120,11 @@ The score reflects partial success because the response contains only a subset o
 In this example, the response does not contain any of the words from the input query. The metric returns a low score indicating no word inclusion.
 
 ```typescript filename="src/example-low-word-inclusion.ts" showLineNumbers copy
-import { WordInclusionMetric } from "./mastra/evals/example-word-inclusion";
+import { WordInclusionMetric } from './mastra/evals/example-word-inclusion';
 
 const metric = new WordInclusionMetric();
 
-const query = "Colombia, Brazil, Panama";
+const query = 'Colombia, Brazil, Panama';
 const response = "Let's go to Mexico";
 
 const result = await metric.measure(query, response);

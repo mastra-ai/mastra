@@ -3,9 +3,6 @@ title: 'Templates Reference'
 description: 'Complete guide to creating, using, and contributing Mastra templates'
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
 ## Overview
 
 This reference provides comprehensive information about Mastra templates, including how to use existing templates, create your own, and contribute to the community ecosystem.

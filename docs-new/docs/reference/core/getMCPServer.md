@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Mastra.getMCPServer() '
+title: 'Mastra.getMCPServer() '
 description: 'Documentation for the `Mastra.getMCPServer()` method in Mastra, which retrieves a specific MCP server instance by ID and optional version.'
 ---
 

@@ -197,7 +197,7 @@ export const createMastraClient = (idToken: string) => {
 Once `MastraClient` is configured with the Firebase ID token, you can send authenticated requests:
 
 <Tabs>
-  <Tab>
+  <TabItem value="react" label="React">
     ```tsx filename="src/components/test-agent.tsx" showLineNumbers copy
     "use client";
 
@@ -231,8 +231,8 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
     };
     ```
 
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="nodejs" label="Node.js">
     ```typescript filename="server.js" showLineNumbers copy
     const express = require('express');
     const admin = require('firebase-admin');
@@ -274,8 +274,8 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
     });
     ```
 
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -284,5 +284,5 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
         "messages": "Weather in London"
       }'
     ```
-  </Tab>
+  </TabItem>
 </Tabs>

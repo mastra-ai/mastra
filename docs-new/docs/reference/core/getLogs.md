@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Mastra.getLogs() '
+title: 'Mastra.getLogs() '
 description: 'Documentation for the `Mastra.getLogs()` method in Mastra, which retrieves all logs for a specific transport ID.'
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Workflow.sendEvent() '
+title: 'Workflow.sendEvent() '
 description: Documentation for the `Workflow.sendEvent()` method in workflows, which resumes execution when an event is sent.
 ---
 

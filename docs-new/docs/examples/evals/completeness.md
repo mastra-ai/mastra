@@ -5,7 +5,11 @@ description: Example of using the Completeness metric to evaluate how thoroughly
 
 # Completeness Evaluation
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 Use `CompletenessMetric` to evaluate whether the response includes all key elements from the input. The metric accepts a `query` and a `response`, and returns a score and an `info` object with detailed element level comparisons.
 

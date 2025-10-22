@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Memory.getThreadsByResourceIdPaginated() '
+title: 'Memory.getThreadsByResourceIdPaginated() '
 description: 'Documentation for the `Memory.getThreadsByResourceIdPaginated()` method in Mastra, which retrieves threads associated with a specific resource ID with pagination support.'
 ---
 

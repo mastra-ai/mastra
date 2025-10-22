@@ -1,5 +1,5 @@
 ---
-title: 'Reference: MastraModelOutput (Experimental) '
+title: 'MastraModelOutput (Experimental) '
 description: 'Complete reference for MastraModelOutput - the stream object returned by agent.stream() with streaming and promise-based access to model outputs.'
 ---
 

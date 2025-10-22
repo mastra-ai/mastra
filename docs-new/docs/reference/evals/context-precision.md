@@ -1,35 +1,38 @@
 ---
-title: "Reference: Context Precision "
+title: 'Reference: Context Precision '
 description: Documentation for the Context Precision Metric in Mastra, which evaluates the relevance and precision of retrieved context nodes for generating expected outputs.
 ---
 
-
 # ContextPrecisionMetric
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 The `ContextPrecisionMetric` class evaluates how relevant and precise the retrieved context nodes are for generating the expected output. It uses a judge-based system to analyze each context piece's contribution and provides weighted scoring based on position.
 
 ## Basic Usage
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { ContextPrecisionMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { ContextPrecisionMetric } from '@mastra/evals/llm';
 
 // Configure the model for evaluation
-const model = openai("gpt-4o-mini");
+const model = openai('gpt-4o-mini');
 
 const metric = new ContextPrecisionMetric(model, {
   context: [
-    "Photosynthesis is a biological process used by plants to create energy from sunlight.",
-    "Plants need water and nutrients from the soil to grow.",
-    "The process of photosynthesis produces oxygen as a byproduct.",
+    'Photosynthesis is a biological process used by plants to create energy from sunlight.',
+    'Plants need water and nutrients from the soil to grow.',
+    'The process of photosynthesis produces oxygen as a byproduct.',
   ],
 });
 
 const result = await metric.measure(
-  "What is photosynthesis?",
-  "Photosynthesis is the process by which plants convert sunlight into energy.",
+  'What is photosynthesis?',
+  'Photosynthesis is the process by which plants convert sunlight into energy.',
 );
 
 console.log(result.score); // Precision score from 0-1
@@ -39,89 +42,89 @@ console.log(result.info.reason); // Explanation of the score
 ## Constructor Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "LanguageModel",
-      description:
-        "Configuration for the model used to evaluate context relevance",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "ContextPrecisionMetricOptions",
-      description: "Configuration options for the metric",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "LanguageModel",
+description:
+"Configuration for the model used to evaluate context relevance",
+isOptional: false,
+},
+{
+name: "options",
+type: "ContextPrecisionMetricOptions",
+description: "Configuration options for the metric",
+isOptional: false,
+},
+]}
 />
 
 ### ContextPrecisionMetricOptions
 
 <PropertiesTable
-  content={[
-    {
-      name: "scale",
-      type: "number",
-      description: "Maximum score value",
-      isOptional: true,
-      defaultValue: "1",
-    },
-    {
-      name: "context",
-      type: "string[]",
-      description: "Array of context pieces in their retrieval order",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "scale",
+type: "number",
+description: "Maximum score value",
+isOptional: true,
+defaultValue: "1",
+},
+{
+name: "context",
+type: "string[]",
+description: "Array of context pieces in their retrieval order",
+isOptional: false,
+},
+]}
 />
 
 ## measure() Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string",
-      description: "The original query or prompt",
-      isOptional: false,
-    },
-    {
-      name: "output",
-      type: "string",
-      description: "The generated response to evaluate",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string",
+description: "The original query or prompt",
+isOptional: false,
+},
+{
+name: "output",
+type: "string",
+description: "The generated response to evaluate",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "score",
-      type: "number",
-      description: "Precision score (0 to scale, default 0-1)",
-    },
-    {
-      name: "info",
-      type: "object",
-      description: "Object containing the reason for the score",
-      properties: [
-        {
-          type: "string",
-          parameters: [
-            {
-              name: "reason",
-              type: "string",
-              description: "Detailed explanation of the score",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "score",
+type: "number",
+description: "Precision score (0 to scale, default 0-1)",
+},
+{
+name: "info",
+type: "object",
+description: "Object containing the reason for the score",
+properties: [
+{
+type: "string",
+parameters: [
+{
+name: "reason",
+type: "string",
+description: "Detailed explanation of the score",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Scoring Details
@@ -131,7 +134,6 @@ The metric evaluates context precision through binary relevance assessment and M
 ### Scoring Process
 
 1. Assigns binary relevance scores:
-
    - Relevant context: 1
    - Irrelevant context: 0
 
@@ -155,24 +157,24 @@ Final score: `Mean Average Precision * scale`
 ## Example with Analysis
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { ContextPrecisionMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { ContextPrecisionMetric } from '@mastra/evals/llm';
 
 // Configure the model for evaluation
-const model = openai("gpt-4o-mini");
+const model = openai('gpt-4o-mini');
 
 const metric = new ContextPrecisionMetric(model, {
   context: [
-    "Exercise strengthens the heart and improves blood circulation.",
-    "A balanced diet is important for health.",
-    "Regular physical activity reduces stress and anxiety.",
-    "Exercise equipment can be expensive.",
+    'Exercise strengthens the heart and improves blood circulation.',
+    'A balanced diet is important for health.',
+    'Regular physical activity reduces stress and anxiety.',
+    'Exercise equipment can be expensive.',
   ],
 });
 
 const result = await metric.measure(
-  "What are the benefits of exercise?",
-  "Regular exercise improves cardiovascular health and mental wellbeing.",
+  'What are the benefits of exercise?',
+  'Regular exercise improves cardiovascular health and mental wellbeing.',
 );
 
 // Example output:

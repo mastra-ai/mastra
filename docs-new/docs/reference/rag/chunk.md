@@ -1,5 +1,5 @@
 ---
-title: 'Reference: .chunk() '
+title: '.chunk() '
 description: Documentation for the chunk function in Mastra, which splits documents into smaller segments using various strategies.
 ---
 

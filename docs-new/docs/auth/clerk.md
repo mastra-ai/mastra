@@ -100,7 +100,7 @@ export const mastraClient = new MastraClient({
 Once `MastraClient` is configured with the Clerk access token, you can send authenticated requests:
 
 <Tabs>
-  <TabItem>
+  <TabItem value="react" label="React">
     ```tsx filename="src/components/test-agent.tsx" showLineNumbers copy
     "use client";
 
@@ -131,7 +131,7 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
     ```
 
   </TabItem>
-  <TabItem>
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \

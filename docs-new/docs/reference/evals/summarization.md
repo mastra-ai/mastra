@@ -1,29 +1,32 @@
 ---
-title: "Reference: Summarization "
+title: 'Reference: Summarization '
 description: Documentation for the Summarization Metric in Mastra, which evaluates the quality of LLM-generated summaries for content and factual accuracy.
 ---
 
-
 # SummarizationMetric
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 The `SummarizationMetric` evaluates how well an LLM's summary captures the original text's content while maintaining factual accuracy. It combines two aspects: alignment (factual correctness) and coverage (inclusion of key information), using the minimum scores to ensure both qualities are necessary for a good summary.
 
 ## Basic Usage
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { SummarizationMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { SummarizationMetric } from '@mastra/evals/llm';
 
 // Configure the model for evaluation
-const model = openai("gpt-4o-mini");
+const model = openai('gpt-4o-mini');
 
 const metric = new SummarizationMetric(model);
 
 const result = await metric.measure(
-  "The company was founded in 1995 by John Smith. It started with 10 employees and grew to 500 by 2020. The company is based in Seattle.",
-  "Founded in 1995 by John Smith, the company grew from 10 to 500 employees by 2020.",
+  'The company was founded in 1995 by John Smith. It started with 10 employees and grew to 500 by 2020. The company is based in Seattle.',
+  'Founded in 1995 by John Smith, the company grew from 10 to 500 employees by 2020.',
 );
 
 console.log(result.score); // Score from 0-1
@@ -33,104 +36,104 @@ console.log(result.info); // Object containing detailed metrics about the summar
 ## Constructor Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "LanguageModel",
-      description: "Configuration for the model used to evaluate summaries",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "SummarizationMetricOptions",
-      description: "Configuration options for the metric",
-      isOptional: true,
-      defaultValue: "{ scale: 1 }",
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "LanguageModel",
+description: "Configuration for the model used to evaluate summaries",
+isOptional: false,
+},
+{
+name: "options",
+type: "SummarizationMetricOptions",
+description: "Configuration options for the metric",
+isOptional: true,
+defaultValue: "{ scale: 1 }",
+},
+]}
 />
 
 ### SummarizationMetricOptions
 
 <PropertiesTable
-  content={[
-    {
-      name: "scale",
-      type: "number",
-      description: "Maximum score value",
-      isOptional: true,
-      defaultValue: "1",
-    },
-  ]}
+content={[
+{
+name: "scale",
+type: "number",
+description: "Maximum score value",
+isOptional: true,
+defaultValue: "1",
+},
+]}
 />
 
 ## measure() Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string",
-      description: "The original text to be summarized",
-      isOptional: false,
-    },
-    {
-      name: "output",
-      type: "string",
-      description: "The generated summary to evaluate",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string",
+description: "The original text to be summarized",
+isOptional: false,
+},
+{
+name: "output",
+type: "string",
+description: "The generated summary to evaluate",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "score",
-      type: "number",
-      description: "Summarization score (0 to scale, default 0-1)",
-    },
-    {
-      name: "info",
-      type: "object",
-      description: "Object containing detailed metrics about the summary",
-      properties: [
-        {
-          type: "string",
-          parameters: [
-            {
-              name: "reason",
-              type: "string",
-              description:
-                "Detailed explanation of the score, including both alignment and coverage aspects",
-            },
-          ],
-        },
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "alignmentScore",
-              type: "number",
-              description: "Alignment score (0 to 1)",
-            },
-          ],
-        },
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "coverageScore",
-              type: "number",
-              description: "Coverage score (0 to 1)",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "score",
+type: "number",
+description: "Summarization score (0 to scale, default 0-1)",
+},
+{
+name: "info",
+type: "object",
+description: "Object containing detailed metrics about the summary",
+properties: [
+{
+type: "string",
+parameters: [
+{
+name: "reason",
+type: "string",
+description:
+"Detailed explanation of the score, including both alignment and coverage aspects",
+},
+],
+},
+{
+type: "number",
+parameters: [
+{
+name: "alignmentScore",
+type: "number",
+description: "Alignment score (0 to 1)",
+},
+],
+},
+{
+type: "number",
+parameters: [
+{
+name: "coverageScore",
+type: "number",
+description: "Coverage score (0 to 1)",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Scoring Details
@@ -138,7 +141,6 @@ console.log(result.info); // Object containing detailed metrics about the summar
 The metric evaluates summaries through two essential components:
 
 1. **Alignment Score**: Measures factual correctness
-
    - Extracts claims from the summary
    - Verifies each claim against the original text
    - Assigns "yes", "no", or "unsure" verdicts
@@ -151,7 +153,6 @@ The metric evaluates summaries through two essential components:
 ### Scoring Process
 
 1. Calculates alignment score:
-
    - Extracts claims from summary
    - Verifies against source text
    - Computes: `supported_claims / total_claims`
@@ -177,17 +178,17 @@ Final score: `min(alignment_score, coverage_score) * scale`
 ## Example with Analysis
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { SummarizationMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { SummarizationMetric } from '@mastra/evals/llm';
 
 // Configure the model for evaluation
-const model = openai("gpt-4o-mini");
+const model = openai('gpt-4o-mini');
 
 const metric = new SummarizationMetric(model);
 
 const result = await metric.measure(
   "The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car, the Roadster, was launched in 2008.",
-  "Tesla, founded by Elon Musk in 2003, revolutionized the electric car industry starting with the Roadster in 2008.",
+  'Tesla, founded by Elon Musk in 2003, revolutionized the electric car industry starting with the Roadster in 2008.',
 );
 
 // Example output:

@@ -1,12 +1,15 @@
 ---
-title: "Textual Evals"
-description: "Understand how Mastra uses LLM-as-judge methodology to evaluate text quality."
+title: 'Textual Evals'
+description: 'Understand how Mastra uses LLM-as-judge methodology to evaluate text quality.'
 ---
-
 
 # Textual Evals
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 Textual evals use an LLM-as-judge methodology to evaluate agent outputs. This approach leverages language models to assess various aspects of text quality, similar to how a teaching assistant might grade assignments using a rubric.
 

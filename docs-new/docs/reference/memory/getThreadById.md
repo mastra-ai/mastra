@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Memory.getThreadById() '
+title: 'Memory.getThreadById() '
 description: 'Documentation for the `Memory.getThreadById()` method in Mastra, which retrieves a specific thread by its ID.'
 ---
 

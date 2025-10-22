@@ -1,5 +1,5 @@
 ---
-title: 'Reference: PinoLogger '
+title: 'PinoLogger '
 description: Documentation for PinoLogger, which provides methods to record events at various severity levels.
 ---
 

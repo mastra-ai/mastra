@@ -1,35 +1,38 @@
 ---
-title: "Reference: Context Position "
+title: 'Reference: Context Position '
 description: Documentation for the Context Position Metric in Mastra, which evaluates the ordering of context nodes based on their relevance to the query and output.
 ---
 
-
 # ContextPositionMetric
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 The `ContextPositionMetric` class evaluates how well context nodes are ordered based on their relevance to the query and output. It uses position-weighted scoring to emphasize the importance of having the most relevant context pieces appear earlier in the sequence.
 
 ## Basic Usage
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { ContextPositionMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { ContextPositionMetric } from '@mastra/evals/llm';
 
 // Configure the model for evaluation
-const model = openai("gpt-4o-mini");
+const model = openai('gpt-4o-mini');
 
 const metric = new ContextPositionMetric(model, {
   context: [
-    "Photosynthesis is a biological process used by plants to create energy from sunlight.",
-    "The process of photosynthesis produces oxygen as a byproduct.",
-    "Plants need water and nutrients from the soil to grow.",
+    'Photosynthesis is a biological process used by plants to create energy from sunlight.',
+    'The process of photosynthesis produces oxygen as a byproduct.',
+    'Plants need water and nutrients from the soil to grow.',
   ],
 });
 
 const result = await metric.measure(
-  "What is photosynthesis?",
-  "Photosynthesis is the process by which plants convert sunlight into energy.",
+  'What is photosynthesis?',
+  'Photosynthesis is the process by which plants convert sunlight into energy.',
 );
 
 console.log(result.score); // Position score from 0-1
@@ -39,89 +42,89 @@ console.log(result.info.reason); // Explanation of the score
 ## Constructor Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "ModelConfig",
-      description:
-        "Configuration for the model used to evaluate context positioning",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "ContextPositionMetricOptions",
-      description: "Configuration options for the metric",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "ModelConfig",
+description:
+"Configuration for the model used to evaluate context positioning",
+isOptional: false,
+},
+{
+name: "options",
+type: "ContextPositionMetricOptions",
+description: "Configuration options for the metric",
+isOptional: false,
+},
+]}
 />
 
 ### ContextPositionMetricOptions
 
 <PropertiesTable
-  content={[
-    {
-      name: "scale",
-      type: "number",
-      description: "Maximum score value",
-      isOptional: true,
-      defaultValue: "1",
-    },
-    {
-      name: "context",
-      type: "string[]",
-      description: "Array of context pieces in their retrieval order",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "scale",
+type: "number",
+description: "Maximum score value",
+isOptional: true,
+defaultValue: "1",
+},
+{
+name: "context",
+type: "string[]",
+description: "Array of context pieces in their retrieval order",
+isOptional: false,
+},
+]}
 />
 
 ## measure() Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string",
-      description: "The original query or prompt",
-      isOptional: false,
-    },
-    {
-      name: "output",
-      type: "string",
-      description: "The generated response to evaluate",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string",
+description: "The original query or prompt",
+isOptional: false,
+},
+{
+name: "output",
+type: "string",
+description: "The generated response to evaluate",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "score",
-      type: "number",
-      description: "Position score (0 to scale, default 0-1)",
-    },
-    {
-      name: "info",
-      type: "object",
-      description: "Object containing the reason for the score",
-      properties: [
-        {
-          type: "string",
-          parameters: [
-            {
-              name: "reason",
-              type: "string",
-              description: "Detailed explanation of the score",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "score",
+type: "number",
+description: "Position score (0 to scale, default 0-1)",
+},
+{
+name: "info",
+type: "object",
+description: "Object containing the reason for the score",
+properties: [
+{
+type: "string",
+parameters: [
+{
+name: "reason",
+type: "string",
+description: "Detailed explanation of the score",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Scoring Details
@@ -131,7 +134,6 @@ The metric evaluates context positioning through binary relevance assessment and
 ### Scoring Process
 
 1. Evaluates context relevance:
-
    - Assigns binary verdict (yes/no) to each piece
    - Records position in sequence
    - Documents relevance reasoning
@@ -156,24 +158,24 @@ Final score: `(weighted_sum / max_possible_sum) * scale`
 ## Example with Analysis
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { ContextPositionMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { ContextPositionMetric } from '@mastra/evals/llm';
 
 // Configure the model for evaluation
-const model = openai("gpt-4o-mini");
+const model = openai('gpt-4o-mini');
 
 const metric = new ContextPositionMetric(model, {
   context: [
-    "A balanced diet is important for health.",
-    "Exercise strengthens the heart and improves blood circulation.",
-    "Regular physical activity reduces stress and anxiety.",
-    "Exercise equipment can be expensive.",
+    'A balanced diet is important for health.',
+    'Exercise strengthens the heart and improves blood circulation.',
+    'Regular physical activity reduces stress and anxiety.',
+    'Exercise equipment can be expensive.',
   ],
 });
 
 const result = await metric.measure(
-  "What are the benefits of exercise?",
-  "Regular exercise improves cardiovascular health and mental wellbeing.",
+  'What are the benefits of exercise?',
+  'Regular exercise improves cardiovascular health and mental wellbeing.',
 );
 
 // Example output:

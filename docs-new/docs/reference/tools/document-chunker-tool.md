@@ -1,5 +1,5 @@
 ---
-title: 'Reference: createDocumentChunkerTool() '
+title: 'createDocumentChunkerTool() '
 description: Documentation for the Document Chunker Tool in Mastra, which splits documents into smaller chunks for efficient processing and retrieval.
 ---
 

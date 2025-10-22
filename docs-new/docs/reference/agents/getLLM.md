@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Agent.getLLM() '
+title: 'Agent.getLLM() '
 description: 'Documentation for the `Agent.getLLM()` method in Mastra agents, which retrieves the language model instance.'
 ---
 

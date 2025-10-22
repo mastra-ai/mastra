@@ -5,7 +5,11 @@ description: 'Mastra allows you to create your own evals, here is how.'
 
 # Create a Custom Eval
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 Create a custom eval by extending the `Metric` class and implementing the `measure` method. This gives you full control over how scores are calculated and what information is returned. For LLM-based evaluations, extend the `MastraAgentJudge` class to define how the model reasons and scores output.
 

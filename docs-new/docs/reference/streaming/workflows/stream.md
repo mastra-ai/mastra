@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Run.stream() '
+title: 'Run.stream() '
 description: Documentation for the `Run.stream()` method in workflows, which allows you to monitor the execution of a workflow run as a stream.
 ---
 

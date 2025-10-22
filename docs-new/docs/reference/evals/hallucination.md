@@ -1,33 +1,34 @@
 ---
-title: "Reference: Hallucination "
+title: 'Reference: Hallucination '
 description: Documentation for the Hallucination Metric in Mastra, which evaluates the factual correctness of LLM outputs by identifying contradictions with provided context.
 ---
 
-
 # HallucinationMetric
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 The `HallucinationMetric` evaluates whether an LLM generates factually correct information by comparing its output against the provided context. This metric measures hallucination by identifying direct contradictions between the context and the output.
 
 ## Basic Usage
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { HallucinationMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { HallucinationMetric } from '@mastra/evals/llm';
 
 // Configure the model for evaluation
-const model = openai("gpt-4o-mini");
+const model = openai('gpt-4o-mini');
 
 const metric = new HallucinationMetric(model, {
-  context: [
-    "Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning in San Carlos, California.",
-  ],
+  context: ['Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning in San Carlos, California.'],
 });
 
 const result = await metric.measure(
   "Tell me about Tesla's founding.",
-  "Tesla was founded in 2004 by Elon Musk in California.",
+  'Tesla was founded in 2004 by Elon Musk in California.',
 );
 
 console.log(result.score); // Score from 0-1
@@ -47,89 +48,89 @@ console.log(result.info.reason); // Explanation of the score
 ## Constructor Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "LanguageModel",
-      description: "Configuration for the model used to evaluate hallucination",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "HallucinationMetricOptions",
-      description: "Configuration options for the metric",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "LanguageModel",
+description: "Configuration for the model used to evaluate hallucination",
+isOptional: false,
+},
+{
+name: "options",
+type: "HallucinationMetricOptions",
+description: "Configuration options for the metric",
+isOptional: false,
+},
+]}
 />
 
 ### HallucinationMetricOptions
 
 <PropertiesTable
-  content={[
-    {
-      name: "scale",
-      type: "number",
-      description: "Maximum score value",
-      isOptional: true,
-      defaultValue: "1",
-    },
-    {
-      name: "context",
-      type: "string[]",
-      description: "Array of context pieces used as the source of truth",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "scale",
+type: "number",
+description: "Maximum score value",
+isOptional: true,
+defaultValue: "1",
+},
+{
+name: "context",
+type: "string[]",
+description: "Array of context pieces used as the source of truth",
+isOptional: false,
+},
+]}
 />
 
 ## measure() Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string",
-      description: "The original query or prompt",
-      isOptional: false,
-    },
-    {
-      name: "output",
-      type: "string",
-      description: "The LLM's response to evaluate",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string",
+description: "The original query or prompt",
+isOptional: false,
+},
+{
+name: "output",
+type: "string",
+description: "The LLM's response to evaluate",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "score",
-      type: "number",
-      description: "Hallucination score (0 to scale, default 0-1)",
-    },
-    {
-      name: "info",
-      type: "object",
-      description: "Object containing the reason for the score",
-      properties: [
-        {
-          type: "string",
-          parameters: [
-            {
-              name: "reason",
-              type: "string",
-              description:
-                "Detailed explanation of the score and identified contradictions",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "score",
+type: "number",
+description: "Hallucination score (0 to scale, default 0-1)",
+},
+{
+name: "info",
+type: "object",
+description: "Object containing the reason for the score",
+properties: [
+{
+type: "string",
+parameters: [
+{
+name: "reason",
+type: "string",
+description:
+"Detailed explanation of the score and identified contradictions",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Scoring Details
@@ -139,13 +140,11 @@ The metric evaluates hallucination through contradiction detection and unsupport
 ### Scoring Process
 
 1. Analyzes factual content:
-
    - Extracts statements from context
    - Identifies numerical values and dates
    - Maps statement relationships
 
 2. Analyzes output for hallucinations:
-
    - Compares against context statements
    - Marks direct conflicts as hallucinations
    - Identifies unsupported claims as hallucinations
@@ -186,24 +185,23 @@ Final score: `(hallucinated_statements / total_statements) * scale`
 ## Example with Analysis
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { HallucinationMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { HallucinationMetric } from '@mastra/evals/llm';
 
 // Configure the model for evaluation
-const model = openai("gpt-4o-mini");
+const model = openai('gpt-4o-mini');
 
 const metric = new HallucinationMetric(model, {
   context: [
-    "OpenAI was founded in December 2015 by Sam Altman, Greg Brockman, and others.",
-    "The company launched with a $1 billion investment commitment.",
-    "Elon Musk was an early supporter but left the board in 2018.",
+    'OpenAI was founded in December 2015 by Sam Altman, Greg Brockman, and others.',
+    'The company launched with a $1 billion investment commitment.',
+    'Elon Musk was an early supporter but left the board in 2018.',
   ],
 });
 
 const result = await metric.measure({
-  input: "What are the key details about OpenAI?",
-  output:
-    "OpenAI was founded in 2015 by Elon Musk and Sam Altman with a $2 billion investment.",
+  input: 'What are the key details about OpenAI?',
+  output: 'OpenAI was founded in 2015 by Elon Musk and Sam Altman with a $2 billion investment.',
 });
 
 // Example output:

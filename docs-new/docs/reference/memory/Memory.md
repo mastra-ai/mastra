@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Memory Class '
+title: 'Memory Class '
 description: 'Documentation for the `Memory` class in Mastra, which provides a robust system for managing conversation history and thread-based message storage.'
 ---
 

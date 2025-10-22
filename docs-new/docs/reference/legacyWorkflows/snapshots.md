@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Snapshots '
+title: 'Snapshots '
 description: 'Technical reference on snapshots in Mastra - the serialized workflow state that enables suspend and resume functionality'
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Agent.getModel() '
+title: 'Agent.getModel() '
 description: 'Documentation for the `Agent.getModel()` method in Mastra agents, which retrieves the language model that powers the agent.'
 ---
 

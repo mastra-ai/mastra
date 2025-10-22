@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Memory.deleteMessages() '
+title: 'Memory.deleteMessages() '
 description: 'Documentation for the `Memory.deleteMessages()` method in Mastra, which deletes multiple messages by their IDs.'
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Unicode Normalizer '
+title: 'Unicode Normalizer '
 description: 'Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters.'
 ---
 

@@ -3,12 +3,15 @@ title: Understanding the Mastra Cloud Dashboard
 description: Details of each feature available in Mastra Cloud
 ---
 
-
 # Navigating the Dashboard
 
 This page explains how to navigate the Mastra Cloud dashboard, where you can configure your project, view deployment details, and interact with agents and workflows using the built-in [Playground](/docs/mastra-cloud/dashboard#playground).
 
-<MastraCloudCallout />
+:::tip Mastra Cloud
+
+Deploy your Mastra application to [Mastra Cloud](https://mastra.ai/cloud) for automated deployment, monitoring, and management.
+
+:::
 
 ## Overview
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Step '
+title: 'Step '
 description: Documentation for the Step class, which defines individual units of work within a workflow.
 ---
 

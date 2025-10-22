@@ -1,5 +1,5 @@
 ---
-title: 'Reference: getScorer() '
+title: 'getScorer() '
 description: 'Documentation for the `getScorer()` method in Mastra, which retrieves a specific scorer by its registration key.'
 ---
 

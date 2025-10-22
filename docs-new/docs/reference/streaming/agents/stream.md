@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Agent.stream() '
+title: 'Agent.stream() '
 description: 'Documentation for the `Agent.stream()` method in Mastra agents, which enables real-time streaming of responses with enhanced capabilities.'
 ---
 

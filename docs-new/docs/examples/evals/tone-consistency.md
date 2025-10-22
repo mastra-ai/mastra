@@ -5,7 +5,11 @@ description: Example of using the Tone Consistency metric to evaluate emotional 
 
 # Tone Consistency Evaluation
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 Use `ToneConsistencyMetric` to evaluate emotional tone patterns and sentiment consistency in text. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing sentiment scores and their difference.
 

@@ -1,33 +1,33 @@
 ---
-title: "Reference: Answer Relevancy "
+title: 'Reference: Answer Relevancy '
 description: Documentation for the Answer Relevancy Metric in Mastra, which evaluates how well LLM outputs address the input query.
 ---
 
-
 # AnswerRelevancyMetric
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 The `AnswerRelevancyMetric` class evaluates how well an LLM's output answers or addresses the input query. It uses a judge-based system to determine relevancy and provides detailed scoring and reasoning.
 
 ## Basic Usage
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { AnswerRelevancyMetric } from '@mastra/evals/llm';
 
 // Configure the model for evaluation
-const model = openai("gpt-4o-mini");
+const model = openai('gpt-4o-mini');
 
 const metric = new AnswerRelevancyMetric(model, {
   uncertaintyWeight: 0.3,
   scale: 1,
 });
 
-const result = await metric.measure(
-  "What is the capital of France?",
-  "Paris is the capital of France.",
-);
+const result = await metric.measure('What is the capital of France?', 'Paris is the capital of France.');
 
 console.log(result.score); // Score from 0-1
 console.log(result.info.reason); // Explanation of the score
@@ -36,90 +36,90 @@ console.log(result.info.reason); // Explanation of the score
 ## Constructor Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "LanguageModel",
-      description: "Configuration for the model used to evaluate relevancy",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "AnswerRelevancyMetricOptions",
-      description: "Configuration options for the metric",
-      isOptional: true,
-      defaultValue: "{ uncertaintyWeight: 0.3, scale: 1 }",
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "LanguageModel",
+description: "Configuration for the model used to evaluate relevancy",
+isOptional: false,
+},
+{
+name: "options",
+type: "AnswerRelevancyMetricOptions",
+description: "Configuration options for the metric",
+isOptional: true,
+defaultValue: "{ uncertaintyWeight: 0.3, scale: 1 }",
+},
+]}
 />
 
 ### AnswerRelevancyMetricOptions
 
 <PropertiesTable
-  content={[
-    {
-      name: "uncertaintyWeight",
-      type: "number",
-      description: "Weight given to 'unsure' verdicts in scoring (0-1)",
-      isOptional: true,
-      defaultValue: "0.3",
-    },
-    {
-      name: "scale",
-      type: "number",
-      description: "Maximum score value",
-      isOptional: true,
-      defaultValue: "1",
-    },
-  ]}
+content={[
+{
+name: "uncertaintyWeight",
+type: "number",
+description: "Weight given to 'unsure' verdicts in scoring (0-1)",
+isOptional: true,
+defaultValue: "0.3",
+},
+{
+name: "scale",
+type: "number",
+description: "Maximum score value",
+isOptional: true,
+defaultValue: "1",
+},
+]}
 />
 
 ## measure() Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string",
-      description: "The original query or prompt",
-      isOptional: false,
-    },
-    {
-      name: "output",
-      type: "string",
-      description: "The LLM's response to evaluate",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string",
+description: "The original query or prompt",
+isOptional: false,
+},
+{
+name: "output",
+type: "string",
+description: "The LLM's response to evaluate",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "score",
-      type: "number",
-      description: "Relevancy score (0 to scale, default 0-1)",
-    },
-    {
-      name: "info",
-      type: "object",
-      description: "Object containing the reason for the score",
-      properties: [
-        {
-          type: "string",
-          parameters: [
-            {
-              name: "reason",
-              type: "string",
-              description: "Explanation of the score",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "score",
+type: "number",
+description: "Relevancy score (0 to scale, default 0-1)",
+},
+{
+name: "info",
+type: "object",
+description: "Object containing the reason for the score",
+properties: [
+{
+type: "string",
+parameters: [
+{
+name: "reason",
+type: "string",
+description: "Explanation of the score",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Scoring Details
@@ -129,7 +129,6 @@ The metric evaluates relevancy through query-answer alignment, considering compl
 ### Scoring Process
 
 1. Statement Analysis:
-
    - Breaks output into meaningful statements while preserving context
    - Evaluates each statement against query requirements
 
@@ -153,11 +152,11 @@ Final score: `((direct + uncertainty * partial) / total_statements) * scale`
 ## Example with Custom Configuration
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { AnswerRelevancyMetric } from '@mastra/evals/llm';
 
 // Configure the model for evaluation
-const model = openai("gpt-4o-mini");
+const model = openai('gpt-4o-mini');
 
 const metric = new AnswerRelevancyMetric(model, {
   uncertaintyWeight: 0.5, // Higher weight for uncertain verdicts
@@ -165,8 +164,8 @@ const metric = new AnswerRelevancyMetric(model, {
 });
 
 const result = await metric.measure(
-  "What are the benefits of exercise?",
-  "Regular exercise improves cardiovascular health, builds strength, and boosts mental wellbeing.",
+  'What are the benefits of exercise?',
+  'Regular exercise improves cardiovascular health, builds strength, and boosts mental wellbeing.',
 );
 
 // Example output:

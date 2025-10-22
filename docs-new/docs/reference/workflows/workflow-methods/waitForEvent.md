@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Workflow.waitForEvent() '
+title: 'Workflow.waitForEvent() '
 description: Documentation for the `Workflow.waitForEvent()` method in workflows, which pauses execution until an event is received.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Agent.listAgents() '
+title: 'Agent.listAgents() '
 description: 'Documentation for the `Agent.listAgents()` method in Mastra agents, which retrieves the sub-agents that the agent can access.'
 ---
 

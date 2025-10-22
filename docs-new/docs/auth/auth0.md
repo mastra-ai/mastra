@@ -177,7 +177,7 @@ export const createMastraClient = (accessToken: string) => {
 Once `MastraClient` is configured with the Auth0 access token, you can send authenticated requests:
 
 <Tabs>
-  <Tab>
+  <TabItem value="react" label="React">
     ```tsx filename="src/components/mastra-api-test.tsx" showLineNumbers copy
     import React, { useState } from 'react';
     import { useAuth0 } from '@auth0/auth0-react';
@@ -222,8 +222,8 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
     };
     ```
 
-  </Tab>
-  <Tab>
+  </TabItem>
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -232,5 +232,5 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
         "messages": "Weather in London"
       }'
     ```
-  </Tab>
+  </TabItem>
 </Tabs>

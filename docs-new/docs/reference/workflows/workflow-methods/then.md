@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Workflow.then() '
+title: 'Workflow.then() '
 description: Documentation for the `Workflow.then()` method in workflows, which creates sequential dependencies between steps.
 ---
 

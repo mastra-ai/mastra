@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Agent.getDescription() '
+title: 'Agent.getDescription() '
 description: "Documentation for the `Agent.getDescription()` method in Mastra agents, which retrieves the agent's description."
 ---
 

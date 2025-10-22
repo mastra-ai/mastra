@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Agent.generate() '
+title: 'Agent.generate() '
 description: 'Documentation for the `Agent.generate()` method in Mastra agents, which enables non-streaming generation of responses with enhanced capabilities.'
 ---
 

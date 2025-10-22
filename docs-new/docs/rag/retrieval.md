@@ -268,8 +268,7 @@ Vector store prompts define query patterns and filtering capabilities for each v
 When implementing filtering, these prompts are required in the agent's instructions to specify valid operators and syntax for each vector store implementation.
 
 <Tabs>
-['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch', 'S3 Vectors']}>
-<TabItem value="tab-1" label="Tab 1">
+<TabItem value="pgvector" label="Pg Vector">
 
 ```ts showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
@@ -288,7 +287,7 @@ export const ragAgent = new Agent({
 
 </TabItem>
 
-<TabItem value="tab-2" label="Tab 2">
+<TabItem value="pinecone" label="Pinecone">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { PINECONE_PROMPT } from "@mastra/pinecone";
@@ -305,7 +304,7 @@ tools: { vectorQueryTool },
 ````
 </TabItem>
 
-<TabItem value="tab-3" label="Tab 3">
+<TabItem value="qdrant" label="Qdrant">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { QDRANT_PROMPT } from "@mastra/qdrant";
@@ -323,7 +322,7 @@ export const ragAgent = new Agent({
 
 </TabItem>
 
-<TabItem value="tab-4" label="Tab 4">
+<TabItem value="chroma" label="Chroma">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { CHROMA_PROMPT } from "@mastra/chroma";
@@ -340,7 +339,7 @@ tools: { vectorQueryTool },
 ````
 </TabItem>
 
-<TabItem value="tab-5" label="Tab 5">
+<TabItem value="astra" label="Astra">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { ASTRA_PROMPT } from "@mastra/astra";
@@ -358,7 +357,7 @@ export const ragAgent = new Agent({
 
 </TabItem>
 
-<TabItem value="tab-6" label="Tab 6">
+<TabItem value="libsql" label="LibSQL">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { LIBSQL_PROMPT } from "@mastra/libsql";
@@ -375,7 +374,7 @@ tools: { vectorQueryTool },
 ````
 </TabItem>
 
-<TabItem value="tab-7" label="Tab 7">
+<TabItem value="upstash" label="Upstash">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { UPSTASH_PROMPT } from "@mastra/upstash";
@@ -393,7 +392,7 @@ export const ragAgent = new Agent({
 
 </TabItem>
 
-<TabItem value="tab-8" label="Tab 8">
+<TabItem value="cloudflare" label="Cloudflare">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { VECTORIZE_PROMPT } from "@mastra/vectorize";
@@ -410,7 +409,7 @@ tools: { vectorQueryTool },
 ````
 </TabItem>
 
-<TabItem value="tab-9" label="Tab 9">
+<TabItem value="mongodb" label="MongoDB">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { MONGODB_PROMPT } from "@mastra/mongodb";
@@ -428,7 +427,7 @@ export const ragAgent = new Agent({
 
 </TabItem>
 
-<TabItem value="tab-10" label="Tab 10">
+<TabItem value="opensearch" label="OpenSearch">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { OPENSEARCH_PROMPT } from "@mastra/opensearch";
@@ -445,7 +444,7 @@ tools: { vectorQueryTool },
 ````
 </TabItem>
 
-<TabItem value="tab-11" label="Tab 11">
+<TabItem value="s3vectors" label="S3 Vectors">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
 import { S3VECTORS_PROMPT } from "@mastra/s3vectors";

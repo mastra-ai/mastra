@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Agent.getVoice() '
+title: 'Agent.getVoice() '
 description: 'Documentation for the `Agent.getVoice()` method in Mastra agents, which retrieves the voice provider for speech capabilities.'
 ---
 

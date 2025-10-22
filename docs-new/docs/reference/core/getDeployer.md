@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Mastra.getDeployer() '
+title: 'Mastra.getDeployer() '
 description: 'Documentation for the `Mastra.getDeployer()` method in Mastra, which retrieves the configured deployer instance.'
 ---
 

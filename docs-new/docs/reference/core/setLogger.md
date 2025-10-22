@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Mastra.setLogger() '
+title: 'Mastra.setLogger() '
 description: 'Documentation for the `Mastra.setLogger()` method in Mastra, which sets the logger for all components (agents, workflows, etc.).'
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Run.observeStreamVNext() '
+title: 'Run.observeStreamVNext() '
 description: Documentation for the `Run.observeStreamVNext()` method in workflows, which enables reopening the stream of an already active workflow run.
 ---
 

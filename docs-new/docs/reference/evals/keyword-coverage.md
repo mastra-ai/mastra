@@ -1,25 +1,28 @@
 ---
-title: "Reference: Keyword Coverage "
+title: 'Reference: Keyword Coverage '
 description: Documentation for the Keyword Coverage Metric in Mastra, which evaluates how well LLM outputs cover important keywords from the input.
 ---
 
-
 # KeywordCoverageMetric
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 The `KeywordCoverageMetric` class evaluates how well an LLM's output covers the important keywords from the input. It analyzes keyword presence and matches while ignoring common words and stop words.
 
 ## Basic Usage
 
 ```typescript
-import { KeywordCoverageMetric } from "@mastra/evals/nlp";
+import { KeywordCoverageMetric } from '@mastra/evals/nlp';
 
 const metric = new KeywordCoverageMetric();
 
 const result = await metric.measure(
-  "What are the key features of Python programming language?",
-  "Python is a high-level programming language known for its simple syntax and extensive libraries.",
+  'What are the key features of Python programming language?',
+  'Python is a high-level programming language known for its simple syntax and extensive libraries.',
 );
 
 console.log(result.score); // Coverage score from 0-1
@@ -29,60 +32,60 @@ console.log(result.info); // Object containing detailed metrics about keyword co
 ## measure() Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string",
-      description: "The original text containing keywords to be matched",
-      isOptional: false,
-    },
-    {
-      name: "output",
-      type: "string",
-      description: "The text to evaluate for keyword coverage",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string",
+description: "The original text containing keywords to be matched",
+isOptional: false,
+},
+{
+name: "output",
+type: "string",
+description: "The text to evaluate for keyword coverage",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "score",
-      type: "number",
-      description:
-        "Coverage score (0-1) representing the proportion of matched keywords",
-    },
-    {
-      name: "info",
-      type: "object",
-      description: "Object containing detailed metrics about keyword coverage",
-      properties: [
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "matchedKeywords",
-              type: "number",
-              description: "Number of keywords found in the output",
-            },
-          ],
-        },
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "totalKeywords",
-              type: "number",
-              description: "Total number of keywords from the input",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "score",
+type: "number",
+description:
+"Coverage score (0-1) representing the proportion of matched keywords",
+},
+{
+name: "info",
+type: "object",
+description: "Object containing detailed metrics about keyword coverage",
+properties: [
+{
+type: "number",
+parameters: [
+{
+name: "matchedKeywords",
+type: "number",
+description: "Number of keywords found in the output",
+},
+],
+},
+{
+type: "number",
+parameters: [
+{
+name: "totalKeywords",
+type: "number",
+description: "Total number of keywords from the input",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Scoring Details
@@ -97,7 +100,6 @@ The metric evaluates keyword coverage by matching keywords with the following fe
 ### Scoring Process
 
 1. Processes keywords from input and output:
-
    - Filters out common words and stop words
    - Normalizes case and word forms
    - Handles special terms and compounds
@@ -122,14 +124,14 @@ Final score: `(matched_keywords / total_keywords) * scale`
 ## Examples with Analysis
 
 ```typescript
-import { KeywordCoverageMetric } from "@mastra/evals/nlp";
+import { KeywordCoverageMetric } from '@mastra/evals/nlp';
 
 const metric = new KeywordCoverageMetric();
 
 // Perfect coverage example
 const result1 = await metric.measure(
-  "The quick brown fox jumps over the lazy dog",
-  "A quick brown fox jumped over a lazy dog",
+  'The quick brown fox jumps over the lazy dog',
+  'A quick brown fox jumped over a lazy dog',
 );
 // {
 //   score: 1.0,
@@ -141,8 +143,8 @@ const result1 = await metric.measure(
 
 // Partial coverage example
 const result2 = await metric.measure(
-  "Python features include easy syntax, dynamic typing, and extensive libraries",
-  "Python has simple syntax and many libraries",
+  'Python features include easy syntax, dynamic typing, and extensive libraries',
+  'Python has simple syntax and many libraries',
 );
 // {
 //   score: 0.67,
@@ -154,8 +156,8 @@ const result2 = await metric.measure(
 
 // Technical terms example
 const result3 = await metric.measure(
-  "Discuss React.js component lifecycle and state management",
-  "React components have lifecycle methods and manage state",
+  'Discuss React.js component lifecycle and state management',
+  'React components have lifecycle methods and manage state',
 );
 // {
 //   score: 1.0,

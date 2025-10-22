@@ -1,5 +1,5 @@
 ---
-title: 'Reference: .after() '
+title: '.after() '
 description: Documentation for the `after()` method in workflows (legacy), enabling branching and merging paths.
 ---
 

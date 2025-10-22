@@ -1,5 +1,5 @@
 ---
-title: 'Reference: ChunkType '
+title: 'ChunkType '
 description: 'Documentation for the ChunkType type used in Mastra streaming responses, defining all possible chunk types and their payloads.'
 ---
 

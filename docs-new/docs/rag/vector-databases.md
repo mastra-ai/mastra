@@ -13,8 +13,7 @@ After generating embeddings, you need to store them in a database that supports 
 ## Supported Databases
 
 <Tabs>
-['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch', 'Couchbase', 'LanceDB', 'S3 Vectors']}>
-  <TabItem value="create" label="create">
+  <TabItem value="mongodb" label="MongoDB">
     ```ts filename="vector-store.ts" showLineNumbers copy
     import { MongoDBVector } from '@mastra/mongodb'
 
@@ -64,7 +63,7 @@ PostgreSQL with the pgvector extension is a good solution for teams already usin
 For detailed setup instructions and best practices, see the [official pgvector repository](https://github.com/pgvector/pgvector).
 </TabItem>
 
-<TabItem value="create" label="create">
+<TabItem value="pinecone" label="Pinecone">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { PineconeVector } from '@mastra/pinecone'
 
@@ -84,7 +83,7 @@ await store.upsert({
 
 </TabItem>
 
-<TabItem value="create" label="create">
+<TabItem value="qdrant" label="Qdrant">
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { QdrantVector } from '@mastra/qdrant'
 
@@ -107,7 +106,7 @@ metadata: chunks.map(chunk => ({ text: chunk.text })),
 ````
 </TabItem>
 
-<TabItem value="create" label="create">
+<TabItem value="chroma" label="Chroma">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { ChromaVector } from '@mastra/chroma'
 
@@ -135,7 +134,7 @@ await store.upsert({
 
 </TabItem>
 
-<TabItem value="create" label="create">
+<TabItem value="astra" label="Astra">
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { AstraVector } from '@mastra/astra'
 
@@ -160,7 +159,7 @@ metadata: chunks.map(chunk => ({ text: chunk.text })),
 </TabItem>
 
 
-<TabItem value="create" label="create">
+<TabItem value="libsql" label="LibSQL">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { LibSQLVector } from "@mastra/core/vector/libsql";
 
@@ -183,7 +182,7 @@ await store.upsert({
 
 </TabItem>
 
-<TabItem value="create" label="create">
+<TabItem value="upstash" label="Upstash">
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { UpstashVector } from '@mastra/upstash'
 
@@ -204,7 +203,7 @@ metadata: chunks.map(chunk => ({ text: chunk.text })),
 ````
 </TabItem>
 
-<TabItem value="create" label="create">
+<TabItem value="cloudflare" label="Cloudflare">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { CloudflareVector } from '@mastra/vectorize'
 
@@ -225,7 +224,7 @@ await store.upsert({
 
 </TabItem>
 
-<TabItem value="create" label="create">
+<TabItem value="opensearch" label="OpenSearch">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { OpenSearchVector } from '@mastra/opensearch'
 
@@ -245,7 +244,7 @@ metadata: chunks.map(chunk => ({ text: chunk.text })),
 ````
 
 </TabItem>
-<TabItem value="create" label="create">
+<TabItem value="couchbase" label="Couchbase">
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { CouchbaseVector } from '@mastra/couchbase'
 
@@ -294,7 +293,7 @@ metadata: chunks.map(chunk => ({ text: chunk.text })),
 LanceDB is an embedded vector database built on the Lance columnar format, suitable for local development or cloud deployment.
 For detailed setup instructions and best practices, see the [official LanceDB documentation](https://lancedb.github.io/lancedb/).
 </TabItem>
-<TabItem value="create" label="create">
+<TabItem value="s3vectors" label="S3 Vectors">
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { S3Vectors } from "@mastra/s3vectors";
 
@@ -350,8 +349,7 @@ The dimension size must match the output dimension of your chosen embedding mode
 Each vector database enforces specific naming conventions for indexes and collections to ensure compatibility and prevent conflicts.
 
 <Tabs>
-['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch', 'S3 Vectors']}>
-  <TabItem value="collection-index-names-must" label="Collection (index) names must:">
+  <TabItem value="mongodb-naming" label="MongoDB">
     Collection (index) names must:
     - Start with a letter or underscore
     - Be up to 120 bytes long
@@ -361,14 +359,14 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `my-index` is not valid (contains hyphen)
     - Example: `My$Collection` is not valid (contains `$`)
   </TabItem>
-  <TabItem value="index-names-must" label="Index names must:">
+  <TabItem value="pgvector-naming" label="Pg Vector">
     Index names must:
     - Start with a letter or underscore
     - Contain only letters, numbers, and underscores
     - Example: `my_index_123` is valid
     - Example: `my-index` is not valid (contains hyphen)
   </TabItem>
-  <TabItem value="index-names-must" label="Index names must:">
+  <TabItem value="pinecone-naming" label="Pinecone">
     Index names must:
     - Use only lowercase letters, numbers, and dashes
     - Not contain dots (used for DNS routing)
@@ -377,7 +375,7 @@ Each vector database enforces specific naming conventions for indexes and collec
       - Example: `my-index-123` is valid
       - Example: `my.index` is not valid (contains dot)
   </TabItem>
-  <TabItem value="collection-names-must" label="Collection names must:">
+  <TabItem value="qdrant-naming" label="Qdrant">
     Collection names must:
     - Be 1-255 characters long
     - Not contain any of these special characters:
@@ -387,7 +385,7 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `my_collection_123` is valid
     - Example: `my/collection` is not valid (contains slash)
   </TabItem>
-  <TabItem value="collection-names-must" label="Collection names must:">
+  <TabItem value="chroma-naming" label="Chroma">
     Collection names must:
     - Be 3-63 characters long
     - Start and end with a letter or number
@@ -397,7 +395,7 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `my-collection-123` is valid
     - Example: `my..collection` is not valid (consecutive periods)
   </TabItem>
-  <TabItem value="collection-names-must" label="Collection names must:">
+  <TabItem value="astra-naming" label="Astra">
     Collection names must:
     - Not be empty
     - Be 48 characters or less
@@ -405,14 +403,14 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `my_collection_123` is valid
     - Example: `my-collection` is not valid (contains hyphen)
   </TabItem>
-  <TabItem value="index-names-must" label="Index names must:">
+  <TabItem value="libsql-naming" label="LibSQL">
     Index names must:
     - Start with a letter or underscore
     - Contain only letters, numbers, and underscores
     - Example: `my_index_123` is valid
     - Example: `my-index` is not valid (contains hyphen)
   </TabItem>
-  <TabItem value="namespace-names-must" label="Namespace names must:">
+  <TabItem value="upstash-naming" label="Upstash">
     Namespace names must:
     - Be 2-100 characters long
     - Contain only:
@@ -423,7 +421,7 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `MyNamespace123` is valid
     - Example: `_namespace` is not valid (starts with underscore)
   </TabItem>
-  <TabItem value="index-names-must" label="Index names must:">
+  <TabItem value="cloudflare-naming" label="Cloudflare">
     Index names must:
     - Start with a letter
     - Be shorter than 32 characters
@@ -432,7 +430,7 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `my-index-123` is valid
     - Example: `My_Index` is not valid (uppercase and underscore)
   </TabItem>
-  <TabItem value="index-names-must" label="Index names must:">
+  <TabItem value="opensearch-naming" label="OpenSearch">
     Index names must:
     - Use only lowercase letters
     - Not begin with underscores or hyphens
@@ -442,7 +440,7 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `My_Index` is not valid (contains uppercase letters)
     - Example: `_myindex` is not valid (begins with underscore)
   </TabItem>
-  <TabItem value="index-names-must" label="Index names must:">
+  <TabItem value="s3vectors-naming" label="S3 Vectors">
     Index names must:
     - Be unique within the same vector bucket
     - Be 3–63 characters long

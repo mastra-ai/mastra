@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Step Class '
+title: 'Step Class '
 description: Documentation for the Step class in Mastra, which defines individual units of work within a workflow.
 ---
 

@@ -11,8 +11,7 @@ import TabItem from '@theme/TabItem';
 After generating embeddings, you need to store them in a database that supports vector similarity search. This example shows how to store embeddings in various vector databases for later retrieval.
 
 <Tabs>
-['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch', 'Couchbase', 'LanceDB']}>
-  <TabItem value="the-pgvector-class-provides-methods-to-create-ind" label="The `PgVector` class provides methods to create ind">
+  <TabItem value="pgvector" label="PgVector">
   The `PgVector` class provides methods to create indexes and insert embeddings into PostgreSQL with the pgvector extension.
     ```tsx copy
     import { openai } from "@ai-sdk/openai";
@@ -53,7 +52,7 @@ After generating embeddings, you need to store them in a database that supports 
 
   </TabItem>
 
-  <TabItem value="the-pineconevector-class-provides-methods-to-crea" label="The `PineconeVector` class provides methods to crea">
+  <TabItem value="pinecone" label="Pinecone">
   The `PineconeVector` class provides methods to create indexes and insert embeddings into Pinecone, a managed vector database service.
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -94,7 +93,7 @@ After generating embeddings, you need to store them in a database that supports 
 
   </TabItem>
 
-  <TabItem value="the-qdrantvector-class-provides-methods-to-create" label="The `QdrantVector` class provides methods to create">
+  <TabItem value="qdrant" label="Qdrant">
   The `QdrantVector` class provides methods to create collections and insert embeddings into Qdrant, a high-performance vector database.
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -131,7 +130,7 @@ After generating embeddings, you need to store them in a database that supports 
 
   </TabItem>
 
-  <TabItem value="the-chromavector-class-provides-methods-to-create" label="The `ChromaVector` class provides methods to create">
+  <TabItem value="chroma" label="Chroma">
   The `ChromaVector` class provides methods to create collections and insert embeddings into Chroma, an open-source embedding database.
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -179,8 +178,8 @@ After generating embeddings, you need to store them in a database that supports 
 
   </TabItem>
 
-  <TabItem value="create" label="create">
-  he `AstraVector` class provides methods to create collections and insert embeddings into DataStax Astra DB, a cloud-native vector database.
+  <TabItem value="astradb" label="Astra DB">
+  The `AstraVector` class provides methods to create collections and insert embeddings into DataStax Astra DB, a cloud-native vector database.
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
     import { AstraVector } from '@mastra/astra';
@@ -216,7 +215,7 @@ After generating embeddings, you need to store them in a database that supports 
 
   </TabItem>
 
-  <TabItem value="the-libsqlvector-class-provides-methods-to-create" label="The `LibSQLVector` class provides methods to create">
+  <TabItem value="libsql" label="LibSQL">
   The `LibSQLVector` class provides methods to create collections and insert embeddings into LibSQL, a fork of SQLite with vector extensions.
     ```tsx copy
     import { openai } from "@ai-sdk/openai";
@@ -259,7 +258,7 @@ After generating embeddings, you need to store them in a database that supports 
 
   </TabItem>
 
-  <TabItem value="the-upstashvector-class-provides-methods-to-creat" label="The `UpstashVector` class provides methods to creat">
+  <TabItem value="upstash" label="Upstash">
   The `UpstashVector` class provides methods to create collections and insert embeddings into Upstash Vector, a serverless vector database.
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -292,7 +291,7 @@ After generating embeddings, you need to store them in a database that supports 
 
   </TabItem>
 
-  <TabItem value="the-cloudflarevector-class-provides-methods-to-cr" label="The `CloudflareVector` class provides methods to cr">
+  <TabItem value="cloudflare" label="Cloudflare">
   The `CloudflareVector` class provides methods to create collections and insert embeddings into Cloudflare Vectorize, a serverless vector database service.
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -327,7 +326,7 @@ After generating embeddings, you need to store them in a database that supports 
     ```
 
   </TabItem>
-  <TabItem value="the-mongodbvector-class-provides-methods-to-creat" label="The `MongoDBVector` class provides methods to creat">
+  <TabItem value="mongodb" label="MongoDB">
   The `MongoDBVector` class provides methods to create indexes and insert embeddings into MongoDB with Atlas Search.
     ```tsx copy
     import { openai } from "@ai-sdk/openai";
@@ -363,7 +362,7 @@ After generating embeddings, you need to store them in a database that supports 
 
   </TabItem>
 
-  <TabItem value="the-opensearchvector-class-provides-methods-to-cr" label="The `OpenSearchVector` class provides methods to cr">
+  <TabItem value="opensearch" label="OpenSearch">
   The `OpenSearchVector` class provides methods to create indexes and insert embeddings into OpenSearch, a distributed search engine with vector search capabilities.
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -398,7 +397,7 @@ After generating embeddings, you need to store them in a database that supports 
 
   </TabItem>
 
-  <TabItem value="the-couchbasevector-class-provides-methods-to-cre" label="The `CouchbaseVector` class provides methods to cre">
+  <TabItem value="couchbase" label="Couchbase">
   The `CouchbaseVector` class provides methods to create indexes and insert embeddings into Couchbase, a distributed NoSQL database with vector search capabilities.
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -438,7 +437,7 @@ After generating embeddings, you need to store them in a database that supports 
 
   </TabItem>
 
-  <TabItem value="the-lancevectorstore-class-provides-methods-to-cr" label="The `LanceVectorStore` class provides methods to cr">
+  <TabItem value="lancedb" label="LanceDB">
   The `LanceVectorStore` class provides methods to create tables, indexes and insert embeddings into LanceDB, an embedded vector database built on the Lance columnar format.
     ```tsx copy
     import { openai } from '@ai-sdk/openai';

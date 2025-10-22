@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Mastra.getWorkflows() '
+title: 'Mastra.getWorkflows() '
 description: 'Documentation for the `Mastra.getWorkflows()` method in Mastra, which retrieves all configured workflows.'
 ---
 

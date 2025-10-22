@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Workflow.commit() '
+title: 'Workflow.commit() '
 description: Documentation for the `.commit()` method in workflows, which re-initializes the workflow machine with the current step configuration.
 ---
 

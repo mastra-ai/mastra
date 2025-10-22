@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Workflow.execute() '
+title: 'Workflow.execute() '
 description: 'Documentation for the `.execute()` method in Mastra workflows, which runs workflow steps and returns results.'
 ---
 

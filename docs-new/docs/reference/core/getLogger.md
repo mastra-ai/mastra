@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Mastra.getLogger() '
+title: 'Mastra.getLogger() '
 description: 'Documentation for the `Mastra.getLogger()` method in Mastra, which retrieves the configured logger instance.'
 ---
 

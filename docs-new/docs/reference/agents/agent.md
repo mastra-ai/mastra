@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Agent Class '
+title: 'Agent Class '
 description: 'Documentation for the `Agent` class in Mastra, which provides the foundation for creating AI agents with various capabilities.'
 ---
 

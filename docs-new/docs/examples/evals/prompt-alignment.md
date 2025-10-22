@@ -5,7 +5,11 @@ description: Example of using the Prompt Alignment metric to evaluate instructio
 
 # Prompt Alignment Evaluation
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 Use `PromptAlignmentMetric` to evaluate how well a response follows a given set of instructions. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason and instruction-level alignment details.
 

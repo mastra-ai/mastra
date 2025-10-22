@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Memory.query() '
+title: 'Memory.query() '
 description: 'Documentation for the `Memory.query()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search.'
 ---
 

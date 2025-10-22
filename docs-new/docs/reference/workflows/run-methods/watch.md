@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Run.watch() '
+title: 'Run.watch() '
 description: Documentation for the `Run.watch()` method in workflows, which allows you to monitor the execution of a workflow run.
 ---
 

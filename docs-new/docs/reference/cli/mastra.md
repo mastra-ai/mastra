@@ -1,5 +1,5 @@
 ---
-title: 'Reference: CLI Commands'
+title: 'CLI Commands'
 description: Documentation for the Mastra CLI to develop, build, and start your project.
 ---
 

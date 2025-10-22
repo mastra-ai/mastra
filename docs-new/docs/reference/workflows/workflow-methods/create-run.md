@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Workflow.createRunAsync() '
+title: 'Workflow.createRunAsync() '
 description: Documentation for the `Workflow.createRunAsync()` method in workflows, which creates a new workflow run instance.
 ---
 

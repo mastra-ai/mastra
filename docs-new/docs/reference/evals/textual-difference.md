@@ -1,26 +1,26 @@
 ---
-title: "Reference: Textual Difference "
+title: 'Reference: Textual Difference '
 description: Documentation for the Textual Difference Metric in Mastra, which measures textual differences between strings using sequence matching.
 ---
 
-
 # TextualDifferenceMetric
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 The `TextualDifferenceMetric` class uses sequence matching to measure the textual differences between two strings. It provides detailed information about changes, including the number of operations needed to transform one text into another.
 
 ## Basic Usage
 
 ```typescript
-import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+import { TextualDifferenceMetric } from '@mastra/evals/nlp';
 
 const metric = new TextualDifferenceMetric();
 
-const result = await metric.measure(
-  "The quick brown fox",
-  "The fast brown fox",
-);
+const result = await metric.measure('The quick brown fox', 'The fast brown fox');
 
 console.log(result.score); // Similarity ratio from 0-1
 console.log(result.info); // Detailed change metrics
@@ -29,81 +29,81 @@ console.log(result.info); // Detailed change metrics
 ## measure() Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string",
-      description: "The original text to compare against",
-      isOptional: false,
-    },
-    {
-      name: "output",
-      type: "string",
-      description: "The text to evaluate for differences",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string",
+description: "The original text to compare against",
+isOptional: false,
+},
+{
+name: "output",
+type: "string",
+description: "The text to evaluate for differences",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "score",
-      type: "number",
-      description: "Similarity ratio (0-1) where 1 indicates identical texts",
-    },
-    {
-      name: "info",
-      description: "Detailed metrics about the differences",
-      properties: [
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "confidence",
-              type: "number",
-              description:
-                "Confidence score based on length difference between texts (0-1)",
-            },
-          ],
-        },
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "ratio",
-              type: "number",
-              description: "Raw similarity ratio between the texts",
-            },
-          ],
-        },
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "changes",
-              type: "number",
-              description:
-                "Number of change operations (insertions, deletions, replacements)",
-            },
-          ],
-        },
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "lengthDiff",
-              type: "number",
-              description:
-                "Normalized difference in length between input and output (0-1)",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "score",
+type: "number",
+description: "Similarity ratio (0-1) where 1 indicates identical texts",
+},
+{
+name: "info",
+description: "Detailed metrics about the differences",
+properties: [
+{
+type: "number",
+parameters: [
+{
+name: "confidence",
+type: "number",
+description:
+"Confidence score based on length difference between texts (0-1)",
+},
+],
+},
+{
+type: "number",
+parameters: [
+{
+name: "ratio",
+type: "number",
+description: "Raw similarity ratio between the texts",
+},
+],
+},
+{
+type: "number",
+parameters: [
+{
+name: "changes",
+type: "number",
+description:
+"Number of change operations (insertions, deletions, replacements)",
+},
+],
+},
+{
+type: "number",
+parameters: [
+{
+name: "lengthDiff",
+type: "number",
+description:
+"Normalized difference in length between input and output (0-1)",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Scoring Details
@@ -118,7 +118,6 @@ The metric calculates several measures:
 ### Scoring Process
 
 1. Analyzes textual differences:
-
    - Performs sequence matching between input and output
    - Counts the number of change operations required
    - Measures length differences
@@ -143,14 +142,11 @@ Final score: `(similarity_ratio * confidence) * scale`
 ## Example with Analysis
 
 ```typescript
-import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+import { TextualDifferenceMetric } from '@mastra/evals/nlp';
 
 const metric = new TextualDifferenceMetric();
 
-const result = await metric.measure(
-  "Hello world! How are you?",
-  "Hello there! How is it going?",
-);
+const result = await metric.measure('Hello world! How are you?', 'Hello there! How is it going?');
 
 // Example output:
 // {

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: createGraphRAGTool() '
+title: 'createGraphRAGTool() '
 description: Documentation for the Graph RAG Tool in Mastra, which enhances RAG by building a graph of semantic relationships between documents.
 ---
 

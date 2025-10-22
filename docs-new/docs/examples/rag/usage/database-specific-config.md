@@ -1,5 +1,5 @@
 ---
-title: "Database-Specific Configurations "
+title: 'Database-Specific Configurations '
 description: Learn how to use database-specific configurations to optimize vector search performance and leverage unique features of different vector stores.
 ---
 
@@ -15,8 +15,7 @@ This example demonstrates how to use database-specific configurations with vecto
 Use different configurations for different environments:
 
 <Tabs>
-['TypeScript', 'JavaScript']}>
-  <TabItem value="create" label="create">
+  <TabItem value="typescript" label="TypeScript">
     ```typescript
     import { openai } from "@ai-sdk/openai";
     import { createVectorQueryTool } from "@mastra/rag";
@@ -42,7 +41,7 @@ Use different configurations for different environments:
 
     // Or use runtime override
     const dynamicSearchTool = createVectorQueryTool({
-      vectorStoreName: "pinecone", 
+      vectorStoreName: "pinecone",
       indexName: "documents",
       model: openai.embedding("text-embedding-3-small")
     });
@@ -63,8 +62,9 @@ Use different configurations for different environments:
       });
     };
     ```
+
   </TabItem>
-  <TabItem value="create" label="create">
+  <TabItem value="javascript" label="JavaScript">
     ```javascript
     import { openai } from "@ai-sdk/openai";
     import { createVectorQueryTool } from "@mastra/rag";
@@ -74,7 +74,7 @@ Use different configurations for different environments:
     const createSearchTool = (environment) => {
       return createVectorQueryTool({
         vectorStoreName: "pinecone",
-        indexName: "documents", 
+        indexName: "documents",
         model: openai.embedding("text-embedding-3-small"),
         databaseConfig: {
           pinecone: {
@@ -111,6 +111,7 @@ Use different configurations for different environments:
       });
     };
     ```
+
   </TabItem>
 </Tabs>
 
@@ -119,8 +120,7 @@ Use different configurations for different environments:
 Optimize search performance for different use cases:
 
 <Tabs>
-['High Accuracy', 'High Speed', 'Balanced']}>
-  <TabItem value="create" label="create">
+  <TabItem value="high-accuracy" label="High Accuracy">
     ```typescript
     // High accuracy configuration - slower but more precise
     const highAccuracyTool = createVectorQueryTool({
@@ -139,7 +139,7 @@ Optimize search performance for different use cases:
     // Use for critical searches where accuracy is paramount
     const criticalSearch = async (query: string) => {
       return await highAccuracyTool.execute({
-        context: { 
+        context: {
           queryText: query,
           topK: 5  // Fewer, higher quality results
         },
@@ -147,8 +147,9 @@ Optimize search performance for different use cases:
       });
     };
     ```
+
   </TabItem>
-  <TabItem value="create" label="create">
+  <TabItem value="high-speed" label="High Speed">
     ```typescript
     // High speed configuration - faster but less precise
     const highSpeedTool = createVectorQueryTool({
@@ -167,7 +168,7 @@ Optimize search performance for different use cases:
     // Use for real-time applications
     const realtimeSearch = async (query: string) => {
       return await highSpeedTool.execute({
-        context: { 
+        context: {
           queryText: query,
           topK: 10  // More results to compensate for lower precision
         },
@@ -175,8 +176,9 @@ Optimize search performance for different use cases:
       });
     };
     ```
+
   </TabItem>
-  <TabItem value="create" label="create">
+  <TabItem value="balanced" label="Balanced">
     ```typescript
     // Balanced configuration - good compromise
     const balancedTool = createVectorQueryTool({
@@ -195,7 +197,7 @@ Optimize search performance for different use cases:
     // Adjust parameters based on load
     const adaptiveSearch = async (query: string, isHighLoad: boolean) => {
       const runtimeContext = new RuntimeContext();
-      
+
       if (isHighLoad) {
         // Reduce quality for speed during high load
         runtimeContext.set('databaseConfig', {
@@ -214,6 +216,7 @@ Optimize search performance for different use cases:
       });
     };
     ```
+
   </TabItem>
 </Tabs>
 
@@ -229,33 +232,33 @@ interface Tenant {
 }
 
 class MultiTenantSearchService {
-  private searchTool: RagTool
+  private searchTool: RagTool;
 
   constructor() {
     this.searchTool = createVectorQueryTool({
-      vectorStoreName: "pinecone",
-      indexName: "shared-documents",
-      model: openai.embedding("text-embedding-3-small")
+      vectorStoreName: 'pinecone',
+      indexName: 'shared-documents',
+      model: openai.embedding('text-embedding-3-small'),
     });
   }
 
   async searchForTenant(tenant: Tenant, query: string) {
     const runtimeContext = new RuntimeContext();
-    
+
     // Isolate search to tenant's namespace
     runtimeContext.set('databaseConfig', {
       pinecone: {
-        namespace: tenant.namespace
-      }
+        namespace: tenant.namespace,
+      },
     });
 
     const results = await this.searchTool.execute({
-      context: { 
+      context: {
         queryText: query,
-        topK: 10
+        topK: 10,
       },
       mastra,
-      runtimeContext
+      runtimeContext,
     });
 
     // Add tenant context to results
@@ -263,15 +266,13 @@ class MultiTenantSearchService {
       tenant: tenant.name,
       query,
       results: results.relevantContext,
-      sources: results.sources
+      sources: results.sources,
     };
   }
 
   async bulkSearchForTenants(tenants: Tenant[], query: string) {
-    const promises = tenants.map(tenant => 
-      this.searchForTenant(tenant, query)
-    );
-    
+    const promises = tenants.map(tenant => this.searchForTenant(tenant, query));
+
     return await Promise.all(promises);
   }
 }
@@ -281,13 +282,10 @@ const searchService = new MultiTenantSearchService();
 
 const tenants = [
   { id: '1', name: 'Company A', namespace: 'company-a' },
-  { id: '2', name: 'Company B', namespace: 'company-b' }
+  { id: '2', name: 'Company B', namespace: 'company-b' },
 ];
 
-const results = await searchService.searchForTenant(
-  tenants[0], 
-  "product documentation"
-);
+const results = await searchService.searchForTenant(tenants[0], 'product documentation');
 ```
 
 ## Hybrid Search with Pinecone
@@ -296,19 +294,19 @@ Combine semantic and keyword search:
 
 ```typescript
 const hybridSearchTool = createVectorQueryTool({
-  vectorStoreName: "pinecone",
-  indexName: "documents",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'pinecone',
+  indexName: 'documents',
+  model: openai.embedding('text-embedding-3-small'),
   databaseConfig: {
     pinecone: {
-      namespace: "production",
+      namespace: 'production',
       sparseVector: {
         // Example sparse vector for keyword "API"
         indices: [1, 5, 10, 15],
-        values: [0.8, 0.6, 0.4, 0.2]
-      }
-    }
-  }
+        values: [0.8, 0.6, 0.4, 0.2],
+      },
+    },
+  },
 });
 
 // Helper function to generate sparse vectors for keywords
@@ -317,45 +315,42 @@ const generateSparseVector = (keywords: string[]) => {
   // a proper sparse encoding method like BM25
   const indices: number[] = [];
   const values: number[] = [];
-  
+
   keywords.forEach((keyword, i) => {
     const hash = keyword.split('').reduce((a, b) => {
-      a = ((a << 5) - a) + b.charCodeAt(0);
+      a = (a << 5) - a + b.charCodeAt(0);
       return a & a;
     }, 0);
-    
+
     indices.push(Math.abs(hash) % 1000);
     values.push(1.0 / (i + 1)); // Decrease weight for later keywords
   });
-  
+
   return { indices, values };
 };
 
 const hybridSearch = async (query: string, keywords: string[]) => {
   const runtimeContext = new RuntimeContext();
-  
+
   if (keywords.length > 0) {
     const sparseVector = generateSparseVector(keywords);
     runtimeContext.set('databaseConfig', {
       pinecone: {
-        namespace: "production",
-        sparseVector
-      }
+        namespace: 'production',
+        sparseVector,
+      },
     });
   }
 
   return await hybridSearchTool.execute({
     context: { queryText: query },
     mastra,
-    runtimeContext
+    runtimeContext,
   });
 };
 
 // Usage
-const results = await hybridSearch(
-  "How to use the REST API",
-  ["API", "REST", "documentation"]
-);
+const results = await hybridSearch('How to use the REST API', ['API', 'REST', 'documentation']);
 ```
 
 ## Quality-Gated Search
@@ -365,9 +360,9 @@ Implement progressive search quality:
 ```typescript
 const createQualityGatedSearch = () => {
   const baseConfig = {
-    vectorStoreName: "postgres",
-    indexName: "embeddings",
-    model: openai.embedding("text-embedding-3-small")
+    vectorStoreName: 'postgres',
+    indexName: 'embeddings',
+    model: openai.embedding('text-embedding-3-small'),
   };
 
   return {
@@ -378,11 +373,11 @@ const createQualityGatedSearch = () => {
         pgvector: {
           minScore: 0.85,
           ef: 200,
-          probes: 15
-        }
-      }
+          probes: 15,
+        },
+      },
     }),
-    
+
     // Medium quality fallback
     mediumQuality: createVectorQueryTool({
       ...baseConfig,
@@ -390,11 +385,11 @@ const createQualityGatedSearch = () => {
         pgvector: {
           minScore: 0.7,
           ef: 150,
-          probes: 10
-        }
-      }
+          probes: 10,
+        },
+      },
     }),
-    
+
     // Low quality last resort
     lowQuality: createVectorQueryTool({
       ...baseConfig,
@@ -402,47 +397,47 @@ const createQualityGatedSearch = () => {
         pgvector: {
           minScore: 0.5,
           ef: 100,
-          probes: 5
-        }
-      }
-    })
+          probes: 5,
+        },
+      },
+    }),
   };
 };
 
 const progressiveSearch = async (query: string, minResults: number = 3) => {
   const tools = createQualityGatedSearch();
-  
+
   // Try high quality first
   let results = await tools.highQuality.execute({
     context: { queryText: query },
-    mastra
+    mastra,
   });
-  
+
   if (results.sources.length >= minResults) {
     return { quality: 'high', ...results };
   }
-  
+
   // Fallback to medium quality
   results = await tools.mediumQuality.execute({
     context: { queryText: query },
-    mastra
+    mastra,
   });
-  
+
   if (results.sources.length >= minResults) {
     return { quality: 'medium', ...results };
   }
-  
+
   // Last resort: low quality
   results = await tools.lowQuality.execute({
     context: { queryText: query },
-    mastra
+    mastra,
   });
-  
+
   return { quality: 'low', ...results };
 };
 
 // Usage
-const results = await progressiveSearch("complex technical query", 5);
+const results = await progressiveSearch('complex technical query', 5);
 console.log(`Found ${results.sources.length} results with ${results.quality} quality`);
 ```
 
@@ -454,4 +449,4 @@ console.log(`Found ${results.sources.length} results with ${results.quality} qua
 4. **Runtime Flexibility**: Override configurations dynamically based on context
 5. **Progressive Quality**: Implement fallback strategies for different quality levels
 
-This approach allows you to optimize vector search for your specific use case while maintaining flexibility and performance. 
+This approach allows you to optimize vector search for your specific use case while maintaining flexibility and performance.

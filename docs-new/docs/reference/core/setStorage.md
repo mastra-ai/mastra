@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Mastra.setStorage() '
+title: 'Mastra.setStorage() '
 description: 'Documentation for the `Mastra.setStorage()` method in Mastra, which sets the storage instance for the Mastra instance.'
 ---
 

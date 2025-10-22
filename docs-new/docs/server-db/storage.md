@@ -5,6 +5,8 @@ description: Overview of Mastra's storage system and data persistence capabiliti
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
+import { SchemaTable } from '@site/src/components/SchemaTable';
+import { StorageOverviewImage } from '@site/src/components/StorageOverviewImage';
 
 # MastraStorage
 
@@ -45,8 +47,7 @@ configuration either on `Mastra` or directly within `new Memory()`.
 ## Data Schema
 
 <Tabs>
-['Messages', 'Threads', 'Resources', 'Workflows', 'Eval Datasets', 'Traces']}>
-  <TabItem value="stores-conversation-messages-and-their-metadata" label="Stores conversation messages and their metadata">
+  <TabItem value="messages" label="Messages">
 Stores conversation messages and their metadata. Each message belongs to a thread and contains the actual content along with metadata about the sender role and message type.
 
 <br />
@@ -150,7 +151,7 @@ constraints: [{ type: "nullable", value: true }]
 
 </TabItem>
 
-  <TabItem value="groups-related-messages-together-and-associates-the" label="Groups related messages together and associates the">
+  <TabItem value="threads" label="Threads">
 Groups related messages together and associates them with a resource. Contains metadata about the conversation.
 
 <br />
@@ -201,7 +202,7 @@ Groups related messages together and associates them with a resource. Contains m
 />
 
 </TabItem>
-  <TabItem value="stores-user-specific-data-for-resource-scoped-worki" label="Stores user-specific data for resource-scoped worki">
+  <TabItem value="resources" label="Resources">
 Stores user-specific data for resource-scoped working memory. Each resource represents a user or entity, allowing working memory to persist across all conversation threads for that user.
 
 <br />
@@ -250,7 +251,7 @@ Stores user-specific data for resource-scoped working memory. Each resource repr
 **Note**: This table is only created and used by storage adapters that support resource-scoped working memory (LibSQL, PostgreSQL, Upstash). Other storage adapters will provide helpful error messages if resource-scoped memory is attempted.
 
 </TabItem>
-  <TabItem value="when-suspend-is-called-on-a-workflow-its-state-i" label="When `suspend` is called on a workflow, its state i">
+  <TabItem value="workflows" label="Workflows">
 When `suspend` is called on a workflow, its state is saved in the following format. When `resume` is called, that state is rehydrated.
 
 <br />
@@ -299,7 +300,7 @@ When `suspend` is called on a workflow, its state is saved in the following form
   ]}
 />
   </TabItem>
-  <TabItem value="stores-eval-results-from-running-metrics-against-ag" label="Stores eval results from running metrics against ag">
+  <TabItem value="eval-datasets" label="Eval Datasets">
 Stores eval results from running metrics against agent outputs.
 
 <br />

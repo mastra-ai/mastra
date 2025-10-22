@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Agent.streamLegacy() (Legacy) '
+title: 'Agent.streamLegacy() (Legacy) '
 description: 'Documentation for the legacy `Agent.streamLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version.'
 ---
 

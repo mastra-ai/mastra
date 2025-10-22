@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Run.observeStream() '
+title: 'Run.observeStream() '
 description: Documentation for the `Run.observeStream()` method in workflows, which enables reopening the stream of an already active workflow run.
 ---
 

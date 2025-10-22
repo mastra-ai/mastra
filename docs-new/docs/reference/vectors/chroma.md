@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Chroma Vector Store '
+title: 'Chroma Vector Store '
 description: Documentation for the ChromaVector class in Mastra, which provides vector search using ChromaDB.
 ---
 

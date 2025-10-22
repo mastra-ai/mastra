@@ -1,5 +1,5 @@
 ---
-title: 'Reference: start() '
+title: 'start() '
 description: 'Documentation for the `start()` method in workflows, which begins execution of a workflow run.'
 ---
 

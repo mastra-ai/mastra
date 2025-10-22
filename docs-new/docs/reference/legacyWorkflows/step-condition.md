@@ -1,5 +1,5 @@
 ---
-title: 'Reference: StepCondition '
+title: 'StepCondition '
 description: Documentation for the step condition class in workflows, which determines whether a step should execute based on the output of previous steps or trigger data.
 ---
 

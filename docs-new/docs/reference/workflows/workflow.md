@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Workflow Class '
+title: 'Workflow Class '
 description: Documentation for the `Workflow` class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 ---
 

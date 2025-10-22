@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Mastra.getLogsByRunId() '
+title: 'Mastra.getLogsByRunId() '
 description: 'Documentation for the `Mastra.getLogsByRunId()` method in Mastra, which retrieves logs for a specific run ID and transport ID.'
 ---
 

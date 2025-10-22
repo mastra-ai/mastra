@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Mastra.setTelemetry() '
+title: 'Mastra.setTelemetry() '
 description: 'Documentation for the `Mastra.setTelemetry()` method in Mastra, which sets the telemetry configuration for all components.'
 ---
 

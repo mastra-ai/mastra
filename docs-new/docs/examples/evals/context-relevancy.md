@@ -5,7 +5,11 @@ description: Example of using the Context Relevancy metric to evaluate how relev
 
 # Context Relevancy Evaluation
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 Use `ContextRelevancyMetric` to evaluate how well the retrieved context aligns with the original query. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 

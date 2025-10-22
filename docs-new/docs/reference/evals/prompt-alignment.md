@@ -1,29 +1,28 @@
 ---
-title: "Reference: Prompt Alignment "
+title: 'Reference: Prompt Alignment '
 description: Documentation for the Prompt Alignment Metric in Mastra, which evaluates how well LLM outputs adhere to given prompt instructions.
 ---
 
-
 # PromptAlignmentMetric
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 The `PromptAlignmentMetric` class evaluates how strictly an LLM's output follows a set of given prompt instructions. It uses a judge-based system to verify each instruction is followed exactly and provides detailed reasoning for any deviations.
 
 ## Basic Usage
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { PromptAlignmentMetric } from "@mastra/evals/llm";
+import { openai } from '@ai-sdk/openai';
+import { PromptAlignmentMetric } from '@mastra/evals/llm';
 
 // Configure the model for evaluation
-const model = openai("gpt-4o-mini");
+const model = openai('gpt-4o-mini');
 
-const instructions = [
-  "Start sentences with capital letters",
-  "End each sentence with a period",
-  "Use present tense",
-];
+const instructions = ['Start sentences with capital letters', 'End each sentence with a period', 'Use present tense'];
 
 const metric = new PromptAlignmentMetric(model, {
   instructions,
@@ -31,8 +30,8 @@ const metric = new PromptAlignmentMetric(model, {
 });
 
 const result = await metric.measure(
-  "describe the weather",
-  "The sun is shining. Clouds float in the sky. A gentle breeze blows.",
+  'describe the weather',
+  'The sun is shining. Clouds float in the sky. A gentle breeze blows.',
 );
 
 console.log(result.score); // Alignment score from 0-1
@@ -42,91 +41,91 @@ console.log(result.info.reason); // Explanation of the score
 ## Constructor Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "LanguageModel",
-      description:
-        "Configuration for the model used to evaluate instruction alignment",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "PromptAlignmentOptions",
-      description: "Configuration options for the metric",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "LanguageModel",
+description:
+"Configuration for the model used to evaluate instruction alignment",
+isOptional: false,
+},
+{
+name: "options",
+type: "PromptAlignmentOptions",
+description: "Configuration options for the metric",
+isOptional: false,
+},
+]}
 />
 
 ### PromptAlignmentOptions
 
 <PropertiesTable
-  content={[
-    {
-      name: "instructions",
-      type: "string[]",
-      description: "Array of instructions that the output should follow",
-      isOptional: false,
-    },
-    {
-      name: "scale",
-      type: "number",
-      description: "Maximum score value",
-      isOptional: true,
-      defaultValue: "1",
-    },
-  ]}
+content={[
+{
+name: "instructions",
+type: "string[]",
+description: "Array of instructions that the output should follow",
+isOptional: false,
+},
+{
+name: "scale",
+type: "number",
+description: "Maximum score value",
+isOptional: true,
+defaultValue: "1",
+},
+]}
 />
 
 ## measure() Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string",
-      description: "The original prompt or query",
-      isOptional: false,
-    },
-    {
-      name: "output",
-      type: "string",
-      description: "The LLM's response to evaluate",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string",
+description: "The original prompt or query",
+isOptional: false,
+},
+{
+name: "output",
+type: "string",
+description: "The LLM's response to evaluate",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "score",
-      type: "number",
-      description: "Alignment score (0 to scale, default 0-1)",
-    },
-    {
-      name: "info",
-      type: "object",
-      description:
-        "Object containing detailed metrics about instruction compliance",
-      properties: [
-        {
-          type: "string",
-          parameters: [
-            {
-              name: "reason",
-              type: "string",
-              description:
-                "Detailed explanation of the score and instruction compliance",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "score",
+type: "number",
+description: "Alignment score (0 to scale, default 0-1)",
+},
+{
+name: "info",
+type: "object",
+description:
+"Object containing detailed metrics about instruction compliance",
+properties: [
+{
+type: "string",
+parameters: [
+{
+name: "reason",
+type: "string",
+description:
+"Detailed explanation of the score and instruction compliance",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Scoring Details
@@ -149,13 +148,11 @@ Each instruction receives one of three verdicts:
 ### Scoring Process
 
 1. Evaluates instruction applicability:
-
    - Determines if each instruction applies to the context
    - Marks irrelevant instructions as "n/a"
    - Considers domain-specific requirements
 
 2. Assesses compliance for applicable instructions:
-
    - Evaluates each applicable instruction independently
    - Requires complete compliance for "yes" verdict
    - Documents specific reasons for all verdicts

@@ -5,7 +5,11 @@ description: Example of using the Textual Difference metric to evaluate similari
 
 # Textual Difference Evaluation
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 Use `TextualDifferenceMetric` to evaluate the similarity between two text strings by analyzing sequence differences and edit operations. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing confidence, ratio, number of changes, and length difference.
 

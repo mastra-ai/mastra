@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Workflow.parallel() '
+title: 'Workflow.parallel() '
 description: Documentation for the `Workflow.parallel()` method in workflows, which executes multiple steps in parallel.
 ---
 

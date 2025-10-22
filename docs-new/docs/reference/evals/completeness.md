@@ -1,25 +1,28 @@
 ---
-title: "Reference: Completeness "
+title: 'Reference: Completeness '
 description: Documentation for the Completeness Metric in Mastra, which evaluates how thoroughly LLM outputs cover key elements present in the input.
 ---
 
-
 # CompletenessMetric
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 The `CompletenessMetric` class evaluates how thoroughly an LLM's output covers the key elements present in the input. It analyzes nouns, verbs, topics, and terms to determine coverage and provides a detailed completeness score.
 
 ## Basic Usage
 
 ```typescript
-import { CompletenessMetric } from "@mastra/evals/nlp";
+import { CompletenessMetric } from '@mastra/evals/nlp';
 
 const metric = new CompletenessMetric();
 
 const result = await metric.measure(
-  "Explain how photosynthesis works in plants using sunlight, water, and carbon dioxide.",
-  "Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis.",
+  'Explain how photosynthesis works in plants using sunlight, water, and carbon dioxide.',
+  'Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis.',
 );
 
 console.log(result.score); // Coverage score from 0-1
@@ -29,80 +32,80 @@ console.log(result.info); // Object containing detailed metrics about element co
 ## measure() Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string",
-      description: "The original text containing key elements to be covered",
-      isOptional: false,
-    },
-    {
-      name: "output",
-      type: "string",
-      description: "The LLM's response to evaluate for completeness",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string",
+description: "The original text containing key elements to be covered",
+isOptional: false,
+},
+{
+name: "output",
+type: "string",
+description: "The LLM's response to evaluate for completeness",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "score",
-      type: "number",
-      description:
-        "Completeness score (0-1) representing the proportion of input elements covered in the output",
-    },
-    {
-      name: "info",
-      type: "object",
-      description: "Object containing detailed metrics about element coverage",
-      properties: [
-        {
-          type: "string[]",
-          parameters: [
-            {
-              name: "inputElements",
-              type: "string[]",
-              description: "Array of key elements extracted from the input",
-            },
-          ],
-        },
-        {
-          type: "string[]",
-          parameters: [
-            {
-              name: "outputElements",
-              type: "string[]",
-              description: "Array of key elements found in the output",
-            },
-          ],
-        },
-        {
-          type: "string[]",
-          parameters: [
-            {
-              name: "missingElements",
-              type: "string[]",
-              description: "Array of input elements not found in the output",
-            },
-          ],
-        },
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "elementCounts",
-              type: "object",
-              description: "Count of elements in input and output",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "score",
+type: "number",
+description:
+"Completeness score (0-1) representing the proportion of input elements covered in the output",
+},
+{
+name: "info",
+type: "object",
+description: "Object containing detailed metrics about element coverage",
+properties: [
+{
+type: "string[]",
+parameters: [
+{
+name: "inputElements",
+type: "string[]",
+description: "Array of key elements extracted from the input",
+},
+],
+},
+{
+type: "string[]",
+parameters: [
+{
+name: "outputElements",
+type: "string[]",
+description: "Array of key elements found in the output",
+},
+],
+},
+{
+type: "string[]",
+parameters: [
+{
+name: "missingElements",
+type: "string[]",
+description: "Array of input elements not found in the output",
+},
+],
+},
+{
+type: "object",
+parameters: [
+{
+name: "elementCounts",
+type: "object",
+description: "Count of elements in input and output",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Element Extraction Details
@@ -129,7 +132,6 @@ The metric evaluates completeness through linguistic element coverage analysis.
 ### Scoring Process
 
 1. Extracts key elements:
-
    - Nouns and named entities
    - Action verbs
    - Topic-specific terms
@@ -154,14 +156,11 @@ Final score: `(covered_elements / total_input_elements) * scale`
 ## Example with Analysis
 
 ```typescript
-import { CompletenessMetric } from "@mastra/evals/nlp";
+import { CompletenessMetric } from '@mastra/evals/nlp';
 
 const metric = new CompletenessMetric();
 
-const result = await metric.measure(
-  "The quick brown fox jumps over the lazy dog",
-  "A brown fox jumped over a dog",
-);
+const result = await metric.measure('The quick brown fox jumps over the lazy dog', 'A brown fox jumped over a dog');
 
 // Example output:
 // {

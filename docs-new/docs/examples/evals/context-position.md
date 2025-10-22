@@ -5,7 +5,11 @@ description: Example of using the Context Position metric to evaluate sequential
 
 # Context Position Evaluation
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 Use `ContextPositionMetric` to evaluate whether the response is supported by the most relevant context segments. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 

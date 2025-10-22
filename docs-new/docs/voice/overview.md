@@ -323,7 +323,7 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
 <AudioPlayback audio="https://github.com/mastra-ai/realtime-voice-demo/raw/refs/heads/main/how_can_i_help_you.mp3" />
 
 <Tabs>
-  <TabItem value="create" label="create">
+  <TabItem value="openai-stt" label="OpenAI">
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
@@ -351,7 +351,7 @@ const { text } = await voiceAgent.generate(transcript);
 
 Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
   </TabItem>
-  <TabItem value="create" label="create">
+  <TabItem value="azure-stt" label="Azure">
 ```typescript
 import { createReadStream } from 'fs';
 import { Agent } from '@mastra/core/agent';
@@ -380,7 +380,7 @@ const { text } = await voiceAgent.generate(transcript);
 Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
 
   </TabItem>
-  <TabItem value="create" label="create">
+  <TabItem value="elevenlabs-stt" label="ElevenLabs">
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
@@ -408,7 +408,7 @@ const { text } = await voiceAgent.generate(transcript);
 
 Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
   </TabItem>
-  <TabItem value="create" label="create">
+  <TabItem value="google-stt" label="Google">
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
@@ -436,7 +436,7 @@ const { text } = await voiceAgent.generate(transcript);
 Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
 
   </TabItem>
-  <TabItem value="create" label="create">
+  <TabItem value="cloudflare-stt" label="Cloudflare">
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
@@ -464,7 +464,7 @@ const { text } = await voiceAgent.generate(transcript);
 
 Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
   </TabItem>
-  <TabItem value="create" label="create">
+  <TabItem value="deepgram-stt" label="Deepgram">
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
@@ -492,7 +492,7 @@ const { text } = await voiceAgent.generate(transcript);
 Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
 
   </TabItem>
-  <TabItem value="create" label="create">
+  <TabItem value="sarvam-stt" label="Sarvam">
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';

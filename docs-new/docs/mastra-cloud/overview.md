@@ -3,12 +3,15 @@ title: Mastra Cloud
 description: Deployment and monitoring service for Mastra applications
 ---
 
-
 # Mastra Cloud
 
 [Mastra Cloud](https://mastra.ai/cloud) is a platform for deploying, managing, monitoring, and debugging Mastra applications. When you [deploy](/docs/mastra-cloud/setting-up) your application, Mastra Cloud exposes your agents, tools, and workflows as REST API endpoints.
 
-<MastraCloudCallout />
+:::tip Mastra Cloud
+
+Deploy your Mastra application to [Mastra Cloud](https://mastra.ai/cloud) for automated deployment, monitoring, and management.
+
+:::
 
 ## Platform features
 

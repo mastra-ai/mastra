@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Run Class '
+title: 'Run Class '
 description: Documentation for the Run class in Mastra, which represents a workflow execution instance.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Agent.getDefaultStreamOptions() '
+title: 'Agent.getDefaultStreamOptions() '
 description: 'Documentation for the `Agent.getDefaultStreamOptions()` method in Mastra agents, which retrieves the default options used for stream calls.'
 ---
 

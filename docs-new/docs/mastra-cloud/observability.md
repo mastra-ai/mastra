@@ -3,12 +3,15 @@ title: Observability in Mastra Cloud
 description: Monitoring and debugging tools for Mastra Cloud deployments
 ---
 
-
 # Understanding Tracing and Logs
 
 Mastra Cloud captures execution data to help you monitor your application's behavior in the production environment.
 
-<MastraCloudCallout />
+:::tip Mastra Cloud
+
+Deploy your Mastra application to [Mastra Cloud](https://mastra.ai/cloud) for automated deployment, monitoring, and management.
+
+:::
 
 ## Logs
 
@@ -33,7 +36,6 @@ With a [logger](/docs/observability/logging) enabled, you can view detailed outp
 Key features:
 
 Tools passed to the agent during generation are standardized using `convertTools`. This includes retrieving client-side tools, memory tools, and tools exposed from workflows.
-
 
 ### Workflows
 

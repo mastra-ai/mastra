@@ -5,7 +5,11 @@ description: Example of using the Keyword Coverage metric to evaluate how well r
 
 # Keyword Coverage Evaluation
 
-<ScorerCallout />
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
 
 Use `KeywordCoverageMetric` to evaluate how accurately a response includes required keywords or phrases from the context. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing keyword match statistics.
 

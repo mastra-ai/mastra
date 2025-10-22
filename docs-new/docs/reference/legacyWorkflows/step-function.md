@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Workflow.step() '
+title: 'Workflow.step() '
 description: Documentation for the `.step()` method in workflows, which adds a new step to the workflow.
 ---
 

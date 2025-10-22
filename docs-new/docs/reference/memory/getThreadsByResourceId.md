@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Memory.getThreadsByResourceId() '
+title: 'Memory.getThreadsByResourceId() '
 description: 'Documentation for the `Memory.getThreadsByResourceId()` method in Mastra, which retrieves all threads that belong to a specific resource.'
 ---
 
