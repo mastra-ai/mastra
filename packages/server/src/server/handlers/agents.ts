@@ -265,7 +265,7 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
   }
 
   if (!agent) {
-    logger.debug('Agent not found, searching agents for agent', { agentId });
+    logger.debug(`Agent ${agentId} not found, looking through sub-agents`);
     const agents = mastra.getAgents();
     if (Object.keys(agents || {}).length) {
       for (const [_, ag] of Object.entries(agents)) {
