@@ -1,0 +1,77 @@
+---
+title: Mastra Client Observability API
+description: Learn how to retrieve AI traces, monitor application performance, and score traces using the client-js SDK.
+---
+
+# Observability API
+
+The Observability API provides methods to retrieve AI traces, monitor your application's performance, and score traces for evaluation. This helps you understand how your AI agents and workflows are performing.
+
+## Getting a Specific AI Trace
+
+Retrieve a specific AI trace by its ID, including all its spans and details:
+
+```typescript
+const trace = await mastraClient.getAITrace('trace-id-123');
+```
+
+## Getting AI Traces with Filtering
+
+Retrieve a paginated list of AI trace root spans with optional filtering:
+
+```typescript
+const traces = await mastraClient.getAITraces({
+  pagination: {
+    page: 1,
+    perPage: 20,
+    dateRange: {
+      start: new Date('2024-01-01'),
+      end: new Date('2024-01-31'),
+    },
+  },
+  filters: {
+    name: 'weather-agent', // Filter by trace name
+    spanType: 'agent', // Filter by span type
+    entityId: 'weather-agent-id', // Filter by entity ID
+    entityType: 'agent', // Filter by entity type
+  },
+});
+
+console.log(`Found ${traces.spans.length} root spans`);
+console.log(`Total pages: ${traces.pagination.totalPages}`);
+
+// To get the complete trace with all spans, use getAITrace
+const completeTrace = await mastraClient.getAITrace(traces.spans[0].traceId);
+```
+
+## Scoring Traces
+
+Score specific traces using registered scorers for evaluation:
+
+```typescript
+const result = await mastraClient.score({
+  scorerName: 'answer-relevancy',
+  targets: [
+    { traceId: 'trace-1', spanId: 'span-1' }, // Score specific span
+    { traceId: 'trace-2' }, // Score specific span which defaults to the parent span
+  ],
+});
+```
+
+## Getting Scores by Span
+
+Retrieve scores for a specific span within a trace:
+
+```typescript
+const scores = await mastraClient.getScoresBySpan({
+  traceId: 'trace-123',
+  spanId: 'span-456',
+  page: 1,
+  perPage: 20,
+});
+```
+
+## Related
+
+- [Agents API](./agents) - Learn about agent interactions that generate traces
+- [Workflows API](./workflows) - Understand workflow execution monitoring
