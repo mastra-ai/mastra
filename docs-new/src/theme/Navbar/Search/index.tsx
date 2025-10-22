@@ -27,7 +27,6 @@ export function Shortcut() {
 
 export default function SearchContainer({ locale }: { locale: string }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isAgentMode, setIsAgentMode] = useState(false);
 
   useHotkeys('meta+k', () => setIsOpen(open => !open));
 
@@ -37,9 +36,7 @@ export default function SearchContainer({ locale }: { locale: string }) {
 
   function close() {
     setIsOpen(false);
-    setIsAgentMode(false);
   }
-
   // Configure Algolia search options
   const searchOptions = {
     indexName: 'docs_crawler',
