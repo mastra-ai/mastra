@@ -1,6 +1,6 @@
 {
   "name": "@mastra/braintrust",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Braintrust observability provider for Mastra - includes AI tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",
@@ -45,7 +45,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.22.0-0"
+    "@mastra/core": ">=0.18.1-0 <0.23.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

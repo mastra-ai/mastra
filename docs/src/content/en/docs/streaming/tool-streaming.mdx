@@ -69,6 +69,36 @@ export const testTool = createTool({
 });
 ```
 
+You can also use `writer.custom` if you want to emit top level stream chunks, This useful and relevant when
+integrating with UI Frameworks
+
+```typescript {5,8,15} showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+
+export const testTool = createTool({
+  // ...
+  execute: async ({ context, writer }) => {
+    const { value } = context;
+
+   await writer?.custom({
+      type: "data-tool-progress",
+      status: "pending"
+    });
+
+    const response = await fetch(...);
+
+   await writer?.custom({
+      type: "data-tool-progress",
+      status: "success"
+    });
+
+    return {
+      value: ""
+    };
+  }
+});
+```
+
 ### Inspecting stream payloads
 
 Events written to the stream are included in the emitted chunks. These chunks can be inspected to access any custom fields, such as event types, intermediate values, or tool-specific data.

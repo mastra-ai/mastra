@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "0.14.9",
+  "version": "0.14.10",
   "description": "",
   "type": "module",
   "files": [
@@ -73,7 +73,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.20.1-0 <0.22.0-0",
+    "@mastra/core": ">=0.20.1-0 <0.23.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   }
 }
