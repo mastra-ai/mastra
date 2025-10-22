@@ -1,7 +1,7 @@
 import type { TestInfo, MetricResult } from '@mastra/core/eval';
 
 import { useQuery } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@mastra/playground-ui';
+import { usePlaygroundStore } from '@/store/playground-store';
 import { useMastraClient } from '@mastra/react';
 
 export type Evals = {
