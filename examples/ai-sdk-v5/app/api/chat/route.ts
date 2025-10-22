@@ -4,7 +4,7 @@ const myAgent = mastra.getAgent("weatherAgent");
 export async function POST(req: Request) {
   const { messages } = await req.json();
 
-  const stream = await myAgent.streamVNext(messages, {
+  const stream = await myAgent.stream(messages, {
     format: "aisdk",
     memory: {
       thread: "2",

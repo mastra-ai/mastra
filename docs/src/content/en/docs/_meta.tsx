@@ -2,7 +2,7 @@ import { Tag } from "@/components/tag";
 
 const meta = {
   index: "Introduction",
-  "getting-started": { title: "Getting Started" },
+  "getting-started": { title: "Getting Started", theme: { collapsed: false } },
   agents: { title: "Agents" },
   workflows: { title: "Workflows" },
   "workflows-legacy": {
@@ -10,10 +10,9 @@ const meta = {
     theme: { collapsed: true },
     display: "hidden",
   },
-  streaming: <Tag text="experimental">Streaming</Tag>,
-  "tools-mcp": { title: "Tools & MCP", theme: { collapsed: true } },
-  memory: { title: "Memory", theme: { collapsed: true } },
-  "networks-vnext": <Tag text="experimental">Networks</Tag>,
+  streaming: { title: "Streaming" },
+  "tools-mcp": { title: "Tools & MCP" },
+  memory: { title: "Memory" },
   rag: { title: "RAG" },
   "server-db": {
     title: "Server & DB",
@@ -21,7 +20,6 @@ const meta = {
   deployment: { title: "Deployment" },
   "mastra-cloud": { title: "Mastra Cloud" },
   observability: { title: "Observability" },
-  evals: { title: "Evals" },
   scorers: <Tag text="experimental">Scorers</Tag>,
   auth: <Tag text="experimental">Auth</Tag>,
   voice: { title: "Voice" },

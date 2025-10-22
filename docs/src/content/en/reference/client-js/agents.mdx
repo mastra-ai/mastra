@@ -2,7 +2,6 @@
 title: Mastra Client Agents API
 description: Learn how to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools using the client-js SDK.
 ---
-import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
 
 # Agents API
 
@@ -68,27 +67,11 @@ const response = await agent.stream({
 
 // Process data stream with the processDataStream util
 response.processDataStream({
-  onTextPart: (text) => {
-    process.stdout.write(text);
-  },
-  onFilePart: (file) => {
-    console.log(file);
-  },
-  onDataPart: (data) => {
-    console.log(data);
-  },
-  onErrorPart: (error) => {
-    console.error(error);
+  onChunk: async(chunk) => {
+    console.log(chunk);
   },
 });
 
-// Process text stream with the processTextStream util
-// (used with structured output)
- response.processTextStream({
-      onTextPart: text => {
-        process.stdout.write(text);
-      },
-});
 
 // You can also read from response body directly
 const reader = response.body.getReader();
@@ -135,8 +118,13 @@ const response = await agent.stream({
 });
 
 response.processDataStream({
-  onTextPart: (text) => console.log(text),
-  onToolCallPart: (toolCall) => console.log('Tool called:', toolCall.toolName),
+  onChunk: async (chunk) => {
+    if (chunk.type === 'text-delta') {
+      console.log(chunk.payload.text);
+    } else if (chunk.type === 'tool-call') {
+      console.log(`calling tool ${chunk.payload.toolName} with args ${JSON.stringify(chunk.payload.args, null, 2)}`);
+    }
+  },
 });
 ```
 
@@ -161,49 +149,68 @@ const liveEvals = await agent.liveEvals();
 ```
 
 
-### Stream VNext (Experimental)
+### Stream
 
-<StreamVNextCallout />
 
-Stream responses using the enhanced VNext API with improved method signatures. This method provides enhanced capabilities and format flexibility, with support for both Mastra's native format and AI SDK v5 compatibility:
+Stream responses using the enhanced API with improved method signatures. This method provides enhanced capabilities and format flexibility, with support for Mastra's native format.
 
 ```typescript
-const response = await agent.streamVNext(
+const response = await agent.stream(
   "Tell me a story",
   {
-    format: 'mastra', // Default: Mastra's native format
     threadId: "thread-1",
     clientTools: { colorChangeTool },
   }
 );
 
-// AI SDK v5 compatible format
-const response = await agent.streamVNext(
-  "Tell me a story",
-  {
-    format: 'aisdk', // Enable AI SDK v5 compatibility
-    threadId: "thread-1",
-  }
-);
-
 // Process the stream
 response.processDataStream({
-  onChunk: (chunk) => {
-    console.log(chunk);
+  onChunk: async (chunk) => {
+    if (chunk.type === 'text-delta') {
+      console.log(chunk.payload.text);
+    }
   },
 });
 ```
 
-The `format` parameter determines the output stream format:
-- `'mastra'` (default): Returns Mastra's native format
-- `'aisdk'`: Returns AI SDK v5 compatible format for frontend integration
+#### AI SDK compatible format
 
-### Generate VNext (Experimental)
+To stream AI SDK-formatted parts on the client from an `agent.stream(...)` response, wrap `response.processDataStream` into a `ReadableStream<ChunkType>` and use `toAISdkFormat`:
 
-Generate a response using the enhanced VNext API with improved method signatures and AI SDK v5 compatibility:
+```typescript filename="client-ai-sdk-transform.ts" copy
+import { createUIMessageStream } from 'ai';
+import { toAISdkFormat } from '@mastra/ai-sdk';
+import type { ChunkType, MastraModelOutput } from '@mastra/core/stream';
+
+const response = await agent.stream({ messages: 'Tell me a story' });
+
+const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
+  start(controller) {
+    response.processDataStream({
+      onChunk: async (chunk) => controller.enqueue(chunk as ChunkType),
+    }).finally(() => controller.close());
+  },
+});
+
+const uiMessageStream = createUIMessageStream({
+  execute: async ({ writer }) => {
+    for await (const part of toAISdkFormat(chunkStream as unknown as MastraModelOutput, { from: 'agent' })) {
+      writer.write(part);
+    }
+  },
+});
+
+for await (const part of uiMessageStream) {
+  console.log(part);
+}
+```
+
+### Generate
+
+Generate a response using the enhanced API with improved method signatures and AI SDK v5 compatibility:
 
 ```typescript
-const response = await agent.generateVNext(
+const response = await agent.generate(
   "Hello, how are you?",
   {
     threadId: "thread-1",

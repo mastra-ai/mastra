@@ -17,11 +17,7 @@ import { writeTelemetryConfig } from '../build/telemetry';
 import { getPackageRootPath } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
-import {
-  collectTransitiveWorkspaceDependencies,
-  getWorkspaceInformation,
-  packWorkspaceDependencies,
-} from './workspaceDependencies';
+import { getWorkspaceInformation } from './workspaceDependencies';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -237,7 +233,9 @@ export abstract class Bundler extends MastraBundler {
           }
 
           const uniqueToolID = crypto.randomUUID();
-          inputs[`tools/${uniqueToolID}`] = entryFile;
+          // Normalize Windows paths to forward slashes for consistent handling
+          const normalizedEntryFile = entryFile.replaceAll('\\', '/');
+          inputs[`tools/${uniqueToolID}`] = normalizedEntryFile;
         } else {
           this.logger.warn(`Tool path ${path} does not exist, skipping...`);
         }
@@ -286,6 +284,11 @@ export abstract class Bundler extends MastraBundler {
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
+      if (error instanceof MastraError) {
+        throw error;
+      }
+
       throw new MastraError(
         {
           id: 'DEPLOYER_BUNDLER_ANALYZE_FAILED',
@@ -354,59 +357,23 @@ export abstract class Bundler extends MastraBundler {
       dependenciesToInstall.set(external, 'latest');
     }
 
-    const workspaceDependencies = new Set<string>();
     for (const dep of analyzedBundleInfo.externalDependencies) {
       try {
         if (analyzedBundleInfo.workspaceMap.has(dep)) {
-          workspaceDependencies.add(dep);
           continue;
         }
 
         const rootPath = await getPackageRootPath(dep);
         const pkg = await readJSON(`${rootPath}/package.json`);
 
-        dependenciesToInstall.set(dep, pkg.version);
+        dependenciesToInstall.set(dep, pkg.version || 'latest');
       } catch {
         dependenciesToInstall.set(dep, 'latest');
       }
     }
 
-    let resolutions: Record<string, string> = {};
-    if (workspaceDependencies.size > 0) {
-      try {
-        const result = collectTransitiveWorkspaceDependencies({
-          workspaceMap: analyzedBundleInfo.workspaceMap,
-          initialDependencies: workspaceDependencies,
-          logger: this.logger,
-        });
-        resolutions = result.resolutions;
-
-        // Update dependenciesToInstall with the resolved TGZ paths
-        Object.entries(resolutions).forEach(([pkgName, tgzPath]) => {
-          dependenciesToInstall.set(pkgName, tgzPath);
-        });
-
-        await packWorkspaceDependencies({
-          workspaceMap: analyzedBundleInfo.workspaceMap,
-          usedWorkspacePackages: result.usedWorkspacePackages,
-          bundleOutputDir: join(outputDirectory, this.outputDir),
-          logger: this.logger,
-        });
-      } catch (error) {
-        throw new MastraError(
-          {
-            id: 'DEPLOYER_BUNDLER_WORKSPACE_DEPS_FAILED',
-            text: `Failed to collect and pack workspace dependencies.`,
-            domain: ErrorDomain.DEPLOYER,
-            category: ErrorCategory.USER,
-          },
-          error,
-        );
-      }
-    }
-
     try {
-      await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall, resolutions);
+      await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
 
       this.logger.info('Bundling Mastra application');
       const inputOptions: InputOptions = await this.getBundlerOptions(
@@ -414,7 +381,7 @@ export abstract class Bundler extends MastraBundler {
         mastraEntryFile,
         analyzedBundleInfo,
         toolsPaths,
-        { enableSourcemap: sourcemap, enableEsmShim: false },
+        { enableSourcemap: sourcemap, enableEsmShim },
       );
 
       const bundler = await this.createBundler(

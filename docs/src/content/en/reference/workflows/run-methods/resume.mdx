@@ -80,6 +80,22 @@ if (result.status === "suspended") {
         }
       ]
     },
+    {
+      name: "outputOptions",
+      type: "OutputOptions",
+      isOptional: true,
+      description: "Options for AI tracing configuration.",
+      properties: [
+        {
+          parameters: [{
+            name: "includeState",
+            type: "boolean",
+            isOptional: true,
+            description: "Whether to include the workflow run state in the result."
+          }]
+        }
+      ]
+    },
   ]}
 />
 
@@ -89,7 +105,7 @@ if (result.status === "suspended") {
   content={[
     {
       name: "result",
-      type: "Promise<WorkflowResult<TOutput, TSteps>>",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
       description: "A promise that resolves to the workflow execution result containing step outputs and status",
     },
     {

@@ -29,6 +29,24 @@ export const mastra = new Mastra({
 
 > See the [VercelDeployer](/reference/deployer/vercel) API reference for all available configuration options.
 
+### Optional overrides
+
+The Vercel deployer can write a few high‑value settings into the Vercel Output API function config (`.vc-config.json`):
+
+- `maxDuration?: number` — Function execution timeout (seconds)
+- `memory?: number` — Function memory allocation (MB)
+- `regions?: string[]` — Regions (e.g. `['sfo1','iad1']`)
+
+Example:
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+deployer: new VercelDeployer({
+  maxDuration: 600,
+  memory: 1536,
+  regions: ["sfo1", "iad1"],
+})
+```
+
 ## Continuous integration
 
 After connecting your Mastra project’s Git repository to Vercel, update the project settings. In the Vercel dashboard, go to **Settings** > **Build and Deployment**, and under **Framework settings**, set the following:

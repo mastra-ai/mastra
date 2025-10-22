@@ -1,19 +1,14 @@
 import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
 import { getErrorMessage } from '@ai-sdk/provider-v5';
-import {
-  consumeStream,
-  createTextStreamResponse,
-  createUIMessageStream,
-  createUIMessageStreamResponse,
-  generateId,
-} from 'ai-v5';
+import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse, generateId } from 'ai-v5';
 import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
-import type z from 'zod';
 import type { MessageList } from '../../../agent/message-list';
+import type { StructuredOutputOptions } from '../../../agent/types';
+import { getValidTraceId } from '../../../ai-tracing';
+import type { TracingContext } from '../../../ai-tracing';
 import type { MastraModelOutput } from '../../base/output';
-import { getResponseFormat } from '../../base/schema';
-import type { OutputSchema } from '../../base/schema';
+import type { InferSchemaOutput, OutputSchema } from '../../base/schema';
 import type { ChunkType } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
 import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream } from './compat';
@@ -23,23 +18,30 @@ import type { OutputChunkType } from './transform';
 type AISDKV5OutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   toolCallStreaming?: boolean;
   includeRawChunks?: boolean;
-  output?: OUTPUT;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  tracingContext?: TracingContext;
 };
 
-export type AIV5FullStreamPart<T = undefined> = T extends undefined
+export type AIV5FullStreamPart<OUTPUT extends OutputSchema = undefined> = OUTPUT extends undefined
   ? TextStreamPart<ToolSet>
   :
       | TextStreamPart<ToolSet>
       | {
           type: 'object';
-          object: T extends z.ZodSchema ? Partial<z.infer<T>> : unknown;
+          object: InferSchemaOutput<OUTPUT>;
         };
-export type AIV5FullStreamType<T> = ReadableStream<AIV5FullStreamPart<T>>;
+export type AIV5FullStreamType<OUTPUT extends OutputSchema = undefined> = ReadableStream<AIV5FullStreamPart<OUTPUT>>;
 
 export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   #modelOutput: MastraModelOutput<OUTPUT>;
   #options: AISDKV5OutputStreamOptions<OUTPUT>;
   #messageList: MessageList;
+
+  /**
+   * Trace ID used on the execution (if the execution was traced).
+   */
+  public traceId?: string;
+
   constructor({
     modelOutput,
     options,
@@ -52,6 +54,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
     this.#modelOutput = modelOutput;
     this.#options = options;
     this.#messageList = messageList;
+    this.traceId = getValidTraceId(options.tracingContext?.currentSpan);
   }
 
   toTextStreamResponse(init?: ResponseInit): Response {
@@ -151,16 +154,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   }
 
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
-    try {
-      await consumeStream({
-        // Type coercion needed due to ReadableStream type mismatch between Node and DOM types
-        stream: this.fullStream as unknown as Parameters<typeof consumeStream>[0]['stream'],
-        onError: options?.onError,
-      });
-    } catch (error) {
-      console.error('consumeStream error', error);
-      options?.onError?.(error);
-    }
+    await this.#modelOutput.consumeStream(options);
   }
 
   get sources() {
@@ -296,61 +290,62 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
     let hasStarted: boolean = false;
 
     // let stepCounter = 1;
-    const responseFormat = getResponseFormat(this.#options.output);
-    const fullStream = this.#modelOutput.fullStream;
 
-    const transformedStream = fullStream.pipeThrough(
-      new TransformStream<ChunkType | NonNullable<OutputChunkType>, TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>>(
-        {
-          transform(chunk, controller) {
-            if (responseFormat?.type === 'json' && chunk.type === 'object') {
-              /**
-               * Pass through 'object' chunks that were created by
-               * createObjectStreamTransformer in base/output.ts.
-               */
-              controller.enqueue(chunk as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
-              return;
+    return this.#modelOutput.fullStream.pipeThrough(
+      new TransformStream<
+        ChunkType<OUTPUT> | NonNullable<OutputChunkType>,
+        TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>
+      >({
+        transform(chunk, controller) {
+          if (chunk.type === 'object') {
+            /**
+             * Pass through 'object' chunks
+             */
+            controller.enqueue(chunk as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
+            return;
+          }
+
+          if (chunk.type === 'step-start' && !startEvent) {
+            startEvent = convertMastraChunkToAISDKv5({
+              chunk,
+            });
+            // stepCounter++;
+            return;
+          } else if (chunk.type !== 'error') {
+            hasStarted = true;
+          }
+
+          if (startEvent && hasStarted) {
+            controller.enqueue(startEvent as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
+            startEvent = undefined;
+          }
+
+          if ('payload' in chunk) {
+            const transformedChunk = convertMastraChunkToAISDKv5<OUTPUT>({
+              chunk,
+            });
+
+            if (transformedChunk) {
+              // if (!['start', 'finish', 'finish-step'].includes(transformedChunk.type)) {
+              //   console.log('step counter', stepCounter);
+              //   transformedChunk.id = transformedChunk.id ?? stepCounter.toString();
+              // }
+
+              controller.enqueue(transformedChunk as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
             }
-
-            if (chunk.type === 'step-start' && !startEvent) {
-              startEvent = convertMastraChunkToAISDKv5({
-                chunk,
-              });
-              // stepCounter++;
-              return;
-            } else if (chunk.type !== 'error') {
-              hasStarted = true;
-            }
-
-            if (startEvent && hasStarted) {
-              controller.enqueue(startEvent as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
-              startEvent = undefined;
-            }
-
-            if ('payload' in chunk) {
-              const transformedChunk = convertMastraChunkToAISDKv5({
-                chunk,
-              });
-
-              if (transformedChunk) {
-                // if (!['start', 'finish', 'finish-step'].includes(transformedChunk.type)) {
-                //   console.log('step counter', stepCounter);
-                //   transformedChunk.id = transformedChunk.id ?? stepCounter.toString();
-                // }
-
-                controller.enqueue(transformedChunk as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
-              }
-            }
-          },
+          }
         },
-      ),
-    );
-
-    return transformedStream as AIV5FullStreamType<OUTPUT>;
+      }),
+    ) as AIV5FullStreamType<OUTPUT>;
   }
 
   async getFullOutput() {
-    await this.consumeStream();
+    await this.consumeStream({
+      onError: (error: any) => {
+        console.error(error);
+        throw error;
+      },
+    });
 
     const object = await this.object;
 
@@ -374,6 +369,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       error: this.error,
       tripwire: this.#modelOutput.tripwire,
       tripwireReason: this.#modelOutput.tripwireReason,
+      traceId: this.traceId,
       ...(object ? { object } : {}),
     };
 

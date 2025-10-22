@@ -1,7 +1,6 @@
 import './index.css';
 
 export * from './domains/agents/index';
-export * from './domains/networks/index';
 export * from './domains/scores/index';
 export * from './domains/tools/index';
 export * from './domains/workflows/index';
@@ -27,12 +26,14 @@ export * from './ds/components/Txt/index';
 export * from './ds/components/Entity/index';
 export * from './ds/components/EmptyState/index';
 export * from './ds/icons/index';
+export * from './ds/components/Alert';
 export * from './lib/polls';
 export * from './domains/voice/hooks/use-speech-recognition';
 export * from './components/ui/radio-group';
 export * from './components/ui/entry';
 export * from './hooks';
 export * from './lib/tanstack-query';
+export * from './domains/memory/hooks';
 
 export type { TraceContextType } from './domains/traces/context/trace-context';
 
@@ -41,7 +42,12 @@ export * from './lib/framework';
 export { MemorySearch } from './components/assistant-ui/memory-search';
 export * from './components/ui/alert-dialog';
 export * from './components/ui/searchbar';
+export * from './components/ui/tooltip';
 export * from './components/ui/kbd';
 export * from './components/ui/collapsible';
 export * from './domains/conversation/index';
 export * from './lib/errors';
+export * from './components/assistant-ui/tools/tool-fallback';
+export * from './domains/workflows/runs/workflow-run-list';
+export * from './domains/mcps/index';
+export * from './domains/evals/index';

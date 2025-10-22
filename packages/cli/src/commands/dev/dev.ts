@@ -1,6 +1,6 @@
 import type { ChildProcess } from 'child_process';
 import process from 'node:process';
-import { join } from 'path';
+import { join, posix } from 'path';
 import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions } from '@mastra/deployer/build';
@@ -9,7 +9,7 @@ import { execa } from 'execa';
 import getPort from 'get-port';
 
 import { devLogger } from '../../utils/dev-logger.js';
-import { logger } from '../../utils/logger.js';
+import { createLogger } from '../../utils/logger.js';
 
 import { DevBundler } from './DevBundler';
 
@@ -127,6 +127,13 @@ const startServer = async (
         }
       });
     }
+
+    // Handle IPC errors to prevent EPIPE crashes
+    currentServerProcess.on('error', (err: Error) => {
+      if ((err as any).code !== 'EPIPE') {
+        throw err;
+      }
+    });
 
     currentServerProcess.on('message', async (message: any) => {
       if (message?.type === 'server-ready') {
@@ -280,7 +287,6 @@ async function rebundleAndRestart(
 }
 
 export async function dev({
-  port,
   dir,
   root,
   tools,
@@ -289,26 +295,28 @@ export async function dev({
   inspectBrk,
   customArgs,
   https,
+  debug,
 }: {
   dir?: string;
   root?: string;
-  port: number | null;
   tools?: string[];
   env?: string;
   inspect?: boolean;
   inspectBrk?: boolean;
   customArgs?: string[];
   https?: boolean;
+  debug: boolean;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
   // You cannot express an "include all js/ts except these" in one single string glob pattern so by default an array is passed to negate test files.
-  const defaultToolsPath = join(mastraDir, 'tools/**/*.{js,ts}');
+  const normalizedMastraDir = mastraDir.replaceAll('\\', '/');
+  const defaultToolsPath = posix.join(normalizedMastraDir, 'tools/**/*.{js,ts}');
   const defaultToolsIgnorePaths = [
-    `!${join(mastraDir, 'tools/**/*.{test,spec}.{js,ts}')}`,
-    `!${join(mastraDir, 'tools/**/__tests__/**')}`,
+    `!${posix.join(normalizedMastraDir, 'tools/**/*.{test,spec}.{js,ts}')}`,
+    `!${posix.join(normalizedMastraDir, 'tools/**/__tests__/**')}`,
   ];
   // We pass an array to tinyglobby to allow for the aforementioned negations
   const defaultTools = [defaultToolsPath, ...defaultToolsIgnorePaths];
@@ -318,7 +326,7 @@ export async function dev({
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
   const bundler = new DevBundler(env);
-  bundler.__setLogger(logger); // Keep Pino logger for internal bundler operations
+  bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
 
   const loadedEnv = await bundler.loadEnvVars();
 
@@ -328,7 +336,7 @@ export async function dev({
   }
 
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
-  let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
+  let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
   if (!portToUse || isNaN(Number(portToUse))) {
     const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);

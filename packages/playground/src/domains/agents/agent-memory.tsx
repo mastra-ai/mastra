@@ -1,5 +1,4 @@
-import { MemorySearch, useThreadInput } from '@mastra/playground-ui';
-import { useMemorySearch, useMemoryConfig } from '@/hooks/use-memory';
+import { MemorySearch, useThreadInput, useMemoryConfig, useMemorySearch } from '@mastra/playground-ui';
 import { AgentWorkingMemory } from './agent-working-memory';
 import { AgentMemoryConfig } from './agent-memory-config';
 import { useParams, useNavigate } from 'react-router';
@@ -19,10 +18,11 @@ export function AgentMemory({ agentId }: AgentMemoryProps) {
   const [searchScope, setSearchScope] = useState<string | null>(null);
 
   // Get memory config to check if semantic recall is enabled
-  const { data: config } = useMemoryConfig(agentId);
+  const { data } = useMemoryConfig(agentId);
 
   // Check if semantic recall is enabled
-  const isSemanticRecallEnabled = config && config.semanticRecall === true;
+  const config = data?.config;
+  const isSemanticRecallEnabled = Boolean(config?.semanticRecall);
 
   // Get memory search hook
   const { searchMemory } = useMemorySearch({

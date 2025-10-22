@@ -9,8 +9,15 @@ export function getAuthEntrypoint() {
     }
 
     async authenticateToken (...args) {
-      if (typeof args[0] === 'string' && args[0].replace('Bearer ', '') === '${process.env.BUSINESS_JWT_TOKEN}') {
-        return { id: 'business-api' }
+      if (typeof args[0] === 'string') {
+        const token = args[0].replace('Bearer ', '');
+        const validTokens = [];
+        ${process.env.PLAYGROUND_JWT_TOKEN ? `validTokens.push('${process.env.PLAYGROUND_JWT_TOKEN}');` : ''}
+        ${process.env.BUSINESS_JWT_TOKEN ? `validTokens.push('${process.env.BUSINESS_JWT_TOKEN}');` : ''}
+        
+        if (validTokens.includes(token)) {
+          return { id: 'business-api' }
+        }
       }
       return this.auth.authenticateToken(...args)
     }

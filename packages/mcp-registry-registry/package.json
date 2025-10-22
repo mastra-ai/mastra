@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-registry-registry",
-  "version": "0.10.16",
+  "version": "0.10.20",
   "description": "MCP server for registry registry services.",
   "type": "module",
   "main": "dist/index.js",
@@ -37,14 +37,14 @@
     "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.4",
+    "@hono/node-server": "^1.19.5",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
     "@types/node": "^20.19.0",
     "@wong2/mcp-cli": "^1.10.0",
-    "cross-env": "^7.0.3",
-    "eslint": "^9.35.0",
+    "cross-env": "^10.1.0",
+    "eslint": "^9.37.0",
     "hono": "^4.9.7",
     "tsup": "^8.5.0",
     "tsx": "^4.20.3",
@@ -53,7 +53,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.20.0-0"
+    "@mastra/core": ">=0.18.1-0 <0.23.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

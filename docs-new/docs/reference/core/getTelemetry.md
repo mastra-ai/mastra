@@ -1,0 +1,35 @@
+---
+title: 'Mastra.getTelemetry() '
+description: 'Documentation for the `Mastra.getTelemetry()` method in Mastra, which retrieves the configured telemetry instance.'
+---
+
+# Mastra.getTelemetry()
+
+The `.getTelemetry()` method is used to retrieve the telemetry instance that has been configured in the Mastra instance.
+
+## Usage example
+
+```typescript copy
+mastra.getTelemetry();
+```
+
+## Parameters
+
+This method does not accept any parameters.
+
+## Returns
+
+<PropertiesTable
+content={[
+{
+name: "telemetry",
+type: "Telemetry | undefined",
+description: "The configured telemetry instance used for tracing and observability across all components, or undefined if no telemetry has been configured.",
+},
+]}
+/>
+
+## Related
+
+- [AI tracing](/docs/observability/ai-tracing/overview)
+- [Telemetry reference](/docs/reference/observability/otel-tracing/otel-config)

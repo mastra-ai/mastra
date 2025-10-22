@@ -1,11 +1,10 @@
-import { useWorkingMemory } from '@mastra/playground-ui';
+import { useWorkingMemory, useMemoryConfig } from '@mastra/playground-ui';
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { useMemoryConfig } from '@/hooks/use-memory';
 import MarkdownRenderer from '@/components/ui/markdown-renderer';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { CodeDisplay } from '@/components/ui/code-display';
@@ -20,10 +19,10 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     useWorkingMemory();
 
   // Get memory config to check if working memory is enabled
-  const { data: config } = useMemoryConfig(agentId);
-
+  const { data } = useMemoryConfig(agentId);
+  const config = data?.config;
   // Check if working memory is enabled
-  const isWorkingMemoryEnabled = config?.workingMemory?.enabled;
+  const isWorkingMemoryEnabled = Boolean(config?.workingMemory?.enabled);
 
   const { isCopied, handleCopy } = useCopyToClipboard({
     text: workingMemoryData ?? '',

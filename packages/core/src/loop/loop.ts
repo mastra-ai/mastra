@@ -2,7 +2,8 @@ import { generateId } from 'ai-v5';
 import type { ToolSet } from 'ai-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { ConsoleLogger } from '../logger';
-import { MastraModelOutput } from '../stream/base/output';
+import type { ProcessorState } from '../processors';
+import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
 import { getRootSpan } from './telemetry';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
@@ -25,6 +26,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   returnScorerData,
   llmAISpan,
   requireToolApproval,
+  agentId,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
@@ -99,6 +101,11 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   const deserializeStreamState = (state: any) => {
     modelOutput?.deserializeState(state);
   };
+
+  // Create processor states map that will be shared across all LLM execution steps
+  const processorStates =
+    outputProcessors && outputProcessors.length > 0 ? new Map<string, ProcessorState<OUTPUT>>() : undefined;
+
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
     resumeContext,
     models,
@@ -115,15 +122,32 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     outputProcessors,
     llmAISpan,
     messageId: messageId!,
+    agentId,
     requireToolApproval,
     streamState: {
       serialize: serializeStreamState,
       deserialize: deserializeStreamState,
     },
+    processorStates,
     ...rest,
   };
 
-  const stream = workflowLoopStream(workflowLoopProps);
+  const existingSnapshot = resumeContext?.snapshot;
+  let initialStreamState: any;
+
+  if (existingSnapshot) {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
+        initialStreamState = step.suspendPayload?.__streamState;
+        break;
+      }
+    }
+  }
+  const baseStream = workflowLoopStream(workflowLoopProps);
+
+  // Apply chunk tracing transform to track LLM_STEP and LLM_CHUNK spans
+  const stream = rest.modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
 
   modelOutput = new MastraModelOutput({
     model: {
@@ -142,13 +166,13 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
       includeRawChunks: !!includeRawChunks,
-      output: rest.output,
+      structuredOutput: rest.structuredOutput,
       outputProcessors,
-      outputProcessorRunnerMode: 'result',
       returnScorerData,
       tracingContext: { currentSpan: llmAISpan },
     },
-  }) as MastraModelOutput<OUTPUT>;
+    initialState: initialStreamState,
+  });
 
-  return modelOutput;
+  return createDestructurableOutput(modelOutput);
 }

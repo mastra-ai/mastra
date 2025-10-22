@@ -14,7 +14,6 @@ import {
   Observability,
 } from './resources';
 import { NetworkMemoryThread } from './resources/network-memory-thread';
-import { VNextNetwork } from './resources/vNextNetwork';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -33,7 +32,6 @@ import type {
   SaveMessageToMemoryResponse,
   McpServerListResponse,
   McpServerToolListResponse,
-  GetVNextNetworkResponse,
   GetNetworkMemoryThreadParams,
   CreateNetworkMemoryThreadParams,
   SaveNetworkMessageToMemoryParams,
@@ -42,6 +40,7 @@ import type {
   GetScoresResponse,
   GetScoresByRunIdParams,
   GetScoresByEntityIdParams,
+  GetScoresBySpanParams,
   SaveScoreParams,
   SaveScoreResponse,
   GetAITracesResponse,
@@ -444,23 +443,6 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Retrieves all available vNext networks
-   * @returns Promise containing map of vNext network IDs to vNext network details
-   */
-  public getVNextNetworks(): Promise<Array<GetVNextNetworkResponse>> {
-    return this.request('/api/networks/v-next');
-  }
-
-  /**
-   * Gets a vNext network instance by ID
-   * @param networkId - ID of the vNext network to retrieve
-   * @returns vNext Network instance
-   */
-  public getVNextNetwork(networkId: string) {
-    return new VNextNetwork(this.options, networkId);
-  }
-
-  /**
    * Retrieves a list of available MCP servers.
    * @param params - Optional parameters for pagination (limit, offset).
    * @returns Promise containing the list of MCP servers and pagination info.
@@ -581,7 +563,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the scorer
    */
   public getScorer(scorerId: string): Promise<GetScorerResponse> {
-    return this.request(`/api/scores/scorers/${scorerId}`);
+    return this.request(`/api/scores/scorers/${encodeURIComponent(scorerId)}`);
   }
 
   public getScoresByScorerId(params: GetScoresByScorerIdParams): Promise<GetScoresResponse> {
@@ -602,7 +584,7 @@ export class MastraClient extends BaseResource {
       searchParams.set('perPage', String(perPage));
     }
     const queryString = searchParams.toString();
-    return this.request(`/api/scores/scorer/${scorerId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/scores/scorer/${encodeURIComponent(scorerId)}${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -622,7 +604,7 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/scores/run/${runId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/scores/run/${encodeURIComponent(runId)}${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -642,7 +624,9 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/scores/entity/${entityType}/${entityId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(
+      `/api/scores/entity/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}${queryString ? `?${queryString}` : ''}`,
+    );
   }
 
   /**
@@ -671,6 +655,10 @@ export class MastraClient extends BaseResource {
 
   getAITraces(params: AITracesPaginatedArg): Promise<GetAITracesResponse> {
     return this.observability.getTraces(params);
+  }
+
+  getScoresBySpan(params: GetScoresBySpanParams): Promise<GetScoresResponse> {
+    return this.observability.getScoresBySpan(params);
   }
 
   score(params: {

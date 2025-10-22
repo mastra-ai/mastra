@@ -4,6 +4,7 @@ import slugify from '@sindresorhus/slugify';
 import * as pkg from 'empathic/package';
 import { findWorkspaces, findWorkspacesRoot, createWorkspacesCache } from 'find-workspaces';
 import { ensureDir } from 'fs-extra';
+import { slash } from '../build/utils';
 import { DepsService } from '../services';
 
 export type WorkspacePackageInfo = {
@@ -42,7 +43,7 @@ export async function getWorkspaceInformation({
 }) {
   // 1) Get the location of the current package and its package.json
   const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
-  const location = closestPkgJson ? dirname(closestPkgJson) : process.cwd();
+  const location = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
 
   // 2) Get all workspaces
   const workspaces = await findWorkspaces(dir, { cache: workspacesCache });

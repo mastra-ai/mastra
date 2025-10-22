@@ -12,7 +12,7 @@ Tool streaming in Mastra enables tools to send incremental results while they ru
 Streams can be written to in two main ways:
 
 - **From within a tool**: every tool receives a `writer` argument, which is a writable stream you can use to push updates as execution progresses.
-- **From an agent stream**: you can also pipe an agent’s `streamVNext` output directly into a tool’s writer, making it easy to chain agent responses into tool results without extra glue code.
+- **From an agent stream**: you can also pipe an agent’s `stream` output directly into a tool’s writer, making it easy to chain agent responses into tool results without extra glue code.
 
 By combining writable tool streams with agent streaming, you gain fine grained control over how intermediate results flow through your system and into the user experience.
 
@@ -69,12 +69,42 @@ export const testTool = createTool({
 });
 ```
 
+You can also use `writer.custom` if you want to emit top level stream chunks, This useful and relevant when
+integrating with UI Frameworks
+
+```typescript {5,8,15} showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+
+export const testTool = createTool({
+  // ...
+  execute: async ({ context, writer }) => {
+    const { value } = context;
+
+   await writer?.custom({
+      type: "data-tool-progress",
+      status: "pending"
+    });
+
+    const response = await fetch(...);
+
+   await writer?.custom({
+      type: "data-tool-progress",
+      status: "success"
+    });
+
+    return {
+      value: ""
+    };
+  }
+});
+```
+
 ### Inspecting stream payloads
 
 Events written to the stream are included in the emitted chunks. These chunks can be inspected to access any custom fields, such as event types, intermediate values, or tool-specific data.
 
 ```typescript showLineNumbers copy
-const stream = await testAgent.streamVNext([
+const stream = await testAgent.stream([
   "What is the weather in London?",
   "Use the testTool"
 ]);
@@ -100,7 +130,7 @@ export const testTool = createTool({
     const { city } = context;
 
     const testAgent = mastra?.getAgent("testAgent");
-    const stream = await testAgent?.streamVNext(`What is the weather in ${city}?`);
+    const stream = await testAgent?.stream(`What is the weather in ${city}?`);
 
     await stream!.textStream.pipeTo(writer!);
 

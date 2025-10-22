@@ -12,7 +12,7 @@ import type { Schema, ModelMessage, ToolSet } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives } from '../../action';
-import { AISpanType } from '../../ai-tracing';
+import { AISpanType, ModelSpanTracker } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
@@ -153,7 +153,7 @@ export class MastraLLMVNext extends MastraBase {
     telemetry_settings,
     threadId,
     resourceId,
-    output,
+    structuredOutput,
     options,
     outputProcessors,
     returnScorerData,
@@ -162,8 +162,9 @@ export class MastraLLMVNext extends MastraBase {
     messageList,
     requireToolApproval,
     _internal,
-    // ...rest
-  }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
+    agentId,
+    toolCallId,
+  }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
     if (maxSteps && typeof maxSteps === 'number') {
@@ -203,11 +204,15 @@ export class MastraLLMVNext extends MastraBase {
       tracingPolicy: this.#options?.tracingPolicy,
     });
 
+    // Create model span tracker that will be shared across all LLM execution steps
+    const modelSpanTracker = new ModelSpanTracker(llmAISpan);
+
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
         mastra: this.#mastra,
         resumeContext,
         runId,
+        toolCallId,
         messageList,
         models: this.#models,
         tools: tools as Tools,
@@ -220,11 +225,13 @@ export class MastraLLMVNext extends MastraBase {
           ...telemetry_settings,
         },
         _internal,
-        output,
+        structuredOutput,
         outputProcessors,
         returnScorerData,
         llmAISpan,
+        modelSpanTracker,
         requireToolApproval,
+        agentId,
         options: {
           ...options,
           onStepFinish: async props => {
@@ -303,11 +310,12 @@ export class MastraLLMVNext extends MastraBase {
 
             llmAISpan?.end({
               output: {
-                text: props?.text,
+                files: props?.files,
+                object: props?.object,
                 reasoning: props?.reasoning,
                 reasoningText: props?.reasoningText,
-                files: props?.files,
                 sources: props?.sources,
+                text: props?.text,
                 warnings: props?.warnings,
               },
               attributes: {

@@ -27,7 +27,10 @@ interface CreatePrepareStreamWorkflowOptions<
   runId: string;
   runtimeContext: RuntimeContext;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
+  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+  /**
+   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
+   */
   format?: FORMAT;
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
@@ -35,7 +38,12 @@ interface CreatePrepareStreamWorkflowOptions<
   saveQueueManager: SaveQueueManager;
   returnScorerData?: boolean;
   requireToolApproval?: boolean;
-  resumeContext?: any;
+  resumeContext?: {
+    resumeData: any;
+    snapshot: any;
+  };
+  agentId: string;
+  toolCallId?: string;
 }
 
 export function createPrepareStreamWorkflow<
@@ -58,6 +66,8 @@ export function createPrepareStreamWorkflow<
   returnScorerData,
   requireToolApproval,
   resumeContext,
+  agentId,
+  toolCallId,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -68,7 +78,6 @@ export function createPrepareStreamWorkflow<
     runtimeContext,
     agentAISpan,
     methodType,
-    format,
     memory,
   });
 
@@ -94,6 +103,8 @@ export function createPrepareStreamWorkflow<
     format,
     requireToolApproval,
     resumeContext,
+    agentId,
+    toolCallId,
   });
 
   const mapResultsStep = createMapResultsStep({
@@ -107,6 +118,7 @@ export function createPrepareStreamWorkflow<
     saveQueueManager,
     agentAISpan,
     instructions,
+    agentId,
   });
 
   return createWorkflow({

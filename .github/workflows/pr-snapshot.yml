@@ -18,9 +18,11 @@ jobs:
 
     permissions:
       pull-requests: read
+      contents: read
+      id-token: write
 
     steps:
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v2
         id: app-token
         with:
           app-id: ${{ vars.DANE_APP_ID }}
@@ -47,7 +49,7 @@ jobs:
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20.19.1
+          node-version: 20.19.5
           cache: 'pnpm'
           registry-url: 'https://registry.yarnpkg.com'
 
@@ -98,12 +100,14 @@ jobs:
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
 
       - name: Run Changeset Pre Exit
-        run: pnpm changeset pre exit
+        run: pnpm changeset-cli pre exit
 
       - name: Run Changeset Version Snapshot
-        run: pnpm changeset version --snapshot ${{ env.FINAL_TAG }}
+        run: pnpm changeset-cli version --snapshot ${{ env.FINAL_TAG }}
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Publish to npm
         run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public
+        env:
+          NPM_CONFIG_PROVENANCE: true

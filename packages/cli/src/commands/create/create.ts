@@ -7,22 +7,22 @@ import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { loadTemplates, selectTemplate, findTemplateByName, getDefaultProjectName } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
 import { init } from '../init/init';
-import { interactivePrompt } from '../init/utils';
-import type { LLMProvider } from '../init/utils';
+import type { Editor } from '../init/mcp-docs-server-install';
+import type { Component, LLMProvider } from '../init/utils';
 import { getPackageManager } from '../utils.js';
 
 import { createMastraProject } from './utils';
 
 export const create = async (args: {
   projectName?: string;
-  components?: string[];
+  components?: Component[];
   llmProvider?: LLMProvider;
   addExample?: boolean;
   llmApiKey?: string;
   createVersionTag?: string;
   timeout?: number;
   directory?: string;
-  mcpServer?: 'windsurf' | 'cursor' | 'cursor-global';
+  mcpServer?: Editor;
   template?: string | boolean;
   analytics?: PosthogAnalytics;
 }) => {
@@ -31,20 +31,23 @@ export const create = async (args: {
     return;
   }
 
-  const { projectName } = await createMastraProject({
+  /**
+   * We need to explicitly check for undefined instead of using the falsy (!) check because the user might have passed args that are explicitly set to false (in this case, no example code) and we need to distinguish between those and the case where the args were not passed at all.
+   */
+  const needsInteractive =
+    args.components === undefined || args.llmProvider === undefined || args.addExample === undefined;
+
+  const { projectName, result } = await createMastraProject({
     projectName: args?.projectName,
     createVersionTag: args?.createVersionTag,
     timeout: args?.timeout,
+    llmProvider: args?.llmProvider,
+    llmApiKey: args?.llmApiKey,
+    needsInteractive,
   });
   const directory = args.directory || 'src/';
 
-  // We need to explicitly check for undefined instead of using the falsy (!)
-  // check because the user might have passed args that are explicitly set
-  // to false (in this case, no example code) and we need to distinguish
-  // between those and the case where the args were not passed at all.
-  if (args.components === undefined || args.llmProvider === undefined || args.addExample === undefined) {
-    const result = await interactivePrompt();
-
+  if (needsInteractive && result) {
     // Track model provider selection from interactive prompt
     const analytics = getAnalytics();
     if (analytics && result?.llmProvider) {
@@ -56,8 +59,8 @@ export const create = async (args: {
 
     await init({
       ...result,
-      llmApiKey: result?.llmApiKey as string,
-      components: ['agents', 'tools', 'workflows'],
+      llmApiKey: result?.llmApiKey as string | undefined,
+      components: ['agents', 'tools', 'workflows', 'scorers'],
       addExample: true,
     });
     postCreate({ projectName });

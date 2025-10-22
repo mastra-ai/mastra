@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ConsoleLogger, LogLevel } from '../logger';
 import { CloudExporter, DefaultExporter } from './exporters';
 import {
   clearAITracingRegistry,
@@ -784,17 +785,22 @@ describe('AI Tracing Registry', () => {
       delete process.env.MASTRA_CLOUD_ACCESS_TOKEN;
       vi.unstubAllEnvs(); // Make sure mock is cleared
 
-      // Spy on console to check for combined warning message
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const logger = new ConsoleLogger({ level: LogLevel.DEBUG });
+
+      // Spy on console to check for warning message
+      // Note: ConsoleLogger.warn() calls console.info() internally
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       // CloudExporter should not throw, but log warning instead
-      const exporter = new CloudExporter();
+      const exporter = new CloudExporter({ logger });
 
-      // Verify combined warning message was logged
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('CloudExporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set'),
+      // Verify warning message was logged with new exporter name
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'mastra-cloud-ai-tracing-exporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set',
+        ),
       );
-      expect(warnSpy).toHaveBeenCalledWith(
+      expect(infoSpy).toHaveBeenCalledWith(
         expect.stringContaining('Sign up for Mastra Cloud at https://cloud.mastra.ai'),
       );
 
@@ -818,7 +824,7 @@ describe('AI Tracing Registry', () => {
       await expect(exporter.exportEvent(event)).resolves.not.toThrow();
 
       // Restore mocks
-      warnSpy.mockRestore();
+      infoSpy.mockRestore();
       if (originalToken) {
         process.env.MASTRA_CLOUD_ACCESS_TOKEN = originalToken;
       }

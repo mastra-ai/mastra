@@ -326,24 +326,81 @@ export class Memory extends MastraMemory {
     });
   }
 
-  async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
-    return this.storage.saveThread({ thread });
+  private async handleWorkingMemoryFromMetadata({
+    workingMemory,
+    resourceId,
+    memoryConfig,
+  }: {
+    workingMemory: string;
+    resourceId: string;
+    memoryConfig?: MemoryConfig;
+  }): Promise<void> {
+    const config = this.getMergedThreadConfig(memoryConfig || {});
+
+    if (config.workingMemory?.enabled) {
+      this.checkStorageFeatureSupport(config);
+
+      const scope = config.workingMemory.scope || 'thread';
+
+      // For resource scope, update the resource's working memory
+      if (scope === 'resource' && resourceId) {
+        await this.storage.updateResource({
+          resourceId,
+          workingMemory,
+        });
+      }
+      // For thread scope, the metadata is already saved with the thread
+    }
+  }
+
+  async saveThread({
+    thread,
+    memoryConfig,
+  }: {
+    thread: StorageThreadType;
+    memoryConfig?: MemoryConfig;
+  }): Promise<StorageThreadType> {
+    const savedThread = await this.storage.saveThread({ thread });
+
+    // Check if metadata contains workingMemory and working memory is enabled
+    if (thread.metadata?.workingMemory && typeof thread.metadata.workingMemory === 'string' && thread.resourceId) {
+      await this.handleWorkingMemoryFromMetadata({
+        workingMemory: thread.metadata.workingMemory,
+        resourceId: thread.resourceId,
+        memoryConfig,
+      });
+    }
+
+    return savedThread;
   }
 
   async updateThread({
     id,
     title,
     metadata,
+    memoryConfig,
   }: {
     id: string;
     title: string;
     metadata: Record<string, unknown>;
+    memoryConfig?: MemoryConfig;
   }): Promise<StorageThreadType> {
-    return this.storage.updateThread({
+    const updatedThread = await this.storage.updateThread({
       id,
       title,
       metadata,
     });
+
+    // Check if metadata contains workingMemory and working memory is enabled
+    if (metadata?.workingMemory && typeof metadata.workingMemory === 'string' && updatedThread.resourceId) {
+      await this.handleWorkingMemoryFromMetadata({
+        workingMemory: metadata.workingMemory as string,
+        resourceId: updatedThread.resourceId,
+        memoryConfig,
+      });
+    }
+
+    return updatedThread;
   }
 
   async deleteThread(threadId: string): Promise<void> {

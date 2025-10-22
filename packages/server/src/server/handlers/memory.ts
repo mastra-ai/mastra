@@ -1,3 +1,4 @@
+import { convertMessages } from '@mastra/core/agent';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
@@ -12,35 +13,52 @@ interface MemoryContext extends Context {
   agentId?: string;
   resourceId?: string;
   threadId?: string;
-  networkId?: string;
   runtimeContext?: RuntimeContext;
 }
 
 async function getMemoryFromContext({
   mastra,
   agentId,
-  networkId,
   runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'>): Promise<
-  MastraMemory | null | undefined
-> {
-  const agent = agentId ? mastra.getAgent(agentId) : null;
-  if (agentId && !agent) {
-    throw new HTTPException(404, { message: 'Agent not found' });
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'runtimeContext'>): Promise<MastraMemory | null | undefined> {
+  const logger = mastra.getLogger();
+  let agent;
+  if (agentId) {
+    try {
+      agent = mastra.getAgent(agentId);
+    } catch (error) {
+      logger.debug('Error getting agent from mastra, searching agents for agent', error);
+    }
   }
+  if (agentId && !agent) {
+    logger.debug('Agent not found, searching agents for agent', { agentId });
+    const agents = mastra.getAgents();
+    if (Object.keys(agents || {}).length) {
+      for (const [_, ag] of Object.entries(agents)) {
+        try {
+          const agents = await ag.listAgents();
 
-  const network = networkId ? mastra.vnext_getNetwork(networkId) : null;
+          if (agents[agentId]) {
+            agent = agents[agentId];
+            break;
+          }
+        } catch (error) {
+          logger.debug('Error getting agent from agent', error);
+        }
+      }
+    }
 
-  if (networkId && !network) {
-    throw new HTTPException(404, { message: 'Network not found' });
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
   }
 
   if (agent) {
-    return (await agent?.getMemory()) || mastra.getMemory();
-  }
-
-  if (network) {
-    return (await network?.getMemory({ runtimeContext })) || mastra.getMemory();
+    return (
+      (await agent?.getMemory({
+        runtimeContext,
+      })) || mastra.getMemory()
+    );
   }
 
   return mastra.getMemory();
@@ -50,11 +68,10 @@ async function getMemoryFromContext({
 export async function getMemoryStatusHandler({
   mastra,
   agentId,
-  networkId,
   runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'>) {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'runtimeContext'>) {
   try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
 
     if (!memory) {
       return { result: false };
@@ -69,11 +86,10 @@ export async function getMemoryStatusHandler({
 export async function getMemoryConfigHandler({
   mastra,
   agentId,
-  networkId,
   runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'>) {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'runtimeContext'>) {
   try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
 
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -92,13 +108,12 @@ export async function getThreadsHandler({
   mastra,
   agentId,
   resourceId,
-  networkId,
   runtimeContext,
   orderBy,
   sortDirection,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'networkId' | 'runtimeContext'> & ThreadSortOptions) {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'runtimeContext'> & ThreadSortOptions) {
   try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
 
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -121,18 +136,17 @@ export async function getThreadsPaginatedHandler({
   mastra,
   agentId,
   resourceId,
-  networkId,
   runtimeContext,
   page,
   perPage,
   orderBy,
   sortDirection,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'networkId' | 'runtimeContext'> & {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'runtimeContext'> & {
   page: number;
   perPage: number;
 } & ThreadSortOptions) {
   try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
 
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -157,13 +171,12 @@ export async function getThreadByIdHandler({
   mastra,
   agentId,
   threadId,
-  networkId,
   runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'>) {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'runtimeContext'>) {
   try {
     validateBody({ threadId });
 
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
@@ -183,15 +196,14 @@ export async function saveMessagesHandler({
   mastra,
   agentId,
   body,
-  networkId,
   runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'> & {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'runtimeContext'> & {
   body: {
     messages: Parameters<MastraMemory['saveMessages']>[0]['messages'];
   };
 }) {
   try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
 
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -230,13 +242,12 @@ export async function createThreadHandler({
   mastra,
   agentId,
   body,
-  networkId,
   runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'> & {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'runtimeContext'> & {
   body?: Omit<Parameters<MastraMemory['createThread']>[0], 'resourceId'> & { resourceId?: string };
 }) {
   try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
 
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -261,13 +272,12 @@ export async function updateThreadHandler({
   agentId,
   threadId,
   body,
-  networkId,
   runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'> & {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'runtimeContext'> & {
   body?: Parameters<MastraMemory['saveThread']>[0]['thread'];
 }) {
   try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
 
     if (!body) {
       throw new HTTPException(400, { message: 'Body is required' });
@@ -307,13 +317,12 @@ export async function deleteThreadHandler({
   mastra,
   agentId,
   threadId,
-  networkId,
   runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'>) {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'runtimeContext'>) {
   try {
     validateBody({ threadId });
 
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
@@ -364,9 +373,8 @@ export async function getMessagesHandler({
   agentId,
   threadId,
   limit,
-  networkId,
   runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'> & {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'runtimeContext'> & {
   limit?: number;
 }) {
   if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
@@ -375,7 +383,7 @@ export async function getMessagesHandler({
   try {
     validateBody({ threadId });
 
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
 
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -390,7 +398,8 @@ export async function getMessagesHandler({
       threadId: threadId!,
       ...(limit && { selectBy: { last: limit } }),
     });
-    return { messages: result.messages, uiMessages: result.uiMessages };
+    const uiMessages = convertMessages(result.messagesV2).to('AIV5.UI');
+    return { messages: result.messages, uiMessages, legacyMessages: result.uiMessages };
   } catch (error) {
     return handleError(error, 'Error getting messages');
   }
@@ -406,15 +415,14 @@ export async function getWorkingMemoryHandler({
   agentId,
   threadId,
   resourceId,
-  networkId,
   runtimeContext,
   memoryConfig,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'> & {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'runtimeContext'> & {
   resourceId?: Parameters<MastraMemory['getWorkingMemory']>[0]['resourceId'];
   memoryConfig?: Parameters<MastraMemory['getWorkingMemory']>[0]['memoryConfig'];
 }) {
   try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
     validateBody({ threadId });
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -445,14 +453,13 @@ export async function updateWorkingMemoryHandler({
   agentId,
   threadId,
   body,
-  networkId,
   runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'> & {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'runtimeContext'> & {
   body: Omit<Parameters<MastraMemory['updateWorkingMemory']>[0], 'threadId'>;
 }) {
   try {
     validateBody({ threadId });
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
     const { resourceId, memoryConfig, workingMemory } = body;
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -499,9 +506,8 @@ export async function deleteMessagesHandler({
   mastra,
   agentId,
   messageIds,
-  networkId,
   runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'> & {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'runtimeContext'> & {
   messageIds: string | string[] | { id: string } | { id: string }[];
 }) {
   try {
@@ -509,7 +515,7 @@ export async function deleteMessagesHandler({
       throw new HTTPException(400, { message: 'messageIds is required' });
     }
 
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
@@ -536,10 +542,9 @@ export async function searchMemoryHandler({
   resourceId,
   threadId,
   limit = 20,
-  networkId,
   runtimeContext,
   memoryConfig,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'> & {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'runtimeContext'> & {
   searchQuery: string;
   resourceId: string;
   threadId?: string;
@@ -549,7 +554,7 @@ export async function searchMemoryHandler({
   try {
     validateBody({ searchQuery, resourceId });
 
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }

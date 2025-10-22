@@ -1,17 +1,22 @@
-import { Tag } from "@/components/tag";
-
 const meta = {
   index: {
     title: "Overview",
   },
   agents: {
     title: "Agents",
+    theme: { collapsed: true },
   },
   workflows: {
     title: "Workflows",
+    theme: { collapsed: true },
   },
-  tools: {
-    title: "Tools",
+  processors: {
+    title: "Processors",
+    theme: { collapsed: true },
+  },
+  memory: {
+    title: "Memory",
+    theme: { collapsed: true },
   },
   workflows_legacy: {
     title: "Workflows (Legacy)",
@@ -19,22 +24,19 @@ const meta = {
   },
   rag: {
     title: "RAG",
-  },
-  memory: {
-    title: "Memory",
+    theme: { collapsed: true },
   },
   evals: {
     title: "Evals",
+    theme: { collapsed: true },
   },
-  scorers: <Tag text="experimental">Scorers</Tag>,
   voice: {
     title: "Voice",
+    theme: { collapsed: true },
   },
   observability: {
     title: "Observability",
-  },
-  deployment: {
-    title: "Deployment",
+    theme: { collapsed: true },
   },
 };
 

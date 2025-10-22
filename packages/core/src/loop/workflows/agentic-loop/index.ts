@@ -12,8 +12,8 @@ import { isControllerOpen } from '../stream';
 
 interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>
   extends LoopRun<Tools, OUTPUT> {
-  controller: ReadableStreamDefaultController<ChunkType>;
-  writer: WritableStream<ChunkType>;
+  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  writer: WritableStream<ChunkType<OUTPUT>>;
 }
 
 export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
@@ -64,10 +64,13 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         // VNext execution as internal
         internal: InternalSpans.WORKFLOW,
       },
+      shouldPersistSnapshot: params => {
+        return params.workflowStatus === 'suspended';
+      },
     },
   })
     .dowhile(agenticExecutionWorkflow, async ({ inputData }) => {
-      const typedInputData = inputData as LLMIterationData<Tools>;
+      const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
       let hasFinishedSteps = false;
 
       const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(

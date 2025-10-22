@@ -10,6 +10,12 @@ interface ServerResourceActionsDependencies {
   clearDefinedResourceTemplates: () => void;
 }
 
+/**
+ * Server-side resource actions for notifying clients about resource changes.
+ *
+ * This class provides methods for MCP servers to notify connected clients when
+ * resources are updated or when the resource list changes.
+ */
 export class ServerResourceActions {
   private readonly getSubscriptions: () => Set<string>;
   private readonly getLogger: () => IMastraLogger;
@@ -17,6 +23,9 @@ export class ServerResourceActions {
   private readonly clearDefinedResources: () => void;
   private readonly clearDefinedResourceTemplates: () => void;
 
+  /**
+   * @internal
+   */
   constructor(dependencies: ServerResourceActionsDependencies) {
     this.getSubscriptions = dependencies.getSubscriptions;
     this.getLogger = dependencies.getLogger;
@@ -26,8 +35,20 @@ export class ServerResourceActions {
   }
 
   /**
-   * Checks if any resources have been updated.
-   * If the resource is subscribed to by clients, an update notification will be sent.
+   * Notifies subscribed clients that a specific resource has been updated.
+   *
+   * If clients are subscribed to the resource URI, they will receive a
+   * `notifications/resources/updated` message to re-fetch the resource content.
+   *
+   * @param params - Notification parameters
+   * @param params.uri - URI of the resource that was updated
+   * @throws {MastraError} If sending the notification fails
+   *
+   * @example
+   * ```typescript
+   * // After updating a file resource
+   * await server.resources.notifyUpdated({ uri: 'file://data.txt' });
+   * ```
    */
   public async notifyUpdated({ uri }: { uri: string }): Promise<void> {
     if (this.getSubscriptions().has(uri)) {
@@ -59,8 +80,18 @@ export class ServerResourceActions {
   }
 
   /**
-   * Notifies the server that the overall list of available resources has changed.
-   * This will clear the internal cache of defined resources and send a list_changed notification to clients.
+   * Notifies clients that the overall list of available resources has changed.
+   *
+   * This clears the internal resource cache and sends a `notifications/resources/list_changed`
+   * message to all clients, prompting them to re-fetch the resource list.
+   *
+   * @throws {MastraError} If sending the notification fails
+   *
+   * @example
+   * ```typescript
+   * // After adding a new resource to your resource handler
+   * await server.resources.notifyListChanged();
+   * ```
    */
   public async notifyListChanged(): Promise<void> {
     this.getLogger().info(

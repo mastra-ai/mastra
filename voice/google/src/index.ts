@@ -10,10 +10,59 @@ import { MastraVoice } from '@mastra/core/voice';
  * Configuration for Google Cloud Voice models
  * @interface GoogleModelConfig
  * @property {string} [apiKey] - Optional Google Cloud API key. If not provided, will use GOOGLE_API_KEY environment variable
+ * @property {string} [keyFilename] - Optional path to a service account key file. If not provided, will use GOOGLE_APPLICATION_CREDENTIALS environment variable
+ * @property {{ client_email?: string; private_key?: string }} [credentials] - Optional in-memory service account credentials
  */
 export interface GoogleModelConfig {
   apiKey?: string;
+  keyFilename?: string;
+  credentials?: {
+    client_email?: string;
+    private_key?: string;
+    [key: string]: unknown;
+  };
 }
+
+type AuthConfig = Pick<GoogleModelConfig, 'apiKey' | 'keyFilename' | 'credentials'>;
+
+type GoogleClientOptions = AuthConfig;
+
+const resolveAuthConfig = (modelConfig: GoogleModelConfig | undefined, fallback: AuthConfig): AuthConfig => {
+  const resolved: AuthConfig = {};
+
+  const apiKey = modelConfig?.apiKey ?? fallback.apiKey;
+  if (apiKey) {
+    resolved.apiKey = apiKey;
+  }
+
+  const keyFilename = modelConfig?.keyFilename ?? fallback.keyFilename;
+  if (keyFilename) {
+    resolved.keyFilename = keyFilename;
+  }
+
+  const credentials = modelConfig?.credentials ?? fallback.credentials;
+  if (credentials) {
+    resolved.credentials = credentials;
+  }
+
+  return resolved;
+};
+
+const buildAuthOptions = (config: AuthConfig): GoogleClientOptions => {
+  if (config.credentials) {
+    return { credentials: config.credentials };
+  }
+
+  if (config.keyFilename) {
+    return { keyFilename: config.keyFilename };
+  }
+
+  if (config.apiKey) {
+    return { apiKey: config.apiKey };
+  }
+
+  return {};
+};
 
 const DEFAULT_VOICE = 'en-US-Casual-K';
 
@@ -32,7 +81,6 @@ export class GoogleVoice extends MastraVoice {
    * @param {GoogleModelConfig} [config.speechModel] - Configuration for speech synthesis
    * @param {GoogleModelConfig} [config.listeningModel] - Configuration for speech recognition
    * @param {string} [config.speaker] - Default voice ID to use for speech synthesis
-   * @throws {Error} If no API key is provided via config or environment variable
    */
   constructor({
     listeningModel,
@@ -44,34 +92,36 @@ export class GoogleVoice extends MastraVoice {
     speaker?: string;
   } = {}) {
     const defaultApiKey = process.env.GOOGLE_API_KEY;
+    const defaultKeyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS;
     const defaultSpeaker = DEFAULT_VOICE;
+
+    const sharedFallback: AuthConfig = {
+      apiKey: defaultApiKey ?? speechModel?.apiKey ?? listeningModel?.apiKey,
+      keyFilename: defaultKeyFilename ?? speechModel?.keyFilename ?? listeningModel?.keyFilename,
+      credentials: speechModel?.credentials ?? listeningModel?.credentials,
+    };
+
+    const speechAuthConfig = resolveAuthConfig(speechModel, sharedFallback);
+    const listeningAuthConfig = resolveAuthConfig(listeningModel, sharedFallback);
 
     super({
       speechModel: {
         name: '',
-        apiKey: speechModel?.apiKey ?? defaultApiKey,
+        apiKey: speechAuthConfig.apiKey ?? defaultApiKey,
       },
       listeningModel: {
         name: '',
-        apiKey: listeningModel?.apiKey ?? defaultApiKey,
+        apiKey: listeningAuthConfig.apiKey ?? defaultApiKey,
       },
       speaker: speaker ?? defaultSpeaker,
     });
 
-    const apiKey = defaultApiKey || speechModel?.apiKey || listeningModel?.apiKey;
-    if (!apiKey) {
-      throw new Error(
-        'Google API key is not set, set GOOGLE_API_KEY environment variable or pass apiKey to constructor',
-      );
-    }
+    const ttsOptions = buildAuthOptions(speechAuthConfig);
+    const speechOptions = buildAuthOptions(listeningAuthConfig);
 
-    this.ttsClient = new TextToSpeechClient({
-      apiKey: this.speechModel?.apiKey || defaultApiKey,
-    });
+    this.ttsClient = new TextToSpeechClient(ttsOptions);
 
-    this.speechClient = new SpeechClient({
-      apiKey: this.listeningModel?.apiKey || defaultApiKey,
-    });
+    this.speechClient = new SpeechClient(speechOptions);
   }
 
   /**

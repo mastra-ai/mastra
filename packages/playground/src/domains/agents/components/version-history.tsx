@@ -2,16 +2,14 @@ import { useState } from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-import type { PromptVersion } from '../types';
-
 import { VersionItem } from './version-item';
 
 interface VersionHistoryProps {
-  versions: PromptVersion[];
+  versions: any[];
   isUpdating: boolean;
   copiedVersions: Record<string | number, boolean>;
   onCopy: (content: string, key: string | number) => Promise<void>;
-  onSetActive: (version: PromptVersion, index: number) => Promise<void>;
+  onSetActive: (version: any, index: number) => Promise<void>;
   onDelete: (index: number) => void;
 }
 

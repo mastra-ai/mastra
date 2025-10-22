@@ -1,6 +1,13 @@
 import type { TracingStrategy } from '../../../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { AISpanRecord, AITraceRecord, AITracesPaginatedArg, PaginationInfo } from '../../types';
+import type {
+  AISpanRecord,
+  AITraceRecord,
+  AITracesPaginatedArg,
+  CreateAISpanRecord,
+  PaginationInfo,
+  UpdateAISpanRecord,
+} from '../../types';
 import type { StoreOperations } from '../operations';
 import { ObservabilityStorage } from './base';
 
@@ -25,13 +32,22 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
-  async createAISpan(span: AISpanRecord): Promise<void> {
+  async createAISpan(span: CreateAISpanRecord): Promise<void> {
     this.validateCreateAISpan(span);
     const id = this.generateId(span);
-    this.collection.set(id, span);
+    const record = span as AISpanRecord;
+    record.createdAt = new Date();
+    record.updatedAt = record.createdAt;
+    this.collection.set(id, record);
   }
 
-  private validateCreateAISpan(record: AISpanRecord): void {
+  async batchCreateAISpans(args: { records: CreateAISpanRecord[] }): Promise<void> {
+    for (const record of args.records) {
+      await this.createAISpan(record);
+    }
+  }
+
+  private validateCreateAISpan(record: CreateAISpanRecord): void {
     if (!record.spanId) {
       throw new MastraError({
         id: 'OBSERVABILITY_SPAN_ID_REQUIRED',
@@ -133,12 +149,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return spans.slice(start, end);
   }
 
-  async updateAISpan(params: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
-  }): Promise<void> {
-    const id = this.generateId({ traceId: params.traceId, spanId: params.spanId });
+  async updateAISpan(params: { spanId: string; traceId: string; updates: Partial<UpdateAISpanRecord> }): Promise<void> {
+    const id = this.generateId(params);
     const span = this.collection.get(id);
 
     if (!span) {
@@ -150,32 +162,18 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       });
     }
 
-    this.collection.set(id, { ...span, ...params.updates });
-  }
-
-  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
-    for (const record of args.records) {
-      this.validateCreateAISpan(record);
-      const id = this.generateId({ traceId: record.traceId, spanId: record.spanId });
-      this.collection.set(id, record);
-    }
+    this.collection.set(id, { ...span, ...params.updates, updatedAt: new Date() });
   }
 
   async batchUpdateAISpans(args: {
-    records: { traceId: string; spanId: string; updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>> }[];
+    records: {
+      traceId: string;
+      spanId: string;
+      updates: Partial<UpdateAISpanRecord>;
+    }[];
   }): Promise<void> {
     for (const record of args.records) {
-      const id = this.generateId({ traceId: record.traceId, spanId: record.spanId });
-      const span = this.collection.get(id);
-      if (!span) {
-        throw new MastraError({
-          id: 'OBSERVABILITY_BATCH_UPDATE_AI_SPAN_NOT_FOUND',
-          domain: ErrorDomain.MASTRA_OBSERVABILITY,
-          category: ErrorCategory.SYSTEM,
-          text: 'Span not found for batch update',
-        });
-      }
-      this.collection.set(id, { ...span, ...record.updates });
+      await this.updateAISpan(record);
     }
   }
 
@@ -183,7 +181,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     for (const traceId of args.traceIds) {
       const spans = Array.from(this.collection.values()).filter(span => span.traceId === traceId);
       for (const span of spans) {
-        this.collection.delete(this.generateId({ traceId: span.traceId, spanId: span.spanId }));
+        this.collection.delete(this.generateId(span));
       }
     }
   }

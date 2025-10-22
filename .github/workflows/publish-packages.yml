@@ -3,6 +3,7 @@ name: Prerelease
 permissions:
   contents: write
   pull-requests: write
+  id-token: write
 
 on:
   workflow_dispatch:
@@ -31,7 +32,7 @@ jobs:
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20.19.1
+          node-version: 20.19.5
           cache: 'pnpm'
           registry-url: 'https://registry.yarnpkg.com'
 
@@ -47,3 +48,5 @@ jobs:
 
       - name: Publish packages
         run: pnpm publish -r --tag alpha --access public
+        env:
+          NPM_CONFIG_PROVENANCE: true

@@ -442,7 +442,7 @@ describe('Mastra ID Generator', () => {
     it('should use custom ID generator in agent operations', async () => {
       const { mastra: _mastra, agent } = createMastraWithMemory(customIdGenerator);
 
-      await agent.generate('Hello');
+      await agent.generateLegacy('Hello');
       expect(customIdGenerator).toHaveBeenCalled();
     });
 
@@ -494,8 +494,8 @@ describe('Mastra ID Generator', () => {
         agents: { agent1, agent2 },
       });
 
-      await agent1.generate('Hello from agent 1');
-      await agent2.generate('Hello from agent 2');
+      await agent1.generateLegacy('Hello from agent 1');
+      await agent2.generateLegacy('Hello from agent 2');
 
       expect(customIdGenerator).toHaveBeenCalled();
     });
@@ -503,7 +503,7 @@ describe('Mastra ID Generator', () => {
     it('should use custom ID generator in streaming operations', async () => {
       const { mastra: _mastra, agent } = createMastraWithMemory(customIdGenerator);
 
-      await agent.stream('Hello', {
+      await agent.streamLegacy('Hello', {
         threadId: 'test-thread',
         resourceId: 'test-resource',
       });
@@ -786,7 +786,7 @@ describe('Mastra ID Generator', () => {
       });
 
       // Simulate user conversation
-      await agent.generate('Hello, can you help me?', {
+      await agent.generateLegacy('Hello, can you help me?', {
         threadId: 'user-conversation',
         resourceId: 'user-session',
       });
@@ -826,7 +826,7 @@ describe('Mastra ID Generator', () => {
 
       const results = await Promise.all(
         conversations.map(conv =>
-          agent.generate(conv.message, {
+          agent.generateLegacy(conv.message, {
             threadId: conv.threadId,
             resourceId: conv.resourceId,
           }),
@@ -906,7 +906,7 @@ describe('Mastra ID Generator', () => {
         agents: { streamingAgent: agent },
       });
 
-      await agent.stream('Please provide a streaming response', {
+      await agent.streamLegacy('Please provide a streaming response', {
         threadId: 'streaming-thread',
         resourceId: 'streaming-resource',
       });

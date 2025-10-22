@@ -6,6 +6,7 @@ import type {
 } from '@ai-sdk/provider-v5';
 import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from 'ai-v5';
 import type { AIV5ResponseMessage } from '../../../agent/message-list';
+import type { OutputSchema, PartialSchemaOutput } from '../../base/schema';
 import type { ChunkType } from '../../types';
 import { ChunkFrom } from '../../types';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
@@ -312,15 +313,18 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
   // }
 }
 
-export type OutputChunkType = TextStreamPart<ToolSet> | ObjectStreamPart<unknown> | undefined;
+export type OutputChunkType<OUTPUT extends OutputSchema = undefined> =
+  | TextStreamPart<ToolSet>
+  | ObjectStreamPart<PartialSchemaOutput<OUTPUT>>
+  | undefined;
 
-export function convertMastraChunkToAISDKv5({
+export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefined>({
   chunk,
   mode = 'stream',
 }: {
-  chunk: ChunkType;
+  chunk: ChunkType<OUTPUT>;
   mode?: 'generate' | 'stream';
-}): OutputChunkType {
+}): OutputChunkType<OUTPUT> {
   switch (chunk.type) {
     case 'start':
       return {
@@ -522,11 +526,11 @@ export function convertMastraChunkToAISDKv5({
       };
 
     default:
-      if (chunk.type && chunk.payload) {
+      if (chunk.type && 'payload' in chunk && chunk.payload) {
         return {
           type: chunk.type as string,
           ...(chunk.payload || {}),
-        } as OutputChunkType;
+        } as OutputChunkType<OUTPUT>;
       }
       return;
   }

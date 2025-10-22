@@ -1,5 +1,4 @@
-import { useSendWorkflowRunEvent } from '@/hooks/use-workflows';
-import { WorkflowGraph, useWorkflow } from '@mastra/playground-ui';
+import { WorkflowGraph, useWorkflow, useSendWorkflowRunEvent } from '@mastra/playground-ui';
 import { useNavigate, useParams } from 'react-router';
 
 export const Workflow = () => {
@@ -11,7 +10,7 @@ export const Workflow = () => {
   return (
     <WorkflowGraph
       workflowId={workflowId!}
-      workflow={workflow}
+      workflow={workflow ?? undefined}
       isLoading={isLoading}
       onShowTrace={({ runId, stepName }) => {
         navigate(`/workflows/${workflowId}/traces?runId=${runId}&stepName=${stepName}`);

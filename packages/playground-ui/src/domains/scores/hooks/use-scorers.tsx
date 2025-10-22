@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { GetScorerResponse, GetScoresResponse } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react-hooks';
+import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
 export const useScoresByEntityId = (entityId: string, entityType: string, page: number = 0) => {

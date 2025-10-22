@@ -7,7 +7,17 @@ import { toast } from 'sonner';
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
-import { Header, Breadcrumb, Crumb, usePlaygroundStore } from '@mastra/playground-ui';
+import {
+  Header,
+  Breadcrumb,
+  Crumb,
+  usePlaygroundStore,
+  McpServerIcon,
+  Icon,
+  Button,
+  HeaderAction,
+  DocsIcon,
+} from '@mastra/playground-ui';
 
 import { useMCPServerTool } from '@/hooks/use-mcp-server-tool';
 import ToolExecutor from '@/pages/tools/tool-executor';
@@ -60,6 +70,9 @@ const MCPServerToolExecutor = () => {
         <Header>
           <Breadcrumb>
             <Crumb as={Link} to={`/mcps`}>
+              <Icon>
+                <McpServerIcon />
+              </Icon>
               MCP Servers
             </Crumb>
             {serverId && (
@@ -71,6 +84,15 @@ const MCPServerToolExecutor = () => {
               {isLoading ? 'Loading Tool...' : toolDisplayNameFromState || 'Tool'}
             </Crumb>
           </Breadcrumb>
+
+          <HeaderAction>
+            <Button as={Link} to="https://mastra.ai/en/docs/tools-mcp/mcp-overview" target="_blank">
+              <Icon>
+                <DocsIcon />
+              </Icon>
+              MCP documentation
+            </Button>
+          </HeaderAction>
         </Header>
         <div className="w-full h-full grid grid-cols-[300px_1fr] p-2 gap-2">
           <div className="flex flex-col gap-4 border-[0.5px] border-mastra-border-1 rounded-[0.25rem] bg-mastra-bg-2 p-4 py-6">
@@ -96,6 +118,9 @@ const MCPServerToolExecutor = () => {
         <Header>
           <Breadcrumb>
             <Crumb as={Link} to={`/mcps`}>
+              <Icon>
+                <McpServerIcon />
+              </Icon>
               MCP Servers
             </Crumb>
             {serverId && (
@@ -107,6 +132,15 @@ const MCPServerToolExecutor = () => {
               {toolDisplayNameFromState || 'Error'}
             </Crumb>
           </Breadcrumb>
+
+          <HeaderAction>
+            <Button as={Link} to="https://mastra.ai/en/docs/tools-mcp/mcp-overview" target="_blank">
+              <Icon>
+                <DocsIcon />
+              </Icon>
+              MCP documentation
+            </Button>
+          </HeaderAction>
         </Header>
         <div className="text-red-500 mt-4">Error loading tool: {error?.message || 'Tool not found.'}</div>
       </div>
@@ -127,6 +161,9 @@ const MCPServerToolExecutor = () => {
       <Header>
         <Breadcrumb>
           <Crumb as={Link} to={`/mcps`}>
+            <Icon>
+              <McpServerIcon />
+            </Icon>
             MCP Servers
           </Crumb>
           <Crumb as={Link} to={`/mcps/${serverId}`}>
@@ -136,6 +173,15 @@ const MCPServerToolExecutor = () => {
             {toolActualName}
           </Crumb>
         </Breadcrumb>
+
+        <HeaderAction>
+          <Button as={Link} to="https://mastra.ai/en/docs/tools-mcp/mcp-overview" target="_blank">
+            <Icon>
+              <DocsIcon />
+            </Icon>
+            MCP documentation
+          </Button>
+        </HeaderAction>
       </Header>
 
       <ToolExecutor

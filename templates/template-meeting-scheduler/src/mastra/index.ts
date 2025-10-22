@@ -32,4 +32,9 @@ export const mastra = new Mastra({
       },
     ],
   },
+  observability: {
+    default: {
+      enabled: true,
+    },
+  },
 });

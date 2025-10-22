@@ -433,6 +433,8 @@ describe('MessageList V5 Support', () => {
       it('should convert system messages correctly', () => {
         const list = new MessageList({ threadId, resourceId });
         list.addSystem('You are a helpful assistant');
+        // Add a user message to avoid empty message list error
+        list.add({ role: 'user', content: 'Hello' }, 'input');
 
         const v5Prompt = list.get.all.aiV5.prompt();
         expect(v5Prompt[0]).toMatchObject({
@@ -529,30 +531,30 @@ describe('MessageList V5 Support', () => {
         });
       });
 
-      it('prompt() should handle empty message list by adding default user message', () => {
+      it('prompt() should throw error for empty message list', () => {
         const list = new MessageList({ threadId, resourceId });
 
-        const prompt = list.get.all.aiV5.prompt();
-
-        expect(prompt).toHaveLength(1);
-        expect(prompt[0]).toMatchObject({
-          role: 'user',
-          content: '.', // Default message uses a period
-        });
+        expect(() => list.get.all.aiV5.prompt()).toThrow(
+          'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+        );
       });
 
-      it('prompt() should prepend user message when first message is assistant', () => {
+      it('prompt() should ensure proper message ordering for Gemini compatibility', () => {
         const list = new MessageList({ threadId, resourceId });
         list.add({ role: 'assistant', content: 'I am ready to help' }, 'response');
 
         const prompt = list.get.all.aiV5.prompt();
 
+        // Should have 2 messages: injected user at start, assistant (no user at end)
         expect(prompt).toHaveLength(2);
+        expect(prompt[0]).toMatchObject({
+          role: 'user',
+          content: '.',
+        });
         expect(prompt[1]).toMatchObject({
           role: 'assistant',
           content: [{ type: 'text', text: 'I am ready to help' }],
         });
-        expect(prompt[1].role).toBe('assistant');
       });
 
       it('llmPrompt() should return proper LanguageModelV2Prompt format', async () => {
@@ -565,6 +567,7 @@ describe('MessageList V5 Support', () => {
 
         // llmPrompt returns messages array directly based on the implementation
         expect(Array.isArray(llmPrompt)).toBe(true);
+        // Should have 3 messages: system, user, assistant (no injected user at end)
         expect(llmPrompt).toHaveLength(3);
         expect(llmPrompt[0].role).toBe('system');
         expect(llmPrompt[1].role).toBe('user');
@@ -936,7 +939,7 @@ describe('MessageList V5 Support', () => {
       const messageList = new MessageList();
       const imageUrl = 'https://httpbin.org/image/png';
 
-      // This mimics what happens when the user passes messages to streamVNext
+      // This mimics what happens when the user passes messages to stream
       // with format: 'aisdk' containing file parts with URLs
       const v2Message: MastraMessageV2 = {
         id: 'test-msg-1',
@@ -1122,18 +1125,16 @@ describe('MessageList V5 Support', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should handle empty message list with prompt methods', () => {
+    it('should throw error for empty message list with prompt methods', () => {
       const list = new MessageList({ threadId, resourceId });
 
-      const v4Prompt = list.get.all.aiV4.prompt();
-      const v5Prompt = list.get.all.aiV5.prompt();
-
-      // Both should add a default user message
-      expect(v4Prompt).toHaveLength(1);
-      expect(v4Prompt[0].role).toBe('user');
-
-      expect(v5Prompt).toHaveLength(1);
-      expect(v5Prompt[0].role).toBe('user');
+      // Both v4 and v5 should throw error for empty list
+      expect(() => list.get.all.aiV4.prompt()).toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
+      expect(() => list.get.all.aiV5.prompt()).toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
     });
 
     it('should throw error for system messages with wrong role', () => {
@@ -1151,7 +1152,8 @@ describe('MessageList V5 Support', () => {
       const v4Prompt = list.get.all.aiV4.prompt();
       const v5Prompt = list.get.all.aiV5.prompt();
 
-      // Should prepend user message
+      // Should add user message before assistant for Gemini compatibility
+      // Both V4 and V5 use same behavior now (prepend only, no append)
       expect(v4Prompt).toHaveLength(2);
       expect(v4Prompt[0].role).toBe('user');
       expect(v4Prompt[1].role).toBe('assistant');

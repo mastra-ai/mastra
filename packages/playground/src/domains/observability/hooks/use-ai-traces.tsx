@@ -57,6 +57,7 @@ export const useAITraces = ({ filters, dateRange }: AITracesFilters) => {
       return data.pages.flatMap(page => page);
     },
     retry: false,
+    refetchInterval: 3000,
   });
 
   useEffect(() => {

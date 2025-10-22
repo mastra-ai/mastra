@@ -125,6 +125,60 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
+### Loop management
+
+Loop conditions can be implemented in different ways depending on how you want the loop to end. Common patterns include checking values returned in `inputData`, setting a maximum number of iterations, or aborting execution when a limit is reached.
+
+#### Conditional loops
+
+The `inputData` for a loop step is the output of a previous step. Use the values in `inputData` to determine whether the loop should continue or stop.
+
+```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const counterStep = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+.dountil(nestedWorkflowStep, async ({ inputData: { userResponse } }) => userResponse === "yes")
+.commit();
+```
+
+#### Limiting loops
+
+The `iterationCount` tracks how many times the loop step has run. You can use this to limit the number of iterations and prevent infinite loops. Combine it with `inputData` values to stop the loop after a set number of attempts.
+
+```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const counterStep = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+.dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => userResponse === "yes" || iterationCount >= 10)
+.commit();
+```
+
+#### Aborting loops
+
+Use `iterationCount` to limit how many times a loop runs. If the count exceeds your threshold, throw an error to fail the step and stop the workflow.
+
+```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const counterStep = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+.dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => {
+  if (iterationCount >= 10) {
+    throw new Error("Maximum iterations reached");
+  }
+  return userResponse === "yes";
+})
+.commit();
+```
+
 ### Repeating with `.foreach()`
 
 Sequentially executes the same step for each item from the `inputSchema`.

@@ -90,7 +90,7 @@ interface TracingConfig {
 ## SamplingStrategy
 
 ```typescript
-type SamplingStrategy = 
+type SamplingStrategy =
   | { type: 'always' }
   | { type: 'never' }
   | { type: 'ratio', probability: number }
@@ -129,8 +129,8 @@ Initializes AI tracing from configuration. Called automatically by Mastra constr
 
 ```typescript
 function registerAITracing(
-  name: string, 
-  instance: AITracing, 
+  name: string,
+  instance: AITracing,
   isDefault?: boolean
 ): void
 ```
@@ -229,5 +229,6 @@ Checks if a tracing instance exists and is enabled.
 ### Exporters
 - [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - Storage configuration
 - [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Cloud setup
-- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
 - [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration
+- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
+- [LangSmith](/reference/observability/ai-tracing/exporters/langsmith) - LangSmith integration

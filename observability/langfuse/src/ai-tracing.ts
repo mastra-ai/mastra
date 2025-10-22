@@ -4,20 +4,25 @@
  * This exporter sends tracing data to Langfuse for AI observability.
  * Root spans start traces in Langfuse.
  * LLM_GENERATION spans become Langfuse generations, all others become spans.
+ *
+ * Compatible with both AI SDK v4 and v5:
+ * - Handles both legacy token usage format (promptTokens/completionTokens)
+ *   and v5 format (inputTokens/outputTokens)
+ * - Supports v5 reasoning tokens and cache-related metrics
+ * - Adapts to v5 streaming protocol changes
  */
 
+import { AISpanType, omitKeys, BaseExporter } from '@mastra/core/ai-tracing';
 import type {
-  AITracingExporter,
   AITracingEvent,
   AnyExportedAISpan,
   LLMGenerationAttributes,
+  BaseExporterConfig,
 } from '@mastra/core/ai-tracing';
-import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
-import { ConsoleLogger } from '@mastra/core/logger';
 import { Langfuse } from 'langfuse';
 import type { LangfuseTraceClient, LangfuseSpanClient, LangfuseGenerationClient, LangfuseEventClient } from 'langfuse';
 
-export interface LangfuseExporterConfig {
+export interface LangfuseExporterConfig extends BaseExporterConfig {
   /** Langfuse API key */
   publicKey?: string;
   /** Langfuse secret key */
@@ -26,8 +31,6 @@ export interface LangfuseExporterConfig {
   baseUrl?: string;
   /** Enable realtime mode - flushes after each event for immediate visibility */
   realtime?: boolean;
-  /** Logger level for diagnostic messages (default: 'warn') */
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Additional options to pass to the Langfuse client */
   options?: any;
 }
@@ -42,22 +45,84 @@ type TraceData = {
 
 type LangfuseParent = LangfuseTraceClient | LangfuseSpanClient | LangfuseGenerationClient | LangfuseEventClient;
 
-export class LangfuseExporter implements AITracingExporter {
+/**
+ * Normalized token usage format compatible with Langfuse.
+ * This unified format supports both AI SDK v4 and v5 token structures.
+ *
+ * @example
+ * ```typescript
+ * // AI SDK v4 format normalizes to:
+ * { input: 100, output: 50, total: 150 }
+ *
+ * // AI SDK v5 format normalizes to:
+ * { input: 120, output: 60, total: 180, reasoning: 1000, cachedInput: 50 }
+ * ```
+ */
+interface NormalizedUsage {
+  /**
+   * Input tokens sent to the model
+   * @source AI SDK v5: `inputTokens` | AI SDK v4: `promptTokens`
+   */
+  input?: number;
+
+  /**
+   * Output tokens received from the model
+   * @source AI SDK v5: `outputTokens` | AI SDK v4: `completionTokens`
+   */
+  output?: number;
+
+  /**
+   * Total tokens (input + output + reasoning if applicable)
+   * @source AI SDK v4 & v5: `totalTokens`
+   */
+  total?: number;
+
+  /**
+   * Reasoning tokens used by reasoning models
+   * @source AI SDK v5: `reasoningTokens`
+   * @since AI SDK v5.0.0
+   * @example Models like o1-preview, o1-mini
+   */
+  reasoning?: number;
+
+  /**
+   * Cached input tokens (prompt cache hit)
+   * @source AI SDK v5: `cachedInputTokens`
+   * @since AI SDK v5.0.0
+   * @example Anthropic's prompt caching, OpenAI prompt caching
+   */
+  cachedInput?: number;
+
+  /**
+   * Prompt cache hit tokens (legacy format)
+   * @source AI SDK v4: `promptCacheHitTokens`
+   * @deprecated Prefer `cachedInput` from v5 format
+   */
+  promptCacheHit?: number;
+
+  /**
+   * Prompt cache miss tokens (legacy format)
+   * @source AI SDK v4: `promptCacheMissTokens`
+   * @deprecated Prefer v5 format which uses `cachedInputTokens`
+   */
+  promptCacheMiss?: number;
+}
+
+export class LangfuseExporter extends BaseExporter {
   name = 'langfuse';
   private client: Langfuse;
   private realtime: boolean;
   private traceMap = new Map<string, TraceData>();
-  private logger: ConsoleLogger;
 
   constructor(config: LangfuseExporterConfig) {
+    super(config);
+
     this.realtime = config.realtime ?? false;
-    this.logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
 
     if (!config.publicKey || !config.secretKey) {
-      this.logger.error('LangfuseExporter: Missing required credentials, exporter will be disabled', {
-        hasPublicKey: !!config.publicKey,
-        hasSecretKey: !!config.secretKey,
-      });
+      this.setDisabled(
+        `Missing required credentials (publicKey: ${!!config.publicKey}, secretKey: ${!!config.secretKey})`,
+      );
       // Create a no-op client to prevent runtime errors
       this.client = null as any;
       return;
@@ -71,12 +136,7 @@ export class LangfuseExporter implements AITracingExporter {
     });
   }
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
-    if (!this.client) {
-      // Exporter is disabled due to missing credentials
-      return;
-    }
-
+  protected async _exportEvent(event: AITracingEvent): Promise<void> {
     if (event.exportedSpan.isEvent) {
       await this.handleEventSpan(event.exportedSpan);
       return;
@@ -288,6 +348,64 @@ export class LangfuseExporter implements AITracingExporter {
     return payload;
   }
 
+  /**
+   * Normalize usage data to handle both AI SDK v4 and v5 formats.
+   *
+   * AI SDK v4 uses: promptTokens, completionTokens
+   * AI SDK v5 uses: inputTokens, outputTokens
+   *
+   * This function normalizes to a unified format that Langfuse can consume,
+   * prioritizing v5 format while maintaining backward compatibility.
+   *
+   * @param usage - Token usage data from AI SDK (v4 or v5 format)
+   * @returns Normalized usage object, or undefined if no usage data available
+   */
+  private normalizeUsage(usage: LLMGenerationAttributes['usage']): NormalizedUsage | undefined {
+    if (!usage) return undefined;
+
+    const normalized: NormalizedUsage = {};
+
+    // Handle input tokens (v5 'inputTokens' or v4 'promptTokens')
+    // Using ?? to prioritize v5 format while falling back to v4
+    const inputTokens = usage.inputTokens ?? usage.promptTokens;
+    if (inputTokens !== undefined) {
+      normalized.input = inputTokens;
+    }
+
+    // Handle output tokens (v5 'outputTokens' or v4 'completionTokens')
+    const outputTokens = usage.outputTokens ?? usage.completionTokens;
+    if (outputTokens !== undefined) {
+      normalized.output = outputTokens;
+    }
+
+    // Total tokens - calculate if not provided
+    if (usage.totalTokens !== undefined) {
+      normalized.total = usage.totalTokens;
+    } else if (normalized.input !== undefined && normalized.output !== undefined) {
+      normalized.total = normalized.input + normalized.output;
+    }
+
+    // AI SDK v5-specific: reasoning tokens
+    if (usage.reasoningTokens !== undefined) {
+      normalized.reasoning = usage.reasoningTokens;
+    }
+
+    // AI SDK v5-specific: cached tokens (cache hit)
+    if (usage.cachedInputTokens !== undefined) {
+      normalized.cachedInput = usage.cachedInputTokens;
+    }
+
+    // Legacy cache metrics (promptCacheHitTokens/promptCacheMissTokens)
+    if (usage.promptCacheHitTokens !== undefined) {
+      normalized.promptCacheHit = usage.promptCacheHitTokens;
+    }
+    if (usage.promptCacheMissTokens !== undefined) {
+      normalized.promptCacheMiss = usage.promptCacheMissTokens;
+    }
+
+    return Object.keys(normalized).length > 0 ? normalized : undefined;
+  }
+
   private buildSpanPayload(span: AnyExportedAISpan, isCreate: boolean): Record<string, any> {
     const payload: Record<string, any> = {};
 
@@ -315,7 +433,11 @@ export class LangfuseExporter implements AITracingExporter {
       }
 
       if (llmAttr.usage !== undefined) {
-        payload.usage = llmAttr.usage;
+        // Normalize usage to handle both v4 and v5 formats
+        const normalizedUsage = this.normalizeUsage(llmAttr.usage);
+        if (normalizedUsage) {
+          payload.usage = normalizedUsage;
+        }
         attributesToOmit.push('usage');
       }
 
@@ -339,10 +461,49 @@ export class LangfuseExporter implements AITracingExporter {
     return payload;
   }
 
+  async addScoreToTrace({
+    traceId,
+    spanId,
+    score,
+    reason,
+    scorerName,
+    metadata,
+  }: {
+    traceId: string;
+    spanId?: string;
+    score: number;
+    reason?: string;
+    scorerName: string;
+    metadata?: Record<string, any>;
+  }): Promise<void> {
+    if (!this.client) return;
+
+    try {
+      await this.client.score({
+        id: `${traceId}-${scorerName}`,
+        traceId,
+        observationId: spanId,
+        name: scorerName,
+        value: score,
+        ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
+        metadata: { ...(reason ? { reason } : {}) },
+        dataType: 'NUMERIC',
+      });
+    } catch (error) {
+      this.logger.error('Langfuse exporter: Error adding score to trace', {
+        error,
+        traceId,
+        spanId,
+        scorerName,
+      });
+    }
+  }
+
   async shutdown(): Promise<void> {
     if (this.client) {
       await this.client.shutdownAsync();
     }
     this.traceMap.clear();
+    await super.shutdown();
   }
 }

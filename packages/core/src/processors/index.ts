@@ -48,3 +48,4 @@ export type OutputProcessor =
 export type ProcessorTypes = InputProcessor | OutputProcessor;
 
 export * from './processors';
+export { ProcessorState } from './runner';

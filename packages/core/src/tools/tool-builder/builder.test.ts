@@ -177,7 +177,11 @@ async function runSingleOutputsTest(
     //   prompt: 'You are a test agent. Your task is to respond with valid JSON matching the schema provided.',
     // });
 
-    const response = await agent.generateVNext(allSchemas[schemaName].description, generateOptions);
+    // Check if model is V1 or V2 and use appropriate method
+    const isV2Model = 'specificationVersion' in model && model.specificationVersion === 'v2';
+    const response = isV2Model
+      ? await agent.generate(allSchemas[schemaName].description, generateOptions)
+      : await agent.generateLegacy(allSchemas[schemaName].description, generateOptions);
 
     if (!response.object) {
       throw new Error('No object generated for schema: ' + schemaName + ' with text: ' + response.text);
@@ -231,10 +235,17 @@ async function runSingleInputTest(
       tools: { [toolName]: testTool },
     });
 
-    const response = await agent.generate(`Please call the tool named '${toolName}'.`, {
-      toolChoice: 'required',
-      maxSteps: 1,
-    });
+    // Check if model is V1 or V2 and use appropriate method
+    const isV2Model = 'specificationVersion' in model && model.specificationVersion === 'v2';
+    const response = isV2Model
+      ? await agent.generate(`Please call the tool named '${toolName}'.`, {
+          toolChoice: 'required',
+          maxSteps: 1,
+        })
+      : await agent.generateLegacy(`Please call the tool named '${toolName}'.`, {
+          toolChoice: 'required',
+          maxSteps: 1,
+        });
 
     const toolCall = response.toolCalls.find(tc => tc.toolName === toolName);
     const toolResult = response.toolResults.find(tr => tr.toolCallId === toolCall?.toolCallId);
@@ -641,6 +652,7 @@ describe('Tool Tracing Context Injection', () => {
         toolDescription: 'Test tool that captures tracing context',
         toolType: 'tool',
       },
+      tracingPolicy: undefined,
     });
 
     // Verify tracingContext was injected with the tool span
@@ -741,6 +753,7 @@ describe('Tool Tracing Context Injection', () => {
         toolDescription: 'Vercel tool test',
         toolType: 'tool',
       },
+      tracingPolicy: undefined,
     });
 
     // Verify Vercel tool execute was called (without tracingContext)
@@ -854,6 +867,7 @@ describe('Tool Tracing Context Injection', () => {
         toolDescription: 'Tool from a toolset',
         toolType: 'toolset',
       },
+      tracingPolicy: undefined,
     });
   });
 });

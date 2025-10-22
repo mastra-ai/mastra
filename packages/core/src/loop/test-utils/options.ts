@@ -1,4 +1,4 @@
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils/test';
+import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import type {
   LanguageModelV2CallOptions,
   LanguageModelV2FunctionTool,
@@ -18,19 +18,20 @@ import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import { MockTracer } from './mockTracer';
-import { createTestModels, testUsage, defaultSettings, modelWithSources, modelWithFiles, testUsage2 } from './utils';
+import {
+  createTestModels,
+  testUsage,
+  defaultSettings,
+  modelWithSources,
+  modelWithFiles,
+  testUsage2,
+  createMessageListWithUserMessage,
+} from './utils';
 
 export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('options.abortSignal', () => {
     it('should forward abort signal to tool execution during streaming', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const abortController = new AbortController();
       const toolExecuteMock = vi.fn().mockResolvedValue('tool result');
@@ -62,6 +63,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         options: {
           abortSignal: abortController.signal,
         },
+        agentId: 'agent-id',
       });
 
       await convertAsyncIterableToArray(result.aisdk.v5.fullStream as any);
@@ -77,6 +79,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           writableStream: expect.any(Object),
           resumeData: undefined,
           suspend: expect.any(Function),
+          tracingContext: expect.any(Object),
         },
       );
     });
@@ -84,14 +87,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   describe('options.onError', () => {
     it('should invoke onError', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result: Array<{ error: unknown }> = [];
 
@@ -108,12 +104,16 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             }),
           },
         ],
+        modelSettings: {
+          maxRetries: 0,
+        },
         messageList,
         options: {
           onError(event) {
             result.push(event);
           },
         },
+        agentId: 'agent-id',
       });
 
       await resultObject.aisdk.v5.consumeStream();
@@ -124,14 +124,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   describe('options.providerMetadata', () => {
     it('should pass provider metadata to model', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
         runId,
@@ -169,6 +162,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         providerOptions: {
           aProvider: { someKey: 'someValue' },
         },
+        agentId: 'agent-id',
       });
 
       expect(await convertAsyncIterableToArray(result.textStream as any)).toEqual(['provider metadata test']);
@@ -177,14 +171,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   describe('options.activeTools', () => {
     it('should filter available tools to only the ones in activeTools', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       let tools: (LanguageModelV2FunctionTool | LanguageModelV2ProviderDefinedTool)[] | undefined;
 
@@ -230,6 +217,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         options: {
           activeTools: ['tool1'],
         },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -274,14 +262,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
     describe('2 steps: initial, tool-result', () => {
       beforeEach(async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
 
         result = undefined as any;
         onFinishResult = undefined as any;
@@ -378,6 +359,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             now: mockValues(0, 100, 500, 600, 1000),
             generateId: mockId({ prefix: 'id' }),
           },
+          agentId: 'agent-id',
         });
       });
 
@@ -553,6 +535,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "id": "id-0",
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
                 "timestamp": 1970-01-01T00:00:00.000Z,
               },
               "type": "finish-step",
@@ -598,6 +585,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "id": "id-1",
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
                 "timestamp": 1970-01-01T00:00:01.000Z,
               },
               "type": "finish-step",
@@ -1393,14 +1385,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       }>;
 
       beforeEach(async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
 
         doStreamCalls = [];
         prepareStepCalls = [];
@@ -1466,6 +1451,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               }),
             },
           ],
+          agentId: 'agent-id',
           tools: {
             tool1: tool({
               inputSchema: z.object({ value: z.string() }),
@@ -3002,20 +2988,14 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       }>;
 
       beforeEach(async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
 
         stopConditionCalls = [];
 
         let responseCount = 0;
         result = await loopFn({
           runId,
+          agentId: 'agent-id',
           models: [
             {
               id: 'test-model',
@@ -3289,7 +3269,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   describe('options.onFinish', () => {
     it.todo('should send correct information', async () => {
-      const messageList = new MessageList();
+      const messageList = createMessageListWithUserMessage();
 
       let result!: any;
 
@@ -3558,7 +3538,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     });
 
     it.todo('should send sources', async () => {
-      const messageList = new MessageList();
+      const messageList = createMessageListWithUserMessage();
       let result!: any;
 
       const resultObject = await loopFn({
@@ -3748,7 +3728,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       const resultObject = await loopFn({
         runId,
-        messageList: new MessageList(),
+        messageList: createMessageListWithUserMessage(),
         models: [{ id: 'test-model', maxRetries: 0, model: modelWithFiles }],
         options: {
           onFinish: async event => {
@@ -3929,17 +3909,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     });
 
     it('should not prevent error from being forwarded', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: [
           {
             id: 'test-model',
@@ -3951,6 +3925,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             }),
           },
         ],
+        modelSettings: {
+          maxRetries: 0,
+        },
         messageList,
         options: {
           onFinish() {}, // just defined; do nothing
@@ -3997,19 +3974,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     >;
 
     beforeEach(async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       result = [];
 
       const resultObject = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
@@ -5926,14 +5897,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   describe('raw chunks forwarding', () => {
     it('should forward raw chunks when includeRawChunks is enabled', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test prompt',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const modelWithRawChunks = createTestModels({
         stream: convertArrayToReadableStream([
@@ -5963,6 +5927,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
 
       const result = await loopFn({
+        agentId: 'agent-id',
         runId,
         models: modelWithRawChunks,
         messageList,
@@ -5985,14 +5950,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     });
 
     it('should not forward raw chunks when includeRawChunks is disabled', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test prompt',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const modelWithRawChunks = createTestModels({
         stream: convertArrayToReadableStream([
@@ -6022,6 +5980,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
 
       const result = await loopFn({
+        agentId: 'agent-id',
         runId,
         models: modelWithRawChunks,
         messageList,
@@ -6034,14 +5993,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     });
 
     it('should pass through the includeRawChunks flag correctly to the model', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test prompt',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
       let capturedOptions: any;
 
       const models = [
@@ -6064,6 +6016,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       ];
 
       const result = await loopFn({
+        agentId: 'agent-id',
         runId,
         models,
         messageList,
@@ -6076,14 +6029,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     });
 
     it('should call onChunk with raw chunks when includeRawChunks is enabled', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test prompt',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
       const onChunkCalls: Array<any> = [];
 
       const modelWithRawChunks = createTestModels({
@@ -6132,6 +6078,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       const result = await loopFn({
         runId,
+        agentId: 'agent-id',
         models: modelWithRawChunks,
         messageList,
         includeRawChunks: true,
@@ -6194,14 +6141,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     });
 
     it('should pass includeRawChunks flag correctly to the model', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test prompt',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
       let capturedOptions: any;
 
       const models = [
@@ -6236,6 +6176,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       ];
 
       const result = await loopFn({
+        agentId: 'agent-id',
         runId,
         models,
         messageList,
@@ -6246,6 +6187,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       expect(capturedOptions.includeRawChunks).toBe(true);
 
       const result2 = await loopFn({
+        agentId: 'agent-id',
         runId,
         models,
         messageList,
@@ -6256,6 +6198,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       expect(capturedOptions.includeRawChunks).toBe(false);
 
       const result3 = await loopFn({
+        agentId: 'agent-id',
         runId,
         models,
         messageList,
@@ -6268,19 +6211,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   describe('mixed multi content streaming with interleaving parts', () => {
     describe('mixed text and reasoning blocks', () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test prompt',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
       let result: any;
 
       beforeEach(async () => {
         result = await loopFn({
           runId,
+          agentId: 'agent-id',
           models: createTestModels({
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
@@ -6435,6 +6372,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "headers": undefined,
                 "id": "id-1",
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
                 "modelProvider": "mock-provider",
                 "modelVersion": "v2",
                 "timestamp": 1970-01-01T00:00:02.000Z,
@@ -6574,14 +6516,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       let onAbortCalls: Array<{ steps: any[] }> = [];
 
       beforeEach(async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
         onErrorCalls = [];
         onAbortCalls = [];
 
@@ -6590,6 +6525,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
         result = await loopFn({
           runId,
+          agentId: 'agent-id',
           options: {
             abortSignal: abortController.signal,
             onError: error => {
@@ -6732,7 +6668,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
         result = loopFn({
           runId,
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
           models: [
             {
               id: 'test-model',
@@ -6951,6 +6887,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "headers": undefined,
                 "id": "id-0",
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
                 "modelProvider": "mock-provider",
                 "modelVersion": "v2",
                 "timestamp": 1970-01-01T00:00:00.000Z,

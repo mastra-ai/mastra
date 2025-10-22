@@ -12,7 +12,7 @@ The `.stream()` method allows you to monitor the execution of a workflow run, pr
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
 
-const stream = await run.stream({
+const { stream } = await run.stream({
   inputData: {
     value: "initial data",
   },
@@ -81,7 +81,7 @@ const stream = await run.stream({
     },
     {
       name: "getWorkflowState",
-      type: "() => Promise<WorkflowResult<TOutput, TSteps>>",
+      type: "() => Promise<WorkflowResult<TState, TOutput, TSteps>>",
       description: "A function that returns a promise resolving to the final workflow result",
     },
     {

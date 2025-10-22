@@ -1,6 +1,7 @@
 const meta = {
   "mastra-scorer": "MastraScorer Class",
   "create-scorer": "createScorer",
+  "run-experiment": "runExperiment",
   "answer-relevancy": "AnswerRelevancy",
   "answer-similarity": "AnswerSimilarity",
   bias: "Bias",
@@ -14,9 +15,9 @@ const meta = {
   "textual-difference": "TextualDifference",
   "tone-consistency": "ToneConsistency",
   "tool-call-accuracy": "ToolCallAccuracy",
-  "prompt-alignment": "PromptAlignment",
-  "noise-sensitivity": "NoiseSensitivity",
   toxicity: "Toxicity",
+  "noise-sensitivity": "NoiseSensitivity",
+  "prompt-alignment": "PromptAlignment",
 };
 
 export default meta;

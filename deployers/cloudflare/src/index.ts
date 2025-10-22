@@ -96,9 +96,6 @@ export class CloudflareDeployer extends Deployer {
   private getEntry(): string {
     return `
     import '#polyfills';
-    import { mastra } from '#mastra';
-    import { createHonoServer, getToolExports } from '#server';
-    import { tools } from '#tools';
     import { evaluate } from '@mastra/core/eval';
     import { AvailableHooks, registerHook } from '@mastra/core/hooks';
     import { TABLE_EVALS } from '@mastra/core/storage';
@@ -107,6 +104,9 @@ export class CloudflareDeployer extends Deployer {
 
     export default {
       fetch: async (request, env, context) => {
+        const { mastra } = await import('#mastra');
+        const { tools } = await import('#tools');
+        const {createHonoServer, getToolExports} = await import('#server');
         const _mastra = mastra();
 
         if (_mastra.getStorage()) {

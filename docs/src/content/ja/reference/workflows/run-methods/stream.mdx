@@ -57,7 +57,7 @@ const stream = await run.stream({
     },
     {
       name: "getWorkflowState",
-      type: "() => Promise<WorkflowResult<TOutput, TSteps>>",
+      type: "() => Promise<WorkflowResult<TState, TOutput, TSteps>>",
       description: "最終的なワークフロー結果に解決される Promise を返す関数。",
     },
   ]}

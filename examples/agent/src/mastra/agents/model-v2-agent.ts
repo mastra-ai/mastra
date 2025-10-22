@@ -1,10 +1,13 @@
 import { Agent } from '@mastra/core/agent';
-import { openai as openai_v5 } from '@ai-sdk/openai-v5';
+import { openai, openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { cookingTool } from '../tools';
-import { myWorkflow } from '../workflows';
+import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
+import { ModerationProcessor } from '@mastra/core/processors';
+import { logDataMiddleware } from '../../model-middleware';
+import { wrapLanguageModel } from 'ai-v5';
+import { cookingTool } from '../tools';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
@@ -22,6 +25,7 @@ export const weatherInfo = createTool({
       wind: '10 mph',
     };
   },
+  // requireApproval: true,
 });
 
 const memory = new Memory();
@@ -29,19 +33,26 @@ const memory = new Memory();
 export const chefModelV2Agent = new Agent({
   name: 'Chef Agent V2 Model',
   description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
-  instructions: `
-      YOU MUST USE THE TOOL cooking-tool
+  instructions: {
+    content: `
       You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
       ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
       You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
       `,
-  model: openai_v5('gpt-4o-mini'),
+    role: 'system',
+  },
+  model: wrapLanguageModel({
+    model: openai_v5('gpt-4o-mini'),
+    middleware: logDataMiddleware,
+  }),
+
   tools: {
-    cookingTool,
     weatherInfo,
+    cookingTool,
   },
   workflows: {
     myWorkflow,
+    lessComplexWorkflow,
   },
   scorers: ({ mastra }) => {
     if (!mastra) {
@@ -54,14 +65,25 @@ export const chefModelV2Agent = new Agent({
     };
   },
   memory,
+  inputProcessors: [
+    new ModerationProcessor({
+      model: openai('gpt-4.1-nano'),
+      categories: ['hate', 'harassment', 'violence'],
+      threshold: 0.7,
+      strategy: 'block',
+      instructions: 'Detect and flag inappropriate content in user messages',
+    }),
+  ],
 });
 
 const weatherAgent = new Agent({
   name: 'Weather Agent',
-  instructions: `You are a weather agent that can help you get weather information for a given city`,
-  description: `An agent that can help you get weather information for a given city`,
+  instructions: `Your goal is to execute the recipe-maker workflow with the given ingredient`,
+  description: `An agent that can help you get a recipe for a given ingredient`,
   model: openai_v5('gpt-4o-mini'),
-  tools: { weatherInfo },
+  tools: {
+    weatherInfo,
+  },
   workflows: {
     myWorkflow,
   },
@@ -73,11 +95,14 @@ export const networkAgent = new Agent({
     'A chef agent that can help you cook great meals with whatever ingredients you have available based on your location and current weather.',
   instructions: `You are a the manager of several agent, tools, and workflows. Use the best primitives based on what the user wants to accomplish your task.`,
   model: openai_v5('gpt-4o-mini'),
-  workflows: {
-    myWorkflow,
-  },
   agents: {
     weatherAgent,
   },
+  // workflows: {
+  //   myWorkflow,
+  // },
+  // tools: {
+  //   weatherInfo,
+  // },
   memory,
 });

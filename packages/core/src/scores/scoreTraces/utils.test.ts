@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { buildSpanTree, transformTraceToScorerInput, transformTraceToScorerOutput, validateTrace } from './utils';
+import { buildSpanTree, transformTraceToScorerInputAndOutput, validateTrace } from './utils';
 
 /**
  * Test utilities for transformer functions - focused on maintainability
@@ -292,34 +292,34 @@ describe('Transformer Functions', () => {
     });
   });
 
-  describe('transformTraceToScorerInput', () => {
+  describe('transformTraceToScorerInputAndOutput - Input', () => {
     it('should extract input messages correctly', () => {
       const trace = TransformerTestScenarios.simpleAgentConversation().buildTrace();
-      const result = transformTraceToScorerInput(trace);
+      const result = transformTraceToScorerInputAndOutput(trace);
 
-      expect(result.inputMessages).toHaveLength(1);
-      expect(result.inputMessages[0]?.content).toBe('Hello, how are you?');
-      expect(result.inputMessages[0]?.role).toBe('user');
+      expect(result.input.inputMessages).toHaveLength(1);
+      expect(result.input.inputMessages[0]?.content).toBe('Hello, how are you?');
+      expect(result.input.inputMessages[0]?.role).toBe('user');
     });
 
     it('should extract system messages correctly', () => {
       const trace = TransformerTestScenarios.simpleAgentConversation().buildTrace();
-      const result = transformTraceToScorerInput(trace);
+      const result = transformTraceToScorerInputAndOutput(trace);
 
-      expect(result.systemMessages).toHaveLength(1);
-      expect(result.systemMessages[0]?.content).toBe('You are a friendly assistant');
-      expect(result.systemMessages[0]?.role).toBe('system');
+      expect(result.input.systemMessages).toHaveLength(1);
+      expect(result.input.systemMessages[0]?.content).toBe('You are a friendly assistant');
+      expect(result.input.systemMessages[0]?.role).toBe('system');
     });
 
     it('should extract conversation memory correctly', () => {
       const trace = TransformerTestScenarios.conversationWithMemory().buildTrace();
-      const result = transformTraceToScorerInput(trace);
+      const result = transformTraceToScorerInputAndOutput(trace);
 
-      expect(result.rememberedMessages).toHaveLength(2);
-      expect(result.rememberedMessages[0]?.content).toBe('What is the weather?');
-      expect(result.rememberedMessages[0]?.role).toBe('user');
-      expect(result.rememberedMessages[1]?.content).toBe('The weather is sunny');
-      expect(result.rememberedMessages[1]?.role).toBe('assistant');
+      expect(result.input.rememberedMessages).toHaveLength(2);
+      expect(result.input.rememberedMessages[0]?.content).toBe('What is the weather?');
+      expect(result.input.rememberedMessages[0]?.role).toBe('user');
+      expect(result.input.rememberedMessages[1]?.content).toBe('The weather is sunny');
+      expect(result.input.rememberedMessages[1]?.role).toBe('assistant');
     });
 
     it('should handle string input format', () => {
@@ -334,9 +334,9 @@ describe('Transformer Functions', () => {
         })
         .buildTrace();
 
-      const result = transformTraceToScorerInput(trace);
-      expect(result.inputMessages).toHaveLength(1);
-      expect(result.inputMessages[0]?.content).toBe('Simple string input');
+      const result = transformTraceToScorerInputAndOutput(trace);
+      expect(result.input.inputMessages).toHaveLength(1);
+      expect(result.input.inputMessages[0]?.content).toBe('Simple string input');
     });
 
     it('should throw for trace without agent span', () => {
@@ -347,37 +347,37 @@ describe('Transformer Functions', () => {
         })
         .buildTrace();
 
-      expect(() => transformTraceToScorerInput(trace)).toThrow();
+      expect(() => transformTraceToScorerInputAndOutput(trace)).toThrow();
     });
   });
 
-  describe('transformTraceToScorerOutput', () => {
+  describe('transformTraceToScorerInputAndOutput - Output', () => {
     it('should create assistant response message', () => {
       const trace = TransformerTestScenarios.simpleAgentConversation().buildTrace();
-      const result = transformTraceToScorerOutput(trace);
+      const result = transformTraceToScorerInputAndOutput(trace);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]?.role).toBe('assistant');
-      expect(result[0]?.content).toBe('I am doing well, thank you!');
+      expect(result.output).toHaveLength(1);
+      expect(result.output[0]?.role).toBe('assistant');
+      expect(result.output[0]?.content).toBe('I am doing well, thank you!');
     });
 
     it('should include tool invocations in response', () => {
       const trace = TransformerTestScenarios.agentWithToolCalls().buildTrace();
-      const result = transformTraceToScorerOutput(trace);
+      const result = transformTraceToScorerInputAndOutput(trace);
 
-      expect(result[0]?.toolInvocations).toHaveLength(1);
-      expect(result[0]?.toolInvocations?.[0]?.toolName).toBe('weatherAPI');
-      expect(result[0]?.toolInvocations?.[0]?.args).toEqual({ location: 'Seattle' });
+      expect(result.output[0]?.toolInvocations).toHaveLength(1);
+      expect(result.output[0]?.toolInvocations?.[0]?.toolName).toBe('weatherAPI');
+      expect(result.output[0]?.toolInvocations?.[0]?.args).toEqual({ location: 'Seattle' });
 
       // @ts-ignore
-      expect(result[0]?.toolInvocations?.[0]?.result).toEqual({ temperature: 72, condition: 'sunny' });
+      expect(result.output[0]?.toolInvocations?.[0]?.result).toEqual({ temperature: 72, condition: 'sunny' });
     });
 
     it('should include both tool invocation and text parts', () => {
       const trace = TransformerTestScenarios.agentWithToolCalls().buildTrace();
-      const result = transformTraceToScorerOutput(trace);
+      const result = transformTraceToScorerInputAndOutput(trace);
 
-      const parts = result[0]?.parts;
+      const parts = result.output[0]?.parts;
       expect(parts).toHaveLength(2); // 1 tool invocation + 1 text
 
       const toolPart = parts?.find(p => p.type === 'tool-invocation');
@@ -393,24 +393,55 @@ describe('Transformer Functions', () => {
     it('should provide descriptive error messages', () => {
       const invalidTrace = { traceId: 'test', spans: [] };
 
-      expect(() => transformTraceToScorerInput(invalidTrace)).toThrow(/Failed to transform trace to scorer input/);
-      expect(() => transformTraceToScorerOutput(invalidTrace)).toThrow(/Failed to transform trace to scorer output/);
+      expect(() => transformTraceToScorerInputAndOutput(invalidTrace)).toThrow(/Trace has no spans/);
     });
 
     it('should handle missing LLM spans gracefully', () => {
       const trace = testBuilder.addAgentSpan({ spanId: 'agent-only' }).buildTrace();
 
-      expect(() => transformTraceToScorerInput(trace)).toThrow('No LLM generation span found');
+      expect(() => transformTraceToScorerInputAndOutput(trace)).toThrow('No LLM generation span found');
+    });
+  });
+
+  describe('transformTraceToScorerInputAndOutput - Combined', () => {
+    it('should return both input and output in a single call', () => {
+      const trace = TransformerTestScenarios.simpleAgentConversation().buildTrace();
+      const result = transformTraceToScorerInputAndOutput(trace);
+
+      // Verify input structure
+      expect(result.input).toBeDefined();
+      expect(result.input.inputMessages).toHaveLength(1);
+      expect(result.input.inputMessages[0]?.content).toBe('Hello, how are you?');
+      expect(result.input.systemMessages).toHaveLength(1);
+      expect(result.input.systemMessages[0]?.content).toBe('You are a friendly assistant');
+
+      // Verify output structure
+      expect(result.output).toBeDefined();
+      expect(result.output).toHaveLength(1);
+      expect(result.output[0]?.role).toBe('assistant');
+      expect(result.output[0]?.content).toBe('I am doing well, thank you!');
+    });
+
+    it('should handle tool calls in both input and output', () => {
+      const trace = TransformerTestScenarios.agentWithToolCalls().buildTrace();
+      const result = transformTraceToScorerInputAndOutput(trace);
+
+      // Input should have the user message
+      expect(result.input.inputMessages[0]?.content).toBe('What is the weather?');
+
+      // Output should have tool invocations
+      expect(result.output[0]?.toolInvocations).toHaveLength(1);
+      expect(result.output[0]?.toolInvocations?.[0]?.toolName).toBe('weatherAPI');
     });
   });
 
   describe('Edge cases', () => {
     it('should handle empty tool invocations', () => {
       const trace = TransformerTestScenarios.simpleAgentConversation().buildTrace();
-      const result = transformTraceToScorerOutput(trace);
+      const result = transformTraceToScorerInputAndOutput(trace);
 
-      expect(result[0]?.toolInvocations).toHaveLength(0);
-      expect(result[0]?.parts?.filter(p => p.type === 'tool-invocation')).toHaveLength(0);
+      expect(result.output[0]?.toolInvocations).toHaveLength(0);
+      expect(result.output[0]?.parts?.filter(p => p.type === 'tool-invocation')).toHaveLength(0);
     });
 
     it('should handle complex nested message content', () => {
@@ -431,9 +462,9 @@ describe('Transformer Functions', () => {
         })
         .buildTrace();
 
-      const result = transformTraceToScorerInput(trace);
-      expect(result.inputMessages[0]?.content).toBe('Test input');
-      expect(result.rememberedMessages[0]?.content).toBe('Second part'); // AI SDK convention: last text part only
+      const result = transformTraceToScorerInputAndOutput(trace);
+      expect(result.input.inputMessages[0]?.content).toBe('Test input');
+      expect(result.input.rememberedMessages[0]?.content).toBe('Second part'); // AI SDK convention: last text part only
     });
   });
 });

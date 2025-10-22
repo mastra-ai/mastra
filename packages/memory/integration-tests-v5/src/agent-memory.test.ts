@@ -180,7 +180,7 @@ describe('Agent Memory Tests', () => {
 
     // First, create a thread and add some messages to establish history
     const thread1Id = randomUUID();
-    await agent.generateVNext('Tell me about cats', {
+    await agent.generate('Tell me about cats', {
       memory: {
         thread: thread1Id,
         resource: resourceId,
@@ -206,7 +206,7 @@ describe('Agent Memory Tests', () => {
       return result;
     };
 
-    const secondResponse = await agent.generateVNext('What did we discuss about cats?', {
+    const secondResponse = await agent.generate('What did we discuss about cats?', {
       memory: {
         thread: thread2Id,
         resource: resourceId,
@@ -258,7 +258,7 @@ describe('Agent Memory Tests', () => {
       const resourceId = 'all-user-messages';
 
       // Send multiple user messages
-      await agent.generateVNext(
+      await agent.generate(
         [
           { role: 'user', content: 'First message' },
           { role: 'user', content: 'Second message' },
@@ -283,7 +283,7 @@ describe('Agent Memory Tests', () => {
       const threadId = randomUUID();
       const resourceId = 'assistant-responses';
       // 1. Text mode
-      await agent.generateVNext([{ role: 'user', content: 'What is 2+2?' }], {
+      await agent.generate([{ role: 'user', content: 'What is 2+2?' }], {
         threadId,
         resourceId,
         modelSettings: {
@@ -292,7 +292,7 @@ describe('Agent Memory Tests', () => {
       });
 
       // 2. Object/output mode
-      await agent.generateVNext([{ role: 'user', content: 'Give me JSON' }], {
+      await agent.generate([{ role: 'user', content: 'Give me JSON' }], {
         threadId,
         resourceId,
         output: z.object({
@@ -336,7 +336,7 @@ describe('Agent Memory Tests', () => {
       const contextMessageContent2 = 'This is the second context message.';
 
       // Send user messages and context messages
-      await agent.generateVNext(userMessageContent, {
+      await agent.generate(userMessageContent, {
         threadId,
         resourceId,
         context: [
@@ -392,7 +392,7 @@ describe('Agent Memory Tests', () => {
       ];
 
       // Send messages with metadata
-      await agent.generateVNext(messagesWithMetadata, {
+      await agent.generate(messagesWithMetadata, {
         threadId,
         resourceId,
       });
@@ -439,6 +439,54 @@ describe('Agent Memory Tests', () => {
         userId: 'user-123',
       });
     });
+
+    it('should consolidate reasoning into single part when saving to memory', async () => {
+      const reasoningAgent = new Agent({
+        name: 'reasoning-test-agent',
+        instructions: 'You are a helpful assistant that thinks through problems.',
+        model: 'openrouter/openai/gpt-oss-20b',
+        memory,
+      });
+
+      const threadId = randomUUID();
+      const resourceId = 'test-resource-reasoning';
+
+      const result = await reasoningAgent.generate('What is 2+2? Think through this carefully.', {
+        threadId,
+        resourceId,
+      });
+
+      expect(result.reasoning.length).toBeGreaterThan(0);
+      expect(result.reasoningText).toBeDefined();
+      expect(result.reasoningText!.length).toBeGreaterThan(0);
+
+      const originalReasoningText = result.reasoningText;
+
+      const agentMemory = (await reasoningAgent.getMemory())!;
+      const { messages } = await agentMemory.query({ threadId });
+
+      const assistantMessage = messages.find(
+        (m: any) =>
+          m.role === 'assistant' && Array.isArray(m.content) && m.content.some((p: any) => p?.type === 'reasoning'),
+      );
+
+      expect(assistantMessage).toBeDefined();
+
+      const retrievedReasoningParts = Array.isArray((assistantMessage as any).content)
+        ? (assistantMessage as any).content.filter((p: any) => p?.type === 'reasoning')
+        : [];
+
+      expect(retrievedReasoningParts).toBeDefined();
+      expect(retrievedReasoningParts.length).toBeGreaterThan(0);
+
+      const retrievedReasoningText = retrievedReasoningParts.map((p: any) => p.text || '').join('');
+
+      expect(retrievedReasoningText.length).toBeGreaterThan(0);
+      expect(retrievedReasoningText).toBe(originalReasoningText);
+
+      // This is the key fix for issue #8073 - before the fix, reasoning was split into many parts
+      expect(retrievedReasoningParts.length).toBe(1);
+    }, 30000);
   });
 
   describe('Agent thread metadata with generateTitle', () => {
@@ -502,8 +550,8 @@ describe('Agent Memory Tests', () => {
       expect(thread).toBeDefined();
       expect(thread?.metadata).toMatchObject(metadata);
 
-      await agentWithTitle.generateVNext([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
-      await agentWithTitle.generateVNext([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
+      await agentWithTitle.generate([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
+      await agentWithTitle.generate([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
 
       const existingThread = await memoryWithTitle.getThreadById({ threadId });
       expect(existingThread).toBeDefined();
@@ -526,7 +574,7 @@ describe('Agent Memory Tests', () => {
 
       const runtimeContext = new RuntimeContext();
       runtimeContext.set('model', 'gpt-4o-mini');
-      await agentWithDynamicModelTitle.generateVNext([{ role: 'user', content: 'Hello, world!' }], {
+      await agentWithDynamicModelTitle.generate([{ role: 'user', content: 'Hello, world!' }], {
         threadId,
         resourceId,
         runtimeContext,
@@ -551,8 +599,8 @@ describe('Agent Memory Tests', () => {
       expect(thread).toBeDefined();
       expect(thread?.metadata).toMatchObject(metadata);
 
-      await agentNoTitle.generateVNext([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
-      await agentNoTitle.generateVNext([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
+      await agentNoTitle.generate([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
+      await agentNoTitle.generate([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
 
       const existingThread = await memoryNoTitle.getThreadById({ threadId });
       expect(existingThread).toBeDefined();
@@ -567,7 +615,7 @@ describe('Agent with message processors', () => {
     const resourceId = 'processor-filter-tool-message';
 
     // First, ask a question that will trigger a tool call
-    const firstResponse = await memoryProcessorAgent.generateVNext('What is the weather in London?', {
+    const firstResponse = await memoryProcessorAgent.generate('What is the weather in London?', {
       threadId,
       resourceId,
     });
@@ -586,7 +634,7 @@ describe('Agent with message processors', () => {
 
     // Now, ask a follow-up question. The processor should prevent the tool call history
     // from being sent to the model.
-    const secondResponse = await memoryProcessorAgent.generateVNext('What was the tool you just used?', {
+    const secondResponse = await memoryProcessorAgent.generate('What was the tool you just used?', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -612,7 +660,7 @@ describe('Agent.fetchMemory', () => {
     const threadId = randomUUID();
     const resourceId = 'fetch-memory-test';
 
-    const response = await weatherAgent.generateVNext('Just a simple greeting to populate memory.', {
+    const response = await weatherAgent.generate('Just a simple greeting to populate memory.', {
       threadId,
       resourceId,
     });
@@ -639,7 +687,7 @@ describe('Agent.fetchMemory', () => {
     const threadId = randomUUID();
     const resourceId = 'fetch-memory-processor-test';
 
-    await memoryProcessorAgent.generateVNext('What is the weather in London?', { threadId, resourceId });
+    await memoryProcessorAgent.generate('What is the weather in London?', { threadId, resourceId });
 
     const { messages } = await memoryProcessorAgent.fetchMemory({ threadId, resourceId });
 
@@ -693,7 +741,7 @@ describe('Agent memory test gemini', () => {
 
   it('should not throw error when using gemini', async () => {
     // generate two messages in the db
-    await agent.generateVNext(`What's the weather in Tokyo?`, {
+    await agent.generate(`What's the weather in Tokyo?`, {
       memory: { resource, thread },
     });
 
@@ -702,7 +750,7 @@ describe('Agent memory test gemini', () => {
     // Will throw if the messages sent to the agent aren't cleaned up because a tool call message will be the first message sent to the agent
     // Which some providers like gemini will not allow.
     await expect(
-      agent.generateVNext(`What's the weather in London?`, {
+      agent.generate(`What's the weather in London?`, {
         memory: { resource, thread },
       }),
     ).resolves.not.toThrow();

@@ -7,6 +7,7 @@ const meta = {
   vectors: "Vectors API",
   logs: "Logs API",
   telemetry: "Telemetry API",
+  observability: "Observability API",
   "error-handling": "Error Handling",
   "workflows-legacy": "Workflows (Legacy) API",
 };

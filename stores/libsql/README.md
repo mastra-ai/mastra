@@ -1,4 +1,4 @@
-# @mastra/pg
+# @mastra/libsql
 
 SQLite implementation for Mastra, providing both vector similarity search and general storage capabilities with connection pooling and transaction support.
 
@@ -47,7 +47,7 @@ const results = await vectorStore.query({
 ### Storage
 
 ```typescript
-import { LibSQLStore } from '@mastra/pg';
+import { LibSQLStore } from '@mastra/libsql';
 
 const store = new LibSQLStore({
   url: 'file:./my-db.db',

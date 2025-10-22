@@ -96,7 +96,7 @@ const stream = run.streamVNext({
     },
     {
       name: "stream.result",
-      type: "Promise<WorkflowResult<TOutput, TSteps>>",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
       description: "A promise that resolves to the final workflow result",
     },
     {

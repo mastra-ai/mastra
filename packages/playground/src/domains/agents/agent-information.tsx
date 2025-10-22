@@ -1,11 +1,3 @@
-import {
-  useAgent,
-  useModelProviders,
-  useReorderModelList,
-  useUpdateAgentModel,
-  useUpdateModelInModelList,
-} from '@/hooks/use-agents';
-import { AgentLogs } from './agent-logs';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   AgentSettings,
@@ -16,9 +8,14 @@ import {
   AgentMetadata,
   AgentEntityHeader,
   useAgentSettings,
+  useAgent,
+  useModelProviders,
+  useReorderModelList,
+  useUpdateAgentModel,
+  useUpdateModelInModelList,
+  useMemory,
 } from '@mastra/playground-ui';
 
-import { useMemory } from '@/hooks/use-memory';
 import { AgentMemory } from './agent-memory';
 import { useState, useEffect } from 'react';
 import { AgentPromptEnhancer } from './agent-instructions-enhancer';
@@ -73,7 +70,6 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             <Tab value="overview">Overview</Tab>
             <Tab value="model-settings">Model Settings</Tab>
             {memory?.result && <Tab value="memory">Memory</Tab>}
-            <Tab value="logs">Log Drains</Tab>
           </TabList>
           <TabContent value="overview">
             {isLoading && <Skeleton className="h-full" />}
@@ -87,18 +83,22 @@ export function AgentInformation({ agentId }: { agentId: string }) {
                 modelProviders={modelProviders || []}
                 hasMemoryEnabled={Boolean(memory?.result)}
                 promptSlot={<AgentPromptEnhancer agentId={agentId} />}
+                modelVersion={agent.modelVersion}
               />
             )}
           </TabContent>
           <TabContent value="model-settings">
             {isLoading && <Skeleton className="h-full" />}
-            {agent && <AgentSettings modelVersion={agent.modelVersion} />}
+            {agent && (
+              <AgentSettings
+                modelVersion={agent.modelVersion}
+                hasMemory={Boolean(memory?.result)}
+                hasSubAgents={Boolean(Object.keys(agent.agents || {}).length > 0)}
+              />
+            )}
           </TabContent>
           <TabContent value="memory">
             {isLoading ? <Skeleton className="h-full" /> : <AgentMemory agentId={agentId} />}
-          </TabContent>
-          <TabContent value="logs">
-            {isLoading ? <Skeleton className="h-full" /> : <AgentLogs agentId={agentId} />}
           </TabContent>
         </PlaygroundTabs>
       </div>

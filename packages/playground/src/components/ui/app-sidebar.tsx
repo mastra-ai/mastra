@@ -1,25 +1,28 @@
 'use client';
 
-import { Network, Globe, ArrowLeftFromLine, Book, Earth, GaugeIcon, Cloudy, EyeIcon, PackageIcon } from 'lucide-react';
-import { Link, useLocation } from 'react-router';
+import {
+  GaugeIcon,
+  EyeIcon,
+  PackageIcon,
+  HomeIcon,
+  GlobeIcon,
+  BookIcon,
+  EarthIcon,
+  CloudUploadIcon,
+  MessagesSquareIcon,
+} from 'lucide-react';
+import { useLocation } from 'react-router';
 
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarRail,
-  useSidebar,
-} from '@/components/ui/sidebar';
-import { AgentIcon, GithubIcon, Icon, McpServerIcon, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
-
-import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
-import clsx from 'clsx';
+  AgentIcon,
+  GithubIcon,
+  McpServerIcon,
+  ToolsIcon,
+  WorkflowIcon,
+  MainSidebar,
+  useMainSidebar,
+  type NavSection,
+} from '@mastra/playground-ui';
 
 export const LogoWithoutText = (props: { className?: string }) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 21 21" fill="none">
@@ -114,53 +117,93 @@ export const LogoWithoutText = (props: { className?: string }) => (
   </svg>
 );
 
-const links = [
+const mainNavigation: NavSection[] = [
   {
-    name: 'Agents',
-    url: '/agents',
-    icon: AgentIcon,
+    key: 'main',
+    links: [
+      {
+        name: 'Agents',
+        url: '/agents',
+        icon: <AgentIcon />,
+      },
+      {
+        name: 'Workflows',
+        url: '/workflows',
+        icon: <WorkflowIcon />,
+      },
+      {
+        name: 'MCP Servers',
+        url: '/mcps',
+        icon: <McpServerIcon />,
+      },
+      {
+        name: 'Tools',
+        url: '/tools',
+        icon: <ToolsIcon />,
+      },
+      {
+        name: 'Scorers',
+        url: '/scorers',
+        icon: <GaugeIcon />,
+      },
+
+      {
+        name: 'Runtime Context',
+        url: '/runtime-context',
+        icon: <GlobeIcon />,
+      },
+    ],
   },
   {
-    name: 'Networks',
-    url: '/networks',
-    icon: Network,
+    key: 'observability',
+    separator: true,
+    links: [
+      {
+        name: 'Observability',
+        url: '/observability',
+        icon: <EyeIcon />,
+      },
+    ],
   },
   {
-    name: 'Tools',
-    url: '/tools',
-    icon: ToolsIcon,
-  },
-  {
-    name: 'MCP Servers',
-    url: '/mcps',
-    icon: McpServerIcon,
-  },
-  {
-    name: 'Workflows',
-    url: '/workflows',
-    icon: WorkflowIcon,
-  },
-  {
-    name: 'Scorers',
-    url: '/scorers',
-    icon: GaugeIcon,
-  },
-  {
-    name: 'Observability',
-    url: '/observability',
-    icon: EyeIcon,
-  },
-  {
-    name: 'Runtime Context',
-    url: '/runtime-context',
-    icon: Globe,
-  },
-  {
-    name: 'Templates',
-    url: '/templates',
-    icon: PackageIcon,
+    key: 'Templates',
+    separator: true,
+    links: [
+      {
+        name: 'Templates',
+        url: '/templates',
+        icon: <PackageIcon />,
+      },
+    ],
   },
 ];
+
+const secondNavigation: NavSection = {
+  key: 'others',
+  title: 'Other links',
+  links: [
+    {
+      name: 'Mastra APIs',
+      url: 'http://localhost:4111/swagger-ui',
+      icon: <EarthIcon />,
+    },
+    {
+      name: 'Documentation',
+      url: 'https://mastra.ai/en/docs',
+      icon: <BookIcon />,
+    },
+    {
+      name: 'Github',
+      url: 'https://github.com/mastra-ai/mastra',
+      icon: <GithubIcon />,
+    },
+    {
+      name: 'Community',
+      url: 'https://discord.gg/BTYqqHKUrf',
+      icon: <MessagesSquareIcon />,
+    },
+  ],
+};
 
 declare global {
   interface Window {
@@ -169,149 +212,71 @@ declare global {
 }
 
 export function AppSidebar() {
-  const { state, toggleSidebar } = useSidebar();
+  const { state } = useMainSidebar();
   const location = useLocation();
   const pathname = location.pathname;
 
   const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader className="w-full pl-1 pt-3 pb-0">
-        <div className="flex justify-between gap-2 items-center">
-          <span className="flex shrink-0">
-            {state === 'collapsed' ? (
-              <LogoWithoutText className="h-10 w-10 shrink-0 ml-1" />
-            ) : (
-              <span className="flex items-center gap-0.5 pl-1">
-                <LogoWithoutText className="h-10 w-10 shrink-0" />
-                <span className="font-serif text-sm">Mastra</span>
-              </span>
-            )}
+    <MainSidebar>
+      <div className="pt-[.75rem] mb-[1rem] -ml-[.2rem] sticky top-0 bg-surface1 z-10">
+        {state === 'collapsed' ? (
+          <LogoWithoutText className="h-[2.5rem] w-[2.5rem] shrink-0 ml-1" />
+        ) : (
+          <span className="flex items-center gap-0.5 pl-1">
+            <LogoWithoutText className="h-[2.5rem] w-[2.5rem] shrink-0" />
+            <span className="font-serif text-sm">Mastra Studio</span>
           </span>
-
-          {state === 'expanded' && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <SidebarMenuButton onClick={() => toggleSidebar()} className="w-8 text-icon3">
-                  <ArrowLeftFromLine />
-                </SidebarMenuButton>
-              </TooltipTrigger>
-              <TooltipContent className="bg-border1 font-sans text-icon6">Collapse sidebar</TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-
-        {state === 'collapsed' && (
-          <SidebarMenuButton
-            onClick={() => toggleSidebar()}
-            tooltip="Expand sidebar"
-            className="w-8 text-icon3 ml-2 absolute mt-[52px] p-1"
-          >
-            <ArrowLeftFromLine className="rotate-180" />
-          </SidebarMenuButton>
         )}
-      </SidebarHeader>
+      </div>
 
-      <SidebarContent className={clsx('p-1 transition-transform', state === 'collapsed' && 'translate-y-10')}>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {links.map((item, index) => {
-                const [_, pagePath] = pathname.split('/');
-                const lowercasedPagePath = item.name.toLowerCase();
-                const isActive = item.url === pathname || item.name === pathname || pagePath === lowercasedPagePath;
-                return (
-                  <SidebarMenuItem key={`${item.name}-${index}`}>
-                    <SidebarMenuButton tooltip={item.name} asChild>
-                      <Link
-                        className={`group/icon pr-4 ${isActive ? 'text-primary bg-muted/50' : 'text-[#939393]'}`}
-                        to={item.url}
-                      >
-                        <Icon>
-                          <item.icon />
-                        </Icon>
-                        <span className="text-[0.8rem] font-normal">{item.name}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-
-      <SidebarFooter className="px-1">
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Mastra APIs" asChild>
-                  <a className={`group/icon text-[#939393]`} href="/swagger-ui" target="_blank" rel="noopener">
-                    <Icon>
-                      <Earth />
-                    </Icon>
-                    <span className="text-[0.8rem] font-normal">Mastra APIs</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Documentation" asChild>
-                  <a
-                    className={`group/icon text-[#939393]`}
-                    href="https://mastra.ai/docs"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    <Icon>
-                      <Book />
-                    </Icon>
-                    <span className="text-[0.8rem] font-normal">Documentation</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Github" asChild>
-                  <a
-                    className={`group/icon text-[#939393]`}
-                    href="https://github.com/mastra-ai/mastra"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    <Icon>
-                      <GithubIcon />
-                    </Icon>
-                    <span className="text-[0.8rem] font-normal">Github</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              {!hideCloudCta && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton tooltip="Deploy to Mastra Cloud" asChild>
-                    <a
-                      className={`group/icon bg-accent1 text-black hover:bg-accent1/80 hover:text-black active:bg-accent1/90 active:text-black`}
-                      href="https://mastra.ai/cloud"
-                      target="_blank"
-                      rel="noopener"
-                    >
-                      <Icon>
-                        <Cloudy />
-                      </Icon>
-
-                      <span className="text-[0.8rem] font-normal">Deploy to Mastra Cloud</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+      <MainSidebar.Nav>
+        {mainNavigation.map(section => {
+          return (
+            <MainSidebar.NavSection key={section.key}>
+              {section?.title ? (
+                <MainSidebar.NavHeader state={state}>{section.title}</MainSidebar.NavHeader>
+              ) : (
+                <>{section?.separator && <MainSidebar.NavSeparator />}</>
               )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarFooter>
-      <SidebarRail />
-    </Sidebar>
+              <MainSidebar.NavList>
+                {section.links.map(link => {
+                  const [_, pagePath] = pathname.split('/');
+                  const lowercasedPagePath = link.name.toLowerCase();
+                  const isActive = link.url === pathname || link.name === pathname || pagePath === lowercasedPagePath;
+
+                  return <MainSidebar.NavLink key={link.name} state={state} link={link} isActive={isActive} />;
+                })}
+              </MainSidebar.NavList>
+            </MainSidebar.NavSection>
+          );
+        })}
+      </MainSidebar.Nav>
+
+      <MainSidebar.Bottom>
+        <MainSidebar.Nav>
+          <MainSidebar.NavSection>
+            <MainSidebar.NavSeparator />
+            <MainSidebar.NavList>
+              {secondNavigation.links.map(link => {
+                return <MainSidebar.NavLink key={link.name} link={link} state={state} />;
+              })}
+              {!hideCloudCta && (
+                <MainSidebar.NavLink
+                  link={{
+                    name: 'Deploy to Mastra Cloud',
+                    url: 'https://mastra.ai/cloud',
+                    icon: <CloudUploadIcon />,
+                    variant: 'featured',
+                  }}
+                  state={state}
+                />
+              )}
+            </MainSidebar.NavList>
+          </MainSidebar.NavSection>
+        </MainSidebar.Nav>
+      </MainSidebar.Bottom>
+    </MainSidebar>
   );
 }

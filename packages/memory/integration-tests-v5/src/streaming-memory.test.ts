@@ -58,7 +58,7 @@ describe('Memory Streaming Tests', () => {
     const resourceId = 'test-resource';
 
     // First weather check
-    const stream1 = await agent.streamVNext('what is the weather in LA?', {
+    const stream1 = await agent.stream('what is the weather in LA?', {
       threadId,
       resourceId,
     });
@@ -76,7 +76,7 @@ describe('Memory Streaming Tests', () => {
     expect(response1).toContain('70 degrees');
 
     // Second weather check
-    const stream2 = await agent.streamVNext('what is the weather in Seattle?', {
+    const stream2 = await agent.stream('what is the weather in Seattle?', {
       threadId,
       resourceId,
       format: 'aisdk', // use aisdk output type this time just for fun
@@ -119,7 +119,7 @@ describe('Memory Streaming Tests', () => {
       },
     });
 
-    await agent.generateVNext('Hello, world!', {
+    await agent.generate('Hello, world!', {
       threadId,
       resourceId,
     });
@@ -151,15 +151,14 @@ describe('Memory Streaming Tests', () => {
 
       mastraServer = spawn(
         'pnpm',
-        [
-          path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`),
-          'dev',
-          '--port',
-          port.toString(),
-        ],
+        [path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`), 'dev'],
         {
           stdio: 'pipe',
           detached: true, // Run in a new process group so we can kill it and children
+          env: {
+            ...process.env,
+            PORT: port.toString(),
+          },
         },
       );
 
@@ -197,7 +196,7 @@ describe('Memory Streaming Tests', () => {
       const { result } = renderHook(() => {
         const chat = useChat({
           transport: new DefaultChatTransport({
-            api: `http://localhost:${port}/api/agents/test/stream/vnext/ui`,
+            api: `http://localhost:${port}/api/agents/test/stream/ui`,
             prepareSendMessagesRequest({ messages }) {
               return {
                 body: {
@@ -258,11 +257,11 @@ describe('Memory Streaming Tests', () => {
       let error: Error | null = null;
       const threadId = randomUUID();
 
-      await weatherAgent.generateVNext(`hi`, {
+      await weatherAgent.generate(`hi`, {
         threadId,
         resourceId,
       });
-      await weatherAgent.generateVNext(`LA weather`, { threadId, resourceId });
+      await weatherAgent.generate(`LA weather`, { threadId, resourceId });
 
       const agentMemory = (await weatherAgent.getMemory())!;
       const initialMessages = (await agentMemory.query({ threadId })).uiMessages;
@@ -270,7 +269,7 @@ describe('Memory Streaming Tests', () => {
       const { result } = renderHook(() => {
         const chat = useChat({
           transport: new DefaultChatTransport({
-            api: `http://localhost:${port}/api/agents/test/stream/vnext/ui`,
+            api: `http://localhost:${port}/api/agents/test/stream/ui`,
             prepareSendMessagesRequest({ messages }) {
               return {
                 body: {

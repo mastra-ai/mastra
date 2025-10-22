@@ -6,9 +6,10 @@ import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import type { TracingContext, TracingPolicy } from './ai-tracing';
+import type { MastraLanguageModel } from './llm/model/shared.types';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
-import type { AiMessageType, MastraLanguageModel, MastraMemory } from './memory';
+import type { AiMessageType, MastraMemory } from './memory';
 import type { RuntimeContext } from './runtime-context';
 import type { ChunkType } from './stream/types';
 import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
@@ -224,6 +225,7 @@ export interface ToolOptions {
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   runtimeContext: RuntimeContext;
+  /** Build-time tracing context (fallback for Legacy methods that can't pass runtime context) */
   tracingContext?: TracingContext;
   tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;
@@ -262,12 +264,17 @@ function createDeterministicId(input: string): string {
  * @returns The tool with the properties set
  */
 function setVercelToolProperties(tool: VercelTool) {
-  const inputSchema = convertVercelToolParameters(tool);
+  // Check if the tool already has inputSchema (v5 format)
+  // If it does, use it directly (it might be a function)
+  // Otherwise, convert the parameters to inputSchema
+  const inputSchema = 'inputSchema' in tool ? tool.inputSchema : convertVercelToolParameters(tool);
+
   const toolId = !('id' in tool)
     ? tool.description
       ? `tool-${createDeterministicId(tool.description)}`
       : `tool-${Math.random().toString(36).substring(2, 9)}`
     : tool.id;
+
   return {
     ...tool,
     id: toolId,
@@ -299,7 +306,14 @@ export function ensureToolProperties(tools: ToolsInput): ToolsInput {
 function convertVercelToolParameters(tool: VercelTool): z.ZodType {
   // If the tool is a Vercel Tool, check if the parameters are already a zod object
   // If not, convert the parameters to a zod object using jsonSchemaToZod
-  const schema = tool.parameters ?? z.object({});
+  // Handle case where parameters (or inputSchema in v5) is a function that returns a schema
+  let schema = tool.parameters ?? z.object({});
+
+  // If schema is a function, call it to get the actual schema
+  if (typeof schema === 'function') {
+    schema = schema();
+  }
+
   return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
 }
 

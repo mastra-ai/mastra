@@ -8,11 +8,20 @@ interface ServerPromptActionsDependencies {
   clearDefinedPrompts: () => void;
 }
 
+/**
+ * Server-side prompt actions for notifying clients about prompt changes.
+ *
+ * This class provides methods for MCP servers to notify connected clients when
+ * the list of available prompts changes.
+ */
 export class ServerPromptActions {
   private readonly getLogger: () => IMastraLogger;
   private readonly getSdkServer: () => Server;
   private readonly clearDefinedPrompts: () => void;
 
+  /**
+   * @internal
+   */
   constructor(dependencies: ServerPromptActionsDependencies) {
     this.getLogger = dependencies.getLogger;
     this.getSdkServer = dependencies.getSdkServer;
@@ -20,8 +29,18 @@ export class ServerPromptActions {
   }
 
   /**
-   * Notifies the server that the overall list of available prompts has changed.
-   * This will clear the internal cache of defined prompts and send a list_changed notification to clients.
+   * Notifies clients that the overall list of available prompts has changed.
+   *
+   * This clears the internal prompt cache and sends a `notifications/prompts/list_changed`
+   * message to all clients, prompting them to re-fetch the prompt list.
+   *
+   * @throws {MastraError} If sending the notification fails
+   *
+   * @example
+   * ```typescript
+   * // After adding or modifying prompts
+   * await server.prompts.notifyListChanged();
+   * ```
    */
   public async notifyListChanged(): Promise<void> {
     this.getLogger().info('Prompt list change externally notified. Clearing definedPrompts and sending notification.');

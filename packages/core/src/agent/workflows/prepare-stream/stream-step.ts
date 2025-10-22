@@ -10,9 +10,17 @@ interface StreamStepOptions<FORMAT extends 'aisdk' | 'mastra' | undefined = unde
   capabilities: AgentCapabilities;
   runId: string;
   returnScorerData?: boolean;
+  /**
+   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
+   */
   format?: FORMAT;
   requireToolApproval?: boolean;
-  resumeContext?: any;
+  resumeContext?: {
+    resumeData: any;
+    snapshot: any;
+  };
+  agentId: string;
+  toolCallId?: string;
 }
 
 export function createStreamStep<
@@ -25,6 +33,8 @@ export function createStreamStep<
   format = 'mastra' as FORMAT,
   requireToolApproval,
   resumeContext,
+  agentId,
+  toolCallId,
 }: StreamStepOptions<FORMAT>) {
   return createStep({
     id: 'stream-text-step',
@@ -61,6 +71,8 @@ export function createStreamStep<
         _internal: {
           generateId: capabilities.generateMessageId,
         },
+        agentId,
+        toolCallId,
       });
 
       if (format === 'aisdk') {

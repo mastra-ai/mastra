@@ -104,6 +104,58 @@ describe('Workflow (fetch-mocked)', () => {
     const res = await wf.start({ runId: 'r-x', inputData: { b: 2 } });
     expect(res).toEqual({ message: 'started' });
   });
+
+  it('starts workflow run synchronously with tracingOptions', async () => {
+    const run = await wf.createRunAsync();
+    const tracingOptions = { metadata: { foo: 'bar' } };
+    const result = await run.start({ inputData: { a: 1 }, tracingOptions });
+    expect(result).toEqual({ message: 'started' });
+
+    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/start?runId='));
+    expect(call).toBeTruthy();
+    const options = call[1];
+    const body = JSON.parse(options.body);
+    expect(body.tracingOptions).toEqual(tracingOptions);
+  });
+
+  it('starts workflow run asynchronously with tracingOptions', async () => {
+    const run = await wf.createRunAsync();
+    const tracingOptions = { metadata: { traceId: 't-1' } };
+    const result = await run.startAsync({ inputData: { a: 1 }, tracingOptions });
+    expect(result).toEqual({ result: 'started-async' });
+
+    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/start-async'));
+    expect(call).toBeTruthy();
+    const options = call[1];
+    const body = JSON.parse(options.body);
+    expect(body.tracingOptions).toEqual(tracingOptions);
+  });
+
+  it('resumes workflow run synchronously with tracingOptions', async () => {
+    const run = await wf.createRunAsync();
+    const tracingOptions = { metadata: { resume: true } };
+    const result = await run.resume({ step: 's1', tracingOptions });
+    expect(result).toEqual({ message: 'resumed' });
+
+    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/resume?runId='));
+    expect(call).toBeTruthy();
+    const options = call[1];
+    const body = JSON.parse(options.body);
+    expect(body.tracingOptions).toEqual(tracingOptions);
+  });
+
+  it('resumes workflow run asynchronously with tracingOptions', async () => {
+    const run = await wf.createRunAsync();
+    const tracingOptions = { metadata: { async: true } };
+    const result = await run.resumeAsync({ step: 's1', tracingOptions });
+    expect(result).toEqual({ result: 'resumed-async' });
+
+    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/resume-async'));
+    expect(call).toBeTruthy();
+    const options = call[1];
+    const body = JSON.parse(options.body);
+    expect(body.tracingOptions).toEqual(tracingOptions);
+  });
 });
 
 // Mock fetch globally for client tests

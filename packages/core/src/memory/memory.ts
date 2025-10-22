@@ -3,6 +3,7 @@ import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 
 import { MessageList } from '../agent/message-list';
 import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
 import { MastraBase } from '../base';
+import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
 import type { MastraStorage, PaginationInfo, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -42,7 +43,7 @@ export const memoryDefaultOptions = {
   lastMessages: 10,
   semanticRecall: false,
   threads: {
-    generateTitle: false,
+    generateTitle: true,
   },
   workingMemory: {
     enabled: false,
@@ -62,8 +63,13 @@ export const memoryDefaultOptions = {
 } satisfies MemoryConfig;
 
 /**
- * Abstract Memory class that defines the interface for storing and retrieving
- * conversation threads and messages.
+ * Abstract base class for implementing conversation memory systems.
+ *
+ * Key features:
+ * - Thread-based conversation organization with resource association
+ * - Optional vector database integration for semantic similarity search
+ * - Working memory templates for structured conversation state
+ * - Handles memory processors to manipulate messages before they are sent to the LLM
  */
 export abstract class MastraMemory extends MastraBase {
   MAX_CONTEXT_TOKENS?: number;
@@ -98,7 +104,13 @@ export abstract class MastraMemory extends MastraBase {
           `Semantic recall requires an embedder to be configured.\n\nhttps://mastra.ai/en/docs/memory/semantic-recall`,
         );
       }
-      this.embedder = config.embedder;
+
+      // Convert string embedder to ModelRouterEmbeddingModel
+      if (typeof config.embedder === 'string') {
+        this.embedder = new ModelRouterEmbeddingModel(config.embedder);
+      } else {
+        this.embedder = config.embedder;
+      }
     }
   }
 
@@ -335,13 +347,13 @@ export abstract class MastraMemory extends MastraBase {
   /**
    * Retrieves all messages for a specific thread
    * @param threadId - The unique identifier of the thread
-   * @returns Promise resolving to array of messages and uiMessages
+   * @returns Promise resolving to array of messages, uiMessages, and messagesV2
    */
-  abstract query({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: UIMessageWithMetadata[] }>;
+  abstract query({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<{
+    messages: CoreMessage[];
+    uiMessages: UIMessageWithMetadata[];
+    messagesV2: MastraMessageV2[];
+  }>;
 
   /**
    * Helper method to create a new thread

@@ -17,4 +17,9 @@ export const mastra = new Mastra({
     name: 'Mastra',
     level: 'info',
   }),
+  observability: {
+    default: {
+      enabled: true,
+    },
+  },
 });

@@ -1,3 +1,5 @@
+import { safeParseErrorObject } from './utils.js';
+
 export enum ErrorDomain {
   TOOL = 'TOOL',
   AGENT = 'AGENT',
@@ -17,6 +19,7 @@ export enum ErrorDomain {
   MASTRA = 'MASTRA',
   DEPLOYER = 'DEPLOYER',
   STORAGE = 'STORAGE',
+  MODEL_ROUTER = 'MODEL_ROUTER',
 }
 
 export enum ErrorCategory {
@@ -71,14 +74,17 @@ export class MastraBaseError<D, C> extends Error {
     errorDefinition: IErrorDefinition<D, C>,
     originalError?: string | Error | MastraBaseError<D, C> | unknown,
   ) {
-    let error;
+    // Convert originalError to Error instance
+    let error: Error | undefined;
     if (originalError instanceof Error) {
       error = originalError;
     } else if (originalError) {
-      error = new Error(String(originalError));
+      const errorMessage = safeParseErrorObject(originalError);
+      error = new Error(errorMessage);
     }
 
     const message = errorDefinition.text ?? error?.message ?? 'Unknown error';
+
     super(message, { cause: error });
     this.id = errorDefinition.id;
     this.domain = errorDefinition.domain;

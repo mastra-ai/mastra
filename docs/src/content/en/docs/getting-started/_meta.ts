@@ -1,9 +1,8 @@
 const meta = {
   installation: "Installation",
+  studio: "Playground",
   "project-structure": "Project Structure",
   "mcp-docs-server": "MCP Docs Server",
-  "model-providers": "Model Providers",
-  "model-capability": "Model Capabilities",
   templates: "Templates",
 };
 

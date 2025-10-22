@@ -30,3 +30,6 @@ ignoredBuiltDependencies:
   - unrs-resolver
   - utf-8-validate
   - workerd
+
+patchedDependencies:
+  '@changesets/get-dependents-graph': patches/@changesets__get-dependents-graph.patch

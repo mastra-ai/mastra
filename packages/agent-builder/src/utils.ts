@@ -5,8 +5,8 @@ import { copyFile, readFile } from 'fs/promises';
 import { createRequire } from 'module';
 import { dirname, basename, extname, resolve, join } from 'path';
 import { promisify } from 'util';
-import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { UNIT_KINDS } from './types';
 import type { UnitKind } from './types';
@@ -641,31 +641,13 @@ export const createModelInstance = async (
           return google(modelId);
         },
       },
-      v2: {
-        openai: async () => {
-          const { openai } = await import('@ai-sdk/openai-v5');
-          return openai(modelId);
-        },
-        anthropic: async () => {
-          const { anthropic } = await import('@ai-sdk/anthropic-v5');
-          return anthropic(modelId);
-        },
-        groq: async () => {
-          const { groq } = await import('@ai-sdk/groq-v5');
-          return groq(modelId);
-        },
-        xai: async () => {
-          const { xai } = await import('@ai-sdk/xai-v5');
-          return xai(modelId);
-        },
-        google: async () => {
-          const { google } = await import('@ai-sdk/google-v5');
-          return google(modelId);
-        },
-      },
     };
 
-    const providerFn = providerMap[version][provider as keyof (typeof providerMap)[typeof version]];
+    const providerFn =
+      version === `v1`
+        ? providerMap[version][provider as keyof (typeof providerMap)[typeof version]]
+        : () => new ModelRouterLanguageModel(`${provider}/${modelId}`);
+
     if (!providerFn) {
       console.error(`Unsupported provider: ${provider}`);
       return null;
@@ -683,11 +665,11 @@ export const createModelInstance = async (
 // Helper function to resolve model from runtime context with AI SDK version detection
 export const resolveModel = async ({
   runtimeContext,
-  defaultModel = openai_v5('gpt-4.1'),
+  defaultModel = 'openai/gpt-4.1',
   projectPath,
 }: {
   runtimeContext: RuntimeContext;
-  defaultModel?: MastraLanguageModel;
+  defaultModel?: MastraLanguageModel | string;
   projectPath?: string;
 }): Promise<MastraLanguageModel> => {
   // First try to get model from runtime context
@@ -721,5 +703,5 @@ export const resolveModel = async ({
   }
 
   console.info('Using default model');
-  return defaultModel;
+  return typeof defaultModel === `string` ? new ModelRouterLanguageModel(defaultModel) : defaultModel;
 };

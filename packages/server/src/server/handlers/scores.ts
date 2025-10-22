@@ -188,13 +188,18 @@ export async function getScoresByEntityIdHandler({
   }
 }
 
+// Legacy function to get trace and span details
 function getTraceDetails(traceIdWithSpanId?: string) {
   if (!traceIdWithSpanId) {
     return {};
   }
 
   const [traceId, spanId] = traceIdWithSpanId.split('-');
-  return { traceId, spanId };
+
+  return {
+    ...(traceId ? { traceId } : {}),
+    ...(spanId ? { spanId } : {}),
+  };
 }
 
 export async function saveScoreHandler({ mastra, score }: Context & { score: ScoreRowData }) {

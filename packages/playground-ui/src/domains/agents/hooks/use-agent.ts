@@ -1,4 +1,4 @@
-import { useMastraClient } from '@mastra/react-hooks';
+import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { usePlaygroundStore } from '@/store/playground-store';
 

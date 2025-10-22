@@ -27,7 +27,6 @@ describe('convertFullStreamChunkToUIMessageStream', () => {
     // Assert: Verify the transformation
     expect(result).toBeDefined();
     expect(result).toEqual({
-      toolCallId: 'test-tool-123',
       content: 'Sample tool output content',
       timestamp: 1234567890,
       metadata: {

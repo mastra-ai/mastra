@@ -30,9 +30,14 @@ export const isCustomRoutePublic = (
   return false;
 };
 
-export const isProtectedPath = (path: string, method: string, authConfig: MastraAuthConfig): boolean => {
+export const isProtectedPath = (
+  path: string,
+  method: string,
+  authConfig: MastraAuthConfig,
+  customRouteAuthConfig?: Map<string, boolean>,
+): boolean => {
   const protectedAccess = [...(defaultAuthConfig.protected || []), ...(authConfig.protected || [])];
-  return isAnyMatch(path, method, protectedAccess);
+  return isAnyMatch(path, method, protectedAccess) || !isCustomRoutePublic(path, method, customRouteAuthConfig);
 };
 
 export const canAccessPublicly = (path: string, method: string, authConfig: MastraAuthConfig): boolean => {

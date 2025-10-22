@@ -73,6 +73,12 @@ const step1 = createStep({
       required: false,
     },
     {
+      name: "stateSchema",
+      type: "z.ZodObject<any>",
+      description: "Optional Zod schema for the step state. Automatically injected when using Mastra's state system. The stateSchema must be a subset of the workflow's stateSchema. If not specified, type is 'any'.",
+      required: false,
+    },
+    {
       name: "execute",
       type: "(params: ExecuteParams) => Promise<any>",
       description: "Async function containing step logic",
@@ -114,8 +120,13 @@ const step1 = createStep({
     },
     {
       name: "suspend",
-      type: "() => Promise<void>",
+      type: "(suspendPayload: any, suspendOptions?: { resumeLabel?: string }) => Promise<void>",
       description: "Function to pause workflow execution",
+    },
+    {
+      name: "setState",
+      type: "(state: z.infer<TState>) => void",
+      description: "Function to set the state of the workflow. Inject via reducer-like pattern, such as 'setState({ ...state, ...newState })'",
     },
     {
       name: "runId",
@@ -141,4 +152,4 @@ const step1 = createStep({
 ## Related
 
 - [Control flow](../../docs/workflows/control-flow.mdx)
-- [Using agents and tools](../../docs/workflows/using-with-agents-and-tools.mdx)
+- [Using agents and tools](../../docs/workflows/agents-and-tools.mdx)

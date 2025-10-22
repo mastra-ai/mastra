@@ -1,13 +1,17 @@
-import type { ZodTypeAny } from 'zod';
+import type { TransformStreamDefaultController } from 'stream/web';
 import { Agent } from '../../agent';
-import type { MastraMessageV2 } from '../../agent/message-list';
 import type { StructuredOutputOptions } from '../../agent/types';
-import type { MastraLanguageModel } from '../../llm/model/shared.types';
-import type { OutputSchema } from '../../stream';
+import type { TracingContext } from '../../ai-tracing';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import { ChunkFrom } from '../../stream';
+import type { ChunkType, OutputSchema } from '../../stream';
 import type { InferSchemaOutput } from '../../stream/base/schema';
+import type { ToolCallChunk, ToolResultChunk } from '../../stream/types';
 import type { Processor } from '../index';
 
 export type { StructuredOutputOptions } from '../../agent/types';
+
+export const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
 
 /**
  * StructuredOutputProcessor transforms unstructured agent output into structured JSON
@@ -22,150 +26,210 @@ export type { StructuredOutputOptions } from '../../agent/types';
  * - Automatic instruction generation based on schema
  */
 export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements Processor {
-  readonly name = 'structured-output';
+  readonly name = STRUCTURED_OUTPUT_PROCESSOR_NAME;
 
   public schema: OUTPUT;
   private structuringAgent: Agent;
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: InferSchemaOutput<OUTPUT>;
+  private isStructuringAgentStreamStarted = false;
+  private jsonPromptInjection?: boolean;
 
-  constructor(options: StructuredOutputOptions<OUTPUT>, fallbackModel?: MastraLanguageModel) {
+  constructor(options: StructuredOutputOptions<OUTPUT>) {
+    if (!options.schema) {
+      throw new MastraError({
+        id: 'STRUCTURED_OUTPUT_PROCESSOR_SCHEMA_REQUIRED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'StructuredOutputProcessor requires a schema to be provided',
+      });
+    }
+    if (!options.model) {
+      throw new MastraError({
+        id: 'STRUCTURED_OUTPUT_PROCESSOR_MODEL_REQUIRED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'StructuredOutputProcessor requires a model to be provided either in options or as fallback',
+      });
+    }
+
     this.schema = options.schema;
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
-
-    // Use provided model or fallback model
-    const modelToUse = options.model || fallbackModel;
-    if (!modelToUse) {
-      throw new Error('StructuredOutputProcessor requires a model to be provided either in options or as fallback');
-    }
-
+    this.jsonPromptInjection = options.jsonPromptInjection;
     // Create internal structuring agent
     this.structuringAgent = new Agent({
       name: 'structured-output-structurer',
       instructions: options.instructions || this.generateInstructions(),
-      model: modelToUse,
+      model: options.model,
     });
   }
 
-  async processOutputResult(args: {
-    messages: MastraMessageV2[];
+  async processOutputStream(args: {
+    part: ChunkType;
+    streamParts: ChunkType[];
+    state: {
+      controller: TransformStreamDefaultController<ChunkType<OUTPUT>>;
+    };
     abort: (reason?: string) => never;
-  }): Promise<MastraMessageV2[]> {
-    const { messages, abort } = args;
+    tracingContext?: TracingContext;
+  }): Promise<ChunkType | null | undefined> {
+    const { part, state, streamParts, abort, tracingContext } = args;
+    const controller = state.controller;
 
-    // Process the final assistant message
-    const processedMessages = await Promise.all(
-      messages.map(async message => {
-        if (message.role !== 'assistant') {
-          return message;
+    switch (part.type) {
+      case 'finish':
+        // The main stream is finished, intercept it and start the structuring agent stream
+        // - enqueue the structuring agent stream chunks into the main stream
+        // - when the structuring agent stream is finished, enqueue the final chunk into the main stream
+
+        await this.processAndEmitStructuredOutput(streamParts, controller, abort, tracingContext);
+        return part;
+
+      default:
+        return part;
+    }
+  }
+
+  private async processAndEmitStructuredOutput(
+    streamParts: ChunkType[],
+    controller: TransformStreamDefaultController<ChunkType<OUTPUT>>,
+    abort: (reason?: string) => never,
+    tracingContext?: TracingContext,
+  ): Promise<void> {
+    if (this.isStructuringAgentStreamStarted) return;
+    this.isStructuringAgentStreamStarted = true;
+    try {
+      const structuringPrompt = this.buildStructuringPrompt(streamParts);
+      const prompt = `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n${structuringPrompt}`;
+
+      // Use structuredOutput in 'direct' mode (no model) since this agent already has a model
+      const structuringAgentStream = await this.structuringAgent.stream(prompt, {
+        structuredOutput: {
+          schema: this.schema as OUTPUT extends OutputSchema ? OUTPUT : never,
+          jsonPromptInjection: this.jsonPromptInjection,
+        },
+        tracingContext,
+      });
+
+      const excludedChunkTypes = [
+        'start',
+        'finish',
+        'text-start',
+        'text-delta',
+        'text-end',
+        'step-start',
+        'step-finish',
+      ];
+
+      // Stream object chunks directly into the main stream
+      for await (const chunk of structuringAgentStream.fullStream) {
+        if (excludedChunkTypes.includes(chunk.type) || chunk.type.startsWith('data-')) {
+          continue;
         }
+        if (chunk.type === 'error') {
+          this.handleError('Structuring failed', 'Internal agent did not generate structured output', abort);
 
-        // Extract text content from the message
-        const textContent = this.extractTextContent(message);
-        if (!textContent.trim()) {
-          return message;
-        }
-
-        try {
-          const modelDef = await this.structuringAgent.getModel();
-          let structuredResult;
-          const prompt = `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n${textContent}`;
-          const schema = this.schema;
-
-          // Use structuring agent to extract structured data from the unstructured text
-          if (modelDef.specificationVersion === 'v2') {
-            structuredResult = await this.structuringAgent.generateVNext(prompt, {
-              output: schema,
-            });
-          } else {
-            structuredResult = await this.structuringAgent.generate(prompt, {
-              output: schema as ZodTypeAny,
-            });
+          if (this.errorStrategy === 'warn') {
+            // avoid enqueuing the error chunk to the main agent stream
+            break;
           }
-
-          if (!structuredResult.object) {
-            this.handleError('Structuring failed', 'Internal agent did not generate structured output', abort);
-
-            if (this.errorStrategy === 'fallback' && this.fallbackValue !== undefined) {
-              // For fallback, return original message with fallback data in content.metadata
-              return {
-                ...message,
-                content: {
-                  ...message.content,
-                  metadata: {
-                    ...(message.content.metadata || {}),
-                    structuredOutput: this.fallbackValue,
-                  },
-                },
-              };
-            }
-
-            return message;
-          }
-
-          // Store both original text and structured data in a way the agent can use
-          // The agent expects text but we need both text and object for experimental_output
-          return {
-            ...message,
-            content: {
-              ...message.content,
-              parts: [
-                {
-                  type: 'text' as const,
-                  text: textContent, // Keep original text unchanged
-                },
-              ],
-              metadata: {
-                ...(message.content.metadata || {}),
-                structuredOutput: structuredResult.object,
-              },
-            },
-          };
-        } catch (error) {
-          this.handleError('Processing failed', error instanceof Error ? error.message : 'Unknown error', abort);
-
           if (this.errorStrategy === 'fallback' && this.fallbackValue !== undefined) {
-            // For fallback, return original message with fallback data in content.metadata
-            return {
-              ...message,
-              content: {
-                ...message.content,
-                metadata: {
-                  ...(message.content.metadata || {}),
-                  structuredOutput: this.fallbackValue,
-                },
+            const fallbackChunk: ChunkType<OUTPUT> = {
+              runId: chunk.runId,
+              from: ChunkFrom.AGENT,
+              type: 'object-result',
+              object: this.fallbackValue,
+              metadata: {
+                from: 'structured-output',
+                fallback: true,
               },
             };
+            controller.enqueue(fallbackChunk);
+            break;
           }
-
-          return message;
         }
-      }),
-    );
 
-    return processedMessages;
+        const newChunk = {
+          ...chunk,
+          metadata: {
+            from: 'structured-output',
+          },
+        };
+        controller.enqueue(newChunk);
+      }
+    } catch (error) {
+      this.handleError(
+        'Structured output processing failed',
+        error instanceof Error ? error.message : 'Unknown error',
+        abort,
+      );
+    }
   }
 
   /**
-   * Extract text content from a message
+   * Build a structured markdown prompt from stream parts
+   * Collects chunks by type and formats them in a consistent structure
    */
-  private extractTextContent(message: MastraMessageV2): string {
-    let text = '';
+  private buildStructuringPrompt(streamParts: ChunkType[]): string {
+    const textChunks: string[] = [];
+    const reasoningChunks: string[] = [];
+    const toolCalls: ToolCallChunk[] = [];
+    const toolResults: ToolResultChunk[] = [];
 
-    if (message.content.parts) {
-      for (const part of message.content.parts) {
-        if (part.type === 'text' && 'text' in part && typeof part.text === 'string') {
-          text += part.text + ' ';
-        }
+    // Collect chunks by type
+    for (const part of streamParts) {
+      switch (part.type) {
+        case 'text-delta':
+          textChunks.push(part.payload.text);
+          break;
+        case 'reasoning-delta':
+          reasoningChunks.push(part.payload.text);
+          break;
+        case 'tool-call':
+          toolCalls.push(part);
+          break;
+        case 'tool-result':
+          toolResults.push(part);
+          break;
       }
     }
 
-    if (!text.trim() && typeof message.content.content === 'string') {
-      text = message.content.content;
+    const sections: string[] = [];
+    if (reasoningChunks.length > 0) {
+      sections.push(`# Assistant Reasoning\n${reasoningChunks.join('')}`);
+    }
+    if (toolCalls.length > 0) {
+      const toolCallsText = toolCalls
+        .map(tc => {
+          const args = typeof tc.payload.args === 'object' ? JSON.stringify(tc.payload.args, null) : tc.payload.args;
+          const output =
+            tc.payload.output !== undefined
+              ? `${typeof tc.payload.output === 'object' ? JSON.stringify(tc.payload.output, null) : tc.payload.output}`
+              : '';
+          return `## ${tc.payload.toolName}\n### Input: ${args}\n### Output: ${output}`;
+        })
+        .join('\n');
+      sections.push(`# Tool Calls\n${toolCallsText}`);
     }
 
-    return text.trim();
+    if (toolResults.length > 0) {
+      const resultsText = toolResults
+        .map(tr => {
+          const result = tr.payload.result;
+          if (result === undefined || result === null) {
+            return `${tr.payload.toolName}: null`;
+          }
+          return `${tr.payload.toolName}: ${typeof result === 'object' ? JSON.stringify(result, null, 2) : result}`;
+        })
+        .join('\n');
+      sections.push(`# Tool Results\n${resultsText}`);
+    }
+    if (textChunks.length > 0) {
+      sections.push(`# Assistant Response\n${textChunks.join('')}`);
+    }
+
+    return sections.join('\n\n');
   }
 
   /**
@@ -192,10 +256,9 @@ The input text may be in any format (sentences, bullet points, paragraphs, etc.)
   private handleError(context: string, error: string, abort: (reason?: string) => never): void {
     const message = `[StructuredOutputProcessor] ${context}: ${error}`;
 
-    console.error(`ERROR from StructuredOutputProcessor: ${message}`);
-
     switch (this.errorStrategy) {
       case 'strict':
+        console.error(message);
         abort(message);
         break;
       case 'warn':

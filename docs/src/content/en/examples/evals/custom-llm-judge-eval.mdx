@@ -63,14 +63,16 @@ class WorldCountryJudge extends MastraAgentJudge {
   async evaluate(query: string, response: string): Promise<MetricResult> {
     const prompt = generatePrompt(query, response);
     const result = await this.agent.generate(prompt, {
-      output: z.object({
-        score: z.number().min(0).max(1),
-        info: z.object({
-          reason: z.string(),
-          matches: z.array(z.string()),
-          misses: z.array(z.string())
+      structuredOutput: {
+        schema: z.object({
+          score: z.number().min(0).max(1),
+          info: z.object({
+            reason: z.string(),
+            matches: z.array(z.string()),
+            misses: z.array(z.string())
+          })
         })
-      })
+      },
     });
 
     return result.object;

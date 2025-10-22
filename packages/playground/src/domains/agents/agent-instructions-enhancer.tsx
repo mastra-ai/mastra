@@ -1,6 +1,4 @@
-import { AlertDialog } from '@mastra/playground-ui';
-
-import { useAgent } from '@/hooks/use-agents';
+import { AlertDialog, extractPrompt, useAgent } from '@mastra/playground-ui';
 
 import { CurrentInstructions } from './components/current-instructions';
 
@@ -17,6 +15,8 @@ export function AgentPromptEnhancer({ agentId }: AgentPromptEnhancerProps) {
   const { data: agent } = useAgent(agentId);
   const [showVersionHistoryDialog, setShowVersionHistoryDialog] = useState(false);
 
+  const formattedInstructions = extractPrompt(agent?.instructions || '');
+
   const {
     versions,
     isUpdating,
@@ -26,12 +26,12 @@ export function AgentPromptEnhancer({ agentId }: AgentPromptEnhancerProps) {
     deleteVersion,
     updateVersion,
     setVersionActive,
-  } = usePromptVersions(agentId, agent?.instructions);
+  } = usePromptVersions(agentId, formattedInstructions);
 
   const { enhancedPrompt, isEnhancing, userComment, enhancePrompt, setUserComment, clearEnhancement, applyChanges } =
     usePromptEnhancer({
       agentId,
-      instructions: agent?.instructions,
+      instructions: formattedInstructions,
       versions,
       onVersionCreate: newVersion => {
         setVersions(prev => [...prev, newVersion]);

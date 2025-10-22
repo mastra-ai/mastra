@@ -8,7 +8,7 @@ import { GithubLink } from "@/components/github-link";
 
 # Example: AI SDK v5 Integration
 
-This example demonstrates how to integrate Mastra agents with [AI SDK v5](https://sdk.vercel.ai/) to build modern streaming chat interfaces. It showcases a complete Next.js application with real-time conversation capabilities, persistent memory, and tool integration using the experimental `streamVNext` method with AI SDK v5 format support.
+This example demonstrates how to integrate Mastra agents with [AI SDK v5](https://sdk.vercel.ai/) to build modern streaming chat interfaces. It showcases a complete Next.js application with real-time conversation capabilities, persistent memory, and tool integration using the `stream` method with AI SDK v5 format support.
 
 ## Key Features
 
@@ -135,7 +135,7 @@ const getWeather = async (location: string) => {
 
 ### Streaming Chat Endpoint
 
-Create an API route that streams responses from your Mastra agent using the experimental `streamVNext` with AI SDK v5 format:
+Create an API route that streams responses from your Mastra agent using the `stream` method with AI SDK v5 format:
 
 ```typescript showLineNumbers copy filename="app/api/chat/route.ts"
 import { mastra } from "@/src/mastra";
@@ -145,8 +145,8 @@ const myAgent = mastra.getAgent("weatherAgent");
 export async function POST(req: Request) {
   const { messages } = await req.json();
 
-  // Use streamVNext with AI SDK v5 format (experimental)
-  const stream = await myAgent.streamVNext(messages, {
+  // Use stream with AI SDK v5 format (experimental)
+  const stream = await myAgent.stream(messages, {
     format: 'aisdk',  // Enable AI SDK v5 compatibility
     memory: {
       thread: "user-session", // Use actual user/session ID
@@ -262,23 +262,19 @@ NOTE: ai-sdk v5 is still in beta, while it is in beta you'll have to install the
 
 ## Key Integration Points
 
-### Experimental streamVNext Format Support
+### Experimental stream Format Support
 
-The experimental `streamVNext` method with `format: 'aisdk'` provides native AI SDK v5 compatibility:
+The experimental `stream` method with `format: 'aisdk'` provides native AI SDK v5 compatibility:
 
 ```typescript
-// Use streamVNext with AI SDK v5 format
-const stream = await agent.streamVNext(messages, {
+// Use stream with AI SDK v5 format
+const stream = await agent.stream(messages, {
   format: 'aisdk'  // Returns AISDKV5OutputStream
 });
 
 // Direct compatibility with AI SDK v5 interfaces
 return stream.toUIMessageStreamResponse();
 ```
-
-<Callout type="info">
-  **Note**: The `streamVNext` method with format support is experimental and may change as we refine the feature based on feedback. See the [Agent Streaming documentation](/docs/agents/streaming) for more details.
-</Callout>
 
 ### Memory Persistence
 
