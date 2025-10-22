@@ -1,0 +1,423 @@
+---
+title: 'OpenAI '
+description: 'Use OpenAI models with Mastra. 27 models available.'
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# <img src="https://models.dev/logos/openai.svg" alt="OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenAI
+
+Access 27 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
+
+Learn more in the [OpenAI documentation](https://platform.openai.com/docs/models).
+
+```bash
+OPENAI_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from '@mastra/core';
+
+const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai/codex-mini-latest',
+});
+
+// Generate a response
+const response = await agent.generate('Hello!');
+
+// Stream a response
+const stream = await agent.stream('Tell me a story');
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Models
+
+<ProviderModelsTable
+models={[
+{
+"model": "openai/gpt-4.1-nano",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 1047576,
+"maxOutput": 32768,
+"inputCost": 0.1,
+"outputCost": 0.4
+},
+{
+"model": "openai/gpt-4",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 8192,
+"maxOutput": 8192,
+"inputCost": 30,
+"outputCost": 60
+},
+{
+"model": "openai/o1-pro",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 200000,
+"maxOutput": 100000,
+"inputCost": 150,
+"outputCost": 600
+},
+{
+"model": "openai/gpt-4o-2024-05-13",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 128000,
+"maxOutput": 4096,
+"inputCost": 5,
+"outputCost": 15
+},
+{
+"model": "openai/gpt-4o-2024-08-06",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 128000,
+"maxOutput": 16384,
+"inputCost": 2.5,
+"outputCost": 10
+},
+{
+"model": "openai/gpt-4.1-mini",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 1047576,
+"maxOutput": 32768,
+"inputCost": 0.4,
+"outputCost": 1.6
+},
+{
+"model": "openai/o3-deep-research",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 200000,
+"maxOutput": 100000,
+"inputCost": 10,
+"outputCost": 40
+},
+{
+"model": "openai/gpt-3.5-turbo",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": false,
+"reasoning": false,
+"contextWindow": 16385,
+"maxOutput": 4096,
+"inputCost": 0.5,
+"outputCost": 1.5
+},
+{
+"model": "openai/gpt-4-turbo",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 128000,
+"maxOutput": 4096,
+"inputCost": 10,
+"outputCost": 30
+},
+{
+"model": "openai/o1-preview",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": false,
+"reasoning": true,
+"contextWindow": 128000,
+"maxOutput": 32768,
+"inputCost": 15,
+"outputCost": 60
+},
+{
+"model": "openai/o3-mini",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 200000,
+"maxOutput": 100000,
+"inputCost": 1.1,
+"outputCost": 4.4
+},
+{
+"model": "openai/codex-mini-latest",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 200000,
+"maxOutput": 100000,
+"inputCost": 1.5,
+"outputCost": 6
+},
+{
+"model": "openai/gpt-5-nano",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 400000,
+"maxOutput": 128000,
+"inputCost": 0.05,
+"outputCost": 0.4
+},
+{
+"model": "openai/gpt-5-codex",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 400000,
+"maxOutput": 128000,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "openai/gpt-4o",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 128000,
+"maxOutput": 16384,
+"inputCost": 2.5,
+"outputCost": 10
+},
+{
+"model": "openai/gpt-4.1",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 1047576,
+"maxOutput": 32768,
+"inputCost": 2,
+"outputCost": 8
+},
+{
+"model": "openai/o4-mini",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 200000,
+"maxOutput": 100000,
+"inputCost": 1.1,
+"outputCost": 4.4
+},
+{
+"model": "openai/o1",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 200000,
+"maxOutput": 100000,
+"inputCost": 15,
+"outputCost": 60
+},
+{
+"model": "openai/gpt-5-mini",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 400000,
+"maxOutput": 128000,
+"inputCost": 0.25,
+"outputCost": 2
+},
+{
+"model": "openai/o1-mini",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": false,
+"reasoning": true,
+"contextWindow": 128000,
+"maxOutput": 65536,
+"inputCost": 1.1,
+"outputCost": 4.4
+},
+{
+"model": "openai/o3-pro",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 200000,
+"maxOutput": 100000,
+"inputCost": 20,
+"outputCost": 80
+},
+{
+"model": "openai/gpt-4o-2024-11-20",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 128000,
+"maxOutput": 16384,
+"inputCost": 2.5,
+"outputCost": 10
+},
+{
+"model": "openai/o3",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 200000,
+"maxOutput": 100000,
+"inputCost": 2,
+"outputCost": 8
+},
+{
+"model": "openai/o4-mini-deep-research",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 200000,
+"maxOutput": 100000,
+"inputCost": 2,
+"outputCost": 8
+},
+{
+"model": "openai/gpt-5-chat-latest",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": false,
+"reasoning": true,
+"contextWindow": 400000,
+"maxOutput": 128000,
+"inputCost": 1.25,
+"outputCost": 10
+},
+{
+"model": "openai/gpt-4o-mini",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 128000,
+"maxOutput": 16384,
+"inputCost": 0.15,
+"outputCost": 0.6
+},
+{
+"model": "openai/gpt-5",
+"imageInput": true,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 400000,
+"maxOutput": 128000,
+"inputCost": 1.25,
+"outputCost": 10
+}
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: 'custom-agent',
+  model: {
+    modelId: 'codex-mini-latest',
+    apiKey: process.env.OPENAI_API_KEY,
+    headers: {
+      'X-Custom-Header': 'value',
+    },
+  },
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: 'dynamic-agent',
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === 'complex';
+    return useAdvanced ? 'openai/o4-mini-deep-research' : 'openai/codex-mini-latest';
+  },
+});
+```
+
+## Direct Provider Installation
+
+This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/openai) for more details.
+
+<Tabs groupId="package-manager">
+  <TabItem value="npm" label="npm" default>
+    ```bash copy
+    npm install @ai-sdk/openai
+    ```
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
+    ```bash copy
+    yarn add @ai-sdk/openai
+    ```
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
+    ```bash copy
+    pnpm add @ai-sdk/openai
+    ```
+  </TabItem>
+  <TabItem value="bun" label="bun">
+    ```bash copy
+    bun add @ai-sdk/openai
+    ```
+  </TabItem>
+</Tabs>
