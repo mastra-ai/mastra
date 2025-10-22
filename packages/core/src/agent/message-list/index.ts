@@ -2488,17 +2488,18 @@ export class MessageList {
         lastPartWasToolResult = false;
       } else if (part.type === 'tool-call') {
         const toolCallPart = part as AIV5Type.ToolCallPart;
-        const toolInvocationPart: AIV4Type.UIMessage['parts'][number] & { providerMetadata?: AIV5Type.ProviderMetadata } =
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              toolCallId: toolCallPart.toolCallId,
-              toolName: toolCallPart.toolName,
-              args: toolCallPart.input,
-              state: 'call',
-            },
-            ...(hasProviderMetadata && { providerMetadata: providerMetadata as AIV5Type.ProviderMetadata }),
-          };
+        const toolInvocationPart: AIV4Type.UIMessage['parts'][number] & {
+          providerMetadata?: AIV5Type.ProviderMetadata;
+        } = {
+          type: 'tool-invocation',
+          toolInvocation: {
+            toolCallId: toolCallPart.toolCallId,
+            toolName: toolCallPart.toolName,
+            args: toolCallPart.input,
+            state: 'call',
+          },
+          ...(hasProviderMetadata && { providerMetadata: providerMetadata as AIV5Type.ProviderMetadata }),
+        };
         v2Parts.push(toolInvocationPart);
         toolInvocations.push({
           toolCallId: toolCallPart.toolCallId,
@@ -2554,8 +2555,9 @@ export class MessageList {
               ? (toolResultPart.output as { value: unknown }).value
               : toolResultPart.output;
           if (hasProviderMetadata) {
-            (matchingV2Part as typeof matchingV2Part & { providerMetadata: AIV5Type.ProviderMetadata }).providerMetadata =
-              providerMetadata as AIV5Type.ProviderMetadata;
+            (
+              matchingV2Part as typeof matchingV2Part & { providerMetadata: AIV5Type.ProviderMetadata }
+            ).providerMetadata = providerMetadata as AIV5Type.ProviderMetadata;
           }
         } else {
           // No matching call, create a result-only part
@@ -2584,12 +2586,13 @@ export class MessageList {
         lastPartWasToolResult = true;
       } else if (part.type === 'reasoning') {
         const reasoningPart = part as AIV5Type.ReasoningUIPart;
-        const v2ReasoningPart: AIV4Type.UIMessage['parts'][number] & { providerMetadata?: AIV5Type.ProviderMetadata } = {
-          type: 'reasoning',
-          reasoning: reasoningPart.text,
-          details: [{ type: 'text', text: reasoningPart.text }],
-          ...(hasProviderMetadata && { providerMetadata: providerMetadata as AIV5Type.ProviderMetadata }),
-        };
+        const v2ReasoningPart: AIV4Type.UIMessage['parts'][number] & { providerMetadata?: AIV5Type.ProviderMetadata } =
+          {
+            type: 'reasoning',
+            reasoning: reasoningPart.text,
+            details: [{ type: 'text', text: reasoningPart.text }],
+            ...(hasProviderMetadata && { providerMetadata: providerMetadata as AIV5Type.ProviderMetadata }),
+          };
         v2Parts.push(v2ReasoningPart);
         reasoningParts.push(reasoningPart.text);
         lastPartWasToolResult = false;
