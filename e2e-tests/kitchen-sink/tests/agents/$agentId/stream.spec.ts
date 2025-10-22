@@ -68,12 +68,6 @@ test('tool stream', async () => {
 });
 
 test('workflow stream', async () => {
-  const expectedTextResult = `The process with the input "ABCD" has been completed successfully. The final output is:
-
-ABCDABABCDACLABDDDDDEND-ENDED
-
-If you have any questions or need further assistance, feel free to ask!`;
-
   await selectFixture(page, 'workflow-stream');
   await page.goto(`http://localhost:4111/agents/weatherAgent/chat/${nanoid()}`);
   await page.click('text=Model settings');
