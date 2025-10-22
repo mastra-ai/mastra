@@ -72,7 +72,7 @@ export const chefModelV2Agent = new Agent({
   ],
 });
 
-const weatherAgent = new Agent({
+export const weatherAgent = new Agent({
   name: 'Weather Agent',
   instructions: `Your goal is to execute the recipe-maker workflow with the given ingredient`,
   description: `An agent that can help you get a recipe for a given ingredient`,
