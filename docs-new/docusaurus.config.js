@@ -28,6 +28,9 @@ const config = {
       onBrokenMarkdownLinks: 'warn',
     },
   },
+  future: {
+    v4: true,
+  },
 
   // Custom fields for Algolia search, HubSpot, and Analytics
   customFields: {

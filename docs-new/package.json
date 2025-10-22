@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@docusaurus/core": "^3.9.1",
+    "@docusaurus/faster": "^3.9.2",
     "@docusaurus/plugin-vercel-analytics": "^3.9.1",
     "@docusaurus/preset-classic": "^3.9.1",
     "@docusaurus/theme-common": "^3.9.1",
