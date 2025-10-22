@@ -3308,8 +3308,8 @@ importers:
   stores/lance:
     dependencies:
       '@lancedb/lancedb':
-        specifier: ^0.21.2
-        version: 0.21.3(apache-arrow@18.1.0)
+        specifier: ^0.22.2
+        version: 0.22.2(apache-arrow@18.1.0)
       apache-arrow:
         specifier: ^18.1.0
         version: 18.1.0
@@ -6901,56 +6901,56 @@ packages:
   '@kwsites/promise-deferred@1.1.1':
     resolution: {integrity: sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==}
 
-  '@lancedb/lancedb-darwin-arm64@0.21.3':
-    resolution: {integrity: sha512-8cq0t64iC2qk3MO2bRLsNPWgwli71KkJJNR47nNdDLoXHWhhkrVZbrEE1BiEkMWAO2sSp98zIyUTDdFvKvjrug==}
+  '@lancedb/lancedb-darwin-arm64@0.22.2':
+    resolution: {integrity: sha512-d0xNmcjVIX930m+HLzuEChqjkxX7VPUdTIca6cWV9vv5r2kksglrpiF8B1ok38Erg7cOsTyYV9RETf4A8aSpiw==}
     engines: {node: '>= 18'}
     cpu: [arm64]
     os: [darwin]
 
-  '@lancedb/lancedb-darwin-x64@0.21.3':
-    resolution: {integrity: sha512-Er4PMooeMTA+8LvH0H/x6Fk7rggCuYZy8UsJ+v4i6JqEFBUF+t5fkMXRk58BC5Xw7Dd0LEs2ZTJry9N7qSr1Ww==}
+  '@lancedb/lancedb-darwin-x64@0.22.2':
+    resolution: {integrity: sha512-LDkjCEDaGoaJVg5u8IyrZuR55F+hu7MVeTZ7kHDDAqVgRoNRNNTNKuwCb2f7bgHTWCHwZBQH2qP0u7eaXXM4xQ==}
     engines: {node: '>= 18'}
     cpu: [x64]
     os: [darwin]
 
-  '@lancedb/lancedb-linux-arm64-gnu@0.21.3':
-    resolution: {integrity: sha512-zeKzfXZBjXW8gsIYVw48aVU4dCQ7ZKuwF0uJHvW+I0+X15rnS21XYgXiOHKSmv6aiFYm0aIowJCLMKBIuwV0IA==}
+  '@lancedb/lancedb-linux-arm64-gnu@0.22.2':
+    resolution: {integrity: sha512-gph2FIDgbVPN58BNHVIJgPPVAc4iKTD/ABhann4ehjFCj3rfwVQUN05cdxq28I73eX+g+mlCyyB5KP8zOrg3yg==}
     engines: {node: '>= 18'}
     cpu: [arm64]
     os: [linux]
 
-  '@lancedb/lancedb-linux-arm64-musl@0.21.3':
-    resolution: {integrity: sha512-apE9VIW/AoAKfBFjhiS3bn2Sl7asDKasDzsAt0Ms7rNKYaADfdr2nF8Bi5fOFsajxEQRJrXHCss1eHHxI02zZw==}
+  '@lancedb/lancedb-linux-arm64-musl@0.22.2':
+    resolution: {integrity: sha512-fo5f6O23ydb+Yv4SfId6mKJ68Iw4dlkKaKhWB0uvAWKR6bwXOFeh8qxGEXxk/JLc07VYYx5xeLEz9BU7A+HVzQ==}
     engines: {node: '>= 18'}
     cpu: [arm64]
     os: [linux]
 
-  '@lancedb/lancedb-linux-x64-gnu@0.21.3':
-    resolution: {integrity: sha512-ybZTqtYq8tdQLfWFbmUO6EwMz+sFu5zmO5J/H31NpxrtvLTrwG2I6zkq2knJrVI4ZqTcoVb/Gi2bq0pll7PJTg==}
+  '@lancedb/lancedb-linux-x64-gnu@0.22.2':
+    resolution: {integrity: sha512-ti3BrdFvac6IfTwg4VFwbZ2OkjuvwPOetx0wr0igbSTlj1vprUmVKjIqhw8bd6vrMFNpzcGEVmPFRwOoLWnnVg==}
     engines: {node: '>= 18'}
     cpu: [x64]
     os: [linux]
 
-  '@lancedb/lancedb-linux-x64-musl@0.21.3':
-    resolution: {integrity: sha512-6GGNMUZ3y7qm8SNO9VJw/G8JUCkekgJG4iiiKsEbpiAxtbMLgB1x/KrqdLklv5fgHfT4Wr9fJB+TqMpG0c8kmg==}
+  '@lancedb/lancedb-linux-x64-musl@0.22.2':
+    resolution: {integrity: sha512-fisNSc6QPl+s9IjeNj8KIyANmpl0s1Gzeyy70+BW7heGEc93OWt+vkZeCSngNauOZrbBIi5hmBTD9Ix8f5vUaw==}
     engines: {node: '>= 18'}
     cpu: [x64]
     os: [linux]
 
-  '@lancedb/lancedb-win32-arm64-msvc@0.21.3':
-    resolution: {integrity: sha512-dEeiIEnoIoLxx81qbzrhjiGJwg4sEE/3o4kKUm4jGw0B5d7GRj624fVQD3p7/C35Bt23yzEKkJ1mSPEjLRowyg==}
+  '@lancedb/lancedb-win32-arm64-msvc@0.22.2':
+    resolution: {integrity: sha512-yr6AGqTI7zkJPaAmqQufkOadUiZB0QeY8C8h0ORiejtNVb5g+kConQ6AUTOrhcQCG2N1+1JO9EVknPfs+Fa5mw==}
     engines: {node: '>= 18'}
     cpu: [arm64]
     os: [win32]
 
-  '@lancedb/lancedb-win32-x64-msvc@0.21.3':
-    resolution: {integrity: sha512-V4rieshQ0VQs+T7X8xBdCL1SDjrU111ahZFPiXs24gfegGMrKi5wLt89aY0B7Zn/QVJWZiHKz8HkKYWNeCoEAw==}
+  '@lancedb/lancedb-win32-x64-msvc@0.22.2':
+    resolution: {integrity: sha512-Wq4SiuFjPa8+2psrAu2EZmZl3VvgL4H2wJZYcakP5vlhj9sudH3f+BPU545tRTQTrSfY3PmbgRgRxZIGvrdEbw==}
     engines: {node: '>= 18'}
     cpu: [x64]
     os: [win32]
 
-  '@lancedb/lancedb@0.21.3':
-    resolution: {integrity: sha512-hfzp498BfcCJ730fV1YGGoXVxRgE+W1n0D0KwanKlbt8bBPSQ6E6Tf8mPXc8rKdAXIRR3o5mTzMG3z3Fda+m3Q==}
+  '@lancedb/lancedb@0.22.2':
+    resolution: {integrity: sha512-dpNgWqW0aBpAGSAxL/x3qDtvZ1XJFmseMGnAg3Ok4fZ7br+1q5M8qRMhaYpYNAy1iG5H74/pWGthkN9oFP2IDw==}
     engines: {node: '>= 18'}
     cpu: [x64, arm64]
     os: [darwin, linux, win32]
@@ -19764,43 +19764,43 @@ snapshots:
 
   '@kwsites/promise-deferred@1.1.1': {}
 
-  '@lancedb/lancedb-darwin-arm64@0.21.3':
+  '@lancedb/lancedb-darwin-arm64@0.22.2':
     optional: true
 
-  '@lancedb/lancedb-darwin-x64@0.21.3':
+  '@lancedb/lancedb-darwin-x64@0.22.2':
     optional: true
 
-  '@lancedb/lancedb-linux-arm64-gnu@0.21.3':
+  '@lancedb/lancedb-linux-arm64-gnu@0.22.2':
     optional: true
 
-  '@lancedb/lancedb-linux-arm64-musl@0.21.3':
+  '@lancedb/lancedb-linux-arm64-musl@0.22.2':
     optional: true
 
-  '@lancedb/lancedb-linux-x64-gnu@0.21.3':
+  '@lancedb/lancedb-linux-x64-gnu@0.22.2':
     optional: true
 
-  '@lancedb/lancedb-linux-x64-musl@0.21.3':
+  '@lancedb/lancedb-linux-x64-musl@0.22.2':
     optional: true
 
-  '@lancedb/lancedb-win32-arm64-msvc@0.21.3':
+  '@lancedb/lancedb-win32-arm64-msvc@0.22.2':
     optional: true
 
-  '@lancedb/lancedb-win32-x64-msvc@0.21.3':
+  '@lancedb/lancedb-win32-x64-msvc@0.22.2':
     optional: true
 
-  '@lancedb/lancedb@0.21.3(apache-arrow@18.1.0)':
+  '@lancedb/lancedb@0.22.2(apache-arrow@18.1.0)':
     dependencies:
       apache-arrow: 18.1.0
       reflect-metadata: 0.2.2
     optionalDependencies:
-      '@lancedb/lancedb-darwin-arm64': 0.21.3
-      '@lancedb/lancedb-darwin-x64': 0.21.3
-      '@lancedb/lancedb-linux-arm64-gnu': 0.21.3
-      '@lancedb/lancedb-linux-arm64-musl': 0.21.3
-      '@lancedb/lancedb-linux-x64-gnu': 0.21.3
-      '@lancedb/lancedb-linux-x64-musl': 0.21.3
-      '@lancedb/lancedb-win32-arm64-msvc': 0.21.3
-      '@lancedb/lancedb-win32-x64-msvc': 0.21.3
+      '@lancedb/lancedb-darwin-arm64': 0.22.2
+      '@lancedb/lancedb-darwin-x64': 0.22.2
+      '@lancedb/lancedb-linux-arm64-gnu': 0.22.2
+      '@lancedb/lancedb-linux-arm64-musl': 0.22.2
+      '@lancedb/lancedb-linux-x64-gnu': 0.22.2
+      '@lancedb/lancedb-linux-x64-musl': 0.22.2
+      '@lancedb/lancedb-win32-arm64-msvc': 0.22.2
+      '@lancedb/lancedb-win32-x64-msvc': 0.22.2
 
   '@lezer/common@1.3.0': {}
 
