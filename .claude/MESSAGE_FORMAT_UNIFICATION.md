@@ -867,54 +867,24 @@ const { messages } = await client.memory.thread('thread-123').getMessages({
 
 ### 3. Stream Format Parameter
 
-**Question:** Should streaming support a `format` parameter to control output format?
+**Question:** Should streaming (e.g., `agent.stream()`) support a `format` parameter to return different stream formats?
 
-**Current behavior:**
-- Server streams Mastra `ChunkType`
-- Client-side `toUIMessage()` converts to `UIMessage`
-
-**Options:**
-- A) Add `format` parameter to streaming (e.g., `agent.stream({ format: 'AIV5.UI' })`)
-- B) Keep streaming as-is (Mastra ChunkType), client-side conversion
-- C) Support both streaming formats
-
-**Recommendation:** Option B - Keep streaming as-is
-- Streaming is already optimized for Mastra ChunkType
-- Client-side conversion is fast and flexible
-- Avoids server-side conversion overhead during streaming
-- Consistent with current architecture
-
-**Impact:**
-- No changes to streaming code
-- Maintains performance
-- Clear separation: storage queries use `format`, streaming uses client-side conversion
+**Answer:** ✅ **No - streaming is out of scope for this work**
+- This work focuses exclusively on memory fetching (`memory.query()`, `getMessages()`)
+- Streaming will continue to use Mastra `ChunkType` with client-side conversion
+- Streaming and memory are separate concerns
 
 ---
 
 ### 4. Performance & Caching
 
-**Question:** Should we cache converted messages to avoid repeated conversions?
+**Question:** Should we cache converted messages to avoid re-converting on every query?
 
-**Considerations:**
-- Format conversion (V2 → V5) involves parsing and restructuring
-- Network data parsing adds overhead for UI formats
-- Most queries are one-time (not repeated)
-
-**Options:**
-- A) Add LRU cache for converted messages
-- B) No caching, convert on-demand
-- C) Cache only for expensive operations (network data parsing)
-
-**Recommendation:** Option B initially, Option C if needed
-- Measure conversion performance first
-- Most queries are one-time, caching may not help
-- If network data parsing is slow, cache parsed results
-- Avoid premature optimization
-
-**Action items:**
-- Add performance benchmarks in test suite
-- Monitor production metrics after release
-- Add caching if conversion takes >100ms for typical queries
+**Answer:** ✅ **No - skip caching for now**
+- We haven't measured if conversion is actually slow
+- Caching adds complexity (invalidation, memory management)
+- Can be added later if benchmarks show it's needed
+- Per-message caching idea is documented in `.claude/MESSAGE_CONVERSION_CACHING_IDEA.md` as a future enhancement
 
 ---
 
