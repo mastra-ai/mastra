@@ -928,16 +928,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * Resolves to an error if an error occurred during streaming.
    */
   get error(): Error | undefined {
-    // if (this.#error instanceof Error) {
-    //   return this.#error;
-    // }
-
-    // if (typeof this.#error === 'object') {
-    //   const error = new Error(this.#error.message);
-    //   error.stack = this.#error.stack;
-    //   return error;
-    // }
-
     return this.#error;
   }
 
