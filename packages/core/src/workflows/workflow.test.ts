@@ -12591,12 +12591,24 @@ describe('Workflow', () => {
         },
       });
 
+      const repeatingStepWithRetryCount = createStep({
+        id: 'repeatingStepWithRetryCount',
+        inputSchema: repeatingStep.outputSchema,
+        outputSchema: z.object({
+          count: z.number(),
+        }),
+        execute: async ({ retryCount }) => {
+          return { count: retryCount };
+        },
+      });
+
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
         outputSchema: repeatingStep.outputSchema,
       })
         .dountil(repeatingStep, async ({ inputData }) => inputData.count === 3)
+        .dountil(repeatingStepWithRetryCount, async ({ inputData }) => inputData.count === 3)
         .commit();
 
       const run = await workflow.createRunAsync();
@@ -12624,8 +12636,8 @@ describe('Workflow', () => {
         outputSchema: z.object({
           count: z.number(),
         }),
-        execute: async ({ runCount }) => {
-          return { count: runCount };
+        execute: async ({ retryCount }) => {
+          return { count: retryCount };
         },
       });
 
@@ -12650,6 +12662,9 @@ describe('Workflow', () => {
       const mockExec = vi.fn().mockImplementation(async ({ runCount }) => {
         return { count: runCount };
       });
+      const mockExecWithRetryCount = vi.fn().mockImplementation(async ({ retryCount }) => {
+        return { count: retryCount };
+      });
       const step = createStep({
         id: 'step',
         inputSchema: z.object({}),
@@ -12658,6 +12673,14 @@ describe('Workflow', () => {
         }),
         execute: mockExec,
       });
+      const step2 = createStep({
+        id: 'step2',
+        inputSchema: z.object({ count: z.number() }),
+        outputSchema: z.object({
+          count: z.number(),
+        }),
+        execute: mockExecWithRetryCount,
+      });
 
       const workflow = createWorkflow({
         id: 'test-workflow',
@@ -12665,6 +12688,7 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       })
         .then(step)
+        .then(step2)
         .commit();
 
       const run = await workflow.createRunAsync();
@@ -12672,6 +12696,8 @@ describe('Workflow', () => {
 
       expect(mockExec).toHaveBeenCalledTimes(1);
       expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ runCount: 0 }));
+      expect(mockExecWithRetryCount).toHaveBeenCalledTimes(1);
+      expect(mockExecWithRetryCount).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 0 }));
     });
   });
   describe('Parallel Suspended Steps', () => {

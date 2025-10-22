@@ -29,11 +29,11 @@ export class StepExecutor extends MastraBase {
     state: Record<string, any>;
     emitter: EventEmitter;
     runtimeContext: RuntimeContext;
-    runCount?: number;
+    retryCount?: number;
     foreachIdx?: number;
     validateInputs?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
-    const { step, stepResults, runId, runtimeContext, runCount = 0 } = params;
+    const { step, stepResults, runId, runtimeContext, retryCount = 0 } = params;
 
     const abortController = new AbortController();
 
@@ -80,7 +80,8 @@ export class StepExecutor extends MastraBase {
           // TODO
           params.state = state;
         },
-        runCount,
+        runCount: retryCount,
+        retryCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(this, stepResults),
@@ -156,9 +157,9 @@ export class StepExecutor extends MastraBase {
     state: Record<string, any>;
     emitter: { runtime: PubSub; events: PubSub };
     runtimeContext: RuntimeContext;
-    runCount?: number;
+    retryCount?: number;
   }): Promise<number[]> {
-    const { step, stepResults, runId, runtimeContext, runCount = 0 } = params;
+    const { step, stepResults, runId, runtimeContext, retryCount = 0 } = params;
 
     const abortController = new AbortController();
     const ee = new EventEmitter();
@@ -173,7 +174,7 @@ export class StepExecutor extends MastraBase {
             runtimeContext,
             inputData: params.input,
             state: params.state,
-            runCount,
+            retryCount,
             resumeData: params.resumeData,
             abortController,
             stepResults,
@@ -209,7 +210,7 @@ export class StepExecutor extends MastraBase {
     runtimeContext,
     emitter,
     abortController,
-    runCount = 0,
+    retryCount = 0,
     iterationCount,
   }: {
     workflowId: string;
@@ -222,7 +223,7 @@ export class StepExecutor extends MastraBase {
     emitter: EventEmitter;
     runtimeContext: RuntimeContext;
     abortController: AbortController;
-    runCount?: number;
+    retryCount?: number;
     iterationCount: number;
   }): Promise<boolean> {
     return condition({
@@ -235,7 +236,8 @@ export class StepExecutor extends MastraBase {
       setState: (_state: any) => {
         // TODO
       },
-      runCount,
+      runCount: retryCount,
+      retryCount,
       resumeData: resumeData,
       getInitData: () => stepResults?.input as any,
       getStepResult: getStepResult.bind(this, stepResults),
@@ -269,9 +271,9 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     emitter: { runtime: PubSub; events: PubSub };
     runtimeContext: RuntimeContext;
-    runCount?: number;
+    retryCount?: number;
   }): Promise<number> {
-    const { step, stepResults, runId, runtimeContext, runCount = 0 } = params;
+    const { step, stepResults, runId, runtimeContext, retryCount = 0 } = params;
 
     const abortController = new AbortController();
     const ee = new EventEmitter();
@@ -296,7 +298,8 @@ export class StepExecutor extends MastraBase {
         setState: (_state: any) => {
           // TODO
         },
-        runCount,
+        runCount: retryCount,
+        retryCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(this, stepResults),
@@ -333,9 +336,9 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     emitter: { runtime: PubSub; events: PubSub };
     runtimeContext: RuntimeContext;
-    runCount?: number;
+    retryCount?: number;
   }): Promise<number> {
-    const { step, stepResults, runId, runtimeContext, runCount = 0 } = params;
+    const { step, stepResults, runId, runtimeContext, retryCount = 0 } = params;
 
     const abortController = new AbortController();
     const ee = new EventEmitter();
@@ -360,7 +363,8 @@ export class StepExecutor extends MastraBase {
         setState: (_state: any) => {
           // TODO
         },
-        runCount,
+        runCount: retryCount,
+        retryCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(this, stepResults),

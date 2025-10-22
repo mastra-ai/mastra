@@ -875,6 +875,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           throw validationError;
         }
 
+        const retryCount = this.getOrGenerateRetryCount(step.id);
+
         const result = await runStep({
           runId,
           resourceId,
@@ -886,8 +888,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           setState: (state: any) => {
             executionContext.state = state;
           },
-          runCount: this.getOrGenerateRetryCount(step.id),
-          retryCount: this.getOrGenerateRetryCount(step.id),
+          runCount: retryCount,
+          retryCount,
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: { currentSpan: stepAISpan },
           getInitData: () => stepResults?.input as any,

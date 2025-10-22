@@ -1176,6 +1176,7 @@ export class Workflow<
           runtimeContext,
           tracingContext,
           outputOptions: { includeState: true },
+          retryCount,
         })
       : await run.start({
           inputData,

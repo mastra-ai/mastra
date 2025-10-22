@@ -1241,6 +1241,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             executionContext.state = state;
           },
           runCount: -1,
+          retryCount: -1,
           tracingContext: {
             currentSpan: sleepSpan,
           },
@@ -1351,6 +1352,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             executionContext.state = state;
           },
           runCount: -1,
+          retryCount: -1,
           tracingContext: {
             currentSpan: sleepUntilSpan,
           },
@@ -2098,6 +2100,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 mastra: this.mastra!,
                 runtimeContext,
                 runCount: -1,
+                retryCount: -1,
                 inputData: prevOutput,
                 state: executionContext.state,
                 setState: (state: any) => {
