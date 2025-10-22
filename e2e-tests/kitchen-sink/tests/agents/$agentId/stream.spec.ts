@@ -66,3 +66,47 @@ test('tool stream', async () => {
   await expect(page.getByTestId('tool-result')).toContainText(`"conditions":`);
   await expect(page.getByTestId('tool-result')).toContainText(`"location":`);
 });
+
+test('workflow stream', async () => {
+  const expectedTextResult = `The process with the input "ABCD" has been completed successfully. The final output is:
+
+ABCDABABCDACLABDDDDDEND-ENDED
+
+If you have any questions or need further assistance, feel free to ask!`;
+
+  await selectFixture(page, 'workflow-stream');
+  await page.goto(`http://localhost:4111/agents/weatherAgent/chat/${nanoid()}`);
+  await page.click('text=Model settings');
+  await page.click('text=Stream');
+
+  await page.locator('textarea').fill('Give me the weather in Paris');
+  await page.click('button:has-text("Send")');
+
+  // Assert partial streaming chunks
+  await expect(page.getByTestId('thread-wrapper').getByRole('button', { name: `lessComplexWorkflow` })).toBeVisible({
+    timeout: 20000,
+  });
+
+  // Workflow checks
+  await expect(page.locator('[data-workflow-node]').nth(0)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(page.locator('[data-workflow-node]').nth(1)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(page.locator('[data-workflow-node]').nth(2)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(page.locator('[data-workflow-node]').nth(3)).toHaveAttribute('data-workflow-step-status', 'success');
+  // 4 and 6 are conditional
+
+  await expect(page.locator('[data-workflow-node]').nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
+  await expect(page.locator('[data-workflow-node]').nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(page.locator('[data-workflow-node]').nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(page.locator('[data-workflow-node]').nth(8)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(page.locator('[data-workflow-node]').nth(9)).toHaveAttribute('data-workflow-step-status', 'running');
+
+  // Text delta result
+  await expect(
+    page
+      .getByTestId('thread-wrapper')
+      .getByText(`It looks like the process I ran with "tomato" resulted in a playful transformation: `),
+  ).toBeVisible({ timeout: 20000 });
+  await expect(page.getByTestId('thread-wrapper').getByText('tomatoABtomatoACLABD-ENDED')).toBeVisible({
+    timeout: 20000,
+  });
+});
