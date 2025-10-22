@@ -62,7 +62,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const client = new MongoClient(uri, {
       ...options,
       driverInfo: {
-        name: 'mastra-storage',
+        name: 'mastra-vector',
         version: packageJson.version || '0.0.0',
         platform: 'Node.js'
       }
