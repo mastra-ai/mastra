@@ -1,3 +1,4 @@
+import { APICallError } from 'ai-v5';
 import { injectJsonInstructionIntoMessages, isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
@@ -171,10 +172,15 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
           {
             retries: modelSettings?.maxRetries ?? 2,
             signal: abortSignal,
+            shouldRetry(context) {
+              if (APICallError.isInstance(context.error)) {
+                return context.error.isRetryable;
+              }
+              return true;
+            },
           },
         );
       } catch (error) {
-        console.error('Error creating stream', error);
         const abortSignal = options?.abortSignal || modelSettings?.abortSignal;
         if (isAbortError(error) && abortSignal?.aborted) {
           console.error('Abort error', error);
@@ -189,10 +195,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
             start: async controller => {
               controller.enqueue({
                 type: 'error',
-                error: {
-                  message: error instanceof Error ? error.message : JSON.stringify(error),
-                  stack: error instanceof Error ? error.stack : undefined,
-                },
+                error,
               });
               controller.close();
             },
