@@ -312,15 +312,46 @@ export class DuckDBFilterBuilder {
 
   /**
    * Build text search condition
+   * @param tableName - Table name (validated for SQL safety)
+   * @param query - Search query (parameterized)
    */
   static buildTextSearch(tableName: string, query: string): string {
+    // Validate table name to prevent SQL injection
+    if (!/^[a-zA-Z0-9_-]+$/.test(tableName)) {
+      throw new Error(
+        `Invalid table name: ${tableName}. Only alphanumeric characters, underscores, and hyphens are allowed.`,
+      );
+    }
+
+    // SQL keywords check
+    const sqlKeywords = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER', 'EXEC', 'EXECUTE', 'UNION'];
+    if (sqlKeywords.includes(tableName.toUpperCase())) {
+      throw new Error(`Table name cannot be a SQL keyword: ${tableName}`);
+    }
+
     return `fts_main_${tableName}(content, ?)`;
   }
 
   /**
    * Build date range condition
+   * @param field - Field name (validated for SQL safety)
+   * @param start - Start date/time
+   * @param end - End date/time
    */
   static buildDateRange(field: string, start?: Date | string, end?: Date | string): FilterSQL {
+    // Validate field name to prevent SQL injection
+    if (!/^[a-zA-Z0-9_.-]+$/.test(field)) {
+      throw new Error(
+        `Invalid field name: ${field}. Only alphanumeric characters, underscores, hyphens, and dots are allowed.`,
+      );
+    }
+
+    // SQL keywords check
+    const sqlKeywords = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER', 'EXEC', 'EXECUTE', 'UNION'];
+    if (sqlKeywords.includes(field.toUpperCase())) {
+      throw new Error(`Field name cannot be a SQL keyword: ${field}`);
+    }
+
     const conditions: string[] = [];
     const params: any[] = [];
 

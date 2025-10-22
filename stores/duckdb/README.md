@@ -286,9 +286,11 @@ await vectorStore.importFromParquet('my-index', {
     content: 'text',
     metadata: 'metadata',
   },
-  filter: "category = 'published'",
   batchSize: 10000,
 });
+
+// Note: If you need to filter Parquet data, please pre-filter your files
+// or use a staging table approach, as runtime filtering is not supported.
 
 // From S3
 await vectorStore.importFromParquet('my-index', {
