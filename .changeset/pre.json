@@ -81,5 +81,7 @@
     "@mastra/voice-speechify": "0.11.10",
     "@mastra/inngest": "0.17.0"
   },
-  "changesets": []
+  "changesets": [
+    "breezy-deer-flow"
+  ]
 }
