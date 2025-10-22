@@ -349,16 +349,39 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
           },
         });
 
-        let e = chunk.payload.error as any;
-        if (typeof e === 'object') {
-          const errorMessage = safeParseErrorObject(e);
-          const originalCause = e instanceof Error ? e.cause : undefined;
-          e = new Error(errorMessage, originalCause ? { cause: originalCause } : undefined);
-          Object.assign(e, chunk.payload.error);
+        // No error payload, use unknown error
+        if (!chunk.payload.error) {
+          const unknownError = new Error('Unknown error in agent stream');
+          controller.enqueue({ ...chunk, payload: { ...chunk.payload, error: unknownError } });
+          await options?.onError?.({ error: unknownError });
+          break;
         }
 
-        controller.enqueue({ ...chunk, payload: { ...chunk.payload, error: e } });
-        await options?.onError?.({ error: e });
+        if (chunk.payload.error instanceof Error) {
+          // Keep original error
+          controller.enqueue(chunk);
+          await options?.onError?.({ error: chunk.payload.error });
+        } else {
+          // For object errors, convert to Error
+          if (typeof chunk.payload.error === 'object') {
+            let errorMessage = 'Unknown error';
+
+            if (
+              chunk.payload.error &&
+              'message' in chunk.payload.error &&
+              typeof chunk.payload.error.message === 'string'
+            ) {
+              errorMessage = chunk.payload.error.message;
+            } else {
+              errorMessage = safeParseErrorObject(chunk.payload.error);
+            }
+
+            const error = new Error(errorMessage);
+            Object.assign(error as Error, chunk.payload.error);
+            controller.enqueue({ ...chunk, payload: { ...chunk.payload, error } });
+            await options?.onError?.({ error });
+          }
+        }
 
         break;
       default:
