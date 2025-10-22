@@ -28,9 +28,13 @@ const config = {
       onBrokenMarkdownLinks: 'warn',
     },
   },
-  future: {
-    v4: true,
-  },
+  // Enable v4 features in prod
+
+  ...(process.env.NODE_ENV === 'production' && {
+    future: {
+      v4: true,
+    },
+  }),
 
   // Custom fields for Algolia search, HubSpot, and Analytics
   customFields: {

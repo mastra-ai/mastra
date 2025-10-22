@@ -2,7 +2,6 @@
   "name": "mastra-docusaurus-test",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "scripts": {
     "docusaurus": "docusaurus",
     "start": "docusaurus start",
@@ -74,5 +73,6 @@
   },
   "engines": {
     "node": ">=18.0"
-  }
+  },
+  "packageManager": "npm@10.9.2"
 }
