@@ -174,6 +174,13 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
   /**
    * @internal
    */
+  rejectResults(error: Error) {
+    this.#delayedPromises.result.reject(error);
+  }
+
+  /**
+   * @internal
+   */
   resume(stream: ReadableStream<WorkflowStreamEvent>) {
     this.#baseStream = stream;
     this.#streamFinished = false;
