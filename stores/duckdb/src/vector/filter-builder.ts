@@ -18,7 +18,6 @@ export interface FilterSQL {
  * Builds SQL WHERE clauses from filter objects
  */
 export class DuckDBFilterBuilder {
-  private paramCounter = 0;
   private params: any[] = [];
 
   /**
@@ -27,7 +26,9 @@ export class DuckDBFilterBuilder {
   private validateFieldName(field: string): string {
     // Only allow alphanumeric, underscore, hyphen, and dot for nested paths
     if (!/^[a-zA-Z0-9_.-]+$/.test(field)) {
-      throw new Error(`Invalid field name: ${field}. Only alphanumeric characters, underscores, hyphens, and dots are allowed.`);
+      throw new Error(
+        `Invalid field name: ${field}. Only alphanumeric characters, underscores, hyphens, and dots are allowed.`,
+      );
     }
 
     // Additional check for SQL keywords
@@ -47,7 +48,6 @@ export class DuckDBFilterBuilder {
       return { sql: '', params: [] };
     }
 
-    this.paramCounter = 0;
     this.params = [];
 
     const conditions: string[] = [];

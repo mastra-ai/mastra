@@ -117,10 +117,10 @@ export class DuckDBVector extends MastraVector {
         // User input only selects which pre-defined command to execute
         // DuckDB limitation: INSTALL/LOAD don't support parameterized queries
         const extensionCommands: Record<string, { install: string; load: string }> = {
-          'vss': { install: 'INSTALL vss', load: 'LOAD vss' },
-          'fts': { install: 'INSTALL fts', load: 'LOAD fts' },
-          'parquet': { install: 'INSTALL parquet', load: 'LOAD parquet' },
-          'json': { install: 'INSTALL json', load: 'LOAD json' },
+          vss: { install: 'INSTALL vss', load: 'LOAD vss' },
+          fts: { install: 'INSTALL fts', load: 'LOAD fts' },
+          parquet: { install: 'INSTALL parquet', load: 'LOAD parquet' },
+          json: { install: 'INSTALL json', load: 'LOAD json' },
         };
 
         for (const ext of this.config.extensions) {
@@ -342,10 +342,7 @@ export class DuckDBVector extends MastraVector {
         // @greptile-security-review safe - Table name is system-generated and validated
         // tableName follows pattern vectors_[a-zA-Z0-9_]+ only
         // escapedTableName is double-quote escaped for SQL identifiers
-        await this.execute(
-          conn,
-          `PRAGMA create_fts_index(${escapedTableName}, 'id', 'content')`,
-        );
+        await this.execute(conn, `PRAGMA create_fts_index(${escapedTableName}, 'id', 'content')`);
       } catch (error) {
         // FTS might not be available, ignore for now
         console.warn('FTS extension not available for hybrid search:', error);
@@ -420,7 +417,12 @@ export class DuckDBVector extends MastraVector {
       await this.execute(conn, 'COMMIT');
       return vectorIds;
     } catch (error) {
-      await this.execute(conn, 'ROLLBACK');
+      try {
+        await this.execute(conn, 'ROLLBACK');
+      } catch (rollbackError) {
+        // Log rollback error but throw original error
+        console.error('Failed to rollback transaction:', rollbackError);
+      }
       throw this.handleError(error, 'Failed to upsert vectors');
     } finally {
       this.releaseConnection(conn);
@@ -700,7 +702,7 @@ export class DuckDBVector extends MastraVector {
       if (filter) {
         throw new Error(
           'Filter parameter is not supported for Parquet import due to SQL injection risks. ' +
-          'Please pre-filter your Parquet files or use a staging table approach.'
+            'Please pre-filter your Parquet files or use a staging table approach.',
         );
       }
 
@@ -880,15 +882,15 @@ export class DuckDBVector extends MastraVector {
 
     // Check for common SQL injection patterns
     const dangerousPatterns = [
-      /;/,           // SQL statement separator
-      /--/,          // SQL comment
-      /\/\*/,        // SQL block comment start
-      /\*\//,        // SQL block comment end
-      /\bDROP\b/i,   // DROP statement
+      /;/, // SQL statement separator
+      /--/, // SQL comment
+      /\/\*/, // SQL block comment start
+      /\*\//, // SQL block comment end
+      /\bDROP\b/i, // DROP statement
       /\bTRUNCATE\b/i, // TRUNCATE statement
-      /\bDELETE\b/i,   // DELETE statement (when not expected)
-      /\bEXEC\b/i,     // EXEC statement
-      /\bEXECUTE\b/i,  // EXECUTE statement
+      /\bDELETE\b/i, // DELETE statement (when not expected)
+      /\bEXEC\b/i, // EXEC statement
+      /\bEXECUTE\b/i, // EXECUTE statement
     ];
 
     for (const pattern of dangerousPatterns) {
