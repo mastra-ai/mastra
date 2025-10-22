@@ -63,7 +63,21 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> See [Input Data Mapping](./input-data-mapping.mdx) for more information.
+  > See [Input Data Mapping](./input-data-mapping.mdx) for more information.
+
+Mastra agents use a default schema that expects a `prompt` string as input and returns a `text` string as output:
+
+```json
+{
+  inputSchema: {
+    prompt: string
+  },
+  outputSchema: {
+    text: string
+  }
+}
+```
+
 
 ## Using tools in workflows
 
