@@ -402,10 +402,10 @@ importers:
   deployers/cloud:
     dependencies:
       '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
+        specifier: '>=0.20.1-0 <0.23.0-0'
+        version: 0.22.0(openapi-types@12.1.3)(react@19.2.0)(zod@4.1.12)
       '@mastra/deployer':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/deployer
       '@mastra/loggers':
         specifier: workspace:*
@@ -457,7 +457,7 @@ importers:
         specifier: ^7.28.4
         version: 7.28.4
       '@mastra/deployer':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/deployer
       '@rollup/plugin-virtual':
         specifier: 3.0.2
@@ -512,7 +512,7 @@ importers:
   deployers/netlify:
     dependencies:
       '@mastra/deployer':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/deployer
       '@rollup/plugin-virtual':
         specifier: 3.0.2
@@ -564,7 +564,7 @@ importers:
   deployers/vercel:
     dependencies:
       '@mastra/deployer':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/deployer
       '@rollup/plugin-virtual':
         specifier: 3.0.2
@@ -1291,10 +1291,10 @@ importers:
         specifier: ^1.2.0
         version: 1.2.0
       '@mastra/deployer':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../deployer
       '@mastra/loggers':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../loggers
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
@@ -1721,7 +1721,7 @@ importers:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       mastra:
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../cli
       rollup:
         specifier: ^4.50.2
@@ -1748,7 +1748,7 @@ importers:
         specifier: ^7.27.1
         version: 7.27.1(@babel/core@7.28.4)
       '@mastra/server':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../server
       '@neon-rs/load':
         specifier: ^0.1.82
@@ -1842,7 +1842,7 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@mastra/mcp':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../mcp
       '@microsoft/api-extractor':
         specifier: ^7.52.8
@@ -2110,7 +2110,7 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@mastra/mcp':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../mcp
       '@modelcontextprotocol/sdk':
         specifier: ^1.17.5
@@ -2205,7 +2205,7 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@mastra/mcp':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../mcp
       '@types/node':
         specifier: ^20.19.21
@@ -2341,7 +2341,7 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@mastra/playground-ui':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../playground-ui
       '@mastra/react':
         specifier: workspace:*
@@ -2721,7 +2721,7 @@ importers:
         version: 5.0.8(@types/react@19.2.2)(react@19.2.0)(use-sync-external-store@1.6.0(react@19.2.0))
     devDependencies:
       '@mastra/client-js':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../client-sdks/client-js
       '@mastra/core':
         specifier: workspace:*
@@ -3324,7 +3324,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/_types-builder
       '@mastra/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
@@ -7071,10 +7071,22 @@ packages:
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
 
+  '@mastra/core@0.22.0':
+    resolution: {integrity: sha512-ZHH/nUlNOa1OHwbirRAYjrf0QqT/3yQYRzufTG8RPHzWBM/8dlbpRC8lwuDxKeCYEH5UO/OBgJ2E4y2ciIJYRg==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
+
   '@mastra/rag@1.3.1':
     resolution: {integrity: sha512-vcnKO0cSCNj92ucWCcfYyCW1LYMoeNfLuJlzYLZ72FpGeTlUEfDwTh/nsQZIuEd3lTZvWXfRsenmv3v6M7WYmQ==}
     peerDependencies:
       '@mastra/core': '>=0.20.0-0 <0.22.0-0'
+      ai: ^4.0.0 || ^5.0.0
+      zod: ^3.25.0 || ^4.0.0
+
+  '@mastra/schema-compat@0.11.4':
+    resolution: {integrity: sha512-oh3+enP3oYftZlmJAKQQj5VXR86KgTMwfMnwALZyLk04dPSWfVD2wGytoDg5Qbi3rX9qHj6g0rMNa0CUjR6aTg==}
+    peerDependencies:
       ai: ^4.0.0 || ^5.0.0
       zod: ^3.25.0 || ^4.0.0
 
@@ -16728,6 +16740,12 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.12(zod@3.25.76)
       zod: 3.25.76
 
+  '@ai-sdk/anthropic@2.0.33(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.12(zod@4.1.12)
+      zod: 4.1.12
+
   '@ai-sdk/anthropic@2.0.4(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
@@ -16773,6 +16791,12 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.12(zod@3.25.76)
       zod: 3.25.76
 
+  '@ai-sdk/google@2.0.23(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.12(zod@4.1.12)
+      zod: 4.1.12
+
   '@ai-sdk/google@2.0.6(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
@@ -16803,6 +16827,12 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.12(zod@3.25.76)
       zod: 3.25.76
 
+  '@ai-sdk/openai-compatible@1.0.22(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.12(zod@4.1.12)
+      zod: 4.1.12
+
   '@ai-sdk/openai-compatible@1.0.7(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
@@ -16826,6 +16856,12 @@ snapshots:
       '@ai-sdk/provider': 2.0.0
       '@ai-sdk/provider-utils': 3.0.12(zod@3.25.76)
       zod: 3.25.76
+
+  '@ai-sdk/openai@2.0.53(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.12(zod@4.1.12)
+      zod: 4.1.12
 
   '@ai-sdk/provider-utils@2.1.10(zod@3.25.76)':
     dependencies:
@@ -16948,6 +16984,13 @@ snapshots:
       '@ai-sdk/provider': 2.0.0
       '@ai-sdk/provider-utils': 3.0.12(zod@3.25.76)
       zod: 3.25.76
+
+  '@ai-sdk/xai@2.0.26(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/openai-compatible': 1.0.22(zod@4.1.12)
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.12(zod@4.1.12)
+      zod: 4.1.12
 
   '@ai-sdk/xai@2.0.7(zod@3.25.76)':
     dependencies:
@@ -19892,6 +19935,71 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
+  '@mastra/core@0.22.0(openapi-types@12.1.3)(react@19.2.0)(zod@4.1.12)':
+    dependencies:
+      '@a2a-js/sdk': 0.2.5
+      '@ai-sdk/anthropic-v5': '@ai-sdk/anthropic@2.0.33(zod@4.1.12)'
+      '@ai-sdk/google-v5': '@ai-sdk/google@2.0.23(zod@4.1.12)'
+      '@ai-sdk/openai-compatible-v5': '@ai-sdk/openai-compatible@1.0.22(zod@4.1.12)'
+      '@ai-sdk/openai-v5': '@ai-sdk/openai@2.0.53(zod@4.1.12)'
+      '@ai-sdk/provider': 1.1.3
+      '@ai-sdk/provider-utils': 2.2.8(zod@4.1.12)
+      '@ai-sdk/provider-utils-v5': '@ai-sdk/provider-utils@3.0.12(zod@4.1.12)'
+      '@ai-sdk/provider-v5': '@ai-sdk/provider@2.0.0'
+      '@ai-sdk/ui-utils': 1.2.11(zod@4.1.12)
+      '@ai-sdk/xai-v5': '@ai-sdk/xai@2.0.26(zod@4.1.12)'
+      '@isaacs/ttlcache': 1.4.1
+      '@mastra/schema-compat': 0.11.4(ai@4.3.19(react@19.2.0)(zod@4.1.12))(zod@4.1.12)
+      '@openrouter/ai-sdk-provider-v5': '@openrouter/ai-sdk-provider@1.2.0(ai@4.3.19(react@19.2.0)(zod@4.1.12))(zod@4.1.12)'
+      '@opentelemetry/api': 1.9.0
+      '@opentelemetry/auto-instrumentations-node': 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-trace-otlp-grpc': 0.203.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-trace-otlp-http': 0.203.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/otlp-exporter-base': 0.203.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/otlp-transformer': 0.203.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-metrics': 2.2.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-trace-base': 2.2.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-trace-node': 2.2.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/semantic-conventions': 1.37.0
+      '@sindresorhus/slugify': 2.2.1
+      ai: 4.3.19(react@19.2.0)(zod@4.1.12)
+      ai-v5: ai@5.0.76(zod@4.1.12)
+      date-fns: 3.6.0
+      dotenv: 16.6.1
+      hono: 4.10.1
+      hono-openapi: 0.4.8(hono@4.10.1)(openapi-types@12.1.3)(zod@4.1.12)
+      js-tiktoken: 1.0.21
+      json-schema: 0.4.0
+      json-schema-to-zod: 2.6.1
+      p-map: 7.0.3
+      p-retry: 7.1.0
+      pino: 9.14.0
+      pino-pretty: 13.1.2
+      radash: 12.1.1
+      sift: 17.1.3
+      xstate: 5.23.0
+      zod: 4.1.12
+      zod-to-json-schema: 3.24.6(zod@4.1.12)
+    transitivePeerDependencies:
+      - '@hono/arktype-validator'
+      - '@hono/effect-validator'
+      - '@hono/typebox-validator'
+      - '@hono/valibot-validator'
+      - '@hono/zod-validator'
+      - '@sinclair/typebox'
+      - '@valibot/to-json-schema'
+      - arktype
+      - effect
+      - encoding
+      - openapi-types
+      - react
+      - supports-color
+      - valibot
+      - zod-openapi
+
   '@mastra/rag@1.3.1(@mastra/core@packages+core)(ai@4.3.19(react@19.2.0)(zod@3.25.76))(encoding@0.1.13)(zod@3.25.76)':
     dependencies:
       '@mastra/core': link:packages/core
@@ -19905,6 +20013,15 @@ snapshots:
       zod: 3.25.76
     transitivePeerDependencies:
       - encoding
+
+  '@mastra/schema-compat@0.11.4(ai@4.3.19(react@19.2.0)(zod@4.1.12))(zod@4.1.12)':
+    dependencies:
+      ai: 4.3.19(react@19.2.0)(zod@4.1.12)
+      json-schema: 0.4.0
+      zod: 4.1.12
+      zod-from-json-schema: 0.5.0
+      zod-from-json-schema-v3: zod-from-json-schema@0.0.5
+      zod-to-json-schema: 3.24.6(zod@4.1.12)
 
   '@mdx-js/react@3.1.1(@types/react@19.2.2)(react@19.2.0)':
     dependencies:
@@ -20170,6 +20287,11 @@ snapshots:
     dependencies:
       ai: 4.3.19(react@19.2.0)(zod@3.25.76)
       zod: 3.25.76
+
+  '@openrouter/ai-sdk-provider@1.2.0(ai@4.3.19(react@19.2.0)(zod@4.1.12))(zod@4.1.12)':
+    dependencies:
+      ai: 4.3.19(react@19.2.0)(zod@4.1.12)
+      zod: 4.1.12
 
   '@opensearch-project/opensearch@3.5.1':
     dependencies:
@@ -26628,6 +26750,14 @@ snapshots:
     optionalDependencies:
       hono: 4.10.1
       zod: 3.25.76
+
+  hono-openapi@0.4.8(hono@4.10.1)(openapi-types@12.1.3)(zod@4.1.12):
+    dependencies:
+      json-schema-walker: 2.0.0
+      openapi-types: 12.1.3
+    optionalDependencies:
+      hono: 4.10.1
+      zod: 4.1.12
 
   hono@4.10.1: {}
 
