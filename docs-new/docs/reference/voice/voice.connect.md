@@ -1,6 +1,6 @@
 ---
-title: "Reference: voice.connect() "
-description: "Documentation for the connect() method available in real-time voice providers, which establishes a connection for speech-to-speech communication."
+title: 'Reference: voice.connect() '
+description: 'Documentation for the connect() method available in real-time voice providers, which establishes a connection for speech-to-speech communication.'
 ---
 
 # voice.connect()
@@ -10,8 +10,8 @@ The `connect()` method establishes a WebSocket or WebRTC connection for real-tim
 ## Usage Example
 
 ```typescript
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
-import Speaker from "@mastra/node-speaker";
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
+import Speaker from '@mastra/node-speaker';
 
 const speaker = new Speaker({
   sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
@@ -22,24 +22,24 @@ const speaker = new Speaker({
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-4o-mini-realtime",
+    model: 'gpt-4o-mini-realtime',
     apiKey: process.env.OPENAI_API_KEY,
     options: {
       sessionConfig: {
         turn_detection: {
-          type: "server_vad",
+          type: 'server_vad',
           threshold: 0.6,
           silence_duration_ms: 1200,
         },
       },
     },
   },
-  speaker: "alloy", // Default voice
+  speaker: 'alloy', // Default voice
 });
 // Connect to the real-time service
 await voice.connect();
 // Now you can use real-time features
-voice.on("speaker", (stream) => {
+voice.on('speaker', stream => {
   stream.pipe(speaker);
 });
 // With connection options
@@ -52,14 +52,14 @@ await voice.connect({
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "options",
-      type: "Record<string, unknown>",
-      description: "Provider-specific connection options",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "options",
+type: "Record<string, unknown>",
+description: "Provider-specific connection options",
+isOptional: true,
+},
+]}
 />
 
 ## Return Value
@@ -73,22 +73,22 @@ Each real-time voice provider may support different options for the `connect()` 
 ### OpenAI Realtime
 
 <PropertiesTable
-  content={[
-    {
-      name: "options.timeout",
-      type: "number",
-      description: "Connection timeout in milliseconds",
-      isOptional: true,
-      defaultValue: "30000",
-    },
-    {
-      name: "options.reconnect",
-      type: "boolean",
-      description: "Whether to automatically reconnect on connection loss",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+content={[
+{
+name: "options.timeout",
+type: "number",
+description: "Connection timeout in milliseconds",
+isOptional: true,
+defaultValue: "30000",
+},
+{
+name: "options.reconnect",
+type: "boolean",
+description: "Whether to automatically reconnect on connection loss",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />
 
 ## Using with CompositeVoice
@@ -96,8 +96,8 @@ Each real-time voice provider may support different options for the `connect()` 
 When using `CompositeVoice`, the `connect()` method delegates to the configured real-time provider:
 
 ```typescript
-import { CompositeVoice } from "@mastra/core/voice";
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { CompositeVoice } from '@mastra/core/voice';
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
 const realtimeVoice = new OpenAIRealtimeVoice();
 const voice = new CompositeVoice({
   realtimeProvider: realtimeVoice,

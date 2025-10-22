@@ -1,6 +1,6 @@
 ---
-title: "Reference: Voice Events "
-description: "Documentation for events emitted by voice providers, particularly for real-time voice interactions."
+title: 'Reference: Voice Events '
+description: 'Documentation for events emitted by voice providers, particularly for real-time voice interactions.'
 ---
 
 # Voice Events
@@ -12,68 +12,68 @@ Voice providers emit various events during real-time voice interactions. These e
 These events are commonly implemented across real-time voice providers:
 
 <PropertiesTable
-  content={[
-    {
-      name: "error",
-      type: "Error",
-      description:
-        "Emitted when an error occurs during voice processing or when audio data format is unsupported",
-    },
-    {
-      name: "session.created",
-      type: "object",
-      description:
-        "Emitted when a new session is created with the OpenAI service",
-    },
-    {
-      name: "session.updated",
-      type: "object",
-      description: "Emitted when the session configuration is updated",
-    },
-    {
-      name: "response.created",
-      type: "object",
-      description: "Emitted when a new response is created by the AI assistant",
-    },
-    {
-      name: "response.done",
-      type: "object",
-      description: "Emitted when the AI assistant has completed its response",
-    },
-    {
-      name: "speaker",
-      type: "StreamWithId",
-      description:
-        "Emitted with a new audio stream that can be piped to an audio output",
-    },
-    {
-      name: "writing",
-      type: "object",
-      description:
-        "Emitted when text is being transcribed (user) or generated (assistant)",
-    },
-    {
-      name: "speaking",
-      type: "object",
-      description:
-        "Emitted when audio data is available from the voice provider",
-    },
-    {
-      name: "speaking.done",
-      type: "object",
-      description: "Emitted when the voice provider has finished speaking",
-    },
-    {
-      name: "tool-call-start",
-      type: "object",
-      description: "Emitted when the AI assistant starts executing a tool",
-    },
-    {
-      name: "tool-call-result",
-      type: "object",
-      description: "Emitted when a tool execution is complete with its result",
-    },
-  ]}
+content={[
+{
+name: "error",
+type: "Error",
+description:
+"Emitted when an error occurs during voice processing or when audio data format is unsupported",
+},
+{
+name: "session.created",
+type: "object",
+description:
+"Emitted when a new session is created with the OpenAI service",
+},
+{
+name: "session.updated",
+type: "object",
+description: "Emitted when the session configuration is updated",
+},
+{
+name: "response.created",
+type: "object",
+description: "Emitted when a new response is created by the AI assistant",
+},
+{
+name: "response.done",
+type: "object",
+description: "Emitted when the AI assistant has completed its response",
+},
+{
+name: "speaker",
+type: "StreamWithId",
+description:
+"Emitted with a new audio stream that can be piped to an audio output",
+},
+{
+name: "writing",
+type: "object",
+description:
+"Emitted when text is being transcribed (user) or generated (assistant)",
+},
+{
+name: "speaking",
+type: "object",
+description:
+"Emitted when audio data is available from the voice provider",
+},
+{
+name: "speaking.done",
+type: "object",
+description: "Emitted when the voice provider has finished speaking",
+},
+{
+name: "tool-call-start",
+type: "object",
+description: "Emitted when the AI assistant starts executing a tool",
+},
+{
+name: "tool-call-result",
+type: "object",
+description: "Emitted when a tool execution is complete with its result",
+},
+]}
 />
 
 ## Notes

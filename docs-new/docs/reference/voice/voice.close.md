@@ -1,6 +1,6 @@
 ---
-title: "Reference: voice.close() "
-description: "Documentation for the close() method available in voice providers, which disconnects from real-time voice services."
+title: 'Reference: voice.close() '
+description: 'Documentation for the close() method available in voice providers, which disconnects from real-time voice services.'
 ---
 
 # voice.close()
@@ -10,13 +10,13 @@ The `close()` method disconnects from a real-time voice service and cleans up re
 ## Usage Example
 
 ```typescript
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
-import { getMicrophoneStream } from "@mastra/node-audio";
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
+import { getMicrophoneStream } from '@mastra/node-audio';
 
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-4o-mini-realtime",
+    model: 'gpt-4o-mini-realtime',
     apiKey: process.env.OPENAI_API_KEY,
   },
 });
@@ -35,7 +35,7 @@ voice.send(microphoneStream);
 setTimeout(() => {
   // Close the connection and clean up resources
   voice.close();
-  console.log("Voice session ended");
+  console.log('Voice session ended');
 }, 60000); // End after 1 minute
 ```
 

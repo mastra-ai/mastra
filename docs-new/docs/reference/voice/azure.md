@@ -1,6 +1,6 @@
 ---
-title: "Reference: Azure Voice "
-description: "Documentation for the AzureVoice class, providing text-to-speech and speech-to-text capabilities using Azure Cognitive Services."
+title: 'Reference: Azure Voice '
+description: 'Documentation for the AzureVoice class, providing text-to-speech and speech-to-text capabilities using Azure Cognitive Services.'
 ---
 
 # Azure
@@ -10,33 +10,33 @@ The AzureVoice class in Mastra provides text-to-speech and speech-to-text capabi
 ## Usage Example
 
 ```typescript
-import { AzureVoice } from "@mastra/voice-azure";
+import { AzureVoice } from '@mastra/voice-azure';
 
 // Initialize with configuration
 const voice = new AzureVoice({
   speechModel: {
-    name: "neural",
-    apiKey: "your-azure-speech-api-key",
-    region: "eastus",
+    name: 'neural',
+    apiKey: 'your-azure-speech-api-key',
+    region: 'eastus',
   },
   listeningModel: {
-    name: "whisper",
-    apiKey: "your-azure-speech-api-key",
-    region: "eastus",
+    name: 'whisper',
+    apiKey: 'your-azure-speech-api-key',
+    region: 'eastus',
   },
-  speaker: "en-US-JennyNeural", // Default voice
+  speaker: 'en-US-JennyNeural', // Default voice
 });
 
 // Convert text to speech
-const audioStream = await voice.speak("Hello, how can I help you?", {
-  speaker: "en-US-GuyNeural", // Override default voice
-  style: "cheerful", // Voice style
+const audioStream = await voice.speak('Hello, how can I help you?', {
+  speaker: 'en-US-GuyNeural', // Override default voice
+  style: 'cheerful', // Voice style
 });
 
 // Convert speech to text
 const text = await voice.listen(audioStream, {
-  filetype: "wav",
-  language: "en-US",
+  filetype: 'wav',
+  language: 'en-US',
 });
 ```
 
@@ -45,53 +45,53 @@ const text = await voice.listen(audioStream, {
 ### Constructor Options
 
 <PropertiesTable
-  content={[
-    {
-      name: "speechModel",
-      type: "AzureSpeechConfig",
-      description: "Configuration for text-to-speech synthesis.",
-      isOptional: true,
-    },
-    {
-      name: "listeningModel",
-      type: "AzureSpeechConfig",
-      description: "Configuration for speech-to-text recognition.",
-      isOptional: true,
-    },
-    {
-      name: "speaker",
-      type: "string",
-      description: "Default voice ID for speech synthesis.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "speechModel",
+type: "AzureSpeechConfig",
+description: "Configuration for text-to-speech synthesis.",
+isOptional: true,
+},
+{
+name: "listeningModel",
+type: "AzureSpeechConfig",
+description: "Configuration for speech-to-text recognition.",
+isOptional: true,
+},
+{
+name: "speaker",
+type: "string",
+description: "Default voice ID for speech synthesis.",
+isOptional: true,
+},
+]}
 />
 
 ### AzureSpeechConfig
 
 <PropertiesTable
-  content={[
-    {
-      name: "name",
-      type: "'neural' | 'standard' | 'whisper'",
-      description: "Model type to use. 'neural' for TTS, 'whisper' for STT.",
-      isOptional: true,
-    },
-    {
-      name: "apiKey",
-      type: "string",
-      description:
-        "Azure Speech Services API key. Falls back to AZURE_SPEECH_KEY environment variable.",
-      isOptional: true,
-    },
-    {
-      name: "region",
-      type: "string",
-      description:
-        "Azure region (e.g., 'eastus', 'westeurope'). Falls back to AZURE_SPEECH_REGION environment variable.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "name",
+type: "'neural' | 'standard' | 'whisper'",
+description: "Model type to use. 'neural' for TTS, 'whisper' for STT.",
+isOptional: true,
+},
+{
+name: "apiKey",
+type: "string",
+description:
+"Azure Speech Services API key. Falls back to AZURE_SPEECH_KEY environment variable.",
+isOptional: true,
+},
+{
+name: "region",
+type: "string",
+description:
+"Azure region (e.g., 'eastus', 'westeurope'). Falls back to AZURE_SPEECH_REGION environment variable.",
+isOptional: true,
+},
+]}
 />
 
 ## Methods
@@ -101,39 +101,39 @@ const text = await voice.listen(audioStream, {
 Converts text to speech using Azure's neural text-to-speech service.
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string | NodeJS.ReadableStream",
-      description: "Text or text stream to convert to speech.",
-      isOptional: false,
-    },
-    {
-      name: "options.speaker",
-      type: "string",
-      description: "Voice ID to use for speech synthesis.",
-      isOptional: true,
-      defaultValue: "Constructor's speaker value",
-    },
-    {
-      name: "options.style",
-      type: "string",
-      description: "Speaking style (e.g., 'cheerful', 'sad', 'angry').",
-      isOptional: true,
-    },
-    {
-      name: "options.rate",
-      type: "string",
-      description: "Speaking rate (e.g., 'slow', 'medium', 'fast').",
-      isOptional: true,
-    },
-    {
-      name: "options.pitch",
-      type: "string",
-      description: "Voice pitch (e.g., 'low', 'medium', 'high').",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string | NodeJS.ReadableStream",
+description: "Text or text stream to convert to speech.",
+isOptional: false,
+},
+{
+name: "options.speaker",
+type: "string",
+description: "Voice ID to use for speech synthesis.",
+isOptional: true,
+defaultValue: "Constructor's speaker value",
+},
+{
+name: "options.style",
+type: "string",
+description: "Speaking style (e.g., 'cheerful', 'sad', 'angry').",
+isOptional: true,
+},
+{
+name: "options.rate",
+type: "string",
+description: "Speaking rate (e.g., 'slow', 'medium', 'fast').",
+isOptional: true,
+},
+{
+name: "options.pitch",
+type: "string",
+description: "Voice pitch (e.g., 'low', 'medium', 'high').",
+isOptional: true,
+},
+]}
 />
 
 Returns: `Promise<NodeJS.ReadableStream>`
@@ -143,28 +143,28 @@ Returns: `Promise<NodeJS.ReadableStream>`
 Transcribes audio using Azure's speech-to-text service.
 
 <PropertiesTable
-  content={[
-    {
-      name: "audioStream",
-      type: "NodeJS.ReadableStream",
-      description: "Audio stream to transcribe.",
-      isOptional: false,
-    },
-    {
-      name: "options.filetype",
-      type: "string",
-      description: "Audio format of the input stream.",
-      isOptional: true,
-      defaultValue: "'wav'",
-    },
-    {
-      name: "options.language",
-      type: "string",
-      description: "Language code for transcription.",
-      isOptional: true,
-      defaultValue: "'en-US'",
-    },
-  ]}
+content={[
+{
+name: "audioStream",
+type: "NodeJS.ReadableStream",
+description: "Audio stream to transcribe.",
+isOptional: false,
+},
+{
+name: "options.filetype",
+type: "string",
+description: "Audio format of the input stream.",
+isOptional: true,
+defaultValue: "'wav'",
+},
+{
+name: "options.language",
+type: "string",
+description: "Language code for transcription.",
+isOptional: true,
+defaultValue: "'en-US'",
+},
+]}
 />
 
 Returns: `Promise<string>`
@@ -174,39 +174,39 @@ Returns: `Promise<string>`
 Returns an array of available voice options, where each node contains:
 
 <PropertiesTable
-  content={[
-    {
-      name: "voiceId",
-      type: "string",
-      description:
-        "Unique identifier for the voice (e.g., 'en-US-JennyNeural')",
-      isOptional: false,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Human-readable name of the voice",
-      isOptional: false,
-    },
-    {
-      name: "locale",
-      type: "string",
-      description: "Language locale of the voice (e.g., 'en-US')",
-      isOptional: false,
-    },
-    {
-      name: "gender",
-      type: "string",
-      description: "Gender of the voice ('Male' or 'Female')",
-      isOptional: false,
-    },
-    {
-      name: "styles",
-      type: "string[]",
-      description: "Available speaking styles for the voice",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "voiceId",
+type: "string",
+description:
+"Unique identifier for the voice (e.g., 'en-US-JennyNeural')",
+isOptional: false,
+},
+{
+name: "name",
+type: "string",
+description: "Human-readable name of the voice",
+isOptional: false,
+},
+{
+name: "locale",
+type: "string",
+description: "Language locale of the voice (e.g., 'en-US')",
+isOptional: false,
+},
+{
+name: "gender",
+type: "string",
+description: "Gender of the voice ('Male' or 'Female')",
+isOptional: false,
+},
+{
+name: "styles",
+type: "string[]",
+description: "Available speaking styles for the voice",
+isOptional: true,
+},
+]}
 />
 
 ## Notes

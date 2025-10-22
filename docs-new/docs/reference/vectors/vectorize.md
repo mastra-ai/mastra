@@ -1,5 +1,5 @@
 ---
-title: "Reference: Cloudflare Vector Store "
+title: 'Reference: Cloudflare Vector Store '
 description: Documentation for the CloudflareVector class in Mastra, which provides vector search using Cloudflare Vectorize.
 ---
 
@@ -10,18 +10,18 @@ The CloudflareVector class provides vector search using [Cloudflare Vectorize](h
 ## Constructor Options
 
 <PropertiesTable
-  content={[
-    {
-      name: "accountId",
-      type: "string",
-      description: "Cloudflare account ID",
-    },
-    {
-      name: "apiToken",
-      type: "string",
-      description: "Cloudflare API token with Vectorize permissions",
-    },
-  ]}
+content={[
+{
+name: "accountId",
+type: "string",
+description: "Cloudflare account ID",
+},
+{
+name: "apiToken",
+type: "string",
+description: "Cloudflare API token with Vectorize permissions",
+},
+]}
 />
 
 ## Methods
@@ -29,92 +29,92 @@ The CloudflareVector class provides vector search using [Cloudflare Vectorize](h
 ### createIndex()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to create",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "Vector dimension (must match your embedding model)",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description:
-        "Distance metric for similarity search (dotproduct maps to dot-product)",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to create",
+},
+{
+name: "dimension",
+type: "number",
+description: "Vector dimension (must match your embedding model)",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean' | 'dotproduct'",
+isOptional: true,
+defaultValue: "cosine",
+description:
+"Distance metric for similarity search (dotproduct maps to dot-product)",
+},
+]}
 />
 
 ### upsert()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to upsert into",
-    },
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of embedding vectors",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      isOptional: true,
-      description: "Metadata for each vector",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Optional vector IDs (auto-generated if not provided)",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to upsert into",
+},
+{
+name: "vectors",
+type: "number[][]",
+description: "Array of embedding vectors",
+},
+{
+name: "metadata",
+type: "Record<string, any>[]",
+isOptional: true,
+description: "Metadata for each vector",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Optional vector IDs (auto-generated if not provided)",
+},
+]}
 />
 
 ### query()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to query",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "Query vector to find similar vectors",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filters for the query",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include vectors in the results",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to query",
+},
+{
+name: "queryVector",
+type: "number[]",
+description: "Query vector to find similar vectors",
+},
+{
+name: "topK",
+type: "number",
+isOptional: true,
+defaultValue: "10",
+description: "Number of results to return",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filters for the query",
+},
+{
+name: "includeVector",
+type: "boolean",
+isOptional: true,
+defaultValue: "false",
+description: "Whether to include vectors in the results",
+},
+]}
 />
 
 ### listIndexes()
@@ -124,13 +124,13 @@ Returns an array of index names as strings.
 ### describeIndex()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to describe",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to describe",
+},
+]}
 />
 
 Returns:
@@ -139,20 +139,20 @@ Returns:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: "cosine" | "euclidean" | "dotproduct";
+  metric: 'cosine' | 'euclidean' | 'dotproduct';
 }
 ```
 
 ### deleteIndex()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to delete",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to delete",
+},
+]}
 />
 
 ### createMetadataIndex()
@@ -160,23 +160,23 @@ interface IndexStats {
 Creates an index on a metadata field to enable filtering.
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the metadata field",
-    },
-    {
-      name: "propertyName",
-      type: "string",
-      description: "Name of the metadata field to index",
-    },
-    {
-      name: "indexType",
-      type: "'string' | 'number' | 'boolean'",
-      description: "Type of the metadata field",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the metadata field",
+},
+{
+name: "propertyName",
+type: "string",
+description: "Name of the metadata field to index",
+},
+{
+name: "indexType",
+type: "'string' | 'number' | 'boolean'",
+description: "Type of the metadata field",
+},
+]}
 />
 
 ### deleteMetadataIndex()
@@ -184,18 +184,18 @@ Creates an index on a metadata field to enable filtering.
 Removes an index from a metadata field.
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the metadata field",
-    },
-    {
-      name: "propertyName",
-      type: "string",
-      description: "Name of the metadata field to remove indexing from",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the metadata field",
+},
+{
+name: "propertyName",
+type: "string",
+description: "Name of the metadata field to remove indexing from",
+},
+]}
 />
 
 ### listMetadataIndexes()
@@ -203,13 +203,13 @@ Removes an index from a metadata field.
 Lists all metadata field indexes for an index.
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to list metadata indexes for",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to list metadata indexes for",
+},
+]}
 />
 
 ### updateVector()
@@ -217,23 +217,23 @@ Lists all metadata field indexes for an index.
 Updates a vector or metadata for a specific ID within an index.
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the ID to update",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier of the vector or metadata to update",
-    },
-    {
-      name: "update",
-      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
-      description: "Object containing the vector and/or metadata to update",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the ID to update",
+},
+{
+name: "id",
+type: "string",
+description: "Unique identifier of the vector or metadata to update",
+},
+{
+name: "update",
+type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+description: "Object containing the vector and/or metadata to update",
+},
+]}
 />
 
 ### deleteVector()
@@ -241,18 +241,18 @@ Updates a vector or metadata for a specific ID within an index.
 Deletes a vector and its associated metadata for a specific ID within an index.
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the ID to delete",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier of the vector and metadata to delete",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the ID to delete",
+},
+{
+name: "id",
+type: "string",
+description: "Unique identifier of the vector and metadata to delete",
+},
+]}
 />
 
 ## Response Types
@@ -275,7 +275,7 @@ The store throws typed errors that can be caught:
 ```typescript copy
 try {
   await store.query({
-    indexName: "index_name",
+    indexName: 'index_name',
     queryVector: queryVector,
   });
 } catch (error) {

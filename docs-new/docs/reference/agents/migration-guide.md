@@ -5,9 +5,11 @@
 As of `v 0.20.00`, the `streamVNext()` and `generateVNext()` methods in Mastra agents have been renamed to `stream()` and `generate()` respectively. These are now the standard APIs with full AI SDK v5 compatibility. The original `stream()` and `generate()` methods have been renamed to `streamLegacy()` and `generateLegacy()` to maintain backward compatibility with AI SDK v4.
 
 ### Continue using AI SDK v4 models
+
 - Rename all your `stream()` and `generate()` calls to `streamLegacy()` and `generateLegacy()` respectively. No other change is needed.
 
 ### Continue using AI SDK v5 models
+
 - Rename all your `streamVNext()` and `generateVNext()` calls to `stream()` and `generate()` respectively. No other change is needed.
 
 ### Upgrade from AI SDK v4 models to v5 models
@@ -51,12 +53,12 @@ First bump all your model provider packages by a major version. This will ensure
 ```typescript
 // Mastra native format (default)
 const result = await agent.stream(messages, {
-  format: 'mastra'
+  format: 'mastra',
 });
 
 // AI SDK v5 compatibility
 const result = await agent.stream(messages, {
-  format: 'aisdk'
+  format: 'aisdk',
 });
 ```
 
@@ -68,7 +70,7 @@ The following options are available in `stream()` and `generate()` but NOT in th
 
 ```typescript
 const result = await agent.stream(messages, {
-  format: 'aisdk' // or 'mastra' (default)
+  format: 'aisdk', // or 'mastra' (default)
 });
 ```
 
@@ -76,7 +78,7 @@ const result = await agent.stream(messages, {
 
 ```typescript
 const result = await agent.stream(messages, {
-  system: 'You are a helpful assistant'
+  system: 'You are a helpful assistant',
 });
 ```
 
@@ -90,13 +92,13 @@ const result = await agent.generate(messages, {
   structuredOutput: {
     schema: z.object({
       name: z.string(),
-      age: z.number()
+      age: z.number(),
     }),
     model: openai('gpt-4o-mini'), // Optional model override for structuring
     errorStrategy: 'fallback',
     fallbackValue: { name: 'unknown', age: 0 },
-    instructions: 'Extract user information' // Override default structuring instructions
-  }
+    instructions: 'Extract user information', // Override default structuring instructions
+  },
 });
 ```
 
@@ -104,7 +106,7 @@ const result = await agent.generate(messages, {
 
 ```typescript
 const result = await agent.stream(messages, {
-  stopWhen: ({ steps, totalTokens }) => steps >= 5 || totalTokens >= 10000
+  stopWhen: ({ steps, totalTokens }) => steps >= 5 || totalTokens >= 10000,
 });
 ```
 
@@ -115,9 +117,9 @@ const result = await agent.stream(messages, {
   providerOptions: {
     openai: {
       store: true,
-      metadata: { userId: '123' }
-    }
-  }
+      metadata: { userId: '123' },
+    },
+  },
 });
 ```
 
@@ -125,9 +127,9 @@ const result = await agent.stream(messages, {
 
 ```typescript
 const result = await agent.stream(messages, {
-  onChunk: (chunk) => {
+  onChunk: chunk => {
     console.log('Received chunk:', chunk);
-  }
+  },
 });
 ```
 
@@ -135,9 +137,9 @@ const result = await agent.stream(messages, {
 
 ```typescript
 const result = await agent.stream(messages, {
-  onError: (error) => {
+  onError: error => {
     console.error('Stream error:', error);
-  }
+  },
 });
 ```
 
@@ -147,7 +149,7 @@ const result = await agent.stream(messages, {
 const result = await agent.stream(messages, {
   onAbort: () => {
     console.log('Stream aborted');
-  }
+  },
 });
 ```
 
@@ -155,7 +157,7 @@ const result = await agent.stream(messages, {
 
 ```typescript
 const result = await agent.stream(messages, {
-  activeTools: ['search', 'calculator'] // Only these tools will be available
+  activeTools: ['search', 'calculator'], // Only these tools will be available
 });
 ```
 
@@ -164,7 +166,7 @@ const result = await agent.stream(messages, {
 ```typescript
 const controller = new AbortController();
 const result = await agent.stream(messages, {
-  abortSignal: controller.signal
+  abortSignal: controller.signal,
 });
 
 // Later: controller.abort();
@@ -176,8 +178,10 @@ const result = await agent.stream(messages, {
 const result = await agent.stream(messages, {
   prepareStep: ({ step, state }) => {
     console.log('About to execute step:', step);
-    return { /* modified state */ };
-  }
+    return {
+      /* modified state */
+    };
+  },
 });
 ```
 
@@ -185,7 +189,7 @@ const result = await agent.stream(messages, {
 
 ```typescript
 const result = await agent.stream(messages, {
-  requireToolApproval: true
+  requireToolApproval: true,
 });
 ```
 
@@ -200,8 +204,8 @@ const result = await agent.stream(messages, {
   modelSettings: {
     temperature: 0.7,
     maxTokens: 1000,
-    topP: 0.9
-  }
+    topP: 0.9,
+  },
 });
 ```
 
@@ -213,8 +217,8 @@ Moved to memory object.
 const result = await agent.stream(messages, {
   memory: {
     resource: 'user-123',
-    thread: 'thread-456'
-  }
+    thread: 'thread-456',
+  },
 });
 ```
 
@@ -228,9 +232,9 @@ Use `structuredOutput` instead to allow for tool calls and an object return.
 const result = await agent.generate(messages, {
   structuredOutput: {
     schema: z.object({
-      summary: z.string()
-    })
-  }
+      summary: z.string(),
+    }),
+  },
 });
 ```
 
@@ -254,6 +258,7 @@ const result = await agent.generate(messages, {
 #### `memoryOptions` was removed
 
 Use `memory` instead
+
 ```typescript
 const result = await agent.generate(messages, {
   memory: {
@@ -272,12 +277,15 @@ const result = await agent.generate(messages, {
 #### `toolChoice` uses the AI SDK v5 `ToolChoice` type
 
 ```typescript
-type ToolChoice<TOOLS extends Record<string, unknown>> = 'auto' | 'none' | 'required' | {
-    type: 'tool';
-    toolName: Extract<keyof TOOLS, string>;
-};
+type ToolChoice<TOOLS extends Record<string, unknown>> =
+  | 'auto'
+  | 'none'
+  | 'required'
+  | {
+      type: 'tool';
+      toolName: Extract<keyof TOOLS, string>;
+    };
 ```
-
 
 ## Migration Checklist
 
@@ -288,4 +296,3 @@ Just find/replace the methods to `stream` and `generate` respectively.
 ### If you're using the old `stream` and `generate`
 
 Decide whether you want to upgrade or not. If you don't, just find/replace to `streamLegacy` and `generateLegacy`.
-

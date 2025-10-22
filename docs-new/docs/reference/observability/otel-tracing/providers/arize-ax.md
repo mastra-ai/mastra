@@ -1,5 +1,5 @@
 ---
-title: "Reference: Arize AX Integration "
+title: 'Reference: Arize AX Integration '
 description: Documentation for integrating Arize AX with Mastra, a comprehensive AI observability platform for monitoring and evaluating LLM applications.
 ---
 
@@ -38,24 +38,21 @@ npm install @arizeai/openinference-mastra
 Here's how to configure Mastra to use Arize AX with OpenTelemetry:
 
 ```typescript
-import { Mastra } from "@mastra/core";
-import {
-  isOpenInferenceSpan,
-  OpenInferenceOTLPTraceExporter,
-} from "@arizeai/openinference-mastra";
+import { Mastra } from '@mastra/core';
+import { isOpenInferenceSpan, OpenInferenceOTLPTraceExporter } from '@arizeai/openinference-mastra';
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: "your-mastra-app",
+    serviceName: 'your-mastra-app',
     enabled: true,
     export: {
-      type: "custom",
+      type: 'custom',
       exporter: new OpenInferenceOTLPTraceExporter({
-        url: "https://otlp.arize.com/v1/traces",
+        url: 'https://otlp.arize.com/v1/traces',
         headers: {
-          "space_id": process.env.ARIZE_SPACE_ID!,
-          "api_key": process.env.ARIZE_API_KEY!,
+          space_id: process.env.ARIZE_SPACE_ID!,
+          api_key: process.env.ARIZE_API_KEY!,
         },
         spanFilter: isOpenInferenceSpan,
       }),

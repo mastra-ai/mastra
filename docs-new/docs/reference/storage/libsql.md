@@ -1,5 +1,5 @@
 ---
-title: "LibSQL Storage "
+title: 'LibSQL Storage '
 description: Documentation for the LibSQL storage implementation in Mastra.
 ---
 
@@ -16,11 +16,11 @@ npm install @mastra/libsql@latest
 ## Usage
 
 ```typescript copy showLineNumbers
-import { LibSQLStore } from "@mastra/libsql";
+import { LibSQLStore } from '@mastra/libsql';
 
 // File database (development)
 const storage = new LibSQLStore({
-  url: "file:./storage.db",
+  url: 'file:./storage.db',
 });
 
 // Persistent database (production)
@@ -32,21 +32,21 @@ const storage = new LibSQLStore({
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "url",
-      type: "string",
-      description:
-        "Database URL. Use ':memory:' for in-memory database, 'file:filename.db' for a file database, or any LibSQL-compatible connection string for persistent storage.",
-      isOptional: false,
-    },
-    {
-      name: "authToken",
-      type: "string",
-      description: "Authentication token for remote LibSQL databases.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "url",
+type: "string",
+description:
+"Database URL. Use ':memory:' for in-memory database, 'file:filename.db' for a file database, or any LibSQL-compatible connection string for persistent storage.",
+isOptional: false,
+},
+{
+name: "authToken",
+type: "string",
+description: "Authentication token for remote LibSQL databases.",
+isOptional: true,
+},
+]}
 />
 
 ## Additional Notes
@@ -66,7 +66,7 @@ For production use cases, use a persistent database URL: `libsql://your-database
 The storage implementation handles schema creation and updates automatically. It creates the following tables:
 
 - `mastra_workflow_snapshot`: Stores workflow state and execution data
-- `mastra_evals`: Stores evaluation results and metadata  
+- `mastra_evals`: Stores evaluation results and metadata
 - `mastra_threads`: Stores conversation threads
 - `mastra_messages`: Stores individual messages
 - `mastra_traces`: Stores telemetry and tracing data

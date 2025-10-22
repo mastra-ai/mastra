@@ -1,6 +1,6 @@
 ---
-title: "Reference: MastraVoice "
-description: "Documentation for the MastraVoice abstract base class, which defines the core interface for all voice services in Mastra, including speech-to-speech capabilities."
+title: 'Reference: MastraVoice '
+description: 'Documentation for the MastraVoice abstract base class, which defines the core interface for all voice services in Mastra, including speech-to-speech capabilities.'
 ---
 
 # MastraVoice
@@ -10,7 +10,7 @@ The MastraVoice class is an abstract base class that defines the core interface 
 ## Usage Example
 
 ```typescript
-import { MastraVoice } from "@mastra/core/voice";
+import { MastraVoice } from '@mastra/core/voice';
 
 // Create a voice provider implementation
 class MyVoiceProvider extends MastraVoice {
@@ -40,16 +40,11 @@ class MyVoiceProvider extends MastraVoice {
     // Implement text-to-speech conversion
   }
 
-  async listen(
-    audioStream: NodeJS.ReadableStream,
-    options?: unknown,
-  ): Promise<string | NodeJS.ReadableStream | void> {
+  async listen(audioStream: NodeJS.ReadableStream, options?: unknown): Promise<string | NodeJS.ReadableStream | void> {
     // Implement speech-to-text conversion
   }
 
-  async getSpeakers(): Promise<
-    Array<{ voiceId: string; [key: string]: unknown }>
-  > {
+  async getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: unknown }>> {
     // Return list of available voices
   }
 
@@ -87,88 +82,88 @@ class MyVoiceProvider extends MastraVoice {
 ## Constructor Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "config",
-      type: "VoiceConfig",
-      description: "Configuration object for the voice service",
-      isOptional: true,
-    },
-    {
-      name: "config.speechModel",
-      type: "BuiltInModelConfig",
-      description: "Configuration for the text-to-speech model",
-      isOptional: true,
-    },
-    {
-      name: "config.listeningModel",
-      type: "BuiltInModelConfig",
-      description: "Configuration for the speech-to-text model",
-      isOptional: true,
-    },
-    {
-      name: "config.speaker",
-      type: "string",
-      description: "Default speaker/voice ID to use",
-      isOptional: true,
-    },
-    {
-      name: "config.name",
-      type: "string",
-      description: "Name for the voice provider instance",
-      isOptional: true,
-    },
-    {
-      name: "config.realtimeConfig",
-      type: "object",
-      description: "Configuration for real-time speech-to-speech capabilities",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "config",
+type: "VoiceConfig",
+description: "Configuration object for the voice service",
+isOptional: true,
+},
+{
+name: "config.speechModel",
+type: "BuiltInModelConfig",
+description: "Configuration for the text-to-speech model",
+isOptional: true,
+},
+{
+name: "config.listeningModel",
+type: "BuiltInModelConfig",
+description: "Configuration for the speech-to-text model",
+isOptional: true,
+},
+{
+name: "config.speaker",
+type: "string",
+description: "Default speaker/voice ID to use",
+isOptional: true,
+},
+{
+name: "config.name",
+type: "string",
+description: "Name for the voice provider instance",
+isOptional: true,
+},
+{
+name: "config.realtimeConfig",
+type: "object",
+description: "Configuration for real-time speech-to-speech capabilities",
+isOptional: true,
+},
+]}
 />
 
 ### BuiltInModelConfig
 
 <PropertiesTable
-  content={[
-    {
-      name: "name",
-      type: "string",
-      description: "Name of the model to use",
-      isOptional: false,
-    },
-    {
-      name: "apiKey",
-      type: "string",
-      description: "API key for the model service",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "name",
+type: "string",
+description: "Name of the model to use",
+isOptional: false,
+},
+{
+name: "apiKey",
+type: "string",
+description: "API key for the model service",
+isOptional: true,
+},
+]}
 />
 
 ### RealtimeConfig
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "string",
-      description: "Model to use for real-time speech-to-speech capabilities",
-      isOptional: true,
-    },
-    {
-      name: "apiKey",
-      type: "string",
-      description: "API key for the real-time service",
-      isOptional: true,
-    },
-    {
-      name: "options",
-      type: "unknown",
-      description: "Provider-specific options for real-time capabilities",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "string",
+description: "Model to use for real-time speech-to-speech capabilities",
+isOptional: true,
+},
+{
+name: "apiKey",
+type: "string",
+description: "API key for the real-time service",
+isOptional: true,
+},
+{
+name: "options",
+type: "unknown",
+description: "Provider-specific options for real-time capabilities",
+isOptional: true,
+},
+]}
 />
 
 ## Abstract Methods
@@ -348,55 +343,55 @@ Purpose:
 The MastraVoice class includes an event system for real-time communication. Standard event types include:
 
 <PropertiesTable
-  content={[
-    {
-      name: "speaking",
-      type: "{ text: string; audioStream?: NodeJS.ReadableStream; audio?: Int16Array }",
-      description:
-        "Emitted when the voice provider is speaking, contains audio data",
-    },
-    {
-      name: "writing",
-      type: "{ text: string, role: string }",
-      description: "Emitted when text is transcribed from speech",
-    },
-    {
-      name: "error",
-      type: "{ message: string; code?: string; details?: unknown }",
-      description: "Emitted when an error occurs",
-    },
-  ]}
+content={[
+{
+name: "speaking",
+type: "{ text: string; audioStream?: NodeJS.ReadableStream; audio?: Int16Array }",
+description:
+"Emitted when the voice provider is speaking, contains audio data",
+},
+{
+name: "writing",
+type: "{ text: string, role: string }",
+description: "Emitted when text is transcribed from speech",
+},
+{
+name: "error",
+type: "{ message: string; code?: string; details?: unknown }",
+description: "Emitted when an error occurs",
+},
+]}
 />
 
 ## Protected Properties
 
 <PropertiesTable
-  content={[
-    {
-      name: "listeningModel",
-      type: "BuiltInModelConfig | undefined",
-      description: "Configuration for the speech-to-text model",
-      isOptional: true,
-    },
-    {
-      name: "speechModel",
-      type: "BuiltInModelConfig | undefined",
-      description: "Configuration for the text-to-speech model",
-      isOptional: true,
-    },
-    {
-      name: "speaker",
-      type: "string | undefined",
-      description: "Default speaker/voice ID",
-      isOptional: true,
-    },
-    {
-      name: "realtimeConfig",
-      type: "{ model?: string; apiKey?: string; options?: unknown } | undefined",
-      description: "Configuration for real-time speech-to-speech capabilities",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "listeningModel",
+type: "BuiltInModelConfig | undefined",
+description: "Configuration for the speech-to-text model",
+isOptional: true,
+},
+{
+name: "speechModel",
+type: "BuiltInModelConfig | undefined",
+description: "Configuration for the text-to-speech model",
+isOptional: true,
+},
+{
+name: "speaker",
+type: "string | undefined",
+description: "Default speaker/voice ID",
+isOptional: true,
+},
+{
+name: "realtimeConfig",
+type: "{ model?: string; apiKey?: string; options?: unknown } | undefined",
+description: "Configuration for real-time speech-to-speech capabilities",
+isOptional: true,
+},
+]}
 />
 
 ## Telemetry Support

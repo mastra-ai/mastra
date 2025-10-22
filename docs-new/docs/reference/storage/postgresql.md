@@ -1,5 +1,5 @@
 ---
-title: "PostgreSQL Storage "
+title: 'PostgreSQL Storage '
 description: Documentation for the PostgreSQL storage implementation in Mastra.
 ---
 
@@ -16,7 +16,7 @@ npm install @mastra/pg@latest
 ## Usage
 
 ```typescript copy showLineNumbers
-import { PostgresStore } from "@mastra/pg";
+import { PostgresStore } from '@mastra/pg';
 
 const storage = new PostgresStore({
   connectionString: process.env.DATABASE_URL,
@@ -26,22 +26,22 @@ const storage = new PostgresStore({
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "connectionString",
-      type: "string",
-      description:
-        "PostgreSQL connection string (e.g., postgresql://user:pass@host:5432/dbname)",
-      isOptional: false,
-    },
-    {
-      name: "schemaName",
-      type: "string",
-      description:
-        "The name of the schema you want the storage to use. Will use the default schema if not provided.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "connectionString",
+type: "string",
+description:
+"PostgreSQL connection string (e.g., postgresql://user:pass@host:5432/dbname)",
+isOptional: false,
+},
+{
+name: "schemaName",
+type: "string",
+description:
+"The name of the schema you want the storage to use. Will use the default schema if not provided.",
+isOptional: true,
+},
+]}
 />
 
 ## Constructor Examples
@@ -49,36 +49,36 @@ const storage = new PostgresStore({
 You can instantiate `PostgresStore` in the following ways:
 
 ```ts
-import { PostgresStore } from "@mastra/pg";
+import { PostgresStore } from '@mastra/pg';
 
 // Using a connection string only
 const store1 = new PostgresStore({
-  connectionString: "postgresql://user:password@localhost:5432/mydb",
+  connectionString: 'postgresql://user:password@localhost:5432/mydb',
 });
 
 // Using a connection string with a custom schema name
 const store2 = new PostgresStore({
-  connectionString: "postgresql://user:password@localhost:5432/mydb",
-  schemaName: "custom_schema", // optional
+  connectionString: 'postgresql://user:password@localhost:5432/mydb',
+  schemaName: 'custom_schema', // optional
 });
 
 // Using individual connection parameters
 const store4 = new PostgresStore({
-  host: "localhost",
+  host: 'localhost',
   port: 5432,
-  database: "mydb",
-  user: "user",
-  password: "password",
+  database: 'mydb',
+  user: 'user',
+  password: 'password',
 });
 
 // Individual parameters with schemaName
 const store5 = new PostgresStore({
-  host: "localhost",
+  host: 'localhost',
   port: 5432,
-  database: "mydb",
-  user: "user",
-  password: "password",
-  schemaName: "custom_schema", // optional
+  database: 'mydb',
+  user: 'user',
+  password: 'password',
+  schemaName: 'custom_schema', // optional
 });
 ```
 
@@ -89,7 +89,7 @@ const store5 = new PostgresStore({
 The storage implementation handles schema creation and updates automatically. It creates the following tables:
 
 - `mastra_workflow_snapshot`: Stores workflow state and execution data
-- `mastra_evals`: Stores evaluation results and metadata  
+- `mastra_evals`: Stores evaluation results and metadata
 - `mastra_threads`: Stores conversation threads
 - `mastra_messages`: Stores individual messages
 - `mastra_traces`: Stores telemetry and tracing data
@@ -101,11 +101,12 @@ The storage implementation handles schema creation and updates automatically. It
 `PostgresStore` exposes both the underlying database object and the pg-promise instance as public fields:
 
 ```typescript
-store.db  // pg-promise database instance
-store.pgp // pg-promise main instance
+store.db; // pg-promise database instance
+store.pgp; // pg-promise main instance
 ```
 
 This enables direct queries and custom transaction management. When using these fields:
+
 - You are responsible for proper connection and transaction handling.
 - Closing the store (`store.close()`) will destroy the associated connection pool.
 - Direct access bypasses any additional logic or validation provided by PostgresStore methods.
@@ -121,7 +122,7 @@ PostgreSQL storage provides comprehensive index management capabilities to optim
 PostgreSQL storage automatically creates composite indexes during initialization for common query patterns:
 
 - `mastra_threads_resourceid_createdat_idx`: (resourceId, createdAt DESC)
-- `mastra_messages_thread_id_createdat_idx`: (thread_id, createdAt DESC)  
+- `mastra_messages_thread_id_createdat_idx`: (thread_id, createdAt DESC)
 - `mastra_traces_name_starttime_idx`: (name, startTime DESC)
 - `mastra_evals_agent_name_created_at_idx`: (agent_name, created_at DESC)
 
@@ -136,14 +137,14 @@ Create additional indexes to optimize specific query patterns:
 await storage.createIndex({
   name: 'idx_threads_resource',
   table: 'mastra_threads',
-  columns: ['resourceId']
+  columns: ['resourceId'],
 });
 
 // Composite index with sort order for filtering + sorting
 await storage.createIndex({
   name: 'idx_messages_composite',
   table: 'mastra_messages',
-  columns: ['thread_id', 'createdAt DESC']
+  columns: ['thread_id', 'createdAt DESC'],
 });
 
 // GIN index for JSONB columns (fast JSON queries)
@@ -151,11 +152,12 @@ await storage.createIndex({
   name: 'idx_traces_attributes',
   table: 'mastra_traces',
   columns: ['attributes'],
-  method: 'gin'
+  method: 'gin',
 });
 ```
 
 For more advanced use cases, you can also use:
+
 - `unique: true` for unique constraints
 - `where: 'condition'` for partial indexes
 - `method: 'brin'` for time-series data
@@ -165,68 +167,68 @@ For more advanced use cases, you can also use:
 ### Index Options
 
 <PropertiesTable
-  content={[
-    {
-      name: "name",
-      type: "string",
-      description: "Unique name for the index",
-      isOptional: false,
-    },
-    {
-      name: "table",
-      type: "string",
-      description: "Table name (e.g., 'mastra_threads')",
-      isOptional: false,
-    },
-    {
-      name: "columns",
-      type: "string[]",
-      description: "Array of column names with optional sort order (e.g., ['id', 'createdAt DESC'])",
-      isOptional: false,
-    },
-    {
-      name: "unique",
-      type: "boolean",
-      description: "Creates a unique constraint index",
-      isOptional: true,
-    },
-    {
-      name: "concurrent",
-      type: "boolean",
-      description: "Creates index without locking table (default: true)",
-      isOptional: true,
-    },
-    {
-      name: "where",
-      type: "string",
-      description: "Partial index condition (PostgreSQL specific)",
-      isOptional: true,
-    },
-    {
-      name: "method",
-      type: "'btree' | 'hash' | 'gin' | 'gist' | 'spgist' | 'brin'",
-      description: "Index method (default: 'btree')",
-      isOptional: true,
-    },
-    {
-      name: "opclass",
-      type: "string",
-      description: "Operator class for GIN/GIST indexes",
-      isOptional: true,
-    },
-    {
-      name: "storage",
-      type: "Record<string, any>",
-      description: "Storage parameters (e.g., { fillfactor: 90 })",
-      isOptional: true,
-    },
-    {
-      name: "tablespace",
-      type: "string",
-      description: "Tablespace name for index placement",
-      isOptional: true,
-    }
-  ]}
+content={[
+{
+name: "name",
+type: "string",
+description: "Unique name for the index",
+isOptional: false,
+},
+{
+name: "table",
+type: "string",
+description: "Table name (e.g., 'mastra_threads')",
+isOptional: false,
+},
+{
+name: "columns",
+type: "string[]",
+description: "Array of column names with optional sort order (e.g., ['id', 'createdAt DESC'])",
+isOptional: false,
+},
+{
+name: "unique",
+type: "boolean",
+description: "Creates a unique constraint index",
+isOptional: true,
+},
+{
+name: "concurrent",
+type: "boolean",
+description: "Creates index without locking table (default: true)",
+isOptional: true,
+},
+{
+name: "where",
+type: "string",
+description: "Partial index condition (PostgreSQL specific)",
+isOptional: true,
+},
+{
+name: "method",
+type: "'btree' | 'hash' | 'gin' | 'gist' | 'spgist' | 'brin'",
+description: "Index method (default: 'btree')",
+isOptional: true,
+},
+{
+name: "opclass",
+type: "string",
+description: "Operator class for GIN/GIST indexes",
+isOptional: true,
+},
+{
+name: "storage",
+type: "Record<string, any>",
+description: "Storage parameters (e.g., { fillfactor: 90 })",
+isOptional: true,
+},
+{
+name: "tablespace",
+type: "string",
+description: "Tablespace name for index placement",
+isOptional: true,
+}
+]}
 />
 
 ### Managing Indexes
@@ -279,14 +281,14 @@ When using custom schemas, indexes are created with schema prefixes:
 ```typescript copy
 const storage = new PostgresStore({
   connectionString: process.env.DATABASE_URL,
-  schemaName: 'custom_schema'
+  schemaName: 'custom_schema',
 });
 
 // Creates index as: custom_schema_idx_threads_status
 await storage.createIndex({
   name: 'idx_threads_status',
   table: 'mastra_threads',
-  columns: ['status']
+  columns: ['status'],
 });
 ```
 
@@ -294,12 +296,11 @@ await storage.createIndex({
 
 PostgreSQL offers different index types optimized for specific scenarios:
 
-| Index Type | Best For | Storage | Speed |
-|------------|----------|---------|-------|
-| **btree** (default) | Range queries, sorting, general purpose | Moderate | Fast |
-| **hash** | Equality comparisons only | Small | Very fast for `=` |
-| **gin** | JSONB, arrays, full-text search | Large | Fast for contains |
-| **gist** | Geometric data, full-text search | Moderate | Fast for nearest-neighbor |
-| **spgist** | Non-balanced data, text patterns | Small | Fast for specific patterns |
-| **brin** | Large tables with natural ordering | Very small | Fast for ranges |
-
+| Index Type          | Best For                                | Storage    | Speed                      |
+| ------------------- | --------------------------------------- | ---------- | -------------------------- |
+| **btree** (default) | Range queries, sorting, general purpose | Moderate   | Fast                       |
+| **hash**            | Equality comparisons only               | Small      | Very fast for `=`          |
+| **gin**             | JSONB, arrays, full-text search         | Large      | Fast for contains          |
+| **gist**            | Geometric data, full-text search        | Moderate   | Fast for nearest-neighbor  |
+| **spgist**          | Non-balanced data, text patterns        | Small      | Fast for specific patterns |
+| **brin**            | Large tables with natural ordering      | Very small | Fast for ranges            |

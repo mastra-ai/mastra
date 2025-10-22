@@ -1,6 +1,6 @@
 ---
-title: "Reference: Murf Voice "
-description: "Documentation for the Murf voice implementation, providing text-to-speech capabilities."
+title: 'Reference: Murf Voice '
+description: 'Documentation for the Murf voice implementation, providing text-to-speech capabilities.'
 ---
 
 # Murf
@@ -10,7 +10,7 @@ The Murf voice implementation in Mastra provides text-to-speech (TTS) capabiliti
 ## Usage Example
 
 ```typescript
-import { MurfVoice } from "@mastra/voice-murf";
+import { MurfVoice } from '@mastra/voice-murf';
 
 // Initialize with default configuration (uses MURF_API_KEY environment variable)
 const voice = new MurfVoice();
@@ -18,29 +18,29 @@ const voice = new MurfVoice();
 // Initialize with custom configuration
 const voice = new MurfVoice({
   speechModel: {
-    name: "GEN2",
-    apiKey: "your-api-key",
+    name: 'GEN2',
+    apiKey: 'your-api-key',
     properties: {
-      format: "MP3",
+      format: 'MP3',
       rate: 1.0,
       pitch: 1.0,
       sampleRate: 48000,
-      channelType: "STEREO",
+      channelType: 'STEREO',
     },
   },
-  speaker: "en-US-cooper",
+  speaker: 'en-US-cooper',
 });
 
 // Text-to-Speech with default settings
-const audioStream = await voice.speak("Hello, world!");
+const audioStream = await voice.speak('Hello, world!');
 
 // Text-to-Speech with custom properties
-const audioStream = await voice.speak("Hello, world!", {
-  speaker: "en-UK-hazel",
+const audioStream = await voice.speak('Hello, world!', {
+  speaker: 'en-UK-hazel',
   properties: {
-    format: "WAV",
+    format: 'WAV',
     rate: 1.2,
-    style: "casual",
+    style: 'casual',
   },
 });
 
@@ -51,122 +51,122 @@ const voices = await voice.getSpeakers();
 ## Constructor Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "speechModel",
-      type: "MurfConfig",
-      description: "Configuration for text-to-speech functionality",
-      isOptional: true,
-      defaultValue: "{ name: 'GEN2' }",
-    },
-    {
-      name: "speaker",
-      type: "string",
-      description: "Default voice ID to use for text-to-speech",
-      isOptional: true,
-      defaultValue: "'en-UK-hazel'",
-    },
-  ]}
+content={[
+{
+name: "speechModel",
+type: "MurfConfig",
+description: "Configuration for text-to-speech functionality",
+isOptional: true,
+defaultValue: "{ name: 'GEN2' }",
+},
+{
+name: "speaker",
+type: "string",
+description: "Default voice ID to use for text-to-speech",
+isOptional: true,
+defaultValue: "'en-UK-hazel'",
+},
+]}
 />
 
 ### MurfConfig
 
 <PropertiesTable
-  content={[
-    {
-      name: "name",
-      type: "'GEN1' | 'GEN2'",
-      description: "The Murf model generation to use",
-      isOptional: false,
-      defaultValue: "'GEN2'",
-    },
-    {
-      name: "apiKey",
-      type: "string",
-      description:
-        "Murf API key. Falls back to MURF_API_KEY environment variable",
-      isOptional: true,
-    },
-    {
-      name: "properties",
-      type: "object",
-      description: "Default properties for all speech synthesis requests",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "name",
+type: "'GEN1' | 'GEN2'",
+description: "The Murf model generation to use",
+isOptional: false,
+defaultValue: "'GEN2'",
+},
+{
+name: "apiKey",
+type: "string",
+description:
+"Murf API key. Falls back to MURF_API_KEY environment variable",
+isOptional: true,
+},
+{
+name: "properties",
+type: "object",
+description: "Default properties for all speech synthesis requests",
+isOptional: true,
+},
+]}
 />
 
 ### Speech Properties
 
 <PropertiesTable
-  content={[
-    {
-      name: "style",
-      type: "string",
-      description: "Speaking style for the voice",
-      isOptional: true,
-    },
-    {
-      name: "rate",
-      type: "number",
-      description: "Speech rate multiplier",
-      isOptional: true,
-    },
-    {
-      name: "pitch",
-      type: "number",
-      description: "Voice pitch adjustment",
-      isOptional: true,
-    },
-    {
-      name: "sampleRate",
-      type: "8000 | 24000 | 44100 | 48000",
-      description: "Audio sample rate in Hz",
-      isOptional: true,
-    },
-    {
-      name: "format",
-      type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
-      description: "Output audio format",
-      isOptional: true,
-    },
-    {
-      name: "channelType",
-      type: "'STEREO' | 'MONO'",
-      description: "Audio channel configuration",
-      isOptional: true,
-    },
-    {
-      name: "pronunciationDictionary",
-      type: "Record<string, string>",
-      description: "Custom pronunciation mappings",
-      isOptional: true,
-    },
-    {
-      name: "encodeAsBase64",
-      type: "boolean",
-      description: "Whether to encode the audio as base64",
-      isOptional: true,
-    },
-    {
-      name: "variation",
-      type: "number",
-      description: "Voice variation parameter",
-      isOptional: true,
-    },
-    {
-      name: "audioDuration",
-      type: "number",
-      description: "Target audio duration in seconds",
-      isOptional: true,
-    },
-    {
-      name: "multiNativeLocale",
-      type: "string",
-      description: "Locale for multilingual support",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "style",
+type: "string",
+description: "Speaking style for the voice",
+isOptional: true,
+},
+{
+name: "rate",
+type: "number",
+description: "Speech rate multiplier",
+isOptional: true,
+},
+{
+name: "pitch",
+type: "number",
+description: "Voice pitch adjustment",
+isOptional: true,
+},
+{
+name: "sampleRate",
+type: "8000 | 24000 | 44100 | 48000",
+description: "Audio sample rate in Hz",
+isOptional: true,
+},
+{
+name: "format",
+type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
+description: "Output audio format",
+isOptional: true,
+},
+{
+name: "channelType",
+type: "'STEREO' | 'MONO'",
+description: "Audio channel configuration",
+isOptional: true,
+},
+{
+name: "pronunciationDictionary",
+type: "Record<string, string>",
+description: "Custom pronunciation mappings",
+isOptional: true,
+},
+{
+name: "encodeAsBase64",
+type: "boolean",
+description: "Whether to encode the audio as base64",
+isOptional: true,
+},
+{
+name: "variation",
+type: "number",
+description: "Voice variation parameter",
+isOptional: true,
+},
+{
+name: "audioDuration",
+type: "number",
+description: "Target audio duration in seconds",
+isOptional: true,
+},
+{
+name: "multiNativeLocale",
+type: "string",
+description: "Locale for multilingual support",
+isOptional: true,
+},
+]}
 />
 
 ## Methods
@@ -176,33 +176,33 @@ const voices = await voice.getSpeakers();
 Converts text to speech using Murf's API.
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string | NodeJS.ReadableStream",
-      description:
-        "Text to convert to speech. If a stream is provided, it will be converted to text first.",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "object",
-      description: "Speech synthesis options",
-      isOptional: true,
-    },
-    {
-      name: "options.speaker",
-      type: "string",
-      description: "Override the default speaker for this request",
-      isOptional: true,
-    },
-    {
-      name: "options.properties",
-      type: "object",
-      description: "Override default speech properties for this request",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string | NodeJS.ReadableStream",
+description:
+"Text to convert to speech. If a stream is provided, it will be converted to text first.",
+isOptional: false,
+},
+{
+name: "options",
+type: "object",
+description: "Speech synthesis options",
+isOptional: true,
+},
+{
+name: "options.speaker",
+type: "string",
+description: "Override the default speaker for this request",
+isOptional: true,
+},
+{
+name: "options.properties",
+type: "object",
+description: "Override default speech properties for this request",
+isOptional: true,
+},
+]}
 />
 
 Returns: `Promise<NodeJS.ReadableStream>`
@@ -212,32 +212,32 @@ Returns: `Promise<NodeJS.ReadableStream>`
 Returns an array of available voice options, where each node contains:
 
 <PropertiesTable
-  content={[
-    {
-      name: "voiceId",
-      type: "string",
-      description: "Unique identifier for the voice",
-      isOptional: false,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Display name of the voice",
-      isOptional: false,
-    },
-    {
-      name: "language",
-      type: "string",
-      description: "Language code for the voice",
-      isOptional: false,
-    },
-    {
-      name: "gender",
-      type: "string",
-      description: "Gender of the voice",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "voiceId",
+type: "string",
+description: "Unique identifier for the voice",
+isOptional: false,
+},
+{
+name: "name",
+type: "string",
+description: "Display name of the voice",
+isOptional: false,
+},
+{
+name: "language",
+type: "string",
+description: "Language code for the voice",
+isOptional: false,
+},
+{
+name: "gender",
+type: "string",
+description: "Gender of the voice",
+isOptional: false,
+},
+]}
 />
 
 ### listen()

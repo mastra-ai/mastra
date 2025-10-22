@@ -1,8 +1,7 @@
 ---
-title: "Deploy a Mastra Server"
-description: "Learn how to deploy a Mastra server with build settings and deployment options."
+title: 'Deploy a Mastra Server'
+description: 'Learn how to deploy a Mastra server with build settings and deployment options.'
 ---
-
 
 # Deploy a Mastra Server
 
@@ -36,8 +35,8 @@ The build process follows these steps:
 
 1. **Locates entry file**: Finds `index.ts` or `index.js` in your specified directory (default: `src/mastra/`).
 2. **Creates build directory**: Generates a `.mastra/` directory containing:
-    - **`.build`**: Contains dependency analysis, bundled dependencies, and build configuration files.
-    - **`output`**: Contains the production-ready application bundle with `index.mjs`, `instrumentation.mjs`, and project-specific files.
+   - **`.build`**: Contains dependency analysis, bundled dependencies, and build configuration files.
+   - **`output`**: Contains the production-ready application bundle with `index.mjs`, `instrumentation.mjs`, and project-specific files.
 3. **Copies static assets**: Copies the `public/` folder contents to the `output` directory for serving static files.
 4. **Bundles code**: Uses Rollup with tree shaking and source maps for optimization.
 5. **Generates server**: Creates a [Hono](https://hono.dev) HTTP server ready for deployment.

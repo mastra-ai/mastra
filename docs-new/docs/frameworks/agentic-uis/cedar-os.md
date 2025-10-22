@@ -3,7 +3,6 @@ title: 'Cedar-OS Integration'
 description: 'Build AI-native frontends for your Mastra agents with Cedar-OS'
 ---
 
-
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
@@ -16,30 +15,34 @@ Cedar-OS is an open-source agentic UI framework designed specifically for buildi
 There are a few pillars Cedar cares about strongly that you can read more about [here](https://docs.cedarcopilot.com/introduction/philosophy):
 
 #### 1. Developer experience
+
 - **Every single component is downloaded shadcn-style** – You own all the code and can style it however you want
 - **Works out of the box** – Just drop in the chat component, and it'll work
 - **Fully extensible** - Built on a [Zustand store architecture](https://docs.cedarcopilot.com/introduction/architecture) that you can customize completely. Every single internal function can be overridden in one line.
 
 #### 2. Enabling truly AI-native applications
+
 For the first time in history, products can come to life. Cedar is aimed at helping you build something with life.
+
 - **[Spells](https://docs.cedarcopilot.com/spells/spells#what-are-spells)** - Users can trigger AI from keyboard shortcuts, mouse events, text selection, and other components
-- **[State Diff Management](https://docs.cedarcopilot.com/state-diff/using-state-diff)** - Give users control over accepting/rejecting agent outputs 
+- **[State Diff Management](https://docs.cedarcopilot.com/state-diff/using-state-diff)** - Give users control over accepting/rejecting agent outputs
 - **[Voice Integration](https://docs.cedarcopilot.com/voice/voice-integration)** - Let users control your app with their voice
 
 ## Quick Start
 
-
 ### Set up your project
 
 Run Cedar's CLI command:
-``` bash
+
+```bash
 npx cedar-os-cli plant-seed
 ```
 
 If starting from scratch, select the **Mastra starter** template for a complete setup with both frontend and backend in a monorepo
 
 If you already have a Mastra backend, use the **blank frontend cedar repo** option instead.
-- This will give you the option to download components and download all dependencies for Cedar. It is recommended to download at least one of the chat components to get started. 
+
+- This will give you the option to download components and download all dependencies for Cedar. It is recommended to download at least one of the chat components to get started.
 
 ### Wrap your app with CedarCopilot
 
@@ -49,16 +52,17 @@ Wrap your application with the CedarCopilot provider to connect to your Mastra b
 import { CedarCopilot } from 'cedar-os';
 
 function App() {
-	return (
-		<CedarCopilot
-			llmProvider={{
-				provider: 'mastra',
-				baseURL: 'http://localhost:4111', // default dev port for Mastra
-				apiKey: process.env.NEXT_PUBLIC_MASTRA_API_KEY, // optional — only for backend auth
-			}}>
-			<YourApp />
-		</CedarCopilot>
-	);
+  return (
+    <CedarCopilot
+      llmProvider={{
+        provider: 'mastra',
+        baseURL: 'http://localhost:4111', // default dev port for Mastra
+        apiKey: process.env.NEXT_PUBLIC_MASTRA_API_KEY, // optional — only for backend auth
+      }}
+    >
+      <YourApp />
+    </CedarCopilot>
+  );
 }
 ```
 
@@ -74,20 +78,20 @@ import { registerApiRoute } from '@mastra/core/server';
 // POST /chat
 // The chat's non-streaming default endpoint
 registerApiRoute('/chat', {
-	method: 'POST',
-	// …validate input w/ zod
-	handler: async (c) => {
-		/* your agent.generate() logic */
-	},
+  method: 'POST',
+  // …validate input w/ zod
+  handler: async c => {
+    /* your agent.generate() logic */
+  },
 });
 
 // POST /chat/stream (SSE)
 // The chat's streaming default endpoint
 registerApiRoute('/chat/stream', {
-	method: 'POST',
-	handler: async (c) => {
-		/* stream agent output in SSE format */
-	},
+  method: 'POST',
+  handler: async c => {
+    /* stream agent output in SSE format */
+  },
 });
 ```
 
@@ -96,8 +100,6 @@ registerApiRoute('/chat/stream', {
 Drop Cedar components into your frontend – see [Chat Overview](https://docs.cedarcopilot.com/chat/chat-overview).
 
 Your backend and frontend are now linked! You're ready to start building AI-native experiences with your Mastra agents.
-
-
 
 ## More information
 

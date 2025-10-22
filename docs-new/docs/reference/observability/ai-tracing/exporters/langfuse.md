@@ -1,8 +1,7 @@
 ---
-title: "LangfuseExporter "
+title: 'LangfuseExporter '
 description: Langfuse exporter for AI tracing
 ---
-
 
 # LangfuseExporter
 
@@ -28,44 +27,44 @@ interface LangfuseExporterConfig {
 ```
 
 <PropertiesTable
-  props={[
-    {
-      name: "publicKey",
-      type: "string",
-      description: "Langfuse API key",
-      required: false,
-    },
-    {
-      name: "secretKey",
-      type: "string",
-      description: "Langfuse secret key",
-      required: false,
-    },
-    {
-      name: "baseUrl",
-      type: "string",
-      description: "Langfuse host URL",
-      required: false,
-    },
-    {
-      name: "realtime",
-      type: "boolean",
-      description: "Enable realtime mode - flushes after each event",
-      required: false,
-    },
-    {
-      name: "logLevel",
-      type: "'debug' | 'info' | 'warn' | 'error'",
-      description: "Logger level (default: 'warn')",
-      required: false,
-    },
-    {
-      name: "options",
-      type: "any",
-      description: "Additional Langfuse client options",
-      required: false,
-    },
-  ]}
+props={[
+{
+name: "publicKey",
+type: "string",
+description: "Langfuse API key",
+required: false,
+},
+{
+name: "secretKey",
+type: "string",
+description: "Langfuse secret key",
+required: false,
+},
+{
+name: "baseUrl",
+type: "string",
+description: "Langfuse host URL",
+required: false,
+},
+{
+name: "realtime",
+type: "boolean",
+description: "Enable realtime mode - flushes after each event",
+required: false,
+},
+{
+name: "logLevel",
+type: "'debug' | 'info' | 'warn' | 'error'",
+description: "Logger level (default: 'warn')",
+required: false,
+},
+{
+name: "options",
+type: "any",
+description: "Additional Langfuse client options",
+required: false,
+},
+]}
 />
 
 ## Methods

@@ -1,6 +1,6 @@
 ---
-title: "Reference: ElevenLabs Voice "
-description: "Documentation for the ElevenLabs voice implementation, offering high-quality text-to-speech capabilities with multiple voice models and natural-sounding synthesis."
+title: 'Reference: ElevenLabs Voice '
+description: 'Documentation for the ElevenLabs voice implementation, offering high-quality text-to-speech capabilities with multiple voice models and natural-sounding synthesis.'
 ---
 
 # ElevenLabs
@@ -10,7 +10,7 @@ The ElevenLabs voice implementation in Mastra provides high-quality text-to-spee
 ## Usage Example
 
 ```typescript
-import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+import { ElevenLabsVoice } from '@mastra/voice-elevenlabs';
 
 // Initialize with default configuration (uses ELEVENLABS_API_KEY environment variable)
 const voice = new ElevenLabsVoice();
@@ -18,14 +18,14 @@ const voice = new ElevenLabsVoice();
 // Initialize with custom configuration
 const voice = new ElevenLabsVoice({
   speechModel: {
-    name: "eleven_multilingual_v2",
-    apiKey: "your-api-key",
+    name: 'eleven_multilingual_v2',
+    apiKey: 'your-api-key',
   },
-  speaker: "custom-speaker-id",
+  speaker: 'custom-speaker-id',
 });
 
 // Text-to-Speech
-const audioStream = await voice.speak("Hello, world!");
+const audioStream = await voice.speak('Hello, world!');
 
 // Get available speakers
 const speakers = await voice.getSpeakers();
@@ -34,43 +34,43 @@ const speakers = await voice.getSpeakers();
 ## Constructor Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "speechModel",
-      type: "ElevenLabsVoiceConfig",
-      description: "Configuration for text-to-speech functionality.",
-      isOptional: true,
-      defaultValue: "{ name: 'eleven_multilingual_v2' }",
-    },
-    {
-      name: "speaker",
-      type: "string",
-      description: "ID of the speaker to use for text-to-speech",
-      isOptional: true,
-      defaultValue: "'9BWtsMINqrJLrRacOk9x' (Aria voice)",
-    },
-  ]}
+content={[
+{
+name: "speechModel",
+type: "ElevenLabsVoiceConfig",
+description: "Configuration for text-to-speech functionality.",
+isOptional: true,
+defaultValue: "{ name: 'eleven_multilingual_v2' }",
+},
+{
+name: "speaker",
+type: "string",
+description: "ID of the speaker to use for text-to-speech",
+isOptional: true,
+defaultValue: "'9BWtsMINqrJLrRacOk9x' (Aria voice)",
+},
+]}
 />
 
 ### ElevenLabsVoiceConfig
 
 <PropertiesTable
-  content={[
-    {
-      name: "name",
-      type: "ElevenLabsModel",
-      description: "The ElevenLabs model to use",
-      isOptional: true,
-      defaultValue: "'eleven_multilingual_v2'",
-    },
-    {
-      name: "apiKey",
-      type: "string",
-      description:
-        "ElevenLabs API key. Falls back to ELEVENLABS_API_KEY environment variable",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "name",
+type: "ElevenLabsModel",
+description: "The ElevenLabs model to use",
+isOptional: true,
+defaultValue: "'eleven_multilingual_v2'",
+},
+{
+name: "apiKey",
+type: "string",
+description:
+"ElevenLabs API key. Falls back to ELEVENLABS_API_KEY environment variable",
+isOptional: true,
+},
+]}
 />
 
 ## Methods
@@ -80,27 +80,27 @@ const speakers = await voice.getSpeakers();
 Converts text to speech using the configured speech model and voice.
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string | NodeJS.ReadableStream",
-      description:
-        "Text to convert to speech. If a stream is provided, it will be converted to text first.",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "object",
-      description: "Additional options for speech synthesis",
-      isOptional: true,
-    },
-    {
-      name: "options.speaker",
-      type: "string",
-      description: "Override the default speaker ID for this request",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string | NodeJS.ReadableStream",
+description:
+"Text to convert to speech. If a stream is provided, it will be converted to text first.",
+isOptional: false,
+},
+{
+name: "options",
+type: "object",
+description: "Additional options for speech synthesis",
+isOptional: true,
+},
+{
+name: "options.speaker",
+type: "string",
+description: "Override the default speaker ID for this request",
+isOptional: true,
+},
+]}
 />
 
 Returns: `Promise<NodeJS.ReadableStream>`
@@ -110,32 +110,32 @@ Returns: `Promise<NodeJS.ReadableStream>`
 Returns an array of available voice options, where each node contains:
 
 <PropertiesTable
-  content={[
-    {
-      name: "voiceId",
-      type: "string",
-      description: "Unique identifier for the voice",
-      isOptional: false,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Display name of the voice",
-      isOptional: false,
-    },
-    {
-      name: "language",
-      type: "string",
-      description: "Language code for the voice",
-      isOptional: false,
-    },
-    {
-      name: "gender",
-      type: "string",
-      description: "Gender of the voice",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "voiceId",
+type: "string",
+description: "Unique identifier for the voice",
+isOptional: false,
+},
+{
+name: "name",
+type: "string",
+description: "Display name of the voice",
+isOptional: false,
+},
+{
+name: "language",
+type: "string",
+description: "Language code for the voice",
+isOptional: false,
+},
+{
+name: "gender",
+type: "string",
+description: "Gender of the voice",
+isOptional: false,
+},
+]}
 />
 
 ### listen()
@@ -143,69 +143,69 @@ Returns an array of available voice options, where each node contains:
 Converts audio input to text using ElevenLabs Speech-to-Text API.
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "NodeJS.ReadableStream",
-      description: "A readable stream containing the audio data to transcribe",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "object",
-      description: "Configuration options for the transcription",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "NodeJS.ReadableStream",
+description: "A readable stream containing the audio data to transcribe",
+isOptional: false,
+},
+{
+name: "options",
+type: "object",
+description: "Configuration options for the transcription",
+isOptional: true,
+},
+]}
 />
 
 The options object supports the following properties:
 
 <PropertiesTable
-  content={[
-    {
-      name: "language_code",
-      type: "string",
-      description: "ISO language code (e.g., 'en', 'fr', 'es')",
-      isOptional: true,
-    },
-    {
-      name: "tag_audio_events",
-      type: "boolean",
-      description: "Whether to tag audio events like [MUSIC], [LAUGHTER], etc.",
-      isOptional: true,
-    },
-    {
-      name: "num_speakers",
-      type: "number",
-      description: "Number of speakers to detect in the audio",
-      isOptional: true,
-    },
-    {
-      name: "filetype",
-      type: "string",
-      description: "Audio file format (e.g., 'mp3', 'wav', 'ogg')",
-      isOptional: true,
-    },
-    {
-      name: "timeoutInSeconds",
-      type: "number",
-      description: "Request timeout in seconds",
-      isOptional: true,
-    },
-    {
-      name: "maxRetries",
-      type: "number",
-      description: "Maximum number of retry attempts",
-      isOptional: true,
-    },
-    {
-      name: "abortSignal",
-      type: "AbortSignal",
-      description: "Signal to abort the request",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "language_code",
+type: "string",
+description: "ISO language code (e.g., 'en', 'fr', 'es')",
+isOptional: true,
+},
+{
+name: "tag_audio_events",
+type: "boolean",
+description: "Whether to tag audio events like [MUSIC], [LAUGHTER], etc.",
+isOptional: true,
+},
+{
+name: "num_speakers",
+type: "number",
+description: "Number of speakers to detect in the audio",
+isOptional: true,
+},
+{
+name: "filetype",
+type: "string",
+description: "Audio file format (e.g., 'mp3', 'wav', 'ogg')",
+isOptional: true,
+},
+{
+name: "timeoutInSeconds",
+type: "number",
+description: "Request timeout in seconds",
+isOptional: true,
+},
+{
+name: "maxRetries",
+type: "number",
+description: "Maximum number of retry attempts",
+isOptional: true,
+},
+{
+name: "abortSignal",
+type: "AbortSignal",
+description: "Signal to abort the request",
+isOptional: true,
+},
+]}
 />
 
 Returns: `Promise<string>` - A Promise that resolves to the transcribed text

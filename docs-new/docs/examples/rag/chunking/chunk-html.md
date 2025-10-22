@@ -1,15 +1,14 @@
 ---
-title: "Semantically Chunking HTML "
+title: 'Semantically Chunking HTML '
 description: Chunk HTML content in Mastra to semantically chunk the document.
 ---
-
 
 # Semantically Chunking HTML
 
 When working with HTML content, you often need to break it down into smaller, manageable pieces while preserving the document structure. The chunk method splits HTML content intelligently, maintaining the integrity of HTML tags and elements. This example shows how to chunk HTML documents for search or retrieval purposes.
 
 ```tsx copy
-import { MDocument } from "@mastra/rag";
+import { MDocument } from '@mastra/rag';
 
 const html = `
 <div>
@@ -22,8 +21,8 @@ const doc = MDocument.fromHTML(html);
 
 const chunks = await doc.chunk({
   headers: [
-    ["h1", "Header 1"],
-    ["p", "Paragraph"],
+    ['h1', 'Header 1'],
+    ['p', 'Paragraph'],
   ],
 });
 

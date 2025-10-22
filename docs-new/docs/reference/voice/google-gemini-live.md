@@ -1,5 +1,5 @@
 ---
-title: "Reference: Google Gemini Live Voice "
+title: 'Reference: Google Gemini Live Voice '
 description: "Documentation for the GeminiLiveVoice class, providing real-time multimodal voice interactions using Google's Gemini Live API with support for both Gemini API and Vertex AI."
 ---
 
@@ -10,36 +10,36 @@ The GeminiLiveVoice class provides real-time voice interaction capabilities usin
 ## Usage Example
 
 ```typescript
-import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
-import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+import { GeminiLiveVoice } from '@mastra/voice-google-gemini-live';
+import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
 
 // Initialize with Gemini API (using API key)
 const voice = new GeminiLiveVoice({
   apiKey: process.env.GOOGLE_API_KEY, // Required for Gemini API
-  model: "gemini-2.0-flash-exp",
-  speaker: "Puck", // Default voice
+  model: 'gemini-2.0-flash-exp',
+  speaker: 'Puck', // Default voice
   debug: true,
 });
 
 // Or initialize with Vertex AI (using OAuth)
 const voiceWithVertexAI = new GeminiLiveVoice({
   vertexAI: true,
-  project: "your-gcp-project",
-  location: "us-central1",
-  serviceAccountKeyFile: "/path/to/service-account.json",
-  model: "gemini-2.0-flash-exp",
-  speaker: "Puck",
+  project: 'your-gcp-project',
+  location: 'us-central1',
+  serviceAccountKeyFile: '/path/to/service-account.json',
+  model: 'gemini-2.0-flash-exp',
+  speaker: 'Puck',
 });
 
 // Or use the VoiceConfig pattern (recommended for consistency with other providers)
 const voiceWithConfig = new GeminiLiveVoice({
   speechModel: {
-    name: "gemini-2.0-flash-exp",
+    name: 'gemini-2.0-flash-exp',
     apiKey: process.env.GOOGLE_API_KEY,
   },
-  speaker: "Puck",
+  speaker: 'Puck',
   realtimeConfig: {
-    model: "gemini-2.0-flash-exp",
+    model: 'gemini-2.0-flash-exp',
     apiKey: process.env.GOOGLE_API_KEY,
     options: {
       debug: true,
@@ -54,25 +54,25 @@ const voiceWithConfig = new GeminiLiveVoice({
 await voice.connect();
 
 // Set up event listeners
-voice.on("speaker", (audioStream) => {
+voice.on('speaker', audioStream => {
   // Handle audio stream (NodeJS.ReadableStream)
   playAudio(audioStream);
 });
 
-voice.on("writing", ({ text, role }) => {
+voice.on('writing', ({ text, role }) => {
   // Handle transcribed text
   console.log(`${role}: ${text}`);
 });
 
-voice.on("turnComplete", ({ timestamp }) => {
+voice.on('turnComplete', ({ timestamp }) => {
   // Handle turn completion
-  console.log("Turn completed at:", timestamp);
+  console.log('Turn completed at:', timestamp);
 });
 
 // Convert text to speech
-await voice.speak("Hello, how can I help you today?", {
-  speaker: "Charon", // Override default voice
-  responseModalities: ["AUDIO", "TEXT"],
+await voice.speak('Hello, how can I help you today?', {
+  speaker: 'Charon', // Override default voice
+  responseModalities: ['AUDIO', 'TEXT'],
 });
 
 // Process audio input
@@ -81,8 +81,8 @@ await voice.send(microphoneStream);
 
 // Update session configuration
 await voice.updateSessionConfig({
-  speaker: "Kore",
-  instructions: "Be more concise in your responses",
+  speaker: 'Kore',
+  instructions: 'Be more concise in your responses',
 });
 
 // When done, disconnect
@@ -96,116 +96,116 @@ voice.close();
 ### Constructor Options
 
 <PropertiesTable
-  content={[
-    {
-      name: "apiKey",
-      type: "string",
-      description:
-        "Google API key for Gemini API authentication. Required unless using Vertex AI.",
-      isOptional: true,
-    },
-    {
-      name: "model",
-      type: "GeminiVoiceModel",
-      description: "The model ID to use for real-time voice interactions.",
-      isOptional: true,
-      defaultValue: "'gemini-2.0-flash-exp'",
-    },
-    {
-      name: "speaker",
-      type: "GeminiVoiceName",
-      description: "Default voice ID for speech synthesis.",
-      isOptional: true,
-      defaultValue: "'Puck'",
-    },
-    {
-      name: "vertexAI",
-      type: "boolean",
-      description: "Use Vertex AI instead of Gemini API for authentication.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "project",
-      type: "string",
-      description: "Google Cloud project ID (required for Vertex AI).",
-      isOptional: true,
-    },
-    {
-      name: "location",
-      type: "string",
-      description: "Google Cloud region for Vertex AI.",
-      isOptional: true,
-      defaultValue: "'us-central1'",
-    },
-    {
-      name: "serviceAccountKeyFile",
-      type: "string",
-      description:
-        "Path to service account JSON key file for Vertex AI authentication.",
-      isOptional: true,
-    },
-    {
-      name: "serviceAccountEmail",
-      type: "string",
-      description:
-        "Service account email for impersonation (alternative to key file).",
-      isOptional: true,
-    },
-    {
-      name: "instructions",
-      type: "string",
-      description: "System instructions for the model.",
-      isOptional: true,
-    },
-    {
-      name: "sessionConfig",
-      type: "GeminiSessionConfig",
-      description: "Session configuration including interrupt and context settings.",
-      isOptional: true,
-    },
-    {
-      name: "debug",
-      type: "boolean",
-      description: "Enable debug logging for troubleshooting.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+content={[
+{
+name: "apiKey",
+type: "string",
+description:
+"Google API key for Gemini API authentication. Required unless using Vertex AI.",
+isOptional: true,
+},
+{
+name: "model",
+type: "GeminiVoiceModel",
+description: "The model ID to use for real-time voice interactions.",
+isOptional: true,
+defaultValue: "'gemini-2.0-flash-exp'",
+},
+{
+name: "speaker",
+type: "GeminiVoiceName",
+description: "Default voice ID for speech synthesis.",
+isOptional: true,
+defaultValue: "'Puck'",
+},
+{
+name: "vertexAI",
+type: "boolean",
+description: "Use Vertex AI instead of Gemini API for authentication.",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "project",
+type: "string",
+description: "Google Cloud project ID (required for Vertex AI).",
+isOptional: true,
+},
+{
+name: "location",
+type: "string",
+description: "Google Cloud region for Vertex AI.",
+isOptional: true,
+defaultValue: "'us-central1'",
+},
+{
+name: "serviceAccountKeyFile",
+type: "string",
+description:
+"Path to service account JSON key file for Vertex AI authentication.",
+isOptional: true,
+},
+{
+name: "serviceAccountEmail",
+type: "string",
+description:
+"Service account email for impersonation (alternative to key file).",
+isOptional: true,
+},
+{
+name: "instructions",
+type: "string",
+description: "System instructions for the model.",
+isOptional: true,
+},
+{
+name: "sessionConfig",
+type: "GeminiSessionConfig",
+description: "Session configuration including interrupt and context settings.",
+isOptional: true,
+},
+{
+name: "debug",
+type: "boolean",
+description: "Enable debug logging for troubleshooting.",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />
 
 ### Session Configuration
 
 <PropertiesTable
-  content={[
-    {
-      name: "interrupts",
-      type: "object",
-      description: "Interrupt handling configuration.",
-      isOptional: true,
-    },
-    {
-      name: "interrupts.enabled",
-      type: "boolean",
-      description: "Enable interrupt handling.",
-      isOptional: true,
-      defaultValue: "true",
-    },
-    {
-      name: "interrupts.allowUserInterruption",
-      type: "boolean",
-      description: "Allow user to interrupt model responses.",
-      isOptional: true,
-      defaultValue: "true",
-    },
-    {
-      name: "contextCompression",
-      type: "boolean",
-      description: "Enable automatic context compression.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-  ]}
+content={[
+{
+name: "interrupts",
+type: "object",
+description: "Interrupt handling configuration.",
+isOptional: true,
+},
+{
+name: "interrupts.enabled",
+type: "boolean",
+description: "Enable interrupt handling.",
+isOptional: true,
+defaultValue: "true",
+},
+{
+name: "interrupts.allowUserInterruption",
+type: "boolean",
+description: "Allow user to interrupt model responses.",
+isOptional: true,
+defaultValue: "true",
+},
+{
+name: "contextCompression",
+type: "boolean",
+description: "Enable automatic context compression.",
+isOptional: true,
+defaultValue: "false",
+},
+]}
 />
 
 ## Methods
@@ -215,19 +215,19 @@ voice.close();
 Establishes a connection to the Gemini Live API. Must be called before using speak, listen, or send methods.
 
 <PropertiesTable
-  content={[
-    {
-      name: "runtimeContext",
-      type: "object",
-      description: "Optional runtime context for the connection.",
-      isOptional: true,
-    },
-    {
-      name: "returns",
-      type: "Promise<void>",
-      description: "Promise that resolves when the connection is established.",
-    },
-  ]}
+content={[
+{
+name: "runtimeContext",
+type: "object",
+description: "Optional runtime context for the connection.",
+isOptional: true,
+},
+{
+name: "returns",
+type: "Promise<void>",
+description: "Promise that resolves when the connection is established.",
+},
+]}
 />
 
 ### speak()
@@ -235,40 +235,40 @@ Establishes a connection to the Gemini Live API. Must be called before using spe
 Converts text to speech and sends it to the model. Can accept either a string or a readable stream as input.
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string | NodeJS.ReadableStream",
-      description: "Text or text stream to convert to speech.",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "GeminiLiveVoiceOptions",
-      description: "Optional speech configuration.",
-      isOptional: true,
-    },
-    {
-      name: "options.speaker",
-      type: "GeminiVoiceName",
-      description: "Voice ID to use for this specific speech request.",
-      isOptional: true,
-      defaultValue: "Constructor's speaker value",
-    },
-    {
-      name: "options.languageCode",
-      type: "string",
-      description: "Language code for the response.",
-      isOptional: true,
-    },
-    {
-      name: "options.responseModalities",
-      type: "('AUDIO' | 'TEXT')[]",
-      description: "Response modalities to receive from the model.",
-      isOptional: true,
-      defaultValue: "['AUDIO', 'TEXT']",
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string | NodeJS.ReadableStream",
+description: "Text or text stream to convert to speech.",
+isOptional: false,
+},
+{
+name: "options",
+type: "GeminiLiveVoiceOptions",
+description: "Optional speech configuration.",
+isOptional: true,
+},
+{
+name: "options.speaker",
+type: "GeminiVoiceName",
+description: "Voice ID to use for this specific speech request.",
+isOptional: true,
+defaultValue: "Constructor's speaker value",
+},
+{
+name: "options.languageCode",
+type: "string",
+description: "Language code for the response.",
+isOptional: true,
+},
+{
+name: "options.responseModalities",
+type: "('AUDIO' | 'TEXT')[]",
+description: "Response modalities to receive from the model.",
+isOptional: true,
+defaultValue: "['AUDIO', 'TEXT']",
+},
+]}
 />
 
 Returns: `Promise<void>` (responses are emitted via `speaker` and `writing` events)
@@ -278,20 +278,20 @@ Returns: `Promise<void>` (responses are emitted via `speaker` and `writing` even
 Processes audio input for speech recognition. Takes a readable stream of audio data and returns the transcribed text.
 
 <PropertiesTable
-  content={[
-    {
-      name: "audioStream",
-      type: "NodeJS.ReadableStream",
-      description: "Audio stream to transcribe.",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "GeminiLiveVoiceOptions",
-      description: "Optional listening configuration.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "audioStream",
+type: "NodeJS.ReadableStream",
+description: "Audio stream to transcribe.",
+isOptional: false,
+},
+{
+name: "options",
+type: "GeminiLiveVoiceOptions",
+description: "Optional listening configuration.",
+isOptional: true,
+},
+]}
 />
 
 Returns: `Promise<string>` - The transcribed text
@@ -301,14 +301,14 @@ Returns: `Promise<string>` - The transcribed text
 Streams audio data in real-time to the Gemini service for continuous audio streaming scenarios like live microphone input.
 
 <PropertiesTable
-  content={[
-    {
-      name: "audioData",
-      type: "NodeJS.ReadableStream | Int16Array",
-      description: "Audio stream or buffer to send to the service.",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "audioData",
+type: "NodeJS.ReadableStream | Int16Array",
+description: "Audio stream or buffer to send to the service.",
+isOptional: false,
+},
+]}
 />
 
 Returns: `Promise<void>`
@@ -318,14 +318,14 @@ Returns: `Promise<void>`
 Updates the session configuration dynamically. This can be used to modify voice settings, speaker selection, and other runtime configurations.
 
 <PropertiesTable
-  content={[
-    {
-      name: "config",
-      type: "Partial<GeminiLiveVoiceConfig>",
-      description: "Configuration updates to apply.",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "config",
+type: "Partial<GeminiLiveVoiceConfig>",
+description: "Configuration updates to apply.",
+isOptional: false,
+},
+]}
 />
 
 Returns: `Promise<void>`
@@ -335,14 +335,14 @@ Returns: `Promise<void>`
 Adds a set of tools to the voice instance. Tools allow the model to perform additional actions during conversations. When GeminiLiveVoice is added to an Agent, any tools configured for the Agent will automatically be available to the voice interface.
 
 <PropertiesTable
-  content={[
-    {
-      name: "tools",
-      type: "ToolsInput",
-      description: "Tools configuration to equip.",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "tools",
+type: "ToolsInput",
+description: "Tools configuration to equip.",
+isOptional: false,
+},
+]}
 />
 
 Returns: `void`
@@ -352,14 +352,14 @@ Returns: `void`
 Adds or updates system instructions for the model.
 
 <PropertiesTable
-  content={[
-    {
-      name: "instructions",
-      type: "string",
-      description: "System instructions to set.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "instructions",
+type: "string",
+description: "System instructions to set.",
+isOptional: true,
+},
+]}
 />
 
 Returns: `void`
@@ -369,14 +369,14 @@ Returns: `void`
 Triggers a response from the model. This method is primarily used internally when integrated with an Agent.
 
 <PropertiesTable
-  content={[
-    {
-      name: "options",
-      type: "Record<string, unknown>",
-      description: "Optional parameters for the answer request.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "options",
+type: "Record<string, unknown>",
+description: "Optional parameters for the answer request.",
+isOptional: true,
+},
+]}
 />
 
 Returns: `Promise<void>`
@@ -404,20 +404,20 @@ Returns: `void`
 Registers an event listener for voice events.
 
 <PropertiesTable
-  content={[
-    {
-      name: "event",
-      type: "string",
-      description: "Name of the event to listen for.",
-      isOptional: false,
-    },
-    {
-      name: "callback",
-      type: "Function",
-      description: "Function to call when the event occurs.",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "event",
+type: "string",
+description: "Name of the event to listen for.",
+isOptional: false,
+},
+{
+name: "callback",
+type: "Function",
+description: "Function to call when the event occurs.",
+isOptional: false,
+},
+]}
 />
 
 Returns: `void`
@@ -427,20 +427,20 @@ Returns: `void`
 Removes a previously registered event listener.
 
 <PropertiesTable
-  content={[
-    {
-      name: "event",
-      type: "string",
-      description: "Name of the event to stop listening to.",
-      isOptional: false,
-    },
-    {
-      name: "callback",
-      type: "Function",
-      description: "The specific callback function to remove.",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "event",
+type: "string",
+description: "Name of the event to stop listening to.",
+isOptional: false,
+},
+{
+name: "callback",
+type: "Function",
+description: "The specific callback function to remove.",
+isOptional: false,
+},
+]}
 />
 
 Returns: `void`
@@ -450,55 +450,55 @@ Returns: `void`
 The GeminiLiveVoice class emits the following events:
 
 <PropertiesTable
-  content={[
-    {
-      name: "speaker",
-      type: "event",
-      description:
-        "Emitted when audio data is received from the model. Callback receives a NodeJS.ReadableStream.",
-    },
-    {
-      name: "speaking",
-      type: "event",
-      description:
-        "Emitted with audio metadata. Callback receives { audioData?: Int16Array, sampleRate?: number }.",
-    },
-    {
-      name: "writing",
-      type: "event",
-      description:
-        "Emitted when transcribed text is available. Callback receives { text: string, role: 'assistant' | 'user' }.",
-    },
-    {
-      name: "session",
-      type: "event",
-      description:
-        "Emitted on session state changes. Callback receives { state: 'connecting' | 'connected' | 'disconnected' | 'disconnecting' | 'updated', config?: object }.",
-    },
-    {
-      name: "turnComplete",
-      type: "event",
-      description:
-        "Emitted when a conversation turn is completed. Callback receives { timestamp: number }.",
-    },
-    {
-      name: "toolCall",
-      type: "event",
-      description:
-        "Emitted when the model requests a tool call. Callback receives { name: string, args: object, id: string }.",
-    },
-    {
-      name: "usage",
-      type: "event",
-      description:
-        "Emitted with token usage information. Callback receives { inputTokens: number, outputTokens: number, totalTokens: number, modality: string }.",
-    },
-    {
-      name: "error",
-      type: "event",
-      description:
-        "Emitted when an error occurs. Callback receives { message: string, code?: string, details?: unknown }.",
-    },
+content={[
+{
+name: "speaker",
+type: "event",
+description:
+"Emitted when audio data is received from the model. Callback receives a NodeJS.ReadableStream.",
+},
+{
+name: "speaking",
+type: "event",
+description:
+"Emitted with audio metadata. Callback receives { audioData?: Int16Array, sampleRate?: number }.",
+},
+{
+name: "writing",
+type: "event",
+description:
+"Emitted when transcribed text is available. Callback receives { text: string, role: 'assistant' | 'user' }.",
+},
+{
+name: "session",
+type: "event",
+description:
+"Emitted on session state changes. Callback receives { state: 'connecting' | 'connected' | 'disconnected' | 'disconnecting' | 'updated', config?: object }.",
+},
+{
+name: "turnComplete",
+type: "event",
+description:
+"Emitted when a conversation turn is completed. Callback receives { timestamp: number }.",
+},
+{
+name: "toolCall",
+type: "event",
+description:
+"Emitted when the model requests a tool call. Callback receives { name: string, args: object, id: string }.",
+},
+{
+name: "usage",
+type: "event",
+description:
+"Emitted with token usage information. Callback receives { inputTokens: number, outputTokens: number, totalTokens: number, modality: string }.",
+},
+{
+name: "error",
+type: "event",
+description:
+"Emitted when an error occurs. Callback receives { message: string, code?: string, details?: unknown }.",
+},
 
     {
       name: "interrupt",
@@ -506,7 +506,8 @@ The GeminiLiveVoice class emits the following events:
       description:
         "Interrupt events. Callback receives { type: 'user' | 'model', timestamp: number }.",
     },
-  ]}
+
+]}
 />
 
 ## Available Models
@@ -538,8 +539,8 @@ The simplest method using an API key from [Google AI Studio](https://makersuite.
 
 ```typescript
 const voice = new GeminiLiveVoice({
-  apiKey: "your-api-key", // Required for Gemini API
-  model: "gemini-2.0-flash-exp",
+  apiKey: 'your-api-key', // Required for Gemini API
+  model: 'gemini-2.0-flash-exp',
 });
 ```
 
@@ -551,24 +552,24 @@ For production use with OAuth authentication and Google Cloud Platform:
 // Using service account key file
 const voice = new GeminiLiveVoice({
   vertexAI: true,
-  project: "your-gcp-project",
-  location: "us-central1",
-  serviceAccountKeyFile: "/path/to/service-account.json",
+  project: 'your-gcp-project',
+  location: 'us-central1',
+  serviceAccountKeyFile: '/path/to/service-account.json',
 });
 
 // Using Application Default Credentials
 const voice = new GeminiLiveVoice({
   vertexAI: true,
-  project: "your-gcp-project",
-  location: "us-central1",
+  project: 'your-gcp-project',
+  location: 'us-central1',
 });
 
 // Using service account impersonation
 const voice = new GeminiLiveVoice({
   vertexAI: true,
-  project: "your-gcp-project",
-  location: "us-central1",
-  serviceAccountEmail: "service-account@project.iam.gserviceaccount.com",
+  project: 'your-gcp-project',
+  location: 'us-central1',
+  serviceAccountEmail: 'service-account@project.iam.gserviceaccount.com',
 });
 ```
 
@@ -579,7 +580,7 @@ const voice = new GeminiLiveVoice({
 The Gemini Live API supports session resumption for handling network interruptions:
 
 ```typescript
-voice.on("sessionHandle", ({ handle, expiresAt }) => {
+voice.on('sessionHandle', ({ handle, expiresAt }) => {
   // Store session handle for resumption
   saveSessionHandle(handle, expiresAt);
 });
@@ -588,7 +589,7 @@ voice.on("sessionHandle", ({ handle, expiresAt }) => {
 const voice = new GeminiLiveVoice({
   sessionConfig: {
     enableResumption: true,
-    maxDuration: "2h",
+    maxDuration: '2h',
   },
 });
 ```
@@ -602,7 +603,7 @@ import { z } from 'zod';
 
 voice.addTools({
   weather: {
-    description: "Get weather information",
+    description: 'Get weather information',
     parameters: z.object({
       location: z.string(),
     }),
@@ -613,7 +614,7 @@ voice.addTools({
   },
 });
 
-voice.on("toolCall", ({ name, args, id }) => {
+voice.on('toolCall', ({ name, args, id }) => {
   console.log(`Tool called: ${name} with args:`, args);
 });
 ```

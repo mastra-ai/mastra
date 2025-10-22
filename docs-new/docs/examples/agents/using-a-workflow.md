@@ -1,9 +1,9 @@
 ---
-title: "Adding Workflows to Agents "
+title: 'Adding Workflows to Agents '
 description: Example of creating an AI agent in Mastra that uses a dedicated workflow to provide soccer fixture information.
 ---
 
-#  Adding a workflow
+# Adding a workflow
 
 When building AI agents, it can be useful to combine them with workflows that perform multi-step tasks or fetch structured data. Mastra lets you pass workflows to an agent using the `workflows` parameter. Workflows provide a way for agents to trigger predefined sequences of steps, giving them access to more complex operations than a single tool can provide.
 
@@ -20,64 +20,65 @@ OPENAI_API_KEY=<your-api-key>
 This workflow retrieves English Premier League fixtures for a given date. Clear input and output schemas keep the data predictable and easy for the agent to use.
 
 ```typescript filename="src/mastra/workflows/example-soccer-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
 
 const getFixtures = createStep({
-  id: "get-fixtures",
-  description: "Fetch match fixtures English Premier League matches",
+  id: 'get-fixtures',
+  description: 'Fetch match fixtures English Premier League matches',
   inputSchema: z.object({
-    date: z.string()
+    date: z.string(),
   }),
   outputSchema: z.object({
-    fixtures: z.any()
+    fixtures: z.any(),
   }),
   execute: async ({ inputData }) => {
     const { date } = inputData;
 
-    const response = await fetch(`https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d=${date}&l=English_Premier_League`);
+    const response = await fetch(
+      `https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d=${date}&l=English_Premier_League`,
+    );
     const { events } = await response.json();
 
     return {
-      fixtures: events
+      fixtures: events,
     };
-  }
+  },
 });
 
 export const soccerWorkflow = createWorkflow({
-  id: "soccer-workflow",
+  id: 'soccer-workflow',
   inputSchema: z.object({
-    date: z.string()
+    date: z.string(),
   }),
   outputSchema: z.object({
-    fixtures: z.any()
-  })
+    fixtures: z.any(),
+  }),
 })
   .then(getFixtures)
   .commit();
 ```
-
 
 ## Adding a workflow to an agent
 
 This agent uses `soccerWorkflow` to answer fixture questions. The instructions tell it to compute the date, pass it in `YYYY-MM-DD` format, and return team names, match times, and dates.
 
 ```typescript filename="src/mastra/agents/example-soccer-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
 
-import { soccerWorkflow } from "../workflows/example-soccer-workflow";
+import { soccerWorkflow } from '../workflows/example-soccer-workflow';
 
 export const soccerAgent = new Agent({
-  name: "soccer-agent",
-  description: "A premier league soccer specialist",
+  name: 'soccer-agent',
+  description: 'A premier league soccer specialist',
   instructions: `You are a premier league soccer specialist. Use the soccerWorkflow to fetch match data.
 
   Calculate dates from ${new Date()} and pass to workflow in YYYY-MM-DD format.
 
   Only show team names, match times, and dates.`,
-  model: openai("gpt-4o"),
-  workflows: { soccerWorkflow }
+  model: openai('gpt-4o'),
+  workflows: { soccerWorkflow },
 });
 ```
 
@@ -86,13 +87,13 @@ export const soccerAgent = new Agent({
 Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt.
 
 ```typescript filename="src/test-soccer-agent.ts" showLineNumbers copy
-import "dotenv/config";
+import 'dotenv/config';
 
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const agent = mastra.getAgent("soccerAgent");
+const agent = mastra.getAgent('soccerAgent');
 
-const response = await agent.generate("What matches are being played this weekend?");
+const response = await agent.generate('What matches are being played this weekend?');
 
 console.log(response.text);
 ```

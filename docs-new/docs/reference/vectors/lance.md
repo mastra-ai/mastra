@@ -1,6 +1,6 @@
 ---
-title: "Reference: Lance Vector Store "
-description: "Documentation for the LanceVectorStore class in Mastra, which provides vector search using LanceDB, an embedded vector database based on the Lance columnar format."
+title: 'Reference: Lance Vector Store '
+description: 'Documentation for the LanceVectorStore class in Mastra, which provides vector search using LanceDB, an embedded vector database based on the Lance columnar format.'
 ---
 
 # Lance Vector Store
@@ -12,20 +12,20 @@ The LanceVectorStore class provides vector search using [LanceDB](https://lanced
 The LanceVectorStore uses a factory pattern for creation. You should use the static `create()` method rather than the constructor directly.
 
 <PropertiesTable
-  content={[
-    {
-      name: "uri",
-      type: "string",
-      description: "Path to LanceDB database or URI for cloud deployments",
-    },
-    {
-      name: "options",
-      type: "ConnectionOptions",
-      description:
-        "Additional connection options for LanceDB",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "uri",
+type: "string",
+description: "Path to LanceDB database or URI for cloud deployments",
+},
+{
+name: "options",
+type: "ConnectionOptions",
+description:
+"Additional connection options for LanceDB",
+isOptional: true,
+},
+]}
 />
 
 ## Constructor Examples
@@ -33,17 +33,17 @@ The LanceVectorStore uses a factory pattern for creation. You should use the sta
 You can create a `LanceVectorStore` instance using the static create method:
 
 ```ts
-import { LanceVectorStore } from "@mastra/lance";
+import { LanceVectorStore } from '@mastra/lance';
 
 // Connect to a local database
-const vectorStore = await LanceVectorStore.create("/path/to/db");
+const vectorStore = await LanceVectorStore.create('/path/to/db');
 
 // Connect to a LanceDB cloud database
-const cloudStore = await LanceVectorStore.create("db://host:port");
+const cloudStore = await LanceVectorStore.create('db://host:port');
 
 // Connect to a cloud database with options
-const s3Store = await LanceVectorStore.create("s3://bucket/db", { 
-  storageOptions: { timeout: '60s' }
+const s3Store = await LanceVectorStore.create('s3://bucket/db', {
+  storageOptions: { timeout: '60s' },
 });
 ```
 
@@ -52,212 +52,212 @@ const s3Store = await LanceVectorStore.create("s3://bucket/db", {
 ### createIndex()
 
 <PropertiesTable
-  content={[
-    {
-      name: "tableName",
-      type: "string",
-      description: "Name of the table to create index in",
-    },
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index (column name) to create",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "Vector dimension (must match your embedding model)",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description: "Distance metric for similarity search",
-    },
-    {
-      name: "indexConfig",
-      type: "LanceIndexConfig",
-      isOptional: true,
-      defaultValue: "{ type: 'hnsw' }",
-      description: "Index configuration",
-    },
-  ]}
+content={[
+{
+name: "tableName",
+type: "string",
+description: "Name of the table to create index in",
+},
+{
+name: "indexName",
+type: "string",
+description: "Name of the index (column name) to create",
+},
+{
+name: "dimension",
+type: "number",
+description: "Vector dimension (must match your embedding model)",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean' | 'dotproduct'",
+isOptional: true,
+defaultValue: "cosine",
+description: "Distance metric for similarity search",
+},
+{
+name: "indexConfig",
+type: "LanceIndexConfig",
+isOptional: true,
+defaultValue: "{ type: 'hnsw' }",
+description: "Index configuration",
+},
+]}
 />
 
 #### LanceIndexConfig
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: "'ivfflat' | 'hnsw'",
-      description: "Index type",
-      defaultValue: "hnsw",
-      properties: [
-        {
-          type: "string",
-          parameters: [
-            {
-              name: "ivfflat",
-              type: "ivfflat",
-              description:
-                "Clusters vectors into lists for approximate search.",
-            },
-            {
-              name: "hnsw",
-              type: "hnsw",
-              description:
-                "Graph-based index offering fast search times and high recall.",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "numPartitions",
-      type: "number",
-      isOptional: true,
-      defaultValue: "128",
-      description: "Number of partitions for IVF indexes",
-    },
-    {
-      name: "numSubVectors",
-      type: "number",
-      isOptional: true,
-      defaultValue: "16",
-      description: "Number of sub-vectors for product quantization",
-    },
-    {
-      name: "hnsw",
-      type: "HNSWConfig",
-      isOptional: true,
-      description: "HNSW configuration",
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "m",
-              type: "number",
-              description:
-                "Maximum number of connections per node (default: 16)",
-              isOptional: true,
-            },
-            {
-              name: "efConstruction",
-              type: "number",
-              description: "Build-time complexity (default: 100)",
-              isOptional: true,
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "type",
+type: "'ivfflat' | 'hnsw'",
+description: "Index type",
+defaultValue: "hnsw",
+properties: [
+{
+type: "string",
+parameters: [
+{
+name: "ivfflat",
+type: "ivfflat",
+description:
+"Clusters vectors into lists for approximate search.",
+},
+{
+name: "hnsw",
+type: "hnsw",
+description:
+"Graph-based index offering fast search times and high recall.",
+},
+],
+},
+],
+},
+{
+name: "numPartitions",
+type: "number",
+isOptional: true,
+defaultValue: "128",
+description: "Number of partitions for IVF indexes",
+},
+{
+name: "numSubVectors",
+type: "number",
+isOptional: true,
+defaultValue: "16",
+description: "Number of sub-vectors for product quantization",
+},
+{
+name: "hnsw",
+type: "HNSWConfig",
+isOptional: true,
+description: "HNSW configuration",
+properties: [
+{
+type: "object",
+parameters: [
+{
+name: "m",
+type: "number",
+description:
+"Maximum number of connections per node (default: 16)",
+isOptional: true,
+},
+{
+name: "efConstruction",
+type: "number",
+description: "Build-time complexity (default: 100)",
+isOptional: true,
+},
+],
+},
+],
+},
+]}
 />
 
 ### createTable()
 
 <PropertiesTable
-  content={[
-    {
-      name: "tableName",
-      type: "string",
-      description: "Name of the table to create",
-    },
-    {
-      name: "data",
-      type: "Record<string, unknown>[] | TableLike",
-      description: "Initial data for the table",
-    },
-    {
-      name: "options",
-      type: "Partial<CreateTableOptions>",
-      isOptional: true,
-      description: "Additional table creation options",
-    },
-  ]}
+content={[
+{
+name: "tableName",
+type: "string",
+description: "Name of the table to create",
+},
+{
+name: "data",
+type: "Record<string, unknown>[] | TableLike",
+description: "Initial data for the table",
+},
+{
+name: "options",
+type: "Partial<CreateTableOptions>",
+isOptional: true,
+description: "Additional table creation options",
+},
+]}
 />
 
 ### upsert()
 
 <PropertiesTable
-  content={[
-    {
-      name: "tableName",
-      type: "string",
-      description: "Name of the table to upsert vectors into",
-    },
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of embedding vectors",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      isOptional: true,
-      description: "Metadata for each vector",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Optional vector IDs (auto-generated if not provided)",
-    },
-  ]}
+content={[
+{
+name: "tableName",
+type: "string",
+description: "Name of the table to upsert vectors into",
+},
+{
+name: "vectors",
+type: "number[][]",
+description: "Array of embedding vectors",
+},
+{
+name: "metadata",
+type: "Record<string, any>[]",
+isOptional: true,
+description: "Metadata for each vector",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Optional vector IDs (auto-generated if not provided)",
+},
+]}
 />
 
 ### query()
 
 <PropertiesTable
-  content={[
-    {
-      name: "tableName",
-      type: "string",
-      description: "Name of the table to query",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "Query vector",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filters",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include the vector in the result",
-    },
-    {
-      name: "columns",
-      type: "string[]",
-      isOptional: true,
-      defaultValue: "[]",
-      description: "Specific columns to include in the result",
-    },
-    {
-      name: "includeAllColumns",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include all columns in the result",
-    },
-  ]}
+content={[
+{
+name: "tableName",
+type: "string",
+description: "Name of the table to query",
+},
+{
+name: "queryVector",
+type: "number[]",
+description: "Query vector",
+},
+{
+name: "topK",
+type: "number",
+isOptional: true,
+defaultValue: "10",
+description: "Number of results to return",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filters",
+},
+{
+name: "includeVector",
+type: "boolean",
+isOptional: true,
+defaultValue: "false",
+description: "Whether to include the vector in the result",
+},
+{
+name: "columns",
+type: "string[]",
+isOptional: true,
+defaultValue: "[]",
+description: "Specific columns to include in the result",
+},
+{
+name: "includeAllColumns",
+type: "boolean",
+isOptional: true,
+defaultValue: "false",
+description: "Whether to include all columns in the result",
+},
+]}
 />
 
 ### listTables()
@@ -272,13 +272,13 @@ const tables = await vectorStore.listTables();
 ### getTableSchema()
 
 <PropertiesTable
-  content={[
-    {
-      name: "tableName",
-      type: "string",
-      description: "Name of the table to describe",
-    },
-  ]}
+content={[
+{
+name: "tableName",
+type: "string",
+description: "Name of the table to describe",
+},
+]}
 />
 
 Returns the schema of the specified table.
@@ -286,13 +286,13 @@ Returns the schema of the specified table.
 ### deleteTable()
 
 <PropertiesTable
-  content={[
-    {
-      name: "tableName",
-      type: "string",
-      description: "Name of the table to delete",
-    },
-  ]}
+content={[
+{
+name: "tableName",
+type: "string",
+description: "Name of the table to delete",
+},
+]}
 />
 
 ### deleteAllTables()
@@ -306,13 +306,13 @@ Returns an array of index names as strings.
 ### describeIndex()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to describe",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to describe",
+},
+]}
 />
 
 Returns information about the index:
@@ -321,8 +321,8 @@ Returns information about the index:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: "cosine" | "euclidean" | "dotproduct";
-  type: "ivfflat" | "hnsw";
+  metric: 'cosine' | 'euclidean' | 'dotproduct';
+  type: 'ivfflat' | 'hnsw';
   config: {
     m?: number;
     efConstruction?: number;
@@ -335,71 +335,71 @@ interface IndexStats {
 ### deleteIndex()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to delete",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to delete",
+},
+]}
 />
 
 ### updateVector()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the vector to update",
-    },
-    {
-      name: "update",
-      type: "object",
-      description: "Update parameters",
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "vector",
-              type: "number[]",
-              description: "New vector values",
-              isOptional: true,
-            },
-            {
-              name: "metadata",
-              type: "Record<string, any>",
-              description: "New metadata values",
-              isOptional: true,
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vector",
+},
+{
+name: "id",
+type: "string",
+description: "ID of the vector to update",
+},
+{
+name: "update",
+type: "object",
+description: "Update parameters",
+properties: [
+{
+type: "object",
+parameters: [
+{
+name: "vector",
+type: "number[]",
+description: "New vector values",
+isOptional: true,
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+description: "New metadata values",
+isOptional: true,
+},
+],
+},
+],
+},
+]}
 />
 
 ### deleteVector()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the vector to delete",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vector",
+},
+{
+name: "id",
+type: "string",
+description: "ID of the vector to delete",
+},
+]}
 />
 
 ### close()
@@ -427,7 +427,7 @@ The store throws typed errors that can be caught:
 ```typescript copy
 try {
   await store.query({
-    tableName: "my_vectors",
+    tableName: 'my_vectors',
     queryVector: queryVector,
   });
 } catch (error) {

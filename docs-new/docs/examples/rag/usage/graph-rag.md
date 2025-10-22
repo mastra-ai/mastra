@@ -1,8 +1,7 @@
 ---
-title: "A Complete Graph RAG System "
+title: 'A Complete Graph RAG System '
 description: Example of implementing a Graph RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
-
 
 # Graph RAG
 
@@ -38,12 +37,12 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="index.ts"
-import { openai } from "@ai-sdk/openai";
-import { Mastra } from "@mastra/core";
-import { Agent } from "@mastra/core/agent";
-import { PgVector } from "@mastra/pg";
-import { MDocument, createGraphRAGTool } from "@mastra/rag";
-import { embedMany } from "ai";
+import { openai } from '@ai-sdk/openai';
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { PgVector } from '@mastra/pg';
+import { MDocument, createGraphRAGTool } from '@mastra/rag';
+import { embedMany } from 'ai';
 ```
 
 ## GraphRAG Tool Creation
@@ -52,9 +51,9 @@ Using createGraphRAGTool imported from @mastra/rag, you can create a tool that q
 
 ```typescript copy showLineNumbers{8} filename="index.ts"
 const graphRagTool = createGraphRAGTool({
-  vectorStoreName: "pgVector",
-  indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  vectorStoreName: 'pgVector',
+  indexName: 'embeddings',
+  model: openai.embedding('text-embedding-3-small'),
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,
@@ -68,7 +67,7 @@ Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{19} filename="index.ts"
 const ragAgent = new Agent({
-  name: "GraphRAG Agent",
+  name: 'GraphRAG Agent',
   instructions: `You are a helpful assistant that answers questions based on the provided context. Format your answers as follows:
 
 1. DIRECT FACTS: List only the directly stated facts from the text relevant to the question (2-3 bullet points)
@@ -79,7 +78,7 @@ Keep each section brief and focus on the most important points.
 
 Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
 If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
-  model: openai("gpt-4o-mini"),
+  model: openai('gpt-4o-mini'),
   tools: {
     graphRagTool,
   },
@@ -99,7 +98,7 @@ export const mastra = new Mastra({
   agents: { ragAgent },
   vectors: { pgVector },
 });
-const agent = mastra.getAgent("ragAgent");
+const agent = mastra.getAgent('ragAgent');
 ```
 
 ## Document Processing
@@ -113,10 +112,10 @@ const doc = MDocument.fromText(`
 `);
 
 const chunks = await doc.chunk({
-  strategy: "recursive",
+  strategy: 'recursive',
   size: 512,
   overlap: 50,
-  separator: "\n",
+  separator: '\n',
 });
 ```
 
@@ -126,17 +125,17 @@ Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy showLineNumbers{56} filename="index.ts"
 const { embeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
-  values: chunks.map((chunk) => chunk.text),
+  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map(chunk => chunk.text),
 });
 
-const vectorStore = mastra.getVector("pgVector");
+const vectorStore = mastra.getVector('pgVector');
 await vectorStore.createIndex({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   dimension: 1536,
 });
 await vectorStore.upsert({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   vectors: embeddings,
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
@@ -150,26 +149,26 @@ Try different queries to explore relationships in the data:
 const queryOne =
   "What are the direct and indirect effects of early railway decisions on Riverdale Heights' current state?";
 const answerOne = await ragAgent.generate(queryOne);
-console.log("\nQuery:", queryOne);
-console.log("Response:", answerOne.text);
+console.log('\nQuery:', queryOne);
+console.log('Response:', answerOne.text);
 
 const queryTwo =
-  "How have changes in transportation infrastructure affected different generations of local businesses and community spaces?";
+  'How have changes in transportation infrastructure affected different generations of local businesses and community spaces?';
 const answerTwo = await ragAgent.generate(queryTwo);
-console.log("\nQuery:", queryTwo);
-console.log("Response:", answerTwo.text);
+console.log('\nQuery:', queryTwo);
+console.log('Response:', answerTwo.text);
 
 const queryThree =
-  "Compare how the Rossi family business and Thompson Steel Works responded to major infrastructure changes, and how their responses affected the community.";
+  'Compare how the Rossi family business and Thompson Steel Works responded to major infrastructure changes, and how their responses affected the community.';
 const answerThree = await ragAgent.generate(queryThree);
-console.log("\nQuery:", queryThree);
-console.log("Response:", answerThree.text);
+console.log('\nQuery:', queryThree);
+console.log('Response:', answerThree.text);
 
 const queryFour =
-  "Trace how the transformation of the Thompson Steel Works site has influenced surrounding businesses and cultural spaces from 1932 to present.";
+  'Trace how the transformation of the Thompson Steel Works site has influenced surrounding businesses and cultural spaces from 1932 to present.';
 const answerFour = await ragAgent.generate(queryFour);
-console.log("\nQuery:", queryFour);
-console.log("Response:", answerFour.text);
+console.log('\nQuery:', queryFour);
+console.log('Response:', answerFour.text);
 ```
 
 <br />

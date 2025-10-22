@@ -1,6 +1,6 @@
 ---
-title: "Reference: CompositeVoice "
-description: "Documentation for the CompositeVoice class, which enables combining multiple voice providers for flexible text-to-speech and speech-to-text operations."
+title: 'Reference: CompositeVoice '
+description: 'Documentation for the CompositeVoice class, which enables combining multiple voice providers for flexible text-to-speech and speech-to-text operations.'
 ---
 
 # CompositeVoice
@@ -12,9 +12,9 @@ CompositeVoice is used internally by the Agent class to provide flexible voice c
 ## Usage Example
 
 ```typescript
-import { CompositeVoice } from "@mastra/core/voice";
-import { OpenAIVoice } from "@mastra/voice-openai";
-import { PlayAIVoice } from "@mastra/voice-playai";
+import { CompositeVoice } from '@mastra/core/voice';
+import { OpenAIVoice } from '@mastra/voice-openai';
+import { PlayAIVoice } from '@mastra/voice-playai';
 
 // Create voice providers
 const openai = new OpenAIVoice();
@@ -30,32 +30,32 @@ const voice = new CompositeVoice({
 const text = await voice.listen(audioStream);
 
 // Convert text to speech using PlayAI
-const audio = await voice.speak("Hello, world!");
+const audio = await voice.speak('Hello, world!');
 ```
 
 ## Constructor Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "config",
-      type: "object",
-      description: "Configuration object for the composite voice service",
-      isOptional: false,
-    },
-    {
-      name: "config.input",
-      type: "MastraVoice",
-      description: "Voice provider to use for speech-to-text operations",
-      isOptional: true,
-    },
-    {
-      name: "config.output",
-      type: "MastraVoice",
-      description: "Voice provider to use for text-to-speech operations",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "config",
+type: "object",
+description: "Configuration object for the composite voice service",
+isOptional: false,
+},
+{
+name: "config.input",
+type: "MastraVoice",
+description: "Voice provider to use for speech-to-text operations",
+isOptional: true,
+},
+{
+name: "config.output",
+type: "MastraVoice",
+description: "Voice provider to use for text-to-speech operations",
+isOptional: true,
+},
+]}
 />
 
 ## Methods
@@ -65,20 +65,20 @@ const audio = await voice.speak("Hello, world!");
 Converts text to speech using the configured speaking provider.
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string | NodeJS.ReadableStream",
-      description: "Text to convert to speech",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "object",
-      description: "Provider-specific options passed to the speaking provider",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string | NodeJS.ReadableStream",
+description: "Text to convert to speech",
+isOptional: false,
+},
+{
+name: "options",
+type: "object",
+description: "Provider-specific options passed to the speaking provider",
+isOptional: true,
+},
+]}
 />
 
 Notes:
@@ -92,20 +92,20 @@ Notes:
 Converts speech to text using the configured listening provider.
 
 <PropertiesTable
-  content={[
-    {
-      name: "audioStream",
-      type: "NodeJS.ReadableStream",
-      description: "Audio stream to convert to text",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "object",
-      description: "Provider-specific options passed to the listening provider",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "audioStream",
+type: "NodeJS.ReadableStream",
+description: "Audio stream to convert to text",
+isOptional: false,
+},
+{
+name: "options",
+type: "object",
+description: "Provider-specific options passed to the listening provider",
+isOptional: true,
+},
+]}
 />
 
 Notes:
@@ -119,21 +119,21 @@ Notes:
 Returns a list of available voices from the speaking provider, where each node contains:
 
 <PropertiesTable
-  content={[
-    {
-      name: "voiceId",
-      type: "string",
-      description: "Unique identifier for the voice",
-      isOptional: false,
-    },
-    {
-      name: "key",
-      type: "value",
-      description:
-        "Additional voice properties that vary by provider (e.g., name, language)",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "voiceId",
+type: "string",
+description: "Unique identifier for the voice",
+isOptional: false,
+},
+{
+name: "key",
+type: "value",
+description:
+"Additional voice properties that vary by provider (e.g., name, language)",
+isOptional: true,
+},
+]}
 />
 
 Notes:

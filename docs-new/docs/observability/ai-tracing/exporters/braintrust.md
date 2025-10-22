@@ -1,6 +1,6 @@
 ---
-title: "Braintrust Exporter "
-description: "Send AI traces to Braintrust for evaluation and monitoring"
+title: 'Braintrust Exporter '
+description: 'Send AI traces to Braintrust for evaluation and monitoring'
 ---
 
 # Braintrust Exporter
@@ -10,6 +10,7 @@ description: "Send AI traces to Braintrust for evaluation and monitoring"
 ## When to Use Braintrust
 
 Braintrust excels at:
+
 - **Evaluation workflows** - Systematic quality measurement
 - **Experiment tracking** - Compare model versions and prompts
 - **Dataset management** - Curate test cases and golden datasets
@@ -39,8 +40,8 @@ BRAINTRUST_PROJECT_NAME=my-project  # Optional, defaults to 'mastra-tracing'
 ### Basic Setup
 
 ```typescript filename="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { BraintrustExporter } from "@mastra/braintrust";
+import { Mastra } from '@mastra/core';
+import { BraintrustExporter } from '@mastra/braintrust';
 
 export const mastra = new Mastra({
   observability: {
@@ -67,10 +68,10 @@ new BraintrustExporter({
   apiKey: process.env.BRAINTRUST_API_KEY!,
 
   // Optional settings
-  projectName: 'my-project',          // Default: 'mastra-tracing'
-  endpoint: 'https://api.braintrust.dev',  // Custom endpoint if needed
-  logLevel: 'info',                   // Diagnostic logging: debug | info | warn | error
-})
+  projectName: 'my-project', // Default: 'mastra-tracing'
+  endpoint: 'https://api.braintrust.dev', // Custom endpoint if needed
+  logLevel: 'info', // Diagnostic logging: debug | info | warn | error
+});
 ```
 
 ## Related

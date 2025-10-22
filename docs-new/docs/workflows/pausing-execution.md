@@ -1,6 +1,6 @@
 ---
-title: "Pausing Execution "
-description: "Pausing execution in Mastra workflows allows you to pause execution while waiting for external input or resources via .sleep(), .sleepUntil() and .waitForEvent()."
+title: 'Pausing Execution '
+description: 'Pausing execution in Mastra workflows allows you to pause execution while waiting for external input or resources via .sleep(), .sleepUntil() and .waitForEvent().'
 ---
 
 # Sleep & Events
@@ -94,7 +94,6 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-
 > `Date.now()` is evaluated when the workflow starts, not at the moment the `sleepUntil()` method is called.
 
 ## Pausing with `.waitForEvent()`
@@ -117,23 +116,24 @@ export const testWorkflow = createWorkflow({...})
   .then(step3)
   .commit();
 ```
+
 ## Sending an event with `.sendEvent()`
 
 The `.sendEvent()` method sends an event to the workflow. It accepts the event name and optional event data, which can be any JSON-serializable value.
 
 ```typescript {5,12,15} filename="src/test-workflow.ts" showLineNumbers copy
-import { mastra } from "./mastra";
+import { mastra } from './mastra';
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+const run = await mastra.getWorkflow('testWorkflow').createRunAsync();
 
 const result = run.start({
   inputData: {
-    value: "hello"
-  }
+    value: 'hello',
+  },
 });
 
 setTimeout(() => {
-  run.sendEvent("my-event-name", { value: "from event" });
+  run.sendEvent('my-event-name', { value: 'from event' });
 }, 3000);
 
 console.log(JSON.stringify(await result, null, 2));

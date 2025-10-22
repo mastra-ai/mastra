@@ -1,5 +1,5 @@
 ---
-title: "Reference: MastraScorer "
+title: 'Reference: MastraScorer '
 description: Documentation for the MastraScorer base class in Mastra, which provides the foundation for all custom and built-in scorers.
 ---
 
@@ -15,10 +15,9 @@ Use the `createScorer` factory function, which returns a `MastraScorer` instance
 
 ```typescript
 const scorer = createScorer({
-  name: "My Custom Scorer",
-  description: "Evaluates responses based on custom criteria"
-})
-.generateScore(({ run, results }) => {
+  name: 'My Custom Scorer',
+  description: 'Evaluates responses based on custom criteria',
+}).generateScore(({ run, results }) => {
   // scoring logic
   return 0.85;
 });
@@ -32,100 +31,102 @@ The `.run()` method is the primary way to execute your scorer and evaluate input
 
 ```typescript
 const result = await scorer.run({
-  input: "What is machine learning?",
-  output: "Machine learning is a subset of artificial intelligence...",
-  runId: "optional-run-id",
-  runtimeContext: { /* optional context */ }
+  input: 'What is machine learning?',
+  output: 'Machine learning is a subset of artificial intelligence...',
+  runId: 'optional-run-id',
+  runtimeContext: {
+    /* optional context */
+  },
 });
 ```
 
 ## .run() Input
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "any",
-      required: true,
-      description: "Input data to be evaluated. Can be any type depending on your scorer's requirements.",
-    },
-    {
-      name: "output",
-      type: "any",
-      required: true,
-      description: "Output data to be evaluated. Can be any type depending on your scorer's requirements.",
-    },
-    {
-      name: "runId",
-      type: "string",
-      required: false,
-      description: "Optional unique identifier for this scoring run.",
-    },
-    {
-      name: "runtimeContext",
-      type: "any",
-      required: false,
-      description: "Optional runtime context from the agent or workflow step being evaluated.",
-    },
-    {
-      name: "groundTruth",
-      type: "any",
-      required: false,
-      description: "Optional expected or reference output for comparison during scoring. Automatically passed when using runExperiment.",
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "any",
+required: true,
+description: "Input data to be evaluated. Can be any type depending on your scorer's requirements.",
+},
+{
+name: "output",
+type: "any",
+required: true,
+description: "Output data to be evaluated. Can be any type depending on your scorer's requirements.",
+},
+{
+name: "runId",
+type: "string",
+required: false,
+description: "Optional unique identifier for this scoring run.",
+},
+{
+name: "runtimeContext",
+type: "any",
+required: false,
+description: "Optional runtime context from the agent or workflow step being evaluated.",
+},
+{
+name: "groundTruth",
+type: "any",
+required: false,
+description: "Optional expected or reference output for comparison during scoring. Automatically passed when using runExperiment.",
+},
+]}
 />
 
 ## .run() Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The unique identifier for this scoring run.",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Numerical score computed by the generateScore step.",
-    },
-    {
-      name: "reason",
-      type: "string",
-      description: "Explanation for the score, if generateReason step was defined (optional).",
-    },
-    {
-      name: "preprocessStepResult",
-      type: "any",
-      description: "Result of the preprocess step, if defined (optional).",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "any",
-      description: "Result of the analyze step, if defined (optional).",
-    },
-    {
-      name: "preprocessPrompt",
-      type: "string",
-      description: "Preprocess prompt, if defined (optional).",
-    },
-    {
-      name: "analyzePrompt",
-      type: "string",
-      description: "Analyze prompt, if defined (optional).",
-    },
-    {
-      name: "generateScorePrompt",
-      type: "string",
-      description: "Generate score prompt, if defined (optional).",
-    },
-        {
-      name: "generateReasonPrompt",
-      type: "string",
-      description: "Generate reason prompt, if defined (optional).",
-    },
-  ]}
+content={[
+{
+name: "runId",
+type: "string",
+description: "The unique identifier for this scoring run.",
+},
+{
+name: "score",
+type: "number",
+description: "Numerical score computed by the generateScore step.",
+},
+{
+name: "reason",
+type: "string",
+description: "Explanation for the score, if generateReason step was defined (optional).",
+},
+{
+name: "preprocessStepResult",
+type: "any",
+description: "Result of the preprocess step, if defined (optional).",
+},
+{
+name: "analyzeStepResult",
+type: "any",
+description: "Result of the analyze step, if defined (optional).",
+},
+{
+name: "preprocessPrompt",
+type: "string",
+description: "Preprocess prompt, if defined (optional).",
+},
+{
+name: "analyzePrompt",
+type: "string",
+description: "Analyze prompt, if defined (optional).",
+},
+{
+name: "generateScorePrompt",
+type: "string",
+description: "Generate score prompt, if defined (optional).",
+},
+{
+name: "generateReasonPrompt",
+type: "string",
+description: "Generate reason prompt, if defined (optional).",
+},
+]}
 />
 
 ## Step Execution Flow
@@ -133,7 +134,7 @@ const result = await scorer.run({
 When you call `.run()`, the MastraScorer executes the defined steps in this order:
 
 1. **preprocess** (optional) - Extracts or transforms data
-2. **analyze** (optional) - Processes the input/output and preprocessed data  
+2. **analyze** (optional) - Processes the input/output and preprocessed data
 3. **generateScore** (required) - Computes the numerical score
 4. **generateReason** (optional) - Provides explanation for the score
 
@@ -143,35 +144,35 @@ Each step receives the results from previous steps, allowing you to build comple
 
 ```typescript
 const scorer = createScorer({
-  name: "Quality Scorer",
-  description: "Evaluates response quality"
+  name: 'Quality Scorer',
+  description: 'Evaluates response quality',
 })
-.preprocess(({ run }) => {
-  // Extract key information
-  return { wordCount: run.output.split(' ').length };
-})
-.analyze(({ run, results }) => {
-  // Analyze the response
-  const hasSubstance = results.preprocessStepResult.wordCount > 10;
-  return { hasSubstance };
-})
-.generateScore(({ results }) => {
-  // Calculate score
-  return results.analyzeStepResult.hasSubstance ? 1.0 : 0.0;
-})
-.generateReason(({ score, results }) => {
-  // Explain the score
-  const wordCount = results.preprocessStepResult.wordCount;
-  return `Score: ${score}. Response has ${wordCount} words.`;
-});
+  .preprocess(({ run }) => {
+    // Extract key information
+    return { wordCount: run.output.split(' ').length };
+  })
+  .analyze(({ run, results }) => {
+    // Analyze the response
+    const hasSubstance = results.preprocessStepResult.wordCount > 10;
+    return { hasSubstance };
+  })
+  .generateScore(({ results }) => {
+    // Calculate score
+    return results.analyzeStepResult.hasSubstance ? 1.0 : 0.0;
+  })
+  .generateReason(({ score, results }) => {
+    // Explain the score
+    const wordCount = results.preprocessStepResult.wordCount;
+    return `Score: ${score}. Response has ${wordCount} words.`;
+  });
 
 // Use the scorer
 const result = await scorer.run({
-  input: "What is machine learning?",
-  output: "Machine learning is a subset of artificial intelligence..."
+  input: 'What is machine learning?',
+  output: 'Machine learning is a subset of artificial intelligence...',
 });
 
-console.log(result.score);  // 1.0
+console.log(result.score); // 1.0
 console.log(result.reason); // "Score: 1.0. Response has 12 words."
 ```
 

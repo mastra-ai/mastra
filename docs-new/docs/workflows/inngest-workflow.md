@@ -1,6 +1,6 @@
 ---
-title: "Inngest Workflows "
-description: "Inngest workflow allows you to run Mastra workflows with Inngest"
+title: 'Inngest Workflows '
+description: 'Inngest workflow allows you to run Mastra workflows with Inngest'
 ---
 
 # Inngest Workflow
@@ -34,12 +34,12 @@ Initialize the Inngest integration to obtain Mastra-compatible workflow helpers.
 In development
 
 ```ts showLineNumbers copy filename="src/mastra/inngest/index.ts"
-import { Inngest } from "inngest";
-import { realtimeMiddleware } from "@inngest/realtime";
+import { Inngest } from 'inngest';
+import { realtimeMiddleware } from '@inngest/realtime';
 
 export const inngest = new Inngest({
-  id: "mastra",
-  baseUrl:"http://localhost:8288",
+  id: 'mastra',
+  baseUrl: 'http://localhost:8288',
   isDev: true,
   middleware: [realtimeMiddleware()],
 });
@@ -48,11 +48,11 @@ export const inngest = new Inngest({
 In production
 
 ```ts showLineNumbers copy filename="src/mastra/inngest/index.ts"
-import { Inngest } from "inngest";
-import { realtimeMiddleware } from "@inngest/realtime";
+import { Inngest } from 'inngest';
+import { realtimeMiddleware } from '@inngest/realtime';
 
 export const inngest = new Inngest({
-  id: "mastra",
+  id: 'mastra',
   middleware: [realtimeMiddleware()],
 });
 ```
@@ -62,16 +62,16 @@ export const inngest = new Inngest({
 Define the individual steps that will compose your workflow:
 
 ```ts showLineNumbers copy filename="src/mastra/workflows/index.ts"
-import { z } from "zod";
-import { inngest } from "../inngest";
-import { init } from "@mastra/inngest";
+import { z } from 'zod';
+import { inngest } from '../inngest';
+import { init } from '@mastra/inngest';
 
 // Initialize Inngest with Mastra, pointing to your local Inngest server
 const { createWorkflow, createStep } = init(inngest);
 
 // Step: Increment the counter value
 const incrementStep = createStep({
-  id: "increment",
+  id: 'increment',
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -91,7 +91,7 @@ Compose the steps into a workflow using the `dountil` loop pattern. The createWo
 ```ts showLineNumbers copy filename="src/mastra/workflows/index.ts"
 // workflow that is registered as a function on inngest server
 const workflow = createWorkflow({
-  id: "increment-workflow",
+  id: 'increment-workflow',
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -110,11 +110,11 @@ export { workflow as incrementWorkflow };
 Register the workflow with Mastra and configure the Inngest API endpoint:
 
 ```ts showLineNumbers copy filename="src/mastra/index.ts"
-import { Mastra } from "@mastra/core/mastra";
-import { serve as inngestServe } from "@mastra/inngest";
-import { incrementWorkflow } from "./workflows";
-import { inngest } from "./inngest";
-import { PinoLogger } from "@mastra/loggers";
+import { Mastra } from '@mastra/core/mastra';
+import { serve as inngestServe } from '@mastra/inngest';
+import { incrementWorkflow } from './workflows';
+import { inngest } from './inngest';
+import { PinoLogger } from '@mastra/loggers';
 
 // Configure Mastra with the workflow and Inngest API endpoint
 export const mastra = new Mastra({
@@ -123,12 +123,12 @@ export const mastra = new Mastra({
   },
   server: {
     // The server configuration is required to allow local docker container can connect to the mastra server
-    host: "0.0.0.0",
+    host: '0.0.0.0',
     apiRoutes: [
       // This API route is used to register the Mastra workflow (inngest function) on the inngest server
       {
-        path: "/api/inngest",
-        method: "ALL",
+        path: '/api/inngest',
+        method: 'ALL',
         createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
         // The inngestServe function integrates Mastra workflows with Inngest by:
         // 1. Creating Inngest functions for each workflow with unique IDs (workflow.${workflowId})
@@ -149,8 +149,8 @@ export const mastra = new Mastra({
     ],
   },
   logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
+    name: 'Mastra',
+    level: 'info',
   }),
 });
 ```
@@ -213,16 +213,16 @@ docker run --rm -p 8288:8288 \
 1. Add Vercel Deployer to Mastra instance
 
 ```ts showLineNumbers copy filename="src/mastra/index.ts"
-import { VercelDeployer } from "@mastra/deployer-vercel";
+import { VercelDeployer } from '@mastra/deployer-vercel';
 
 export const mastra = new Mastra({
   // ...other config
   deployer: new VercelDeployer({
-    teamSlug: "your_team_slug",
-    projectName: "your_project_name",
+    teamSlug: 'your_team_slug',
+    projectName: 'your_project_name',
     // you can get your vercel token from the vercel dashboard by clicking on the user icon in the top right corner
     // and then clicking on "Account Settings" and then clicking on "Tokens" on the left sidebar.
-    token: "your_vercel_token",
+    token: 'your_vercel_token',
   }),
 });
 ```
@@ -284,7 +284,7 @@ You can serve additional Inngest functions alongside your Mastra workflows by us
 First, create your custom Inngest functions:
 
 ```ts showLineNumbers copy filename="src/inngest/custom-functions.ts"
-import { inngest } from "./inngest";
+import { inngest } from './inngest';
 
 // Define custom Inngest functions
 export const customEmailFunction = inngest.createFunction(
@@ -294,7 +294,7 @@ export const customEmailFunction = inngest.createFunction(
     // Custom email logic here
     console.log(`Sending welcome email to ${event.data.email}`);
     return { status: 'email_sent' };
-  }
+  },
 );
 
 export const customWebhookFunction = inngest.createFunction(
@@ -304,7 +304,7 @@ export const customWebhookFunction = inngest.createFunction(
     // Custom webhook processing
     console.log(`Processing webhook: ${event.data.type}`);
     return { processed: true };
-  }
+  },
 );
 ```
 
@@ -313,27 +313,28 @@ export const customWebhookFunction = inngest.createFunction(
 Update your Mastra configuration to include the custom functions:
 
 ```ts showLineNumbers copy filename="src/mastra/index.ts"
-import { Mastra } from "@mastra/core/mastra";
-import { serve as inngestServe } from "@mastra/inngest";
-import { incrementWorkflow } from "./workflows";
-import { inngest } from "./inngest";
-import { customEmailFunction, customWebhookFunction } from "./inngest/custom-functions";
+import { Mastra } from '@mastra/core/mastra';
+import { serve as inngestServe } from '@mastra/inngest';
+import { incrementWorkflow } from './workflows';
+import { inngest } from './inngest';
+import { customEmailFunction, customWebhookFunction } from './inngest/custom-functions';
 
 export const mastra = new Mastra({
   workflows: {
     incrementWorkflow,
   },
   server: {
-    host: "0.0.0.0",
+    host: '0.0.0.0',
     apiRoutes: [
       {
-        path: "/api/inngest",
-        method: "ALL",
-        createHandler: async ({ mastra }) => inngestServe({
-          mastra,
-          inngest,
-          functions: [customEmailFunction, customWebhookFunction] // Add your custom functions
-        }),
+        path: '/api/inngest',
+        method: 'ALL',
+        createHandler: async ({ mastra }) =>
+          inngestServe({
+            mastra,
+            inngest,
+            functions: [customEmailFunction, customWebhookFunction], // Add your custom functions
+          }),
       },
     ],
   },

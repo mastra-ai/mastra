@@ -1,6 +1,6 @@
 ---
-title: "Create A Mastra Production Server"
-description: "Learn how to configure and deploy a production-ready Mastra server with custom settings for APIs, CORS, and more"
+title: 'Create A Mastra Production Server'
+description: 'Learn how to configure and deploy a production-ready Mastra server with custom settings for APIs, CORS, and more'
 ---
 
 # Create a Mastra Production Server
@@ -30,7 +30,7 @@ adding additional server behaviour.
 You can configure server `port` and `timeout` in the Mastra instance.
 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra({
   // ...
@@ -62,9 +62,7 @@ Mastra requires `module` and `moduleResolution` values that support modern Node.
     "noEmit": true,
     "outDir": "dist"
   },
-  "include": [
-    "src/**/*"
-  ]
+  "include": ["src/**/*"]
 }
 ```
 
@@ -75,15 +73,15 @@ Mastra requires `module` and `moduleResolution` values that support modern Node.
 Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra({
   // ...
   server: {
     cors: {
-      origin: ["https://example.com"], // Allow specific origins or '*' for all
-      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-      allowHeaders: ["Content-Type", "Authorization"],
+      origin: ['https://example.com'], // Allow specific origins or '*' for all
+      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowHeaders: ['Content-Type', 'Authorization'],
       credentials: false,
     },
   },

@@ -1,5 +1,5 @@
 ---
-title: "Reference: Traceloop Integration "
+title: 'Reference: Traceloop Integration '
 description: Documentation for integrating Traceloop with Mastra, an OpenTelemetry-native observability platform for LLM applications.
 ---
 
@@ -21,15 +21,15 @@ OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer your_api_key, x-traceloop-desti
 Here's how to configure Mastra to use Traceloop:
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core';
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: "your-service-name",
+    serviceName: 'your-service-name',
     enabled: true,
     export: {
-      type: "otlp",
+      type: 'otlp',
     },
   },
 });

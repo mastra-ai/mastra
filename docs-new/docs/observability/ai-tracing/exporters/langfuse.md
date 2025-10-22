@@ -1,6 +1,6 @@
 ---
-title: "Langfuse Exporter "
-description: "Send AI traces to Langfuse for LLM observability and analytics"
+title: 'Langfuse Exporter '
+description: 'Send AI traces to Langfuse for LLM observability and analytics'
 ---
 
 # Langfuse Exporter
@@ -10,6 +10,7 @@ description: "Send AI traces to Langfuse for LLM observability and analytics"
 ## When to Use Langfuse
 
 Langfuse is ideal when you need:
+
 - **LLM-specific analytics** - Token usage, costs, latency breakdown
 - **Conversation tracking** - Session-based trace grouping
 - **Quality scoring** - Manual and automated evaluation scores
@@ -39,8 +40,8 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com  # Or your self-hosted URL
 ### Basic Setup
 
 ```typescript filename="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { LangfuseExporter } from "@mastra/langfuse";
+import { Mastra } from '@mastra/core';
+import { LangfuseExporter } from '@mastra/langfuse';
 
 export const mastra = new Mastra({
   observability: {
@@ -70,25 +71,27 @@ export const mastra = new Mastra({
 The Langfuse exporter supports two modes for sending traces:
 
 #### Realtime Mode (Development)
+
 Traces appear immediately in Langfuse dashboard, ideal for debugging:
 
 ```typescript
 new LangfuseExporter({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
   secretKey: process.env.LANGFUSE_SECRET_KEY!,
-  realtime: true,  // Flush after each event
-})
+  realtime: true, // Flush after each event
+});
 ```
 
 #### Batch Mode (Production)
+
 Better performance with automatic batching:
 
 ```typescript
 new LangfuseExporter({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
   secretKey: process.env.LANGFUSE_SECRET_KEY!,
-  realtime: false,  // Default - batch traces
-})
+  realtime: false, // Default - batch traces
+});
 ```
 
 ### Complete Configuration
@@ -100,17 +103,17 @@ new LangfuseExporter({
   secretKey: process.env.LANGFUSE_SECRET_KEY!,
 
   // Optional settings
-  baseUrl: process.env.LANGFUSE_BASE_URL,     // Default: https://cloud.langfuse.com
-  realtime: process.env.NODE_ENV === 'development',  // Dynamic mode selection
-  logLevel: 'info',  // Diagnostic logging: debug | info | warn | error
+  baseUrl: process.env.LANGFUSE_BASE_URL, // Default: https://cloud.langfuse.com
+  realtime: process.env.NODE_ENV === 'development', // Dynamic mode selection
+  logLevel: 'info', // Diagnostic logging: debug | info | warn | error
 
   // Langfuse-specific options
   options: {
-    environment: process.env.NODE_ENV,        // Shows in UI for filtering
-    version: process.env.APP_VERSION,         // Track different versions
-    release: process.env.GIT_COMMIT,          // Git commit hash
+    environment: process.env.NODE_ENV, // Shows in UI for filtering
+    version: process.env.APP_VERSION, // Track different versions
+    release: process.env.GIT_COMMIT, // Git commit hash
   },
-})
+});
 ```
 
 ## Related

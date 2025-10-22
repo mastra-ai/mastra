@@ -1,21 +1,21 @@
 ---
 title: Custom API Route
-description: "export const mastra = new Mastra({"
+description: 'export const mastra = new Mastra({'
 ---
 
 ```typescript showLineNumbers
-import { Mastra } from "@mastra/core";
-import { registerApiRoute } from "@mastra/core/server";
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
 
 export const mastra = new Mastra({
   server: {
     apiRoutes: [
-      registerApiRoute("/my-custom-route", {
-        method: "GET",
-        handler: async (c) => {
-          const mastra = c.get("mastra");
-          const agents = await mastra.getAgent("my-agent");
-          return c.json({ message: "Hello, world!" });
+      registerApiRoute('/my-custom-route', {
+        method: 'GET',
+        handler: async c => {
+          const mastra = c.get('mastra');
+          const agents = await mastra.getAgent('my-agent');
+          return c.json({ message: 'Hello, world!' });
         },
       }),
     ],

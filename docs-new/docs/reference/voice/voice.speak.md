@@ -1,6 +1,6 @@
 ---
-title: "Reference: voice.speak() "
-description: "Documentation for the speak() method available in all Mastra voice providers, which converts text to speech."
+title: 'Reference: voice.speak() '
+description: 'Documentation for the speak() method available in all Mastra voice providers, which converts text to speech.'
 ---
 
 # voice.speak()
@@ -10,53 +10,53 @@ The `speak()` method is a core function available in all Mastra voice providers 
 ## Usage Example
 
 ```typescript
-import { OpenAIVoice } from "@mastra/voice-openai";
+import { OpenAIVoice } from '@mastra/voice-openai';
 // Initialize a voice provider
 const voice = new OpenAIVoice({
-  speaker: "alloy", // Default voice
+  speaker: 'alloy', // Default voice
 });
 // Basic usage with default settings
-const audioStream = await voice.speak("Hello, world!");
+const audioStream = await voice.speak('Hello, world!');
 // Using a different voice for this specific request
-const audioStreamWithDifferentVoice = await voice.speak("Hello again!", {
-  speaker: "nova",
+const audioStreamWithDifferentVoice = await voice.speak('Hello again!', {
+  speaker: 'nova',
 });
 // Using provider-specific options
-const audioStreamWithOptions = await voice.speak("Hello with options!", {
-  speaker: "echo",
+const audioStreamWithOptions = await voice.speak('Hello with options!', {
+  speaker: 'echo',
   speed: 1.2, // OpenAI-specific option
 });
 // Using a text stream as input
-import { Readable } from "stream";
-const textStream = Readable.from(["Hello", " from", " a", " stream!"]);
+import { Readable } from 'stream';
+const textStream = Readable.from(['Hello', ' from', ' a', ' stream!']);
 const audioStreamFromTextStream = await voice.speak(textStream);
 ```
 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string | NodeJS.ReadableStream",
-      description:
-        "Text to convert to speech. Can be a string or a readable stream of text.",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "object",
-      description: "Options for speech synthesis",
-      isOptional: true,
-    },
-    {
-      name: "options.speaker",
-      type: "string",
-      description:
-        "Voice ID to use for this specific request. Overrides the default speaker set in the constructor.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string | NodeJS.ReadableStream",
+description:
+"Text to convert to speech. Can be a string or a readable stream of text.",
+isOptional: false,
+},
+{
+name: "options",
+type: "object",
+description: "Options for speech synthesis",
+isOptional: true,
+},
+{
+name: "options.speaker",
+type: "string",
+description:
+"Voice ID to use for this specific request. Overrides the default speaker set in the constructor.",
+isOptional: true,
+},
+]}
 />
 
 ## Return Value
@@ -73,84 +73,84 @@ Each voice provider may support additional options specific to their implementat
 ### OpenAI
 
 <PropertiesTable
-  content={[
-    {
-      name: "options.speed",
-      type: "number",
-      description:
-        "Speech speed multiplier. Values between 0.25 and 4.0 are supported.",
-      isOptional: true,
-      defaultValue: "1.0",
-    },
-  ]}
+content={[
+{
+name: "options.speed",
+type: "number",
+description:
+"Speech speed multiplier. Values between 0.25 and 4.0 are supported.",
+isOptional: true,
+defaultValue: "1.0",
+},
+]}
 />
 
 ### ElevenLabs
 
 <PropertiesTable
-  content={[
-    {
-      name: "options.stability",
-      type: "number",
-      description:
-        "Voice stability. Higher values result in more stable, less expressive speech.",
-      isOptional: true,
-      defaultValue: "0.5",
-    },
-    {
-      name: "options.similarity_boost",
-      type: "number",
-      description: "Voice clarity and similarity to the original voice.",
-      isOptional: true,
-      defaultValue: "0.75",
-    },
-  ]}
+content={[
+{
+name: "options.stability",
+type: "number",
+description:
+"Voice stability. Higher values result in more stable, less expressive speech.",
+isOptional: true,
+defaultValue: "0.5",
+},
+{
+name: "options.similarity_boost",
+type: "number",
+description: "Voice clarity and similarity to the original voice.",
+isOptional: true,
+defaultValue: "0.75",
+},
+]}
 />
 
 ### Google
 
 <PropertiesTable
-  content={[
-    {
-      name: "options.languageCode",
-      type: "string",
-      description: "Language code for the voice (e.g., 'en-US').",
-      isOptional: true,
-    },
-    {
-      name: "options.audioConfig",
-      type: "object",
-      description:
-        "Audio configuration options from Google Cloud Text-to-Speech API.",
-      isOptional: true,
-      defaultValue: "{ audioEncoding: 'LINEAR16' }",
-    },
-  ]}
+content={[
+{
+name: "options.languageCode",
+type: "string",
+description: "Language code for the voice (e.g., 'en-US').",
+isOptional: true,
+},
+{
+name: "options.audioConfig",
+type: "object",
+description:
+"Audio configuration options from Google Cloud Text-to-Speech API.",
+isOptional: true,
+defaultValue: "{ audioEncoding: 'LINEAR16' }",
+},
+]}
 />
 
 ### Murf
 
 <PropertiesTable
-  content={[
-    {
-      name: "options.properties.rate",
-      type: "number",
-      description: "Speech rate multiplier.",
-      isOptional: true,
-    },
-    {
-      name: "options.properties.pitch",
-      type: "number",
-      description: "Voice pitch adjustment.",
-      isOptional: true,
-    },
-    {
-      name: "options.properties.format",
-      type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
-      description: "Output audio format.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "options.properties.rate",
+type: "number",
+description: "Speech rate multiplier.",
+isOptional: true,
+},
+{
+name: "options.properties.pitch",
+type: "number",
+description: "Voice pitch adjustment.",
+isOptional: true,
+},
+{
+name: "options.properties.format",
+type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
+description: "Output audio format.",
+isOptional: true,
+},
+]}
 />
 
 ## Realtime Voice Providers
@@ -161,8 +161,8 @@ When using realtime voice providers like `OpenAIRealtimeVoice`, the `speak()` me
 - You need to register an event listener to receive the audio chunks
 
 ```typescript
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
-import Speaker from "@mastra/node-speaker";
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
+import Speaker from '@mastra/node-speaker';
 
 const speaker = new Speaker({
   sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
@@ -173,12 +173,12 @@ const speaker = new Speaker({
 const voice = new OpenAIRealtimeVoice();
 await voice.connect();
 // Register event listener for audio chunks
-voice.on("speaker", (stream) => {
+voice.on('speaker', stream => {
   // Handle audio chunk (e.g., play it or save it)
   stream.pipe(speaker);
 });
 // This will emit 'speaking' events instead of returning a stream
-await voice.speak("Hello, this is realtime speech!");
+await voice.speak('Hello, this is realtime speech!');
 ```
 
 ## Using with CompositeVoice
@@ -186,15 +186,15 @@ await voice.speak("Hello, this is realtime speech!");
 When using `CompositeVoice`, the `speak()` method delegates to the configured speaking provider:
 
 ```typescript
-import { CompositeVoice } from "@mastra/core/voice";
-import { OpenAIVoice } from "@mastra/voice-openai";
-import { PlayAIVoice } from "@mastra/voice-playai";
+import { CompositeVoice } from '@mastra/core/voice';
+import { OpenAIVoice } from '@mastra/voice-openai';
+import { PlayAIVoice } from '@mastra/voice-playai';
 const voice = new CompositeVoice({
   speakProvider: new PlayAIVoice(),
   listenProvider: new OpenAIVoice(),
 });
 // This will use the PlayAIVoice provider
-const audioStream = await voice.speak("Hello, world!");
+const audioStream = await voice.speak('Hello, world!');
 ```
 
 ## Notes

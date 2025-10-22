@@ -1,6 +1,6 @@
 ---
-title: "Conversation History "
-description: "Learn how to configure conversation history in Mastra to store recent messages from the current conversation."
+title: 'Conversation History '
+description: 'Learn how to configure conversation history in Mastra to store recent messages from the current conversation.'
 ---
 
 # Conversation History
@@ -16,8 +16,8 @@ export const testAgent = new Agent({
   // ...
   memory: new Memory({
     options: {
-      lastMessages: 100
+      lastMessages: 100,
     },
-  })
+  }),
 });
 ```

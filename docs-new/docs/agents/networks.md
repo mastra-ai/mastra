@@ -1,6 +1,6 @@
 ---
-title: "Handling Complex LLM Operations "
-description: "Networks in Mastra help you execute individual or multiple Mastra primitives in a non-deterministic way using a single API."
+title: 'Handling Complex LLM Operations '
+description: 'Networks in Mastra help you execute individual or multiple Mastra primitives in a non-deterministic way using a single API.'
 ---
 
 # Agent.network()
@@ -33,7 +33,6 @@ As an example, we have an Agent with 3 primitives at its disposal:
 
 We use the `network` method to create a task that requires multiple primitives. The Agent will, using memory, figure out which primitives to call and in which order, as well as when the task is complete.
 
-
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
@@ -63,9 +62,9 @@ const agentStep1 = createStep({
       structuredOutput: {
         schema: z.object({
           text: z.string(),
-        })
+        }),
       },
-      maxSteps: 1
+      maxSteps: 1,
     });
 
     return { text: resp.object.text };
@@ -86,9 +85,9 @@ const agentStep2 = createStep({
       structuredOutput: {
         schema: z.object({
           text: z.string(),
-        })
+        }),
       },
-      maxSteps: 1
+      maxSteps: 1,
     });
 
     return { text: resp.object.text };

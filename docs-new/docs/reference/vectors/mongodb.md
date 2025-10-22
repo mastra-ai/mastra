@@ -1,5 +1,5 @@
 ---
-title: "Reference: MongoDB Vector Store "
+title: 'Reference: MongoDB Vector Store '
 description: Documentation for the MongoDBVector class in Mastra, which provides vector search using MongoDB Atlas and Atlas Vector Search.
 ---
 
@@ -16,7 +16,7 @@ npm install @mastra/mongodb
 ## Usage Example
 
 ```typescript copy showLineNumbers
-import { MongoDBVector } from "@mastra/mongodb";
+import { MongoDBVector } from '@mastra/mongodb';
 
 const store = new MongoDBVector({
   url: process.env.MONGODB_URL,
@@ -27,24 +27,24 @@ const store = new MongoDBVector({
 ## Constructor Options
 
 <PropertiesTable
-  content={[
-    {
-      name: "url",
-      type: "string",
-      description: "MongoDB connection string (URI)",
-    },
-    {
-      name: "database",
-      type: "string",
-      description: "Name of the MongoDB database to use",
-    },
-    {
-      name: "options",
-      type: "MongoClientOptions",
-      isOptional: true,
-      description: "Optional MongoDB client options",
-    },
-  ]}
+content={[
+{
+name: "url",
+type: "string",
+description: "MongoDB connection string (URI)",
+},
+{
+name: "database",
+type: "string",
+description: "Name of the MongoDB database to use",
+},
+{
+name: "options",
+type: "MongoClientOptions",
+isOptional: true,
+description: "Optional MongoDB client options",
+},
+]}
 />
 
 ## Methods
@@ -54,25 +54,25 @@ const store = new MongoDBVector({
 Creates a new vector index (collection) in MongoDB.
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection to create",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "Vector dimension (must match your embedding model)",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description: "Distance metric for similarity search",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection to create",
+},
+{
+name: "dimension",
+type: "number",
+description: "Vector dimension (must match your embedding model)",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean' | 'dotproduct'",
+isOptional: true,
+defaultValue: "cosine",
+description: "Distance metric for similarity search",
+},
+]}
 />
 
 ### upsert()
@@ -80,30 +80,30 @@ Creates a new vector index (collection) in MongoDB.
 Adds or updates vectors and their metadata in the collection.
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection to insert into",
-    },
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of embedding vectors",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      isOptional: true,
-      description: "Metadata for each vector",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Optional vector IDs (auto-generated if not provided)",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection to insert into",
+},
+{
+name: "vectors",
+type: "number[][]",
+description: "Array of embedding vectors",
+},
+{
+name: "metadata",
+type: "Record<string, any>[]",
+isOptional: true,
+description: "Metadata for each vector",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Optional vector IDs (auto-generated if not provided)",
+},
+]}
 />
 
 ### query()
@@ -111,51 +111,51 @@ Adds or updates vectors and their metadata in the collection.
 Searches for similar vectors with optional metadata filtering.
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection to search in",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "Query vector to find similar vectors for",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filters (applies to the `metadata` field)",
-    },
-    {
-      name: "documentFilter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Filters on original document fields (not just metadata)",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include vector data in results",
-    },
-    {
-      name: "minScore",
-      type: "number",
-      isOptional: true,
-      defaultValue: "0",
-      description: "Minimum similarity score threshold",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection to search in",
+},
+{
+name: "queryVector",
+type: "number[]",
+description: "Query vector to find similar vectors for",
+},
+{
+name: "topK",
+type: "number",
+isOptional: true,
+defaultValue: "10",
+description: "Number of results to return",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filters (applies to the `metadata` field)",
+},
+{
+name: "documentFilter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Filters on original document fields (not just metadata)",
+},
+{
+name: "includeVector",
+type: "boolean",
+isOptional: true,
+defaultValue: "false",
+description: "Whether to include vector data in results",
+},
+{
+name: "minScore",
+type: "number",
+isOptional: true,
+defaultValue: "0",
+description: "Minimum similarity score threshold",
+},
+]}
 />
 
 ### describeIndex()
@@ -163,13 +163,13 @@ Searches for similar vectors with optional metadata filtering.
 Returns information about the index (collection).
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection to describe",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection to describe",
+},
+]}
 />
 
 Returns:
@@ -178,7 +178,7 @@ Returns:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: "cosine" | "euclidean" | "dotproduct";
+  metric: 'cosine' | 'euclidean' | 'dotproduct';
 }
 ```
 
@@ -187,13 +187,13 @@ interface IndexStats {
 Deletes a collection and all its data.
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection to delete",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection to delete",
+},
+]}
 />
 
 ### listIndexes()
@@ -207,35 +207,35 @@ Returns: `Promise<string[]>`
 Updates a specific vector entry by its ID with new vector data and/or metadata.
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection containing the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the vector entry to update",
-    },
-    {
-      name: "update",
-      type: "object",
-      description: "Update data containing vector and/or metadata",
-    },
-    {
-      name: "update.vector",
-      type: "number[]",
-      isOptional: true,
-      description: "New vector data to update",
-    },
-    {
-      name: "update.metadata",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "New metadata to update",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection containing the vector",
+},
+{
+name: "id",
+type: "string",
+description: "ID of the vector entry to update",
+},
+{
+name: "update",
+type: "object",
+description: "Update data containing vector and/or metadata",
+},
+{
+name: "update.vector",
+type: "number[]",
+isOptional: true,
+description: "New vector data to update",
+},
+{
+name: "update.metadata",
+type: "Record<string, any>",
+isOptional: true,
+description: "New metadata to update",
+},
+]}
 />
 
 ### deleteVector()
@@ -243,18 +243,18 @@ Updates a specific vector entry by its ID with new vector data and/or metadata.
 Deletes a specific vector entry from an index by its ID.
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the collection containing the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the vector entry to delete",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the collection containing the vector",
+},
+{
+name: "id",
+type: "string",
+description: "ID of the vector entry to delete",
+},
+]}
 />
 
 ### disconnect()
@@ -281,19 +281,17 @@ The store throws typed errors that can be caught:
 ```typescript copy
 try {
   await store.query({
-    indexName: "my_collection",
+    indexName: 'my_collection',
     queryVector: queryVector,
   });
 } catch (error) {
   // Handle specific error cases
-  if (error.message.includes("Invalid collection name")) {
-    console.error(
-      "Collection name must start with a letter or underscore and contain only valid characters.",
-    );
-  } else if (error.message.includes("Collection not found")) {
-    console.error("The specified collection does not exist");
+  if (error.message.includes('Invalid collection name')) {
+    console.error('Collection name must start with a letter or underscore and contain only valid characters.');
+  } else if (error.message.includes('Collection not found')) {
+    console.error('The specified collection does not exist');
   } else {
-    console.error("Vector store error:", error.message);
+    console.error('Vector store error:', error.message);
   }
 }
 ```

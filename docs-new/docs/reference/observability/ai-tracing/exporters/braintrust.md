@@ -1,8 +1,7 @@
 ---
-title: "BraintrustExporter "
+title: 'BraintrustExporter '
 description: Braintrust exporter for AI tracing
 ---
-
 
 # BraintrustExporter
 
@@ -27,38 +26,38 @@ interface BraintrustExporterConfig {
 ```
 
 <PropertiesTable
-  props={[
-    {
-      name: "apiKey",
-      type: "string",
-      description: "Braintrust API key",
-      required: false,
-    },
-    {
-      name: "endpoint",
-      type: "string",
-      description: "Custom Braintrust endpoint",
-      required: false,
-    },
-    {
-      name: "projectName",
-      type: "string",
-      description: "Project name (default: 'mastra-tracing')",
-      required: false,
-    },
-    {
-      name: "logLevel",
-      type: "'debug' | 'info' | 'warn' | 'error'",
-      description: "Logger level (default: 'warn')",
-      required: false,
-    },
-    {
-      name: "tuningParameters",
-      type: "Record<string, any>",
-      description: "Tuning parameters for Braintrust",
-      required: false,
-    },
-  ]}
+props={[
+{
+name: "apiKey",
+type: "string",
+description: "Braintrust API key",
+required: false,
+},
+{
+name: "endpoint",
+type: "string",
+description: "Custom Braintrust endpoint",
+required: false,
+},
+{
+name: "projectName",
+type: "string",
+description: "Project name (default: 'mastra-tracing')",
+required: false,
+},
+{
+name: "logLevel",
+type: "'debug' | 'info' | 'warn' | 'error'",
+description: "Logger level (default: 'warn')",
+required: false,
+},
+{
+name: "tuningParameters",
+type: "Record<string, any>",
+description: "Tuning parameters for Braintrust",
+required: false,
+},
+]}
 />
 
 ## Methods
@@ -100,12 +99,12 @@ const exporter = new BraintrustExporter({
 
 ## Span Type Mapping
 
-| AI Span Type | Braintrust Type |
-|--------------|-----------------|
-| `LLM_GENERATION` | `llm` |
-| `LLM_CHUNK` | `llm` |
-| `TOOL_CALL` | `tool` |
-| `MCP_TOOL_CALL` | `tool` |
-| `WORKFLOW_CONDITIONAL_EVAL` | `function` |
-| `WORKFLOW_WAIT_EVENT` | `function` |
-| All others | `task` |
+| AI Span Type                | Braintrust Type |
+| --------------------------- | --------------- |
+| `LLM_GENERATION`            | `llm`           |
+| `LLM_CHUNK`                 | `llm`           |
+| `TOOL_CALL`                 | `tool`          |
+| `MCP_TOOL_CALL`             | `tool`          |
+| `WORKFLOW_CONDITIONAL_EVAL` | `function`      |
+| `WORKFLOW_WAIT_EVENT`       | `function`      |
+| All others                  | `task`          |

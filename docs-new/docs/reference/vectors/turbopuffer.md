@@ -1,5 +1,5 @@
 ---
-title: "Reference: Turbopuffer Vector Store "
+title: 'Reference: Turbopuffer Vector Store '
 description: Documentation for integrating Turbopuffer with Mastra, a high-performance vector database for efficient similarity search.
 ---
 
@@ -10,59 +10,59 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
 ## Constructor Options
 
 <PropertiesTable
-  content={[
-    {
-      name: "apiKey",
-      type: "string",
-      description: "The API key to authenticate with Turbopuffer",
-    },
-    {
-      name: "baseUrl",
-      type: "string",
-      isOptional: true,
-      defaultValue: "https://api.turbopuffer.com",
-      description: "The base URL for the Turbopuffer API",
-    },
-    {
-      name: "connectTimeout",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10000",
-      description:
-        "The timeout to establish a connection, in ms. Only applicable in Node and Deno.",
-    },
-    {
-      name: "connectionIdleTimeout",
-      type: "number",
-      isOptional: true,
-      defaultValue: "60000",
-      description:
-        "The socket idle timeout, in ms. Only applicable in Node and Deno.",
-    },
-    {
-      name: "warmConnections",
-      type: "number",
-      isOptional: true,
-      defaultValue: "0",
-      description:
-        "The number of connections to open initially when creating a new client.",
-    },
-    {
-      name: "compression",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "true",
-      description:
-        "Whether to compress requests and accept compressed responses.",
-    },
-    {
-      name: "schemaConfigForIndex",
-      type: "function",
-      isOptional: true,
-      description:
-        "A callback function that takes an index name and returns a config object for that index. This allows you to define explicit schemas per index.",
-    },
-  ]}
+content={[
+{
+name: "apiKey",
+type: "string",
+description: "The API key to authenticate with Turbopuffer",
+},
+{
+name: "baseUrl",
+type: "string",
+isOptional: true,
+defaultValue: "https://api.turbopuffer.com",
+description: "The base URL for the Turbopuffer API",
+},
+{
+name: "connectTimeout",
+type: "number",
+isOptional: true,
+defaultValue: "10000",
+description:
+"The timeout to establish a connection, in ms. Only applicable in Node and Deno.",
+},
+{
+name: "connectionIdleTimeout",
+type: "number",
+isOptional: true,
+defaultValue: "60000",
+description:
+"The socket idle timeout, in ms. Only applicable in Node and Deno.",
+},
+{
+name: "warmConnections",
+type: "number",
+isOptional: true,
+defaultValue: "0",
+description:
+"The number of connections to open initially when creating a new client.",
+},
+{
+name: "compression",
+type: "boolean",
+isOptional: true,
+defaultValue: "true",
+description:
+"Whether to compress requests and accept compressed responses.",
+},
+{
+name: "schemaConfigForIndex",
+type: "function",
+isOptional: true,
+description:
+"A callback function that takes an index name and returns a config object for that index. This allows you to define explicit schemas per index.",
+},
+]}
 />
 
 ## Methods
@@ -70,86 +70,86 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
 ### createIndex()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to create",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "Vector dimension (must match your embedding model)",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description: "Distance metric for similarity search",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to create",
+},
+{
+name: "dimension",
+type: "number",
+description: "Vector dimension (must match your embedding model)",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean' | 'dotproduct'",
+isOptional: true,
+defaultValue: "cosine",
+description: "Distance metric for similarity search",
+},
+]}
 />
 
 ### upsert()
 
 <PropertiesTable
-  content={[
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of embedding vectors",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      isOptional: true,
-      description: "Metadata for each vector",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Optional vector IDs (auto-generated if not provided)",
-    },
-  ]}
+content={[
+{
+name: "vectors",
+type: "number[][]",
+description: "Array of embedding vectors",
+},
+{
+name: "metadata",
+type: "Record<string, any>[]",
+isOptional: true,
+description: "Metadata for each vector",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Optional vector IDs (auto-generated if not provided)",
+},
+]}
 />
 
 ### query()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to query",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "Query vector to find similar vectors",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filters for the query",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include vectors in the results",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to query",
+},
+{
+name: "queryVector",
+type: "number[]",
+description: "Query vector to find similar vectors",
+},
+{
+name: "topK",
+type: "number",
+isOptional: true,
+defaultValue: "10",
+description: "Number of results to return",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filters for the query",
+},
+{
+name: "includeVector",
+type: "boolean",
+isOptional: true,
+defaultValue: "false",
+description: "Whether to include vectors in the results",
+},
+]}
 />
 
 ### listIndexes()
@@ -159,13 +159,13 @@ Returns an array of index names as strings.
 ### describeIndex()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to describe",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to describe",
+},
+]}
 />
 
 Returns:
@@ -174,20 +174,20 @@ Returns:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: "cosine" | "euclidean" | "dotproduct";
+  metric: 'cosine' | 'euclidean' | 'dotproduct';
 }
 ```
 
 ### deleteIndex()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to delete",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to delete",
+},
+]}
 />
 
 ## Response Types
@@ -210,12 +210,12 @@ The `schemaConfigForIndex` option allows you to define explicit schemas for diff
 ```typescript copy
 schemaConfigForIndex: (indexName: string) => {
   // Mastra's default embedding model and index for memory messages:
-  if (indexName === "memory_messages_384") {
+  if (indexName === 'memory_messages_384') {
     return {
       dimensions: 384,
       schema: {
         thread_id: {
-          type: "string",
+          type: 'string',
           filterable: true,
         },
       },
@@ -233,7 +233,7 @@ The store throws typed errors that can be caught:
 ```typescript copy
 try {
   await store.query({
-    indexName: "index_name",
+    indexName: 'index_name',
     queryVector: queryVector,
   });
 } catch (error) {

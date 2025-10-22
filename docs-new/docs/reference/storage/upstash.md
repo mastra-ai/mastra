@@ -1,14 +1,15 @@
 ---
-title: "Upstash Storage "
+title: 'Upstash Storage '
 description: Documentation for the Upstash storage implementation in Mastra.
 ---
+
 # Upstash Storage
 
 The Upstash storage implementation provides a serverless-friendly storage solution using Upstash's Redis-compatible key-value store.
 
 :::warning
 
-  **Important:** When using Mastra with Upstash, the pay-as-you-go model can result in unexpectedly high costs due to the high volume of Redis commands generated during agent conversations. We strongly recommend using a **fixed pricing plan** for predictable costs. See [Upstash pricing](https://upstash.com/pricing/redis) for details and [GitHub issue #5850](https://github.com/mastra-ai/mastra/issues/5850) for context.
+**Important:** When using Mastra with Upstash, the pay-as-you-go model can result in unexpectedly high costs due to the high volume of Redis commands generated during agent conversations. We strongly recommend using a **fixed pricing plan** for predictable costs. See [Upstash pricing](https://upstash.com/pricing/redis) for details and [GitHub issue #5850](https://github.com/mastra-ai/mastra/issues/5850) for context.
 
 :::
 
@@ -21,7 +22,7 @@ npm install @mastra/upstash@latest
 ## Usage
 
 ```typescript copy showLineNumbers
-import { UpstashStore } from "@mastra/upstash";
+import { UpstashStore } from '@mastra/upstash';
 
 const storage = new UpstashStore({
   url: process.env.UPSTASH_URL,
@@ -32,27 +33,27 @@ const storage = new UpstashStore({
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "url",
-      type: "string",
-      description: "Upstash Redis URL",
-      isOptional: false,
-    },
-    {
-      name: "token",
-      type: "string",
-      description: "Upstash Redis authentication token",
-      isOptional: false,
-    },
-    {
-      name: "prefix",
-      type: "string",
-      description: "Key prefix for all stored items",
-      isOptional: true,
-      defaultValue: "mastra:",
-    },
-  ]}
+content={[
+{
+name: "url",
+type: "string",
+description: "Upstash Redis URL",
+isOptional: false,
+},
+{
+name: "token",
+type: "string",
+description: "Upstash Redis authentication token",
+isOptional: false,
+},
+{
+name: "prefix",
+type: "string",
+description: "Key prefix for all stored items",
+isOptional: true,
+defaultValue: "mastra:",
+},
+]}
 />
 
 ## Additional Notes

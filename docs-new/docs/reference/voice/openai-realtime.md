@@ -1,6 +1,6 @@
 ---
-title: "Reference: OpenAI Realtime Voice "
-description: "Documentation for the OpenAIRealtimeVoice class, providing real-time text-to-speech and speech-to-text capabilities via WebSockets."
+title: 'Reference: OpenAI Realtime Voice '
+description: 'Documentation for the OpenAIRealtimeVoice class, providing real-time text-to-speech and speech-to-text capabilities via WebSockets.'
 ---
 
 # OpenAI Realtime Voice
@@ -10,22 +10,22 @@ The OpenAIRealtimeVoice class provides real-time voice interaction capabilities 
 ## Usage Example
 
 ```typescript
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
-import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
+import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
 
 // Initialize with default configuration using environment variables
 const voice = new OpenAIRealtimeVoice();
 
 // Or initialize with specific configuration
 const voiceWithConfig = new OpenAIRealtimeVoice({
-  apiKey: "your-openai-api-key",
-  model: "gpt-4o-mini-realtime-preview-2024-12-17",
-  speaker: "alloy", // Default voice
+  apiKey: 'your-openai-api-key',
+  model: 'gpt-4o-mini-realtime-preview-2024-12-17',
+  speaker: 'alloy', // Default voice
 });
 
 voiceWithConfig.updateSession({
   turn_detection: {
-    type: "server_vad",
+    type: 'server_vad',
     threshold: 0.6,
     silence_duration_ms: 1200,
   },
@@ -35,19 +35,19 @@ voiceWithConfig.updateSession({
 await voice.connect();
 
 // Set up event listeners
-voice.on("speaker", ({ audio }) => {
+voice.on('speaker', ({ audio }) => {
   // Handle audio data (Int16Array) pcm format by default
   playAudio(audio);
 });
 
-voice.on("writing", ({ text, role }) => {
+voice.on('writing', ({ text, role }) => {
   // Handle transcribed text
   console.log(`${role}: ${text}`);
 });
 
 // Convert text to speech
-await voice.speak("Hello, how can I help you today?", {
-  speaker: "echo", // Override default voice
+await voice.speak('Hello, how can I help you today?', {
+  speaker: 'echo', // Override default voice
 });
 
 // Process audio input
@@ -63,66 +63,66 @@ voice.connect();
 ### Constructor Options
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "string",
-      description: "The model ID to use for real-time voice interactions.",
-      isOptional: true,
-      defaultValue: "'gpt-4o-mini-realtime-preview-2024-12-17'",
-    },
-    {
-      name: "apiKey",
-      type: "string",
-      description:
-        "OpenAI API key. Falls back to OPENAI_API_KEY environment variable.",
-      isOptional: true,
-    },
-    {
-      name: "speaker",
-      type: "string",
-      description: "Default voice ID for speech synthesis.",
-      isOptional: true,
-      defaultValue: "'alloy'",
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "string",
+description: "The model ID to use for real-time voice interactions.",
+isOptional: true,
+defaultValue: "'gpt-4o-mini-realtime-preview-2024-12-17'",
+},
+{
+name: "apiKey",
+type: "string",
+description:
+"OpenAI API key. Falls back to OPENAI_API_KEY environment variable.",
+isOptional: true,
+},
+{
+name: "speaker",
+type: "string",
+description: "Default voice ID for speech synthesis.",
+isOptional: true,
+defaultValue: "'alloy'",
+},
+]}
 />
 
 ### Voice Activity Detection (VAD) Configuration
 
 <PropertiesTable
-  content={[
-    {
-      name: "type",
-      type: "string",
-      description:
-        "Type of VAD to use. Server-side VAD provides better accuracy.",
-      isOptional: true,
-      defaultValue: "'server_vad'",
-    },
-    {
-      name: "threshold",
-      type: "number",
-      description: "Speech detection sensitivity (0.0-1.0).",
-      isOptional: true,
-      defaultValue: "0.5",
-    },
-    {
-      name: "prefix_padding_ms",
-      type: "number",
-      description:
-        "Milliseconds of audio to include before speech is detected.",
-      isOptional: true,
-      defaultValue: "1000",
-    },
-    {
-      name: "silence_duration_ms",
-      type: "number",
-      description: "Milliseconds of silence before ending a turn.",
-      isOptional: true,
-      defaultValue: "1000",
-    },
-  ]}
+content={[
+{
+name: "type",
+type: "string",
+description:
+"Type of VAD to use. Server-side VAD provides better accuracy.",
+isOptional: true,
+defaultValue: "'server_vad'",
+},
+{
+name: "threshold",
+type: "number",
+description: "Speech detection sensitivity (0.0-1.0).",
+isOptional: true,
+defaultValue: "0.5",
+},
+{
+name: "prefix_padding_ms",
+type: "number",
+description:
+"Milliseconds of audio to include before speech is detected.",
+isOptional: true,
+defaultValue: "1000",
+},
+{
+name: "silence_duration_ms",
+type: "number",
+description: "Milliseconds of silence before ending a turn.",
+isOptional: true,
+defaultValue: "1000",
+},
+]}
 />
 
 ## Methods
@@ -132,13 +132,13 @@ voice.connect();
 Establishes a connection to the OpenAI realtime service. Must be called before using speak, listen, or send functions.
 
 <PropertiesTable
-  content={[
-    {
-      name: "returns",
-      type: "Promise<void>",
-      description: "Promise that resolves when the connection is established.",
-    },
-  ]}
+content={[
+{
+name: "returns",
+type: "Promise<void>",
+description: "Promise that resolves when the connection is established.",
+},
+]}
 />
 
 ### speak()
@@ -146,21 +146,21 @@ Establishes a connection to the OpenAI realtime service. Must be called before u
 Emits a speaking event using the configured voice model. Can accept either a string or a readable stream as input.
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string | NodeJS.ReadableStream",
-      description: "Text or text stream to convert to speech.",
-      isOptional: false,
-    },
-    {
-      name: "options.speaker",
-      type: "string",
-      description: "Voice ID to use for this specific speech request.",
-      isOptional: true,
-      defaultValue: "Constructor's speaker value",
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string | NodeJS.ReadableStream",
+description: "Text or text stream to convert to speech.",
+isOptional: false,
+},
+{
+name: "options.speaker",
+type: "string",
+description: "Voice ID to use for this specific speech request.",
+isOptional: true,
+defaultValue: "Constructor's speaker value",
+},
+]}
 />
 
 Returns: `Promise<void>`
@@ -170,14 +170,14 @@ Returns: `Promise<void>`
 Processes audio input for speech recognition. Takes a readable stream of audio data and emits a 'listening' event with the transcribed text.
 
 <PropertiesTable
-  content={[
-    {
-      name: "audioData",
-      type: "NodeJS.ReadableStream",
-      description: "Audio stream to transcribe.",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "audioData",
+type: "NodeJS.ReadableStream",
+description: "Audio stream to transcribe.",
+isOptional: false,
+},
+]}
 />
 
 Returns: `Promise<void>`
@@ -187,14 +187,14 @@ Returns: `Promise<void>`
 Streams audio data in real-time to the OpenAI service for continuous audio streaming scenarios like live microphone input.
 
 <PropertiesTable
-  content={[
-    {
-      name: "audioData",
-      type: "NodeJS.ReadableStream",
-      description: "Audio stream to send to the service.",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "audioData",
+type: "NodeJS.ReadableStream",
+description: "Audio stream to send to the service.",
+isOptional: false,
+},
+]}
 />
 
 Returns: `Promise<void>`
@@ -204,14 +204,14 @@ Returns: `Promise<void>`
 Updates the session configuration for the voice instance. This can be used to modify voice settings, turn detection, and other parameters.
 
 <PropertiesTable
-  content={[
-    {
-      name: "sessionConfig",
-      type: "Realtime.SessionConfig",
-      description: "New session configuration to apply.",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "sessionConfig",
+type: "Realtime.SessionConfig",
+description: "New session configuration to apply.",
+isOptional: false,
+},
+]}
 />
 
 Returns: `void`
@@ -221,14 +221,14 @@ Returns: `void`
 Adds a set of tools to the voice instance. Tools allow the model to perform additional actions during conversations. When OpenAIRealtimeVoice is added to an Agent, any tools configured for the Agent will automatically be available to the voice interface.
 
 <PropertiesTable
-  content={[
-    {
-      name: "tools",
-      type: "ToolsInput",
-      description: "Tools configuration to equip.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "tools",
+type: "ToolsInput",
+description: "Tools configuration to equip.",
+isOptional: true,
+},
+]}
 />
 
 Returns: `void`
@@ -250,20 +250,20 @@ Returns: `Promise<Array<{ voiceId: string; [key: string]: any }>>`
 Registers an event listener for voice events.
 
 <PropertiesTable
-  content={[
-    {
-      name: "event",
-      type: "string",
-      description: "Name of the event to listen for.",
-      isOptional: false,
-    },
-    {
-      name: "callback",
-      type: "Function",
-      description: "Function to call when the event occurs.",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "event",
+type: "string",
+description: "Name of the event to listen for.",
+isOptional: false,
+},
+{
+name: "callback",
+type: "Function",
+description: "Function to call when the event occurs.",
+isOptional: false,
+},
+]}
 />
 
 Returns: `void`
@@ -273,20 +273,20 @@ Returns: `void`
 Removes a previously registered event listener.
 
 <PropertiesTable
-  content={[
-    {
-      name: "event",
-      type: "string",
-      description: "Name of the event to stop listening to.",
-      isOptional: false,
-    },
-    {
-      name: "callback",
-      type: "Function",
-      description: "The specific callback function to remove.",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "event",
+type: "string",
+description: "Name of the event to stop listening to.",
+isOptional: false,
+},
+{
+name: "callback",
+type: "Function",
+description: "The specific callback function to remove.",
+isOptional: false,
+},
+]}
 />
 
 Returns: `void`
@@ -296,26 +296,26 @@ Returns: `void`
 The OpenAIRealtimeVoice class emits the following events:
 
 <PropertiesTable
-  content={[
-    {
-      name: "speaking",
-      type: "event",
-      description:
-        "Emitted when audio data is received from the model. Callback receives { audio: Int16Array }.",
-    },
-    {
-      name: "writing",
-      type: "event",
-      description:
-        "Emitted when transcribed text is available. Callback receives { text: string, role: string }.",
-    },
-    {
-      name: "error",
-      type: "event",
-      description:
-        "Emitted when an error occurs. Callback receives the error object.",
-    },
-  ]}
+content={[
+{
+name: "speaking",
+type: "event",
+description:
+"Emitted when audio data is received from the model. Callback receives { audio: Int16Array }.",
+},
+{
+name: "writing",
+type: "event",
+description:
+"Emitted when transcribed text is available. Callback receives { text: string, role: string }.",
+},
+{
+name: "error",
+type: "event",
+description:
+"Emitted when an error occurs. Callback receives the error object.",
+},
+]}
 />
 
 ### OpenAI Realtime Events
@@ -323,33 +323,33 @@ The OpenAIRealtimeVoice class emits the following events:
 You can also listen to [OpenAI Realtime utility events](https://github.com/openai/openai-realtime-api-beta#reference-client-utility-events) by prefixing with 'openAIRealtime:':
 
 <PropertiesTable
-  content={[
-    {
-      name: "openAIRealtime:conversation.created",
-      type: "event",
-      description: "Emitted when a new conversation is created.",
-    },
-    {
-      name: "openAIRealtime:conversation.interrupted",
-      type: "event",
-      description: "Emitted when a conversation is interrupted.",
-    },
-    {
-      name: "openAIRealtime:conversation.updated",
-      type: "event",
-      description: "Emitted when a conversation is updated.",
-    },
-    {
-      name: "openAIRealtime:conversation.item.appended",
-      type: "event",
-      description: "Emitted when an item is appended to the conversation.",
-    },
-    {
-      name: "openAIRealtime:conversation.item.completed",
-      type: "event",
-      description: "Emitted when an item in the conversation is completed.",
-    },
-  ]}
+content={[
+{
+name: "openAIRealtime:conversation.created",
+type: "event",
+description: "Emitted when a new conversation is created.",
+},
+{
+name: "openAIRealtime:conversation.interrupted",
+type: "event",
+description: "Emitted when a conversation is interrupted.",
+},
+{
+name: "openAIRealtime:conversation.updated",
+type: "event",
+description: "Emitted when a conversation is updated.",
+},
+{
+name: "openAIRealtime:conversation.item.appended",
+type: "event",
+description: "Emitted when an item is appended to the conversation.",
+},
+{
+name: "openAIRealtime:conversation.item.completed",
+type: "event",
+description: "Emitted when an item in the conversation is completed.",
+},
+]}
 />
 
 ## Available Voices

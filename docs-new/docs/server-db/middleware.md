@@ -1,6 +1,6 @@
 ---
-title: "Middleware"
-description: "Apply custom middleware functions to intercept requests."
+title: 'Middleware'
+description: 'Apply custom middleware functions to intercept requests.'
 ---
 
 # Middleware
@@ -14,7 +14,7 @@ function. If it returns a `Response` the request is short-circuited. Calling
 `next()` continues processing the next middleware or route handler.
 
 ```typescript copy showLineNumbers
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core';
 
 export const mastra = new Mastra({
   server: {
@@ -22,14 +22,14 @@ export const mastra = new Mastra({
       {
         handler: async (c, next) => {
           // Example: Add authentication check
-          const authHeader = c.req.header("Authorization");
+          const authHeader = c.req.header('Authorization');
           if (!authHeader) {
-            return new Response("Unauthorized", { status: 401 });
+            return new Response('Unauthorized', { status: 401 });
           }
 
           await next();
         },
-        path: "/api/*",
+        path: '/api/*',
       },
       // Add a global request logger
       async (c, next) => {
@@ -45,17 +45,17 @@ To attach middleware to a single route pass the `middleware` option to
 `registerApiRoute`:
 
 ```typescript copy showLineNumbers
-registerApiRoute("/my-custom-route", {
-  method: "GET",
+registerApiRoute('/my-custom-route', {
+  method: 'GET',
   middleware: [
     async (c, next) => {
       console.log(`${c.req.method} ${c.req.url}`);
       await next();
     },
   ],
-  handler: async (c) => {
-    const mastra = c.get("mastra");
-    return c.json({ message: "Hello, world!" });
+  handler: async c => {
+    const mastra = c.get('mastra');
+    return c.json({ message: 'Hello, world!' });
   },
 });
 ```
@@ -138,6 +138,7 @@ be inspected by middleware to tailor behaviour:
   },
 }
 ```
+
 - `x-mastra-cloud`: request originates from Mastra Cloud
 - `x-mastra-client-type`: identifies the client SDK, e.g. `js` or `python`
 - `x-mastra-dev-playground`: request triggered from a local playground
@@ -147,24 +148,24 @@ be inspected by middleware to tailor behaviour:
 You can populate `runtimeContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
-import { testWeatherAgent } from "./agents/test-weather-agent";
-import { WeatherRuntimeContext } from "./mastra/tools/test-weather-tool";
+import { Mastra } from '@mastra/core/mastra';
+import { RuntimeContext } from '@mastra/core/runtime-context';
+import { testWeatherAgent } from './agents/test-weather-agent';
+import { WeatherRuntimeContext } from './mastra/tools/test-weather-tool';
 
 export const mastra = new Mastra({
   agents: { testWeatherAgent },
   server: {
     middleware: [
       async (context, next) => {
-        const country = context.req.header("CF-IPCountry");
-        const runtimeContext = context.get("runtimeContext") as RuntimeContext<WeatherRuntimeContext>;
+        const country = context.req.header('CF-IPCountry');
+        const runtimeContext = context.get('runtimeContext') as RuntimeContext<WeatherRuntimeContext>;
 
-        runtimeContext.set("temperature-unit", country === "US" ? "fahrenheit" : "celsius");
+        runtimeContext.set('temperature-unit', country === 'US' ? 'fahrenheit' : 'celsius');
 
         await next();
-      }
-    ]
-  }
+      },
+    ],
+  },
 });
 ```

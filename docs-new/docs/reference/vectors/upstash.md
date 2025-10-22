@@ -1,5 +1,5 @@
 ---
-title: "Reference: Upstash Vector Store "
+title: 'Reference: Upstash Vector Store '
 description: Documentation for the UpstashVector class in Mastra, which provides vector search using Upstash Vector.
 ---
 
@@ -10,18 +10,18 @@ The UpstashVector class provides vector search using [Upstash Vector](https://up
 ## Constructor Options
 
 <PropertiesTable
-  content={[
-    {
-      name: "url",
-      type: "string",
-      description: "Upstash Vector database URL",
-    },
-    {
-      name: "token",
-      type: "string",
-      description: "Upstash Vector API token",
-    },
-  ]}
+content={[
+{
+name: "url",
+type: "string",
+description: "Upstash Vector database URL",
+},
+{
+name: "token",
+type: "string",
+description: "Upstash Vector API token",
+},
+]}
 />
 
 ## Methods
@@ -31,115 +31,115 @@ The UpstashVector class provides vector search using [Upstash Vector](https://up
 Note: This method is a no-op for Upstash as indexes are created automatically.
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to create",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "Vector dimension (must match your embedding model)",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description: "Distance metric for similarity search",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to create",
+},
+{
+name: "dimension",
+type: "number",
+description: "Vector dimension (must match your embedding model)",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean' | 'dotproduct'",
+isOptional: true,
+defaultValue: "cosine",
+description: "Distance metric for similarity search",
+},
+]}
 />
 
 ### upsert()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to upsert into",
-    },
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of embedding vectors",
-    },
-    {
-      name: "sparseVectors",
-      type: "{ indices: number[], values: number[] }[]",
-      isOptional: true,
-      description: "Array of sparse vectors for hybrid search. Each sparse vector must have matching indices and values arrays.",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      isOptional: true,
-      description: "Metadata for each vector",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Optional vector IDs (auto-generated if not provided)",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to upsert into",
+},
+{
+name: "vectors",
+type: "number[][]",
+description: "Array of embedding vectors",
+},
+{
+name: "sparseVectors",
+type: "{ indices: number[], values: number[] }[]",
+isOptional: true,
+description: "Array of sparse vectors for hybrid search. Each sparse vector must have matching indices and values arrays.",
+},
+{
+name: "metadata",
+type: "Record<string, any>[]",
+isOptional: true,
+description: "Metadata for each vector",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Optional vector IDs (auto-generated if not provided)",
+},
+]}
 />
 
 ### query()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to query",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "Query vector to find similar vectors",
-    },
-    {
-      name: "sparseVector",
-      type: "{ indices: number[], values: number[] }",
-      isOptional: true,
-      description: "Optional sparse vector for hybrid search. Must have matching indices and values arrays.",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filters for the query",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include vectors in the results",
-    },
-    {
-      name: "fusionAlgorithm",
-      type: "FusionAlgorithm",
-      isOptional: true,
-      description: "Algorithm used to combine dense and sparse search results in hybrid search (e.g., RRF - Reciprocal Rank Fusion)",
-    },
-    {
-      name: "queryMode",
-      type: "QueryMode",
-      isOptional: true,
-      description: "Search mode: 'DENSE' for dense-only, 'SPARSE' for sparse-only, or 'HYBRID' for combined search",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to query",
+},
+{
+name: "queryVector",
+type: "number[]",
+description: "Query vector to find similar vectors",
+},
+{
+name: "sparseVector",
+type: "{ indices: number[], values: number[] }",
+isOptional: true,
+description: "Optional sparse vector for hybrid search. Must have matching indices and values arrays.",
+},
+{
+name: "topK",
+type: "number",
+isOptional: true,
+defaultValue: "10",
+description: "Number of results to return",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filters for the query",
+},
+{
+name: "includeVector",
+type: "boolean",
+isOptional: true,
+defaultValue: "false",
+description: "Whether to include vectors in the results",
+},
+{
+name: "fusionAlgorithm",
+type: "FusionAlgorithm",
+isOptional: true,
+description: "Algorithm used to combine dense and sparse search results in hybrid search (e.g., RRF - Reciprocal Rank Fusion)",
+},
+{
+name: "queryMode",
+type: "QueryMode",
+isOptional: true,
+description: "Search mode: 'DENSE' for dense-only, 'SPARSE' for sparse-only, or 'HYBRID' for combined search",
+},
+]}
 />
 
 ### listIndexes()
@@ -149,13 +149,13 @@ Returns an array of index names (namespaces) as strings.
 ### describeIndex()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to describe",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to describe",
+},
+]}
 />
 
 Returns:
@@ -164,42 +164,42 @@ Returns:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: "cosine" | "euclidean" | "dotproduct";
+  metric: 'cosine' | 'euclidean' | 'dotproduct';
 }
 ```
 
 ### deleteIndex()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index (namespace) to delete",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index (namespace) to delete",
+},
+]}
 />
 
 ### updateVector()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to update",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the item to update",
-    },
-    {
-      name: "update",
-      type: "object",
-      description: "Update object containing vector, sparse vector, and/or metadata",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to update",
+},
+{
+name: "id",
+type: "string",
+description: "ID of the item to update",
+},
+{
+name: "update",
+type: "object",
+description: "Update object containing vector, sparse vector, and/or metadata",
+},
+]}
 />
 
 The `update` object can have the following properties:
@@ -211,18 +211,18 @@ The `update` object can have the following properties:
 ### deleteVector()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index from which to delete the item",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the item to delete",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index from which to delete the item",
+},
+{
+name: "id",
+type: "string",
+description: "ID of the item to delete",
+},
+]}
 />
 
 Attempts to delete an item by its ID from the specified index. Logs an error message if the deletion fails.
@@ -238,21 +238,24 @@ import { UpstashVector } from '@mastra/upstash';
 
 const vectorStore = new UpstashVector({
   url: process.env.UPSTASH_VECTOR_URL,
-  token: process.env.UPSTASH_VECTOR_TOKEN
+  token: process.env.UPSTASH_VECTOR_TOKEN,
 });
 
 // Upsert vectors with both dense and sparse components
-const denseVectors = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]];
+const denseVectors = [
+  [0.1, 0.2, 0.3],
+  [0.4, 0.5, 0.6],
+];
 const sparseVectors = [
   { indices: [1, 5, 10], values: [0.8, 0.6, 0.4] },
-  { indices: [2, 6, 11], values: [0.7, 0.5, 0.3] }
+  { indices: [2, 6, 11], values: [0.7, 0.5, 0.3] },
 ];
 
 await vectorStore.upsert({
   indexName: 'hybrid-index',
   vectors: denseVectors,
   sparseVectors: sparseVectors,
-  metadata: [{ title: 'Document 1' }, { title: 'Document 2' }]
+  metadata: [{ title: 'Document 1' }, { title: 'Document 2' }],
 });
 
 // Query with hybrid search
@@ -260,7 +263,7 @@ const results = await vectorStore.query({
   indexName: 'hybrid-index',
   queryVector: [0.1, 0.2, 0.3],
   sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
-  topK: 10
+  topK: 10,
 });
 ```
 
@@ -275,7 +278,7 @@ const fusionResults = await vectorStore.query({
   queryVector: [0.1, 0.2, 0.3],
   sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
   fusionAlgorithm: FusionAlgorithm.RRF,
-  topK: 10
+  topK: 10,
 });
 
 // Dense-only search
@@ -283,7 +286,7 @@ const denseResults = await vectorStore.query({
   indexName: 'hybrid-index',
   queryVector: [0.1, 0.2, 0.3],
   queryMode: QueryMode.DENSE,
-  topK: 10
+  topK: 10,
 });
 
 // Sparse-only search
@@ -292,7 +295,7 @@ const sparseResults = await vectorStore.query({
   queryVector: [0.1, 0.2, 0.3], // Still required for index structure
   sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
   queryMode: QueryMode.SPARSE,
-  topK: 10
+  topK: 10,
 });
 ```
 
@@ -306,8 +309,8 @@ await vectorStore.updateVector({
   update: {
     vector: [0.2, 0.3, 0.4],
     sparseVector: { indices: [2, 7, 12], values: [0.9, 0.8, 0.6] },
-    metadata: { title: 'Updated Document' }
-  }
+    metadata: { title: 'Updated Document' },
+  },
 });
 ```
 
@@ -331,7 +334,7 @@ The store throws typed errors that can be caught:
 ```typescript copy
 try {
   await store.query({
-    indexName: "index_name",
+    indexName: 'index_name',
     queryVector: queryVector,
   });
 } catch (error) {

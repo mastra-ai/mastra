@@ -1,6 +1,6 @@
 ---
-title: "Reference: Cloudflare Voice "
-description: "Documentation for the CloudflareVoice class, providing text-to-speech capabilities using Cloudflare Workers AI."
+title: 'Reference: Cloudflare Voice '
+description: 'Documentation for the CloudflareVoice class, providing text-to-speech capabilities using Cloudflare Workers AI.'
 ---
 
 # Cloudflare
@@ -10,21 +10,21 @@ The CloudflareVoice class in Mastra provides text-to-speech capabilities using C
 ## Usage Example
 
 ```typescript
-import { CloudflareVoice } from "@mastra/voice-cloudflare";
+import { CloudflareVoice } from '@mastra/voice-cloudflare';
 
 // Initialize with configuration
 const voice = new CloudflareVoice({
   speechModel: {
-    name: "@cf/meta/m2m100-1.2b",
-    apiKey: "your-cloudflare-api-token",
-    accountId: "your-cloudflare-account-id",
+    name: '@cf/meta/m2m100-1.2b',
+    apiKey: 'your-cloudflare-api-token',
+    accountId: 'your-cloudflare-account-id',
   },
-  speaker: "en-US-1", // Default voice
+  speaker: 'en-US-1', // Default voice
 });
 
 // Convert text to speech
-const audioStream = await voice.speak("Hello, how can I help you?", {
-  speaker: "en-US-2", // Override default voice
+const audioStream = await voice.speak('Hello, how can I help you?', {
+  speaker: 'en-US-2', // Override default voice
 });
 
 // Get available voices
@@ -37,49 +37,49 @@ console.log(speakers);
 ### Constructor Options
 
 <PropertiesTable
-  content={[
-    {
-      name: "speechModel",
-      type: "CloudflareSpeechConfig",
-      description: "Configuration for text-to-speech synthesis.",
-      isOptional: true,
-    },
-    {
-      name: "speaker",
-      type: "string",
-      description: "Default voice ID for speech synthesis.",
-      isOptional: true,
-      defaultValue: "'en-US-1'",
-    },
-  ]}
+content={[
+{
+name: "speechModel",
+type: "CloudflareSpeechConfig",
+description: "Configuration for text-to-speech synthesis.",
+isOptional: true,
+},
+{
+name: "speaker",
+type: "string",
+description: "Default voice ID for speech synthesis.",
+isOptional: true,
+defaultValue: "'en-US-1'",
+},
+]}
 />
 
 ### CloudflareSpeechConfig
 
 <PropertiesTable
-  content={[
-    {
-      name: "name",
-      type: "string",
-      description: "Model name to use for TTS.",
-      isOptional: true,
-      defaultValue: "'@cf/meta/m2m100-1.2b'",
-    },
-    {
-      name: "apiKey",
-      type: "string",
-      description:
-        "Cloudflare API token with Workers AI access. Falls back to CLOUDFLARE_API_TOKEN environment variable.",
-      isOptional: true,
-    },
-    {
-      name: "accountId",
-      type: "string",
-      description:
-        "Cloudflare account ID. Falls back to CLOUDFLARE_ACCOUNT_ID environment variable.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "name",
+type: "string",
+description: "Model name to use for TTS.",
+isOptional: true,
+defaultValue: "'@cf/meta/m2m100-1.2b'",
+},
+{
+name: "apiKey",
+type: "string",
+description:
+"Cloudflare API token with Workers AI access. Falls back to CLOUDFLARE_API_TOKEN environment variable.",
+isOptional: true,
+},
+{
+name: "accountId",
+type: "string",
+description:
+"Cloudflare account ID. Falls back to CLOUDFLARE_ACCOUNT_ID environment variable.",
+isOptional: true,
+},
+]}
 />
 
 ## Methods
@@ -89,28 +89,28 @@ console.log(speakers);
 Converts text to speech using Cloudflare's text-to-speech service.
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string | NodeJS.ReadableStream",
-      description: "Text or text stream to convert to speech.",
-      isOptional: false,
-    },
-    {
-      name: "options.speaker",
-      type: "string",
-      description: "Voice ID to use for speech synthesis.",
-      isOptional: true,
-      defaultValue: "Constructor's speaker value",
-    },
-    {
-      name: "options.format",
-      type: "string",
-      description: "Output audio format.",
-      isOptional: true,
-      defaultValue: "'mp3'",
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string | NodeJS.ReadableStream",
+description: "Text or text stream to convert to speech.",
+isOptional: false,
+},
+{
+name: "options.speaker",
+type: "string",
+description: "Voice ID to use for speech synthesis.",
+isOptional: true,
+defaultValue: "Constructor's speaker value",
+},
+{
+name: "options.format",
+type: "string",
+description: "Output audio format.",
+isOptional: true,
+defaultValue: "'mp3'",
+},
+]}
 />
 
 Returns: `Promise<NodeJS.ReadableStream>`
@@ -120,20 +120,20 @@ Returns: `Promise<NodeJS.ReadableStream>`
 Returns an array of available voice options, where each node contains:
 
 <PropertiesTable
-  content={[
-    {
-      name: "voiceId",
-      type: "string",
-      description: "Unique identifier for the voice (e.g., 'en-US-1')",
-      isOptional: false,
-    },
-    {
-      name: "language",
-      type: "string",
-      description: "Language code of the voice (e.g., 'en-US')",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "voiceId",
+type: "string",
+description: "Unique identifier for the voice (e.g., 'en-US-1')",
+isOptional: false,
+},
+{
+name: "language",
+type: "string",
+description: "Language code of the voice (e.g., 'en-US')",
+isOptional: false,
+},
+]}
 />
 
 ## Notes

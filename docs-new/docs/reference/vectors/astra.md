@@ -1,5 +1,5 @@
 ---
-title: "Reference: Astra Vector Store "
+title: 'Reference: Astra Vector Store '
 description: Documentation for the AstraVector class in Mastra, which provides vector search using DataStax Astra DB.
 ---
 
@@ -11,24 +11,24 @@ It provides vector search capabilities with enterprise-grade scalability and hig
 ## Constructor Options
 
 <PropertiesTable
-  content={[
-    {
-      name: "token",
-      type: "string",
-      description: "Astra DB API token",
-    },
-    {
-      name: "endpoint",
-      type: "string",
-      description: "Astra DB API endpoint",
-    },
-    {
-      name: "keyspace",
-      type: "string",
-      isOptional: true,
-      description: "Optional keyspace name",
-    },
-  ]}
+content={[
+{
+name: "token",
+type: "string",
+description: "Astra DB API token",
+},
+{
+name: "endpoint",
+type: "string",
+description: "Astra DB API endpoint",
+},
+{
+name: "keyspace",
+type: "string",
+isOptional: true,
+description: "Optional keyspace name",
+},
+]}
 />
 
 ## Methods
@@ -36,92 +36,92 @@ It provides vector search capabilities with enterprise-grade scalability and hig
 ### createIndex()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to create",
-    },
-    {
-      name: "dimension",
-      type: "number",
-      description: "Vector dimension (must match your embedding model)",
-    },
-    {
-      name: "metric",
-      type: "'cosine' | 'euclidean' | 'dotproduct'",
-      isOptional: true,
-      defaultValue: "cosine",
-      description:
-        "Distance metric for similarity search (maps to dot_product for dotproduct)",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to create",
+},
+{
+name: "dimension",
+type: "number",
+description: "Vector dimension (must match your embedding model)",
+},
+{
+name: "metric",
+type: "'cosine' | 'euclidean' | 'dotproduct'",
+isOptional: true,
+defaultValue: "cosine",
+description:
+"Distance metric for similarity search (maps to dot_product for dotproduct)",
+},
+]}
 />
 
 ### upsert()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to upsert into",
-    },
-    {
-      name: "vectors",
-      type: "number[][]",
-      description: "Array of embedding vectors",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>[]",
-      isOptional: true,
-      description: "Metadata for each vector",
-    },
-    {
-      name: "ids",
-      type: "string[]",
-      isOptional: true,
-      description: "Optional vector IDs (auto-generated if not provided)",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to upsert into",
+},
+{
+name: "vectors",
+type: "number[][]",
+description: "Array of embedding vectors",
+},
+{
+name: "metadata",
+type: "Record<string, any>[]",
+isOptional: true,
+description: "Metadata for each vector",
+},
+{
+name: "ids",
+type: "string[]",
+isOptional: true,
+description: "Optional vector IDs (auto-generated if not provided)",
+},
+]}
 />
 
 ### query()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to query",
-    },
-    {
-      name: "queryVector",
-      type: "number[]",
-      description: "Query vector to find similar vectors",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      defaultValue: "10",
-      description: "Number of results to return",
-    },
-    {
-      name: "filter",
-      type: "Record<string, any>",
-      isOptional: true,
-      description: "Metadata filters for the query",
-    },
-    {
-      name: "includeVector",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether to include vectors in the results",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to query",
+},
+{
+name: "queryVector",
+type: "number[]",
+description: "Query vector to find similar vectors",
+},
+{
+name: "topK",
+type: "number",
+isOptional: true,
+defaultValue: "10",
+description: "Number of results to return",
+},
+{
+name: "filter",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata filters for the query",
+},
+{
+name: "includeVector",
+type: "boolean",
+isOptional: true,
+defaultValue: "false",
+description: "Whether to include vectors in the results",
+},
+]}
 />
 
 ### listIndexes()
@@ -131,13 +131,13 @@ Returns an array of index names as strings.
 ### describeIndex()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to describe",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to describe",
+},
+]}
 />
 
 Returns:
@@ -146,73 +146,73 @@ Returns:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: "cosine" | "euclidean" | "dotproduct";
+  metric: 'cosine' | 'euclidean' | 'dotproduct';
 }
 ```
 
 ### deleteIndex()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index to delete",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index to delete",
+},
+]}
 />
 
 ### updateVector()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the vector to update",
-    },
-    {
-      name: "update",
-      type: "object",
-      description: "Update object containing vector and/or metadata changes",
-      properties: [
-        {
-          name: "vector",
-          type: "number[]",
-          isOptional: true,
-          description: "New vector values",
-        },
-        {
-          name: "metadata",
-          type: "Record<string, any>",
-          isOptional: true,
-          description: "New metadata values",
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vector",
+},
+{
+name: "id",
+type: "string",
+description: "ID of the vector to update",
+},
+{
+name: "update",
+type: "object",
+description: "Update object containing vector and/or metadata changes",
+properties: [
+{
+name: "vector",
+type: "number[]",
+isOptional: true,
+description: "New vector values",
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+isOptional: true,
+description: "New metadata values",
+},
+],
+},
+]}
 />
 
 ### deleteVector()
 
 <PropertiesTable
-  content={[
-    {
-      name: "indexName",
-      type: "string",
-      description: "Name of the index containing the vector",
-    },
-    {
-      name: "id",
-      type: "string",
-      description: "ID of the vector to delete",
-    },
-  ]}
+content={[
+{
+name: "indexName",
+type: "string",
+description: "Name of the index containing the vector",
+},
+{
+name: "id",
+type: "string",
+description: "ID of the vector to delete",
+},
+]}
 />
 
 ## Response Types
@@ -235,7 +235,7 @@ The store throws typed errors that can be caught:
 ```typescript copy
 try {
   await store.query({
-    indexName: "index_name",
+    indexName: 'index_name',
     queryVector: queryVector,
   });
 } catch (error) {

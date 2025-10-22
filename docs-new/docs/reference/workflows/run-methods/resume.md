@@ -133,7 +133,7 @@ if (result.status === 'suspended') {
 
 ## Related
 
-- [Workflows overview](/docs/workflows/overview#run-workflow)
+- [Workflows overview](/docs/workflows/overview)
 - [Run Class](../run)
 - [Suspend and resume](/docs/workflows/suspend-and-resume)
 - [Human in the loop example](/docs/examples/workflows/human-in-the-loop)

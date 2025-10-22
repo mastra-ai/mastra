@@ -1,6 +1,6 @@
 ---
-title: "Dynamic Workflows (Legacy) "
-description: "Learn how to create dynamic workflows within legacy workflow steps, allowing for flexible workflow creation based on runtime conditions."
+title: 'Dynamic Workflows (Legacy) '
+description: 'Learn how to create dynamic workflows within legacy workflow steps, allowing for flexible workflow creation based on runtime conditions.'
 ---
 
 # Dynamic Workflows (Legacy)
@@ -18,34 +18,34 @@ The key to creating dynamic workflows is accessing the Mastra instance from with
 ### Basic Example
 
 ```typescript
-import { Mastra } from "@mastra/core";
-import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
-import { z } from "zod";
+import { Mastra } from '@mastra/core';
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
+import { z } from 'zod';
 
 const isMastra = (mastra: any): mastra is Mastra => {
-  return mastra && typeof mastra === "object" && mastra instanceof Mastra;
+  return mastra && typeof mastra === 'object' && mastra instanceof Mastra;
 };
 
 // Step that creates and runs a dynamic workflow
 const createDynamicWorkflow = new LegacyStep({
-  id: "createDynamicWorkflow",
+  id: 'createDynamicWorkflow',
   outputSchema: z.object({
     dynamicWorkflowResult: z.any(),
   }),
   execute: async ({ context, mastra }) => {
     if (!mastra) {
-      throw new Error("Mastra instance not available");
+      throw new Error('Mastra instance not available');
     }
 
     if (!isMastra(mastra)) {
-      throw new Error("Invalid Mastra instance");
+      throw new Error('Invalid Mastra instance');
     }
 
     const inputData = context.triggerData.inputData;
 
     // Create a new dynamic workflow
     const dynamicWorkflow = new LegacyWorkflow({
-      name: "dynamic-workflow",
+      name: 'dynamic-workflow',
       mastra, // Pass the mastra instance to the new workflow
       triggerSchema: z.object({
         dynamicInput: z.string(),
@@ -54,7 +54,7 @@ const createDynamicWorkflow = new LegacyStep({
 
     // Define steps for the dynamic workflow
     const dynamicStep = new LegacyStep({
-      id: "dynamicStep",
+      id: 'dynamicStep',
       execute: async ({ context }) => {
         const dynamicInput = context.triggerData.dynamicInput;
         return {
@@ -76,11 +76,10 @@ const createDynamicWorkflow = new LegacyStep({
 
     let dynamicWorkflowResult;
 
-    if (result.results["dynamicStep"]?.status === "success") {
-      dynamicWorkflowResult =
-        result.results["dynamicStep"]?.output.processedValue;
+    if (result.results['dynamicStep']?.status === 'success') {
+      dynamicWorkflowResult = result.results['dynamicStep']?.output.processedValue;
     } else {
-      throw new Error("Dynamic workflow failed");
+      throw new Error('Dynamic workflow failed');
     }
 
     // Return the result from the dynamic workflow
@@ -92,7 +91,7 @@ const createDynamicWorkflow = new LegacyStep({
 
 // Main workflow that uses the dynamic workflow creator
 const mainWorkflow = new LegacyWorkflow({
-  name: "main-workflow",
+  name: 'main-workflow',
   triggerSchema: z.object({
     inputData: z.string(),
   }),
@@ -109,7 +108,7 @@ export const mastra = new Mastra({
 const run = mainWorkflow.createRun();
 const result = await run.start({
   triggerData: {
-    inputData: "test",
+    inputData: 'test',
   },
 });
 ```
@@ -120,13 +119,13 @@ You can create a workflow factory that generates different workflows based on in
 
 ```typescript
 const isMastra = (mastra: any): mastra is Mastra => {
-  return mastra && typeof mastra === "object" && mastra instanceof Mastra;
+  return mastra && typeof mastra === 'object' && mastra instanceof Mastra;
 };
 
 const workflowFactory = new LegacyStep({
-  id: "workflowFactory",
+  id: 'workflowFactory',
   inputSchema: z.object({
-    workflowType: z.enum(["simple", "complex"]),
+    workflowType: z.enum(['simple', 'complex']),
     inputData: z.string(),
   }),
   outputSchema: z.object({
@@ -134,11 +133,11 @@ const workflowFactory = new LegacyStep({
   }),
   execute: async ({ context, mastra }) => {
     if (!mastra) {
-      throw new Error("Mastra instance not available");
+      throw new Error('Mastra instance not available');
     }
 
     if (!isMastra(mastra)) {
-      throw new Error("Invalid Mastra instance");
+      throw new Error('Invalid Mastra instance');
     }
 
     // Create a new dynamic workflow based on the type
@@ -150,10 +149,10 @@ const workflowFactory = new LegacyStep({
       }),
     });
 
-    if (context.workflowType === "simple") {
+    if (context.workflowType === 'simple') {
       // Simple workflow with a single step
       const simpleStep = new Step({
-        id: "simpleStep",
+        id: 'simpleStep',
         execute: async ({ context }) => {
           return {
             result: `Simple processing: ${context.triggerData.input}`,
@@ -165,7 +164,7 @@ const workflowFactory = new LegacyStep({
     } else {
       // Complex workflow with multiple steps
       const step1 = new LegacyStep({
-        id: "step1",
+        id: 'step1',
         outputSchema: z.object({
           intermediateResult: z.string(),
         }),
@@ -177,7 +176,7 @@ const workflowFactory = new LegacyStep({
       });
 
       const step2 = new LegacyStep({
-        id: "step2",
+        id: 'step2',
         execute: async ({ context }) => {
           const intermediate = context.getStepResult(step1).intermediateResult;
           return {
@@ -198,15 +197,15 @@ const workflowFactory = new LegacyStep({
     });
 
     // Return the appropriate result based on workflow type
-    if (context.workflowType === "simple") {
+    if (context.workflowType === 'simple') {
       return {
         // @ts-ignore
-        result: result.results["simpleStep"]?.output,
+        result: result.results['simpleStep']?.output,
       };
     } else {
       return {
         // @ts-ignore
-        result: result.results["step2"]?.output,
+        result: result.results['step2']?.output,
       };
     }
   },

@@ -1,5 +1,5 @@
 ---
-title: "Reference: GraphRAG "
+title: 'Reference: GraphRAG '
 description: Documentation for the GraphRAG class in Mastra, which implements a graph-based approach to retrieval augmented generation.
 ---
 
@@ -10,7 +10,7 @@ The `GraphRAG` class implements a graph-based approach to retrieval augmented ge
 ## Basic Usage
 
 ```typescript
-import { GraphRAG } from "@mastra/rag";
+import { GraphRAG } from '@mastra/rag';
 
 const graphRag = new GraphRAG({
   dimension: 1536,
@@ -32,23 +32,23 @@ const results = await graphRag.query({
 ## Constructor Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "dimension",
-      type: "number",
-      description: "Dimension of the embedding vectors",
-      isOptional: true,
-      defaultValue: "1536",
-    },
-    {
-      name: "threshold",
-      type: "number",
-      description:
-        "Similarity threshold for creating edges between nodes (0-1)",
-      isOptional: true,
-      defaultValue: "0.7",
-    },
-  ]}
+content={[
+{
+name: "dimension",
+type: "number",
+description: "Dimension of the embedding vectors",
+isOptional: true,
+defaultValue: "1536",
+},
+{
+name: "threshold",
+type: "number",
+description:
+"Similarity threshold for creating edges between nodes (0-1)",
+isOptional: true,
+defaultValue: "0.7",
+},
+]}
 />
 
 ## Methods
@@ -64,20 +64,20 @@ createGraph(chunks: GraphChunk[], embeddings: GraphEmbedding[]): void
 #### Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "chunks",
-      type: "GraphChunk[]",
-      description: "Array of document chunks with text and metadata",
-      isOptional: false,
-    },
-    {
-      name: "embeddings",
-      type: "GraphEmbedding[]",
-      description: "Array of embeddings corresponding to chunks",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "chunks",
+type: "GraphChunk[]",
+description: "Array of document chunks with text and metadata",
+isOptional: false,
+},
+{
+name: "embeddings",
+type: "GraphEmbedding[]",
+description: "Array of embeddings corresponding to chunks",
+isOptional: false,
+},
+]}
 />
 
 ### query
@@ -101,35 +101,35 @@ query({
 #### Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "query",
-      type: "number[]",
-      description: "Query embedding vector",
-      isOptional: false,
-    },
-    {
-      name: "topK",
-      type: "number",
-      description: "Number of results to return",
-      isOptional: true,
-      defaultValue: "10",
-    },
-    {
-      name: "randomWalkSteps",
-      type: "number",
-      description: "Number of steps in random walk",
-      isOptional: true,
-      defaultValue: "100",
-    },
-    {
-      name: "restartProb",
-      type: "number",
-      description: "Probability of restarting walk from query node",
-      isOptional: true,
-      defaultValue: "0.15",
-    },
-  ]}
+content={[
+{
+name: "query",
+type: "number[]",
+description: "Query embedding vector",
+isOptional: false,
+},
+{
+name: "topK",
+type: "number",
+description: "Number of results to return",
+isOptional: true,
+defaultValue: "10",
+},
+{
+name: "randomWalkSteps",
+type: "number",
+description: "Number of steps in random walk",
+isOptional: true,
+defaultValue: "100",
+},
+{
+name: "restartProb",
+type: "number",
+description: "Probability of restarting walk from query node",
+isOptional: true,
+defaultValue: "0.15",
+},
+]}
 />
 
 #### Returns
@@ -137,28 +137,28 @@ query({
 Returns an array of `RankedNode` objects, where each node contains:
 
 <PropertiesTable
-  content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for the node",
-    },
-    {
-      name: "content",
-      type: "string",
-      description: "Text content of the document chunk",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "Additional metadata associated with the chunk",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Combined relevance score from graph traversal",
-    },
-  ]}
+content={[
+{
+name: "id",
+type: "string",
+description: "Unique identifier for the node",
+},
+{
+name: "content",
+type: "string",
+description: "Text content of the document chunk",
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+description: "Additional metadata associated with the chunk",
+},
+{
+name: "score",
+type: "number",
+description: "Combined relevance score from graph traversal",
+},
+]}
 />
 
 ## Advanced Example

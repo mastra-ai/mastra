@@ -1,6 +1,6 @@
 ---
 title: Deploying a Mastra Server
-description: "```bash showLineNumbers"
+description: '```bash showLineNumbers'
 ---
 
 Build your application and start the generated HTTP server:

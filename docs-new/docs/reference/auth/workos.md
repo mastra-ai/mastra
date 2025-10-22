@@ -1,6 +1,6 @@
 ---
-title: "MastraAuthWorkos Class"
-description: "API reference for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication."
+title: 'MastraAuthWorkos Class'
+description: 'API reference for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication.'
 ---
 
 # MastraAuthWorkos Class
@@ -10,7 +10,7 @@ The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 
 export const mastra = new Mastra({
@@ -18,7 +18,7 @@ export const mastra = new Mastra({
   server: {
     experimental_auth: new MastraAuthWorkos({
       apiKey: process.env.WORKOS_API_KEY,
-      clientId: process.env.WORKOS_CLIENT_ID
+      clientId: process.env.WORKOS_CLIENT_ID,
     }),
   },
 });
@@ -29,35 +29,35 @@ export const mastra = new Mastra({
 ## Constructor parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "apiKey",
-      type: "string",
-      description: "Your WorkOS API key. This is used to authenticate with the WorkOS API for user verification and organization management.",
-      isOptional: true,
-      defaultValue: "process.env.WORKOS_API_KEY"
-    },
-    {
-      name: "clientId",
-      type: "string",
-      description: "Your WorkOS Client ID. This identifies your application when exchanging authorization codes for access tokens.",
-      isOptional: true,
-      defaultValue: "process.env.WORKOS_CLIENT_ID"
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Custom name for the auth provider instance.",
-      isOptional: true,
-      defaultValue: '"workos"'
-    },
-    {
-      name: "authorizeUser",
-      type: "(user: WorkosUser) => Promise<boolean> | boolean",
-      description: "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, checks if the user has an 'admin' role in any organization membership.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "apiKey",
+type: "string",
+description: "Your WorkOS API key. This is used to authenticate with the WorkOS API for user verification and organization management.",
+isOptional: true,
+defaultValue: "process.env.WORKOS_API_KEY"
+},
+{
+name: "clientId",
+type: "string",
+description: "Your WorkOS Client ID. This identifies your application when exchanging authorization codes for access tokens.",
+isOptional: true,
+defaultValue: "process.env.WORKOS_CLIENT_ID"
+},
+{
+name: "name",
+type: "string",
+description: "Custom name for the auth provider instance.",
+isOptional: true,
+defaultValue: '"workos"'
+},
+{
+name: "authorizeUser",
+type: "(user: WorkosUser) => Promise<boolean> | boolean",
+description: "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, checks if the user has an 'admin' role in any organization membership.",
+isOptional: true,
+},
+]}
 />
 
 ## Environment Variables
@@ -65,20 +65,20 @@ export const mastra = new Mastra({
 The following environment variables are automatically used when constructor options are not provided:
 
 <PropertiesTable
-  content={[
-    {
-      name: "WORKOS_API_KEY",
-      type: "string",
-      description: "Your WorkOS API key. Can be found in your WorkOS Dashboard under API Keys.",
-      isOptional: true,
-    },
-    {
-      name: "WORKOS_CLIENT_ID",
-      type: "string",
-      description: "Your WorkOS Client ID. Can be found in your WorkOS Dashboard under Applications.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "WORKOS_API_KEY",
+type: "string",
+description: "Your WorkOS API key. Can be found in your WorkOS Dashboard under API Keys.",
+isOptional: true,
+},
+{
+name: "WORKOS_CLIENT_ID",
+type: "string",
+description: "Your WorkOS Client ID. Can be found in your WorkOS Dashboard under Applications.",
+isOptional: true,
+},
+]}
 />
 
 ## Default Authorization Behavior
@@ -125,4 +125,3 @@ The properties with `urn:myapp:` prefixes are custom claims configured in your W
 ## Related
 
 [MastraAuthWorkos Class](/docs/auth/workos)
-

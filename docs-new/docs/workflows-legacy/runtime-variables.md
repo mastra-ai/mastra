@@ -1,5 +1,5 @@
 ---
-title: "Runtime variables - dependency injection "
+title: 'Runtime variables - dependency injection '
 description: Learn how to use Mastra's dependency injection system to provide runtime configuration to workflows and steps.
 ---
 
@@ -19,7 +19,7 @@ The dependency injection system allows you to:
 ## Basic Usage
 
 ```typescript
-const myWorkflow = mastra.legacy_getWorkflow("myWorkflow");
+const myWorkflow = mastra.legacy_getWorkflow('myWorkflow');
 const { runId, start, resume } = myWorkflow.createRun();
 
 // Define your runtimeContext's type structure
@@ -28,7 +28,7 @@ type WorkflowRuntimeContext = {
 };
 
 const runtimeContext = new RuntimeContext<WorkflowRuntimeContext>();
-runtimeContext.set("multiplier", 5);
+runtimeContext.set('multiplier', 5);
 
 // Start the workflow execution with runtimeContext
 await start({
@@ -42,9 +42,9 @@ await start({
 Here's how to dynamically set a multiplier value from an HTTP header:
 
 ```typescript filename="src/index.ts"
-import { Mastra } from "@mastra/core";
-import { RuntimeContext } from "@mastra/core/di";
-import { workflow as myWorkflow } from "./workflows";
+import { Mastra } from '@mastra/core';
+import { RuntimeContext } from '@mastra/core/di';
+import { workflow as myWorkflow } from './workflows';
 
 // Define runtimeContext type with clear, descriptive types
 type WorkflowRuntimeContext = {
@@ -58,16 +58,16 @@ export const mastra = new Mastra({
   server: {
     middleware: [
       async (c, next) => {
-        const multiplier = c.req.header("x-multiplier");
-        const runtimeContext = c.get<WorkflowRuntimeContext>("runtimeContext");
+        const multiplier = c.req.header('x-multiplier');
+        const runtimeContext = c.get<WorkflowRuntimeContext>('runtimeContext');
 
         // Parse and validate the multiplier value
-        const multiplierValue = parseInt(multiplier || "1", 10);
+        const multiplierValue = parseInt(multiplier || '1', 10);
         if (isNaN(multiplierValue)) {
-          throw new Error("Invalid multiplier value");
+          throw new Error('Invalid multiplier value');
         }
 
-        runtimeContext.set("multiplier", multiplierValue);
+        runtimeContext.set('multiplier', multiplierValue);
 
         await next(); // Don't forget to call next()
       },
@@ -81,8 +81,8 @@ export const mastra = new Mastra({
 Steps can access runtimeContext variables and must conform to the workflow's runtimeContext type:
 
 ```typescript
-import { LegacyStep } from "@mastra/core/workflows/legacy";
-import { z } from "zod";
+import { LegacyStep } from '@mastra/core/workflows/legacy';
+import { z } from 'zod';
 
 // Define step input/output types
 interface StepInput {
@@ -94,21 +94,20 @@ interface StepOutput {
 }
 
 const stepOne = new LegacyStep({
-  id: "stepOne",
-  description: "Multiply the input value by the configured multiplier",
+  id: 'stepOne',
+  description: 'Multiply the input value by the configured multiplier',
   execute: async ({ context, runtimeContext }) => {
     try {
       // Type-safe access to runtimeContext variables
-      const multiplier = runtimeContext.get("multiplier");
+      const multiplier = runtimeContext.get('multiplier');
       if (multiplier === undefined) {
-        throw new Error("Multiplier not configured in runtimeContext");
+        throw new Error('Multiplier not configured in runtimeContext');
       }
 
       // Get and validate input
-      const inputValue =
-        context.getStepResult<StepInput>("trigger")?.inputValue;
+      const inputValue = context.getStepResult<StepInput>('trigger')?.inputValue;
       if (inputValue === undefined) {
-        throw new Error("Input value not provided");
+        throw new Error('Input value not provided');
       }
 
       const result: StepOutput = {
@@ -134,13 +133,13 @@ When working with runtime variables in workflows, it's important to handle poten
 
 ```typescript
 // Example of defensive programming with runtimeContext variables
-const multiplier = runtimeContext.get("multiplier");
+const multiplier = runtimeContext.get('multiplier');
 if (multiplier === undefined) {
-  throw new Error("Multiplier not configured in runtimeContext");
+  throw new Error('Multiplier not configured in runtimeContext');
 }
 
 // Type and value validation
-if (typeof multiplier !== "number" || multiplier <= 0) {
+if (typeof multiplier !== 'number' || multiplier <= 0) {
   throw new Error(`Invalid multiplier value: ${multiplier}`);
 }
 ```

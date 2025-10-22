@@ -1,17 +1,16 @@
 ---
-title: "Semantically Chunking Text "
+title: 'Semantically Chunking Text '
 description: Example of using Mastra to split large text documents into smaller chunks for processing.
 ---
-
 
 # Chunk Text
 
 When working with large text documents, you need to break them down into smaller, manageable pieces for processing. The chunk method splits text content into segments that can be used for search, analysis, or retrieval. This example shows how to split plain text into chunks using default settings.
 
 ```tsx copy
-import { MDocument } from "@mastra/rag";
+import { MDocument } from '@mastra/rag';
 
-const doc = MDocument.fromText("Your plain text content...");
+const doc = MDocument.fromText('Your plain text content...');
 
 const chunks = await doc.chunk();
 ```

@@ -1,5 +1,5 @@
 ---
-title: "Reference: Arize Phoenix Integration "
+title: 'Reference: Arize Phoenix Integration '
 description: Documentation for integrating Arize Phoenix with Mastra, an open-source AI observability platform for monitoring and evaluating LLM applications.
 ---
 
@@ -49,19 +49,16 @@ Here's how to configure Mastra to use Phoenix with OpenTelemetry:
 ### Phoenix Cloud Configuration
 
 ```typescript
-import { Mastra } from "@mastra/core";
-import {
-  OpenInferenceOTLPTraceExporter,
-  isOpenInferenceSpan,
-} from "@arizeai/openinference-mastra";
+import { Mastra } from '@mastra/core';
+import { OpenInferenceOTLPTraceExporter, isOpenInferenceSpan } from '@arizeai/openinference-mastra';
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: "my-mastra-app",
+    serviceName: 'my-mastra-app',
     enabled: true,
     export: {
-      type: "custom",
+      type: 'custom',
       exporter: new OpenInferenceOTLPTraceExporter({
         url: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
         headers: {
@@ -77,19 +74,16 @@ export const mastra = new Mastra({
 ### Self-Hosted Phoenix Configuration
 
 ```typescript
-import { Mastra } from "@mastra/core";
-import {
-  OpenInferenceOTLPTraceExporter,
-  isOpenInferenceSpan,
-} from "@arizeai/openinference-mastra";
+import { Mastra } from '@mastra/core';
+import { OpenInferenceOTLPTraceExporter, isOpenInferenceSpan } from '@arizeai/openinference-mastra';
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: "my-mastra-app",
+    serviceName: 'my-mastra-app',
     enabled: true,
     export: {
-      type: "custom",
+      type: 'custom',
       exporter: new OpenInferenceOTLPTraceExporter({
         url: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
         spanFilter: isOpenInferenceSpan,
@@ -114,6 +108,7 @@ All traces follow OpenTelemetry standards and include relevant metadata such as 
 ## Dashboard
 
 Once configured, you can view your traces and analytics in Phoenix:
+
 - **Phoenix Cloud**: [app.phoenix.arize.com](https://app.phoenix.arize.com)
 - **Self-hosted**: Your Phoenix instance URL (e.g., `http://localhost:6006`)
 

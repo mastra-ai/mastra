@@ -1,5 +1,5 @@
 ---
-title: "Reference: Langfuse Integration "
+title: 'Reference: Langfuse Integration '
 description: Documentation for integrating Langfuse with Mastra, an open-source observability platform for LLM applications.
 ---
 
@@ -45,7 +45,7 @@ echo -n "pk-lf-1234567890:sk-lf-1234567890" | base64 -w 0
 Here's how to configure Mastra to use Langfuse with OpenTelemetry:
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core';
 
 export const mastra = new Mastra({
   // ... other config
@@ -65,7 +65,7 @@ export const mastra = new Mastra({
 Alternatively, if you're using environment variables, you can simplify the configuration:
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core';
 
 export const mastra = new Mastra({
   // ... other config

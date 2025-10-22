@@ -1,5 +1,5 @@
 ---
-title: "MSSQL Storage "
+title: 'MSSQL Storage '
 description: Documentation for the MSSQL storage implementation in Mastra.
 ---
 
@@ -16,7 +16,7 @@ npm install @mastra/mssql@latest
 ## Usage
 
 ```typescript copy showLineNumbers
-import { MSSQLStore } from "@mastra/mssql";
+import { MSSQLStore } from '@mastra/mssql';
 
 const storage = new MSSQLStore({
   connectionString: process.env.DATABASE_URL,
@@ -26,22 +26,22 @@ const storage = new MSSQLStore({
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "connectionString",
-      type: "string",
-      description:
-        "MSSQL connection string (e.g., mssql://user:pass@host:1433/dbname)",
-      isOptional: false,
-    },
-    {
-      name: "schemaName",
-      type: "string",
-      description:
-        "The name of the schema you want the storage to use. Will use the default schema if not provided.",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "connectionString",
+type: "string",
+description:
+"MSSQL connection string (e.g., mssql://user:pass@host:1433/dbname)",
+isOptional: false,
+},
+{
+name: "schemaName",
+type: "string",
+description:
+"The name of the schema you want the storage to use. Will use the default schema if not provided.",
+isOptional: true,
+},
+]}
 />
 
 ## Constructor Examples
@@ -49,36 +49,36 @@ const storage = new MSSQLStore({
 You can instantiate `MSSQLStore` in the following ways:
 
 ```ts
-import { MSSQLStore } from "@mastra/mssql";
+import { MSSQLStore } from '@mastra/mssql';
 
 // Using a connection string only
 const store1 = new MSSQLStore({
-  connectionString: "mssql://user:password@localhost:1433/mydb",
+  connectionString: 'mssql://user:password@localhost:1433/mydb',
 });
 
 // Using a connection string with a custom schema name
 const store2 = new MSSQLStore({
-  connectionString: "mssql://user:password@localhost:1433/mydb",
-  schemaName: "custom_schema", // optional
+  connectionString: 'mssql://user:password@localhost:1433/mydb',
+  schemaName: 'custom_schema', // optional
 });
 
 // Using individual connection parameters
 const store4 = new MSSQLStore({
-  server: "localhost",
+  server: 'localhost',
   port: 1433,
-  database: "mydb",
-  user: "user",
-  password: "password",
+  database: 'mydb',
+  user: 'user',
+  password: 'password',
 });
 
 // Individual parameters with schemaName
 const store5 = new MSSQLStore({
-  server: "localhost",
+  server: 'localhost',
   port: 1433,
-  database: "mydb",
-  user: "user",
-  password: "password",
-  schemaName: "custom_schema", // optional
+  database: 'mydb',
+  user: 'user',
+  password: 'password',
+  schemaName: 'custom_schema', // optional
 });
 ```
 
@@ -89,7 +89,7 @@ const store5 = new MSSQLStore({
 The storage implementation handles schema creation and updates automatically. It creates the following tables:
 
 - `mastra_workflow_snapshot`: Stores workflow state and execution data
-- `mastra_evals`: Stores evaluation results and metadata  
+- `mastra_evals`: Stores evaluation results and metadata
 - `mastra_threads`: Stores conversation threads
 - `mastra_messages`: Stores individual messages
 - `mastra_traces`: Stores telemetry and tracing data
@@ -101,12 +101,13 @@ The storage implementation handles schema creation and updates automatically. It
 `MSSQLStore` exposes the mssql connection pool as public fields:
 
 ```typescript
-store.pool // mssql connection pool instance
+store.pool; // mssql connection pool instance
 ```
 
 This enables direct queries and custom transaction management. When using these fields:
+
 - You are responsible for proper connection and transaction handling.
 - Closing the store (`store.close()`) will destroy the associated connection pool.
 - Direct access bypasses any additional logic or validation provided by MSSQLStore methods.
 
-This approach is intended for advanced scenarios where low-level access is required. 
+This approach is intended for advanced scenarios where low-level access is required.

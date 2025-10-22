@@ -1,8 +1,7 @@
 ---
-title: "LangSmithExporter "
+title: 'LangSmithExporter '
 description: LangSmith exporter for AI tracing
 ---
-
 
 # LangSmithExporter
 
@@ -24,50 +23,50 @@ interface LangSmithExporterConfig extends ClientConfig {
 ```
 
 <PropertiesTable
-  props={[
-    {
-      name: "apiKey",
-      type: "string",
-      description: "LangSmith API key",
-      required: false,
-    },
-    {
-      name: "apiUrl",
-      type: "string",
-      description: "LangSmith API URL",
-      required: false,
-    },
-    {
-      name: "callerOptions",
-      type: "object",
-      description: "HTTP client configuration options",
-      required: false,
-    },
-    {
-      name: "hideInputs",
-      type: "boolean",
-      description: "Hide input data in the LangSmith UI",
-      required: false,
-    },
-    {
-      name: "hideOutputs",
-      type: "boolean",
-      description: "Hide output data in the LangSmith UI",
-      required: false,
-    },
-    {
-      name: "logLevel",
-      type: "'debug' | 'info' | 'warn' | 'error'",
-      description: "Logger level (default: 'warn')",
-      required: false,
-    },
-    {
-      name: "client",
-      type: "Client",
-      description: "Pre-configured LangSmith client instance",
-      required: false,
-    },
-  ]}
+props={[
+{
+name: "apiKey",
+type: "string",
+description: "LangSmith API key",
+required: false,
+},
+{
+name: "apiUrl",
+type: "string",
+description: "LangSmith API URL",
+required: false,
+},
+{
+name: "callerOptions",
+type: "object",
+description: "HTTP client configuration options",
+required: false,
+},
+{
+name: "hideInputs",
+type: "boolean",
+description: "Hide input data in the LangSmith UI",
+required: false,
+},
+{
+name: "hideOutputs",
+type: "boolean",
+description: "Hide output data in the LangSmith UI",
+required: false,
+},
+{
+name: "logLevel",
+type: "'debug' | 'info' | 'warn' | 'error'",
+description: "Logger level (default: 'warn')",
+required: false,
+},
+{
+name: "client",
+type: "Client",
+description: "Pre-configured LangSmith client instance",
+required: false,
+},
+]}
 />
 
 ## Methods
@@ -102,10 +101,10 @@ const exporter = new LangSmithExporter({
 
 ## Span Type Mapping
 
-| AI Span Type | LangSmith Type |
-|--------------|----------------|
-| `LLM_GENERATION` | `llm` |
-| `LLM_CHUNK` | `llm` |
-| `TOOL_CALL` | `tool` |
-| `MCP_TOOL_CALL` | `tool` |
-| All others | `chain` |
+| AI Span Type     | LangSmith Type |
+| ---------------- | -------------- |
+| `LLM_GENERATION` | `llm`          |
+| `LLM_CHUNK`      | `llm`          |
+| `TOOL_CALL`      | `tool`         |
+| `MCP_TOOL_CALL`  | `tool`         |
+| All others       | `chain`        |

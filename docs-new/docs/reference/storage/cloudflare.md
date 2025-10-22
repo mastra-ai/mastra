@@ -1,5 +1,5 @@
 ---
-title: "Cloudflare Storage "
+title: 'Cloudflare Storage '
 description: Documentation for the Cloudflare KV storage implementation in Mastra.
 ---
 
@@ -16,7 +16,7 @@ npm install @mastra/cloudflare@latest
 ## Usage
 
 ```typescript copy showLineNumbers
-import { CloudflareStore } from "@mastra/cloudflare";
+import { CloudflareStore } from '@mastra/cloudflare';
 
 // --- Example 1: Using Workers Binding ---
 const storageWorkers = new CloudflareStore({
@@ -25,54 +25,54 @@ const storageWorkers = new CloudflareStore({
     messages: MESSAGES_KV, // KVNamespace binding for messages table
     // Add other tables as needed
   },
-  keyPrefix: "dev_", // Optional: isolate keys per environment
+  keyPrefix: 'dev_', // Optional: isolate keys per environment
 });
 
 // --- Example 2: Using REST API ---
 const storageRest = new CloudflareStore({
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
   apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
-  namespacePrefix: "dev_", // Optional: isolate namespaces per environment
+  namespacePrefix: 'dev_', // Optional: isolate namespaces per environment
 });
 ```
 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "bindings",
-      type: "Record<string, KVNamespace>",
-      description: "Cloudflare Workers KV bindings (for Workers runtime)",
-      isOptional: true,
-    },
-    {
-      name: "accountId",
-      type: "string",
-      description: "Cloudflare Account ID (for REST API)",
-      isOptional: true,
-    },
-    {
-      name: "apiToken",
-      type: "string",
-      description: "Cloudflare API Token (for REST API)",
-      isOptional: true,
-    },
-    {
-      name: "namespacePrefix",
-      type: "string",
-      description:
-        "Optional prefix for all namespace names (useful for environment isolation)",
-      isOptional: true,
-    },
-    {
-      name: "keyPrefix",
-      type: "string",
-      description:
-        "Optional prefix for all keys (useful for environment isolation)",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "bindings",
+type: "Record<string, KVNamespace>",
+description: "Cloudflare Workers KV bindings (for Workers runtime)",
+isOptional: true,
+},
+{
+name: "accountId",
+type: "string",
+description: "Cloudflare Account ID (for REST API)",
+isOptional: true,
+},
+{
+name: "apiToken",
+type: "string",
+description: "Cloudflare API Token (for REST API)",
+isOptional: true,
+},
+{
+name: "namespacePrefix",
+type: "string",
+description:
+"Optional prefix for all namespace names (useful for environment isolation)",
+isOptional: true,
+},
+{
+name: "keyPrefix",
+type: "string",
+description:
+"Optional prefix for all keys (useful for environment isolation)",
+isOptional: true,
+},
+]}
 />
 
 #### Additional Notes

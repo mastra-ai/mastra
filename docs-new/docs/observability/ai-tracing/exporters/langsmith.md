@@ -1,6 +1,6 @@
 ---
-title: "LangSmith Exporter "
-description: "Send AI traces to LangSmith for LLM observability and evaluation"
+title: 'LangSmith Exporter '
+description: 'Send AI traces to LangSmith for LLM observability and evaluation'
 ---
 
 # LangSmith Exporter
@@ -10,6 +10,7 @@ description: "Send AI traces to LangSmith for LLM observability and evaluation"
 ## When to Use LangSmith
 
 LangSmith is ideal when you need:
+
 - **LangChain ecosystem integration** - Native support for LangChain applications
 - **Debugging and testing** - Detailed trace visualization and replay
 - **Evaluation pipelines** - Built-in evaluation and dataset management
@@ -38,8 +39,8 @@ LANGSMITH_BASE_URL=https://api.smith.langchain.com  # Optional for self-hosted
 ### Basic Setup
 
 ```typescript filename="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { LangSmithExporter } from "@mastra/langsmith";
+import { Mastra } from '@mastra/core';
+import { LangSmithExporter } from '@mastra/langsmith';
 
 export const mastra = new Mastra({
   observability: {
@@ -67,17 +68,18 @@ new LangSmithExporter({
   apiKey: process.env.LANGSMITH_API_KEY!,
 
   // Optional settings
-  apiUrl: process.env.LANGSMITH_BASE_URL,       // Default: https://api.smith.langchain.com
-  callerOptions: {                              // HTTP client options
-    timeout: 30000,                             // Request timeout in ms
-    maxRetries: 3,                              // Retry attempts
+  apiUrl: process.env.LANGSMITH_BASE_URL, // Default: https://api.smith.langchain.com
+  callerOptions: {
+    // HTTP client options
+    timeout: 30000, // Request timeout in ms
+    maxRetries: 3, // Retry attempts
   },
-  logLevel: 'info',                             // Diagnostic logging: debug | info | warn | error
+  logLevel: 'info', // Diagnostic logging: debug | info | warn | error
 
   // LangSmith-specific options
-  hideInputs: false,                            // Hide input data in UI
-  hideOutputs: false,                           // Hide output data in UI
-})
+  hideInputs: false, // Hide input data in UI
+  hideOutputs: false, // Hide output data in UI
+});
 ```
 
 ## Related

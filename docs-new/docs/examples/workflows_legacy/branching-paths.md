@@ -22,8 +22,6 @@ Here's the control flow diagram:
 
 Let's start by creating the steps and initializing the workflow.
 
-{/_ prettier-ignore _/}
-
 ```ts showLineNumbers copy
 import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
 import { z } from 'zod';

@@ -1,5 +1,5 @@
 ---
-title: "Reference: OtelConfig "
+title: 'Reference: OtelConfig '
 description: Documentation for the OtelConfig object, which configures OpenTelemetry instrumentation, tracing, and exporting behavior.
 ---
 
@@ -10,20 +10,20 @@ The `OtelConfig` object is used to configure OpenTelemetry instrumentation, trac
 To use the `OtelConfig` within Mastra, pass it as the value of the `telemetry` key when initializing Mastra. This will configure Mastra to use your custom OpenTelemetry settings for tracing and instrumentation.
 
 ```typescript showLineNumbers copy
-import { Mastra } from "mastra";
+import { Mastra } from 'mastra';
 
 const otelConfig: OtelConfig = {
-  serviceName: "my-awesome-service",
+  serviceName: 'my-awesome-service',
   enabled: true,
   sampling: {
-    type: "ratio",
+    type: 'ratio',
     probability: 0.5,
   },
   export: {
-    type: "otlp",
-    endpoint: "https://otel-collector.example.com/v1/traces",
+    type: 'otlp',
+    endpoint: 'https://otel-collector.example.com/v1/traces',
     headers: {
-      Authorization: "Bearer YOUR_TOKEN_HERE",
+      Authorization: 'Bearer YOUR_TOKEN_HERE',
     },
   },
 };
@@ -32,86 +32,86 @@ const otelConfig: OtelConfig = {
 ### Properties
 
 <PropertiesTable
-  content={[
-    {
-      name: "serviceName",
-      type: "string",
-      isOptional: true,
-      default: "default-service",
-      description:
-        "Human-readable name used to identify your service in telemetry backends.",
-    },
-    {
-      name: "enabled",
-      type: "boolean",
-      isOptional: true,
-      default: "true",
-      description: "Whether telemetry collection and export are enabled.",
-    },
-    {
-      name: "sampling",
-      type: "SamplingStrategy",
-      isOptional: true,
-      description:
-        "Defines the sampling strategy for traces, controlling how much data is collected.",
-      properties: [
-        {
-          name: "type",
-          type: `'ratio' | 'always_on' | 'always_off' | 'parent_based'`,
-          description: "Specifies the sampling strategy type.",
-        },
-        {
-          name: "probability",
-          type: "number (0.0 to 1.0)",
-          isOptional: true,
-          description:
-            "For `ratio` or `parent_based` strategies, defines the sampling probability.",
-        },
-        {
-          name: "root",
-          type: "object",
-          isOptional: true,
-          description:
-            "For `parent_based` strategy, configures root-level probability sampling.",
-          properties: [
-            {
-              name: "probability",
-              type: "number (0.0 to 1.0)",
-              isOptional: true,
-              description:
-                "Sampling probability for root traces in `parent_based` strategy.",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "export",
-      type: "object",
-      isOptional: true,
-      description: "Configuration for exporting collected telemetry data.",
-      properties: [
-        {
-          name: "type",
-          type: `'otlp' | 'console'`,
-          description:
-            "Specifies the exporter type. Use `otlp` for external exporters or `console` for development.",
-        },
-        {
-          name: "endpoint",
-          type: "string",
-          isOptional: true,
-          description:
-            "For `otlp` type, the OTLP endpoint URL to send traces to.",
-        },
-        {
-          name: "headers",
-          type: "Record<string, string>",
-          isOptional: true,
-          description:
-            "Additional headers to send with OTLP requests, useful for authentication or routing.",
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "serviceName",
+type: "string",
+isOptional: true,
+default: "default-service",
+description:
+"Human-readable name used to identify your service in telemetry backends.",
+},
+{
+name: "enabled",
+type: "boolean",
+isOptional: true,
+default: "true",
+description: "Whether telemetry collection and export are enabled.",
+},
+{
+name: "sampling",
+type: "SamplingStrategy",
+isOptional: true,
+description:
+"Defines the sampling strategy for traces, controlling how much data is collected.",
+properties: [
+{
+name: "type",
+type: `'ratio' | 'always_on' | 'always_off' | 'parent_based'`,
+description: "Specifies the sampling strategy type.",
+},
+{
+name: "probability",
+type: "number (0.0 to 1.0)",
+isOptional: true,
+description:
+"For `ratio` or `parent_based` strategies, defines the sampling probability.",
+},
+{
+name: "root",
+type: "object",
+isOptional: true,
+description:
+"For `parent_based` strategy, configures root-level probability sampling.",
+properties: [
+{
+name: "probability",
+type: "number (0.0 to 1.0)",
+isOptional: true,
+description:
+"Sampling probability for root traces in `parent_based` strategy.",
+},
+],
+},
+],
+},
+{
+name: "export",
+type: "object",
+isOptional: true,
+description: "Configuration for exporting collected telemetry data.",
+properties: [
+{
+name: "type",
+type: `'otlp' | 'console'`,
+description:
+"Specifies the exporter type. Use `otlp` for external exporters or `console` for development.",
+},
+{
+name: "endpoint",
+type: "string",
+isOptional: true,
+description:
+"For `otlp` type, the OTLP endpoint URL to send traces to.",
+},
+{
+name: "headers",
+type: "Record<string, string>",
+isOptional: true,
+description:
+"Additional headers to send with OTLP requests, useful for authentication or routing.",
+},
+],
+},
+]}
 />

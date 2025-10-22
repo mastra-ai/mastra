@@ -1,5 +1,5 @@
 ---
-title: "Reference: Keywords AI Integration "
+title: 'Reference: Keywords AI Integration '
 description: Documentation for integrating Keywords AI (an observability platform for LLM applications) with Mastra.
 ---
 
@@ -10,7 +10,6 @@ description: Documentation for integrating Keywords AI (an observability platfor
 This tutorial shows how to set up Keywords AI tracing with [Mastra](https://mastra.ai/) to monitor and trace your AI-powered applications.
 
 To help you get started quickly, we’ve provided a pre-built example. You can find the code [on GitHub](https://github.com/Keywords-AI/keywordsai-example-projects/tree/main/mastra-ai-weather-agent).
-
 
 ## Setup
 
@@ -30,7 +29,7 @@ Copy the example environment file and add your API keys:
 cp .env.local.example .env.local
 ```
 
-Update .env.local with your credentials: 
+Update .env.local with your credentials:
 
 ```bash .env.local copy
 OPENAI_API_KEY=your-openai-api-key
@@ -66,6 +65,7 @@ telemetry: {
 ```bash copy
 mastra dev
 ```
+
 This opens the Mastra playground where you can interact with the weather agent.
 
 ## Observability

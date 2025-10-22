@@ -1,6 +1,6 @@
 ---
-title: "Reference: Google Voice "
-description: "Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities."
+title: 'Reference: Google Voice '
+description: 'Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities.'
 ---
 
 # Google
@@ -10,7 +10,7 @@ The Google Voice implementation in Mastra provides both text-to-speech (TTS) and
 ## Usage Example
 
 ```typescript
-import { GoogleVoice } from "@mastra/voice-google";
+import { GoogleVoice } from '@mastra/voice-google';
 
 // Initialize with default configuration (uses GOOGLE_API_KEY environment variable)
 const voice = new GoogleVoice();
@@ -18,74 +18,74 @@ const voice = new GoogleVoice();
 // Initialize with custom configuration
 const voice = new GoogleVoice({
   speechModel: {
-    apiKey: "your-speech-api-key",
+    apiKey: 'your-speech-api-key',
   },
   listeningModel: {
-    apiKey: "your-listening-api-key",
+    apiKey: 'your-listening-api-key',
   },
-  speaker: "en-US-Casual-K",
+  speaker: 'en-US-Casual-K',
 });
 
 // Text-to-Speech
-const audioStream = await voice.speak("Hello, world!", {
-  languageCode: "en-US",
+const audioStream = await voice.speak('Hello, world!', {
+  languageCode: 'en-US',
   audioConfig: {
-    audioEncoding: "LINEAR16",
+    audioEncoding: 'LINEAR16',
   },
 });
 
 // Speech-to-Text
 const transcript = await voice.listen(audioStream, {
   config: {
-    encoding: "LINEAR16",
-    languageCode: "en-US",
+    encoding: 'LINEAR16',
+    languageCode: 'en-US',
   },
 });
 
 // Get available voices for a specific language
-const voices = await voice.getSpeakers({ languageCode: "en-US" });
+const voices = await voice.getSpeakers({ languageCode: 'en-US' });
 ```
 
 ## Constructor Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "speechModel",
-      type: "GoogleModelConfig",
-      description: "Configuration for text-to-speech functionality",
-      isOptional: true,
-      defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
-    },
-    {
-      name: "listeningModel",
-      type: "GoogleModelConfig",
-      description: "Configuration for speech-to-text functionality",
-      isOptional: true,
-      defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
-    },
-    {
-      name: "speaker",
-      type: "string",
-      description: "Default voice ID to use for text-to-speech",
-      isOptional: true,
-      defaultValue: "'en-US-Casual-K'",
-    },
-  ]}
+content={[
+{
+name: "speechModel",
+type: "GoogleModelConfig",
+description: "Configuration for text-to-speech functionality",
+isOptional: true,
+defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
+},
+{
+name: "listeningModel",
+type: "GoogleModelConfig",
+description: "Configuration for speech-to-text functionality",
+isOptional: true,
+defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
+},
+{
+name: "speaker",
+type: "string",
+description: "Default voice ID to use for text-to-speech",
+isOptional: true,
+defaultValue: "'en-US-Casual-K'",
+},
+]}
 />
 
 ### GoogleModelConfig
 
 <PropertiesTable
-  content={[
-    {
-      name: "apiKey",
-      type: "string",
-      description:
-        "Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "apiKey",
+type: "string",
+description:
+"Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable",
+isOptional: true,
+},
+]}
 />
 
 ## Methods
@@ -95,42 +95,42 @@ const voices = await voice.getSpeakers({ languageCode: "en-US" });
 Converts text to speech using Google Cloud Text-to-Speech service.
 
 <PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string | NodeJS.ReadableStream",
-      description:
-        "Text to convert to speech. If a stream is provided, it will be converted to text first.",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "object",
-      description: "Speech synthesis options",
-      isOptional: true,
-    },
-    {
-      name: "options.speaker",
-      type: "string",
-      description: "Voice ID to use for this request",
-      isOptional: true,
-    },
-    {
-      name: "options.languageCode",
-      type: "string",
-      description:
-        "Language code for the voice (e.g., 'en-US'). Defaults to the language code from the speaker ID or 'en-US'",
-      isOptional: true,
-    },
-    {
-      name: "options.audioConfig",
-      type: "ISynthesizeSpeechRequest['audioConfig']",
-      description:
-        "Audio configuration options from Google Cloud Text-to-Speech API",
-      isOptional: true,
-      defaultValue: "{ audioEncoding: 'LINEAR16' }",
-    },
-  ]}
+content={[
+{
+name: "input",
+type: "string | NodeJS.ReadableStream",
+description:
+"Text to convert to speech. If a stream is provided, it will be converted to text first.",
+isOptional: false,
+},
+{
+name: "options",
+type: "object",
+description: "Speech synthesis options",
+isOptional: true,
+},
+{
+name: "options.speaker",
+type: "string",
+description: "Voice ID to use for this request",
+isOptional: true,
+},
+{
+name: "options.languageCode",
+type: "string",
+description:
+"Language code for the voice (e.g., 'en-US'). Defaults to the language code from the speaker ID or 'en-US'",
+isOptional: true,
+},
+{
+name: "options.audioConfig",
+type: "ISynthesizeSpeechRequest['audioConfig']",
+description:
+"Audio configuration options from Google Cloud Text-to-Speech API",
+isOptional: true,
+defaultValue: "{ audioEncoding: 'LINEAR16' }",
+},
+]}
 />
 
 Returns: `Promise<NodeJS.ReadableStream>`
@@ -140,34 +140,34 @@ Returns: `Promise<NodeJS.ReadableStream>`
 Converts speech to text using Google Cloud Speech-to-Text service.
 
 <PropertiesTable
-  content={[
-    {
-      name: "audioStream",
-      type: "NodeJS.ReadableStream",
-      description: "Audio stream to transcribe",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "object",
-      description: "Recognition options",
-      isOptional: true,
-    },
-    {
-      name: "options.stream",
-      type: "boolean",
-      description: "Whether to use streaming recognition",
-      isOptional: true,
-    },
-    {
-      name: "options.config",
-      type: "IRecognitionConfig",
-      description:
-        "Recognition configuration from Google Cloud Speech-to-Text API",
-      isOptional: true,
-      defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
-    },
-  ]}
+content={[
+{
+name: "audioStream",
+type: "NodeJS.ReadableStream",
+description: "Audio stream to transcribe",
+isOptional: false,
+},
+{
+name: "options",
+type: "object",
+description: "Recognition options",
+isOptional: true,
+},
+{
+name: "options.stream",
+type: "boolean",
+description: "Whether to use streaming recognition",
+isOptional: true,
+},
+{
+name: "options.config",
+type: "IRecognitionConfig",
+description:
+"Recognition configuration from Google Cloud Speech-to-Text API",
+isOptional: true,
+defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
+},
+]}
 />
 
 Returns: `Promise<string>`
@@ -177,20 +177,20 @@ Returns: `Promise<string>`
 Returns an array of available voice options, where each node contains:
 
 <PropertiesTable
-  content={[
-    {
-      name: "voiceId",
-      type: "string",
-      description: "Unique identifier for the voice",
-      isOptional: false,
-    },
-    {
-      name: "languageCodes",
-      type: "string[]",
-      description: "List of language codes supported by this voice",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "voiceId",
+type: "string",
+description: "Unique identifier for the voice",
+isOptional: false,
+},
+{
+name: "languageCodes",
+type: "string[]",
+description: "List of language codes supported by this voice",
+isOptional: false,
+},
+]}
 />
 
 ## Important Notes

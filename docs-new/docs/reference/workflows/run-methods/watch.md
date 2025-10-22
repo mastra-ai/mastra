@@ -68,6 +68,6 @@ const result = await run.start({ inputData: { value: 'initial data' } });
 
 ## Related
 
-- [Workflows overview](/docs/workflows/overview#run-workflow)
+- [Workflows overview](/docs/workflows/overview)
 - [Run Class](../run)
 - [Watch Workflow](/docs/workflows/overview#watch-workflow)

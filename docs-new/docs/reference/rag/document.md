@@ -1,5 +1,5 @@
 ---
-title: "Reference: MDocument "
+title: 'Reference: MDocument '
 description: Documentation for the MDocument class in Mastra, which handles document processing and chunking.
 ---
 
@@ -10,19 +10,19 @@ The MDocument class processes documents for RAG applications. The main methods a
 ## Constructor
 
 <PropertiesTable
-  content={[
-    {
-      name: "docs",
-      type: "Array<{ text: string, metadata?: Record<string, any> }>",
-      description:
-        "Array of document chunks with their text content and optional metadata",
-    },
-    {
-      name: "type",
-      type: "'text' | 'html' | 'markdown' | 'json' | 'latex'",
-      description: "Type of document content",
-    },
-  ]}
+content={[
+{
+name: "docs",
+type: "Array<{ text: string, metadata?: Record<string, any> }>",
+description:
+"Array of document chunks with their text content and optional metadata",
+},
+{
+name: "type",
+type: "'text' | 'html' | 'markdown' | 'json' | 'latex'",
+description: "Type of document content",
+},
+]}
 />
 
 ## Static Methods
@@ -106,17 +106,17 @@ async extractMetadata(params: ExtractParams): Promise<MDocument>
 ## Examples
 
 ```typescript
-import { MDocument } from "@mastra/rag";
+import { MDocument } from '@mastra/rag';
 
 // Create document from text
-const doc = MDocument.fromText("Your content here");
+const doc = MDocument.fromText('Your content here');
 
 // Split into chunks with metadata extraction
 const chunks = await doc.chunk({
-  strategy: "markdown",
+  strategy: 'markdown',
   headers: [
-    ["#", "title"],
-    ["##", "section"],
+    ['#', 'title'],
+    ['##', 'section'],
   ],
   extract: {
     summary: true, // Extract summaries with default settings

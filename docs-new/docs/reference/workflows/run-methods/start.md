@@ -130,5 +130,5 @@ const result = await run.start({
 
 ## Related
 
-- [Workflows overview](/docs/workflows/overview#run-workflow)
+- [Workflows overview](/docs/workflows/overview)
 - [Run Class](../run)

@@ -1,5 +1,5 @@
 ---
-title: "Reference: Rerank "
+title: 'Reference: Rerank '
 description: Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
 ---
 
@@ -19,55 +19,50 @@ function rerank(
 ## Usage Example
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { rerank } from "@mastra/rag";
+import { openai } from '@ai-sdk/openai';
+import { rerank } from '@mastra/rag';
 
-const model = openai("gpt-4o-mini");
+const model = openai('gpt-4o-mini');
 
-const rerankedResults = await rerank(
-  vectorSearchResults,
-  "How do I deploy to production?",
-  model,
-  {
-    weights: {
-      semantic: 0.5,
-      vector: 0.3,
-      position: 0.2,
-    },
-    topK: 3,
+const rerankedResults = await rerank(vectorSearchResults, 'How do I deploy to production?', model, {
+  weights: {
+    semantic: 0.5,
+    vector: 0.3,
+    position: 0.2,
   },
-);
+  topK: 3,
+});
 ```
 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "results",
-      type: "QueryResult[]",
-      description: "The vector search results to rerank",
-      isOptional: false,
-    },
-    {
-      name: "query",
-      type: "string",
-      description: "The search query text used to evaluate relevance",
-      isOptional: false,
-    },
-    {
-      name: "model",
-      type: "MastraLanguageModel",
-      description: "The language Model to use for reranking",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "RerankerFunctionOptions",
-      description: "Options for the reranking model",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "results",
+type: "QueryResult[]",
+description: "The vector search results to rerank",
+isOptional: false,
+},
+{
+name: "query",
+type: "string",
+description: "The search query text used to evaluate relevance",
+isOptional: false,
+},
+{
+name: "model",
+type: "MastraLanguageModel",
+description: "The language Model to use for reranking",
+isOptional: false,
+},
+{
+name: "options",
+type: "RerankerFunctionOptions",
+description: "Options for the reranking model",
+isOptional: true,
+},
+]}
 />
 
 The rerank function accepts any LanguageModel from the Vercel AI SDK. When using the Cohere model `rerank-v3.5`, it will automatically use Cohere's reranking capabilities.
@@ -77,63 +72,63 @@ The rerank function accepts any LanguageModel from the Vercel AI SDK. When using
 ### RerankerFunctionOptions
 
 <PropertiesTable
-  content={[
-    {
-      name: "weights",
-      type: "WeightConfig",
-      description:
-        "Weights for different scoring components (must add up to 1)",
-      isOptional: true,
-      properties: [
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "semantic",
-              description: "Weight for semantic relevance",
-              isOptional: true,
-              type: "number (default: 0.4)",
-            },
-          ],
-        },
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "vector",
-              description: "Weight for vector similarity",
-              isOptional: true,
-              type: "number (default: 0.4)",
-            },
-          ],
-        },
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "position",
-              description: "Weight for position-based scoring",
-              isOptional: true,
-              type: "number (default: 0.2)",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "queryEmbedding",
-      type: "number[]",
-      description: "Embedding of the query",
-      isOptional: true,
-    },
-    {
-      name: "topK",
-      type: "number",
-      description: "Number of top results to return",
-      isOptional: true,
-      defaultValue: "3",
-    },
-  ]}
+content={[
+{
+name: "weights",
+type: "WeightConfig",
+description:
+"Weights for different scoring components (must add up to 1)",
+isOptional: true,
+properties: [
+{
+type: "number",
+parameters: [
+{
+name: "semantic",
+description: "Weight for semantic relevance",
+isOptional: true,
+type: "number (default: 0.4)",
+},
+],
+},
+{
+type: "number",
+parameters: [
+{
+name: "vector",
+description: "Weight for vector similarity",
+isOptional: true,
+type: "number (default: 0.4)",
+},
+],
+},
+{
+type: "number",
+parameters: [
+{
+name: "position",
+description: "Weight for position-based scoring",
+isOptional: true,
+type: "number (default: 0.2)",
+},
+],
+},
+],
+},
+{
+name: "queryEmbedding",
+type: "number[]",
+description: "Embedding of the query",
+isOptional: true,
+},
+{
+name: "topK",
+type: "number",
+description: "Number of top results to return",
+isOptional: true,
+defaultValue: "3",
+},
+]}
 />
 
 ## Returns
@@ -141,71 +136,71 @@ The rerank function accepts any LanguageModel from the Vercel AI SDK. When using
 The function returns an array of `RerankResult` objects:
 
 <PropertiesTable
-  content={[
-    {
-      name: "result",
-      type: "QueryResult",
-      description: "The original query result",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Combined reranking score (0-1)",
-    },
-    {
-      name: "details",
-      type: "ScoringDetails",
-      description: "Detailed scoring information",
-    },
-  ]}
+content={[
+{
+name: "result",
+type: "QueryResult",
+description: "The original query result",
+},
+{
+name: "score",
+type: "number",
+description: "Combined reranking score (0-1)",
+},
+{
+name: "details",
+type: "ScoringDetails",
+description: "Detailed scoring information",
+},
+]}
 />
 
 ### ScoringDetails
 
 <PropertiesTable
-  content={[
-    {
-      name: "semantic",
-      type: "number",
-      description: "Semantic relevance score (0-1)",
-    },
-    {
-      name: "vector",
-      type: "number",
-      description: "Vector similarity score (0-1)",
-    },
-    {
-      name: "position",
-      type: "number",
-      description: "Position-based score (0-1)",
-    },
-    {
-      name: "queryAnalysis",
-      type: "object",
-      description: "Query analysis details",
-      isOptional: true,
-      properties: [
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "magnitude",
-              description: "Magnitude of the query",
-            },
-          ],
-        },
-        {
-          type: "number[]",
-          parameters: [
-            {
-              name: "dominantFeatures",
-              description: "Dominant features of the query",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "semantic",
+type: "number",
+description: "Semantic relevance score (0-1)",
+},
+{
+name: "vector",
+type: "number",
+description: "Vector similarity score (0-1)",
+},
+{
+name: "position",
+type: "number",
+description: "Position-based score (0-1)",
+},
+{
+name: "queryAnalysis",
+type: "object",
+description: "Query analysis details",
+isOptional: true,
+properties: [
+{
+type: "number",
+parameters: [
+{
+name: "magnitude",
+description: "Magnitude of the query",
+},
+],
+},
+{
+type: "number[]",
+parameters: [
+{
+name: "dominantFeatures",
+description: "Dominant features of the query",
+},
+],
+},
+],
+},
+]}
 />
 
 ## Related

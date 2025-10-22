@@ -1,6 +1,6 @@
 ---
-title: "Creating Steps and Adding to Workflows (Legacy) "
-description: "Steps in Mastra workflows provide a structured way to manage operations by defining inputs, outputs, and execution logic."
+title: 'Creating Steps and Adding to Workflows (Legacy) '
+description: 'Steps in Mastra workflows provide a structured way to manage operations by defining inputs, outputs, and execution logic.'
 ---
 
 # Defining Steps in a Workflow (Legacy)
@@ -14,12 +14,12 @@ The code below shows how to define these steps inline or separately.
 You can create steps directly within your workflow using `.step()` and `.then()`. This code shows how to define, link, and execute two steps in sequence.
 
 ```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
-import { Mastra } from "@mastra/core";
-import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
-import { z } from "zod";
+import { Mastra } from '@mastra/core';
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
+import { z } from 'zod';
 
 export const myWorkflow = new LegacyWorkflow({
-  name: "my-workflow",
+  name: 'my-workflow',
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
@@ -28,7 +28,7 @@ export const myWorkflow = new LegacyWorkflow({
 myWorkflow
   .step(
     new LegacyStep({
-      id: "stepOne",
+      id: 'stepOne',
       outputSchema: z.object({
         doubledValue: z.number(),
       }),
@@ -39,12 +39,12 @@ myWorkflow
   )
   .then(
     new LegacyStep({
-      id: "stepTwo",
+      id: 'stepTwo',
       outputSchema: z.object({
         incrementedValue: z.number(),
       }),
       execute: async ({ context }) => {
-        if (context.steps.stepOne.status !== "success") {
+        if (context.steps.stepOne.status !== 'success') {
           return { incrementedValue: 0 };
         }
 
@@ -67,13 +67,13 @@ export const mastra = new Mastra({
 If you prefer to manage your step logic in separate entities, you can define steps outside and then add them to your workflow. This code shows how to define steps independently and link them afterward.
 
 ```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
-import { Mastra } from "@mastra/core";
-import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
-import { z } from "zod";
+import { Mastra } from '@mastra/core';
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
+import { z } from 'zod';
 
 // Define steps separately
 const stepOne = new LegacyStep({
-  id: "stepOne",
+  id: 'stepOne',
   outputSchema: z.object({
     doubledValue: z.number(),
   }),
@@ -83,12 +83,12 @@ const stepOne = new LegacyStep({
 });
 
 const stepTwo = new LegacyStep({
-  id: "stepTwo",
+  id: 'stepTwo',
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
   execute: async ({ context }) => {
-    if (context.steps.stepOne.status !== "success") {
+    if (context.steps.stepOne.status !== 'success') {
       return { incrementedValue: 0 };
     }
     return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 };
@@ -97,7 +97,7 @@ const stepTwo = new LegacyStep({
 
 // Build the workflow
 const myWorkflow = new LegacyWorkflow({
-  name: "my-workflow",
+  name: 'my-workflow',
   triggerSchema: z.object({
     inputValue: z.number(),
   }),

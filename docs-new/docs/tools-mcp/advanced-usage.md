@@ -1,5 +1,5 @@
 ---
-title: "Advanced Tool Usage "
+title: 'Advanced Tool Usage '
 description: This page covers advanced features for Mastra tools, including abort signals and compatibility with the Vercel AI SDK tool format.
 ---
 
@@ -51,13 +51,13 @@ export const longRunningTool = createTool({
 To use this, provide an `AbortController`'s signal when calling the agent:
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent';
 // Assume 'agent' is an Agent instance with longRunningTool configured
 
 const controller = new AbortController();
 
 // Start the agent call
-const promise = agent.generate("Perform the long computation.", {
+const promise = agent.generate('Perform the long computation.', {
   abortSignal: controller.signal,
 });
 
@@ -68,10 +68,10 @@ try {
   const result = await promise;
   console.log(result.text);
 } catch (error) {
-  if (error.name === "AbortError") {
-    console.log("Agent generation was aborted.");
+  if (error.name === 'AbortError') {
+    console.log('Agent generation was aborted.');
   } else {
-    console.error("An error occurred:", error);
+    console.error('An error occurred:', error);
   }
 }
 ```
@@ -89,13 +89,13 @@ npm install ai
 Here's an example of a tool defined using the Vercel AI SDK format:
 
 ```typescript filename="src/mastra/tools/vercelWeatherTool.ts" copy
-import { tool } from "ai";
-import { z } from "zod";
+import { tool } from 'ai';
+import { z } from 'zod';
 
 export const vercelWeatherTool = tool({
-  description: "Fetches current weather using Vercel AI SDK format",
+  description: 'Fetches current weather using Vercel AI SDK format',
   parameters: z.object({
-    city: z.string().describe("The city to get weather for"),
+    city: z.string().describe('The city to get weather for'),
   }),
   execute: async ({ city }) => {
     console.log(`Fetching weather for ${city} (Vercel format tool)`);
@@ -109,15 +109,15 @@ export const vercelWeatherTool = tool({
 You can then add this tool to your Mastra agent just like any other tool:
 
 ```typescript filename="src/mastra/agents/mixedToolsAgent.ts"
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { vercelWeatherTool } from "../tools/vercelWeatherTool"; // Vercel AI SDK tool
-import { mastraTool } from "../tools/mastraTool"; // Mastra createTool tool
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { vercelWeatherTool } from '../tools/vercelWeatherTool'; // Vercel AI SDK tool
+import { mastraTool } from '../tools/mastraTool'; // Mastra createTool tool
 
 export const mixedToolsAgent = new Agent({
-  name: "Mixed Tools Agent",
-  instructions: "You can use tools defined in different formats.",
-  model: openai("gpt-4o-mini"),
+  name: 'Mixed Tools Agent',
+  instructions: 'You can use tools defined in different formats.',
+  model: openai('gpt-4o-mini'),
   tools: {
     weatherVercel: vercelWeatherTool,
     someMastraTool: mastraTool,

@@ -146,7 +146,7 @@ export const ShowcaseGrid = () => {
         <p className="text-lg text-[var(--mastra-text-tertiary)]">Check out these applications built with Mastra.</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {showcaseItems.map((item) => (
+        {showcaseItems.map(item => (
           <ShowcaseCard key={item.title} {...item} />
         ))}
       </div>

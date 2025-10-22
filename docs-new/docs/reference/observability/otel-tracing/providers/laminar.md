@@ -1,5 +1,5 @@
 ---
-title: "Reference: Laminar Integration "
+title: 'Reference: Laminar Integration '
 description: Documentation for integrating Laminar with Mastra, a specialized observability platform for LLM applications.
 ---
 
@@ -21,16 +21,16 @@ OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer your_api_key, x-laminar-team-id
 Here's how to configure Mastra to use Laminar:
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from '@mastra/core';
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: "your-service-name",
+    serviceName: 'your-service-name',
     enabled: true,
     export: {
-      type: "otlp",
-      protocol: "grpc",
+      type: 'otlp',
+      protocol: 'grpc',
     },
   },
 });
