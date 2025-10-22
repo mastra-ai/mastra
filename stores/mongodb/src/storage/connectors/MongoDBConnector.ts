@@ -48,7 +48,6 @@ export class MongoDBConnector {
       driverInfo: {
         name: 'mastra-storage',
         version: packageJson.version || '0.0.0',
-        platform: 'Node.js',
       },
     });
     return new MongoDBConnector({
