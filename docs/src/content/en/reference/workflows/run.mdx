@@ -40,13 +40,13 @@ if (result.status === "suspended") {
       required: true,
     },
     {
-      name: "stream",
+      name: "streamLegacy",
       type: "(options?: StreamOptions) => Promise<StreamResult>",
       description: "Monitors workflow execution as a stream of events",
       required: true,
     },
     {
-      name: "streamVNext",
+      name: "stream",
       type: "(options?: StreamOptions) => MastraWorkflowStream",
       description: "Enables real-time streaming with enhanced features",
       required: true,
@@ -98,7 +98,7 @@ A workflow run's `status` indicates its current execution state. The possible va
 - [Running workflows](../../examples/workflows/running-workflows.mdx)
 - [Run.start()](./run-methods/start.mdx)
 - [Run.resume()](./run-methods/resume.mdx)
+- [Run.streamLegacy()](./run-methods/streamLegacy.mdx)
 - [Run.stream()](./run-methods/stream.mdx)
-- [Run.streamVNext()](./run-methods/streamVNext.mdx)
 - [Run.watch()](./run-methods/watch.mdx)
 - [Run.cancel()](./run-methods/cancel.mdx)

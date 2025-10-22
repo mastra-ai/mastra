@@ -19,7 +19,7 @@ By combining writable workflow streams with agent streaming, you gain fine-grain
 ### Using the `writer` argument
 
 <Callout type="warning">
-The writer is only available when using `streamVNext`.
+The writer is only available when using `stream`.
 </Callout>
 
 The `writer` argument is passed to a workflow step's `execute` function and can be used to emit custom events, data, or values into the active stream. This enables workflow steps to provide intermediate results or status updates while execution is still in progress.
@@ -88,7 +88,7 @@ if (result!.status === "suspended") {
 
 ### Resuming an interrupted workflow stream
 
-If a workflow stream is closed or interrupted for any reason, you can resume it with the `resumeStreamVNext` method. This will return a new `ReadableStream` that you can use to observe the workflow events.
+If a workflow stream is closed or interrupted for any reason, you can resume it with the `resumeStream` method. This will return a new `ReadableStream` that you can use to observe the workflow events.
 
 ```typescript showLineNumbers copy
 const newStream = await run.resumeStream();
