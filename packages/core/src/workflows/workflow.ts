@@ -1102,7 +1102,7 @@ export class Workflow<
     runtimeContext,
     abort,
     abortSignal,
-    runCount,
+    retryCount,
     tracingContext,
     writer,
     validateInputs,
@@ -1128,7 +1128,7 @@ export class Workflow<
     abortSignal: AbortSignal;
     bail: (result: any) => any;
     abort: () => any;
-    runCount?: number;
+    retryCount?: number;
     tracingContext?: TracingContext;
     writer?: WritableStream<ChunkType>;
     validateInputs?: boolean;
@@ -1165,7 +1165,7 @@ export class Workflow<
       emitter.emit('nested-watch', { event, workflowId: this.id, runId: run.runId, isResume: !!resume?.steps?.length });
     }, 'watch');
 
-    if (runCount && runCount > 0 && resume?.steps?.length && runtimeContext) {
+    if (retryCount && retryCount > 0 && resume?.steps?.length && runtimeContext) {
       runtimeContext.set('__mastraWorflowInputData', inputData);
     }
 
@@ -2168,7 +2168,9 @@ export class Run<
       | string[];
     label?: string;
     runtimeContext?: RuntimeContext;
+    /** @deprecated This property will be removed on November 4th, 2025. Use `retryCount` instead. */
     runCount?: number;
+    retryCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     writableStream?: WritableStream<ChunkType>;
@@ -2176,7 +2178,7 @@ export class Run<
       includeState?: boolean;
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    return this._resume(params);
+    return this._resume({ ...params, retryCount: params.retryCount ?? params.runCount });
   }
 
   protected async _resume<TResumeSchema extends z.ZodType<any>>(params: {
@@ -2191,7 +2193,7 @@ export class Run<
       | string[];
     label?: string;
     runtimeContext?: RuntimeContext;
-    runCount?: number;
+    retryCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     writableStream?: WritableStream<ChunkType>;
@@ -2256,7 +2258,7 @@ export class Run<
       }
     }
 
-    if (!params.runCount) {
+    if (!params.retryCount) {
       if (snapshot.status !== 'suspended') {
         throw new Error('This workflow run was not suspended');
       }
@@ -2277,7 +2279,7 @@ export class Run<
     const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
 
     let runtimeContextInput;
-    if (params.runCount && params.runCount > 0 && params.runtimeContext) {
+    if (params.retryCount && params.retryCount > 0 && params.runtimeContext) {
       runtimeContextInput = params.runtimeContext.get('__mastraWorflowInputData');
       params.runtimeContext.delete('__mastraWorflowInputData');
     }

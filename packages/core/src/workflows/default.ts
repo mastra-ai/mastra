@@ -72,34 +72,34 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   /**
-   * The runCounts map is used to keep track of the run count for each step.
-   * The step id is used as the key and the run count is the value.
+   * The retryCounts map is used to keep track of the run count for each step.
+   * The step id is used as the key and the retry count is the value.
    */
-  protected runCounts = new Map<string, number>();
+  protected retryCounts = new Map<string, number>();
 
   /**
-   * Get or generate the run count for a step.
-   * If the step id is not in the map, it will be added and the run count will be 0.
-   * If the step id is in the map, it will return the run count.
+   * Get or generate the retry count for a step.
+   * If the step id is not in the map, it will be added and the retry count will be 0.
+   * If the step id is in the map, it will return the retry count.
    *
    * @param stepId - The id of the step.
-   * @returns The run count for the step.
+   * @returns The retry count for the step.
    */
-  protected getOrGenerateRunCount(stepId: Step['id']) {
-    if (this.runCounts.has(stepId)) {
-      const currentRunCount = this.runCounts.get(stepId) as number;
-      const nextRunCount = currentRunCount + 1;
+  protected getOrGenerateRetryCount(stepId: Step['id']) {
+    if (this.retryCounts.has(stepId)) {
+      const currentRetryCount = this.retryCounts.get(stepId) as number;
+      const nextRetryCount = currentRetryCount + 1;
 
-      this.runCounts.set(stepId, nextRunCount);
+      this.retryCounts.set(stepId, nextRetryCount);
 
-      return nextRunCount;
+      return nextRetryCount;
     }
 
-    const runCount = 0;
+    const retryCount = 0;
 
-    this.runCounts.set(stepId, runCount);
+    this.retryCounts.set(stepId, retryCount);
 
-    return runCount;
+    return retryCount;
   }
 
   protected async fmtReturnValue<TOutput>(
@@ -235,8 +235,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
-    //clear runCounts
-    this.runCounts.clear();
+    //clear retryCounts
+    this.retryCounts.clear();
 
     if (steps.length === 0) {
       const empty_graph_error = new MastraError({
@@ -513,6 +513,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           executionContext.state = state;
         },
         runCount: -1,
+        retryCount: -1,
         tracingContext: {
           currentSpan: sleepSpan,
         },
@@ -619,6 +620,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           executionContext.state = state;
         },
         runCount: -1,
+        retryCount: -1,
         tracingContext: {
           currentSpan: sleepUntilSpan,
         },
@@ -884,7 +886,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           setState: (state: any) => {
             executionContext.state = state;
           },
-          runCount: this.getOrGenerateRunCount(step.id),
+          runCount: this.getOrGenerateRetryCount(step.id),
+          retryCount: this.getOrGenerateRetryCount(step.id),
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: { currentSpan: stepAISpan },
           getInitData: () => stepResults?.input as any,
@@ -1316,6 +1319,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 executionContext.state = state;
               },
               runCount: -1,
+              retryCount: -1,
               tracingContext: {
                 currentSpan: evalSpan,
               },
@@ -1608,6 +1612,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           executionContext.state = state;
         },
         runCount: -1,
+        retryCount: -1,
         tracingContext: {
           currentSpan: evalSpan,
         },
