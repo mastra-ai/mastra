@@ -236,7 +236,7 @@ export class InMemoryMemory extends MemoryStorage {
       ...rest,
       threadId: thread_id,
       ...(message.resourceId && { resourceId: message.resourceId }),
-      content: typeof content === 'string' ? content : JSON.parse(content),
+      content: typeof content === 'string' ? JSON.parse(content) : content,
       role: role as MastraMessageV2['role'],
     } satisfies MastraMessageV2;
   }
