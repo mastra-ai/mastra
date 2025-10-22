@@ -1,5 +1,14 @@
 # @mastra/langsmith
 
+## 0.0.6-alpha.0
+
+### Patch Changes
+
+- Fix a `ERR_MODULE_NOT_FOUND` error that was caused by a bad import to `@mastra/core/dist/ai-tracing/exporters/index.js` ([#9129](https://github.com/mastra-ai/mastra/pull/9129))
+
+- Updated dependencies []:
+  - @mastra/core@0.22.1-alpha.0
+
 ## 0.0.5
 
 ### Patch Changes
