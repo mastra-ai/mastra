@@ -1275,7 +1275,7 @@ export const redirectList = [
   {
     source: "/:locale/examples/agents/using-a-workflow",
     destination:
-      "/:locale/docs/workflows/using-with-agents-and-tools#adding-an-agent-as-a-step",
+      "/:locale/docs/workflows/agents-and-tools#adding-an-agent-as-a-step",
     permanent: true,
   },
   {
@@ -1290,7 +1290,7 @@ export const redirectList = [
   },
   {
     source: "/:locale/examples/workflows/agent-as-step",
-    destination: "/:locale/docs/workflows/using-with-agents-and-tools",
+    destination: "/:locale/docs/workflows/agents-and-tools",
     permanent: true,
   },
   {
@@ -1300,7 +1300,7 @@ export const redirectList = [
   },
   {
     source: "/:locale/examples/workflows/calling-agent",
-    destination: "/:locale/docs/workflows/using-with-agents-and-tools",
+    destination: "/:locale/docs/workflows/agents-and-tools",
     permanent: true,
   },
   {
@@ -1335,7 +1335,7 @@ export const redirectList = [
   },
   {
     source: "/:locale/examples/workflows/tool-as-step",
-    destination: "/:locale/docs/workflows/using-with-agents-and-tools",
+    destination: "/:locale/docs/workflows/agents-and-tools",
     permanent: true,
   },
   {
@@ -1350,7 +1350,7 @@ export const redirectList = [
   },
   {
     source: "/:locale/examples/tools/workflow-as-tools",
-    destination: "/:locale/docs/workflows/using-with-agents-and-tools",
+    destination: "/:locale/docs/workflows/agents-and-tools",
     permanent: true,
   },
   {
