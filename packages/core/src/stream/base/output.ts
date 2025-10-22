@@ -4,7 +4,7 @@ import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import { getValidTraceId } from '../../ai-tracing';
 import { MastraBase } from '../../base';
-import { safeParseErrorObject } from '../../error/utils.js';
+import { getErrorFromUnknown, safeParseErrorObject } from '../../error/utils.js';
 import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
@@ -62,7 +62,7 @@ export function createDestructurableOutput<OUTPUT extends OutputSchema = undefin
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
   #status: WorkflowRunStatus = 'running';
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
-  #error: Error | string | { message: string; stack: string } | undefined;
+  #error: Error | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
   #bufferedChunks: ChunkType<OUTPUT>[] = [];
   #streamFinished = false;
@@ -612,7 +612,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   self.#delayedPromises.finishReason.resolve('other');
                   self.#delayedPromises.text.resolve('');
                 } else {
-                  self.#error = error instanceof Error ? error.message : String(error);
+                  self.#error = getErrorFromUnknown(error, 'Unknown error in stream');
                   self.#delayedPromises.finishReason.resolve('error');
                   self.#delayedPromises.text.resolve('');
                 }
@@ -762,18 +762,14 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               break;
 
             case 'error':
-              self.#error = chunk.payload.error as Error | string | { message: string; stack: string };
+              const error = getErrorFromUnknown(chunk.payload.error, 'Unknown error chunk in stream');
+              self.#error = error;
               self.#status = 'failed';
               self.#streamFinished = true; // Mark stream as finished for EventEmitter
 
-              // Reject all delayed promises on error
-              const errorMessage = (self.#error as any)?.message || safeParseErrorObject(self.#error);
-              const errorCause = self.#error instanceof Error ? self.#error.cause : undefined;
-              const error = new Error(errorMessage, errorCause ? { cause: errorCause } : undefined);
-
               Object.values(self.#delayedPromises).forEach(promise => {
                 if (promise.status.type === 'pending') {
-                  promise.reject(error);
+                  promise.reject(self.#error);
                 }
               });
 
@@ -925,7 +921,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   /**
    * Resolves to an error if an error occurred during streaming.
    */
-  get error(): Error | string | { message: string; stack: string } | undefined {
+  get error(): Error | undefined {
     // if (this.#error instanceof Error) {
     //   return this.#error;
     // }

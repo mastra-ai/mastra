@@ -3,7 +3,7 @@ import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';
 import { MessageList } from '../../../agent/message-list';
-import { safeParseErrorObject } from '../../../error/utils.js';
+import { getErrorFromUnknown } from '../../../error/utils.js';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
@@ -349,41 +349,11 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
           },
         });
 
-        // No error payload, use unknown error
-        if (!chunk.payload.error) {
-          const unknownError = new Error('Unknown error in agent stream');
-          controller.enqueue({ ...chunk, payload: { ...chunk.payload, error: unknownError } });
-          await options?.onError?.({ error: unknownError });
-          break;
-        }
-
-        if (chunk.payload.error instanceof Error) {
-          // Keep original error
-          controller.enqueue(chunk);
-          await options?.onError?.({ error: chunk.payload.error });
-        } else {
-          // For object errors, convert to Error
-          if (typeof chunk.payload.error === 'object') {
-            let errorMessage = 'Unknown error';
-
-            if (
-              chunk.payload.error &&
-              'message' in chunk.payload.error &&
-              typeof chunk.payload.error.message === 'string'
-            ) {
-              errorMessage = chunk.payload.error.message;
-            } else {
-              errorMessage = safeParseErrorObject(chunk.payload.error);
-            }
-
-            const error = new Error(errorMessage);
-            Object.assign(error as Error, chunk.payload.error);
-            controller.enqueue({ ...chunk, payload: { ...chunk.payload, error } });
-            await options?.onError?.({ error });
-          }
-        }
-
+        const error = getErrorFromUnknown(chunk.payload.error, 'Unknown error in agent stream');
+        controller.enqueue({ ...chunk, payload: { ...chunk.payload, error } });
+        await options?.onError?.({ error });
         break;
+
       default:
         if (isControllerOpen(controller)) {
           controller.enqueue(chunk);
