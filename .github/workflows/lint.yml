@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configure npm registry
         run: mkdir -p ~/setup-pnpm && echo "registry=https://registry.yarnpkg.com" > ~/setup-pnpm/.npmrc
@@ -60,7 +60,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configure npm registry
         run: mkdir -p ~/setup-pnpm && echo "registry=https://registry.yarnpkg.com" > ~/setup-pnpm/.npmrc
@@ -103,7 +103,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configure npm registry
         run: mkdir -p ~/setup-pnpm && echo "registry=https://registry.yarnpkg.com" > ~/setup-pnpm/.npmrc
@@ -145,7 +145,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
@@ -169,7 +169,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # Fetch entire git history so Changesets can generate changelogs
           # with the correct commits
@@ -217,7 +217,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
