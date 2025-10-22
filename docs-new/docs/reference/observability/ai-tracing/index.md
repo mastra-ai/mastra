@@ -1,9 +1,8 @@
 ---
-title: "AITracing "
+title: 'AITracing '
 description: Core AI Tracing classes and methods
 asIndexPage: true
 ---
-
 
 # AITracing
 
@@ -72,50 +71,50 @@ startSpan<TType extends AISpanType>(
 Start a new span of a specific AISpanType. Creates the root span of a trace if no parent is provided.
 
 <PropertiesTable
-  props={[
-    {
-      name: "type",
-      type: "AISpanType",
-      description: "Type of span to create",
-      required: true,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Name of the span",
-      required: true,
-    },
-    {
-      name: "parent",
-      type: "AnyAISpan",
-      description: "Parent span (if not root)",
-      required: false,
-    },
-    {
-      name: "attributes",
-      type: "AISpanTypeMap[TType]",
-      description: "Type-specific attributes",
-      required: false,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "User-defined metadata",
-      required: false,
-    },
-    {
-      name: "input",
-      type: "any",
-      description: "Initial input data",
-      required: false,
-    },
-    {
-      name: "customSamplerOptions",
-      type: "CustomSamplerOptions",
-      description: "Options for custom sampler",
-      required: false,
-    },
-  ]}
+props={[
+{
+name: "type",
+type: "AISpanType",
+description: "Type of span to create",
+required: true,
+},
+{
+name: "name",
+type: "string",
+description: "Name of the span",
+required: true,
+},
+{
+name: "parent",
+type: "AnyAISpan",
+description: "Parent span (if not root)",
+required: false,
+},
+{
+name: "attributes",
+type: "AISpanTypeMap[TType]",
+description: "Type-specific attributes",
+required: false,
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+description: "User-defined metadata",
+required: false,
+},
+{
+name: "input",
+type: "any",
+description: "Initial input data",
+required: false,
+},
+{
+name: "customSamplerOptions",
+type: "CustomSamplerOptions",
+description: "Options for custom sampler",
+required: false,
+},
+]}
 />
 
 #### shutdown
@@ -136,11 +135,9 @@ class CustomAITracing extends BaseAITracing {
     super(config);
     // Custom initialization
   }
-  
+
   // Override methods as needed
-  startSpan<TType extends AISpanType>(
-    options: StartSpanOptions<TType>
-  ): AISpan<TType> {
+  startSpan<TType extends AISpanType>(options: StartSpanOptions<TType>): AISpan<TType> {
     // Custom span creation logic
     return super.startSpan(options);
   }
@@ -158,6 +155,7 @@ class NoOpAISpan<TType extends AISpanType> extends BaseAISpan<TType>
 ```
 
 A span that performs no operations. All methods are no-ops:
+
 - `id` returns `'no-op'`
 - `traceId` returns `'no-op-trace'`
 - `isValid` returns `false`
@@ -167,15 +165,18 @@ A span that performs no operations. All methods are no-ops:
 ## See Also
 
 ### Documentation
+
 - [AI Tracing Overview](/docs/observability/ai-tracing/overview) - Concepts and usage guide
-- [Configuration Reference](/reference/observability/ai-tracing/configuration) - Configuration options
-- [Interfaces Reference](/reference/observability/ai-tracing/interfaces) - Type definitions
-- [Span Reference](/reference/observability/ai-tracing/span) - Span lifecycle and methods
+- [Configuration Reference](/docs/reference/observability/ai-tracing/configuration) - Configuration options
+- [Interfaces Reference](/docs/reference/observability/ai-tracing/interfaces) - Type definitions
+- [Span Reference](/docs/reference/observability/ai-tracing/span) - Span lifecycle and methods
 
 ### Examples
-- [Basic AI Tracing](/examples/observability/basic-ai-tracing) - Getting started example
+
+- [Basic AI Tracing](/docs/examples/observability/basic-ai-tracing) - Getting started example
 
 ### Exporters
-- [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - Storage persistence
-- [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud integration
-- [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - Debug output
+
+- [DefaultExporter](/docs/reference/observability/ai-tracing/exporters/default-exporter) - Storage persistence
+- [CloudExporter](/docs/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud integration
+- [ConsoleExporter](/docs/reference/observability/ai-tracing/exporters/console-exporter) - Debug output

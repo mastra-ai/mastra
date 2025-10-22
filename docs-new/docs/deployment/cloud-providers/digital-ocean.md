@@ -200,6 +200,6 @@ const mastraClient = new MastraClient({
 
 ## Next steps
 
-- [Mastra Client SDK](/docs/client-js/overview)
+- [Mastra Client SDK](/docs/server-db/mastra-client)
 - [Digital Ocean App Platform documentation](https://docs.digitalocean.com/products/app-platform/)
 - [Digital Ocean Droplets documentation](https://docs.digitalocean.com/products/droplets/)

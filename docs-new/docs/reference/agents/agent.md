@@ -226,5 +226,5 @@ description: "A new Agent instance with the specified configuration.",
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview)
-- [Calling Agents](../../examples/agents/calling-agents)
+- [Agents overview](/docs/agents/overview)
+- [Calling Agents](/docs/examples/agents/calling-agents)

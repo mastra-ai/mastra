@@ -32,7 +32,7 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-> See [Agent.stream()](../../reference/agents/stream) for more information.
+> See [Agent.stream()](/docs/reference/streaming/agents/stream) for more information.
 
 ### Output from `Agent.stream()`
 
@@ -92,7 +92,7 @@ for await (const chunk of stream) {
 }
 ```
 
-> See [Run.streamVNext()](../../reference/workflows/run-methods/streamVNext) for more information.
+> See [Run.streamVNext()](/docs/reference/streaming/workflows/streamVNext) for more information.
 
 ### Output from `Run.stream()`
 

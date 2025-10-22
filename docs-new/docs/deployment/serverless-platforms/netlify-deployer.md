@@ -1,12 +1,11 @@
 ---
-title: "Netlify Deployer"
-description: "Learn how to deploy a Mastra application to Netlify using the Mastra NetlifyDeployer"
+title: 'Netlify Deployer'
+description: 'Learn how to deploy a Mastra application to Netlify using the Mastra NetlifyDeployer'
 ---
-
 
 # NetlifyDeployer
 
-The `NetlifyDeployer` class handles deployment of standalone Mastra applications to Netlify. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/deployer) class with Netlify specific functionality.
+The `NetlifyDeployer` class handles deployment of standalone Mastra applications to Netlify. It manages configuration, deployment, and extends the base [Deployer](/docs/reference/deployer) class with Netlify specific functionality.
 
 ## Installation
 
@@ -17,16 +16,16 @@ npm install @mastra/deployer-netlify@latest
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { NetlifyDeployer } from "@mastra/deployer-netlify";
+import { Mastra } from '@mastra/core/mastra';
+import { NetlifyDeployer } from '@mastra/deployer-netlify';
 
 export const mastra = new Mastra({
   // ...
-  deployer: new NetlifyDeployer()
+  deployer: new NetlifyDeployer(),
 });
 ```
 
-> See the [NetlifyDeployer](/reference/deployer/netlify) API reference for all available configuration options.
+> See the [NetlifyDeployer](/docs/reference/deployer/netlify) API reference for all available configuration options.
 
 ## Continuous integration
 
@@ -40,9 +39,7 @@ Before your first deployment, make sure to add any environment variables used by
 
 > See [Environment variables overview](https://docs.netlify.com/environment-variables/overview/) for more details.
 
-
 Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
-
 
 ## Manual deployment
 
@@ -59,7 +56,6 @@ netlify deploy --prod
 The build output for Mastra applications using the `NetlifyDeployer` includes all agents, tools, and workflows in your project, along with Mastra specific files required to run your application on Netlify.
 
 > File structure information available - see original documentation for detailed tree view.
-
 
 The `NetlifyDeployer` automatically generates a `config.json` configuration file in `.netlify/v1` with the following settings:
 
@@ -78,4 +74,4 @@ The `NetlifyDeployer` automatically generates a `config.json` configuration file
 
 ## Next steps
 
-- [Mastra Client SDK](/docs/client-js/overview)
+- [Mastra Client SDK](/docs/reference/client-js/mastra-client)

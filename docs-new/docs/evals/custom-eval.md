@@ -17,10 +17,10 @@ Create a custom eval by extending the `Metric` class and implementing the `measu
 
 You can write lightweight custom metrics using plain JavaScript/TypeScript. These are ideal for simple string comparisons, pattern checks, or other rule-based logic.
 
-See our [Word Inclusion example](/examples/evals/custom-native-javascript-eval), which scores responses based on the number of reference words found in the output.
+See our [Word Inclusion example](/docs/examples/evals/custom-native-javascript-eval), which scores responses based on the number of reference words found in the output.
 
 ## LLM as a judge evaluation
 
 For more complex evaluations, you can build a judge powered by an LLM. This lets you capture more nuanced criteria, like factual accuracy, tone, or reasoning.
 
-See the [Real World Countries example](/examples/evals/custom-llm-judge-eval) for a complete walkthrough of building a custom judge and metric that evaluates real-world factual accuracy.
+See the [Real World Countries example](/docs/examples/evals/custom-llm-judge-eval) for a complete walkthrough of building a custom judge and metric that evaluates real-world factual accuracy.

@@ -31,4 +31,4 @@ description: "The description of the agent, or an empty string if no description
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview)
+- [Agents overview](/docs/agents/overview)

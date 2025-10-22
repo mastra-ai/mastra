@@ -1,5 +1,5 @@
 ---
-title: "Context Relevance Scorer "
+title: 'Context Relevance Scorer '
 description: Example of using the Context Relevance scorer to evaluate how relevant and useful provided context is for generating agent responses.
 ---
 
@@ -39,7 +39,7 @@ const result = await scorer.run({
       {
         id: '1',
         role: 'user',
-        content: 'What were Einstein\'s major scientific achievements?',
+        content: "What were Einstein's major scientific achievements?",
       },
     ],
   },
@@ -47,7 +47,8 @@ const result = await scorer.run({
     {
       id: '2',
       role: 'assistant',
-      content: 'Einstein\'s major achievements include the Nobel Prize for the photoelectric effect, special relativity in 1905, and general relativity in 1915.',
+      content:
+        "Einstein's major achievements include the Nobel Prize for the photoelectric effect, special relativity in 1905, and general relativity in 1915.",
     },
   ],
 });
@@ -129,7 +130,13 @@ const customScorer = createContextRelevanceScorerLLM({
 
 const customResult = await customScorer.run({
   input: { inputMessages: [{ id: '1', role: 'user', content: 'What causes solar eclipses?' }] },
-  output: [{ id: '2', role: 'assistant', content: 'Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.' }],
+  output: [
+    {
+      id: '2',
+      role: 'assistant',
+      content: 'Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.',
+    },
+  ],
 });
 
 console.log(customResult);
@@ -203,24 +210,16 @@ const scorer = createContextRelevanceScorerLLM({
     contextExtractor: (input, output) => {
       // Extract query from input
       const query = input?.inputMessages?.[0]?.content || '';
-      
+
       // Dynamically retrieve context based on query
       if (query.toLowerCase().includes('einstein')) {
-        return [
-          'Einstein developed E=mc²',
-          'He won the Nobel Prize in 1921',
-          'His theories revolutionized physics',
-        ];
+        return ['Einstein developed E=mc²', 'He won the Nobel Prize in 1921', 'His theories revolutionized physics'];
       }
-      
+
       if (query.toLowerCase().includes('climate')) {
-        return [
-          'Global temperatures are rising',
-          'CO2 levels affect climate',
-          'Renewable energy reduces emissions',
-        ];
+        return ['Global temperatures are rising', 'CO2 levels affect climate', 'Renewable energy reduces emissions'];
       }
-      
+
       return ['General knowledge base entry'];
     },
     penalties: {
@@ -247,11 +246,9 @@ const scorer = createContextRelevanceScorerLLM({
     contextExtractor: (input, output) => {
       // Extract from RAG retrieval results
       const ragResults = input.metadata?.ragResults || [];
-      
+
       // Return the text content of retrieved documents
-      return ragResults
-        .filter(doc => doc.relevanceScore > 0.5)
-        .map(doc => doc.content);
+      return ragResults.filter(doc => doc.relevanceScore > 0.5).map(doc => doc.content);
     },
     penalties: {
       unusedHighRelevanceContext: 0.12, // Moderate penalty for unused RAG context
@@ -263,9 +260,9 @@ const scorer = createContextRelevanceScorerLLM({
 });
 
 // Evaluate RAG system performance
-const evaluateRAG = async (testCases) => {
+const evaluateRAG = async testCases => {
   const results = [];
-  
+
   for (const testCase of testCases) {
     const score = await scorer.run(testCase);
     results.push({
@@ -276,7 +273,7 @@ const evaluateRAG = async (testCases) => {
       missingContext: score.reason.includes('missing'),
     });
   }
-  
+
   return results;
 };
 ```
@@ -359,10 +356,7 @@ console.log('Lenient penalties:', lenientResult.score); // Higher score, less pe
 const scorer = createContextRelevanceScorerLLM({
   model: openai('gpt-4o-mini'),
   options: {
-    context: [
-      'Relevant information...',
-      'Supporting details...',
-    ],
+    context: ['Relevant information...', 'Supporting details...'],
     scale: 100, // Scale scores from 0-100 instead of 0-1
   },
 });
@@ -378,17 +372,13 @@ const scorer = createContextRelevanceScorerLLM({
   options: {
     contextExtractor: (input, output) => {
       const query = input?.inputMessages?.[0]?.content || '';
-      
+
       // Combine from multiple sources
       const kbContext = knowledgeBase.search(query);
       const docContext = documentStore.retrieve(query);
       const cacheContext = contextCache.get(query);
-      
-      return [
-        ...kbContext,
-        ...docContext,
-        ...cacheContext,
-      ];
+
+      return [...kbContext, ...docContext, ...cacheContext];
     },
     scale: 1,
   },
@@ -408,6 +398,7 @@ const scorer = createContextRelevanceScorerLLM({
 ### Reason analysis
 
 The reason field provides insights on:
+
 - Relevance level of each context piece (high/medium/low/none)
 - Which context was actually used in the response
 - Penalties applied for unused high-relevance context (configurable via `unusedHighRelevanceContext`)
@@ -416,6 +407,7 @@ The reason field provides insights on:
 ### Optimization strategies
 
 Use results to improve your system:
+
 - **Filter irrelevant context**: Remove low/none relevance pieces before processing
 - **Ensure context usage**: Make sure high-relevance context is incorporated
 - **Fill context gaps**: Add missing information identified by the scorer
@@ -426,16 +418,16 @@ Use results to improve your system:
 
 Choose the right scorer for your needs:
 
-| Use Case | Context Relevance | Context Precision |
-|----------|-------------------|-------------------|
-| **RAG evaluation** | When usage matters | When ranking matters |
-| **Context quality** | Nuanced levels | Binary relevance |
-| **Missing detection** | ✓ Identifies gaps | ✗ Not evaluated |
-| **Usage tracking** | ✓ Tracks utilization | ✗ Not considered |
-| **Position sensitivity** | ✗ Position agnostic | ✓ Rewards early placement |
+| Use Case                 | Context Relevance    | Context Precision         |
+| ------------------------ | -------------------- | ------------------------- |
+| **RAG evaluation**       | When usage matters   | When ranking matters      |
+| **Context quality**      | Nuanced levels       | Binary relevance          |
+| **Missing detection**    | ✓ Identifies gaps    | ✗ Not evaluated           |
+| **Usage tracking**       | ✓ Tracks utilization | ✗ Not considered          |
+| **Position sensitivity** | ✗ Position agnostic  | ✓ Rewards early placement |
 
 ## Related examples
 
-- [Context Precision Example](/examples/scorers/context-precision) - Evaluating context ranking
-- [Faithfulness Example](/examples/scorers/faithfulness) - Measuring groundedness in context
-- [Answer Relevancy Example](/examples/scorers/answer-relevancy) - Evaluating answer quality
+- [Context Precision Example](/docs/examples/scorers/context-precision) - Evaluating context ranking
+- [Faithfulness Example](/docs/examples/scorers/faithfulness) - Measuring groundedness in context
+- [Answer Relevancy Example](/docs/examples/scorers/answer-relevancy) - Evaluating answer quality

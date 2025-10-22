@@ -7,7 +7,7 @@ description: 'Documentation for the legacy `Agent.streamLegacy()` method in Mast
 
 :::warning
 
-**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.stream()`](./stream) method instead. See the [migration guide](../../agents/migration-guide) for details on upgrading.
+**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.stream()`](./stream) method instead. See the [migration guide](/docs/reference/agents/migration-guide) for details on upgrading.
 
 :::
 
@@ -483,7 +483,7 @@ await agent.streamLegacy('message for agent', {
 
 :::note Deprecation Notice
 
-The new `.stream()` method offers enhanced capabilities including AI SDK v5 compatibility, better structured output handling, and improved callback system. See the [migration guide](../../agents/migration-guide) for detailed migration instructions.
+The new `.stream()` method offers enhanced capabilities including AI SDK v5 compatibility, better structured output handling, and improved callback system. See the [migration guide](/docs/reference/agents/migration-guide) for detailed migration instructions.
 
 :::
 
@@ -513,7 +513,7 @@ const result = await agent.stream('message', {
 
 ## Related
 
-- [Migration Guide](../../agents/migration-guide)
+- [Migration Guide](/docs/reference/agents/migration-guide)
 - [New .stream() method](./stream)
-- [Generating responses](../../docs/agents/overview#generating-responses)
-- [Streaming responses](../../docs/agents/overview#streaming-responses)
+- [Generating responses](/docs/agents/overview#generating-responses)
+- [Streaming responses](/docs/streaming/overview#streaming-with-agents)

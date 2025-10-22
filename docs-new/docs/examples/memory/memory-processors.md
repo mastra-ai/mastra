@@ -161,4 +161,4 @@ export const memoryProcessorAgent = new Agent({
 ## Related
 
 - [Calling Agents](../agents/calling-agents#from-the-command-line)
-- [Memory Processors](../../docs/memory/memory-processors)
+- [Memory Processors](/docs/memory/memory-processors)

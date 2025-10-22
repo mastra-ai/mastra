@@ -65,4 +65,4 @@ description: "Runtime context for dependency injection and contextual informatio
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview)
+- [Agents overview](/docs/agents/overview)

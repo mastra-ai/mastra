@@ -1,21 +1,20 @@
 ---
-title: "Cyclical Dependencies "
+title: 'Cyclical Dependencies '
 description: Example of using Mastra to create legacy workflows with cyclical dependencies and conditional loops.
 ---
-
 
 # Workflow (Legacy) with Cyclical dependencies
 
 Workflows support cyclical dependencies where steps can loop back based on conditions. The example below shows how to use conditional logic to create loops and handle repeated execution.
 
 ```ts showLineNumbers copy
-import { LegacyWorkflow, LegacyStep } from "@mastra/core/workflows/legacy";
-import { z } from "zod";
+import { LegacyWorkflow, LegacyStep } from '@mastra/core/workflows/legacy';
+import { z } from 'zod';
 
 async function main() {
   const doubleValue = new LegacyStep({
-    id: "doubleValue",
-    description: "Doubles the input value",
+    id: 'doubleValue',
+    description: 'Doubles the input value',
     inputSchema: z.object({
       inputValue: z.number(),
     }),
@@ -29,23 +28,21 @@ async function main() {
   });
 
   const incrementByOne = new LegacyStep({
-    id: "incrementByOne",
-    description: "Adds 1 to the input value",
+    id: 'incrementByOne',
+    description: 'Adds 1 to the input value',
     outputSchema: z.object({
       incrementedValue: z.number(),
     }),
     execute: async ({ context }) => {
-      const valueToIncrement = context?.getStepResult<{ firstValue: number }>(
-        "trigger",
-      )?.firstValue;
-      if (!valueToIncrement) throw new Error("No value to increment provided");
+      const valueToIncrement = context?.getStepResult<{ firstValue: number }>('trigger')?.firstValue;
+      if (!valueToIncrement) throw new Error('No value to increment provided');
       const incrementedValue = valueToIncrement + 1;
       return { incrementedValue };
     },
   });
 
   const cyclicalWorkflow = new LegacyWorkflow({
-    name: "cyclical-workflow",
+    name: 'cyclical-workflow',
     triggerSchema: z.object({
       firstValue: z.number(),
     }),
@@ -55,8 +52,8 @@ async function main() {
     .step(doubleValue, {
       variables: {
         inputValue: {
-          step: "trigger",
-          path: "firstValue",
+          step: 'trigger',
+          path: 'firstValue',
         },
       },
     })
@@ -66,7 +63,7 @@ async function main() {
       variables: {
         inputValue: {
           step: doubleValue,
-          path: "doubledValue",
+          path: 'doubledValue',
         },
       },
     })
@@ -74,7 +71,7 @@ async function main() {
 
   const { runId, start } = cyclicalWorkflow.createRun();
 
-  console.log("Run", runId);
+  console.log('Run', runId);
 
   const res = await start({ triggerData: { firstValue: 6 } });
 
@@ -99,13 +96,13 @@ main();
 
 The following links provide example documentation for legacy workflows:
 
-- [Creating a Simple Workflow (Legacy)](/examples/workflows_legacy/creating-a-workflow)
-- [Workflow (Legacy) with Sequential Steps](/examples/workflows_legacy/sequential-steps)
-- [Parallel Execution with Steps](/examples/workflows_legacy/parallel-steps)
-- [Branching Paths](/examples/workflows_legacy/branching-paths)
-- [Workflow (Legacy) with Conditional Branching (experimental)](/examples/workflows_legacy/conditional-branching)
-- [Calling an Agent From a Workflow (Legacy)](/examples/workflows_legacy/calling-agent)
-- [Tool as a Workflow step (Legacy)](/examples/workflows_legacy/using-a-tool-as-a-step)
-- [Data Mapping with Workflow Variables (Legacy)](/examples/workflows_legacy/workflow-variables)
-- [Human in the Loop Workflow (Legacy)](/examples/workflows_legacy/human-in-the-loop)
-- [Workflow (Legacy) with Suspend and Resume](/examples/workflows_legacy/suspend-and-resume)
+- [Creating a Simple Workflow (Legacy)](/docs/examples/workflows_legacy/creating-a-workflow)
+- [Workflow (Legacy) with Sequential Steps](/docs/examples/workflows_legacy/sequential-steps)
+- [Parallel Execution with Steps](/docs/examples/workflows_legacy/parallel-steps)
+- [Branching Paths](/docs/examples/workflows_legacy/branching-paths)
+- [Workflow (Legacy) with Conditional Branching (experimental)](/docs/examples/workflows_legacy/conditional-branching)
+- [Calling an Agent From a Workflow (Legacy)](/docs/examples/workflows_legacy/calling-agent)
+- [Tool as a Workflow step (Legacy)](/docs/examples/workflows_legacy/using-a-tool-as-a-step)
+- [Data Mapping with Workflow Variables (Legacy)](/docs/examples/workflows_legacy/workflow-variables)
+- [Human in the Loop Workflow (Legacy)](/docs/examples/workflows_legacy/human-in-the-loop)
+- [Workflow (Legacy) with Suspend and Resume](/docs/examples/workflows_legacy/suspend-and-resume)

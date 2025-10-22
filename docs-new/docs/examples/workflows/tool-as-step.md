@@ -77,5 +77,5 @@ export const toolAsStep = createWorkflow({
 
 The following links provide example documentation for legacy workflows:
 
-- [Calling an Agent From a Workflow (Legacy)](/examples/workflows_legacy/calling-agent)
-- [Tool as a Workflow step (Legacy)](/examples/workflows_legacy/using-a-tool-as-a-step)
+- [Calling an Agent From a Workflow (Legacy)](/docs/examples/workflows_legacy/calling-agent)
+- [Tool as a Workflow step (Legacy)](/docs/examples/workflows_legacy/using-a-tool-as-a-step)

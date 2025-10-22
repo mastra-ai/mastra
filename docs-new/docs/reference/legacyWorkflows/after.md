@@ -83,7 +83,7 @@ workflow
 
 ## Related
 
-- [Branching Paths example](../../examples/workflows_legacy/branching-paths)
+- [Branching Paths example](/docs/examples/workflows_legacy/branching-paths)
 - [Workflow Class Reference](./workflow)
 - [Step Reference](./step-class)
-- [Control Flow Guide](../../docs/workflows-legacy/control-flow)
+- [Control Flow Guide](/docs/workflows-legacy/control-flow)

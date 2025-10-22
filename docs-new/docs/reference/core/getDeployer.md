@@ -31,5 +31,5 @@ description: "The configured deployer instance, or undefined if no deployer has 
 
 ## Related
 
-- [Deployment overview](../../docs/deployment/overview)
-- [Deployer reference](../../reference/deployer/deployer)
+- [Deployment overview](/docs/deployment/overview)
+- [Deployer reference](/docs/reference/deployer)

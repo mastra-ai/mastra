@@ -94,7 +94,7 @@ const workosAuth = new MastraAuthWorkos({
 });
 ```
 
-> See the [MastraAuthWorkos](/reference/auth/workos) API reference for all available configuration options.
+> See the [MastraAuthWorkos](/docs/reference/auth/workos) API reference for all available configuration options.
 
 ## Client-side setup
 

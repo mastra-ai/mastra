@@ -41,4 +41,4 @@ description: "The workflow instance for method chaining",
 
 ## Related
 
-- [Control flow](../../../docs/workflows/control-flow)
+- [Control flow](/docs/workflows/control-flow)

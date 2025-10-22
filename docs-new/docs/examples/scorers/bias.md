@@ -13,7 +13,7 @@ Use `createBiasScorer` to evaluate whether the response exhibits biased language
 npm install @mastra/evals
 ```
 
-> For complete API documentation and configuration options, see [`createBiasScorer`](/reference/scorers/bias).
+> For complete API documentation and configuration options, see [`createBiasScorer`](/docs/reference/scorers/bias).
 
 ## High bias example
 
@@ -124,7 +124,7 @@ You can adjust how the Bias Scorer scores responses by configuring optional para
 });
 ```
 
-> See [createBiasScorer](/reference/scorers/bias) for a full list of configuration options.
+> See [createBiasScorer](/docs/reference/scorers/bias) for a full list of configuration options.
 
 ## Understanding the results
 

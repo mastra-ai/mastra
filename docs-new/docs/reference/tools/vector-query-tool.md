@@ -323,7 +323,7 @@ This agent-driven approach:
 
 For detailed filter syntax and store-specific capabilities, see the [Metadata Filters](../rag/metadata-filters) documentation.
 
-For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](../../../examples/rag/usage/filter-rag) example.
+For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](/docs/examples/rag/usage/filter-rag) example.
 
 ## Example with Reranking
 
@@ -559,8 +559,8 @@ const response = await agent.generate('Find documentation from the knowledge bas
 
 For more information on runtime context, please see:
 
-- [Agent Runtime Context](../../docs/agents/runtime-context)
-- [Tool Runtime Context](../../docs/tools-mcp/runtime-context)
+- [Agent Runtime Context](/docs/agents/runtime-context)
+- [Tool Runtime Context](/docs/tools-mcp/runtime-context)
 
 ## Usage Without a Mastra Server
 

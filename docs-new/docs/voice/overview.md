@@ -66,7 +66,7 @@ playAudio(audioStream);
 
 ````
 
-Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
+Visit the [OpenAI Voice Reference](/docs/reference/voice/openai) for more information on the OpenAI voice provider.
   </TabItem>
   <TabItem value="tab-2" label="Tab 2">
 ```typescript
@@ -92,7 +92,7 @@ const audioStream = await voiceAgent.voice.speak(text, {
 playAudio(audioStream);
 ````
 
-Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
+Visit the [Azure Voice Reference](/docs/reference/voice/azure) for more information on the Azure voice provider.
 
   </TabItem>
   <TabItem value="tab-3" label="Tab 3">
@@ -120,7 +120,7 @@ playAudio(audioStream);
 
 ````
 
-Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
+Visit the [ElevenLabs Voice Reference](/docs/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
   </TabItem>
   <TabItem value="tab-4" label="Tab 4">
 ```typescript
@@ -146,7 +146,7 @@ const audioStream = await voiceAgent.voice.speak(text, {
 playAudio(audioStream);
 ````
 
-Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
+Visit the [PlayAI Voice Reference](/docs/reference/voice/playai) for more information on the PlayAI voice provider.
 
   </TabItem>
   <TabItem value="tab-5" label="Tab 5">
@@ -174,7 +174,7 @@ playAudio(audioStream);
 
 ````
 
-Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
+Visit the [Google Voice Reference](/docs/reference/voice/google) for more information on the Google voice provider.
   </TabItem>
   <TabItem value="tab-6" label="Tab 6">
 ```typescript
@@ -200,7 +200,7 @@ const audioStream = await voiceAgent.voice.speak(text, {
 playAudio(audioStream);
 ````
 
-Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
+Visit the [Cloudflare Voice Reference](/docs/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
 
   </TabItem>
   <TabItem value="tab-7" label="Tab 7">
@@ -228,7 +228,7 @@ playAudio(audioStream);
 
 ````
 
-Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
+Visit the [Deepgram Voice Reference](/docs/reference/voice/deepgram) for more information on the Deepgram voice provider.
   </TabItem>
   <TabItem value="tab-8" label="Tab 8">
 ```typescript
@@ -254,7 +254,7 @@ const audioStream = await voiceAgent.voice.speak(text, {
 playAudio(audioStream);
 ````
 
-Visit the [Speechify Voice Reference](/reference/voice/speechify) for more information on the Speechify voice provider.
+Visit the [Speechify Voice Reference](/docs/reference/voice/speechify) for more information on the Speechify voice provider.
 
   </TabItem>
   <TabItem value="tab-9" label="Tab 9">
@@ -282,7 +282,7 @@ playAudio(audioStream);
 
 ````
 
-Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+Visit the [Sarvam Voice Reference](/docs/reference/voice/sarvam) for more information on the Sarvam voice provider.
   </TabItem>
   <TabItem value="tab-10" label="Tab 10">
 ```typescript
@@ -308,7 +308,7 @@ const audioStream = await voiceAgent.voice.speak(text, {
 playAudio(audioStream);
 ````
 
-Visit the [Murf Voice Reference](/reference/voice/murf) for more information on the Murf voice provider.
+Visit the [Murf Voice Reference](/docs/reference/voice/murf) for more information on the Murf voice provider.
 
   </TabItem>
 </Tabs>
@@ -349,7 +349,7 @@ const { text } = await voiceAgent.generate(transcript);
 
 ````
 
-Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
+Visit the [OpenAI Voice Reference](/docs/reference/voice/openai) for more information on the OpenAI voice provider.
   </TabItem>
   <TabItem value="azure-stt" label="Azure">
 ```typescript
@@ -377,7 +377,7 @@ console.log(`User said: ${transcript}`);
 const { text } = await voiceAgent.generate(transcript);
 ````
 
-Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
+Visit the [Azure Voice Reference](/docs/reference/voice/azure) for more information on the Azure voice provider.
 
   </TabItem>
   <TabItem value="elevenlabs-stt" label="ElevenLabs">
@@ -406,7 +406,7 @@ const { text } = await voiceAgent.generate(transcript);
 
 ````
 
-Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
+Visit the [ElevenLabs Voice Reference](/docs/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
   </TabItem>
   <TabItem value="google-stt" label="Google">
 ```typescript
@@ -433,7 +433,7 @@ console.log(`User said: ${transcript}`);
 const { text } = await voiceAgent.generate(transcript);
 ````
 
-Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
+Visit the [Google Voice Reference](/docs/reference/voice/google) for more information on the Google voice provider.
 
   </TabItem>
   <TabItem value="cloudflare-stt" label="Cloudflare">
@@ -462,7 +462,7 @@ const { text } = await voiceAgent.generate(transcript);
 
 ````
 
-Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
+Visit the [Cloudflare Voice Reference](/docs/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
   </TabItem>
   <TabItem value="deepgram-stt" label="Deepgram">
 ```typescript
@@ -489,7 +489,7 @@ console.log(`User said: ${transcript}`);
 const { text } = await voiceAgent.generate(transcript);
 ````
 
-Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
+Visit the [Deepgram Voice Reference](/docs/reference/voice/deepgram) for more information on the Deepgram voice provider.
 
   </TabItem>
   <TabItem value="sarvam-stt" label="Sarvam">
@@ -518,7 +518,7 @@ const { text } = await voiceAgent.generate(transcript);
 
 ````
 
-Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+Visit the [Sarvam Voice Reference](/docs/reference/voice/sarvam) for more information on the Sarvam voice provider.
   </TabItem>
 </Tabs>
 
@@ -555,7 +555,7 @@ const micStream = getMicrophoneStream();
 await voiceAgent.voice.send(micStream);
 ````
 
-Visit the [OpenAI Voice Reference](/reference/voice/openai-realtime) for more information on the OpenAI voice provider.
+Visit the [OpenAI Voice Reference](/docs/reference/voice/openai-realtime) for more information on the OpenAI voice provider.
 
   </TabItem>
   <TabItem value="tab-2" label="Tab 2">
@@ -605,7 +605,7 @@ await voiceAgent.voice.send(micStream);
 
 ````
 
-Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
+Visit the [Google Gemini Live Reference](/docs/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
 
   </TabItem>
 </Tabs>
@@ -635,7 +635,7 @@ const voice = new OpenAIVoice({
 });
 ````
 
-Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
+Visit the [OpenAI Voice Reference](/docs/reference/voice/openai) for more information on the OpenAI voice provider.
 
   </TabItem>
   <TabItem value="tab-2" label="Tab 2">
@@ -660,7 +660,7 @@ const voice = new AzureVoice({
 });
 ```
 
-Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
+Visit the [Azure Voice Reference](/docs/reference/voice/azure) for more information on the Azure voice provider.
 
   </TabItem>
   <TabItem value="tab-3" label="Tab 3">
@@ -678,7 +678,7 @@ const voice = new ElevenLabsVoice({
 });
 ```
 
-Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
+Visit the [ElevenLabs Voice Reference](/docs/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
 
   </TabItem>
   <TabItem value="tab-4" label="Tab 4">
@@ -696,7 +696,7 @@ const voice = new PlayAIVoice({
 });
 ```
 
-Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
+Visit the [PlayAI Voice Reference](/docs/reference/voice/playai) for more information on the PlayAI voice provider.
 
   </TabItem>
   <TabItem value="tab-5" label="Tab 5">
@@ -717,7 +717,7 @@ const voice = new GoogleVoice({
 });
 ```
 
-Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
+Visit the [Google Voice Reference](/docs/reference/voice/google) for more information on the Google voice provider.
 
   </TabItem>
   <TabItem value="tab-6" label="Tab 6">
@@ -735,7 +735,7 @@ const voice = new CloudflareVoice({
 });
 ```
 
-Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
+Visit the [Cloudflare Voice Reference](/docs/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
 
   </TabItem>
   <TabItem value="tab-7" label="Tab 7">
@@ -756,7 +756,7 @@ const voice = new DeepgramVoice({
 });
 ```
 
-Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
+Visit the [Deepgram Voice Reference](/docs/reference/voice/deepgram) for more information on the Deepgram voice provider.
 
   </TabItem>
   <TabItem value="tab-8" label="Tab 8">
@@ -774,7 +774,7 @@ const voice = new SpeechifyVoice({
 });
 ```
 
-Visit the [Speechify Voice Reference](/reference/voice/speechify) for more information on the Speechify voice provider.
+Visit the [Speechify Voice Reference](/docs/reference/voice/speechify) for more information on the Speechify voice provider.
 
   </TabItem>
   <TabItem value="tab-9" label="Tab 9">
@@ -791,7 +791,7 @@ const voice = new SarvamVoice({
 });
 ```
 
-Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+Visit the [Sarvam Voice Reference](/docs/reference/voice/sarvam) for more information on the Sarvam voice provider.
 
   </TabItem>
   <TabItem value="tab-10" label="Tab 10">
@@ -808,7 +808,7 @@ const voice = new MurfVoice({
 });
 ```
 
-Visit the [Murf Voice Reference](/reference/voice/murf) for more information on the Murf voice provider.
+Visit the [Murf Voice Reference](/docs/reference/voice/murf) for more information on the Murf voice provider.
 
   </TabItem>
   <TabItem value="tab-11" label="Tab 11">
@@ -829,7 +829,7 @@ const voice = new OpenAIRealtimeVoice({
 });
 ```
 
-For more information on the OpenAI Realtime voice provider, refer to the [OpenAI Realtime Voice Reference](/reference/voice/openai-realtime).
+For more information on the OpenAI Realtime voice provider, refer to the [OpenAI Realtime Voice Reference](/docs/reference/voice/openai-realtime).
 
   </TabItem>
   <TabItem value="tab-12" label="Tab 12">
@@ -845,7 +845,7 @@ const voice = new GeminiLiveVoice({
 });
 ```
 
-Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
+Visit the [Google Gemini Live Reference](/docs/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
 
   </TabItem>
 </Tabs>
@@ -901,17 +901,17 @@ const responseAudio = await voice.speak(`You said: ${transcript}`, {
 playAudio(responseAudio);
 ```
 
-For more information on the CompositeVoice, refer to the [CompositeVoice Reference](/reference/voice/composite-voice).
+For more information on the CompositeVoice, refer to the [CompositeVoice Reference](/docs/reference/voice/composite-voice).
 
 ## More Resources
 
-- [CompositeVoice](../../reference/voice/composite-voice)
-- [MastraVoice](../../reference/voice/mastra-voice)
-- [OpenAI Voice](../../reference/voice/openai)
-- [OpenAI Realtime Voice](../../reference/voice/openai-realtime)
-- [Azure Voice](../../reference/voice/azure)
-- [Google Voice](../../reference/voice/google)
-- [Google Gemini Live Voice](../../reference/voice/google-gemini-live)
-- [Deepgram Voice](../../reference/voice/deepgram)
-- [PlayAI Voice](../../reference/voice/playai)
-- [Voice Examples](../../examples/voice/text-to-speech)
+- [CompositeVoice](/docs/reference/voice/composite-voice)
+- [MastraVoice](/docs/reference/voice/mastra-voice)
+- [OpenAI Voice](/docs/reference/voice/openai)
+- [OpenAI Realtime Voice](/docs/reference/voice/openai-realtime)
+- [Azure Voice](/docs/reference/voice/azure)
+- [Google Voice](/docs/reference/voice/google)
+- [Google Gemini Live Voice](/docs/reference/voice/google-gemini-live)
+- [Deepgram Voice](/docs/reference/voice/deepgram)
+- [PlayAI Voice](/docs/reference/voice/playai)
+- [Voice Examples](/docs/examples/voice/text-to-speech)

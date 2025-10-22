@@ -15,7 +15,7 @@ In this guide, you're going to create a simple agent that fetches the last day's
 ## Prerequisites
 
 - Node.js `v20.0` or later installed
-- An API key from a supported [Model Provider](/docs/getting-started/model-providers)
+- An API key from a supported [Model Provider](/docs/models/providers)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
 ## Creating the Agent
@@ -116,7 +116,7 @@ You can run your agent as a service using the `mastra dev` command:
 mastra dev
 ```
 
-This will start a server exposing endpoints to interact with your registered agents. Within the [playground](../../docs/server-db/local-dev-playground) you can test your `stockAgent` and `stockPrices` tool through a UI.
+This will start a server exposing endpoints to interact with your registered agents. Within the [playground](/docs/server-db/local-dev-playground) you can test your `stockAgent` and `stockPrices` tool through a UI.
 
 ### Accessing the Stock Agent API
 

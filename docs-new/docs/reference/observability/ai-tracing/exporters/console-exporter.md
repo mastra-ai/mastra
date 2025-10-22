@@ -1,8 +1,7 @@
 ---
-title: "ConsoleExporter "
+title: 'ConsoleExporter '
 description: API reference for the ConsoleExporter
 ---
-
 
 # ConsoleExporter
 
@@ -15,14 +14,14 @@ new ConsoleExporter(logger?: IMastraLogger)
 ```
 
 <PropertiesTable
-  props={[
-    {
-      name: "logger",
-      type: "IMastraLogger",
-      description: "Logger instance to use. Falls back to ConsoleLogger with INFO level if not provided",
-      required: false,
-    },
-  ]}
+props={[
+{
+name: "logger",
+type: "IMastraLogger",
+description: "Logger instance to use. Falls back to ConsoleLogger with INFO level if not provided",
+required: false,
+},
+]}
 />
 
 ## Properties
@@ -42,14 +41,14 @@ async exportEvent(event: AITracingEvent): Promise<void>
 Exports a tracing event to the console.
 
 <PropertiesTable
-  props={[
-    {
-      name: "event",
-      type: "AITracingEvent",
-      description: "The tracing event to export",
-      required: true,
-    },
-  ]}
+props={[
+{
+name: "event",
+type: "AITracingEvent",
+description: "The tracing event to export",
+required: true,
+},
+]}
 />
 
 ### shutdown
@@ -133,15 +132,18 @@ const exporterWithLogger = new ConsoleExporter(customLogger);
 ## See Also
 
 ### Documentation
+
 - [AI Tracing Overview](/docs/observability/ai-tracing/overview) - Complete guide
 - [Exporters](/docs/observability/ai-tracing/overview#exporters) - Exporter concepts
 
 ### Other Exporters
-- [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - Storage persistence
-- [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud
-- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
-- [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration
+
+- [DefaultExporter](/docs/reference/observability/ai-tracing/exporters/default-exporter) - Storage persistence
+- [CloudExporter](/docs/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud
+- [Langfuse](/docs/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
+- [Braintrust](/docs/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration
 
 ### Reference
-- [Configuration](/reference/observability/ai-tracing/configuration) - Configuration options
-- [Interfaces](/reference/observability/ai-tracing/interfaces) - Type definitions
+
+- [Configuration](/docs/reference/observability/ai-tracing/configuration) - Configuration options
+- [Interfaces](/docs/reference/observability/ai-tracing/interfaces) - Type definitions

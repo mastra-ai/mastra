@@ -528,5 +528,5 @@ await agent.generateLegacy(
 
 - [Migration Guide](./migration-guide)
 - [New .generate() method](./generate)
-- [Generating responses](../../docs/agents/overview#generating-responses)
-- [Streaming responses](../../docs/agents/overview#streaming-responses)
+- [Generating responses](/docs/agents/overview#generating-responses)
+- [Streaming responses](/docs/streaming/overview#streaming-with-agents)

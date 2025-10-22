@@ -152,7 +152,7 @@ You can create a `CompletenessMetric` instance with default settings. No additio
 const metric = new CompletenessMetric();
 ```
 
-> See [CompletenessMetric](/reference/evals/completeness) for a full list of configuration options.
+> See [CompletenessMetric](/docs/reference/evals/completeness) for a full list of configuration options.
 
 ## Understanding the results
 

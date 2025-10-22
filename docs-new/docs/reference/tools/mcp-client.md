@@ -1,5 +1,5 @@
 ---
-title: "Reference: MCPClient "
+title: 'Reference: MCPClient '
 description: API Reference for MCPClient - A class for managing multiple Model Context Protocol servers and their tools.
 ---
 
@@ -7,7 +7,7 @@ description: API Reference for MCPClient - A class for managing multiple Model C
 
 The `MCPClient` class provides a way to manage multiple MCP server connections and their tools in a Mastra application. It handles connection lifecycle, tool namespacing, and provides access to tools across all configured servers.
 
-This class replaces the deprecated [`MastraMCPClient`](/reference/tools/client).
+This class replaces the deprecated [`MastraMCPClient`](/docs/reference/tools/client).
 
 ## Constructor
 
@@ -220,11 +220,8 @@ async read(serverName: string, uri: string): Promise<ReadResourceResult>
 Example:
 
 ```typescript
-const content = await mcpClient.resources.read(
-  "myWeatherServer",
-  "weather://current",
-);
-console.log("Current weather:", content.contents[0].text);
+const content = await mcpClient.resources.read('myWeatherServer', 'weather://current');
+console.log('Current weather:', content.contents[0].text);
 ```
 
 #### `resources.subscribe(serverName: string, uri: string)`
@@ -238,7 +235,7 @@ async subscribe(serverName: string, uri: string): Promise<object>
 Example:
 
 ```typescript
-await mcpClient.resources.subscribe("myWeatherServer", "weather://current");
+await mcpClient.resources.subscribe('myWeatherServer', 'weather://current');
 ```
 
 #### `resources.unsubscribe(serverName: string, uri: string)`
@@ -252,7 +249,7 @@ async unsubscribe(serverName: string, uri: string): Promise<object>
 Example:
 
 ```typescript
-await mcpClient.resources.unsubscribe("myWeatherServer", "weather://current");
+await mcpClient.resources.unsubscribe('myWeatherServer', 'weather://current');
 ```
 
 #### `resources.onUpdated(serverName: string, handler: (params: { uri: string }) => void)`
@@ -266,7 +263,7 @@ async onUpdated(serverName: string, handler: (params: { uri: string }) => void):
 Example:
 
 ```typescript
-mcpClient.resources.onUpdated("myWeatherServer", (params) => {
+mcpClient.resources.onUpdated('myWeatherServer', params => {
   console.log(`Resource updated on myWeatherServer: ${params.uri}`);
   // You might want to re-fetch the resource content here
   // await mcpClient.resources.read("myWeatherServer", params.uri);
@@ -284,8 +281,8 @@ async onListChanged(serverName: string, handler: () => void): Promise<void>
 Example:
 
 ```typescript
-mcpClient.resources.onListChanged("myWeatherServer", () => {
-  console.log("Resource list changed on myWeatherServer.");
+mcpClient.resources.onListChanged('myWeatherServer', () => {
+  console.log('Resource list changed on myWeatherServer.');
   // You should re-fetch the list of resources
   // await mcpClient.resources.list();
 });
@@ -303,8 +300,8 @@ const mcpClient = new MCPClient({
 // Access prompt methods via mcpClient.prompts
 const allPromptsByServer = await mcpClient.prompts.list();
 const { prompt, messages } = await mcpClient.prompts.get({
-  serverName: "myWeatherServer",
-  name: "current",
+  serverName: 'myWeatherServer',
+  name: 'current',
 });
 ```
 
@@ -318,15 +315,15 @@ const mcpClient = new MCPClient({
 });
 
 // Set up elicitation handler
-mcpClient.elicitation.onRequest('serverName', async (request) => {
+mcpClient.elicitation.onRequest('serverName', async request => {
   // Handle elicitation request from server
   console.log('Server requests:', request.message);
   console.log('Schema:', request.requestedSchema);
-  
+
   // Return user response
   return {
     action: 'accept',
-    content: { name: 'John Doe', email: 'john@example.com' }
+    content: { name: 'John Doe', email: 'john@example.com' },
   };
 });
 ```
@@ -338,19 +335,21 @@ Sets up a handler function that will be called when any connected MCP server sen
 **ElicitationHandler Function:**
 
 The handler function receives a request object with:
+
 - `message`: A human-readable message describing what information is needed
 - `requestedSchema`: A JSON schema defining the structure of the expected response
 
 The handler must return an `ElicitResult` with:
+
 - `action`: One of `'accept'`, `'decline'`, or `'cancel'`
 - `content`: The user's data (only when action is `'accept'`)
 
 **Example:**
 
 ```typescript
-mcpClient.elicitation.onRequest('serverName', async (request) => {
+mcpClient.elicitation.onRequest('serverName', async request => {
   console.log(`Server requests: ${request.message}`);
-  
+
   // Example: Simple user input collection
   if (request.requestedSchema.properties.name) {
     // Simulate user accepting and providing data
@@ -358,11 +357,11 @@ mcpClient.elicitation.onRequest('serverName', async (request) => {
       action: 'accept',
       content: {
         name: 'Alice Smith',
-        email: 'alice@example.com'
-      }
+        email: 'alice@example.com',
+      },
     };
   }
-  
+
   // Simulate user declining the request
   return { action: 'decline' };
 });
@@ -394,49 +393,49 @@ const mcpClient = new MCPClient({
 });
 
 // Set up interactive elicitation handler
-await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
+await mcpClient.elicitation.onRequest('interactiveServer', async request => {
   console.log(`\n📋 Server Request: ${request.message}`);
   console.log('Required information:');
-  
+
   const schema = request.requestedSchema;
   const properties = schema.properties || {};
   const required = schema.required || [];
   const content: Record<string, any> = {};
-  
+
   // Collect input for each field
   for (const [fieldName, fieldSchema] of Object.entries(properties)) {
     const field = fieldSchema as any;
     const isRequired = required.includes(fieldName);
-    
+
     let prompt = `${field.title || fieldName}`;
     if (field.description) prompt += ` (${field.description})`;
     if (isRequired) prompt += ' *required*';
     prompt += ': ';
-    
+
     const answer = await askQuestion(prompt);
-    
+
     // Handle cancellation
     if (answer.toLowerCase() === 'cancel') {
       return { action: 'cancel' };
     }
-    
+
     // Validate required fields
     if (answer === '' && isRequired) {
       console.log(`❌ ${fieldName} is required`);
       return { action: 'decline' };
     }
-    
+
     if (answer !== '') {
       content[fieldName] = answer;
     }
   }
-  
+
   // Confirm submission
   console.log('\n📝 You provided:');
   console.log(JSON.stringify(content, null, 2));
-  
+
   const confirm = await askQuestion('\nSubmit this information? (yes/no/cancel): ');
-  
+
   if (confirm.toLowerCase() === 'yes' || confirm.toLowerCase() === 'y') {
     return { action: 'accept', content };
   } else if (confirm.toLowerCase() === 'cancel') {
@@ -486,9 +485,9 @@ Example:
 
 ```typescript
 const { prompt, messages } = await mcpClient.prompts.get({
-  serverName: "myWeatherServer",
-  name: "current",
-  args: { location: "London" },
+  serverName: 'myWeatherServer',
+  name: 'current',
+  args: { location: 'London' },
 });
 console.log(prompt);
 console.log(messages);
@@ -505,8 +504,8 @@ async onListChanged(serverName: string, handler: () => void): Promise<void>
 Example:
 
 ```typescript
-mcpClient.prompts.onListChanged("myWeatherServer", () => {
-  console.log("Prompt list changed on myWeatherServer.");
+mcpClient.prompts.onListChanged('myWeatherServer', () => {
+  console.log('Prompt list changed on myWeatherServer.');
   // You should re-fetch the list of prompts
   // await mcpClient.prompts.list();
 });
@@ -540,16 +539,16 @@ const mcpClient = new MCPClient({
 });
 
 // Set up elicitation handler
-mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
+mcpClient.elicitation.onRequest('interactiveServer', async request => {
   // Handle the server's request for user input
   console.log(`Server needs: ${request.message}`);
-  
+
   // Your logic to collect user input
   const userData = await collectUserInput(request.requestedSchema);
-  
+
   return {
     action: 'accept',
-    content: userData
+    content: userData,
   };
 });
 ```
@@ -559,14 +558,16 @@ mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
 Your elicitation handler must return one of three response types:
 
 - **Accept**: User provided data and confirmed submission
+
   ```typescript
   return {
     action: 'accept',
-    content: { name: 'John Doe', email: 'john@example.com' }
+    content: { name: 'John Doe', email: 'john@example.com' },
   };
   ```
 
 - **Decline**: User explicitly declined to provide the information
+
   ```typescript
   return { action: 'decline' };
   ```
@@ -581,14 +582,14 @@ Your elicitation handler must return one of three response types:
 The `requestedSchema` provides structure for the data the server needs:
 
 ```typescript
-await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
+await mcpClient.elicitation.onRequest('interactiveServer', async request => {
   const { properties, required = [] } = request.requestedSchema;
   const content: Record<string, any> = {};
-  
+
   for (const [fieldName, fieldSchema] of Object.entries(properties || {})) {
     const field = fieldSchema as any;
     const isRequired = required.includes(fieldName);
-    
+
     // Collect input based on field type and requirements
     const value = await promptUser({
       name: fieldName,
@@ -599,12 +600,12 @@ await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
       format: field.format,
       enum: field.enum,
     });
-    
+
     if (value !== null) {
       content[fieldName] = value;
     }
   }
-  
+
   return { action: 'accept', content };
 });
 ```
@@ -624,24 +625,24 @@ await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
 For tools where you have a single connection to the MCP server for you entire app, use `getTools()` and pass the tools to your agent:
 
 ```typescript
-import { MCPClient } from "@mastra/mcp";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
+import { MCPClient } from '@mastra/mcp';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
 
 const mcp = new MCPClient({
   servers: {
     stockPrice: {
-      command: "npx",
-      args: ["tsx", "stock-price.ts"],
+      command: 'npx',
+      args: ['tsx', 'stock-price.ts'],
       env: {
-        API_KEY: "your-api-key",
+        API_KEY: 'your-api-key',
       },
-      log: (logMessage) => {
+      log: logMessage => {
         console.log(`[${logMessage.level}] ${logMessage.message}`);
       },
     },
     weather: {
-      url: new URL("http://localhost:8080/sse"),
+      url: new URL('http://localhost:8080/sse'),
     },
   },
   timeout: 30000, // Global 30s timeout
@@ -649,9 +650,9 @@ const mcp = new MCPClient({
 
 // Create an agent with access to all tools
 const agent = new Agent({
-  name: "Multi-tool Agent",
-  instructions: "You have access to multiple tool servers.",
-  model: openai("gpt-4"),
+  name: 'Multi-tool Agent',
+  instructions: 'You have access to multiple tool servers.',
+  model: openai('gpt-4'),
   tools: await mcp.getTools(),
 });
 
@@ -661,14 +662,11 @@ async function checkWeatherResource() {
     const weatherResources = await mcp.resources.list();
     if (weatherResources.weather && weatherResources.weather.length > 0) {
       const currentWeatherURI = weatherResources.weather[0].uri;
-      const weatherData = await mcp.resources.read(
-        "weather",
-        currentWeatherURI,
-      );
-      console.log("Weather data:", weatherData.contents[0].text);
+      const weatherData = await mcp.resources.read('weather', currentWeatherURI);
+      console.log('Weather data:', weatherData.contents[0].text);
     }
   } catch (error) {
-    console.error("Error fetching weather resource:", error);
+    console.error('Error fetching weather resource:', error);
   }
 }
 checkWeatherResource();
@@ -678,17 +676,15 @@ async function checkWeatherPrompt() {
   try {
     const weatherPrompts = await mcp.prompts.list();
     if (weatherPrompts.weather && weatherPrompts.weather.length > 0) {
-      const currentWeatherPrompt = weatherPrompts.weather.find(
-        (p) => p.name === "current"
-      );
+      const currentWeatherPrompt = weatherPrompts.weather.find(p => p.name === 'current');
       if (currentWeatherPrompt) {
-        console.log("Weather prompt:", currentWeatherPrompt);
+        console.log('Weather prompt:', currentWeatherPrompt);
       } else {
-        console.log("Current weather prompt not found");
+        console.log('Current weather prompt not found');
       }
     }
   } catch (error) {
-    console.error("Error fetching weather prompt:", error);
+    console.error('Error fetching weather prompt:', error);
   }
 }
 checkWeatherPrompt();
@@ -699,30 +695,30 @@ checkWeatherPrompt();
 When you need a new MCP connection for each user, use `getToolsets()` and add the tools when calling stream or generate:
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { MCPClient } from "@mastra/mcp";
-import { openai } from "@ai-sdk/openai";
+import { Agent } from '@mastra/core/agent';
+import { MCPClient } from '@mastra/mcp';
+import { openai } from '@ai-sdk/openai';
 
 // Create the agent first, without any tools
 const agent = new Agent({
-  name: "Multi-tool Agent",
-  instructions: "You help users check stocks and weather.",
-  model: openai("gpt-4"),
+  name: 'Multi-tool Agent',
+  instructions: 'You help users check stocks and weather.',
+  model: openai('gpt-4'),
 });
 
 // Later, configure MCP with user-specific settings
 const mcp = new MCPClient({
   servers: {
     stockPrice: {
-      command: "npx",
-      args: ["tsx", "stock-price.ts"],
+      command: 'npx',
+      args: ['tsx', 'stock-price.ts'],
       env: {
-        API_KEY: "user-123-api-key",
+        API_KEY: 'user-123-api-key',
       },
       timeout: 20000, // Server-specific timeout
     },
     weather: {
-      url: new URL("http://localhost:8080/sse"),
+      url: new URL('http://localhost:8080/sse'),
       requestInit: {
         headers: {
           Authorization: `Bearer user-123-token`,
@@ -733,12 +729,9 @@ const mcp = new MCPClient({
 });
 
 // Pass all toolsets to stream() or generate()
-const response = await agent.stream(
-  "How is AAPL doing and what is the weather?",
-  {
-    toolsets: await mcp.getToolsets(),
-  },
-);
+const response = await agent.stream('How is AAPL doing and what is the weather?', {
+  toolsets: await mcp.getToolsets(),
+});
 ```
 
 ## Instance Management
@@ -770,7 +763,7 @@ const mcp2 = new MCPClient({
 // To fix, either:
 // 1. Add unique IDs
 const mcp3 = new MCPClient({
-  id: "instance-1",
+  id: 'instance-1',
   servers: {
     /* ... */
   },
@@ -801,18 +794,18 @@ When using the legacy SSE MCP transport, you must configure both `requestInit` a
 const sseClient = new MCPClient({
   servers: {
     exampleServer: {
-      url: new URL("https://your-mcp-server.com/sse"),
+      url: new URL('https://your-mcp-server.com/sse'),
       // Note: requestInit alone isn't enough for SSE
       requestInit: {
         headers: {
-          Authorization: "Bearer your-token",
+          Authorization: 'Bearer your-token',
         },
       },
       // This is also required for SSE connections with custom headers
       eventSourceInit: {
         fetch(input: Request | URL | string, init?: RequestInit) {
           const headers = new Headers(init?.headers || {});
-          headers.set("Authorization", "Bearer your-token");
+          headers.set('Authorization', 'Bearer your-token');
           return fetch(input, {
             ...init,
             headers,

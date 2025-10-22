@@ -159,7 +159,7 @@ export const mastra = new Mastra({
 
 The local development server runs fully self-contained without external dependencies or containers. It leverages:
 
-- **Dev Server** powered by [Hono](https://hono.dev) for the core [Mastra Server](/docs/deployment/server).
+- **Dev Server** powered by [Hono](https://hono.dev) for the core [Mastra Server](/docs/deployment/server-deployment).
 - **In-Memory Storage** via [LibSQL](https://libsql.org/) adapters for agent memory, traces, evals, and workflow snapshots.
 - **Vector Storage** using [FastEmbed](https://github.com/qdrant/fastembed) for embeddings, vector search, and semantic retrieval.
 
@@ -222,10 +222,10 @@ export const mastra = new Mastra({
 });
 ```
 
-> See [Mastra Class](../../reference/core/mastra-class) for more configuration options.
+> See [Mastra Class](/docs/reference/core/mastra-class) for more configuration options.
 
 ## Next steps
 
 - [Mastra Cloud](/docs/mastra-cloud/overview)
 - [Deployment Overview](/docs/deployment/overview)
-- [Mastra Client SDK](/docs/client-js/overview)
+- [Mastra Client SDK](/docs/server-db/mastra-client)

@@ -98,7 +98,7 @@ Browse the directory of available models using the navigation on the left, or ex
 <CardGrid>
     <CardGridItem
       title="Gateways"
-      href="./models/gateways"
+      href="/docs/models/gateways"
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-2">
@@ -120,7 +120,7 @@ Browse the directory of available models using the navigation on the left, or ex
     </CardGridItem>
     <CardGridItem
       title="Providers"
-      href="./models/providers"
+      href="/docs/models/providers"
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-2">
@@ -174,7 +174,7 @@ const reasoningAgent = new Agent({
 
 ## Dynamic model selection
 
-Since models are just strings, you can select them dynamically based on [runtime context](/docs/server-db/runtime-context), variables, or any other logic.
+Since models are just strings, you can select them dynamically based on [runtime context](/docs/agents/runtime-context), variables, or any other logic.
 
 ```typescript showLineNumbers
 const agent = new Agent({

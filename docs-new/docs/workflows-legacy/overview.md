@@ -162,7 +162,7 @@ When you need to pause execution for external data, user input, or asynchronous 
 
 ## Observability and Debugging
 
-Mastra workflows automatically [log the input and output of each step within a workflow run](../../reference/observability/otel-config), allowing you to send this data to your preferred logging, telemetry, or observability tools.
+Mastra workflows automatically [log the input and output of each step within a workflow run](/docs/reference/observability/otel-tracing/otel-config), allowing you to send this data to your preferred logging, telemetry, or observability tools.
 
 You can:
 
@@ -172,9 +172,9 @@ You can:
 
 ## More Resources
 
-- [Sequential Steps workflow example](../../examples/workflows_legacy/sequential-steps)
-- [Parallel Steps workflow example](../../examples/workflows_legacy/parallel-steps)
-- [Branching Paths workflow example](../../examples/workflows_legacy/branching-paths)
-- [Workflow Variables example](../../examples/workflows_legacy/workflow-variables)
-- [Cyclical Dependencies workflow example](../../examples/workflows_legacy/cyclical-dependencies)
-- [Suspend and Resume workflow example](../../examples/workflows_legacy/suspend-and-resume)
+- [Sequential Steps workflow example](/docs/examples/workflows_legacy/sequential-steps)
+- [Parallel Steps workflow example](/docs/examples/workflows_legacy/parallel-steps)
+- [Branching Paths workflow example](/docs/examples/workflows_legacy/branching-paths)
+- [Workflow Variables example](/docs/examples/workflows_legacy/workflow-variables)
+- [Cyclical Dependencies workflow example](/docs/examples/workflows_legacy/cyclical-dependencies)
+- [Suspend and Resume workflow example](/docs/examples/workflows_legacy/suspend-and-resume)

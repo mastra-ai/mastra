@@ -79,9 +79,9 @@ Mastra's RAG system includes observability features to help you optimize your re
 - Analyze query patterns and cache hit rates
 - Export metrics to your observability platform
 
-See the [OTel Configuration](../../reference/observability/otel-config) page for more details.
+See the [OTel Configuration](/docs/reference/observability/otel-tracing/otel-config) page for more details.
 
 ## More resources
 
-- [Chain of Thought RAG Example](../../examples/rag/usage/cot-rag)
-- [All RAG Examples](../../examples/) (including different chunking strategies, embedding models, and vector stores)
+- [Chain of Thought RAG Example](/docs/examples/rag/usage/cot-rag)
+- [All RAG Examples](/docs/examples/) (including different chunking strategies, embedding models, and vector stores)

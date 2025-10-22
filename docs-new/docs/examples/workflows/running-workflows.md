@@ -5,11 +5,11 @@ description: Example for how to run workflows.
 
 # Running Workflows
 
-Workflows can be run from different environments. These examples demonstrate how to execute a workflow using a command line script or by calling the [Mastra Client SDK](../../docs/server-db/mastra-client) from a client-side component.
+Workflows can be run from different environments. These examples demonstrate how to execute a workflow using a command line script or by calling the [Mastra Client SDK](/docs/server-db/mastra-client) from a client-side component.
 
 ## From Mastra Client
 
-In this example, a client-side request is made using the [Mastra Client SDK](../../docs/server-db/mastra-client). The `inputData` matches the `inputSchema` for the [sequentialSteps](./sequential-steps) example.
+In this example, a client-side request is made using the [Mastra Client SDK](/docs/server-db/mastra-client). The `inputData` matches the `inputSchema` for the [sequentialSteps](./sequential-steps) example.
 
 ```typescript filename="src/components/test-run-workflow.tsx"
 import { mastraClient } from "../../lib/mastra-client";
@@ -34,7 +34,7 @@ export const TestWorkflow = () => {
 };
 ```
 
-> See [Mastra Client SDK](../../docs/server-db/mastra-client) for more information.
+> See [Mastra Client SDK](/docs/server-db/mastra-client) for more information.
 
 ## From the command line
 

@@ -31,5 +31,5 @@ description: "The configured telemetry instance used for tracing and observabili
 
 ## Related
 
-- [AI tracing](../../docs/observability/ai-tracing)
-- [Telemetry reference](../../reference/observability/otel-config)
+- [AI tracing](/docs/observability/ai-tracing/overview)
+- [Telemetry reference](/docs/reference/observability/otel-tracing/otel-config)

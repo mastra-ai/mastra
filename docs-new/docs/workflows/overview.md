@@ -60,7 +60,7 @@ Steps are the building blocks of workflows. Create a step using `createStep`:
 const step1 = createStep({...});
 ```
 
-> See [createStep](../../reference/workflows/step) for more information.
+> See [createStep](/docs/reference/workflows/step) for more information.
 
 ### Create workflow
 
@@ -86,7 +86,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> See [workflow](../../reference/workflows/workflow) for more information.
+> See [workflow](/docs/reference/workflows/workflow) for more information.
 
 #### Composing steps
 
@@ -202,7 +202,7 @@ if (result.status === 'success') {
 }
 ```
 
-> see [createRunAsync](/reference/workflows/run) and [start](/reference/workflows/run-methods/start) for more information.
+> see [createRunAsync](/docs/reference/workflows/run) and [start](/docs/reference/workflows/run-methods/start) for more information.
 
 To trigger this workflow, run the following:
 
@@ -294,7 +294,7 @@ for await (const chunk of result.stream) {
 }
 ```
 
-> See [stream](/reference/streaming/workflows/stream) for more information.
+> See [stream](/docs/reference/streaming/workflows/stream) for more information.
 
 ## Watch Workflow
 
@@ -316,16 +316,16 @@ const result = await run.start({
 });
 ```
 
-> See [watch](/reference/workflows/run-methods/watch) for more information.
+> See [watch](/docs/reference/workflows/run-methods/watch) for more information.
 
 ## Related
 
-- The [Workflow Guide](/guides/ai-recruiter) in the Guides section is a tutorial that covers the main concepts.
-- [Parallel Steps workflow example](/examples/workflows/parallel-steps)
-- [Conditional Branching workflow example](/examples/workflows/conditional-branching)
-- [Inngest workflow example](/examples/workflows/inngest-workflow)
-- [Suspend and Resume workflow example](/examples/workflows/human-in-the-loop)
+- The [Workflow Guide](/docs/guides/guide/ai-recruiter) in the Guides section is a tutorial that covers the main concepts.
+- [Parallel Steps workflow example](/docs/examples/workflows/parallel-steps)
+- [Conditional Branching workflow example](/docs/examples/workflows/conditional-branching)
+- [Inngest workflow example](/docs/examples/workflows/inngest-workflow)
+- [Suspend and Resume workflow example](/docs/examples/workflows/human-in-the-loop)
 
 ## Workflows (Legacy)
 
-For legacy workflow documentation, see [Workflows (Legacy)](/workflows-legacy/overview).
+For legacy workflow documentation, see [Workflows (Legacy)](/docs/workflows-legacy/overview).

@@ -45,7 +45,7 @@ export const testAgent = new Agent({
 });
 ```
 
-> Title generation runs asynchronously after the agent responds and does not affect response time. See the [full configuration reference](../../reference/memory/Memory#thread-title-generation) for details and examples.
+> Title generation runs asynchronously after the agent responds and does not affect response time. See the [full configuration reference](/docs/reference/memory) for details and examples.
 
 #### Optimizing title generation
 

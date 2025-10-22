@@ -13,7 +13,7 @@ Use `createTextualDifferenceScorer` to evaluate the similarity between two text 
 npm install @mastra/evals
 ```
 
-> For complete API documentation and configuration options, see [`createTextualDifferenceScorer`](/reference/scorers/textual-difference).
+> For complete API documentation and configuration options, see [`createTextualDifferenceScorer`](/docs/reference/scorers/textual-difference).
 
 ## No differences example
 
@@ -134,7 +134,7 @@ You can create a `TextualDifferenceScorer` instance with default settings. No ad
 const scorer = createTextualDifferenceScorer();
 ```
 
-> See [TextualDifferenceScorer](/reference/scorers/textual-difference) for a full list of configuration options.
+> See [TextualDifferenceScorer](/docs/reference/scorers/textual-difference) for a full list of configuration options.
 
 ## Understanding the results
 

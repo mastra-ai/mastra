@@ -1,8 +1,7 @@
 ---
-title: "Answer Similarity "
+title: 'Answer Similarity '
 description: Example of using the Answer Similarity scorer to compare agent outputs against ground truth answers for CI/CD testing.
 ---
-
 
 # Answer Similarity Scorer
 
@@ -14,26 +13,26 @@ Use `createAnswerSimilarityScorer` to compare agent outputs against ground truth
 npm install @mastra/evals
 ```
 
-> For complete API documentation and configuration options, see [`createAnswerSimilarityScorer`](/reference/scorers/answer-similarity).
+> For complete API documentation and configuration options, see [`createAnswerSimilarityScorer`](/docs/reference/scorers/answer-similarity).
 
 ## Perfect similarity example
 
 In this example, the agent's output semantically matches the ground truth perfectly.
 
 ```typescript filename="src/example-perfect-similarity.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { runExperiment } from "@mastra/core/scores";
-import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
-import { myAgent } from "./agent";
+import { openai } from '@ai-sdk/openai';
+import { runExperiment } from '@mastra/core/scores';
+import { createAnswerSimilarityScorer } from '@mastra/evals/scorers/llm';
+import { myAgent } from './agent';
 
-const scorer = createAnswerSimilarityScorer({ model: openai("gpt-4o-mini") });
+const scorer = createAnswerSimilarityScorer({ model: openai('gpt-4o-mini') });
 
 const result = await runExperiment({
   data: [
-    { 
-      input: "What is 2+2?",
-      groundTruth: "4"
-    }
+    {
+      input: 'What is 2+2?',
+      groundTruth: '4',
+    },
   ],
   scorers: [scorer],
   target: myAgent,
@@ -60,19 +59,19 @@ The output receives a perfect score because both the agent's answer and ground t
 In this example, the agent provides the same information as the ground truth but with different phrasing.
 
 ```typescript filename="src/example-semantic-similarity.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { runExperiment } from "@mastra/core/scores";
-import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
-import { myAgent } from "./agent";
+import { openai } from '@ai-sdk/openai';
+import { runExperiment } from '@mastra/core/scores';
+import { createAnswerSimilarityScorer } from '@mastra/evals/scorers/llm';
+import { myAgent } from './agent';
 
-const scorer = createAnswerSimilarityScorer({ model: openai("gpt-4o-mini") });
+const scorer = createAnswerSimilarityScorer({ model: openai('gpt-4o-mini') });
 
 const result = await runExperiment({
   data: [
-    { 
-      input: "What is the capital of France?",
-      groundTruth: "The capital of France is Paris",
-    }
+    {
+      input: 'What is the capital of France?',
+      groundTruth: 'The capital of France is Paris',
+    },
   ],
   scorers: [scorer],
   target: myAgent,
@@ -99,19 +98,19 @@ The output receives a high score because it conveys the same information with eq
 In this example, the agent's response is partially correct but missing key information.
 
 ```typescript filename="src/example-partial-similarity.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { runExperiment } from "@mastra/core/scores";
-import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
-import { myAgent } from "./agent";
+import { openai } from '@ai-sdk/openai';
+import { runExperiment } from '@mastra/core/scores';
+import { createAnswerSimilarityScorer } from '@mastra/evals/scorers/llm';
+import { myAgent } from './agent';
 
-const scorer = createAnswerSimilarityScorer({ model: openai("gpt-4o-mini") });
+const scorer = createAnswerSimilarityScorer({ model: openai('gpt-4o-mini') });
 
 const result = await runExperiment({
   data: [
-    { 
-      input: "What are the primary colors?",
-      groundTruth: "The primary colors are red, blue, and yellow",
-    }
+    {
+      input: 'What are the primary colors?',
+      groundTruth: 'The primary colors are red, blue, and yellow',
+    },
   ],
   scorers: [scorer],
   target: myAgent,
@@ -138,19 +137,19 @@ The output receives a moderate score because it includes some correct informatio
 In this example, the agent provides factually incorrect information that contradicts the ground truth.
 
 ```typescript filename="src/example-contradiction.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { runExperiment } from "@mastra/core/scores";
-import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
-import { myAgent } from "./agent";
+import { openai } from '@ai-sdk/openai';
+import { runExperiment } from '@mastra/core/scores';
+import { createAnswerSimilarityScorer } from '@mastra/evals/scorers/llm';
+import { myAgent } from './agent';
 
-const scorer = createAnswerSimilarityScorer({ model: openai("gpt-4o-mini") });
+const scorer = createAnswerSimilarityScorer({ model: openai('gpt-4o-mini') });
 
 const result = await runExperiment({
   data: [
-    { 
-      input: "Who wrote Romeo and Juliet?",
-      groundTruth: "William Shakespeare wrote Romeo and Juliet",
-    }
+    {
+      input: 'Who wrote Romeo and Juliet?',
+      groundTruth: 'William Shakespeare wrote Romeo and Juliet',
+    },
   ],
   scorers: [scorer],
   target: myAgent,
@@ -178,25 +177,25 @@ Use the scorer in your test suites to ensure agent consistency over time:
 
 ```typescript filename="src/ci-integration.test.ts" showLineNumbers copy
 import { describe, it, expect } from 'vitest';
-import { openai } from "@ai-sdk/openai";
-import { runExperiment } from "@mastra/core/scores";
-import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
-import { myAgent } from "./agent";
+import { openai } from '@ai-sdk/openai';
+import { runExperiment } from '@mastra/core/scores';
+import { createAnswerSimilarityScorer } from '@mastra/evals/scorers/llm';
+import { myAgent } from './agent';
 
 describe('Agent Consistency Tests', () => {
-  const scorer = createAnswerSimilarityScorer({ model: openai("gpt-4o-mini") });
+  const scorer = createAnswerSimilarityScorer({ model: openai('gpt-4o-mini') });
 
   it('should provide accurate factual answers', async () => {
     const result = await runExperiment({
       data: [
-        { 
-          input: "What is the speed of light?",
-          groundTruth: "The speed of light in vacuum is 299,792,458 meters per second"
+        {
+          input: 'What is the speed of light?',
+          groundTruth: 'The speed of light in vacuum is 299,792,458 meters per second',
         },
-        { 
-          input: "What is the capital of Japan?",
-          groundTruth: "Tokyo is the capital of Japan"
-        }
+        {
+          input: 'What is the capital of Japan?',
+          groundTruth: 'Tokyo is the capital of Japan',
+        },
       ],
       scorers: [scorer],
       target: myAgent,
@@ -207,16 +206,16 @@ describe('Agent Consistency Tests', () => {
   });
 
   it('should maintain consistency across runs', async () => {
-    const testData = { 
-      input: "Define machine learning",
-      groundTruth: "Machine learning is a subset of AI that enables systems to learn and improve from experience"
+    const testData = {
+      input: 'Define machine learning',
+      groundTruth: 'Machine learning is a subset of AI that enables systems to learn and improve from experience',
     };
 
     // Run multiple times to check consistency
     const results = await Promise.all([
       runExperiment({ data: [testData], scorers: [scorer], target: myAgent }),
       runExperiment({ data: [testData], scorers: [scorer], target: myAgent }),
-      runExperiment({ data: [testData], scorers: [scorer], target: myAgent })
+      runExperiment({ data: [testData], scorers: [scorer], target: myAgent }),
     ]);
 
     // Check that all runs produce similar scores (within 0.1 tolerance)
@@ -232,39 +231,39 @@ describe('Agent Consistency Tests', () => {
 Customize the scorer behavior for specific use cases:
 
 ```typescript filename="src/custom-config.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { runExperiment } from "@mastra/core/scores";
-import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
-import { myAgent } from "./agent";
+import { openai } from '@ai-sdk/openai';
+import { runExperiment } from '@mastra/core/scores';
+import { createAnswerSimilarityScorer } from '@mastra/evals/scorers/llm';
+import { myAgent } from './agent';
 
 // Configure for strict exact matching with high scale
-const strictScorer = createAnswerSimilarityScorer({ 
-  model: openai("gpt-4o-mini"),
+const strictScorer = createAnswerSimilarityScorer({
+  model: openai('gpt-4o-mini'),
   options: {
-    exactMatchBonus: 0.5,        // Higher bonus for exact matches
-    contradictionPenalty: 2.0,   // Very strict on contradictions
-    missingPenalty: 0.3,         // Higher penalty for missing info
-    scale: 10                    // Score out of 10 instead of 1
-  }
+    exactMatchBonus: 0.5, // Higher bonus for exact matches
+    contradictionPenalty: 2.0, // Very strict on contradictions
+    missingPenalty: 0.3, // Higher penalty for missing info
+    scale: 10, // Score out of 10 instead of 1
+  },
 });
 
 // Configure for lenient semantic matching
-const lenientScorer = createAnswerSimilarityScorer({ 
-  model: openai("gpt-4o-mini"),
+const lenientScorer = createAnswerSimilarityScorer({
+  model: openai('gpt-4o-mini'),
   options: {
-    semanticThreshold: 0.6,      // Lower threshold for semantic matches
-    contradictionPenalty: 0.5,   // More forgiving on minor contradictions
-    extraInfoPenalty: 0,         // No penalty for extra information
-    requireGroundTruth: false    // Allow missing ground truth
-  }
+    semanticThreshold: 0.6, // Lower threshold for semantic matches
+    contradictionPenalty: 0.5, // More forgiving on minor contradictions
+    extraInfoPenalty: 0, // No penalty for extra information
+    requireGroundTruth: false, // Allow missing ground truth
+  },
 });
 
 const result = await runExperiment({
   data: [
-    { 
-      input: "Explain photosynthesis",
-      groundTruth: "Photosynthesis is the process by which plants convert light energy into chemical energy"
-    }
+    {
+      input: 'Explain photosynthesis',
+      groundTruth: 'Photosynthesis is the process by which plants convert light energy into chemical energy',
+    },
   ],
   scorers: [strictScorer, lenientScorer],
   target: myAgent,

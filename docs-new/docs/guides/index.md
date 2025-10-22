@@ -14,26 +14,26 @@ While examples show quick implementations and docs explain specific features, th
     <CardGridItem
       title="AI Recruiter"
       description="Create a workflow that processes candidate resumes and conducts interviews, demonstrating branching logic and LLM integration in Mastra workflows."
-      href="/guides/ai-recruiter"
+      href="/docs/guides/guide/ai-recruiter"
     />
     <CardGridItem
       title="Chef Assistant"
       description="Build an AI chef agent that helps users cook meals with available ingredients, showing how to create interactive agents with custom tools."
-      href="/guides/chef-michel"
+      href="/docs/guides/guide/chef-michel"
     />
     <CardGridItem
       title="Research Assistant"
       description="Develop an AI research assistant that analyzes academic papers using Retrieval Augmented Generation (RAG), demonstrating document processing and question answering."
-      href="/guides/research-assistant"
+      href="/docs/guides/guide/research-assistant"
     />
     <CardGridItem
       title="Stock Agent"
       description="Implement a simple agent that fetches stock prices, illustrating the basics of creating tools and integrating them with Mastra agents."
-      href="/guides/stock-agent"
+      href="/docs/guides/guide/stock-agent"
     />
     <CardGridItem
       title="Notes MCP Server"
       description="Build an AI notes assistant that helps users manage their notes, showing how to create interactive agents with custom tools."
-      href="/guides/notes-mcp-server"
+      href="/docs/guides/guide/notes-mcp-server"
     />
 </CardGrid>

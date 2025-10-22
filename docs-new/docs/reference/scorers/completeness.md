@@ -1,5 +1,5 @@
 ---
-title: "Reference: Completeness "
+title: 'Reference: Completeness '
 description: Documentation for the Completeness Scorer in Mastra, which evaluates how thoroughly LLM outputs cover key elements present in the input.
 ---
 
@@ -7,7 +7,7 @@ description: Documentation for the Completeness Scorer in Mastra, which evaluate
 
 The `createCompletenessScorer()` function evaluates how thoroughly an LLM's output covers the key elements present in the input. It analyzes nouns, verbs, topics, and terms to determine coverage and provides a detailed completeness score.
 
-For a usage example, see the [Completeness Examples](/examples/scorers/completeness).
+For a usage example, see the [Completeness Examples](/docs/examples/scorers/completeness).
 
 ## Parameters
 
@@ -18,23 +18,23 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 ## .run() Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "preprocessStepResult",
-      type: "object",
-      description: "Object with extracted elements and coverage details: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Completeness score (0-1) representing the proportion of input elements covered in the output.",
-    },
-  ]}
+content={[
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "preprocessStepResult",
+type: "object",
+description: "Object with extracted elements and coverage details: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }",
+},
+{
+name: "score",
+type: "number",
+description: "Completeness score (0-1) representing the proportion of input elements covered in the output.",
+},
+]}
 />
 
 ## Element Extraction Details

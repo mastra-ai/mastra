@@ -106,7 +106,7 @@ const firebaseAuth = new MastraAuthFirebase({
 });
 ```
 
-> See the [MastraAuthFirebase](/reference/auth/firebase) API reference for all available configuration options.
+> See the [MastraAuthFirebase](/docs/reference/auth/firebase) API reference for all available configuration options.
 
 ## Client-side setup
 

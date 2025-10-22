@@ -1,5 +1,5 @@
 ---
-title: "Reference: Tone Consistency "
+title: 'Reference: Tone Consistency '
 description: Documentation for the Tone Consistency Scorer in Mastra, which evaluates emotional tone and sentiment consistency in text.
 ---
 
@@ -7,7 +7,7 @@ description: Documentation for the Tone Consistency Scorer in Mastra, which eval
 
 The `createToneScorer()` function evaluates the text's emotional tone and sentiment consistency. It can operate in two modes: comparing tone between input/output pairs or analyzing tone stability within a single text.
 
-For a usage example, see the [Tone Consistency Examples](/examples/scorers/tone-consistency).
+For a usage example, see the [Tone Consistency Examples](/docs/examples/scorers/tone-consistency).
 
 ## Parameters
 
@@ -18,23 +18,23 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 ## .run() Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description: "Object with tone metrics: { responseSentiment: number, referenceSentiment: number, difference: number } (for comparison mode) OR { avgSentiment: number, sentimentVariance: number } (for stability mode)",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Tone consistency/stability score (0-1).",
-    },
-  ]}
+content={[
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "analyzeStepResult",
+type: "object",
+description: "Object with tone metrics: { responseSentiment: number, referenceSentiment: number, difference: number } (for comparison mode) OR { avgSentiment: number, sentimentVariance: number } (for stability mode)",
+},
+{
+name: "score",
+type: "number",
+description: "Tone consistency/stability score (0-1).",
+},
+]}
 />
 
 ## Scoring Details
@@ -52,7 +52,7 @@ The scorer evaluates sentiment consistency through tone pattern analysis and mod
    - Compares sentiment between texts
    - Calculates sentiment difference
    - Score = 1 - (sentiment_difference / max_difference)
-   **Tone Stability** (single input):
+     **Tone Stability** (single input):
    - Analyzes sentiment across sentences
    - Calculates sentiment variance
    - Score = 1 - (sentiment_variance / max_variance)

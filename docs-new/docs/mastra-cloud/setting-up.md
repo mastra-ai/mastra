@@ -63,7 +63,7 @@ Mastra Cloud automatically detects the right build settings, but you can customi
   - **Install command**: Runs pre-build to install project dependencies
   - **Project setup command**: Runs pre-build to prepare any external dependencies
   - **Port**: The network port the server will use
-  - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/docs/storage/overview) storage
+  - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/docs/server-db/storage) storage
 - **Deploy Project**: Starts the deployment process
 
 ### Deploy project
@@ -82,7 +82,7 @@ Your project is now configured with automatic deployments which occur whenever y
 
 ## Testing your application
 
-After a successful deployment you can test your agents and workflows from the [Playground](/docs/mastra-cloud/dashboard#playground) in Mastra Cloud, or interact with them using our [Client SDK](/docs/client-js/overview).
+After a successful deployment you can test your agents and workflows from the [Playground](/docs/mastra-cloud/dashboard#playground) in Mastra Cloud, or interact with them using our [Client SDK](/docs/server-db/mastra-client).
 
 ## Next steps
 

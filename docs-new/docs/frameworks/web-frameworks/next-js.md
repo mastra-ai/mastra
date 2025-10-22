@@ -38,7 +38,7 @@ Run the following command to quickly scaffold the default Weather agent with sen
 npx mastra@latest init --dir . --components agents,tools --example --llm openai
 ```
 
-> See [mastra init](/reference/cli/init) for more information.
+> See [mastra init](/docs/reference/cli/mastra#mastra-init) for more information.
 
 ### 2. Use the Interactive CLI
 
@@ -60,7 +60,7 @@ By default, `mastra init` suggests `src` as the install location. If you're usin
 OPENAI_API_KEY=<your-api-key>
 ```
 
-> Each LLM provider uses a different env var. See [Model Capabilities](/docs/getting-started/model-capability) for more information.
+> Each LLM provider uses a different env var. See [Model Capabilities](/docs/models) for more information.
 
 ## Configure Next.js
 
@@ -205,7 +205,7 @@ Run the following command to quickly scaffold the default Weather agent with sen
 npx mastra@latest init --dir . --components agents,tools --example --llm openai
 ```
 
-> See [mastra init](/reference/cli/init) for more information.
+> See [mastra init](/docs/reference/cli/mastra#mastra-init) for more information.
 
 ### 2. Use the Interactive CLI
 
@@ -227,7 +227,7 @@ By default, `mastra init` suggests `src` as the install location. If you're usin
 OPENAI_API_KEY=<your-api-key>
 ```
 
-> Each LLM provider uses a different env var. See [Model Capabilities](/docs/getting-started/model-capability) for more information.
+> Each LLM provider uses a different env var. See [Model Capabilities](/docs/models) for more information.
 
 ## Configure Next.js
 
@@ -335,4 +335,4 @@ Let me know if you need more information!
 ## Next Steps
 
 - [Deployment | With Next.js on Vercel](/docs/deployment/web-framework#with-nextjs-on-vercel)
-- [Monorepo Deployment](../../deployment/monorepo)
+- [Monorepo Deployment](/docs/deployment/monorepo)

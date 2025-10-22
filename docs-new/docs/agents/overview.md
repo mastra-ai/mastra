@@ -35,7 +35,7 @@ Mastra's model router auto-detects environment variables for your chosen provide
 OPENAI_API_KEY=<your-api-key>
 ```
 
-> Mastra supports more than 600 models. Choose from the full list [here](../getting-started/model-providers).
+> Mastra supports more than 600 models. Choose from the full list [here](/docs/models).
 
 ### Create an agent
 
@@ -128,7 +128,7 @@ instructions: {
 }
 ```
 
-> See the [Agent reference doc](../../reference/agents/agent) for more information.
+> See the [Agent reference doc](/docs/reference/agents/agent) for more information.
 
 ### Registering an agent
 
@@ -158,7 +158,7 @@ const testAgent = mastra.getAgent('testAgent');
 
 :::
 
-> See [Calling agents](../../examples/agents/calling-agents) for more information.
+> See [Calling agents](/docs/examples/agents/calling-agents) for more information.
 
 ## Generating responses
 
@@ -221,7 +221,7 @@ for await (const chunk of stream.textStream) {
   </TabItem>
 </Tabs>
 
-> See [.generate()](../../reference/agents/generate) or [.stream()](../../reference/agents/stream) for more information.
+> See [.generate()](/docs/reference/agents/generate) or [.stream()](/docs/reference/streaming/agents/stream) for more information.
 
 ## Structured output
 
@@ -342,7 +342,7 @@ const response = await agent.generate('Help me organize my day');
 console.log(response.text);
 ```
 
-> See [.generate()](../../reference/agents/generate) or [.stream()](../../reference/agents/stream) for more information.
+> See [.generate()](/docs/reference/agents/generate) or [.stream()](/docs/reference/streaming/agents/stream) for more information.
 
 To test this agent, run the following:
 
@@ -353,6 +353,6 @@ npx tsx src/test-agent.ts
 ## Related
 
 - [Agent Memory](./agent-memory)
-- [Dynamic Agents](./dynamic-agents)
+- [Dynamic Agents](/docs/examples/agents/dynamic-agents)
 - [Agent Tools and MCP](./using-tools-and-mcp)
-- [Calling Agents](../../examples/agents/calling-agents)
+- [Calling Agents](/docs/examples/agents/calling-agents)

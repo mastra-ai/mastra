@@ -1,6 +1,6 @@
 ---
-title: "Amazon EC2"
-description: "Deploy your Mastra applications to Amazon EC2."
+title: 'Amazon EC2'
+description: 'Deploy your Mastra applications to Amazon EC2.'
 ---
 
 import Tabs from '@theme/Tabs';
@@ -12,10 +12,10 @@ Deploy your Mastra applications to Amazon EC2 (Elastic Cloud Compute).
 
 :::note
 
-  This guide assumes your Mastra application has been created using the default
-  `npx create-mastra@latest` command.
-  For more information on how to create a new Mastra application,
-  refer to our [getting started guide](/docs/getting-started/installation)
+This guide assumes your Mastra application has been created using the default
+`npx create-mastra@latest` command.
+For more information on how to create a new Mastra application,
+refer to our [getting started guide](/docs/getting-started/installation)
 
 :::
 
@@ -29,8 +29,6 @@ Deploy your Mastra applications to Amazon EC2 (Elastic Cloud Compute).
 - Node.js 18+ installed on your instance
 
 ## Deployment Steps
-
-
 
 ### Clone your Mastra application
 
@@ -99,22 +97,20 @@ Your Mastra application will run on port 4111 by default. Ensure your reverse pr
 
 :::
 
-
-
 ## Connect to your Mastra server
 
 You can now connect to your Mastra server from your client application using a `MastraClient` from the `@mastra/client-js` package.
 
-Refer to the [`MastraClient` documentation](/docs/client-js/overview) for more information.
+Refer to the [`MastraClient` documentation](/docs/server-db/mastra-client) for more information.
 
 ```typescript copy showLineNumbers
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js';
 
 const mastraClient = new MastraClient({
-  baseUrl: "https://<your-domain-name>",
+  baseUrl: 'https://<your-domain-name>',
 });
 ```
 
 ## Next steps
 
-- [Mastra Client SDK](/docs/client-js/overview)
+- [Mastra Client SDK](/docs/server-db/mastra-client)

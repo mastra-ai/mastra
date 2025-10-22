@@ -68,5 +68,5 @@ try {
 
 - [step Reference](./step-class)
 - [after Reference](./after)
-- [Sequential Steps Example](../../examples/workflows_legacy/sequential-steps)
-- [Control Flow Guide](../../docs/workflows-legacy/control-flow)
+- [Sequential Steps Example](/docs/examples/workflows_legacy/sequential-steps)
+- [Control Flow Guide](/docs/workflows-legacy/control-flow)

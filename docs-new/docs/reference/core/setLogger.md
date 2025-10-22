@@ -43,5 +43,5 @@ This method does not return a value.
 
 ## Related
 
-- [Logging overview](../../docs/observability/logging)
-- [Logger reference](../../reference/observability/logger)
+- [Logging overview](/docs/observability/logging)
+- [Logger reference](/docs/reference/observability/logging/pino-logger)

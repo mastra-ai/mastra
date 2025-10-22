@@ -74,9 +74,9 @@ Snapshots are saved to the configured storage system. By default, they use LibSQ
 
 Read more about:
 
-- [LibSQL Storage](../../reference/storage/libsql)
-- [Upstash Storage](../../reference/storage/upstash)
-- [PostgreSQL Storage](../../reference/storage/postgresql)
+- [LibSQL Storage](/docs/reference/storage/libsql)
+- [Upstash Storage](/docs/reference/storage/upstash)
+- [PostgreSQL Storage](/docs/reference/storage/postgresql)
 
 ### Saving snapshots
 
@@ -249,6 +249,6 @@ if (result.status === 'suspended') {
 
 ## Related
 
-- [Suspend and resume](../../docs/workflows/suspend-and-resume)
-- [Human in the loop example](../../examples/workflows/human-in-the-loop)
-- [WorkflowRun.watch()](../../reference/workflows/run-methods/watch)
+- [Suspend and resume](/docs/workflows/suspend-and-resume)
+- [Human in the loop example](/docs/examples/workflows/human-in-the-loop)
+- [WorkflowRun.watch()](/docs/reference/workflows/run-methods/watch)

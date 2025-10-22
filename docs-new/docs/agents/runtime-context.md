@@ -37,7 +37,7 @@ export const dynamicAgent = new Agent({
 
 You can also use `runtimeContext` with other parameters like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
 
-> See [Agent](../../reference/agents/agent) for a full list of configuration options.
+> See [Agent](/docs/reference/agents/agent) for a full list of configuration options.
 
 ## Setting values
 

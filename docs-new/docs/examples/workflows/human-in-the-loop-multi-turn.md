@@ -65,7 +65,7 @@ Return only the person's name, nothing else.`,
 });
 ```
 
-> See [Agent](../../reference/agents/agent) for a full list of configuration options.
+> See [Agent](/docs/reference/agents/agent) for a full list of configuration options.
 
 ## Game agent
 
@@ -236,7 +236,7 @@ export const headsUpWorkflow = createWorkflow({
   .commit();
 ```
 
-> See [Workflow](../../reference/workflows/workflow) for a full list of configuration options.
+> See [Workflow](/docs/reference/workflows/workflow) for a full list of configuration options.
 
 ## Registering the agents and workflow
 
@@ -263,4 +263,4 @@ export const mastra = new Mastra({
 ## Related
 
 - [Running Workflows](./running-workflows)
-- [Control Flow](../../docs/workflows/control-flow)
+- [Control Flow](/docs/workflows/control-flow)

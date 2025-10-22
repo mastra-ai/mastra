@@ -93,7 +93,7 @@ const auth0Provider = new MastraAuthAuth0({
 });
 ```
 
-> See the [MastraAuthAuth0](/reference/auth/auth0) API reference for all available configuration options.
+> See the [MastraAuthAuth0](/docs/reference/auth/auth0) API reference for all available configuration options.
 
 ## Client-side setup
 

@@ -145,7 +145,7 @@ const metric = new ContextPrecisionMetric(openai('gpt-4o-mini'), {
 });
 ```
 
-> See [ContextPrecisionMetric](/reference/evals/context-precision) for a full list of configuration options.
+> See [ContextPrecisionMetric](/docs/reference/evals/context-precision) for a full list of configuration options.
 
 ## Understanding the results
 

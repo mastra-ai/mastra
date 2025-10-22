@@ -1,5 +1,5 @@
 ---
-title: "Reference: Content Similarity "
+title: 'Reference: Content Similarity '
 description: Documentation for the Content Similarity Scorer in Mastra, which measures textual similarity between strings and provides a matching score.
 ---
 
@@ -7,29 +7,29 @@ description: Documentation for the Content Similarity Scorer in Mastra, which me
 
 The `createContentSimilarityScorer()` function measures the textual similarity between two strings, providing a score that indicates how closely they match. It supports configurable options for case sensitivity and whitespace handling.
 
-For a usage example, see the [Content Similarity Examples](/examples/scorers/content-similarity).
+For a usage example, see the [Content Similarity Examples](/docs/examples/scorers/content-similarity).
 
 ## Parameters
 
 The `createContentSimilarityScorer()` function accepts a single options object with the following properties:
 
 <PropertiesTable
-  content={[
-    {
-      name: "ignoreCase",
-      type: "boolean",
-      required: false,
-      defaultValue: "true",
-      description: "Whether to ignore case differences when comparing strings.",
-    },
-    {
-      name: "ignoreWhitespace",
-      type: "boolean",
-      required: false,
-      defaultValue: "true",
-      description: "Whether to normalize whitespace when comparing strings.",
-    },
-  ]}
+content={[
+{
+name: "ignoreCase",
+type: "boolean",
+required: false,
+defaultValue: "true",
+description: "Whether to ignore case differences when comparing strings.",
+},
+{
+name: "ignoreWhitespace",
+type: "boolean",
+required: false,
+defaultValue: "true",
+description: "Whether to normalize whitespace when comparing strings.",
+},
+]}
 />
 
 This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
@@ -37,28 +37,28 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 ## .run() Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "preprocessStepResult",
-      type: "object",
-      description: "Object with processed input and output: { processedInput: string, processedOutput: string }",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description: "Object with similarity: { similarity: number }",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Similarity score (0-1) where 1 indicates perfect similarity.",
-    },
-  ]}
+content={[
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "preprocessStepResult",
+type: "object",
+description: "Object with processed input and output: { processedInput: string, processedOutput: string }",
+},
+{
+name: "analyzeStepResult",
+type: "object",
+description: "Object with similarity: { similarity: number }",
+},
+{
+name: "score",
+type: "number",
+description: "Similarity score (0-1) where 1 indicates perfect similarity.",
+},
+]}
 />
 
 ## Scoring Details

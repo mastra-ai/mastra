@@ -17,7 +17,7 @@ You'll learn how to create the agent and register it with Mastra. Next, you'll i
 ## Prerequisites
 
 - Node.js `v20.0` or later installed
-- An API key from a supported [Model Provider](/docs/getting-started/model-providers)
+- An API key from a supported [Model Provider](/docs/models/providers)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
 ## Creating the Agent
@@ -136,7 +136,7 @@ Great! You can make a comforting chicken curry...
 
 ### Generating a Recipe with Structured Data
 
-Instead of showing the agent's response to a human you might want to pass it along to another part of your code. For these instances your agent should return [structured output](../../docs/agents/overview#4-structured-output).
+Instead of showing the agent's response to a human you might want to pass it along to another part of your code. For these instances your agent should return [structured output](/docs/agents/overview#structured-output).
 
 Change your `src/index.ts` to the following:
 
@@ -202,7 +202,7 @@ You can run your agent as a service using the `mastra dev` command:
 mastra dev
 ```
 
-This will start a server exposing endpoints to interact with your registered agents. Within the [playground](../../docs/server-db/local-dev-playground) you can test your agent through a UI.
+This will start a server exposing endpoints to interact with your registered agents. Within the [playground](/docs/server-db/local-dev-playground) you can test your agent through a UI.
 
 ### Accessing the Chef Assistant API
 

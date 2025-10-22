@@ -153,7 +153,7 @@ const metric = new PromptAlignmentMetric(openai('gpt-4o-mini'), {
 });
 ```
 
-> See [PromptAlignmentMetric](/reference/evals/prompt-alignment) for a full list of configuration options.
+> See [PromptAlignmentMetric](/docs/reference/evals/prompt-alignment) for a full list of configuration options.
 
 ## Understanding the results
 

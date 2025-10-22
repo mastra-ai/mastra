@@ -1,5 +1,5 @@
 ---
-title: "Reference: MCPServer "
+title: 'Reference: MCPServer '
 description: API Reference for MCPServer - A class for exposing Mastra tools and capabilities as a Model Context Protocol server.
 ---
 
@@ -53,109 +53,109 @@ const server = new MCPServer({
 The constructor accepts an `MCPServerConfig` object with the following properties:
 
 <PropertiesTable
-  content={[
-    {
-      name: "name",
-      type: "string",
-      isOptional: false,
-      description:
-        "A descriptive name for your server (e.g., 'My Weather and Agent Server').",
-    },
-    {
-      name: "version",
-      type: "string",
-      isOptional: false,
-      description: "The semantic version of your server (e.g., '1.0.0').",
-    },
-    {
-      name: "tools",
-      type: "ToolsInput",
-      isOptional: false,
-      description:
-        "An object where keys are tool names and values are Mastra tool definitions (created with `createTool` or Vercel AI SDK). These tools will be directly exposed.",
-    },
-    {
-      name: "agents",
-      type: "Record<string, Agent>",
-      isOptional: true,
-      description:
-        "An object where keys are agent identifiers and values are Mastra Agent instances. Each agent will be automatically converted into a tool named `ask_<agentIdentifier>`. The agent **must** have a non-empty `description` string property defined in its constructor configuration. This description will be used in the tool's description. If an agent's description is missing or empty, an error will be thrown during MCPServer initialization.",
-    },
-    {
-      name: "workflows",
-      type: "Record<string, Workflow>",
-      isOptional: true,
-      description:
-        "An object where keys are workflow identifiers and values are Mastra Workflow instances. Each workflow is converted into a tool named `run_<workflowKey>`. The workflow's `inputSchema` becomes the tool's input schema. The workflow **must** have a non-empty `description` string property, which is used for the tool's description. If a workflow's description is missing or empty, an error will be thrown. The tool executes the workflow by calling `workflow.createRunAsync()` followed by `run.start({ inputData: <tool_input> })`. If a tool name derived from an agent or workflow (e.g., `ask_myAgent` or `run_myWorkflow`) collides with an explicitly defined tool name or another derived name, the explicitly defined tool takes precedence, and a warning is logged. Agents/workflows leading to subsequent collisions are skipped.",
-    },
-    {
-      name: "id",
-      type: "string",
-      isOptional: true,
-      description:
-        "Optional unique identifier for the server. If not provided, a UUID will be generated. This ID is considered final and cannot be changed by Mastra if provided.",
-    },
-    {
-      name: "description",
-      type: "string",
-      isOptional: true,
-      description: "Optional description of what the MCP server does.",
-    },
-    {
-      name: "repository",
-      type: "Repository", // { url: string; source: string; id: string; }
-      isOptional: true,
-      description:
-        "Optional repository information for the server's source code.",
-    },
-    {
-      name: "releaseDate",
-      type: "string", // ISO 8601
-      isOptional: true,
-      description:
-        "Optional release date of this server version (ISO 8601 string). Defaults to the time of instantiation if not provided.",
-    },
-    {
-      name: "isLatest",
-      type: "boolean",
-      isOptional: true,
-      description:
-        "Optional flag indicating if this is the latest version. Defaults to true if not provided.",
-    },
-    {
-      name: "packageCanonical",
-      type: "'npm' | 'docker' | 'pypi' | 'crates' | string",
-      isOptional: true,
-      description:
-        "Optional canonical packaging format if the server is distributed as a package (e.g., 'npm', 'docker').",
-    },
-    {
-      name: "packages",
-      type: "PackageInfo[]",
-      isOptional: true,
-      description: "Optional list of installable packages for this server.",
-    },
-    {
-      name: "remotes",
-      type: "RemoteInfo[]",
-      isOptional: true,
-      description: "Optional list of remote access points for this server.",
-    },
-    {
-      name: "resources",
-      type: "MCPServerResources",
-      isOptional: true,
-      description:
-        "An object defining how the server should handle MCP resources. See Resource Handling section for details.",
-    },
-    {
-      name: "prompts",
-      type: "MCPServerPrompts",
-      isOptional: true,
-      description:
-        "An object defining how the server should handle MCP prompts. See Prompt Handling section for details.",
-    },
-  ]}
+content={[
+{
+name: "name",
+type: "string",
+isOptional: false,
+description:
+"A descriptive name for your server (e.g., 'My Weather and Agent Server').",
+},
+{
+name: "version",
+type: "string",
+isOptional: false,
+description: "The semantic version of your server (e.g., '1.0.0').",
+},
+{
+name: "tools",
+type: "ToolsInput",
+isOptional: false,
+description:
+"An object where keys are tool names and values are Mastra tool definitions (created with `createTool` or Vercel AI SDK). These tools will be directly exposed.",
+},
+{
+name: "agents",
+type: "Record<string, Agent>",
+isOptional: true,
+description:
+"An object where keys are agent identifiers and values are Mastra Agent instances. Each agent will be automatically converted into a tool named `ask_<agentIdentifier>`. The agent **must** have a non-empty `description` string property defined in its constructor configuration. This description will be used in the tool's description. If an agent's description is missing or empty, an error will be thrown during MCPServer initialization.",
+},
+{
+name: "workflows",
+type: "Record<string, Workflow>",
+isOptional: true,
+description:
+"An object where keys are workflow identifiers and values are Mastra Workflow instances. Each workflow is converted into a tool named `run_<workflowKey>`. The workflow's `inputSchema` becomes the tool's input schema. The workflow **must** have a non-empty `description` string property, which is used for the tool's description. If a workflow's description is missing or empty, an error will be thrown. The tool executes the workflow by calling `workflow.createRunAsync()` followed by `run.start({ inputData: <tool_input> })`. If a tool name derived from an agent or workflow (e.g., `ask_myAgent` or `run_myWorkflow`) collides with an explicitly defined tool name or another derived name, the explicitly defined tool takes precedence, and a warning is logged. Agents/workflows leading to subsequent collisions are skipped.",
+},
+{
+name: "id",
+type: "string",
+isOptional: true,
+description:
+"Optional unique identifier for the server. If not provided, a UUID will be generated. This ID is considered final and cannot be changed by Mastra if provided.",
+},
+{
+name: "description",
+type: "string",
+isOptional: true,
+description: "Optional description of what the MCP server does.",
+},
+{
+name: "repository",
+type: "Repository", // { url: string; source: string; id: string; }
+isOptional: true,
+description:
+"Optional repository information for the server's source code.",
+},
+{
+name: "releaseDate",
+type: "string", // ISO 8601
+isOptional: true,
+description:
+"Optional release date of this server version (ISO 8601 string). Defaults to the time of instantiation if not provided.",
+},
+{
+name: "isLatest",
+type: "boolean",
+isOptional: true,
+description:
+"Optional flag indicating if this is the latest version. Defaults to true if not provided.",
+},
+{
+name: "packageCanonical",
+type: "'npm' | 'docker' | 'pypi' | 'crates' | string",
+isOptional: true,
+description:
+"Optional canonical packaging format if the server is distributed as a package (e.g., 'npm', 'docker').",
+},
+{
+name: "packages",
+type: "PackageInfo[]",
+isOptional: true,
+description: "Optional list of installable packages for this server.",
+},
+{
+name: "remotes",
+type: "RemoteInfo[]",
+isOptional: true,
+description: "Optional list of remote access points for this server.",
+},
+{
+name: "resources",
+type: "MCPServerResources",
+isOptional: true,
+description:
+"An object defining how the server should handle MCP resources. See Resource Handling section for details.",
+},
+{
+name: "prompts",
+type: "MCPServerPrompts",
+isOptional: true,
+description:
+"An object defining how the server should handle MCP prompts. See Prompt Handling section for details.",
+},
+]}
 />
 
 ## Exposing Agents as Tools
@@ -165,7 +165,6 @@ A powerful feature of `MCPServer` is its ability to automatically expose your Ma
 - **Tool Naming**: Each agent is converted into a tool named `ask_<agentKey>`, where `<agentKey>` is the key you used for that agent in the `agents` object. For instance, if you configure `agents: { myAgentKey: myAgentInstance }`, a tool named `ask_myAgentKey` will be created.
 
 - **Tool Functionality**:
-
   - **Description**: The generated tool's description will be in the format: "Ask agent `<AgentName>` a question. Original agent instructions: `<agent description>`".
   - **Input**: The tool expects a single object argument with a `message` property (string): `{ message: "Your question for the agent" }`.
   - **Execution**: When this tool is called, it invokes the `generate()` method of the corresponding agent, passing the provided `query`.
@@ -229,13 +228,13 @@ async startSSE({
 Here's an example of how you might use `startSSE` within an HTTP server request handler. In this example an MCP client could connect to your MCP server at `http://localhost:1234/sse`:
 
 ```typescript
-import http from "http";
+import http from 'http';
 
 const httpServer = http.createServer(async (req, res) => {
   await server.startSSE({
-    url: new URL(req.url || "", `http://localhost:1234`),
-    ssePath: "/sse",
-    messagePath: "/message",
+    url: new URL(req.url || '', `http://localhost:1234`),
+    ssePath: '/sse',
+    messagePath: '/message',
     req,
     res,
   });
@@ -249,36 +248,36 @@ httpServer.listen(PORT, () => {
 Here are the details for the values needed by the `startSSE` method:
 
 <PropertiesTable
-  content={[
-    {
-      name: "url",
-      type: "URL",
-      description: "The web address the user is requesting.",
-    },
-    {
-      name: "ssePath",
-      type: "string",
-      description:
-        "The specific part of the URL where clients will connect for SSE (e.g., '/sse').",
-    },
-    {
-      name: "messagePath",
-      type: "string",
-      description:
-        "The specific part of the URL where clients will send messages (e.g., '/message').",
-    },
-    {
-      name: "req",
-      type: "any",
-      description: "The incoming request object from your web server.",
-    },
-    {
-      name: "res",
-      type: "any",
-      description:
-        "The response object from your web server, used to send data back.",
-    },
-  ]}
+content={[
+{
+name: "url",
+type: "URL",
+description: "The web address the user is requesting.",
+},
+{
+name: "ssePath",
+type: "string",
+description:
+"The specific part of the URL where clients will connect for SSE (e.g., '/sse').",
+},
+{
+name: "messagePath",
+type: "string",
+description:
+"The specific part of the URL where clients will send messages (e.g., '/message').",
+},
+{
+name: "req",
+type: "any",
+description: "The incoming request object from your web server.",
+},
+{
+name: "res",
+type: "any",
+description:
+"The response object from your web server, used to send data back.",
+},
+]}
 />
 
 ### startHonoSSE()
@@ -304,13 +303,13 @@ async startHonoSSE({
 Here's an example of how you might use `startHonoSSE` within an HTTP server request handler. In this example an MCP client could connect to your MCP server at `http://localhost:1234/hono-sse`:
 
 ```typescript
-import http from "http";
+import http from 'http';
 
 const httpServer = http.createServer(async (req, res) => {
   await server.startHonoSSE({
-    url: new URL(req.url || "", `http://localhost:1234`),
-    ssePath: "/hono-sse",
-    messagePath: "/message",
+    url: new URL(req.url || '', `http://localhost:1234`),
+    ssePath: '/hono-sse',
+    messagePath: '/message',
     req,
     res,
   });
@@ -324,36 +323,36 @@ httpServer.listen(PORT, () => {
 Here are the details for the values needed by the `startHonoSSE` method:
 
 <PropertiesTable
-  content={[
-    {
-      name: "url",
-      type: "URL",
-      description: "The web address the user is requesting.",
-    },
-    {
-      name: "ssePath",
-      type: "string",
-      description:
-        "The specific part of the URL where clients will connect for SSE (e.g., '/hono-sse').",
-    },
-    {
-      name: "messagePath",
-      type: "string",
-      description:
-        "The specific part of the URL where clients will send messages (e.g., '/message').",
-    },
-    {
-      name: "req",
-      type: "any",
-      description: "The incoming request object from your web server.",
-    },
-    {
-      name: "res",
-      type: "any",
-      description:
-        "The response object from your web server, used to send data back.",
-    },
-  ]}
+content={[
+{
+name: "url",
+type: "URL",
+description: "The web address the user is requesting.",
+},
+{
+name: "ssePath",
+type: "string",
+description:
+"The specific part of the URL where clients will connect for SSE (e.g., '/hono-sse').",
+},
+{
+name: "messagePath",
+type: "string",
+description:
+"The specific part of the URL where clients will send messages (e.g., '/message').",
+},
+{
+name: "req",
+type: "any",
+description: "The incoming request object from your web server.",
+},
+{
+name: "res",
+type: "any",
+description:
+"The response object from your web server, used to send data back.",
+},
+]}
 />
 
 ### startHTTP()
@@ -379,7 +378,7 @@ async startHTTP({
 Here's an example of how you might use `startHTTP` within an HTTP server request handler. In this example an MCP client could connect to your MCP server at `http://localhost:1234/http`:
 
 ```typescript
-import http from "http";
+import http from 'http';
 
 const httpServer = http.createServer(async (req, res) => {
   await server.startHTTP({
@@ -401,71 +400,71 @@ httpServer.listen(PORT, () => {
 Here are the details for the values needed by the `startHTTP` method:
 
 <PropertiesTable
-  content={[
-    {
-      name: 'url',
-      type: 'URL',
-      description: 'The web address the user is requesting.',
-    },
-    {
-      name: 'httpPath',
-      type: 'string',
-      description:
-        "The specific part of the URL where the MCP server will handle HTTP requests (e.g., '/mcp').",
-    },
-    {
-      name: 'req',
-      type: 'http.IncomingMessage',
-      description: 'The incoming request object from your web server.',
-    },
-    {
-      name: 'res',
-      type: 'http.ServerResponse',
-      description:
-        'The response object from your web server, used to send data back.',
-    },
-    {
-      name: 'options',
-      type: 'StreamableHTTPServerTransportOptions',
-      description:
-        'Optional configuration for the HTTP transport. See the options table below for more details.',
-      optional: true,
-    },
-  ]}
+content={[
+{
+name: 'url',
+type: 'URL',
+description: 'The web address the user is requesting.',
+},
+{
+name: 'httpPath',
+type: 'string',
+description:
+"The specific part of the URL where the MCP server will handle HTTP requests (e.g., '/mcp').",
+},
+{
+name: 'req',
+type: 'http.IncomingMessage',
+description: 'The incoming request object from your web server.',
+},
+{
+name: 'res',
+type: 'http.ServerResponse',
+description:
+'The response object from your web server, used to send data back.',
+},
+{
+name: 'options',
+type: 'StreamableHTTPServerTransportOptions',
+description:
+'Optional configuration for the HTTP transport. See the options table below for more details.',
+optional: true,
+},
+]}
 />
 
 The `StreamableHTTPServerTransportOptions` object allows you to customize the behavior of the HTTP transport. Here are the available options:
 
 <PropertiesTable
-  content={[
-    {
-      name: 'sessionIdGenerator',
-      type: '(() => string) | undefined',
-      description:
-        'A function that generates a unique session ID. This should be a cryptographically secure, globally unique string. Return `undefined` to disable session management.',
-    },
-    {
-      name: 'onsessioninitialized',
-      type: '(sessionId: string) => void',
-      description:
-        'A callback that is invoked when a new session is initialized. This is useful for tracking active MCP sessions.',
-      optional: true,
-    },
-    {
-      name: 'enableJsonResponse',
-      type: 'boolean',
-      description:
-        'If `true`, the server will return plain JSON responses instead of using Server-Sent Events (SSE) for streaming. Defaults to `false`.',
-      optional: true,
-    },
-    {
-      name: 'eventStore',
-      type: 'EventStore',
-      description:
-        'An event store for message resumability. Providing this enables clients to reconnect and resume message streams.',
-      optional: true,
-    },
-  ]}
+content={[
+{
+name: 'sessionIdGenerator',
+type: '(() => string) | undefined',
+description:
+'A function that generates a unique session ID. This should be a cryptographically secure, globally unique string. Return `undefined` to disable session management.',
+},
+{
+name: 'onsessioninitialized',
+type: '(sessionId: string) => void',
+description:
+'A callback that is invoked when a new session is initialized. This is useful for tracking active MCP sessions.',
+optional: true,
+},
+{
+name: 'enableJsonResponse',
+type: 'boolean',
+description:
+'If `true`, the server will return plain JSON responses instead of using Server-Sent Events (SSE) for streaming. Defaults to `false`.',
+optional: true,
+},
+{
+name: 'eventStore',
+type: 'EventStore',
+description:
+'An event store for message resumability. Providing this enables clients to reconnect and resume message streams.',
+optional: true,
+},
+]}
 />
 
 ### close()
@@ -561,25 +560,25 @@ async executeTool(
 ```
 
 <PropertiesTable
-  content={[
-    {
-      name: "toolId",
-      type: "string",
-      description: "The ID/name of the tool to execute.",
-    },
-    {
-      name: "args",
-      type: "any",
-      description: "The arguments to pass to the tool\'s execute function.",
-    },
-    {
-      name: "executionContext",
-      type: "object",
-      isOptional: true,
-      description:
-        "Optional context for the tool execution, like messages or a toolCallId.",
-    },
-  ]}
+content={[
+{
+name: "toolId",
+type: "string",
+description: "The ID/name of the tool to execute.",
+},
+{
+name: "args",
+type: "any",
+description: "The arguments to pass to the tool\'s execute function.",
+},
+{
+name: "executionContext",
+type: "object",
+isOptional: true,
+description:
+"Optional context for the tool execution, like messages or a toolCallId.",
+},
+]}
 />
 
 ## Resource Handling
@@ -616,11 +615,7 @@ export type MCPServerResources = {
   listResources: () => Promise<Resource[]>;
 
   // Callback to get the content of a specific resource
-  getResourceContent: ({
-    uri,
-  }: {
-    uri: string;
-  }) => Promise<MCPServerResourceContent | MCPServerResourceContent[]>;
+  getResourceContent: ({ uri }: { uri: string }) => Promise<MCPServerResourceContent | MCPServerResourceContent[]>;
 
   // Optional callback to list available resource templates
   resourceTemplates?: () => Promise<ResourceTemplate[]>;
@@ -632,28 +627,22 @@ export type MCPServerResourceContent = { text?: string } | { blob?: string };
 Example:
 
 ```typescript
-import { MCPServer } from "@mastra/mcp";
-import type {
-  MCPServerResourceContent,
-  Resource,
-  ResourceTemplate,
-} from "@mastra/mcp";
+import { MCPServer } from '@mastra/mcp';
+import type { MCPServerResourceContent, Resource, ResourceTemplate } from '@mastra/mcp';
 
 // Resources/resource templates will generally be dynamically fetched.
-const myResources: Resource[] = [
-  { uri: "file://data/123.txt", name: "Data File", mimeType: "text/plain" },
-];
+const myResources: Resource[] = [{ uri: 'file://data/123.txt', name: 'Data File', mimeType: 'text/plain' }];
 
 const myResourceContents: Record<string, MCPServerResourceContent> = {
-  "file://data.txt/123": { text: "This is the content of the data file." },
+  'file://data.txt/123': { text: 'This is the content of the data file.' },
 };
 
 const myResourceTemplates: ResourceTemplate[] = [
   {
-    uriTemplate: "file://data/{id}",
-    name: "Data File",
-    description: "A file containing data.",
-    mimeType: "text/plain",
+    uriTemplate: 'file://data/{id}',
+    name: 'Data File',
+    description: 'A file containing data.',
+    mimeType: 'text/plain',
   },
 ];
 
@@ -669,8 +658,8 @@ const myResourceHandlers: MCPServerResources = {
 };
 
 const serverWithResources = new MCPServer({
-  name: "Resourceful Server",
-  version: "1.0.0",
+  name: 'Resourceful Server',
+  version: '1.0.0',
   tools: {
     /* ... your tools ... */
   },
@@ -694,7 +683,7 @@ Example:
 
 ```typescript
 // After updating the content of 'file://data.txt'
-await serverWithResources.resources.notifyUpdated({ uri: "file://data.txt" });
+await serverWithResources.resources.notifyUpdated({ uri: 'file://data.txt' });
 ```
 
 #### `server.resources.notifyListChanged()`
@@ -745,60 +734,62 @@ export type MCPServerPrompts = {
 Example:
 
 ```typescript
-import { MCPServer } from "@mastra/mcp";
-import type { Prompt, PromptMessage, MCPServerPrompts } from "@mastra/mcp";
+import { MCPServer } from '@mastra/mcp';
+import type { Prompt, PromptMessage, MCPServerPrompts } from '@mastra/mcp';
 
 const prompts: Prompt[] = [
   {
-    name: "analyze-code",
-    description: "Analyze code for improvements",
-    version: "v1"
+    name: 'analyze-code',
+    description: 'Analyze code for improvements',
+    version: 'v1',
   },
   {
-    name: "analyze-code",
-    description: "Analyze code for improvements (new logic)",
-    version: "v2"
-  }
+    name: 'analyze-code',
+    description: 'Analyze code for improvements (new logic)',
+    version: 'v2',
+  },
 ];
 
 const myPromptHandlers: MCPServerPrompts = {
   listPrompts: async () => prompts,
   getPromptMessages: async ({ name, version, args }) => {
-    if (name === "analyze-code") {
-      if (version === "v2") {
-        const prompt = prompts.find(p => p.name === name && p.version === "v2");
-        if (!prompt) throw new Error("Prompt version not found");
+    if (name === 'analyze-code') {
+      if (version === 'v2') {
+        const prompt = prompts.find(p => p.name === name && p.version === 'v2');
+        if (!prompt) throw new Error('Prompt version not found');
         return {
           prompt,
           messages: [
             {
-              role: "user",
-              content: { type: "text", text: `Analyze this code with the new logic: ${args.code}` }
-            }
-          ]
+              role: 'user',
+              content: { type: 'text', text: `Analyze this code with the new logic: ${args.code}` },
+            },
+          ],
         };
       }
       // Default or v1
-      const prompt = prompts.find(p => p.name === name && p.version === "v1");
-      if (!prompt) throw new Error("Prompt version not found");
+      const prompt = prompts.find(p => p.name === name && p.version === 'v1');
+      if (!prompt) throw new Error('Prompt version not found');
       return {
         prompt,
         messages: [
           {
-            role: "user",
-            content: { type: "text", text: `Analyze this code: ${args.code}` }
-          }
-        ]
+            role: 'user',
+            content: { type: 'text', text: `Analyze this code: ${args.code}` },
+          },
+        ],
       };
     }
-    throw new Error("Prompt not found");
-  }
+    throw new Error('Prompt not found');
+  },
 };
 
 const serverWithPrompts = new MCPServer({
-  name: "Promptful Server",
-  version: "1.0.0",
-  tools: { /* ... */ },
+  name: 'Promptful Server',
+  version: '1.0.0',
+  tools: {
+    /* ... */
+  },
   prompts: myPromptHandlers,
 });
 ```
@@ -829,7 +820,7 @@ await serverWithPrompts.prompts.notifyListChanged();
 
 ## Examples
 
-For practical examples of setting up and deploying an MCPServer, see the [Deploying an MCPServer Example](/examples/agents/deploying-mcp-server).
+For practical examples of setting up and deploying an MCPServer, see the [Deploying an MCPServer Example](/docs/examples/agents/deploying-mcp-server).
 
 The example at the beginning of this page also demonstrates how to instantiate `MCPServer` with both tools and agents.
 
@@ -849,20 +840,22 @@ When tools are executed within an MCP server context, they receive an additional
 execute: async ({ context }, options) => {
   // context contains the tool's input parameters
   // options contains server capabilities like elicitation and authentication info
-  
+
   // Access authentication information (when available)
   if (options.extra?.authInfo) {
     console.log('Authenticated request from:', options.extra.authInfo.clientId);
   }
-  
+
   // Use elicitation capabilities
   const result = await options.elicitation.sendRequest({
-    message: "Please provide information",
-    requestedSchema: { /* schema */ }
+    message: 'Please provide information',
+    requestedSchema: {
+      /* schema */
+    },
   });
-  
+
   return result;
-}
+};
 ```
 
 ### How Elicitation Works
@@ -881,30 +874,30 @@ A common use case is during tool execution. When a tool needs user input, it can
 Here's an example of a tool that uses elicitation to collect user contact information:
 
 ```typescript
-import { MCPServer } from "@mastra/mcp";
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { MCPServer } from '@mastra/mcp';
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
 const server = new MCPServer({
-  name: "Interactive Server",
-  version: "1.0.0",
+  name: 'Interactive Server',
+  version: '1.0.0',
   tools: {
     collectContactInfo: createTool({
-      id: "collectContactInfo",
-      description: "Collects user contact information through elicitation",
+      id: 'collectContactInfo',
+      description: 'Collects user contact information through elicitation',
       inputSchema: z.object({
-        reason: z.string().optional().describe("Reason for collecting contact info"),
+        reason: z.string().optional().describe('Reason for collecting contact info'),
       }),
       execute: async ({ context }, options) => {
         const { reason } = context;
-        
+
         // Log session info if available
         console.log('Request from session:', options.extra?.sessionId);
 
         try {
           // Request user input via elicitation
           const result = await options.elicitation.sendRequest({
-            message: reason 
+            message: reason
               ? `Please provide your contact information. ${reason}`
               : 'Please provide your contact information',
             requestedSchema: {
@@ -917,7 +910,7 @@ const server = new MCPServer({
                 },
                 email: {
                   type: 'string',
-                  title: 'Email Address', 
+                  title: 'Email Address',
                   description: 'Your email address',
                   format: 'email',
                 },
@@ -1017,7 +1010,7 @@ execute: async ({ context }, options) => {
     message: string,           // Message to display to user
     requestedSchema: object    // JSON schema defining expected response structure
   }): Promise<ElicitResult>
-  
+
   // Access authentication info if needed
   if (options.extra?.authInfo) {
     // Use options.extra.authInfo.token, etc.
@@ -1033,7 +1026,7 @@ The `ElicitResult` type:
 type ElicitResult = {
   action: 'accept' | 'decline' | 'cancel';
   content?: any; // Only present when action is 'accept'
-}
+};
 ```
 
 ## Authentication Context
@@ -1043,31 +1036,33 @@ Tools can access request metadata via `options.extra` when using HTTP-based tran
 ```typescript
 execute: async ({ context }, options) => {
   if (!options.extra?.authInfo?.token) {
-    return "Authentication required";
+    return 'Authentication required';
   }
-  
+
   // Use the auth token
   const response = await fetch('/api/data', {
     headers: { Authorization: `Bearer ${options.extra.authInfo.token}` },
     signal: options.extra.signal,
   });
-  
+
   return response.json();
-}
+};
 ```
 
 The `extra` object contains:
+
 - `authInfo`: Authentication info (when provided by server middleware)
-- `sessionId`: Session identifier  
+- `sessionId`: Session identifier
 - `signal`: AbortSignal for cancellation
 - `sendNotification`/`sendRequest`: MCP protocol functions
 
 > Note: To enable authentication, your HTTP server needs middleware that populates `req.auth` before calling `server.startHTTP()`. For example:
+>
 > ```typescript
 > httpServer.createServer((req, res) => {
 >   // Add auth middleware
 >   req.auth = validateAuthToken(req.headers.authorization);
->   
+>
 >   // Then pass to MCP server
 >   await server.startHTTP({ url, httpPath, req, res });
 > });

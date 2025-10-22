@@ -1,6 +1,6 @@
 ---
-title: "Cloud Providers"
-description: "Deploy your Mastra applications to popular cloud providers."
+title: 'Cloud Providers'
+description: 'Deploy your Mastra applications to popular cloud providers.'
 ---
 
 ## Cloud Providers
@@ -12,7 +12,7 @@ Standalone Mastra applications can be deployed to popular cloud providers, see o
 - [Digital Ocean](/docs/deployment/cloud-providers/digital-ocean)
 - [Azure App Services](/docs/deployment/cloud-providers/azure-app-services)
 
-For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/docs/deployment/server) guide.
+For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/docs/deployment/server-deployment) guide.
 
 ## Prerequisites
 
@@ -33,20 +33,23 @@ Specifically, ensure you've removed it from both `src/mastra/index.ts` and `src/
 ```typescript filename="src/mastra/index.ts" showLineNumbers
 export const mastra = new Mastra({
   // ...
-  storage: new LibSQLStore({ // [!code --]
+  storage: new LibSQLStore({
+    // [!code --]
     // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db // [!code --]
-    url: ":memory:", // [!code --]
-  })//[!code --]
+    url: ':memory:', // [!code --]
+  }), //[!code --]
 });
 ```
 
 ```typescript filename="src/mastra/agents/weather-agent.ts" showLineNumbers
 export const weatherAgent = new Agent({
- // ..
- memory: new Memory({  // [!code --]
-   storage: new LibSQLStore({ // [!code --]
-      url: "file:../mastra.db" // path is relative to the .mastra/output directory // [!code --]
-   }) // [!code --]
- })//  [!code --]
+  // ..
+  memory: new Memory({
+    // [!code --]
+    storage: new LibSQLStore({
+      // [!code --]
+      url: 'file:../mastra.db', // path is relative to the .mastra/output directory // [!code --]
+    }), // [!code --]
+  }), //  [!code --]
 });
 ```

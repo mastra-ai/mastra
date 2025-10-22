@@ -140,7 +140,7 @@ const metric = new ContextualRecallMetric(openai('gpt-4o-mini'), {
 });
 ```
 
-> See [ContextualRecallMetric](/reference/evals/contextual-recall) for a full list of configuration options.
+> See [ContextualRecallMetric](/docs/reference/evals/contextual-recall) for a full list of configuration options.
 
 ## Understanding the results
 

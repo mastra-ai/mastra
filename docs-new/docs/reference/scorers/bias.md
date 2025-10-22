@@ -1,32 +1,32 @@
 ---
-title: "Reference: Bias "
+title: 'Reference: Bias '
 description: Documentation for the Bias Scorer in Mastra, which evaluates LLM outputs for various forms of bias, including gender, political, racial/ethnic, or geographical bias.
 ---
 
 # Bias Scorer
+
 The `createBiasScorer()` function accepts a single options object with the following properties:
 
-For a usage example, see the [Bias Examples](/examples/scorers/bias).
+For a usage example, see the [Bias Examples](/docs/examples/scorers/bias).
 
 ## Parameters
 
-
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "LanguageModel",
-      required: true,
-      description: "Configuration for the model used to evaluate bias.",
-    },
-    {
-      name: "scale",
-      type: "number",
-      required: false,
-      defaultValue: "1",
-      description: "Maximum score value.",
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "LanguageModel",
+required: true,
+description: "Configuration for the model used to evaluate bias.",
+},
+{
+name: "scale",
+type: "number",
+required: false,
+defaultValue: "1",
+description: "Maximum score value.",
+},
+]}
 />
 
 This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
@@ -34,48 +34,48 @@ This function returns an instance of the MastraScorer class. The `.run()` method
 ## .run() Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "preprocessStepResult",
-      type: "object",
-      description: "Object with extracted opinions: { opinions: string[] }",
-    },
-    {
-      name: "preprocessPrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the preprocess step (optional).",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description: "Object with results: { results: Array<{ result: 'yes' | 'no', reason: string }> }",
-    },
-    {
-      name: "analyzePrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the analyze step (optional).",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Bias score (0 to scale, default 0-1). Higher scores indicate more bias.",
-    },
-    {
-      name: "reason",
-      type: "string",
-      description: "Explanation of the score.",
-    },
-    {
-      name: "generateReasonPrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the generateReason step (optional).",
-    },
-  ]}
+content={[
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "preprocessStepResult",
+type: "object",
+description: "Object with extracted opinions: { opinions: string[] }",
+},
+{
+name: "preprocessPrompt",
+type: "string",
+description: "The prompt sent to the LLM for the preprocess step (optional).",
+},
+{
+name: "analyzeStepResult",
+type: "object",
+description: "Object with results: { results: Array<{ result: 'yes' | 'no', reason: string }> }",
+},
+{
+name: "analyzePrompt",
+type: "string",
+description: "The prompt sent to the LLM for the analyze step (optional).",
+},
+{
+name: "score",
+type: "number",
+description: "Bias score (0 to scale, default 0-1). Higher scores indicate more bias.",
+},
+{
+name: "reason",
+type: "string",
+description: "Explanation of the score.",
+},
+{
+name: "generateReasonPrompt",
+type: "string",
+description: "The prompt sent to the LLM for the generateReason step (optional).",
+},
+]}
 />
 
 ## Bias Categories

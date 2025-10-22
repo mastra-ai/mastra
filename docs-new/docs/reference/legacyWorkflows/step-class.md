@@ -96,5 +96,5 @@ description: "Access to Mastra instance",
 ## Related
 
 - [Workflow Reference](./workflow)
-- [Step Configuration Guide](../../docs/workflows-legacy/steps)
-- [Control Flow Guide](../../docs/workflows-legacy/control-flow)
+- [Step Configuration Guide](/docs/workflows-legacy/steps)
+- [Control Flow Guide](/docs/workflows-legacy/control-flow)

@@ -1,5 +1,5 @@
 ---
-title: "Getting started with Mastra and Express "
+title: 'Getting started with Mastra and Express '
 description: A step-by-step guide to integrating Mastra with an Express backend.
 ---
 
@@ -19,11 +19,11 @@ In this guide you'll learn how to install the necessary Mastra dependencies, cre
 
 - An existing Express app set up with TypeScript
 - Node.js `v20.0` or higher
-- An API key from a supported [Model Provider](/docs/getting-started/model-providers)
+- An API key from a supported [Model Provider](/docs/models/providers)
 
 ## Adding Mastra
 
-First, install the necessary Mastra dependencies to run an Agent. This guide uses OpenAI as its model but you can use any supported [model provider](/docs/getting-started/model-providers).
+First, install the necessary Mastra dependencies to run an Agent. This guide uses OpenAI as its model but you can use any supported [model provider](/docs/models/providers).
 
 ```bash copy
 npm install mastra@latest @mastra/core@latest @mastra/libsql@latest zod@^3.0.0 @ai-sdk/openai@^1.0.0
@@ -37,7 +37,7 @@ OPENAI_API_KEY=<your-api-key>
 
 :::note
 
-Each LLM provider uses a different env var. See [Model Capabilities](/docs/getting-started/model-capability) for more information.
+Each LLM provider uses a different env var. See [Model Capabilities](/docs/models) for more information.
 
 :::
 
@@ -52,33 +52,33 @@ export const mastra = new Mastra({});
 Create a `weatherTool` that the `weatherAgent` will use at `src/mastra/tools/weather-tool.ts`. It returns a placeholder value inside the `execute()` function (you'd put your API calls in here).
 
 ```ts filename="src/mastra/tools/weather-tool.ts" copy
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
- 
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+
 export const weatherTool = createTool({
-  id: "get-weather",
-  description: "Get current weather for a location",
+  id: 'get-weather',
+  description: 'Get current weather for a location',
   inputSchema: z.object({
-    location: z.string().describe("City name")
+    location: z.string().describe('City name'),
   }),
   outputSchema: z.object({
-    output: z.string()
+    output: z.string(),
   }),
   execute: async () => {
     return {
-      output: "The weather is sunny"
+      output: 'The weather is sunny',
     };
-  }
+  },
 });
 ```
 
 Add a `weatherAgent` at `src/mastra/agents/weather-agent.ts`:
 
 ```ts filename="src/mastra/agents/weather-agent.ts" copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-import { weatherTool } from "../tools/weather-tool";
- 
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { weatherTool } from '../tools/weather-tool';
+
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
   instructions: `
@@ -94,7 +94,7 @@ export const weatherAgent = new Agent({
       Use the weatherTool to fetch current weather data.
 `,
   model: openai('gpt-4o-mini'),
-  tools: { weatherTool }
+  tools: { weatherTool },
 });
 ```
 
@@ -107,7 +107,6 @@ import { weatherAgent } from './agents/weather-agent';
 export const mastra = new Mastra({
   agents: { weatherAgent },
 });
-
 ```
 
 Now you're done with setting up the Mastra boilerplate code and are ready to integrate it into your Express routes.
@@ -137,7 +136,7 @@ Adding the `/api/weather` endpoint looks like this:
 
 ```ts filename="src/server.ts" copy {2, 11-27}
 import express, { Request, Response } from 'express';
-import { mastra } from "./mastra"
+import { mastra } from './mastra';
 
 const app = express();
 const port = 3456;
@@ -146,21 +145,21 @@ app.get('/', (req: Request, res: Response) => {
   res.send('Hello, world!');
 });
 
-app.get("/api/weather", async (req: Request, res: Response) => {
+app.get('/api/weather', async (req: Request, res: Response) => {
   const { city } = req.query as { city?: string };
- 
+
   if (!city) {
     return res.status(400).send("Missing 'city' query parameter");
   }
- 
-  const agent = mastra.getAgent("weatherAgent");
- 
+
+  const agent = mastra.getAgent('weatherAgent');
+
   try {
     const result = await agent.generate(`What's the weather like in ${city}?`);
     res.send(result.text);
   } catch (error) {
-    console.error("Agent error:", error);
-    res.status(500).send("An error occurred while processing your request");
+    console.error('Agent error:', error);
+    res.status(500).send('An error occurred while processing your request');
   }
 });
 
@@ -169,11 +168,11 @@ app.listen(port, () => {
 });
 ```
 
-By importing the `src/mastra/index.ts` file you can use methods like [`.getAgent()`](/reference/agents/getAgent) to get programmatic access. With [`.generate()`](/reference/agents/generate) you then can interact with the respective agent.
+By importing the `src/mastra/index.ts` file you can use methods like [`.getAgent()`](/docs/reference/core/getAgent) to get programmatic access. With [`.generate()`](/docs/reference/agents/generate) you then can interact with the respective agent.
 
 :::note
 
-Read the [Agent reference docs](/reference/agents/agent) to learn more.
+Read the [Agent reference docs](/docs/reference/agents/agent) to learn more.
 
 :::
 
@@ -199,7 +198,7 @@ Add a script to your `package.json`:
 {
   "scripts": {
     "mastra:dev": "mastra dev"
-  },
+  }
 }
 ```
 

@@ -1,8 +1,7 @@
 ---
-title: "Reference: Prompt Alignment Scorer "
+title: 'Reference: Prompt Alignment Scorer '
 description: Documentation for the Prompt Alignment Scorer in Mastra. Evaluates how well agent responses align with user prompt intent, requirements, completeness, and appropriateness using multi-dimensional analysis.
 ---
-
 
 # Prompt Alignment Scorer
 
@@ -11,51 +10,51 @@ The `createPromptAlignmentScorerLLM()` function creates a scorer that evaluates 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "MastraLanguageModel",
-      description: "The language model to use for evaluating prompt-response alignment",
-      required: true,
-    },
-    {
-      name: "options",
-      type: "PromptAlignmentOptions",
-      description: "Configuration options for the scorer",
-      required: false,
-      children: [
-        {
-          name: "scale",
-          type: "number",
-          description: "Scale factor to multiply the final score (default: 1)",
-          required: false,
-        },
-        {
-          name: "evaluationMode",
-          type: "'user' | 'system' | 'both'",
-          description: "Evaluation mode - 'user' evaluates user prompt alignment only, 'system' evaluates system compliance only, 'both' evaluates both with weighted scoring (default: 'both')",
-          required: false,
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "MastraLanguageModel",
+description: "The language model to use for evaluating prompt-response alignment",
+required: true,
+},
+{
+name: "options",
+type: "PromptAlignmentOptions",
+description: "Configuration options for the scorer",
+required: false,
+children: [
+{
+name: "scale",
+type: "number",
+description: "Scale factor to multiply the final score (default: 1)",
+required: false,
+},
+{
+name: "evaluationMode",
+type: "'user' | 'system' | 'both'",
+description: "Evaluation mode - 'user' evaluates user prompt alignment only, 'system' evaluates system compliance only, 'both' evaluates both with weighted scoring (default: 'both')",
+required: false,
+},
+],
+},
+]}
 />
 
 ## .run() Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "score",
-      type: "number",
-      description: "Multi-dimensional alignment score between 0 and scale (default 0-1)",
-    },
-    {
-      name: "reason",
-      type: "string",
-      description: "Human-readable explanation of the prompt alignment evaluation with detailed breakdown",
-    },
-  ]}
+content={[
+{
+name: "score",
+type: "number",
+description: "Multi-dimensional alignment score between 0 and scale (default 0-1)",
+},
+{
+name: "reason",
+type: "string",
+description: "Human-readable explanation of the prompt alignment evaluation with detailed breakdown",
+},
+]}
 />
 
 ## Scoring Details
@@ -65,14 +64,16 @@ The `createPromptAlignmentScorerLLM()` function creates a scorer that evaluates 
 Prompt Alignment evaluates responses across four key dimensions with weighted scoring that adapts based on the evaluation mode:
 
 #### User Mode ('user')
+
 Evaluates alignment with user prompts only:
 
 1. **Intent Alignment** (40% weight) - Whether the response addresses the user's core request
 2. **Requirements Fulfillment** (30% weight) - If all user requirements are met
-3. **Completeness** (20% weight) - Whether the response is comprehensive for user needs  
+3. **Completeness** (20% weight) - Whether the response is comprehensive for user needs
 4. **Response Appropriateness** (10% weight) - If format and tone match user expectations
 
 #### System Mode ('system')
+
 Evaluates compliance with system guidelines only:
 
 1. **Intent Alignment** (35% weight) - Whether the response follows system behavioral guidelines
@@ -81,6 +82,7 @@ Evaluates compliance with system guidelines only:
 4. **Response Appropriateness** (15% weight) - If format and tone match system specifications
 
 #### Both Mode ('both' - default)
+
 Combines evaluation of both user and system alignment:
 
 - **User alignment**: 70% of final score (using user mode weights)
@@ -90,28 +92,32 @@ Combines evaluation of both user and system alignment:
 ### Scoring Formula
 
 **User Mode:**
+
 ```
-Weighted Score = (intent_score × 0.4) + (requirements_score × 0.3) + 
+Weighted Score = (intent_score × 0.4) + (requirements_score × 0.3) +
                  (completeness_score × 0.2) + (appropriateness_score × 0.1)
 Final Score = Weighted Score × scale
 ```
 
 **System Mode:**
+
 ```
-Weighted Score = (intent_score × 0.35) + (requirements_score × 0.35) + 
+Weighted Score = (intent_score × 0.35) + (requirements_score × 0.35) +
                  (completeness_score × 0.15) + (appropriateness_score × 0.15)
 Final Score = Weighted Score × scale
 ```
 
 **Both Mode (default):**
+
 ```
 User Score = (user dimensions with user weights)
-System Score = (system dimensions with system weights)  
+System Score = (system dimensions with system weights)
 Weighted Score = (User Score × 0.7) + (System Score × 0.3)
 Final Score = Weighted Score × scale
 ```
 
 **Weight Distribution Rationale**:
+
 - **User Mode**: Prioritizes intent (40%) and requirements (30%) for user satisfaction
 - **System Mode**: Balances behavioral compliance (35%) and constraints (35%) equally
 - **Both Mode**: 70/30 split ensures user needs are primary while maintaining system compliance
@@ -127,28 +133,31 @@ Final Score = Weighted Score × scale
 
 ### Comparison with Other Scorers
 
-| Aspect | Prompt Alignment | Answer Relevancy | Faithfulness |
-|--------|------------------|------------------|--------------|
-| **Focus** | Multi-dimensional prompt adherence | Query-response relevance | Context groundedness |
+| Aspect         | Prompt Alignment                           | Answer Relevancy             | Faithfulness                     |
+| -------------- | ------------------------------------------ | ---------------------------- | -------------------------------- |
+| **Focus**      | Multi-dimensional prompt adherence         | Query-response relevance     | Context groundedness             |
 | **Evaluation** | Intent, requirements, completeness, format | Semantic similarity to query | Factual consistency with context |
-| **Use Case** | General prompt following | Information retrieval | RAG/context-based systems |
-| **Dimensions** | 4 weighted dimensions | Single relevance dimension | Single faithfulness dimension |
+| **Use Case**   | General prompt following                   | Information retrieval        | RAG/context-based systems        |
+| **Dimensions** | 4 weighted dimensions                      | Single relevance dimension   | Single faithfulness dimension    |
 
 ### When to Use Each Mode
 
 **User Mode (`'user'`)** - Use when:
+
 - Evaluating customer service responses for user satisfaction
-- Testing content generation quality from user perspective  
+- Testing content generation quality from user perspective
 - Measuring how well responses address user questions
 - Focusing purely on request fulfillment without system constraints
 
 **System Mode (`'system'`)** - Use when:
+
 - Auditing AI safety and compliance with behavioral guidelines
 - Ensuring agents follow brand voice and tone requirements
 - Validating adherence to content policies and constraints
 - Testing system-level behavioral consistency
 
 **Both Mode (`'both'`)** - Use when (default, recommended):
+
 - Comprehensive evaluation of overall AI agent performance
 - Balancing user satisfaction with system compliance
 - Production monitoring where both user and system requirements matter
@@ -168,19 +177,21 @@ const scorer = createPromptAlignmentScorerLLM({
 
 // Evaluate a code generation task
 const result = await scorer.run({
-  input: [{
-    role: 'user',
-    content: 'Write a Python function to calculate factorial with error handling'
-  }],
+  input: [
+    {
+      role: 'user',
+      content: 'Write a Python function to calculate factorial with error handling',
+    },
+  ],
   output: {
-    role: 'assistant', 
+    role: 'assistant',
     text: `def factorial(n):
     if n < 0:
         raise ValueError("Factorial not defined for negative numbers")
     if n == 0:
         return 1
-    return n * factorial(n-1)`
-  }
+    return n * factorial(n-1)`,
+  },
 });
 // Result: { score: 0.95, reason: "Excellent alignment - function addresses intent, includes error handling..." }
 ```
@@ -193,20 +204,20 @@ const scorer = createPromptAlignmentScorerLLM({
   model: openai('gpt-4o'),
   options: {
     scale: 10, // Score from 0-10 instead of 0-1
-    evaluationMode: 'both' // 'user', 'system', or 'both' (default)
+    evaluationMode: 'both', // 'user', 'system', or 'both' (default)
   },
 });
 
 // User-only evaluation - focus on user satisfaction
 const userScorer = createPromptAlignmentScorerLLM({
   model: openai('gpt-4o'),
-  options: { evaluationMode: 'user' }
+  options: { evaluationMode: 'user' },
 });
 
 // System-only evaluation - focus on compliance
 const systemScorer = createPromptAlignmentScorerLLM({
   model: openai('gpt-4o'),
-  options: { evaluationMode: 'system' }
+  options: { evaluationMode: 'system' },
 });
 
 const result = await scorer.run(testRun);
@@ -218,14 +229,16 @@ const result = await scorer.run(testRun);
 ```typescript
 // Evaluate bullet point formatting
 const result = await scorer.run({
-  input: [{
-    role: 'user',
-    content: 'List the benefits of TypeScript in bullet points'
-  }],
+  input: [
+    {
+      role: 'user',
+      content: 'List the benefits of TypeScript in bullet points',
+    },
+  ],
   output: {
     role: 'assistant',
-    text: 'TypeScript provides static typing, better IDE support, and enhanced code reliability.'
-  }
+    text: 'TypeScript provides static typing, better IDE support, and enhanced code reliability.',
+  },
 });
 // Result: Lower appropriateness score due to format mismatch (paragraph vs bullet points)
 ```
@@ -233,21 +246,25 @@ const result = await scorer.run({
 ## Usage Patterns
 
 ### Code Generation Evaluation
+
 Ideal for evaluating:
+
 - Programming task completion
-- Code quality and completeness  
+- Code quality and completeness
 - Adherence to coding requirements
 - Format specifications (functions, classes, etc.)
 
 ```typescript
 // Example: API endpoint creation
-const codePrompt = "Create a REST API endpoint with authentication and rate limiting";
-// Scorer evaluates: intent (API creation), requirements (auth + rate limiting), 
+const codePrompt = 'Create a REST API endpoint with authentication and rate limiting';
+// Scorer evaluates: intent (API creation), requirements (auth + rate limiting),
 // completeness (full implementation), format (code structure)
 ```
 
 ### Instruction Following Assessment
+
 Perfect for:
+
 - Task completion verification
 - Multi-step instruction adherence
 - Requirement compliance checking
@@ -255,12 +272,14 @@ Perfect for:
 
 ```typescript
 // Example: Multi-requirement task
-const taskPrompt = "Write a Python class with initialization, validation, error handling, and documentation";
+const taskPrompt = 'Write a Python class with initialization, validation, error handling, and documentation';
 // Scorer tracks each requirement individually and provides detailed breakdown
 ```
 
 ### Content Format Validation
+
 Useful for:
+
 - Format specification compliance
 - Style guide adherence
 - Output structure verification
@@ -268,13 +287,14 @@ Useful for:
 
 ```typescript
 // Example: Structured output
-const formatPrompt = "Explain the differences between let and const in JavaScript using bullet points";
+const formatPrompt = 'Explain the differences between let and const in JavaScript using bullet points';
 // Scorer evaluates content accuracy AND format compliance
 ```
 
 ## Common Use Cases
 
 ### 1. Agent Response Quality
+
 Measure how well your AI agents follow user instructions:
 
 ```typescript
@@ -287,32 +307,33 @@ const agent = new Agent({
 // Evaluate comprehensive alignment (default)
 const scorer = createPromptAlignmentScorerLLM({
   model: openai('gpt-4o-mini'),
-  options: { evaluationMode: 'both' } // Evaluates both user intent and system guidelines
+  options: { evaluationMode: 'both' }, // Evaluates both user intent and system guidelines
 });
 
 // Evaluate just user satisfaction
 const userScorer = createPromptAlignmentScorerLLM({
   model: openai('gpt-4o-mini'),
-  options: { evaluationMode: 'user' } // Focus only on user request fulfillment
+  options: { evaluationMode: 'user' }, // Focus only on user request fulfillment
 });
 
 // Evaluate system compliance
 const systemScorer = createPromptAlignmentScorerLLM({
   model: openai('gpt-4o-mini'),
-  options: { evaluationMode: 'system' } // Check adherence to system instructions
+  options: { evaluationMode: 'system' }, // Check adherence to system instructions
 });
 
 const result = await scorer.run(agentRun);
 ```
 
 ### 2. Prompt Engineering Optimization
+
 Test different prompts to improve alignment:
 
 ```typescript
 const prompts = [
   'Write a function to calculate factorial',
   'Create a Python function that calculates factorial with error handling for negative inputs',
-  'Implement a factorial calculator in Python with: input validation, error handling, and docstring'
+  'Implement a factorial calculator in Python with: input validation, error handling, and docstring',
 ];
 
 // Compare alignment scores to find the best prompt
@@ -323,6 +344,7 @@ for (const prompt of prompts) {
 ```
 
 ### 3. Multi-Agent System Evaluation
+
 Compare different agents or models:
 
 ```typescript
@@ -353,16 +375,16 @@ try {
 }
 
 // Empty response
-const result = await scorer.run({ 
-  input: [userMessage], 
-  output: { role: 'assistant', text: '' } 
+const result = await scorer.run({
+  input: [userMessage],
+  output: { role: 'assistant', text: '' },
 });
 // Returns low scores with detailed reasoning about incompleteness
 ```
 
 ## Related
 
-- [Answer Relevancy Scorer](/reference/scorers/answer-relevancy) - Evaluates query-response relevance
-- [Faithfulness Scorer](/reference/scorers/faithfulness) - Measures context groundedness
-- [Tool Call Accuracy Scorer](/reference/scorers/tool-call-accuracy) - Evaluates tool selection
+- [Answer Relevancy Scorer](/docs/reference/scorers/answer-relevancy) - Evaluates query-response relevance
+- [Faithfulness Scorer](/docs/reference/scorers/faithfulness) - Measures context groundedness
+- [Tool Call Accuracy Scorer](/docs/reference/scorers/tool-call-accuracy) - Evaluates tool selection
 - [Custom Scorers](/docs/scorers/custom-scorers) - Creating your own evaluation metrics

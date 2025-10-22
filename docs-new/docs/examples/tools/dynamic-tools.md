@@ -36,7 +36,7 @@ export const getExchangeRatesTool = createTool({
 });
 ```
 
-> See [createTool()](../../reference/tools//create-tool) for a full list of configuration options.
+> See [createTool()](/docs/reference/tools/create-tool) for a full list of configuration options.
 
 ## Example usage
 

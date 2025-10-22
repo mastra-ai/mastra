@@ -16,12 +16,14 @@ Each step can use either **functions** or **prompt objects** (LLM-based evaluati
 ### Functions vs Prompt Objects
 
 **Functions** use JavaScript for deterministic logic. They're ideal for:
+
 - Algorithmic evaluations with clear criteria
 - Performance-critical scenarios
 - Integration with existing libraries
 - Consistent, reproducible results
 
 **Prompt Objects** use LLMs as judges for evaluation. They're perfect for:
+
 - Subjective evaluations requiring human-like judgment
 - Complex criteria difficult to code algorithmically
 - Natural language understanding tasks
@@ -62,8 +64,7 @@ For type safety and compatibility with both live agent scoring and trace scoring
 const myScorer = createScorer({
   // ...
   type: 'agent', // Automatically handles agent input/output types
-})
-.generateScore(({ run, results }) => {
+}).generateScore(({ run, results }) => {
   // run.output is automatically typed as ScorerRunOutputForAgent
   // run.input is automatically typed as ScorerRunInputForAgent
 });
@@ -83,7 +84,7 @@ const glutenCheckerScorer = createScorer(...)
   // Extract and clean recipe text
   const recipeText = run.output.text.toLowerCase();
   const wordCount = recipeText.split(' ').length;
-  
+
   return {
     recipeText,
     wordCount,
@@ -105,7 +106,7 @@ const glutenCheckerScorer = createScorer(...)
   createPrompt: ({ run }) => `
     Extract all ingredients and cooking methods from this recipe:
     ${run.output.text}
-    
+
     Return JSON with ingredients and cookingMethods arrays.
   `
 })
@@ -124,13 +125,13 @@ const glutenCheckerScorer = createScorer({...})
 .preprocess(...)
 .analyze(({ run, results }) => {
   const { recipeText, hasCommonGlutenWords } = results.preprocessStepResult;
-  
+
   // Simple gluten detection algorithm
   const glutenKeywords = ['wheat', 'flour', 'barley', 'rye', 'bread'];
-  const foundGlutenWords = glutenKeywords.filter(word => 
+  const foundGlutenWords = glutenKeywords.filter(word =>
     recipeText.includes(word)
   );
-  
+
   return {
     isGlutenFree: foundGlutenWords.length === 0,
     detectedGlutenSources: foundGlutenWords,
@@ -154,7 +155,7 @@ const glutenCheckerScorer = createScorer({...})
   createPrompt: ({ run, results }) => `
     Analyze this recipe for gluten content:
     "${results.preprocessStepResult.recipeText}"
-    
+
     Look for wheat, barley, rye, and hidden sources like soy sauce.
     Return JSON with isGlutenFree, glutenSources array, and confidence (0-1).
   `
@@ -175,14 +176,14 @@ const glutenCheckerScorer = createScorer({...})
 .analyze(...)
 .generateScore(({ results }) => {
   const { isGlutenFree, confidence } = results.analyzeStepResult;
-  
+
   // Return 1 for gluten-free, 0 for contains gluten
   // Weight by confidence level
   return isGlutenFree ? confidence : 0;
 })
 ```
 
-**Prompt Objects:** See the [`createScorer`](/reference/scorers/create-scorer) API reference for details on using prompt objects with generateScore, including required `calculateScore` function.
+**Prompt Objects:** See the [`createScorer`](/docs/reference/scorers/create-scorer) API reference for details on using prompt objects with generateScore, including required `calculateScore` function.
 
 **Data Flow:** The score is available to generateReason as the `score` parameter
 
@@ -199,7 +200,7 @@ const glutenCheckerScorer = createScorer({...})
 .generateScore(...)
 .generateReason(({ results, score }) => {
   const { isGlutenFree, glutenSources } = results.analyzeStepResult;
-  
+
   if (isGlutenFree) {
     return `Score: ${score}. This recipe is gluten-free with no harmful ingredients detected.`;
   } else {
@@ -220,13 +221,14 @@ const glutenCheckerScorer = createScorer({...})
   createPrompt: ({ results, score }) => `
     Explain why this recipe received a score of ${score}.
     Analysis: ${JSON.stringify(results.analyzeStepResult)}
-    
+
     Provide a clear explanation for someone with dietary restrictions.
   `
 })
 ```
 
 **Examples and Resources:**
-- [Custom Scorer Example](/examples/scorers/custom-scorer) - Complete walkthrough
-- [createScorer API Reference](/reference/scorers/create-scorer) - Complete technical documentation
+
+- [Custom Scorer Example](/docs/examples/scorers/custom-scorer) - Complete walkthrough
+- [createScorer API Reference](/docs/reference/scorers/create-scorer) - Complete technical documentation
 - [Built-in Scorers Source Code](https://github.com/mastra-ai/mastra/tree/main/packages/evals/src/scorers) - Real implementations for reference

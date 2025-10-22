@@ -13,7 +13,7 @@ Use `createHallucinationScorer` to evaluate whether the response contradicts any
 npm install @mastra/evals
 ```
 
-> For complete API documentation and configuration options, see [`createHallucinationScorer`](/reference/scorers/hallucination).
+> For complete API documentation and configuration options, see [`createHallucinationScorer`](/docs/reference/scorers/hallucination).
 
 ## No hallucination example
 
@@ -142,7 +142,7 @@ const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options
 });
 ```
 
-> See [HallucinationScorer](/reference/scorers/hallucination) for a full list of configuration options.
+> See [HallucinationScorer](/docs/reference/scorers/hallucination) for a full list of configuration options.
 
 ## Understanding the results
 

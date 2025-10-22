@@ -1,5 +1,5 @@
 ---
-title: "Reference: Answer Relevancy "
+title: 'Reference: Answer Relevancy '
 description: Documentation for the Answer Relevancy Scorer in Mastra, which evaluates how well LLM outputs address the input query.
 ---
 
@@ -7,33 +7,33 @@ description: Documentation for the Answer Relevancy Scorer in Mastra, which eval
 
 The `createAnswerRelevancyScorer()` function accepts a single options object with the following properties:
 
-For usage example, see the [Answer Relevancy Examples](/examples/scorers/answer-relevancy).
+For usage example, see the [Answer Relevancy Examples](/docs/examples/scorers/answer-relevancy).
 
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "LanguageModel",
-      required: true,
-      description: "Configuration for the model used to evaluate relevancy.",
-    },
-    {
-      name: "uncertaintyWeight",
-      type: "number",
-      required: false,
-      defaultValue: "0.3",
-      description: "Weight given to 'unsure' verdicts in scoring (0-1).",
-    },
-    {
-      name: "scale",
-      type: "number",
-      required: false,
-      defaultValue: "1",
-      description: "Maximum score value.",
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "LanguageModel",
+required: true,
+description: "Configuration for the model used to evaluate relevancy.",
+},
+{
+name: "uncertaintyWeight",
+type: "number",
+required: false,
+defaultValue: "0.3",
+description: "Weight given to 'unsure' verdicts in scoring (0-1).",
+},
+{
+name: "scale",
+type: "number",
+required: false,
+defaultValue: "1",
+description: "Maximum score value.",
+},
+]}
 />
 
 This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
@@ -41,48 +41,48 @@ This function returns an instance of the MastraScorer class. The `.run()` method
 ## .run() Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Relevancy score (0 to scale, default 0-1)",
-    },
-    {
-      name: "preprocessPrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the preprocess step (optional).",
-    },
-    {
-      name: "preprocessStepResult",
-      type: "object",
-      description: "Object with extracted statements: { statements: string[] }",
-    },
-    {
-      name: "analyzePrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the analyze step (optional).",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description: "Object with results: { results: Array<{ result: 'yes' | 'unsure' | 'no', reason: string }> }",
-    },
-    {
-      name: "generateReasonPrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the reason step (optional).",
-    },
-    {
-      name: "reason",
-      type: "string",
-      description: "Explanation of the score.",
-    },
-  ]}
+content={[
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "score",
+type: "number",
+description: "Relevancy score (0 to scale, default 0-1)",
+},
+{
+name: "preprocessPrompt",
+type: "string",
+description: "The prompt sent to the LLM for the preprocess step (optional).",
+},
+{
+name: "preprocessStepResult",
+type: "object",
+description: "Object with extracted statements: { statements: string[] }",
+},
+{
+name: "analyzePrompt",
+type: "string",
+description: "The prompt sent to the LLM for the analyze step (optional).",
+},
+{
+name: "analyzeStepResult",
+type: "object",
+description: "Object with results: { results: Array<{ result: 'yes' | 'unsure' | 'no', reason: string }> }",
+},
+{
+name: "generateReasonPrompt",
+type: "string",
+description: "The prompt sent to the LLM for the reason step (optional).",
+},
+{
+name: "reason",
+type: "string",
+description: "Explanation of the score.",
+},
+]}
 />
 
 ## Scoring Details

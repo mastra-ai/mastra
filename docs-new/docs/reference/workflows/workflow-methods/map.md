@@ -40,4 +40,4 @@ description: "The workflow instance for method chaining",
 
 ## Related
 
-- [Input data mapping](../../../docs/workflows/input-data-mapping)
+- [Input data mapping](/docs/workflows/input-data-mapping)

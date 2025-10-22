@@ -73,5 +73,5 @@ export const loopingForeach = createWorkflow({
 
 The following links provide example documentation for legacy workflows:
 
-- [Creating a Simple Workflow (Legacy)](/examples/workflows_legacy/creating-a-workflow)
-- [Data Mapping with Workflow Variables (Legacy)](/examples/workflows_legacy/workflow-variables)
+- [Creating a Simple Workflow (Legacy)](/docs/examples/workflows_legacy/creating-a-workflow)
+- [Data Mapping with Workflow Variables (Legacy)](/docs/examples/workflows_legacy/workflow-variables)

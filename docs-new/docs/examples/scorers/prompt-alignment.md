@@ -1,8 +1,7 @@
 ---
-title: "Prompt Alignment "
+title: 'Prompt Alignment '
 description: Example of using the Prompt Alignment scorer to evaluate how well responses align with user prompt intent and requirements.
 ---
-
 
 # Prompt Alignment Scorer
 
@@ -14,33 +13,35 @@ Use `createPromptAlignmentScorerLLM` to score how well responses align with user
 npm install @mastra/evals
 ```
 
-> For complete API documentation and configuration options, see [`createPromptAlignmentScorerLLM`](/reference/scorers/prompt-alignment).
+> For complete API documentation and configuration options, see [`createPromptAlignmentScorerLLM`](/docs/reference/scorers/prompt-alignment).
 
 ## Excellent alignment example
 
 In this example, the response fully addresses the user's prompt with all requirements met.
 
 ```typescript filename="src/example-excellent-prompt-alignment.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
+import { openai } from '@ai-sdk/openai';
+import { createPromptAlignmentScorerLLM } from '@mastra/evals/scorers/llm';
 
-const scorer = createPromptAlignmentScorerLLM({ 
-  model: openai("gpt-4o-mini") 
+const scorer = createPromptAlignmentScorerLLM({
+  model: openai('gpt-4o-mini'),
 });
 
-const inputMessages = [{ 
-  role: 'user', 
-  content: "Write a Python function to calculate factorial with error handling for negative numbers" 
-}];
+const inputMessages = [
+  {
+    role: 'user',
+    content: 'Write a Python function to calculate factorial with error handling for negative numbers',
+  },
+];
 
-const outputMessage = { 
+const outputMessage = {
   text: `def factorial(n):
     """Calculate factorial of a number."""
     if n < 0:
         raise ValueError("Factorial not defined for negative numbers")
     if n == 0 or n == 1:
         return 1
-    return n * factorial(n - 1)` 
+    return n * factorial(n - 1)`,
 };
 
 const result = await scorer.run({
@@ -67,20 +68,22 @@ The output receives a high score because it perfectly addresses the intent, fulf
 In this example, the response addresses the core intent but misses some requirements or has format issues.
 
 ```typescript filename="src/example-partial-prompt-alignment.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
+import { openai } from '@ai-sdk/openai';
+import { createPromptAlignmentScorerLLM } from '@mastra/evals/scorers/llm';
 
-const scorer = createPromptAlignmentScorerLLM({ 
-  model: openai("gpt-4o-mini") 
+const scorer = createPromptAlignmentScorerLLM({
+  model: openai('gpt-4o-mini'),
 });
 
-const inputMessages = [{ 
-  role: 'user', 
-  content: "List the benefits of TypeScript in bullet points" 
-}];
+const inputMessages = [
+  {
+    role: 'user',
+    content: 'List the benefits of TypeScript in bullet points',
+  },
+];
 
-const outputMessage = { 
-  text: "TypeScript provides static typing, better IDE support, and enhanced code reliability through compile-time error checking." 
+const outputMessage = {
+  text: 'TypeScript provides static typing, better IDE support, and enhanced code reliability through compile-time error checking.',
 };
 
 const result = await scorer.run({
@@ -107,22 +110,24 @@ The output receives a lower score because while the content is accurate, it does
 In this example, the response fails to address the user's specific requirements.
 
 ```typescript filename="src/example-poor-prompt-alignment.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
+import { openai } from '@ai-sdk/openai';
+import { createPromptAlignmentScorerLLM } from '@mastra/evals/scorers/llm';
 
-const scorer = createPromptAlignmentScorerLLM({ 
-  model: openai("gpt-4o-mini") 
+const scorer = createPromptAlignmentScorerLLM({
+  model: openai('gpt-4o-mini'),
 });
 
-const inputMessages = [{ 
-  role: 'user', 
-  content: "Write a Python class with initialization, validation, error handling, and documentation" 
-}];
+const inputMessages = [
+  {
+    role: 'user',
+    content: 'Write a Python class with initialization, validation, error handling, and documentation',
+  },
+];
 
-const outputMessage = { 
+const outputMessage = {
   text: `class Example:
     def __init__(self, value):
-        self.value = value` 
+        self.value = value`,
 };
 
 const result = await scorer.run({
@@ -149,12 +154,12 @@ The output receives a low score because it only partially fulfills the requireme
 You can customize the Prompt Alignment Scorer by adjusting the scale parameter and evaluation mode to fit your scoring needs.
 
 ```typescript showLineNumbers copy
-const scorer = createPromptAlignmentScorerLLM({ 
-  model: openai("gpt-4o-mini"), 
-  options: { 
+const scorer = createPromptAlignmentScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: {
     scale: 10, // Score from 0-10 instead of 0-1
-    evaluationMode: 'both' // 'user', 'system', or 'both' (default)
-  }
+    evaluationMode: 'both', // 'user', 'system', or 'both' (default)
+  },
 });
 ```
 
@@ -165,25 +170,29 @@ const scorer = createPromptAlignmentScorerLLM({
 Evaluates how well the response addresses the user's request, ignoring system instructions:
 
 ```typescript filename="src/example-user-mode.ts" showLineNumbers copy
-const scorer = createPromptAlignmentScorerLLM({ 
-  model: openai("gpt-4o-mini"),
-  options: { evaluationMode: 'user' }
+const scorer = createPromptAlignmentScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: { evaluationMode: 'user' },
 });
 
 const result = await scorer.run({
   input: {
-    inputMessages: [{ 
-      role: 'user', 
-      content: "Explain recursion with an example" 
-    }],
-    systemMessages: [{ 
-      role: 'system', 
-      content: "Always provide code examples in Python" 
-    }]
+    inputMessages: [
+      {
+        role: 'user',
+        content: 'Explain recursion with an example',
+      },
+    ],
+    systemMessages: [
+      {
+        role: 'system',
+        content: 'Always provide code examples in Python',
+      },
+    ],
   },
-  output: { 
-    text: "Recursion is when a function calls itself. For example: factorial(5) = 5 * factorial(4)" 
-  }
+  output: {
+    text: 'Recursion is when a function calls itself. For example: factorial(5) = 5 * factorial(4)',
+  },
 });
 // Scores high for addressing user request, even without Python code
 ```
@@ -193,25 +202,29 @@ const result = await scorer.run({
 Evaluates compliance with system behavioral guidelines and constraints:
 
 ```typescript filename="src/example-system-mode.ts" showLineNumbers copy
-const scorer = createPromptAlignmentScorerLLM({ 
-  model: openai("gpt-4o-mini"),
-  options: { evaluationMode: 'system' }
+const scorer = createPromptAlignmentScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: { evaluationMode: 'system' },
 });
 
 const result = await scorer.run({
   input: {
-    systemMessages: [{ 
-      role: 'system', 
-      content: "You are a helpful assistant. Always be polite, concise, and provide examples." 
-    }],
-    inputMessages: [{ 
-      role: 'user', 
-      content: "What is machine learning?" 
-    }]
+    systemMessages: [
+      {
+        role: 'system',
+        content: 'You are a helpful assistant. Always be polite, concise, and provide examples.',
+      },
+    ],
+    inputMessages: [
+      {
+        role: 'user',
+        content: 'What is machine learning?',
+      },
+    ],
   },
-  output: { 
-    text: "Machine learning is a subset of AI where computers learn from data. For example, spam filters learn to identify unwanted emails by analyzing patterns in previously marked spam." 
-  }
+  output: {
+    text: 'Machine learning is a subset of AI where computers learn from data. For example, spam filters learn to identify unwanted emails by analyzing patterns in previously marked spam.',
+  },
 });
 // Evaluates politeness, conciseness, and example provision
 ```
@@ -221,35 +234,39 @@ const result = await scorer.run({
 Evaluates both user intent fulfillment and system compliance with weighted scoring (70% user, 30% system):
 
 ```typescript filename="src/example-both-mode.ts" showLineNumbers copy
-const scorer = createPromptAlignmentScorerLLM({ 
-  model: openai("gpt-4o-mini"),
-  options: { evaluationMode: 'both' } // This is the default
+const scorer = createPromptAlignmentScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: { evaluationMode: 'both' }, // This is the default
 });
 
 const result = await scorer.run({
   input: {
-    systemMessages: [{ 
-      role: 'system', 
-      content: "Always provide code examples when explaining programming concepts" 
-    }],
-    inputMessages: [{ 
-      role: 'user', 
-      content: "Explain how to reverse a string" 
-    }]
+    systemMessages: [
+      {
+        role: 'system',
+        content: 'Always provide code examples when explaining programming concepts',
+      },
+    ],
+    inputMessages: [
+      {
+        role: 'user',
+        content: 'Explain how to reverse a string',
+      },
+    ],
   },
-  output: { 
+  output: {
     text: `To reverse a string, you can iterate through it backwards. Here's an example in Python:
     
     def reverse_string(s):
         return s[::-1]
     
-    # Usage: reverse_string("hello") returns "olleh"` 
-  }
+    # Usage: reverse_string("hello") returns "olleh"`,
+  },
 });
 // High score for both addressing the user's request AND following system guidelines
 ```
 
-> See [createPromptAlignmentScorerLLM](/reference/scorers/prompt-alignment) for a full list of configuration options.
+> See [createPromptAlignmentScorerLLM](/docs/reference/scorers/prompt-alignment) for a full list of configuration options.
 
 ## Understanding the results
 
@@ -296,7 +313,7 @@ const result = await scorer.run({
 A multi-dimensional alignment score between 0 and scale (default 0-1):
 
 - **0.9-1.0**: Excellent alignment across all dimensions
-- **0.8-0.9**: Very good alignment with minor gaps  
+- **0.8-0.9**: Very good alignment with minor gaps
 - **0.7-0.8**: Good alignment but missing some requirements
 - **0.6-0.7**: Moderate alignment with noticeable gaps
 - **0.4-0.6**: Poor alignment with significant issues
@@ -307,28 +324,34 @@ A multi-dimensional alignment score between 0 and scale (default 0-1):
 The scorer evaluates four weighted dimensions that adapt based on the evaluation mode:
 
 **User Mode Weights:**
+
 - **Intent Alignment (40%)**: Whether the response addresses the user's core request
-- **Requirements Fulfillment (30%)**: If all user requirements are met  
+- **Requirements Fulfillment (30%)**: If all user requirements are met
 - **Completeness (20%)**: Whether the response is comprehensive for the user's needs
 - **Response Appropriateness (10%)**: If the format and tone match user expectations
 
 **System Mode Weights:**
+
 - **Intent Alignment (35%)**: Whether the response follows system behavioral guidelines
 - **Requirements Fulfillment (35%)**: If all system constraints are respected
 - **Completeness (15%)**: Whether the response adheres to all system rules
 - **Response Appropriateness (15%)**: If the format and tone match system specifications
 
 **Both Mode (Default):**
+
 - Combines user alignment (70% weight) with system compliance (30% weight)
 - Provides balanced evaluation of both user satisfaction and system adherence
 
 ### runId
+
 The unique identifier for this scorer run.
 
 ### reason
+
 A detailed explanation of the score including breakdown by dimension and specific issues identified.
 
 ### analyzeStepResult
+
 The detailed analysis results showing scores and reasoning for each dimension.
 
 <GithubLink

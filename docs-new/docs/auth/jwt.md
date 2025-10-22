@@ -34,7 +34,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> See the [MastraJwtAuth](/reference/auth/jwt) API reference for all available configuration options.
+> See the [MastraJwtAuth](/docs/reference/auth/jwt) API reference for all available configuration options.
 
 ## Configuring `MastraClient`
 

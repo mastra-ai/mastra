@@ -498,6 +498,6 @@ const messagesV2 = await mastra.getStorage().getMessagesById({ messageIds: messa
 
 Mastra supports the following providers:
 
-- For local development, check out [LibSQL Storage](../../reference/storage/libsql)
-- For production, check out [PostgreSQL Storage](../../reference/storage/postgresql)
-- For serverless deployments, check out [Upstash Storage](../../reference/storage/upstash)
+- For local development, check out [LibSQL Storage](/docs/reference/storage/libsql)
+- For production, check out [PostgreSQL Storage](/docs/reference/storage/postgresql)
+- For serverless deployments, check out [Upstash Storage](/docs/reference/storage/upstash)

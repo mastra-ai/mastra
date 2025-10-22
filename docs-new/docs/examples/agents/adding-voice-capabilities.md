@@ -47,7 +47,7 @@ export const hybridVoiceAgent = new Agent({
 });
 ```
 
-> See [Agent](../../reference/agents/agent) for a full list of configuration options.
+> See [Agent](/docs/reference/agents/agent) for a full list of configuration options.
 
 ## Unified voice agent
 
@@ -66,7 +66,7 @@ export const unifiedVoiceAgent = new Agent({
 });
 ```
 
-> See [Agent](../../reference/agents/agent) for a full list of configuration options.
+> See [Agent](/docs/reference/agents/agent) for a full list of configuration options.
 
 ## Registering agents
 

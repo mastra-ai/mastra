@@ -45,4 +45,4 @@ description: "The workflow instance with the specified ID. Throws an error if th
 
 ## Related
 
-- [Workflows overview](../../docs/workflows/overview)
+- [Workflows overview](/docs/workflows/overview)

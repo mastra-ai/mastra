@@ -144,7 +144,7 @@ const metric = new FaithfulnessMetric(openai('gpt-4o-mini'), {
 });
 ```
 
-> See [FaithfulnessMetric](/reference/evals/faithfulness) for a full list of configuration options.
+> See [FaithfulnessMetric](/docs/reference/evals/faithfulness) for a full list of configuration options.
 
 ## Understanding the results
 

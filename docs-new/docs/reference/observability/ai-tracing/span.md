@@ -1,8 +1,7 @@
 ---
-title: "Span "
+title: 'Span '
 description: Span interfaces, methods, and lifecycle events
 ---
-
 
 # Span
 
@@ -14,34 +13,34 @@ Base interface for all span types.
 interface BaseSpan<TType extends AISpanType> {
   /** Unique span identifier */
   id: string;
-  
+
   /** OpenTelemetry-compatible trace ID (32 hex chars) */
   traceId: string;
-  
+
   /** Name of the span */
   name: string;
-  
+
   /** Type of the span */
   type: TType;
-  
+
   /** When span started */
   startTime: Date;
-  
+
   /** When span ended */
   endTime?: Date;
-  
+
   /** Type-specific attributes */
   attributes?: AISpanTypeMap[TType];
-  
+
   /** User-defined metadata */
   metadata?: Record<string, any>;
-  
+
   /** Input passed at the start of the span */
   input?: any;
-  
+
   /** Output generated at the end of the span */
   output?: any;
-  
+
   /** Error information if span failed */
   errorInfo?: {
     message: string;
@@ -50,7 +49,7 @@ interface BaseSpan<TType extends AISpanType> {
     category?: string;
     details?: Record<string, any>;
   };
-  
+
   /** Is an event span? (occurs at startTime, has no endTime) */
   isEvent: boolean;
 }
@@ -64,10 +63,10 @@ AI Span interface, used internally for tracing. Extends BaseSpan with lifecycle 
 interface AISpan<TType extends AISpanType> extends BaseSpan<TType> {
   /** Is an internal span? (spans internal to the operation of mastra) */
   isInternal: boolean;
-  
+
   /** Parent span reference (undefined for root spans) */
   parent?: AnyAISpan;
-  
+
   /** Pointer to the AITracing instance */
   aiTracing: AITracing;
 }
@@ -100,26 +99,26 @@ end(options?: EndSpanOptions<TType>): void
 Ends the span and triggers export to configured exporters. Sets the `endTime` and optionally updates `output`, `metadata`, and `attributes`.
 
 <PropertiesTable
-  props={[
-    {
-      name: "output",
-      type: "any",
-      description: "Final output data from the operation",
-      required: false,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "Additional metadata to merge",
-      required: false,
-    },
-    {
-      name: "attributes",
-      type: "Partial<AISpanTypeMap[TType]>",
-      description: "Type-specific attributes to update",
-      required: false,
-    },
-  ]}
+props={[
+{
+name: "output",
+type: "any",
+description: "Final output data from the operation",
+required: false,
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+description: "Additional metadata to merge",
+required: false,
+},
+{
+name: "attributes",
+type: "Partial<AISpanTypeMap[TType]>",
+description: "Type-specific attributes to update",
+required: false,
+},
+]}
 />
 
 #### error
@@ -131,32 +130,32 @@ error(options: ErrorSpanOptions<TType>): void
 Records an error on the span. Sets the `errorInfo` field and can optionally end the span.
 
 <PropertiesTable
-  props={[
-    {
-      name: "error",
-      type: "Error",
-      description: "The error that occurred",
-      required: true,
-    },
-    {
-      name: "endSpan",
-      type: "boolean",
-      description: "Whether to end the span after recording the error",
-      required: false,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "Additional error context metadata",
-      required: false,
-    },
-    {
-      name: "attributes",
-      type: "Partial<AISpanTypeMap[TType]>",
-      description: "Type-specific attributes to update",
-      required: false,
-    },
-  ]}
+props={[
+{
+name: "error",
+type: "Error",
+description: "The error that occurred",
+required: true,
+},
+{
+name: "endSpan",
+type: "boolean",
+description: "Whether to end the span after recording the error",
+required: false,
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+description: "Additional error context metadata",
+required: false,
+},
+{
+name: "attributes",
+type: "Partial<AISpanTypeMap[TType]>",
+description: "Type-specific attributes to update",
+required: false,
+},
+]}
 />
 
 #### update
@@ -168,32 +167,32 @@ update(options: UpdateSpanOptions<TType>): void
 Updates span data while it's still active. Can modify `input`, `output`, `metadata`, and `attributes`.
 
 <PropertiesTable
-  props={[
-    {
-      name: "input",
-      type: "any",
-      description: "Update or set input data",
-      required: false,
-    },
-    {
-      name: "output",
-      type: "any",
-      description: "Update or set output data",
-      required: false,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "Metadata to merge with existing",
-      required: false,
-    },
-    {
-      name: "attributes",
-      type: "Partial<AISpanTypeMap[TType]>",
-      description: "Type-specific attributes to update",
-      required: false,
-    },
-  ]}
+props={[
+{
+name: "input",
+type: "any",
+description: "Update or set input data",
+required: false,
+},
+{
+name: "output",
+type: "any",
+description: "Update or set output data",
+required: false,
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+description: "Metadata to merge with existing",
+required: false,
+},
+{
+name: "attributes",
+type: "Partial<AISpanTypeMap[TType]>",
+description: "Type-specific attributes to update",
+required: false,
+},
+]}
 />
 
 #### createChildSpan
@@ -207,38 +206,38 @@ createChildSpan<TChildType extends AISpanType>(
 Creates a child span under this span. Child spans track sub-operations and inherit the trace context.
 
 <PropertiesTable
-  props={[
-    {
-      name: "type",
-      type: "TChildType",
-      description: "Type of the child span",
-      required: true,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Name of the child span",
-      required: true,
-    },
-    {
-      name: "attributes",
-      type: "AISpanTypeMap[TChildType]",
-      description: "Type-specific attributes",
-      required: false,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "Initial metadata",
-      required: false,
-    },
-    {
-      name: "input",
-      type: "any",
-      description: "Initial input data",
-      required: false,
-    },
-  ]}
+props={[
+{
+name: "type",
+type: "TChildType",
+description: "Type of the child span",
+required: true,
+},
+{
+name: "name",
+type: "string",
+description: "Name of the child span",
+required: true,
+},
+{
+name: "attributes",
+type: "AISpanTypeMap[TChildType]",
+description: "Type-specific attributes",
+required: false,
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+description: "Initial metadata",
+required: false,
+},
+{
+name: "input",
+type: "any",
+description: "Initial input data",
+required: false,
+},
+]}
 />
 
 #### createEventSpan
@@ -252,44 +251,44 @@ createEventSpan<TChildType extends AISpanType>(
 Creates an event span under this span. Event spans represent point-in-time occurrences with no duration.
 
 <PropertiesTable
-  props={[
-    {
-      name: "type",
-      type: "TChildType",
-      description: "Type of the event span",
-      required: true,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Name of the event",
-      required: true,
-    },
-    {
-      name: "attributes",
-      type: "AISpanTypeMap[TChildType]",
-      description: "Type-specific attributes",
-      required: false,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "Event metadata",
-      required: false,
-    },
-    {
-      name: "input",
-      type: "any",
-      description: "Event input data",
-      required: false,
-    },
-    {
-      name: "output",
-      type: "any",
-      description: "Event output data",
-      required: false,
-    },
-  ]}
+props={[
+{
+name: "type",
+type: "TChildType",
+description: "Type of the event span",
+required: true,
+},
+{
+name: "name",
+type: "string",
+description: "Name of the event",
+required: true,
+},
+{
+name: "attributes",
+type: "AISpanTypeMap[TChildType]",
+description: "Type-specific attributes",
+required: false,
+},
+{
+name: "metadata",
+type: "Record<string, any>",
+description: "Event metadata",
+required: false,
+},
+{
+name: "input",
+type: "any",
+description: "Event input data",
+required: false,
+},
+{
+name: "output",
+type: "any",
+description: "Event output data",
+required: false,
+},
+]}
 />
 
 ## ExportedAISpan
@@ -300,7 +299,7 @@ Exported AI Span interface, used for tracing exporters. A lightweight version of
 interface ExportedAISpan<TType extends AISpanType> extends BaseSpan<TType> {
   /** Parent span id reference (undefined for root spans) */
   parentSpanId?: string;
-  
+
   /** TRUE if the span is the root span of a trace */
   isRootSpan: boolean;
 }
@@ -316,10 +315,10 @@ Events emitted during the span lifecycle.
 enum AITracingEventType {
   /** Emitted when a span is created and started */
   SPAN_STARTED = 'span_started',
-  
+
   /** Emitted when a span is updated via update() */
   SPAN_UPDATED = 'span_updated',
-  
+
   /** Emitted when a span is ended via end() or error() */
   SPAN_ENDED = 'span_ended',
 }
@@ -357,14 +356,17 @@ Union type for cases that need to handle any exported span type.
 ## See Also
 
 ### Documentation
+
 - [AI Tracing Overview](/docs/observability/ai-tracing/overview) - Concepts and usage
 - [Creating Child Spans](/docs/observability/ai-tracing/overview#creating-child-spans) - Practical examples
 - [Retrieving Trace IDs](/docs/observability/ai-tracing/overview#retrieving-trace-ids) - Using trace IDs
 
 ### Reference
-- [AITracing Classes](/reference/observability/ai-tracing/ai-tracing) - Core tracing classes
-- [Interfaces](/reference/observability/ai-tracing/interfaces) - Complete type reference
-- [Configuration](/reference/observability/ai-tracing/configuration) - Configuration options
+
+- [AITracing Classes](/docs/reference/observability/ai-tracing) - Core tracing classes
+- [Interfaces](/docs/reference/observability/ai-tracing/interfaces) - Complete type reference
+- [Configuration](/docs/reference/observability/ai-tracing/configuration) - Configuration options
 
 ### Examples
-- [Basic AI Tracing](/examples/observability/basic-ai-tracing) - Working with spans
+
+- [Basic AI Tracing](/docs/examples/observability/basic-ai-tracing) - Working with spans

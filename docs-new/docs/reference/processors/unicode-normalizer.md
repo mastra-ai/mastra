@@ -109,4 +109,4 @@ export const agent = new Agent({
 
 ## Related
 
-- [Input Processors](../../docs/agents/input-processors)
+- [Input Processors](/docs/agents/guardrails)

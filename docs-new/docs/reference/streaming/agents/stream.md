@@ -682,5 +682,5 @@ await agent.stream('message for agent', {
 
 ## Related
 
-- [Generating responses](../../../../docs/agents/overview#generating-responses)
-- [Streaming responses](../../../../docs/agents/overview#streaming-responses)
+- [Generating responses](/docs/agents/overview#generating-responses)
+- [Streaming responses](/docs/streaming/overview#streaming-with-agents)

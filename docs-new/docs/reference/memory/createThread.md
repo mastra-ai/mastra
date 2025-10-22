@@ -112,8 +112,8 @@ console.log(response.text);
 
 ### Related
 
-- [Memory Class Reference](/reference/memory/Memory)
+- [Memory Class Reference](/docs/reference/memory)
 - [Getting Started with Memory](/docs/memory/overview) (Covers threads concept)
-- [getThreadById](/reference/memory/getThreadById)
-- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId)
-- [query](/reference/memory/query)
+- [getThreadById](/docs/reference/memory/getThreadById)
+- [getThreadsByResourceId](/docs/reference/memory/getThreadsByResourceId)
+- [query](/docs/reference/memory/query)

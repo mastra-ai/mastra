@@ -61,7 +61,7 @@ Run the following command to quickly scaffold the default Weather agent with sen
 npx mastra@latest init --dir . --components agents,tools --example --llm openai
 ```
 
-> See [mastra init](/reference/cli/init) for more information.
+> See [mastra init](/docs/reference/cli/mastra#mastra-init) for more information.
 
 ### 2. Use the Interactive CLI
 
@@ -121,7 +121,7 @@ Modify the `tsconfig.json` file in your project root:
 OPENAI_API_KEY=<your-api-key>
 ```
 
-> Each LLM provider uses a different env var. See [Model Capabilities](/docs/getting-started/model-capability) for more information.
+> Each LLM provider uses a different env var. See [Model Capabilities](/docs/models) for more information.
 
 ## Update .gitignore
 
@@ -233,4 +233,4 @@ The current weather in London is partly cloudy with a temperature of 19.3°C, fe
 
 ## Next steps
 
-- [Monorepo Deployment](../../deployment/monorepo)
+- [Monorepo Deployment](/docs/deployment/monorepo)

@@ -1,8 +1,7 @@
 ---
-title: "Branching Paths "
+title: 'Branching Paths '
 description: Example of using Mastra to create legacy workflows with branching paths based on intermediate results.
 ---
-
 
 # Branching Paths
 
@@ -23,62 +22,62 @@ Here's the control flow diagram:
 
 Let's start by creating the steps and initializing the workflow.
 
-{/* prettier-ignore */}
+{/_ prettier-ignore _/}
+
 ```ts showLineNumbers copy
-import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
-import { z } from "zod"
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
+import { z } from 'zod';
 
 const stepOne = new LegacyStep({
-  id: "stepOne",
+  id: 'stepOne',
   execute: async ({ context }) => ({
-    doubledValue: context.triggerData.inputValue * 2
-  })
+    doubledValue: context.triggerData.inputValue * 2,
+  }),
 });
 
 const stepTwo = new LegacyStep({
-  id: "stepTwo",
+  id: 'stepTwo',
   execute: async ({ context }) => {
-    const stepOneResult = context.getStepResult<{ doubledValue: number }>("stepOne");
+    const stepOneResult = context.getStepResult<{ doubledValue: number }>('stepOne');
     if (!stepOneResult) {
-      return { isDivisibleByFive: false }
+      return { isDivisibleByFive: false };
     }
 
-    return { isDivisibleByFive: stepOneResult.doubledValue % 5 === 0 }
-  }
+    return { isDivisibleByFive: stepOneResult.doubledValue % 5 === 0 };
+  },
 });
 
-
 const stepThree = new LegacyStep({
-  id: "stepThree",
-  execute: async ({ context }) =>{
-    const stepOneResult = context.getStepResult<{ doubledValue: number }>("stepOne");
+  id: 'stepThree',
+  execute: async ({ context }) => {
+    const stepOneResult = context.getStepResult<{ doubledValue: number }>('stepOne');
     if (!stepOneResult) {
-      return { incrementedValue: 0 }
+      return { incrementedValue: 0 };
     }
 
-    return { incrementedValue: stepOneResult.doubledValue + 1 }
-  }
+    return { incrementedValue: stepOneResult.doubledValue + 1 };
+  },
 });
 
 const stepFour = new LegacyStep({
-  id: "stepFour",
+  id: 'stepFour',
   execute: async ({ context }) => {
-    const stepThreeResult = context.getStepResult<{ incrementedValue: number }>("stepThree");
+    const stepThreeResult = context.getStepResult<{ incrementedValue: number }>('stepThree');
     if (!stepThreeResult) {
-      return { isDivisibleByThree: false }
+      return { isDivisibleByThree: false };
     }
 
-    return { isDivisibleByThree: stepThreeResult.incrementedValue % 3 === 0 }
-  }
+    return { isDivisibleByThree: stepThreeResult.incrementedValue % 3 === 0 };
+  },
 });
 
 // New step that depends on both branches
 const finalStep = new LegacyStep({
-  id: "finalStep",
+  id: 'finalStep',
   execute: async ({ context }) => {
     // Get results from both branches using getStepResult
-    const stepTwoResult = context.getStepResult<{ isDivisibleByFive: boolean }>("stepTwo");
-    const stepFourResult = context.getStepResult<{ isDivisibleByThree: boolean }>("stepFour");
+    const stepTwoResult = context.getStepResult<{ isDivisibleByFive: boolean }>('stepTwo');
+    const stepFourResult = context.getStepResult<{ isDivisibleByThree: boolean }>('stepFour');
 
     const isDivisibleByFive = stepTwoResult?.isDivisibleByFive || false;
     const isDivisibleByThree = stepFourResult?.isDivisibleByThree || false;
@@ -86,14 +85,14 @@ const finalStep = new LegacyStep({
     return {
       summary: `The number ${context.triggerData.inputValue} when doubled ${isDivisibleByFive ? 'is' : 'is not'} divisible by 5, and when doubled and incremented ${isDivisibleByThree ? 'is' : 'is not'} divisible by 3.`,
       isDivisibleByFive,
-      isDivisibleByThree
-    }
-  }
+      isDivisibleByThree,
+    };
+  },
 });
 
 // Build the workflow
 const myWorkflow = new LegacyWorkflow({
-  name: "my-workflow",
+  name: 'my-workflow',
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
@@ -134,7 +133,7 @@ You can create more complex workflows with multiple branches and merge points:
 
 ```ts showLineNumbers copy
 const complexWorkflow = new LegacyWorkflow({
-  name: "complex-workflow",
+  name: 'complex-workflow',
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
@@ -157,11 +156,9 @@ complexWorkflow
   .after(stepOne)
   .step(
     new LegacyStep({
-      id: "alternativePath",
+      id: 'alternativePath',
       execute: async ({ context }) => {
-        const stepOneResult = context.getStepResult<{ doubledValue: number }>(
-          "stepOne",
-        );
+        const stepOneResult = context.getStepResult<{ doubledValue: number }>('stepOne');
         return {
           result: (stepOneResult?.doubledValue || 0) * 3,
         };
@@ -173,17 +170,17 @@ complexWorkflow
   .after([stepTwo, stepFour])
   .step(
     new LegacyStep({
-      id: "partialMerge",
+      id: 'partialMerge',
       execute: async ({ context }) => {
         const stepTwoResult = context.getStepResult<{
           isDivisibleByFive: boolean;
-        }>("stepTwo");
+        }>('stepTwo');
         const stepFourResult = context.getStepResult<{
           isDivisibleByThree: boolean;
-        }>("stepFour");
+        }>('stepFour');
 
         return {
-          intermediateResult: "Processed first two branches",
+          intermediateResult: 'Processed first two branches',
           branchResults: {
             branch1: stepTwoResult?.isDivisibleByFive,
             branch2: stepFourResult?.isDivisibleByThree,
@@ -194,22 +191,20 @@ complexWorkflow
   )
 
   // Final merge of all branches
-  .after(["partialMerge", "alternativePath"])
+  .after(['partialMerge', 'alternativePath'])
   .step(
     new LegacyStep({
-      id: "finalMerge",
+      id: 'finalMerge',
       execute: async ({ context }) => {
         const partialMergeResult = context.getStepResult<{
           intermediateResult: string;
           branchResults: { branch1: boolean; branch2: boolean };
-        }>("partialMerge");
+        }>('partialMerge');
 
-        const alternativePathResult = context.getStepResult<{ result: number }>(
-          "alternativePath",
-        );
+        const alternativePathResult = context.getStepResult<{ result: number }>('alternativePath');
 
         return {
-          finalResult: "All branches processed",
+          finalResult: 'All branches processed',
           combinedData: {
             fromPartialMerge: partialMergeResult?.branchResults,
             fromAlternativePath: alternativePathResult?.result,
@@ -237,13 +232,13 @@ complexWorkflow
 
 The following links provide example documentation for legacy workflows:
 
-- [Creating a Simple Workflow (Legacy)](/examples/workflows_legacy/creating-a-workflow)
-- [Workflow (Legacy) with Sequential Steps](/examples/workflows_legacy/sequential-steps)
-- [Parallel Execution with Steps](/examples/workflows_legacy/parallel-steps)
-- [Workflow (Legacy) with Conditional Branching (experimental)](/examples/workflows_legacy/conditional-branching)
-- [Calling an Agent From a Workflow (Legacy)](/examples/workflows_legacy/calling-agent)
-- [Tool as a Workflow step (Legacy)](/examples/workflows_legacy/using-a-tool-as-a-step)
-- [Workflow (Legacy) with Cyclical dependencies](/examples/workflows_legacy/cyclical-dependencies)
-- [Data Mapping with Workflow Variables (Legacy)](/examples/workflows_legacy/workflow-variables)
-- [Human in the Loop Workflow (Legacy)](/examples/workflows_legacy/human-in-the-loop)
-- [Workflow (Legacy) with Suspend and Resume](/examples/workflows_legacy/suspend-and-resume)
+- [Creating a Simple Workflow (Legacy)](/docs/examples/workflows_legacy/creating-a-workflow)
+- [Workflow (Legacy) with Sequential Steps](/docs/examples/workflows_legacy/sequential-steps)
+- [Parallel Execution with Steps](/docs/examples/workflows_legacy/parallel-steps)
+- [Workflow (Legacy) with Conditional Branching (experimental)](/docs/examples/workflows_legacy/conditional-branching)
+- [Calling an Agent From a Workflow (Legacy)](/docs/examples/workflows_legacy/calling-agent)
+- [Tool as a Workflow step (Legacy)](/docs/examples/workflows_legacy/using-a-tool-as-a-step)
+- [Workflow (Legacy) with Cyclical dependencies](/docs/examples/workflows_legacy/cyclical-dependencies)
+- [Data Mapping with Workflow Variables (Legacy)](/docs/examples/workflows_legacy/workflow-variables)
+- [Human in the Loop Workflow (Legacy)](/docs/examples/workflows_legacy/human-in-the-loop)
+- [Workflow (Legacy) with Suspend and Resume](/docs/examples/workflows_legacy/suspend-and-resume)

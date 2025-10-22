@@ -31,5 +31,5 @@ description: "The configured logger instance used for logging across all compone
 
 ## Related
 
-- [Logging overview](../../docs/observability/logging)
-- [Logger reference](../../reference/observability/logger)
+- [Logging overview](/docs/observability/logging)
+- [Logger reference](/docs/reference/observability/logging/pino-logger)

@@ -557,23 +557,23 @@ Traces are available in multiple locations:
 
 ### Examples
 
-- [Basic AI Tracing Example](/examples/observability/basic-ai-tracing) - Working implementation
+- [Basic AI Tracing Example](/docs/examples/observability/basic-ai-tracing) - Working implementation
 
 ### Reference Documentation
 
-- [Configuration API](/reference/observability/ai-tracing/configuration) - ObservabilityConfig details
-- [AITracing Classes](/reference/observability/ai-tracing/ai-tracing) - Core classes and methods
-- [Span Interfaces](/reference/observability/ai-tracing/span) - Span types and lifecycle
-- [Type Definitions](/reference/observability/ai-tracing/interfaces) - Complete interface reference
+- [Configuration API](/docs/reference/observability/ai-tracing/configuration) - ObservabilityConfig details
+- [AITracing Classes](/docs/reference/observability/ai-tracing) - Core classes and methods
+- [Span Interfaces](/docs/reference/observability/ai-tracing/span) - Span types and lifecycle
+- [Type Definitions](/docs/reference/observability/ai-tracing/interfaces) - Complete interface reference
 
 ### Exporters
 
-- [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - Storage persistence
-- [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud integration
-- [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - Debug output
-- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
-- [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration
-- [OpenTelemetry](/reference/observability/ai-tracing/exporters/otel) - OTEL-compatible platforms
+- [DefaultExporter](/docs/reference/observability/ai-tracing/exporters/default-exporter) - Storage persistence
+- [CloudExporter](/docs/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud integration
+- [ConsoleExporter](/docs/reference/observability/ai-tracing/exporters/console-exporter) - Debug output
+- [Langfuse](/docs/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
+- [Braintrust](/docs/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration
+- [OpenTelemetry](/docs/reference/observability/ai-tracing/exporters/otel) - OTEL-compatible platforms
 
 ### Processors
 

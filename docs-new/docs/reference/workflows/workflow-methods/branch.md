@@ -1,5 +1,5 @@
 ---
-title: "Reference: Workflow.branch() "
+title: 'Reference: Workflow.branch() '
 description: Documentation for the `Workflow.branch()` method in workflows, which creates conditional branches between steps.
 ---
 
@@ -19,30 +19,30 @@ workflow.branch([
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "steps",
-      type: "[() => boolean, Step]",
-      description:
-        "An array of tuples, each containing a condition function and a step to execute if the condition is true",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "steps",
+type: "[() => boolean, Step]",
+description:
+"An array of tuples, each containing a condition function and a step to execute if the condition is true",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "workflow",
-      type: "NewWorkflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+content={[
+{
+name: "workflow",
+type: "NewWorkflow",
+description: "The workflow instance for method chaining",
+},
+]}
 />
 
 ## Related
 
-- [Conditional Branching Logic](../../../docs/workflows/control-flow#conditional-logic-with-branch)
-- [Conditional Branching Example](../../../examples/workflows/conditional-branching)
+- [Conditional Branching Logic](/docs/workflows/control-flow#conditional-logic-with-branch)
+- [Conditional Branching Example](/docs/examples/workflows/conditional-branching)

@@ -134,7 +134,7 @@ In addition to live evaluations, you can use scorers to evaluate historical trac
 
 :::note Observability Required
 
-To score traces, you must first configure observability in your Mastra instance to collect trace data. See [AI Tracing documentation](../observability/ai-tracing) for setup instructions.
+To score traces, you must first configure observability in your Mastra instance to collect trace data. See [AI Tracing documentation](/docs/observability/ai-tracing/overview) for setup instructions.
 
 :::
 
@@ -165,4 +165,4 @@ For more details, see the [Local Dev Playground](/docs/server-db/local-dev-playg
 - Learn how to create your own scorers in the [Creating Custom Scorers](/docs/scorers/custom-scorers) guide
 - Explore built-in scorers in the [Off-the-shelf Scorers](/docs/scorers/off-the-shelf-scorers) section
 - Test scorers with the [Local Dev Playground](/docs/server-db/local-dev-playground)
-- See example scorers in the [Examples Overview](/examples) section
+- See example scorers in the [Examples Overview](/docs/examples) section

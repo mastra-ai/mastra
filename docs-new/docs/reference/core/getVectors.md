@@ -31,5 +31,5 @@ description: "A record of all configured vector stores, where keys are vector st
 
 ## Related
 
-- [Vector stores overview](../../docs/rag/vector-databases)
-- [RAG overview](../../docs/rag/overview)
+- [Vector stores overview](/docs/rag/vector-databases)
+- [RAG overview](/docs/rag/overview)

@@ -1,6 +1,6 @@
 ---
-title: "Reference: getScorerByName() "
-description: "Documentation for the `getScorerByName()` method in Mastra, which retrieves a scorer by its name property rather than registration key."
+title: 'Reference: getScorerByName() '
+description: 'Documentation for the `getScorerByName()` method in Mastra, which retrieves a scorer by its name property rather than registration key.'
 ---
 
 # getScorerByName()
@@ -15,7 +15,7 @@ import { mastra } from './mastra';
 // Get a scorer by its name property
 const relevancyScorer = mastra.getScorerByName('Answer Relevancy');
 
-const weatherAgent = mastra.getAgent('weatherAgent')
+const weatherAgent = mastra.getAgent('weatherAgent');
 
 // Use the scorer to evaluate an AI output
 await weatherAgent.generate('What is the weather in Rome', {
@@ -30,31 +30,32 @@ await weatherAgent.generate('What is the weather in Rome', {
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "name",
-      type: "string",
-      description: "The name property of the scorer to retrieve. This should match the 'name' field specified when creating the scorer with createScorer().",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "name",
+type: "string",
+description: "The name property of the scorer to retrieve. This should match the 'name' field specified when creating the scorer with createScorer().",
+isOptional: false,
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "scorer",
-      type: "MastraScorer",
-      description: "The MastraScorer instance that has the matching name property.",
-    },
-  ]}
+content={[
+{
+name: "scorer",
+type: "MastraScorer",
+description: "The MastraScorer instance that has the matching name property.",
+},
+]}
 />
 
 ## Error Handling
 
 This method throws a `MastraError` if:
+
 - No scorer with the specified name is found
 - No scorers are registered with the Mastra instance
 
@@ -70,6 +71,6 @@ try {
 
 ## Related
 
-- [getScorer()](../../reference/core/getScorer) - Get a scorer by its registration key
-- [getScorers()](../../reference/core/getScorers) - Get all registered scorers
-- [createScorer()](../../reference/scorers/create-scorer) - Learn how to create scorers with names
+- [getScorer()](/docs/reference/core/getScorer) - Get a scorer by its registration key
+- [getScorers()](/docs/reference/core/getScorers) - Get all registered scorers
+- [createScorer()](/docs/reference/scorers/create-scorer) - Learn how to create scorers with names

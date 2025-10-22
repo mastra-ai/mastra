@@ -57,4 +57,4 @@ description: "The workflow instance for method chaining",
 
 ## Related
 
-- [Repeating with foreach](../../../docs/workflows/control-flow#repeating-with-foreach)
+- [Repeating with foreach](/docs/workflows/control-flow#repeating-with-foreach)

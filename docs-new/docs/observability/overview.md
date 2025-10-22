@@ -60,11 +60,11 @@ export const mastra = new Mastra({
 
 With this basic setup, you will see Traces and Logs in both the Playground and in Mastra Cloud.
 
-We also support various external tracing providers like Langfuse, Braintrust, and any OpenTelemetry-compatible platform (Datadog, New Relic, SigNoz, etc.). See more about this in the [AI Tracing](/docs/observability/ai-tracing) documentation.
+We also support various external tracing providers like Langfuse, Braintrust, and any OpenTelemetry-compatible platform (Datadog, New Relic, SigNoz, etc.). See more about this in the [AI Tracing](/docs/observability/ai-tracing/overview) documentation.
 
 ## What's Next?
 
-- **[Set up AI Tracing](/docs/observability/ai-tracing)**: Configure tracing for your application
+- **[Set up AI Tracing](/docs/observability/ai-tracing/overview)**: Configure tracing for your application
 - **[Configure Logging](/docs/observability/logging)**: Add structured logging
-- **[View Examples](/examples/observability/basic-ai-tracing)**: See observability in action
-- **[API Reference](/reference/observability/ai-tracing/ai-tracing)**: Detailed configuration options
+- **[View Examples](/docs/examples/observability/basic-ai-tracing)**: See observability in action
+- **[API Reference](/docs/reference/observability/ai-tracing)**: Detailed configuration options

@@ -87,7 +87,7 @@ isOptional: true,
 
 ## Related
 
-- [Basic Usage with Step Instance](../../docs/workflows-legacy/steps)
+- [Basic Usage with Step Instance](/docs/workflows-legacy/steps)
 - [Step Class Reference](./step-class)
 - [Workflow Class Reference](./workflow)
-- [Control Flow Guide](../../docs/workflows-legacy/control-flow)
+- [Control Flow Guide](/docs/workflows-legacy/control-flow)

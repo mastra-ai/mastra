@@ -58,7 +58,7 @@ type OtelConfig = {
 };
 ```
 
-See the [OtelConfig reference documentation](../../reference/observability/otel-config) for more details.
+See the [OtelConfig reference documentation](/docs/reference/observability/otel-tracing/otel-config) for more details.
 
 ### Environment Variables
 
@@ -93,7 +93,7 @@ Here's what a traced agent interaction looks like in [SigNoz](https://signoz.io)
 
 ### Other Supported Providers
 
-For a complete list of supported observability providers and their configuration details, see the [Observability Providers reference](../../reference/observability/providers/).
+For a complete list of supported observability providers and their configuration details, see the [Observability Providers reference](/docs/reference/observability/otel-tracing/providers/).
 
 ### Custom Instrumentation files
 

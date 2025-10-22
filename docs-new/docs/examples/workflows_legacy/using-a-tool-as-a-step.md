@@ -1,21 +1,20 @@
 ---
-title: "Using a Tool as a Step "
+title: 'Using a Tool as a Step '
 description: Example of using Mastra to integrate a custom tool as a step in a legacy workflow.
 ---
-
 
 # Tool as a Workflow step (Legacy)
 
 This example demonstrates how to create and integrate a custom tool as a workflow step, showing how to define input/output schemas and implement the tool's execution logic.
 
 ```ts showLineNumbers copy
-import { createTool } from "@mastra/core/tools";
-import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
-import { z } from "zod";
+import { createTool } from '@mastra/core/tools';
+import { LegacyWorkflow } from '@mastra/core/workflows/legacy';
+import { z } from 'zod';
 
 const crawlWebpage = createTool({
-  id: "Crawl Webpage",
-  description: "Crawls a webpage and extracts the text content",
+  id: 'Crawl Webpage',
+  description: 'Crawls a webpage and extracts the text content',
   inputSchema: z.object({
     url: z.string().url(),
   }),
@@ -25,17 +24,17 @@ const crawlWebpage = createTool({
   execute: async ({ context }) => {
     const response = await fetch(context.triggerData.url);
     const text = await response.text();
-    return { rawText: "This is the text content of the webpage: " + text };
+    return { rawText: 'This is the text content of the webpage: ' + text };
   },
 });
 
-const contentWorkflow = new LegacyWorkflow({ name: "content-review" });
+const contentWorkflow = new LegacyWorkflow({ name: 'content-review' });
 
 contentWorkflow.step(crawlWebpage).commit();
 
 const { start } = contentWorkflow.createRun();
 
-const res = await start({ triggerData: { url: "https://example.com" } });
+const res = await start({ triggerData: { url: 'https://example.com' } });
 
 console.log(res.results);
 ```
@@ -55,13 +54,13 @@ console.log(res.results);
 
 The following links provide example documentation for legacy workflows:
 
-- [Creating a Simple Workflow (Legacy)](/examples/workflows_legacy/creating-a-workflow)
-- [Workflow (Legacy) with Sequential Steps](/examples/workflows_legacy/sequential-steps)
-- [Parallel Execution with Steps](/examples/workflows_legacy/parallel-steps)
-- [Branching Paths](/examples/workflows_legacy/branching-paths)
-- [Workflow (Legacy) with Conditional Branching (experimental)](/examples/workflows_legacy/conditional-branching)
-- [Calling an Agent From a Workflow (Legacy)](/examples/workflows_legacy/calling-agent)
-- [Workflow (Legacy) with Cyclical dependencies](/examples/workflows_legacy/cyclical-dependencies)
-- [Data Mapping with Workflow Variables (Legacy)](/examples/workflows_legacy/workflow-variables)
-- [Human in the Loop Workflow (Legacy)](/examples/workflows_legacy/human-in-the-loop)
-- [Workflow (Legacy) with Suspend and Resume](/examples/workflows_legacy/suspend-and-resume)
+- [Creating a Simple Workflow (Legacy)](/docs/examples/workflows_legacy/creating-a-workflow)
+- [Workflow (Legacy) with Sequential Steps](/docs/examples/workflows_legacy/sequential-steps)
+- [Parallel Execution with Steps](/docs/examples/workflows_legacy/parallel-steps)
+- [Branching Paths](/docs/examples/workflows_legacy/branching-paths)
+- [Workflow (Legacy) with Conditional Branching (experimental)](/docs/examples/workflows_legacy/conditional-branching)
+- [Calling an Agent From a Workflow (Legacy)](/docs/examples/workflows_legacy/calling-agent)
+- [Workflow (Legacy) with Cyclical dependencies](/docs/examples/workflows_legacy/cyclical-dependencies)
+- [Data Mapping with Workflow Variables (Legacy)](/docs/examples/workflows_legacy/workflow-variables)
+- [Human in the Loop Workflow (Legacy)](/docs/examples/workflows_legacy/human-in-the-loop)
+- [Workflow (Legacy) with Suspend and Resume](/docs/examples/workflows_legacy/suspend-and-resume)

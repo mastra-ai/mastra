@@ -1,8 +1,7 @@
 ---
-title: "CloudExporter "
+title: 'CloudExporter '
 description: API reference for the CloudExporter
 ---
-
 
 # CloudExporter
 
@@ -15,14 +14,14 @@ new CloudExporter(config?: CloudExporterConfig)
 ```
 
 <PropertiesTable
-  props={[
-    {
-      name: "config",
-      type: "CloudExporterConfig",
-      description: "Configuration options",
-      required: false,
-    },
-  ]}
+props={[
+{
+name: "config",
+type: "CloudExporterConfig",
+description: "Configuration options",
+required: false,
+},
+]}
 />
 
 ## CloudExporterConfig
@@ -31,19 +30,19 @@ new CloudExporter(config?: CloudExporterConfig)
 interface CloudExporterConfig {
   /** Maximum number of spans per batch. Default: 1000 */
   maxBatchSize?: number;
-  
+
   /** Maximum wait time before flushing in milliseconds. Default: 5000 */
   maxBatchWaitMs?: number;
-  
+
   /** Maximum retry attempts. Default: 3 */
   maxRetries?: number;
-  
+
   /** Cloud access token (from env or config) */
   accessToken?: string;
-  
+
   /** Cloud AI tracing endpoint */
   endpoint?: string;
-  
+
   /** Optional logger */
   logger?: IMastraLogger;
 }
@@ -73,14 +72,14 @@ async exportEvent(event: AITracingEvent): Promise<void>
 Processes tracing events. Only exports SPAN_ENDED events to Cloud.
 
 <PropertiesTable
-  props={[
-    {
-      name: "event",
-      type: "AITracingEvent",
-      description: "The tracing event to export",
-      required: true,
-    },
-  ]}
+props={[
+{
+name: "event",
+type: "AITracingEvent",
+description: "The tracing event to export",
+required: true,
+},
+]}
 />
 
 ### shutdown
@@ -96,12 +95,14 @@ Flushes remaining events and performs cleanup.
 ### Authentication
 
 If no access token is provided via config or environment variable, the exporter:
+
 - Logs a warning with sign-up information
 - Operates as a no-op (discards all events)
 
 ### Batching
 
 The exporter batches spans for efficient network usage:
+
 - Flushes when batch size reaches `maxBatchSize`
 - Flushes when `maxBatchWaitMs` elapsed since first span in batch
 - Flushes on `shutdown()`
@@ -154,22 +155,25 @@ const exporter = new CloudExporter();
 const customExporter = new CloudExporter({
   accessToken: 'your-token',
   maxBatchSize: 500,
-  maxBatchWaitMs: 2000
+  maxBatchWaitMs: 2000,
 });
 ```
 
 ## See Also
 
 ### Documentation
+
 - [AI Tracing Overview](/docs/observability/ai-tracing/overview) - Complete guide
 - [Exporters](/docs/observability/ai-tracing/overview#exporters) - Exporter concepts
 
 ### Other Exporters
-- [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - Storage persistence
-- [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - Debug output
-- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
-- [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration
+
+- [DefaultExporter](/docs/reference/observability/ai-tracing/exporters/default-exporter) - Storage persistence
+- [ConsoleExporter](/docs/reference/observability/ai-tracing/exporters/console-exporter) - Debug output
+- [Langfuse](/docs/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
+- [Braintrust](/docs/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration
 
 ### Reference
-- [Configuration](/reference/observability/ai-tracing/configuration) - Configuration options
-- [Interfaces](/reference/observability/ai-tracing/interfaces) - Type definitions
+
+- [Configuration](/docs/reference/observability/ai-tracing/configuration) - Configuration options
+- [Interfaces](/docs/reference/observability/ai-tracing/interfaces) - Type definitions

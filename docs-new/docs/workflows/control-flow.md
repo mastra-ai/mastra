@@ -53,7 +53,7 @@ export const testWorkflow = createWorkflow({...})
 
 This executes `step1` and `step2` concurrently, then continues to `step3` after both complete.
 
-> See [Parallel Execution with Steps](../../examples/workflows/parallel-steps) for more information.
+> See [Parallel Execution with Steps](/docs/examples/workflows/parallel-steps) for more information.
 
 > 📹 Watch: How to run steps in parallel and optimize your Mastra workflow → [YouTube (3 minutes)](https://youtu.be/GQJxve5Hki4)
 
@@ -80,7 +80,7 @@ export const testWorkflow = createWorkflow({...})
 
 Branch conditions are evaluated sequentially, but steps with matching conditions are executed in parallel.
 
-> See [Workflow with Conditional Branching](../../examples/workflows/conditional-branching) for more information.
+> See [Workflow with Conditional Branching](/docs/examples/workflows/conditional-branching) for more information.
 
 ## Looping steps
 

@@ -31,5 +31,5 @@ This method does not return a value.
 
 ## Related
 
-- [Logging](../../docs/observability/logging)
-- [PinoLogger](../../reference/observability/logger)
+- [Logging](/docs/observability/logging)
+- [PinoLogger](/docs/reference/observability/logging/pino-logger)

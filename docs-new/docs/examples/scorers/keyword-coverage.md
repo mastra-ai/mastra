@@ -13,7 +13,7 @@ Use `createKeywordCoverageScorer` to evaluate how accurately a response includes
 npm install @mastra/evals
 ```
 
-> For complete API documentation and configuration options, see [`createKeywordCoverageScorer`](/reference/scorers/keyword-coverage).
+> For complete API documentation and configuration options, see [`createKeywordCoverageScorer`](/docs/reference/scorers/keyword-coverage).
 
 ## Full coverage example
 
@@ -128,7 +128,7 @@ You can create a `KeywordCoverageMetric` instance with default settings. No addi
 const metric = new KeywordCoverageMetric();
 ```
 
-> See [KeywordCoverageScorer](/reference/scorers/keyword-coverage) for a full list of configuration options.
+> See [KeywordCoverageScorer](/docs/reference/scorers/keyword-coverage) for a full list of configuration options.
 
 ## Understanding the results
 

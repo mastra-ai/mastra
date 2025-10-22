@@ -151,5 +151,5 @@ isOptional: true,
 
 ## Related
 
-- [Control flow](../../docs/workflows/control-flow)
-- [Using agents and tools](../../docs/workflows/using-with-agents-and-tools)
+- [Control flow](/docs/workflows/control-flow)
+- [Using agents and tools](/docs/workflows/using-with-agents-and-tools)

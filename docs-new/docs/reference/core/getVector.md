@@ -39,5 +39,5 @@ description: "The vector store instance with the specified name. Throws an error
 
 ## Related
 
-- [Vector stores overview](../../docs/rag/vector-databases)
-- [RAG overview](../../docs/rag/overview)
+- [Vector stores overview](/docs/rag/vector-databases)
+- [RAG overview](/docs/rag/overview)

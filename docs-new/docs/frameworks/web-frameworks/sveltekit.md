@@ -57,7 +57,7 @@ Run the following command to quickly scaffold the default Weather agent with sen
 npx mastra@latest init --default
 ```
 
-> See [mastra init](/reference/cli/init) for more information.
+> See [mastra init](/docs/reference/cli/mastra#mastra-init) for more information.
 
 ### 2. Use the Interactive CLI
 
@@ -260,7 +260,7 @@ Run the following command to quickly scaffold the default Weather agent with sen
 npx mastra@latest init --default
 ```
 
-> See [mastra init](/reference/cli/init) for more information.
+> See [mastra init](/docs/reference/cli/mastra#mastra-init) for more information.
 
 ### 2. Use the Interactive CLI
 
@@ -437,4 +437,4 @@ If you need more details or information about a different location, feel free to
 
 ## Next steps
 
-- [Monorepo Deployment](../../deployment/monorepo)
+- [Monorepo Deployment](/docs/deployment/monorepo)

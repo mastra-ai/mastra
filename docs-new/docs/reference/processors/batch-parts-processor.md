@@ -1,6 +1,6 @@
 ---
-title: "Reference: Batch Parts Processor "
-description: "Documentation for the BatchPartsProcessor in Mastra, which batches multiple stream parts together to reduce frequency of emissions."
+title: 'Reference: Batch Parts Processor '
+description: 'Documentation for the BatchPartsProcessor in Mastra, which batches multiple stream parts together to reduce frequency of emissions.'
 ---
 
 # BatchPartsProcessor
@@ -10,102 +10,102 @@ The `BatchPartsProcessor` is an **output processor** that batches multiple strea
 ## Usage example
 
 ```typescript copy
-import { BatchPartsProcessor } from "@mastra/core/processors";
+import { BatchPartsProcessor } from '@mastra/core/processors';
 
 const processor = new BatchPartsProcessor({
   batchSize: 5,
   maxWaitTime: 100,
-  emitOnNonText: true
+  emitOnNonText: true,
 });
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "options",
-      type: "Options",
-      description: "Configuration options for batching stream parts",
-      isOptional: true,
-    },
-  ]}
+content={[
+{
+name: "options",
+type: "Options",
+description: "Configuration options for batching stream parts",
+isOptional: true,
+},
+]}
 />
 
 ### Options
 
 <PropertiesTable
-  content={[
-    {
-      name: "batchSize",
-      type: "number",
-      description: "Number of parts to batch together before emitting",
-      isOptional: true,
-      default: "5",
-    },
-    {
-      name: "maxWaitTime",
-      type: "number",
-      description: "Maximum time to wait before emitting a batch (in milliseconds). If set, will emit the current batch even if it hasn't reached batchSize",
-      isOptional: true,
-      default: "undefined (no timeout)",
-    },
-    {
-      name: "emitOnNonText",
-      type: "boolean",
-      description: "Whether to emit immediately when a non-text part is encountered",
-      isOptional: true,
-      default: "true",
-    },
-  ]}
+content={[
+{
+name: "batchSize",
+type: "number",
+description: "Number of parts to batch together before emitting",
+isOptional: true,
+default: "5",
+},
+{
+name: "maxWaitTime",
+type: "number",
+description: "Maximum time to wait before emitting a batch (in milliseconds). If set, will emit the current batch even if it hasn't reached batchSize",
+isOptional: true,
+default: "undefined (no timeout)",
+},
+{
+name: "emitOnNonText",
+type: "boolean",
+description: "Whether to emit immediately when a non-text part is encountered",
+isOptional: true,
+default: "true",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "name",
-      type: "string",
-      description: "Processor name set to 'batch-parts'",
-      isOptional: false,
-    },
-    {
-      name: "processOutputStream",
-      type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never }) => Promise<ChunkType | null>",
-      description: "Processes streaming output parts to batch them together",
-      isOptional: false,
-    },
-    {
-      name: "flush",
-      type: "(state?: BatchPartsState) => ChunkType | null",
-      description: "Force flush any remaining batched parts when the stream ends",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "name",
+type: "string",
+description: "Processor name set to 'batch-parts'",
+isOptional: false,
+},
+{
+name: "processOutputStream",
+type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never }) => Promise<ChunkType | null>",
+description: "Processes streaming output parts to batch them together",
+isOptional: false,
+},
+{
+name: "flush",
+type: "(state?: BatchPartsState) => ChunkType | null",
+description: "Force flush any remaining batched parts when the stream ends",
+isOptional: false,
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript filename="src/mastra/agents/batched-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-import { BatchPartsProcessor } from "@mastra/core/processors";
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { BatchPartsProcessor } from '@mastra/core/processors';
 
 export const agent = new Agent({
-  name: "batched-agent",
-  instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  name: 'batched-agent',
+  instructions: 'You are a helpful assistant',
+  model: openai('gpt-4o-mini'),
   outputProcessors: [
     new BatchPartsProcessor({
       batchSize: 5,
       maxWaitTime: 100,
-      emitOnNonText: true
-    })
-  ]
+      emitOnNonText: true,
+    }),
+  ],
 });
 ```
 
 ## Related
 
-- [Output Processors documentation](/docs/agents/output-processors)
+- [Output Processors documentation](/docs/agents/guardrails)

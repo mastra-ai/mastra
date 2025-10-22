@@ -339,6 +339,6 @@ const vectorTool = createVectorQueryTool({
 
 ## Related
 
-- [createVectorQueryTool()](/reference/tools/vector-query-tool)
-- [Hybrid Vector Search](/examples/rag/query/hybrid-vector-search)
-- [Metadata Filters](/reference/rag/metadata-filters)
+- [createVectorQueryTool()](/docs/reference/tools/vector-query-tool)
+- [Hybrid Vector Search](/docs/examples/rag/query/hybrid-vector-search)
+- [Metadata Filters](/docs/reference/rag/metadata-filters)

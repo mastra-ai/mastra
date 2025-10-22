@@ -40,4 +40,4 @@ description: "The workflow instance for method chaining",
 
 ## Related
 
-- [Parallel Workflow Example](../../../examples/workflows/parallel-steps)
+- [Parallel Workflow Example](/docs/examples/workflows/parallel-steps)

@@ -88,5 +88,5 @@ description: "A promise that resolves to the logs for the specified transport ID
 
 ## Related
 
-- [Logging overview](../../docs/observability/logging)
-- [Logger reference](../../reference/observability/logger)
+- [Logging overview](/docs/observability/logging)
+- [Logger reference](/docs/reference/observability/logging/pino-logger)

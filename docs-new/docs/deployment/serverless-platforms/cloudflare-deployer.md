@@ -1,12 +1,11 @@
 ---
-title: "Cloudflare Deployer"
-description: "Learn how to deploy a Mastra application to Cloudflare using the Mastra CloudflareDeployer"
+title: 'Cloudflare Deployer'
+description: 'Learn how to deploy a Mastra application to Cloudflare using the Mastra CloudflareDeployer'
 ---
-
 
 # CloudflareDeployer
 
-The `CloudflareDeployer` class handles deployment of standalone Mastra applications to Cloudflare Workers. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/deployer) class with Cloudflare specific functionality.
+The `CloudflareDeployer` class handles deployment of standalone Mastra applications to Cloudflare Workers. It manages configuration, deployment, and extends the base [Deployer](/docs/reference/deployer) class with Cloudflare specific functionality.
 
 ## Installation
 
@@ -17,21 +16,21 @@ npm install @mastra/deployer-cloudflare@latest
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
+import { Mastra } from '@mastra/core/mastra';
+import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
 
 export const mastra = new Mastra({
   // ...
   deployer: new CloudflareDeployer({
-    projectName: "hello-mastra",
+    projectName: 'hello-mastra',
     env: {
-      NODE_ENV: "production",
+      NODE_ENV: 'production',
     },
   }),
 });
 ```
 
-> See the [CloudflareDeployer](/reference/deployer/cloudflare) API reference for all available configuration options.
+> See the [CloudflareDeployer](/docs/reference/deployer/cloudflare) API reference for all available configuration options.
 
 ## Manual deployment
 
@@ -71,8 +70,8 @@ The `CloudflareDeployer` automatically generates a `wrangler.json` configuration
     "CLOUDFLARE_API_TOKEN": "..."
   }
 }
-
 ```
+
 ## Next steps
 
-- [Mastra Client SDK](/docs/client-js/overview)
+- [Mastra Client SDK](/docs/reference/client-js/mastra-client)

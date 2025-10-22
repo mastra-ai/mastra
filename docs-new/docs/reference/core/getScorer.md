@@ -71,6 +71,6 @@ try {
 
 ## Related
 
-- [getScorers()](../../reference/core/getScorers) - Get all registered scorers
-- [getScorerByName()](../../reference/core/getScorerByName) - Get a scorer by its name property
-- [Custom Scorers](../../docs/scorers/custom-scorers) - Learn how to create custom scorers
+- [getScorers()](/docs/reference/core/getScorers) - Get all registered scorers
+- [getScorerByName()](/docs/reference/core/getScorerByName) - Get a scorer by its name property
+- [Custom Scorers](/docs/scorers/custom-scorers) - Learn how to create custom scorers

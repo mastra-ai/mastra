@@ -1,6 +1,6 @@
 ---
-title: "MCP Docs Server "
-description: "Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert."
+title: 'MCP Docs Server '
+description: 'Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert.'
 ---
 
 import YouTube from '@site/src/components/YouTube';
@@ -19,7 +19,7 @@ In this guide you'll learn how to add Mastra's MCP server to your AI tooling.
 
 ### create-mastra
 
-During the interactive [create-mastra](/reference/cli/create-mastra) wizard, choose one of your tools in the MCP step.
+During the interactive [create-mastra](/docs/reference/cli/create-mastra) wizard, choose one of your tools in the MCP step.
 
 ### Manual setup
 
@@ -68,20 +68,17 @@ If you followed the automatic installation, you'll see a popup when you open cur
 1. Create a `.vscode/mcp.json` file in your workspace
 2. Insert the following configuration:
 
-    ```json copy
-    {
-      "servers": {
-        "mastra": {
-          "type": "stdio",
-          "command": "npx",
-          "args": [
-            "-y",
-            "@mastra/mcp-docs-server"
-          ]
-        }
-      }
-    }
-    ```
+   ```json copy
+   {
+     "servers": {
+       "mastra": {
+         "type": "stdio",
+         "command": "npx",
+         "args": ["-y", "@mastra/mcp-docs-server"]
+       }
+     }
+   }
+   ```
 
 Once you installed the MCP server, you can use it like so:
 
@@ -89,12 +86,12 @@ Once you installed the MCP server, you can use it like so:
 2. Navigate to MCP settings.
 3. Click "enable" on the Chat > MCP option.
 
-    <img
-      src="/img/vscode-mcp-setting.png"
-      alt="Settings page of VSCode to enable MCP"
-      width={800}
-      className="rounded-lg"
-    />
+   <img
+     src="/img/vscode-mcp-setting.png"
+     alt="Settings page of VSCode to enable MCP"
+     width={800}
+     className="rounded-lg"
+   />
 
 MCP only works in Agent mode in VSCode. Once you are in agent mode, open the `mcp.json` file and click the "start" button. Note that the "start" button will only appear if the `.vscode` folder containing `mcp.json` is in your workspace root, or the highest level of the in-editor file explorer.
 
@@ -121,16 +118,17 @@ After starting the MCP server, click the tools button in the Copilot pane to see
 1. Open `~/.codeium/windsurf/mcp_config.json` in your editor
 2. Insert the following configuration:
 
-    ```json copy
-    {
-      "mcpServers": {
-        "mastra": {
-          "command": "npx",
-          "args": ["-y", "@mastra/mcp-docs-server"]
-        }
-      }
-    }
-    ```
+   ```json copy
+   {
+     "mcpServers": {
+       "mastra": {
+         "command": "npx",
+         "args": ["-y", "@mastra/mcp-docs-server"]
+       }
+     }
+   }
+   ```
+
 3. Save the configuration and restart Windsurf
 
 [More info on using MCP servers with Windsurf](https://docs.windsurf.com/windsurf/cascade/mcp#mcp-config-json)
@@ -161,7 +159,6 @@ Once configured, you can ask your AI tool questions about Mastra or instruct it 
 ### Troubleshooting
 
 1. **Server Not Starting**
-
    - Ensure [npx](https://docs.npmjs.com/cli/v11/commands/npx) is installed and working.
    - Check for conflicting MCP servers.
    - Verify your configuration file syntax.

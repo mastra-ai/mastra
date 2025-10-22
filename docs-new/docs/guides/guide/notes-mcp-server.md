@@ -15,7 +15,7 @@ In this guide, you'll learn how to build a complete MCP (Model Context Protocol)
 ## Prerequisites
 
 - Node.js `v20.0` or later installed
-- An API key from a supported [Model Provider](/docs/getting-started/model-providers)
+- An API key from a supported [Model Provider](/docs/models/providers)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
 ## Adding necessary dependencies & files
@@ -385,7 +385,7 @@ export const notes = new MCPServer({
 
 ## Run the Server
 
-Great, you've authored your first MCP server! Now you can try it out by starting the [playground](../../docs/server-db/local-dev-playground):
+Great, you've authored your first MCP server! Now you can try it out by starting the [playground](/docs/server-db/local-dev-playground):
 
 ```bash copy
 npm run dev

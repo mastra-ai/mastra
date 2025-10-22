@@ -39,16 +39,16 @@ const voice = new OpenAIVoice();
 
 Mastra supports a wide range of Text-to-Speech providers, each with their own unique capabilities and voice options. You can choose the provider that best suits your application's needs:
 
-- [**OpenAI**](/reference/voice/openai/) - High-quality voices with natural intonation and expression
-- [**Azure**](/reference/voice/azure/) - Microsoft's speech service with a wide range of voices and languages
-- [**ElevenLabs**](/reference/voice/elevenlabs/) - Ultra-realistic voices with emotion and fine-grained control
-- [**PlayAI**](/reference/voice/playai/) - Specialized in natural-sounding voices with various styles
-- [**Google**](/reference/voice/google/) - Google's speech synthesis with multilingual support
-- [**Cloudflare**](/reference/voice/cloudflare/) - Edge-optimized speech synthesis for low-latency applications
-- [**Deepgram**](/reference/voice/deepgram/) - AI-powered speech technology with high accuracy
-- [**Speechify**](/reference/voice/speechify/) - Text-to-speech optimized for readability and accessibility
-- [**Sarvam**](/reference/voice/sarvam/) - Specialized in Indic languages and accents
-- [**Murf**](/reference/voice/murf/) - Studio-quality voice overs with customizable parameters
+- [**OpenAI**](/docs/reference/voice/openai/) - High-quality voices with natural intonation and expression
+- [**Azure**](/docs/reference/voice/azure/) - Microsoft's speech service with a wide range of voices and languages
+- [**ElevenLabs**](/docs/reference/voice/elevenlabs/) - Ultra-realistic voices with emotion and fine-grained control
+- [**PlayAI**](/docs/reference/voice/playai/) - Specialized in natural-sounding voices with various styles
+- [**Google**](/docs/reference/voice/google/) - Google's speech synthesis with multilingual support
+- [**Cloudflare**](/docs/reference/voice/cloudflare/) - Edge-optimized speech synthesis for low-latency applications
+- [**Deepgram**](/docs/reference/voice/deepgram/) - AI-powered speech technology with high accuracy
+- [**Speechify**](/docs/reference/voice/speechify/) - Text-to-speech optimized for readability and accessibility
+- [**Sarvam**](/docs/reference/voice/sarvam/) - Specialized in Indic languages and accents
+- [**Murf**](/docs/reference/voice/murf/) - Studio-quality voice overs with customizable parameters
 
 Each provider is implemented as a separate package that you can install as needed:
 

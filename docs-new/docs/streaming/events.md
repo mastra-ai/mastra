@@ -36,7 +36,7 @@ for await (const chunk of stream) {
 }
 ```
 
-> See [Agent.stream()](../../reference/agents/stream) for more information.
+> See [Agent.stream()](/docs/reference/streaming/agents/stream) for more information.
 
 ### Example agent output
 

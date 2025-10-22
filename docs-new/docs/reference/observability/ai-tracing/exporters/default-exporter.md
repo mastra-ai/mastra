@@ -1,8 +1,7 @@
 ---
-title: "DefaultExporter "
+title: 'DefaultExporter '
 description: API reference for the DefaultExporter
 ---
-
 
 # DefaultExporter
 
@@ -15,20 +14,20 @@ new DefaultExporter(config?: BatchingConfig, logger?: IMastraLogger)
 ```
 
 <PropertiesTable
-  props={[
-    {
-      name: "config",
-      type: "BatchingConfig",
-      description: "Batching configuration options",
-      required: false,
-    },
-    {
-      name: "logger",
-      type: "IMastraLogger",
-      description: "Logger instance. Falls back to ConsoleLogger with INFO level if not provided",
-      required: false,
-    },
-  ]}
+props={[
+{
+name: "config",
+type: "BatchingConfig",
+description: "Batching configuration options",
+required: false,
+},
+{
+name: "logger",
+type: "IMastraLogger",
+description: "Logger instance. Falls back to ConsoleLogger with INFO level if not provided",
+required: false,
+},
+]}
 />
 
 ## BatchingConfig
@@ -37,19 +36,19 @@ new DefaultExporter(config?: BatchingConfig, logger?: IMastraLogger)
 interface BatchingConfig {
   /** Maximum number of spans per batch. Default: 1000 */
   maxBatchSize?: number;
-  
+
   /** Maximum total buffer size before emergency flush. Default: 10000 */
   maxBufferSize?: number;
-  
+
   /** Maximum time to wait before flushing batch in milliseconds. Default: 5000 */
   maxBatchWaitMs?: number;
-  
+
   /** Maximum number of retry attempts. Default: 4 */
   maxRetries?: number;
-  
+
   /** Base retry delay in milliseconds (uses exponential backoff). Default: 500 */
   retryDelayMs?: number;
-  
+
   /** Tracing strategy or 'auto' for automatic selection. Default: 'auto' */
   strategy?: TracingStrategy | 'auto';
 }
@@ -75,7 +74,7 @@ readonly name = 'tracing-default-exporter';
 
 ## Methods
 
-### __registerMastra
+### \_\_registerMastra
 
 ```typescript
 __registerMastra(mastra: Mastra): void
@@ -100,14 +99,14 @@ async exportEvent(event: AITracingEvent): Promise<void>
 Processes a tracing event according to the resolved strategy.
 
 <PropertiesTable
-  props={[
-    {
-      name: "event",
-      type: "AITracingEvent",
-      description: "The tracing event to export",
-      required: true,
-    },
-  ]}
+props={[
+{
+name: "event",
+type: "AITracingEvent",
+description: "The tracing event to export",
+required: true,
+},
+]}
 />
 
 ### shutdown
@@ -126,13 +125,14 @@ When `strategy: 'auto'` (default), the exporter queries the storage adapter for 
 interface AITracingStrategy {
   /** Strategies supported by this adapter */
   supported: TracingStrategy[];
-  
+
   /** Preferred strategy for optimal performance */
   preferred: TracingStrategy;
 }
 ```
 
 The exporter will:
+
 1. Use the storage adapter's preferred strategy if available
 2. Fall back to the first supported strategy if preferred isn't available
 3. Log a warning if a user-specified strategy isn't supported
@@ -142,6 +142,7 @@ The exporter will:
 ### Flush Triggers
 
 The buffer flushes when any of these conditions are met:
+
 - Buffer size reaches `maxBatchSize`
 - Time since first buffered event exceeds `maxBatchWaitMs`
 - Buffer size reaches `maxBufferSize` (emergency flush)
@@ -150,6 +151,7 @@ The buffer flushes when any of these conditions are met:
 ### Retry Logic
 
 Failed flushes are retried with exponential backoff:
+
 - Retry delay: `retryDelayMs * 2^attempt`
 - Maximum attempts: `maxRetries`
 - Batch is dropped after all retries fail
@@ -157,6 +159,7 @@ Failed flushes are retried with exponential backoff:
 ### Out-of-Order Handling
 
 For `batch-with-updates` strategy:
+
 - Tracks which spans have been created
 - Rejects updates/ends for spans not yet created
 - Logs warnings for out-of-order events
@@ -174,22 +177,25 @@ const exporter = new DefaultExporter();
 const customExporter = new DefaultExporter({
   maxBatchSize: 500,
   maxBatchWaitMs: 2000,
-  strategy: 'batch-with-updates'
+  strategy: 'batch-with-updates',
 });
 ```
 
 ## See Also
 
 ### Documentation
+
 - [AI Tracing Overview](/docs/observability/ai-tracing/overview) - Complete guide
 - [Exporters](/docs/observability/ai-tracing/overview#exporters) - Exporter concepts
 
 ### Other Exporters
-- [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud
-- [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - Debug output
-- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
-- [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration
+
+- [CloudExporter](/docs/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud
+- [ConsoleExporter](/docs/reference/observability/ai-tracing/exporters/console-exporter) - Debug output
+- [Langfuse](/docs/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
+- [Braintrust](/docs/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration
 
 ### Reference
-- [Configuration](/reference/observability/ai-tracing/configuration) - Configuration options
-- [Interfaces](/reference/observability/ai-tracing/interfaces) - Type definitions
+
+- [Configuration](/docs/reference/observability/ai-tracing/configuration) - Configuration options
+- [Interfaces](/docs/reference/observability/ai-tracing/interfaces) - Type definitions

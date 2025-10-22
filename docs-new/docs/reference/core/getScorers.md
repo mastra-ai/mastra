@@ -1,6 +1,6 @@
 ---
-title: "Reference: getScorers() "
-description: "Documentation for the `getScorers()` method in Mastra, which returns all registered scorers for evaluating AI outputs."
+title: 'Reference: getScorers() '
+description: 'Documentation for the `getScorers()` method in Mastra, which returns all registered scorers for evaluating AI outputs.'
 ---
 
 # getScorers()
@@ -26,17 +26,17 @@ This method takes no parameters.
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "scorers",
-      type: "Record<string, MastraScorer> | undefined",
-      description: "An object containing all registered scorers, where keys are scorer names and values are MastraScorer instances. Returns undefined if no scorers are registered.",
-    },
-  ]}
+content={[
+{
+name: "scorers",
+type: "Record<string, MastraScorer> | undefined",
+description: "An object containing all registered scorers, where keys are scorer names and values are MastraScorer instances. Returns undefined if no scorers are registered.",
+},
+]}
 />
 
 ## Related
 
-- [getScorer()](../../reference/core/getScorer) - Get a specific scorer by key
-- [getScorerByName()](../../reference/core/getScorerByName) - Get a scorer by its name property
-- [Scorers Overview](../../docs/scorers/overview) - Learn about creating and using scorers
+- [getScorer()](/docs/reference/core/getScorer) - Get a specific scorer by key
+- [getScorerByName()](/docs/reference/core/getScorerByName) - Get a scorer by its name property
+- [Scorers Overview](/docs/scorers/overview) - Learn about creating and using scorers

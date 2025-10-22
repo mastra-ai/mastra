@@ -186,4 +186,4 @@ export const parallelWorkflows = createWorkflow({
 
 The following links provide example documentation for legacy workflows:
 
-- [Parallel Execution with Steps](/examples/workflows_legacy/parallel-steps)
+- [Parallel Execution with Steps](/docs/examples/workflows_legacy/parallel-steps)

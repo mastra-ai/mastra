@@ -40,4 +40,4 @@ description: "A record of all configured workflows, where keys are workflow IDs 
 
 ## Related
 
-- [Workflows overview](../../docs/workflows/overview)
+- [Workflows overview](/docs/workflows/overview)

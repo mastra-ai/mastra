@@ -117,7 +117,7 @@ You can create a `ContentSimilarityMetric` instance with default settings. No ad
 const metric = new ContentSimilarityMetric();
 ```
 
-> See [ContentSimilarityMetric](/reference/evals/content-similarity) for a full list of configuration options.
+> See [ContentSimilarityMetric](/docs/reference/evals/content-similarity) for a full list of configuration options.
 
 ## Understanding the results
 

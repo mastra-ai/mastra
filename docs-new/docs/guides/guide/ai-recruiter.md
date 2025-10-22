@@ -13,7 +13,7 @@ You'll create a workflow that gathers information from a candidate's resume, the
 ## Prerequisites
 
 - Node.js `v20.0` or later installed
-- An API key from a supported [Model Provider](/docs/getting-started/model-providers)
+- An API key from a supported [Model Provider](/docs/models/providers)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
 ## Building the Workflow
@@ -197,7 +197,7 @@ export const mastra = new Mastra({
 
 ## Testing the Workflow
 
-You can test your workflow inside Mastra's [playground](../../docs/server-db/local-dev-playground) by starting the development server:
+You can test your workflow inside Mastra's [playground](/docs/server-db/local-dev-playground) by starting the development server:
 
 ```bash copy
 mastra dev
@@ -211,7 +211,7 @@ Knowledgeable Software Engineer with more than 10 years of experience in softwar
 
 After entering the resume text, press the **Run** button. You should now see two status boxes (`GatherCandidateInfo` and `AskAboutSpecialty`) which contain the output of the workflow steps.
 
-You can also test the workflow programmatically by calling [`.createRunAsync()`](../../reference/workflows/create-run) and [`.start()`](../../reference/workflows/run-methods/start). Create a new file `src/test-workflow.ts` and add the following:
+You can also test the workflow programmatically by calling [`.createRunAsync()`](/docs/reference/workflows/run) and [`.start()`](/docs/reference/workflows/run-methods/start). Create a new file `src/test-workflow.ts` and add the following:
 
 ```ts copy filename="src/test-workflow.ts"
 import { mastra } from './mastra';

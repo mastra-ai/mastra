@@ -31,5 +31,5 @@ description: "The configured memory instance, or undefined if no memory has been
 
 ## Related
 
-- [Memory overview](../../docs/memory/overview)
-- [Memory reference](../../reference/memory/Memory)
+- [Memory overview](/docs/memory/overview)
+- [Memory reference](/docs/reference/memory)

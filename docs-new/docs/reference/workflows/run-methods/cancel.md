@@ -54,5 +54,5 @@ try {
 
 ## Related
 
-- [Workflows overview](../../../docs/workflows/overview#run-workflow)
-- [Workflow.createRunAsync()](../create-run)
+- [Workflows overview](/docs/workflows/overview#run-workflow)
+- [Run Class](../run)

@@ -31,5 +31,5 @@ description: "The configured server configuration including port, timeout, API r
 
 ## Related
 
-- [Server deployment](../../docs/deployment/server-deployment)
-- [Server configuration](../../docs/server-db/custom-api-routes)
+- [Server deployment](/docs/deployment/server-deployment)
+- [Server configuration](/docs/server-db/custom-api-routes)

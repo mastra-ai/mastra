@@ -1,8 +1,7 @@
 ---
-title: "Interfaces "
+title: 'Interfaces '
 description: AI Tracing type definitions and interfaces
 ---
-
 
 # Interfaces
 
@@ -16,19 +15,19 @@ Primary interface for AI Tracing.
 interface AITracing {
   /** Get current configuration */
   getConfig(): Readonly<Required<TracingConfig>>;
-  
+
   /** Get all exporters */
   getExporters(): readonly AITracingExporter[];
-  
+
   /** Get all processors */
   getProcessors(): readonly AISpanProcessor[];
-  
+
   /** Get the logger instance (for exporters and other components) */
   getLogger(): IMastraLogger;
-  
+
   /** Start a new span of a specific AISpanType */
   startSpan<TType extends AISpanType>(options: StartSpanOptions<TType>): AISpan<TType>;
-  
+
   /** Shutdown AI tracing and clean up resources */
   shutdown(): Promise<void>;
 }
@@ -69,44 +68,40 @@ interface AISpan<TType extends AISpanType> {
   readonly traceId: string;
   readonly type: TType;
   readonly name: string;
-  
+
   /** Is an internal span? (spans internal to the operation of mastra) */
   isInternal: boolean;
-  
+
   /** Parent span reference (undefined for root spans) */
   parent?: AnyAISpan;
-  
+
   /** Pointer to the AITracing instance */
   aiTracing: AITracing;
-  
+
   attributes?: AISpanTypeMap[TType];
   metadata?: Record<string, any>;
   input?: any;
   output?: any;
   errorInfo?: any;
-  
+
   /** End the span */
   end(options?: EndSpanOptions<TType>): void;
-  
+
   /** Record an error for the span, optionally end the span as well */
   error(options: ErrorSpanOptions<TType>): void;
-  
+
   /** Update span attributes */
   update(options: UpdateSpanOptions<TType>): void;
-  
+
   /** Create child span - can be any span type independent of parent */
-  createChildSpan<TChildType extends AISpanType>(
-    options: ChildSpanOptions<TChildType>
-  ): AISpan<TChildType>;
-  
+  createChildSpan<TChildType extends AISpanType>(options: ChildSpanOptions<TChildType>): AISpan<TChildType>;
+
   /** Create event span - can be any span type independent of parent */
-  createEventSpan<TChildType extends AISpanType>(
-    options: ChildEventOptions<TChildType>
-  ): AISpan<TChildType>;
-  
+  createEventSpan<TChildType extends AISpanType>(options: ChildEventOptions<TChildType>): AISpan<TChildType>;
+
   /** Returns TRUE if the span is the root span of a trace */
   get isRootSpan(): boolean;
-  
+
   /** Returns TRUE if the span is a valid span (not a NO-OP Span) */
   get isValid(): boolean;
 }
@@ -120,13 +115,13 @@ Interface for tracing exporters.
 interface AITracingExporter {
   /** Exporter name */
   name: string;
-  
+
   /** Initialize exporter (called after all dependencies are ready) */
   init?(): void;
-  
+
   /** Export tracing events */
   exportEvent(event: AITracingEvent): Promise<void>;
-  
+
   /** Shutdown exporter */
   shutdown(): Promise<void>;
 }
@@ -140,10 +135,10 @@ Interface for span processors.
 interface AISpanProcessor {
   /** Processor name */
   name: string;
-  
+
   /** Process span before export */
   process(span?: AnyAISpan): AnyAISpan | undefined;
-  
+
   /** Shutdown processor */
   shutdown(): Promise<void>;
 }
@@ -159,43 +154,43 @@ AI-specific span types with their associated metadata.
 enum AISpanType {
   /** Agent run - root span for agent processes */
   AGENT_RUN = 'agent_run',
-  
+
   /** Generic span for custom operations */
   GENERIC = 'generic',
-  
+
   /** LLM generation with model calls, token usage, prompts, completions */
   LLM_GENERATION = 'llm_generation',
-  
+
   /** Individual LLM streaming chunk/event */
   LLM_CHUNK = 'llm_chunk',
-  
+
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
-  
+
   /** Function/tool execution with inputs, outputs, errors */
   TOOL_CALL = 'tool_call',
-  
+
   /** Workflow run - root span for workflow processes */
   WORKFLOW_RUN = 'workflow_run',
-  
+
   /** Workflow step execution with step status, data flow */
   WORKFLOW_STEP = 'workflow_step',
-  
+
   /** Workflow conditional execution with condition evaluation */
   WORKFLOW_CONDITIONAL = 'workflow_conditional',
-  
+
   /** Individual condition evaluation within conditional */
   WORKFLOW_CONDITIONAL_EVAL = 'workflow_conditional_eval',
-  
+
   /** Workflow parallel execution */
   WORKFLOW_PARALLEL = 'workflow_parallel',
-  
+
   /** Workflow loop execution */
   WORKFLOW_LOOP = 'workflow_loop',
-  
+
   /** Workflow sleep operation */
   WORKFLOW_SLEEP = 'workflow_sleep',
-  
+
   /** Workflow wait for event operation */
   WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
 }
@@ -219,16 +214,16 @@ Agent Run attributes.
 interface AgentRunAttributes {
   /** Agent identifier */
   agentId: string;
-  
+
   /** Agent Instructions */
   instructions?: string;
-  
+
   /** Agent Prompt */
   prompt?: string;
-  
+
   /** Available tools for this execution */
   availableTools?: string[];
-  
+
   /** Maximum steps allowed */
   maxSteps?: number;
 }
@@ -242,13 +237,13 @@ LLM Generation attributes.
 interface LLMGenerationAttributes {
   /** Model name (e.g., 'gpt-4', 'claude-3') */
   model?: string;
-  
+
   /** Model provider (e.g., 'openai', 'anthropic') */
   provider?: string;
-  
+
   /** Type of result/output this LLM call produced */
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
-  
+
   /** Token usage statistics */
   usage?: {
     promptTokens?: number;
@@ -257,7 +252,7 @@ interface LLMGenerationAttributes {
     promptCacheHitTokens?: number;
     promptCacheMissTokens?: number;
   };
-  
+
   /** Model parameters */
   parameters?: {
     maxOutputTokens?: number;
@@ -270,10 +265,10 @@ interface LLMGenerationAttributes {
     seed?: number;
     maxRetries?: number;
   };
-  
+
   /** Whether this was a streaming response */
   streaming?: boolean;
-  
+
   /** Reason the generation finished */
   finishReason?: string;
 }
@@ -287,7 +282,7 @@ LLM Chunk attributes - for individual streaming chunks/events.
 interface LLMChunkAttributes {
   /** Type of chunk (text-delta, reasoning-delta, tool-call, etc.) */
   chunkType?: string;
-  
+
   /** Sequence number of this chunk in the stream */
   sequenceNumber?: number;
 }
@@ -314,13 +309,13 @@ MCP Tool Call attributes.
 interface MCPToolCallAttributes {
   /** Id of the MCP tool/function */
   toolId: string;
-  
+
   /** MCP server identifier */
   mcpServer: string;
-  
+
   /** MCP server version */
   serverVersion?: string;
-  
+
   /** Whether tool execution was successful */
   success?: boolean;
 }
@@ -334,13 +329,13 @@ Workflow Run attributes.
 interface WorkflowRunAttributes {
   /** Workflow identifier */
   workflowId: string;
-  
+
   /** Workflow version */
   workflowVersion?: string;
-  
+
   /** Workflow run ID */
   runId?: string;
-  
+
   /** Final workflow execution status */
   status?: WorkflowRunStatus;
 }
@@ -354,16 +349,16 @@ Workflow Step attributes.
 interface WorkflowStepAttributes {
   /** Step identifier */
   stepId?: string;
-  
+
   /** Step type */
   stepType?: string;
-  
+
   /** Step status */
   status?: WorkflowStepStatus;
-  
+
   /** Step execution order */
   stepNumber?: number;
-  
+
   /** Result store key */
   resultKey?: string;
 }
@@ -379,25 +374,25 @@ Options for starting new spans.
 interface StartSpanOptions<TType extends AISpanType> {
   /** Span type */
   type: TType;
-  
+
   /** Span name */
   name: string;
-  
+
   /** Span attributes */
   attributes?: AISpanTypeMap[TType];
-  
+
   /** Span metadata */
   metadata?: Record<string, any>;
-  
+
   /** Input data */
   input?: any;
-  
+
   /** Parent span */
   parent?: AnyAISpan;
-  
+
   /** Policy-level tracing configuration */
   tracingPolicy?: TracingPolicy;
-  
+
   /** Options passed when using a custom sampler strategy */
   customSamplerOptions?: CustomSamplerOptions;
 }
@@ -411,13 +406,13 @@ Options for updating spans.
 interface UpdateSpanOptions<TType extends AISpanType> {
   /** Span attributes */
   attributes?: Partial<AISpanTypeMap[TType]>;
-  
+
   /** Span metadata */
   metadata?: Record<string, any>;
-  
+
   /** Input data */
   input?: any;
-  
+
   /** Output data */
   output?: any;
 }
@@ -431,10 +426,10 @@ Options for ending spans.
 interface EndSpanOptions<TType extends AISpanType> {
   /** Output data */
   output?: any;
-  
+
   /** Span metadata */
   metadata?: Record<string, any>;
-  
+
   /** Span attributes */
   attributes?: Partial<AISpanTypeMap[TType]>;
 }
@@ -448,13 +443,13 @@ Options for recording span errors.
 interface ErrorSpanOptions<TType extends AISpanType> {
   /** The error associated with the issue */
   error: Error;
-  
+
   /** End the span when true */
   endSpan?: boolean;
-  
+
   /** Span metadata */
   metadata?: Record<string, any>;
-  
+
   /** Span attributes */
   attributes?: Partial<AISpanTypeMap[TType]>;
 }
@@ -501,7 +496,7 @@ Policy-level tracing configuration applied when creating a workflow or agent.
 
 ```typescript
 interface TracingPolicy {
-  /** 
+  /**
    * Bitwise options to set different types of spans as Internal in
    * a workflow or agent execution. Internal spans are hidden by
    * default in exported traces.
@@ -520,19 +515,19 @@ Configuration for a single tracing instance.
 interface TracingConfig {
   /** Unique identifier for this config in the ai tracing registry */
   name: string;
-  
+
   /** Service name for tracing */
   serviceName: string;
-  
+
   /** Sampling strategy - controls whether tracing is collected (defaults to ALWAYS) */
   sampling?: SamplingStrategy;
-  
+
   /** Custom exporters */
   exporters?: AITracingExporter[];
-  
+
   /** Custom processors */
   processors?: AISpanProcessor[];
-  
+
   /** Set to true if you want to see spans internal to the operation of mastra */
   includeInternalSpans?: boolean;
 }
@@ -548,10 +543,10 @@ interface ObservabilityRegistryConfig {
   default?: {
     enabled?: boolean;
   };
-  
+
   /** Map of tracing instance names to their configurations or pre-instantiated instances */
   configs?: Record<string, Omit<TracingConfig, 'name'> | AITracing>;
-  
+
   /** Optional selector function to choose which tracing instance to use */
   configSelector?: ConfigSelector;
 }
@@ -591,7 +586,7 @@ Function to select which AI tracing instance to use for a given span.
 ```typescript
 type ConfigSelector = (
   options: ConfigSelectorOptions,
-  availableConfigs: ReadonlyMap<string, AITracing>
+  availableConfigs: ReadonlyMap<string, AITracing>,
 ) => string | undefined;
 ```
 
@@ -616,19 +611,19 @@ Bitwise options to set different types of spans as internal in a workflow or age
 enum InternalSpans {
   /** No spans are marked internal */
   NONE = 0,
-  
+
   /** Workflow spans are marked internal */
   WORKFLOW = 1 << 0,
-  
+
   /** Agent spans are marked internal */
   AGENT = 1 << 1,
-  
+
   /** Tool spans are marked internal */
   TOOL = 1 << 2,
-  
+
   /** LLM spans are marked internal */
   LLM = 1 << 3,
-  
+
   /** All spans are marked internal */
   ALL = (1 << 4) - 1,
 }
@@ -637,14 +632,17 @@ enum InternalSpans {
 ## See Also
 
 ### Documentation
+
 - [AI Tracing Overview](/docs/observability/ai-tracing/overview) - Complete guide to AI tracing
 - [Creating Child Spans](/docs/observability/ai-tracing/overview#creating-child-spans) - Working with span hierarchies
 - [Adding Custom Metadata](/docs/observability/ai-tracing/overview#adding-custom-metadata) - Enriching traces
 
 ### Reference
-- [Configuration](/reference/observability/ai-tracing/configuration) - Registry and configuration
-- [AITracing Classes](/reference/observability/ai-tracing/ai-tracing) - Core implementations
-- [Span Reference](/reference/observability/ai-tracing/span) - Span lifecycle methods
+
+- [Configuration](/docs/reference/observability/ai-tracing/configuration) - Registry and configuration
+- [AITracing Classes](/docs/reference/observability/ai-tracing) - Core implementations
+- [Span Reference](/docs/reference/observability/ai-tracing/span) - Span lifecycle methods
 
 ### Examples
-- [Basic AI Tracing](/examples/observability/basic-ai-tracing) - Implementation example
+
+- [Basic AI Tracing](/docs/examples/observability/basic-ai-tracing) - Implementation example

@@ -25,7 +25,7 @@ Each log entry includes its severity level and a detailed message showing agent,
 
 ## Traces
 
-More detailed traces are available for both agents and workflows by using a [logger](/docs/observability/logging) or enabling [telemetry](/docs/observability/tracing) using one of our [supported providers](/reference/observability/providers).
+More detailed traces are available for both agents and workflows by using a [logger](/docs/observability/logging) or enabling [telemetry](/docs/observability/ai-tracing/overview) using one of our [supported providers](/docs/reference/observability/otel-tracing/providers).
 
 ### Agents
 
@@ -50,4 +50,4 @@ Workflows are created using `createWorkflow`, which sets up steps, metadata, and
 ## Next steps
 
 - [Logging](/docs/observability/logging)
-- [Tracing](/docs/observability/tracing)
+- [AI Tracing](/docs/observability/ai-tracing/overview)

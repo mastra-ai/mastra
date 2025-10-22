@@ -31,5 +31,5 @@ description: "A record of all registered MCP server instances, where keys are se
 
 ## Related
 
-- [MCP overview](../../docs/tools-mcp/mcp-overview)
-- [MCP server reference](../../reference/tools/mcp-server)
+- [MCP overview](/docs/tools-mcp/mcp-overview)
+- [MCP server reference](/docs/reference/tools/mcp-server)

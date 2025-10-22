@@ -63,5 +63,5 @@ description: "Runtime context for dependency injection and contextual informatio
 
 ## Related
 
-- [Adding voice to agents](../../docs/agents/adding-voice)
+- [Adding voice to agents](/docs/agents/adding-voice)
 - [Voice providers](../voice/mastra-voice)

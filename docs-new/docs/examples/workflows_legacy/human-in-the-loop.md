@@ -1,8 +1,7 @@
 ---
-title: "Human in the Loop "
+title: 'Human in the Loop '
 description: Example of using Mastra to create legacy workflows with human intervention points.
 ---
-
 
 # Human in the Loop Workflow (Legacy)
 
@@ -22,14 +21,14 @@ This pattern allows for safe, type-checked human intervention in automated workf
 This example demonstrates how to use the [Inquirer](https://www.npmjs.com/package/@inquirer/prompts) library to collect user input directly from the terminal when a workflow is suspended, creating a truly interactive human-in-the-loop experience.
 
 ```ts showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
-import { z } from "zod";
-import { confirm, input, select } from "@inquirer/prompts";
+import { Mastra } from '@mastra/core';
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
+import { z } from 'zod';
+import { confirm, input, select } from '@inquirer/prompts';
 
 // Step 1: Generate product recommendations
 const generateRecommendations = new LegacyStep({
-  id: "generateRecommendations",
+  id: 'generateRecommendations',
   outputSchema: z.object({
     customerName: z.string(),
     recommendations: z.array(
@@ -50,22 +49,22 @@ const generateRecommendations = new LegacyStep({
       customerName,
       recommendations: [
         {
-          productId: "prod-001",
-          productName: "Premium Widget",
+          productId: 'prod-001',
+          productName: 'Premium Widget',
           price: 99.99,
-          description: "Our best-selling premium widget with advanced features",
+          description: 'Our best-selling premium widget with advanced features',
         },
         {
-          productId: "prod-002",
-          productName: "Basic Widget",
+          productId: 'prod-002',
+          productName: 'Basic Widget',
           price: 49.99,
-          description: "Affordable entry-level widget for beginners",
+          description: 'Affordable entry-level widget for beginners',
         },
         {
-          productId: "prod-003",
-          productName: "Widget Pro Plus",
+          productId: 'prod-003',
+          productName: 'Widget Pro Plus',
           price: 149.99,
-          description: "Professional-grade widget with extended warranty",
+          description: 'Professional-grade widget with extended warranty',
         },
       ],
     };
@@ -76,7 +75,7 @@ const generateRecommendations = new LegacyStep({
 ```ts showLineNumbers copy
 // Step 2: Get human approval and customization for the recommendations
 const reviewRecommendations = new LegacyStep({
-  id: "reviewRecommendations",
+  id: 'reviewRecommendations',
   inputSchema: z.object({
     approvedProducts: z.array(z.string()),
     customerNote: z.string().optional(),
@@ -94,10 +93,8 @@ const reviewRecommendations = new LegacyStep({
     offerDiscount: z.boolean(),
   }),
   execute: async ({ context, suspend }) => {
-    const { customerName, recommendations } = context.getStepResult(
-      generateRecommendations,
-    ) || {
-      customerName: "",
+    const { customerName, recommendations } = context.getStepResult(generateRecommendations) || {
+      customerName: '',
       recommendations: [],
     };
 
@@ -114,24 +111,21 @@ const reviewRecommendations = new LegacyStep({
       await suspend({
         customerName,
         recommendations,
-        message:
-          "Please review these product recommendations before sending to the customer",
+        message: 'Please review these product recommendations before sending to the customer',
       });
 
       // Placeholder return (won't be reached due to suspend)
       return {
         finalRecommendations: [],
-        customerNote: "",
+        customerNote: '',
         offerDiscount: false,
       };
     }
 
     // Process the agent's product selections
     const finalRecommendations = recommendations
-      .filter((product) =>
-        reviewInput.approvedProducts.includes(product.productId),
-      )
-      .map((product) => ({
+      .filter(product => reviewInput.approvedProducts.includes(product.productId))
+      .map(product => ({
         productId: product.productId,
         productName: product.productName,
         price: product.price,
@@ -139,7 +133,7 @@ const reviewRecommendations = new LegacyStep({
 
     return {
       finalRecommendations,
-      customerNote: reviewInput.customerNote || "",
+      customerNote: reviewInput.customerNote || '',
       offerDiscount: reviewInput.offerDiscount || false,
     };
   },
@@ -149,42 +143,40 @@ const reviewRecommendations = new LegacyStep({
 ```ts showLineNumbers copy
 // Step 3: Send the recommendations to the customer
 const sendRecommendations = new LegacyStep({
-  id: "sendRecommendations",
+  id: 'sendRecommendations',
   outputSchema: z.object({
     emailSent: z.boolean(),
     emailContent: z.string(),
   }),
   execute: async ({ context }) => {
     const { customerName } = context.getStepResult(generateRecommendations) || {
-      customerName: "",
+      customerName: '',
     };
-    const { finalRecommendations, customerNote, offerDiscount } =
-      context.getStepResult(reviewRecommendations) || {
-        finalRecommendations: [],
-        customerNote: "",
-        offerDiscount: false,
-      };
+    const { finalRecommendations, customerNote, offerDiscount } = context.getStepResult(reviewRecommendations) || {
+      finalRecommendations: [],
+      customerNote: '',
+      offerDiscount: false,
+    };
 
     // Generate email content based on the recommendations
     let emailContent = `Dear ${customerName},\n\nBased on your preferences, we recommend:\n\n`;
 
-    finalRecommendations.forEach((product) => {
+    finalRecommendations.forEach(product => {
       emailContent += `- ${product.productName}: $${product.price.toFixed(2)}\n`;
     });
 
     if (offerDiscount) {
-      emailContent +=
-        "\nAs a valued customer, use code SAVE10 for 10% off your next purchase!\n";
+      emailContent += '\nAs a valued customer, use code SAVE10 for 10% off your next purchase!\n';
     }
 
     if (customerNote) {
       emailContent += `\nPersonal note: ${customerNote}\n`;
     }
 
-    emailContent += "\nThank you for your business,\nThe Sales Team";
+    emailContent += '\nThank you for your business,\nThe Sales Team';
 
     // In a real application, you would send this email
-    console.log("Email content generated:", emailContent);
+    console.log('Email content generated:', emailContent);
 
     return {
       emailSent: true,
@@ -195,17 +187,13 @@ const sendRecommendations = new LegacyStep({
 
 // Build the workflow
 const recommendationWorkflow = new LegacyWorkflow({
-  name: "product-recommendation-workflow",
+  name: 'product-recommendation-workflow',
   triggerSchema: z.object({
     customerName: z.string(),
   }),
 });
 
-recommendationWorkflow
-  .step(generateRecommendations)
-  .then(reviewRecommendations)
-  .then(sendRecommendations)
-  .commit();
+recommendationWorkflow.step(generateRecommendations).then(reviewRecommendations).then(sendRecommendations).commit();
 
 // Register the workflow
 const mastra = new Mastra({
@@ -216,45 +204,38 @@ const mastra = new Mastra({
 ```ts showLineNumbers copy
 // Example of using the workflow with Inquirer prompts
 async function runRecommendationWorkflow() {
-  const registeredWorkflow = mastra.legacy_getWorkflow(
-    "recommendationWorkflow",
-  );
+  const registeredWorkflow = mastra.legacy_getWorkflow('recommendationWorkflow');
   const run = registeredWorkflow.createRun();
 
-  console.log("Starting product recommendation workflow...");
+  console.log('Starting product recommendation workflow...');
   const result = await run.start({
     triggerData: {
-      customerName: "Jane Smith",
+      customerName: 'Jane Smith',
     },
   });
 
-  const isReviewStepSuspended =
-    result.activePaths.get("reviewRecommendations")?.status === "suspended";
+  const isReviewStepSuspended = result.activePaths.get('reviewRecommendations')?.status === 'suspended';
 
   // Check if workflow is suspended for human review
   if (isReviewStepSuspended) {
-    const { customerName, recommendations, message } = result.activePaths.get(
-      "reviewRecommendations",
-    )?.suspendPayload;
+    const { customerName, recommendations, message } = result.activePaths.get('reviewRecommendations')?.suspendPayload;
 
-    console.log("\n===================================");
+    console.log('\n===================================');
     console.log(message);
     console.log(`Customer: ${customerName}`);
-    console.log("===================================\n");
+    console.log('===================================\n');
 
     // Use Inquirer to collect input from the sales agent in the terminal
-    console.log("Available product recommendations:");
+    console.log('Available product recommendations:');
     recommendations.forEach((product, index) => {
-      console.log(
-        `${index + 1}. ${product.productName} - $${product.price.toFixed(2)}`,
-      );
+      console.log(`${index + 1}. ${product.productName} - $${product.price.toFixed(2)}`);
       console.log(`   ${product.description}\n`);
     });
 
     // Let the agent select which products to recommend
     const approvedProducts = await checkbox({
-      message: "Select products to recommend to the customer:",
-      choices: recommendations.map((product) => ({
+      message: 'Select products to recommend to the customer:',
+      choices: recommendations.map(product => ({
         name: `${product.productName} ($${product.price.toFixed(2)})`,
         value: product.productId,
       })),
@@ -262,28 +243,28 @@ async function runRecommendationWorkflow() {
 
     // Let the agent add a personal note
     const includeNote = await confirm({
-      message: "Would you like to add a personal note?",
+      message: 'Would you like to add a personal note?',
       default: false,
     });
 
-    let customerNote = "";
+    let customerNote = '';
     if (includeNote) {
       customerNote = await input({
-        message: "Enter your personalized note for the customer:",
+        message: 'Enter your personalized note for the customer:',
       });
     }
 
     // Ask if a discount should be offered
     const offerDiscount = await confirm({
-      message: "Offer a 10% discount to this customer?",
+      message: 'Offer a 10% discount to this customer?',
       default: false,
     });
 
-    console.log("\nSubmitting your review...");
+    console.log('\nSubmitting your review...');
 
     // Resume the workflow with the agent's input
     const resumeResult = await run.resume({
-      stepId: "reviewRecommendations",
+      stepId: 'reviewRecommendations',
       context: {
         approvedProducts,
         customerNote,
@@ -291,14 +272,11 @@ async function runRecommendationWorkflow() {
       },
     });
 
-    console.log("\n===================================");
-    console.log("Workflow completed!");
-    console.log("Email content:");
-    console.log("===================================\n");
-    console.log(
-      resumeResult?.results?.sendRecommendations ||
-        "No email content generated",
-    );
+    console.log('\n===================================');
+    console.log('Workflow completed!');
+    console.log('Email content:');
+    console.log('===================================\n');
+    console.log(resumeResult?.results?.sendRecommendations || 'No email content generated');
 
     return resumeResult;
   }
@@ -315,14 +293,14 @@ runRecommendationWorkflow().catch(console.error);
 This example demonstrates a more complex workflow that requires multiple human intervention points, such as in a content moderation system.
 
 ```ts showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
-import { z } from "zod";
-import { select, input } from "@inquirer/prompts";
+import { Mastra } from '@mastra/core';
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
+import { z } from 'zod';
+import { select, input } from '@inquirer/prompts';
 
 // Step 1: Receive and analyze content
 const analyzeContent = new LegacyStep({
-  id: "analyzeContent",
+  id: 'analyzeContent',
   outputSchema: z.object({
     content: z.string(),
     aiAnalysisScore: z.number(),
@@ -333,10 +311,7 @@ const analyzeContent = new LegacyStep({
 
     // Simulate AI analysis
     const aiAnalysisScore = simulateContentAnalysis(content);
-    const flaggedCategories =
-      aiAnalysisScore < 0.7
-        ? ["potentially inappropriate", "needs review"]
-        : [];
+    const flaggedCategories = aiAnalysisScore < 0.7 ? ['potentially inappropriate', 'needs review'] : [];
 
     return {
       content,
@@ -350,15 +325,15 @@ const analyzeContent = new LegacyStep({
 ```ts showLineNumbers copy
 // Step 2: Moderate content that needs review
 const moderateContent = new LegacyStep({
-  id: "moderateContent",
+  id: 'moderateContent',
   // Define the schema for human input that will be provided when resuming
   inputSchema: z.object({
-    moderatorDecision: z.enum(["approve", "reject", "modify"]).optional(),
+    moderatorDecision: z.enum(['approve', 'reject', 'modify']).optional(),
     moderatorNotes: z.string().optional(),
     modifiedContent: z.string().optional(),
   }),
   outputSchema: z.object({
-    moderationResult: z.enum(["approved", "rejected", "modified"]),
+    moderationResult: z.enum(['approved', 'rejected', 'modified']),
     moderatedContent: z.string(),
     notes: z.string().optional(),
   }),
@@ -373,14 +348,11 @@ const moderateContent = new LegacyStep({
     };
 
     // If the AI analysis score is high enough, auto-approve
-    if (
-      analysisResult?.aiAnalysisScore > 0.9 &&
-      !analysisResult?.flaggedCategories?.length
-    ) {
+    if (analysisResult?.aiAnalysisScore > 0.9 && !analysisResult?.flaggedCategories?.length) {
       return {
-        moderationResult: "approved",
+        moderationResult: 'approved',
         moderatedContent: analysisResult.content,
-        notes: "Auto-approved by system",
+        notes: 'Auto-approved by system',
       };
     }
 
@@ -390,45 +362,44 @@ const moderateContent = new LegacyStep({
         content: analysisResult?.content,
         aiScore: analysisResult?.aiAnalysisScore,
         flaggedCategories: analysisResult?.flaggedCategories,
-        message: "Please review this content and make a moderation decision",
+        message: 'Please review this content and make a moderation decision',
       });
 
       // Placeholder return
       return {
-        moderationResult: "approved",
-        moderatedContent: "",
+        moderationResult: 'approved',
+        moderatedContent: '',
       };
     }
 
     // Process the moderator's decision
     switch (moderatorInput.decision) {
-      case "approve":
+      case 'approve':
         return {
-          moderationResult: "approved",
-          moderatedContent: analysisResult?.content || "",
-          notes: moderatorInput.notes || "Approved by moderator",
+          moderationResult: 'approved',
+          moderatedContent: analysisResult?.content || '',
+          notes: moderatorInput.notes || 'Approved by moderator',
         };
 
-      case "reject":
+      case 'reject':
         return {
-          moderationResult: "rejected",
-          moderatedContent: "",
-          notes: moderatorInput.notes || "Rejected by moderator",
+          moderationResult: 'rejected',
+          moderatedContent: '',
+          notes: moderatorInput.notes || 'Rejected by moderator',
         };
 
-      case "modify":
+      case 'modify':
         return {
-          moderationResult: "modified",
-          moderatedContent:
-            moderatorInput.modifiedContent || analysisResult?.content || "",
-          notes: moderatorInput.notes || "Modified by moderator",
+          moderationResult: 'modified',
+          moderatedContent: moderatorInput.modifiedContent || analysisResult?.content || '',
+          notes: moderatorInput.notes || 'Modified by moderator',
         };
 
       default:
         return {
-          moderationResult: "rejected",
-          moderatedContent: "",
-          notes: "Invalid moderator decision",
+          moderationResult: 'rejected',
+          moderatedContent: '',
+          notes: 'Invalid moderator decision',
         };
     }
   },
@@ -438,7 +409,7 @@ const moderateContent = new LegacyStep({
 ```ts showLineNumbers copy
 // Step 3: Apply moderation actions
 const applyModeration = new LegacyStep({
-  id: "applyModeration",
+  id: 'applyModeration',
   outputSchema: z.object({
     finalStatus: z.string(),
     content: z.string().optional(),
@@ -455,37 +426,37 @@ const applyModeration = new LegacyStep({
 
     // Create audit log
     const auditLog = {
-      originalContent: analysisResult?.content || "",
-      moderationResult: moderationResult?.moderationResult || "unknown",
+      originalContent: analysisResult?.content || '',
+      moderationResult: moderationResult?.moderationResult || 'unknown',
       aiScore: analysisResult?.aiAnalysisScore || 0,
       timestamp: new Date().toISOString(),
     };
 
     // Apply moderation action
     switch (moderationResult?.moderationResult) {
-      case "approved":
+      case 'approved':
         return {
-          finalStatus: "Content published",
+          finalStatus: 'Content published',
           content: moderationResult.moderatedContent,
           auditLog,
         };
 
-      case "modified":
+      case 'modified':
         return {
-          finalStatus: "Content modified and published",
+          finalStatus: 'Content modified and published',
           content: moderationResult.moderatedContent,
           auditLog,
         };
 
-      case "rejected":
+      case 'rejected':
         return {
-          finalStatus: "Content rejected",
+          finalStatus: 'Content rejected',
           auditLog,
         };
 
       default:
         return {
-          finalStatus: "Error in moderation process",
+          finalStatus: 'Error in moderation process',
           auditLog,
         };
     }
@@ -496,17 +467,13 @@ const applyModeration = new LegacyStep({
 ```ts showLineNumbers copy
 // Build the workflow
 const contentModerationWorkflow = new LegacyWorkflow({
-  name: "content-moderation-workflow",
+  name: 'content-moderation-workflow',
   triggerSchema: z.object({
     content: z.string(),
   }),
 });
 
-contentModerationWorkflow
-  .step(analyzeContent)
-  .then(moderateContent)
-  .then(applyModeration)
-  .commit();
+contentModerationWorkflow.step(analyzeContent).then(moderateContent).then(applyModeration).commit();
 
 // Register the workflow
 const mastra = new Mastra({
@@ -515,68 +482,62 @@ const mastra = new Mastra({
 
 // Example of using the workflow with Inquirer prompts
 async function runModerationDemo() {
-  const registeredWorkflow = mastra.legacy_getWorkflow(
-    "contentModerationWorkflow",
-  );
+  const registeredWorkflow = mastra.legacy_getWorkflow('contentModerationWorkflow');
   const run = registeredWorkflow.createRun();
 
   // Start the workflow with content that needs review
-  console.log("Starting content moderation workflow...");
+  console.log('Starting content moderation workflow...');
   const result = await run.start({
     triggerData: {
-      content: "This is some user-generated content that requires moderation.",
+      content: 'This is some user-generated content that requires moderation.',
     },
   });
 
-  const isReviewStepSuspended =
-    result.activePaths.get("moderateContent")?.status === "suspended";
+  const isReviewStepSuspended = result.activePaths.get('moderateContent')?.status === 'suspended';
 
   // Check if workflow is suspended
   if (isReviewStepSuspended) {
-    const { content, aiScore, flaggedCategories, message } =
-      result.activePaths.get("moderateContent")?.suspendPayload;
+    const { content, aiScore, flaggedCategories, message } = result.activePaths.get('moderateContent')?.suspendPayload;
 
-    console.log("\n===================================");
+    console.log('\n===================================');
     console.log(message);
-    console.log("===================================\n");
+    console.log('===================================\n');
 
-    console.log("Content to review:");
+    console.log('Content to review:');
     console.log(content);
     console.log(`\nAI Analysis Score: ${aiScore}`);
-    console.log(
-      `Flagged Categories: ${flaggedCategories?.join(", ") || "None"}\n`,
-    );
+    console.log(`Flagged Categories: ${flaggedCategories?.join(', ') || 'None'}\n`);
 
     // Collect moderator decision using Inquirer
     const moderatorDecision = await select({
-      message: "Select your moderation decision:",
+      message: 'Select your moderation decision:',
       choices: [
-        { name: "Approve content as is", value: "approve" },
-        { name: "Reject content completely", value: "reject" },
-        { name: "Modify content before publishing", value: "modify" },
+        { name: 'Approve content as is', value: 'approve' },
+        { name: 'Reject content completely', value: 'reject' },
+        { name: 'Modify content before publishing', value: 'modify' },
       ],
     });
 
     // Collect additional information based on decision
-    let moderatorNotes = "";
-    let modifiedContent = "";
+    let moderatorNotes = '';
+    let modifiedContent = '';
 
     moderatorNotes = await input({
-      message: "Enter any notes about your decision:",
+      message: 'Enter any notes about your decision:',
     });
 
-    if (moderatorDecision === "modify") {
+    if (moderatorDecision === 'modify') {
       modifiedContent = await input({
-        message: "Enter the modified content:",
+        message: 'Enter the modified content:',
         default: content,
       });
     }
 
-    console.log("\nSubmitting your moderation decision...");
+    console.log('\nSubmitting your moderation decision...');
 
     // Resume the workflow with the moderator's input
     const resumeResult = await run.resume({
-      stepId: "moderateContent",
+      stepId: 'moderateContent',
       context: {
         moderatorDecision,
         moderatorNotes,
@@ -584,15 +545,13 @@ async function runModerationDemo() {
       },
     });
 
-    if (resumeResult?.results?.applyModeration?.status === "success") {
-      console.log("\n===================================");
-      console.log(
-        `Moderation complete: ${resumeResult?.results?.applyModeration?.output.finalStatus}`,
-      );
-      console.log("===================================\n");
+    if (resumeResult?.results?.applyModeration?.status === 'success') {
+      console.log('\n===================================');
+      console.log(`Moderation complete: ${resumeResult?.results?.applyModeration?.output.finalStatus}`);
+      console.log('===================================\n');
 
       if (resumeResult?.results?.applyModeration?.output.content) {
-        console.log("Published content:");
+        console.log('Published content:');
         console.log(resumeResult.results.applyModeration.output.content);
       }
     }
@@ -600,10 +559,7 @@ async function runModerationDemo() {
     return resumeResult;
   }
 
-  console.log(
-    "Workflow completed without requiring human intervention:",
-    result.results,
-  );
+  console.log('Workflow completed without requiring human intervention:', result.results);
   return result;
 }
 
@@ -626,7 +582,7 @@ runModerationDemo().catch(console.error);
 
 ```ts
 await suspend({
-  messageForHuman: "Please review this data",
+  messageForHuman: 'Please review this data',
   data: someImportantData,
 });
 ```
@@ -635,28 +591,28 @@ await suspend({
 
 ```ts
 const result = await workflow.start({ triggerData });
-if (result.status === "suspended" && result.suspendedStepId === "stepId") {
+if (result.status === 'suspended' && result.suspendedStepId === 'stepId') {
   // Process suspension
-  console.log("Workflow is waiting for input:", result.suspendPayload);
+  console.log('Workflow is waiting for input:', result.suspendPayload);
 }
 ```
 
 4. **Interactive Terminal Input** - Use libraries like Inquirer to create interactive prompts:
 
 ```ts
-import { select, input, confirm } from "@inquirer/prompts";
+import { select, input, confirm } from '@inquirer/prompts';
 
 // When the workflow is suspended
-if (result.status === "suspended") {
+if (result.status === 'suspended') {
   // Display information from the suspend payload
   console.log(result.suspendPayload.message);
 
   // Collect user input interactively
   const decision = await select({
-    message: "What would you like to do?",
+    message: 'What would you like to do?',
     choices: [
-      { name: "Approve", value: "approve" },
-      { name: "Reject", value: "reject" },
+      { name: 'Approve', value: 'approve' },
+      { name: 'Reject', value: 'reject' },
     ],
   });
 
@@ -672,11 +628,11 @@ if (result.status === "suspended") {
 
 ```ts
 const resumeResult = await run.resume({
-  stepId: "suspendedStepId",
+  stepId: 'suspendedStepId',
   context: {
     // This data is passed to the suspended step as context.inputData
     // and must conform to the step's inputSchema
-    userDecision: "approve",
+    userDecision: 'approve',
   },
 });
 ```
@@ -685,11 +641,11 @@ const resumeResult = await run.resume({
 
 ```ts
 const myStep = new LegacyStep({
-  id: "myStep",
+  id: 'myStep',
   inputSchema: z.object({
     // This schema validates the data passed in resume's context
     // and makes it available as context.inputData
-    userDecision: z.enum(["approve", "reject"]),
+    userDecision: z.enum(['approve', 'reject']),
     userComments: z.string().optional(),
   }),
   execute: async ({ context, suspend }) => {
@@ -727,13 +683,13 @@ Human-in-the-loop workflows are powerful for building systems that blend automat
 
 The following links provide example documentation for legacy workflows:
 
-- [Creating a Simple Workflow (Legacy)](/examples/workflows_legacy/creating-a-workflow)
-- [Workflow (Legacy) with Sequential Steps](/examples/workflows_legacy/sequential-steps)
-- [Parallel Execution with Steps](/examples/workflows_legacy/parallel-steps)
-- [Branching Paths](/examples/workflows_legacy/branching-paths)
-- [Workflow (Legacy) with Conditional Branching (experimental)](/examples/workflows_legacy/conditional-branching)
-- [Calling an Agent From a Workflow (Legacy)](/examples/workflows_legacy/calling-agent)
-- [Tool as a Workflow step (Legacy)](/examples/workflows_legacy/using-a-tool-as-a-step)
-- [Workflow (Legacy) with Cyclical dependencies](/examples/workflows_legacy/cyclical-dependencies)
-- [Data Mapping with Workflow Variables (Legacy)](/examples/workflows_legacy/workflow-variables)
-- [Workflow (Legacy) with Suspend and Resume](/examples/workflows_legacy/suspend-and-resume)
+- [Creating a Simple Workflow (Legacy)](/docs/examples/workflows_legacy/creating-a-workflow)
+- [Workflow (Legacy) with Sequential Steps](/docs/examples/workflows_legacy/sequential-steps)
+- [Parallel Execution with Steps](/docs/examples/workflows_legacy/parallel-steps)
+- [Branching Paths](/docs/examples/workflows_legacy/branching-paths)
+- [Workflow (Legacy) with Conditional Branching (experimental)](/docs/examples/workflows_legacy/conditional-branching)
+- [Calling an Agent From a Workflow (Legacy)](/docs/examples/workflows_legacy/calling-agent)
+- [Tool as a Workflow step (Legacy)](/docs/examples/workflows_legacy/using-a-tool-as-a-step)
+- [Workflow (Legacy) with Cyclical dependencies](/docs/examples/workflows_legacy/cyclical-dependencies)
+- [Data Mapping with Workflow Variables (Legacy)](/docs/examples/workflows_legacy/workflow-variables)
+- [Workflow (Legacy) with Suspend and Resume](/docs/examples/workflows_legacy/suspend-and-resume)

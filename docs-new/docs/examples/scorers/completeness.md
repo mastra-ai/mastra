@@ -13,7 +13,7 @@ Use `createCompletenessScorer` to evaluate whether the response thoroughly addre
 npm install @mastra/evals
 ```
 
-> For complete API documentation and configuration options, see [`createCompletenessScorer`](/reference/scorers/completeness).
+> For complete API documentation and configuration options, see [`createCompletenessScorer`](/docs/reference/scorers/completeness).
 
 ## High completeness example
 
@@ -125,7 +125,7 @@ const scorer = createCompletenessScorer({ model: openai("gpt-4o-mini"), options:
 });
 ```
 
-> See [CompletenessScorer](/reference/scorers/completeness) for a full list of configuration options.
+> See [CompletenessScorer](/docs/reference/scorers/completeness) for a full list of configuration options.
 
 ## Understanding the results
 

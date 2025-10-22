@@ -1,5 +1,5 @@
 ---
-title: "Reference: Hallucination "
+title: 'Reference: Hallucination '
 description: Documentation for the Hallucination Scorer in Mastra, which evaluates the factual correctness of LLM outputs by identifying contradictions with provided context.
 ---
 
@@ -7,28 +7,28 @@ description: Documentation for the Hallucination Scorer in Mastra, which evaluat
 
 The `createHallucinationScorer()` function evaluates whether an LLM generates factually correct information by comparing its output against the provided context. This scorer measures hallucination by identifying direct contradictions between the context and the output.
 
-For a usage example, see the [Hallucination Examples](/examples/scorers/hallucination).
+For a usage example, see the [Hallucination Examples](/docs/examples/scorers/hallucination).
 
 ## Parameters
 
 The `createHallucinationScorer()` function accepts a single options object with the following properties:
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "LanguageModel",
-      required: true,
-      description: "Configuration for the model used to evaluate hallucination.",
-    },
-    {
-      name: "scale",
-      type: "number",
-      required: false,
-      defaultValue: "1",
-      description: "Maximum score value.",
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "LanguageModel",
+required: true,
+description: "Configuration for the model used to evaluate hallucination.",
+},
+{
+name: "scale",
+type: "number",
+required: false,
+defaultValue: "1",
+description: "Maximum score value.",
+},
+]}
 />
 
 This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
@@ -36,48 +36,48 @@ This function returns an instance of the MastraScorer class. The `.run()` method
 ## .run() Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "preprocessStepResult",
-      type: "object",
-      description: "Object with extracted claims: { claims: string[] }",
-    },
-    {
-      name: "preprocessPrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the preprocess step (optional).",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description: "Object with verdicts: { verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }> }",
-    },
-    {
-      name: "analyzePrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the analyze step (optional).",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Hallucination score (0 to scale, default 0-1).",
-    },
-    {
-      name: "reason",
-      type: "string",
-      description: "Detailed explanation of the score and identified contradictions.",
-    },
-    {
-      name: "generateReasonPrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the generateReason step (optional).",
-    },
-  ]}
+content={[
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "preprocessStepResult",
+type: "object",
+description: "Object with extracted claims: { claims: string[] }",
+},
+{
+name: "preprocessPrompt",
+type: "string",
+description: "The prompt sent to the LLM for the preprocess step (optional).",
+},
+{
+name: "analyzeStepResult",
+type: "object",
+description: "Object with verdicts: { verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }> }",
+},
+{
+name: "analyzePrompt",
+type: "string",
+description: "The prompt sent to the LLM for the analyze step (optional).",
+},
+{
+name: "score",
+type: "number",
+description: "Hallucination score (0 to scale, default 0-1).",
+},
+{
+name: "reason",
+type: "string",
+description: "Detailed explanation of the score and identified contradictions.",
+},
+{
+name: "generateReasonPrompt",
+type: "string",
+description: "The prompt sent to the LLM for the generateReason step (optional).",
+},
+]}
 />
 
 ## Scoring Details

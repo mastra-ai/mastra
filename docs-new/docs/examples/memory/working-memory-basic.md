@@ -159,5 +159,5 @@ Working memory stores data in `.json` format, which would look similar to the be
 ## Related
 
 - [Calling Agents](../agents/calling-agents#from-the-command-line)
-- [Agent Memory](../../docs/agents/agent-memory)
-- [Serverless Deployment](../../docs/deployment/server-deployment#libsqlstore)
+- [Agent Memory](/docs/agents/agent-memory)
+- [LibSQL Storage](/docs/reference/storage/libsql)

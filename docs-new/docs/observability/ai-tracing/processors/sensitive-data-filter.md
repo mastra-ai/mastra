@@ -1,6 +1,6 @@
 ---
-title: "Sensitive Data Filter "
-description: "Protect sensitive information in your AI traces with automatic data redaction"
+title: 'Sensitive Data Filter '
+description: 'Protect sensitive information in your AI traces with automatic data redaction'
 ---
 
 # Sensitive Data Filter
@@ -17,7 +17,7 @@ export const mastra = new Mastra({
     default: { enabled: true }, // Automatically includes SensitiveDataFilter
   },
   storage: new LibSQLStore({
-    url: "file:./mastra.db",
+    url: 'file:./mastra.db',
   }),
 });
 ```
@@ -76,16 +76,24 @@ export const mastra = new Mastra({
             // Add custom sensitive fields
             sensitiveFields: [
               // Default fields
-              'password', 'token', 'secret', 'key', 'apikey',
+              'password',
+              'token',
+              'secret',
+              'key',
+              'apikey',
               // Custom fields for your application
-              'creditCard', 'bankAccount', 'routingNumber',
-              'email', 'phoneNumber', 'dateOfBirth',
+              'creditCard',
+              'bankAccount',
+              'routingNumber',
+              'email',
+              'phoneNumber',
+              'dateOfBirth',
             ],
             // Custom redaction token
             redactionToken: '***SENSITIVE***',
             // Redaction style
             redactionStyle: 'full', // or 'partial'
-          })
+          }),
         ],
       },
     },
@@ -121,8 +129,8 @@ Shows the first and last 3 characters, useful for debugging without exposing ful
 
 ```ts
 new SensitiveDataFilter({
-  redactionStyle: 'partial'
-})
+  redactionStyle: 'partial',
+});
 ```
 
 ```json
@@ -229,13 +237,17 @@ Only disable sensitive data filtering in controlled environments. Never disable 
 new SensitiveDataFilter({
   sensitiveFields: [
     // HIPAA-related fields
-    'ssn', 'socialSecurityNumber',
-    'medicalRecordNumber', 'mrn',
+    'ssn',
+    'socialSecurityNumber',
+    'medicalRecordNumber',
+    'mrn',
     'healthInsuranceNumber',
-    'diagnosisCode', 'icd10',
-    'prescription', 'medication',
-  ]
-})
+    'diagnosisCode',
+    'icd10',
+    'prescription',
+    'medication',
+  ],
+});
 ```
 
 ### Financial Services
@@ -244,13 +256,21 @@ new SensitiveDataFilter({
 new SensitiveDataFilter({
   sensitiveFields: [
     // PCI compliance fields
-    'creditCard', 'ccNumber', 'cardNumber',
-    'cvv', 'cvc', 'securityCode',
-    'expirationDate', 'expiry',
-    'bankAccount', 'accountNumber',
-    'routingNumber', 'iban', 'swift',
-  ]
-})
+    'creditCard',
+    'ccNumber',
+    'cardNumber',
+    'cvv',
+    'cvc',
+    'securityCode',
+    'expirationDate',
+    'expiry',
+    'bankAccount',
+    'accountNumber',
+    'routingNumber',
+    'iban',
+    'swift',
+  ],
+});
 ```
 
 ## Error Handling
@@ -271,6 +291,5 @@ This ensures that processing errors don't prevent traces from being exported or 
 
 ## Related
 
-- [SensitiveDataFilter API](/reference/observability/ai-tracing/processors/sensitive-data-filter)
-- [Basic AI Tracing Example](/examples/observability/basic-ai-tracing) 
-
+- [SensitiveDataFilter API](/docs/reference/observability/ai-tracing/processors/sensitive-data-filter)
+- [Basic AI Tracing Example](/docs/examples/observability/basic-ai-tracing)

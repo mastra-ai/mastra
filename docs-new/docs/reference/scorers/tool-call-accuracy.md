@@ -1,5 +1,5 @@
 ---
-title: "Reference: Tool Call Accuracy "
+title: 'Reference: Tool Call Accuracy '
 description: Documentation for the Tool Call Accuracy Scorers in Mastra, which evaluate whether LLM outputs call the correct tools from available options.
 ---
 
@@ -10,7 +10,7 @@ Mastra provides two tool call accuracy scorers for evaluating whether an LLM sel
 1. **Code-based scorer** - Deterministic evaluation using exact tool matching
 2. **LLM-based scorer** - Semantic evaluation using AI to assess appropriateness
 
-For usage examples, see the [Tool Call Accuracy Examples](/examples/scorers/tool-call-accuracy).
+For usage examples, see the [Tool Call Accuracy Examples](/docs/examples/scorers/tool-call-accuracy).
 
 ## Code-Based Tool Call Accuracy Scorer
 
@@ -19,27 +19,27 @@ The `createToolCallAccuracyScorerCode()` function from `@mastra/evals/scorers/co
 ### Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "expectedTool",
-      type: "string",
-      description: "The name of the tool that should be called for the given task. Ignored when expectedToolOrder is provided.",
-      required: false,
-    },
-    {
-      name: "strictMode",
-      type: "boolean",
-      description: "Controls evaluation strictness. For single tool mode: only exact single tool calls accepted. For order checking mode: tools must match exactly with no extra tools allowed.",
-      required: false,
-      default: "false",
-    },
-    {
-      name: "expectedToolOrder",
-      type: "string[]",
-      description: "Array of tool names in the expected calling order. When provided, enables order checking mode and ignores expectedTool parameter.",
-      required: false,
-    },
-  ]}
+content={[
+{
+name: "expectedTool",
+type: "string",
+description: "The name of the tool that should be called for the given task. Ignored when expectedToolOrder is provided.",
+required: false,
+},
+{
+name: "strictMode",
+type: "boolean",
+description: "Controls evaluation strictness. For single tool mode: only exact single tool calls accepted. For order checking mode: tools must match exactly with no extra tools allowed.",
+required: false,
+default: "false",
+},
+{
+name: "expectedToolOrder",
+type: "string[]",
+description: "Array of tool names in the expected calling order. When provided, enables order checking mode and ignores expectedTool parameter.",
+required: false,
+},
+]}
 />
 
 This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
@@ -69,20 +69,20 @@ import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
 
 // Single tool validation
 const scorer = createToolCallAccuracyScorerCode({
-  expectedTool: 'weather-tool'
+  expectedTool: 'weather-tool',
 });
 
 // Strict single tool (no other tools allowed)
 const strictScorer = createToolCallAccuracyScorerCode({
   expectedTool: 'calculator-tool',
-  strictMode: true
+  strictMode: true,
 });
 
 // Tool order validation
 const orderScorer = createToolCallAccuracyScorerCode({
   expectedTool: 'search-tool', // ignored when order is specified
   expectedToolOrder: ['search-tool', 'weather-tool'],
-  strictMode: true // exact match required
+  strictMode: true, // exact match required
 });
 ```
 
@@ -93,20 +93,20 @@ The `createToolCallAccuracyScorerLLM()` function from `@mastra/evals/scorers/llm
 ### Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "MastraLanguageModel",
-      description: "The LLM model to use for evaluating tool appropriateness",
-      required: true,
-    },
-    {
-      name: "availableTools",
-      type: "Array<{name: string, description: string}>",
-      description: "List of available tools with their descriptions for context",
-      required: true,
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "MastraLanguageModel",
+description: "The LLM model to use for evaluating tool appropriateness",
+required: true,
+},
+{
+name: "availableTools",
+type: "Array<{name: string, description: string}>",
+description: "List of available tools with their descriptions for context",
+required: true,
+},
+]}
 />
 
 ### Features
@@ -137,17 +137,17 @@ const llmScorer = createToolCallAccuracyScorerLLM({
   availableTools: [
     {
       name: 'weather-tool',
-      description: 'Get current weather information for any location'
+      description: 'Get current weather information for any location',
     },
     {
       name: 'search-tool',
-      description: 'Search the web for information'
+      description: 'Search the web for information',
     },
     {
       name: 'calendar-tool',
-      description: 'Check calendar events and scheduling'
-    }
-  ]
+      description: 'Check calendar events and scheduling',
+    },
+  ],
 });
 
 const result = await llmScorer.run(agentRun);

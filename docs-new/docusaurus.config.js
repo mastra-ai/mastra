@@ -29,14 +29,6 @@ const config = {
     },
   },
 
-  // Even if you don't use internationalization, you can use this field to set
-  // useful metadata like html lang. For example, if your site is Chinese, you
-  // may want to replace "en" with "zh-Hans".
-  i18n: {
-    defaultLocale: 'en',
-    locales: ['en'],
-  },
-
   // Custom fields for Algolia search, HubSpot, and Analytics
   customFields: {
     algoliaAppId: process.env.ALGOLIA_APP_ID,
@@ -137,25 +129,28 @@ const config = {
                 label: 'Docs',
                 to: '/docs',
               },
+
               {
                 label: 'Templates',
-                to: '/templates',
+                href: `https://mastra.ai/templates`,
               },
               {
                 label: 'Principles of Building AI Agents',
-                to: '/book',
+                href: `https://mastra.ai/book`,
               },
+
               {
                 label: 'llms.txt',
-                to: '/llms.txt',
+                href: `https://mastra.ai/llms.txt`,
               },
+
               {
                 label: 'llms-full.txt',
-                to: '/llms-full.txt',
+                href: `https://mastra.ai/llms-full.txt`,
               },
               {
                 label: 'MCP Registry Registry',
-                to: '/mcp-registry-registry',
+                href: `https://mastra.ai/mcp-registry-registry`,
               },
               {
                 label: 'Mastra Cloud Status',
@@ -189,7 +184,7 @@ const config = {
             items: [
               {
                 label: 'Privacy Policy',
-                to: '/privacy-policy',
+                href: `https://mastra.ai/privacy-policy`,
               },
             ],
           },

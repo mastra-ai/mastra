@@ -1,8 +1,7 @@
 ---
-title: "Re-ranking Results "
+title: 'Re-ranking Results '
 description: Example of implementing semantic re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
-
 
 # Re-ranking Results
 
@@ -34,14 +33,10 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { openai } from "@ai-sdk/openai";
-import { PgVector } from "@mastra/pg";
-import { 
-  MDocument, 
-  rerankWithScorer as rerank, 
-  MastraAgentRelevanceScorer 
-} from "@mastra/rag";
-import { embedMany, embed } from "ai";
+import { openai } from '@ai-sdk/openai';
+import { PgVector } from '@mastra/pg';
+import { MDocument, rerankWithScorer as rerank, MastraAgentRelevanceScorer } from '@mastra/rag';
+import { embedMany, embed } from 'ai';
 ```
 
 ## Document Processing
@@ -58,10 +53,10 @@ price action determines trade timing.
 `);
 
 const chunks = await doc1.chunk({
-  strategy: "recursive",
+  strategy: 'recursive',
   size: 150,
   overlap: 20,
-  separator: "\n",
+  separator: '\n',
 });
 ```
 
@@ -71,8 +66,8 @@ Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy showLineNumbers{36} filename="src/index.ts"
 const { embeddings } = await embedMany({
-  values: chunks.map((chunk) => chunk.text),
-  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding('text-embedding-3-small'),
 });
 
 const pgVector = new PgVector({
@@ -80,12 +75,12 @@ const pgVector = new PgVector({
 });
 
 await pgVector.createIndex({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   dimension: 1536,
 });
 
 await pgVector.upsert({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   vectors: embeddings,
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
@@ -96,17 +91,17 @@ await pgVector.upsert({
 Perform vector search and re-rank the results:
 
 ```typescript copy showLineNumbers{51} filename="src/index.ts"
-const query = "explain technical trading analysis";
+const query = 'explain technical trading analysis';
 
 // Get query embedding
 const { embedding: queryEmbedding } = await embed({
   value: query,
-  model: openai.embedding("text-embedding-3-small"),
+  model: openai.embedding('text-embedding-3-small'),
 });
 
 // Get initial results
 const initialResults = await pgVector.query({
-  indexName: "embeddings",
+  indexName: 'embeddings',
   queryVector: queryEmbedding,
   topK: 3,
 });
@@ -115,7 +110,7 @@ const initialResults = await pgVector.query({
 const rerankedResults = await rerank({
   results: initialResults,
   query,
-  scorer: new MastraAgentRelevanceScorer('relevance-scorer', openai("gpt-4o-mini")),
+  scorer: new MastraAgentRelevanceScorer('relevance-scorer', openai('gpt-4o-mini')),
   options: {
     weights: {
       semantic: 0.5, // How well the content matches the query semantically
@@ -138,7 +133,7 @@ The weights control how different factors influence the final ranking:
 Print both initial and re-ranked results to see the improvement:
 
 ```typescript copy showLineNumbers{72} filename="src/index.ts"
-console.log("Initial Results:");
+console.log('Initial Results:');
 initialResults.forEach((result, index) => {
   console.log(`Result ${index + 1}:`, {
     text: result.metadata.text,
@@ -146,7 +141,7 @@ initialResults.forEach((result, index) => {
   });
 });
 
-console.log("Re-ranked Results:");
+console.log('Re-ranked Results:');
 rerankedResults.forEach(({ result, score, details }, index) => {
   console.log(`Result ${index + 1}:`, {
     text: result.metadata.text,

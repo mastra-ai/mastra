@@ -72,4 +72,4 @@ Each template includes a comprehensive README with specific setup instructions a
 
 :::
 
-For detailed information on creating templates, see the [Templates Reference](/reference/templates).
+For detailed information on creating templates, see the [Templates Reference](/docs/reference/templates/overview).

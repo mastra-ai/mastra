@@ -45,5 +45,5 @@ description: "The MCP server instance with the specified ID and version, or unde
 
 ## Related
 
-- [MCP overview](../../docs/tools-mcp/mcp-overview)
-- [MCP server reference](../../reference/tools/mcp-server)
+- [MCP overview](/docs/tools-mcp/mcp-overview)
+- [MCP server reference](/docs/reference/tools/mcp-server)

@@ -120,7 +120,7 @@ You can create a `KeywordCoverageMetric` instance with default settings. No addi
 const metric = new KeywordCoverageMetric();
 ```
 
-> See [KeywordCoverageMetric](/reference/evals/keyword-coverage) for a full list of configuration options.
+> See [KeywordCoverageMetric](/docs/reference/evals/keyword-coverage) for a full list of configuration options.
 
 ## Understanding the results
 

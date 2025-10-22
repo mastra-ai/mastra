@@ -1,12 +1,11 @@
 ---
-title: "Vercel Deployer"
-description: "Learn how to deploy a Mastra application to Vercel using the Mastra VercelDeployer"
+title: 'Vercel Deployer'
+description: 'Learn how to deploy a Mastra application to Vercel using the Mastra VercelDeployer'
 ---
-
 
 # VercelDeployer
 
-The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/deployer) class with Vercel specific functionality.
+The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/docs/reference/deployer) class with Vercel specific functionality.
 
 ## Installation
 
@@ -17,16 +16,16 @@ npm install @mastra/deployer-vercel@latest
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { VercelDeployer } from "@mastra/deployer-vercel";
+import { Mastra } from '@mastra/core/mastra';
+import { VercelDeployer } from '@mastra/deployer-vercel';
 
 export const mastra = new Mastra({
   // ...
-  deployer: new VercelDeployer()
+  deployer: new VercelDeployer(),
 });
 ```
 
-> See the [VercelDeployer](/reference/deployer/vercel) API reference for all available configuration options.
+> See the [VercelDeployer](/docs/reference/deployer/vercel) API reference for all available configuration options.
 
 ### Optional overrides
 
@@ -42,8 +41,8 @@ Example:
 deployer: new VercelDeployer({
   maxDuration: 600,
   memory: 1536,
-  regions: ["sfo1", "iad1"],
-})
+  regions: ['sfo1', 'iad1'],
+});
 ```
 
 ## Continuous integration
@@ -76,7 +75,6 @@ The build output for Mastra applications using the `VercelDeployer` includes all
 
 > File structure information available - see original documentation for detailed tree view.
 
-
 The `VercelDeployer` automatically generates a `config.json` configuration file in `.vercel/output` with the following settings:
 
 ```json
@@ -93,4 +91,4 @@ The `VercelDeployer` automatically generates a `config.json` configuration file 
 
 ## Next steps
 
-- [Mastra Client SDK](/docs/client-js/overview)
+- [Mastra Client SDK](/docs/reference/client-js/mastra-client)

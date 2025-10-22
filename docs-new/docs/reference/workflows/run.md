@@ -95,10 +95,10 @@ description:
 
 ## Related
 
-- [Running workflows](../../examples/workflows/running-workflows)
+- [Running workflows](/docs/examples/workflows/running-workflows)
 - [Run.start()](./run-methods/start)
 - [Run.resume()](./run-methods/resume)
-- [Run.stream()](./run-methods/stream)
-- [Run.streamVNext()](./run-methods/streamVNext)
+- [Run.stream()](/docs/reference/streaming/workflows/stream)
+- [Run.streamVNext()](/docs/reference/streaming/workflows/streamVNext)
 - [Run.watch()](./run-methods/watch)
 - [Run.cancel()](./run-methods/cancel)

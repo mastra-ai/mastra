@@ -55,7 +55,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> See [Mastra Class](../../reference/core/mastra-class) for more configuration options.
+> See [Mastra Class](/docs/reference/core/mastra-class) for more configuration options.
 
 ## Supported monorepos
 

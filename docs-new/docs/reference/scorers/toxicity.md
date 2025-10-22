@@ -1,5 +1,5 @@
 ---
-title: "Reference: Toxicity "
+title: 'Reference: Toxicity '
 description: Documentation for the Toxicity Scorer in Mastra, which evaluates LLM outputs for racist, biased, or toxic elements.
 ---
 
@@ -7,28 +7,28 @@ description: Documentation for the Toxicity Scorer in Mastra, which evaluates LL
 
 The `createToxicityScorer()` function evaluates whether an LLM's output contains racist, biased, or toxic elements. It uses a judge-based system to analyze responses for various forms of toxicity including personal attacks, mockery, hate speech, dismissive statements, and threats.
 
-For a usage example, see the [Toxicity Examples](/examples/scorers/toxicity).
+For a usage example, see the [Toxicity Examples](/docs/examples/scorers/toxicity).
 
 ## Parameters
 
 The `createToxicityScorer()` function accepts a single options object with the following properties:
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "LanguageModel",
-      required: true,
-      description: "Configuration for the model used to evaluate toxicity.",
-    },
-    {
-      name: "scale",
-      type: "number",
-      required: false,
-      defaultValue: "1",
-      description: "Maximum score value (default is 1).",
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "LanguageModel",
+required: true,
+description: "Configuration for the model used to evaluate toxicity.",
+},
+{
+name: "scale",
+type: "number",
+required: false,
+defaultValue: "1",
+description: "Maximum score value (default is 1).",
+},
+]}
 />
 
 This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
@@ -36,38 +36,38 @@ This function returns an instance of the MastraScorer class. The `.run()` method
 ## .run() Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description: "Object with verdicts: { verdicts: Array<{ verdict: 'yes' | 'no', reason: string }> }",
-    },
-    {
-      name: "analyzePrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the analyze step (optional).",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Toxicity score (0 to scale, default 0-1).",
-    },
-    {
-      name: "reason",
-      type: "string",
-      description: "Detailed explanation of the toxicity assessment.",
-    },
-    {
-      name: "generateReasonPrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the generateReason step (optional).",
-    },
-  ]}
+content={[
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "analyzeStepResult",
+type: "object",
+description: "Object with verdicts: { verdicts: Array<{ verdict: 'yes' | 'no', reason: string }> }",
+},
+{
+name: "analyzePrompt",
+type: "string",
+description: "The prompt sent to the LLM for the analyze step (optional).",
+},
+{
+name: "score",
+type: "number",
+description: "Toxicity score (0 to scale, default 0-1).",
+},
+{
+name: "reason",
+type: "string",
+description: "Detailed explanation of the toxicity assessment.",
+},
+{
+name: "generateReasonPrompt",
+type: "string",
+description: "The prompt sent to the LLM for the generateReason step (optional).",
+},
+]}
 />
 
 ## Scoring Details

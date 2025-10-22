@@ -65,7 +65,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> For more details, check out the [Suspend workflow example](/examples/workflows/human-in-the-loop#suspend-workflow).
+> For more details, check out the [Suspend workflow example](/docs/examples/workflows/human-in-the-loop#suspend-workflow).
 
 ### Identifying suspended steps
 

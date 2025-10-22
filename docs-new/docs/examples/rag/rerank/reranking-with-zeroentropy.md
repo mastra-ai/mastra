@@ -28,5 +28,5 @@ const results = rerank({
 
 ## Links
 
-- [rerank() reference](/reference/rag/rerankWithScorer)
-- [Retrieval docs](/reference/rag/retrieval)
+- [rerank() reference](/docs/reference/rag/rerankWithScorer)
+- [Retrieval docs](/docs/rag/retrieval)

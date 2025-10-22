@@ -48,7 +48,7 @@ export const mastra = new Mastra({
 
 > **Note:** The default `authorizeUser` method checks the `isAdmin` column in the `users` table in the `public` schema. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
 
-> See the [MastraAuthSupabase](/reference/auth/supabase) API reference for all available configuration options.
+> See the [MastraAuthSupabase](/docs/reference/auth/supabase) API reference for all available configuration options.
 
 ## Client-side setup
 

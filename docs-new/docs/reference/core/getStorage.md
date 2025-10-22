@@ -31,5 +31,5 @@ description: "The configured storage instance, or undefined if no storage has be
 
 ## Related
 
-- [Storage overview](../../docs/server-db/storage)
-- [Storage reference](../../reference/storage/libsql)
+- [Storage overview](/docs/server-db/storage)
+- [Storage reference](/docs/reference/storage/libsql)

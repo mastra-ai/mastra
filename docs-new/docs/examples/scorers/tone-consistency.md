@@ -13,7 +13,7 @@ Use `createToneConsistencyScorer` to evaluate emotional tone patterns and sentim
 npm install @mastra/evals
 ```
 
-> For complete API documentation and configuration options, see [`createToneScorer`](/reference/scorers/tone-consistency).
+> For complete API documentation and configuration options, see [`createToneScorer`](/docs/reference/scorers/tone-consistency).
 
 ## Positive tone example
 
@@ -130,7 +130,7 @@ You can create a `ToneConsistencyScorer` instance with default settings. No addi
 const scorer = createToneScorer();
 ```
 
-> See [ToneConsistencyScorer](/reference/scorers/tone-consistency) for a full list of configuration options.
+> See [ToneConsistencyScorer](/docs/reference/scorers/tone-consistency) for a full list of configuration options.
 
 ## Understanding the results
 

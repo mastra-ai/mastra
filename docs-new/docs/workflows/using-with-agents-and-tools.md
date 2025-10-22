@@ -1,6 +1,6 @@
 ---
-title: "Using Workflows with Agents and Tools "
-description: "Steps in Mastra workflows provide a structured way to manage operations by defining inputs, outputs, and execution logic."
+title: 'Using Workflows with Agents and Tools '
+description: 'Steps in Mastra workflows provide a structured way to manage operations by defining inputs, outputs, and execution logic.'
 ---
 
 # Agents and Tools
@@ -22,14 +22,14 @@ To include an agent in a workflow, define it in the usual way, then either add i
 This agent uses OpenAI to generate a fact about a city, country, and timezone.
 
 ```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
 
 export const testAgent = new Agent({
-  name: "test-agent",
-  description: "Create facts for a country based on the city",
+  name: 'test-agent',
+  description: 'Create facts for a country based on the city',
   instructions: `Return an interesting fact about the country based on the city provided`,
-  model: openai("gpt-4o")
+  model: openai('gpt-4o'),
 });
 ```
 
@@ -41,29 +41,27 @@ The `.map` method transforms the workflow input into a `prompt` string compatibl
 
 The step is composed into the workflow using `.then()`, allowing it to receive the mapped input and return the agent's structured output. The workflow is finalized with `.commit()`.
 
-
 ![Agent as step](/img/workflows/workflows-agent-tools-agent-step.jpg)
 
-
 ```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { testAgent } from "../agents/test-agent";
+import { testAgent } from '../agents/test-agent';
 
 const step1 = createStep(testAgent);
 
 export const testWorkflow = createWorkflow({
-  id: "test-workflow",
+  id: 'test-workflow',
   description: 'Test workflow',
   inputSchema: z.object({
-    input: z.string()
+    input: z.string(),
   }),
   outputSchema: z.object({
-    output: z.string()
-  })
+    output: z.string(),
+  }),
 })
   .map(({ inputData }) => {
     const { input } = inputData;
     return {
-      prompt: `Provide facts about the city: ${input}`
+      prompt: `Provide facts about the city: ${input}`,
     };
   })
   .then(step1)
@@ -118,17 +116,17 @@ To use a tool within a workflow, define it in the usual way, then either add it 
 The example below uses the Open Meteo API to retrieve geolocation details for a city, returning its name, country, and timezone.
 
 ```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
-import { createTool } from "@mastra/core";
-import { z } from "zod";
+import { createTool } from '@mastra/core';
+import { z } from 'zod';
 
 export const testTool = createTool({
-  id: "test-tool",
-  description: "Gets country for a city",
+  id: 'test-tool',
+  description: 'Gets country for a city',
   inputSchema: z.object({
-    input: z.string()
+    input: z.string(),
   }),
   outputSchema: z.object({
-    country_name: z.string()
+    country_name: z.string(),
   }),
   execute: async ({ context }) => {
     const { input } = context;
@@ -138,9 +136,9 @@ export const testTool = createTool({
     const { country } = geocodingData.results[0];
 
     return {
-      country_name: country
+      country_name: country,
     };
-  }
+  },
 });
 ```
 
@@ -208,7 +206,6 @@ export const testWorkflow = createWorkflow({...})
 
 In this example the `cityStringWorkflow` workflow has been added to the main Mastra instance.
 
-
 ```typescript {7} filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 
@@ -224,13 +221,13 @@ Once a workflow has been registered it can be referenced using `getWorkflow` fro
 
 ```typescript {10,17-27} filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
 export const cityCoordinatesTool = createTool({
-  id: "city-tool",
-  description: "Convert city details",
+  id: 'city-tool',
+  description: 'Convert city details',
   inputSchema: z.object({
-    city: z.string()
+    city: z.string(),
   }),
   outputSchema: z.object({
-    outcome: z.string()
+    outcome: z.string(),
   }),
   execute: async ({ context, mastra }) => {
     const { city } = context;
@@ -239,7 +236,7 @@ export const cityCoordinatesTool = createTool({
 
     const { name, country, timezone } = geocodingData.results[0];
 
-    const workflow = mastra?.getWorkflow("cityStringWorkflow");
+    const workflow = mastra?.getWorkflow('cityStringWorkflow');
 
     const run = await workflow?.createRunAsync();
 
@@ -247,14 +244,14 @@ export const cityCoordinatesTool = createTool({
       inputData: {
         city_name: name,
         country_name: country,
-        country_timezone: timezone
-      }
+        country_timezone: timezone,
+      },
     });
 
     return {
-      outcome: result.outcome
+      outcome: result.outcome,
     };
-  }
+  },
 });
 ```
 
@@ -263,25 +260,24 @@ export const cityCoordinatesTool = createTool({
 You can also use Workflows in Agents. This agent is able to choose between using the test tool or the test workflow.
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-import { testTool } from "../tools/test-tool";
-import { testWorkflow } from "../workflows/test-workflow";
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { testTool } from '../tools/test-tool';
+import { testWorkflow } from '../workflows/test-workflow';
 
 export const testAgent = new Agent({
-  name: "test-agent",
-  description: "Create facts for a country based on the city",
+  name: 'test-agent',
+  description: 'Create facts for a country based on the city',
   instructions: `Return an interesting fact about the country based on the city provided`,
-  model: openai("gpt-4o"),
+  model: openai('gpt-4o'),
   workflows: {
-    test_workflow: testWorkflow
+    test_workflow: testWorkflow,
   },
   tools: {
-    test_tool: testTool
+    test_tool: testTool,
   },
 });
 ```
-
 
 ## Exposing workflows with `MCPServer`
 
@@ -294,23 +290,23 @@ When you provide workflows to the server, each workflow is automatically exposed
 - `run_testWorkflow`.
 
 ```typescript filename="src/test-mcp-server.ts" showLineNumbers copy
-import { MCPServer } from "@mastra/mcp";
+import { MCPServer } from '@mastra/mcp';
 
-import { testAgent } from "./mastra/agents/test-agent";
-import { testTool } from "./mastra/tools/test-tool";
-import { testWorkflow } from "./mastra/workflows/test-workflow";
+import { testAgent } from './mastra/agents/test-agent';
+import { testTool } from './mastra/tools/test-tool';
+import { testWorkflow } from './mastra/workflows/test-workflow';
 
 async function startServer() {
   const server = new MCPServer({
-    name: "test-mcp-server",
-    version: "1.0.0",
+    name: 'test-mcp-server',
+    version: '1.0.0',
     workflows: {
-      testWorkflow
-    }
+      testWorkflow,
+    },
   });
 
   await server.startStdio();
-  console.log("MCPServer started on stdio");
+  console.log('MCPServer started on stdio');
 }
 
 startServer().catch(console.error);
@@ -319,16 +315,16 @@ startServer().catch(console.error);
 To verify that your workflow is available on the server, you can connect with an MCPClient.
 
 ```typescript filename="src/test-mcp-client.ts" showLineNumbers copy
-import { MCPClient } from "@mastra/mcp";
+import { MCPClient } from '@mastra/mcp';
 
 async function main() {
   const mcp = new MCPClient({
     servers: {
       local: {
-        command: "npx",
-        args: ["tsx", "src/test-mcp-server.ts"]
-      }
-    }
+        command: 'npx',
+        args: ['tsx', 'src/test-mcp-server.ts'],
+      },
+    },
   });
 
   const tools = await mcp.getTools();
@@ -346,5 +342,5 @@ npx tsx src/test-mcp-client.ts
 
 ## More resources
 
-- [MCPServer reference documentation](/reference/tools/mcp-server).
-- [MCPClient reference documentation](/reference/tools/mcp-client).
+- [MCPServer reference documentation](/docs/reference/tools/mcp-server).
+- [MCPClient reference documentation](/docs/reference/tools/mcp-client).

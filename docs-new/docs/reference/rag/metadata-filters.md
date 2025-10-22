@@ -1,5 +1,5 @@
 ---
-title: "Reference: Metadata Filters "
+title: 'Reference: Metadata Filters '
 description: Documentation for metadata filtering capabilities in Mastra, which allow for precise querying of vector search results across different vector stores.
 ---
 
@@ -10,18 +10,18 @@ Mastra provides a unified metadata filtering syntax across all vector stores, ba
 ## Basic Example
 
 ```typescript
-import { PgVector } from "@mastra/pg";
+import { PgVector } from '@mastra/pg';
 
 const store = new PgVector({ connectionString });
 
 const results = await store.query({
-  indexName: "my_index",
+  indexName: 'my_index',
   queryVector: queryVector,
   topK: 10,
   filter: {
-    category: "electronics", // Simple equality
+    category: 'electronics', // Simple equality
     price: { $gt: 100 }, // Numeric comparison
-    tags: { $in: ["sale", "new"] }, // Array membership
+    tags: { $in: ['sale', 'new'] }, // Array membership
   },
 });
 ```
@@ -29,96 +29,96 @@ const results = await store.query({
 ## Supported Operators
 
 <OperatorsTable
-  title="Basic Comparison"
-  operators={[
-    {
-      name: "$eq",
+title="Basic Comparison"
+operators={[
+{
+name: "$eq",
       description: "Matches values equal to specified value",
       example: "{ age: { $eq: 25 } }",
       supportedBy: ["All except Couchbase"],
     },
     {
       name: "$ne",
-      description: "Matches values not equal",
-      example: "{ status: { $ne: 'inactive' } }",
+description: "Matches values not equal",
+example: "{ status: { $ne: 'inactive' } }",
       supportedBy: ["All except Couchbase"],
     },
     {
       name: "$gt",
-      description: "Greater than",
-      example: "{ price: { $gt: 100 } }",
+description: "Greater than",
+example: "{ price: { $gt: 100 } }",
       supportedBy: ["All except Couchbase"],
     },
     {
       name: "$gte",
-      description: "Greater than or equal",
-      example: "{ rating: { $gte: 4.5 } }",
+description: "Greater than or equal",
+example: "{ rating: { $gte: 4.5 } }",
       supportedBy: ["All except Couchbase"],
     },
     {
       name: "$lt",
-      description: "Less than",
-      example: "{ stock: { $lt: 20 } }",
+description: "Less than",
+example: "{ stock: { $lt: 20 } }",
       supportedBy: ["All except Couchbase"],
     },
     {
       name: "$lte",
-      description: "Less than or equal",
-      example: "{ priority: { $lte: 3 } }",
-      supportedBy: ["All except Couchbase"],
-    },
-  ]}
+description: "Less than or equal",
+example: "{ priority: { $lte: 3 } }",
+supportedBy: ["All except Couchbase"],
+},
+]}
 />
 
 <OperatorsTable
-  title="Array Operators"
-  operators={[
-    {
-      name: "$in",
+title="Array Operators"
+operators={[
+{
+name: "$in",
       description: "Matches any value in array",
       example: '{ category: { $in: ["A", "B"] } }',
       supportedBy: ["All except Couchbase"],
     },
     {
       name: "$nin",
-      description: "Matches none of the values",
-      example: '{ status: { $nin: ["deleted", "archived"] } }',
+description: "Matches none of the values",
+example: '{ status: { $nin: ["deleted", "archived"] } }',
       supportedBy: ["All except Couchbase"],
     },
     {
       name: "$all",
-      description: "Matches arrays containing all elements",
-      example: '{ tags: { $all: ["urgent", "high"] } }',
+description: "Matches arrays containing all elements",
+example: '{ tags: { $all: ["urgent", "high"] } }',
       supportedBy: ["Astra", "Pinecone", "Upstash", "MongoDB"],
     },
     {
       name: "$elemMatch",
-      description: "Matches array elements meeting criteria",
-      example: "{ scores: { $elemMatch: { $gt: 80 } } }",
-      supportedBy: ["LibSQL", "PgVector", "MongoDB"],
-    },
-  ]}
+description: "Matches array elements meeting criteria",
+example: "{ scores: { $elemMatch: { $gt: 80 } } }",
+supportedBy: ["LibSQL", "PgVector", "MongoDB"],
+},
+]}
 />
 
 <OperatorsTable
-  title="Logical Operators"
-  operators={[
-    {
-      name: "$and",
+title="Logical Operators"
+operators={[
+{
+name: "$and",
       description: "Logical AND",
       example: "{ $and: [{ price: { $gt: 100 } }, { stock: { $gt: 0 } }] }",
       supportedBy: ["All except Vectorize, Couchbase"],
     },
     {
       name: "$or",
-      description: "Logical OR",
-      example: '{ $or: [{ status: "active" }, { priority: "high" }] }',
+description: "Logical OR",
+example: '{ $or: [{ status: "active" }, { priority: "high" }] }',
       supportedBy: ["All except Vectorize, Couchbase"],
     },
     {
       name: "$not",
-      description: "Logical NOT",
-      example: "{ price: { $not: { $lt: 100 } } }",
+description: "Logical NOT",
+example: "{ price: { $not: { $lt: 100 } } }",
       supportedBy: [
         "Astra",
         "Qdrant",
@@ -130,89 +130,86 @@ const results = await store.query({
     },
     {
       name: "$nor",
-      description: "Logical NOR",
-      example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
-      supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL", "MongoDB"],
-    },
-  ]}
+description: "Logical NOR",
+example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
+supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL", "MongoDB"],
+},
+]}
 />
 
 <OperatorsTable
-  title="Element Operators"
-  operators={[
-    {
-      name: "$exists",
-      description: "Matches documents with field",
-      example: "{ rating: { $exists: true } }",
-      supportedBy: ["All except Vectorize, Chroma, Couchbase"],
-    },
-  ]}
+title="Element Operators"
+operators={[
+{
+name: "$exists",
+description: "Matches documents with field",
+example: "{ rating: { $exists: true } }",
+supportedBy: ["All except Vectorize, Chroma, Couchbase"],
+},
+]}
 />
 
 <OperatorsTable
-  title="Custom Operators"
-  operators={[
-    {
-      name: "$contains",
+title="Custom Operators"
+operators={[
+{
+name: "$contains",
       description: "Text contains substring",
       example: '{ description: { $contains: "sale" } }',
       supportedBy: ["Upstash", "LibSQL", "PgVector"],
     },
     {
       name: "$regex",
-      description: "Regular expression match",
-      example: '{ name: { $regex: "^test" } }',
+description: "Regular expression match",
+example: '{ name: { $regex: "^test" } }',
       supportedBy: ["Qdrant", "PgVector", "Upstash", "MongoDB"],
     },
     {
       name: "$size",
-      description: "Array length check",
-      example: "{ tags: { $size: { $gt: 2 } } }",
+description: "Array length check",
+example: "{ tags: { $size: { $gt: 2 } } }",
       supportedBy: ["Astra", "LibSQL", "PgVector", "MongoDB"],
     },
     {
       name: "$geo",
-      description: "Geospatial query",
-      example: '{ location: { $geo: { type: "radius", ... } } }',
+description: "Geospatial query",
+example: '{ location: { $geo: { type: "radius", ... } } }',
       supportedBy: ["Qdrant"],
     },
     {
       name: "$datetime",
-      description: "Datetime range query",
-      example: '{ created: { $datetime: { range: { gt: "2024-01-01" } } } }',
+description: "Datetime range query",
+example: '{ created: { $datetime: { range: { gt: "2024-01-01" } } } }',
       supportedBy: ["Qdrant"],
     },
     {
       name: "$hasId",
-      description: "Vector ID existence check",
-      example: '{ $hasId: ["id1", "id2"] }',
+description: "Vector ID existence check",
+example: '{ $hasId: ["id1", "id2"] }',
       supportedBy: ["Qdrant"],
     },
     {
       name: "$hasVector",
-      description: "Vector existence check",
-      example: "{ $hasVector: true }",
-      supportedBy: ["Qdrant"],
-    },
-  ]}
+description: "Vector existence check",
+example: "{ $hasVector: true }",
+supportedBy: ["Qdrant"],
+},
+]}
 />
 
 ## Common Rules and Restrictions
 
 1. Field names cannot:
-
    - Contain dots (.) unless referring to nested fields
    - Start with $ or contain null characters
    - Be empty strings
 
 2. Values must be:
-
    - Valid JSON types (string, number, boolean, object, array)
    - Not undefined
    - Properly typed for the operator (e.g., numbers for numeric comparisons)
 
 3. Logical operators:
-
    - Must contain valid conditions
    - Cannot be empty
    - Must be properly nested
@@ -225,7 +222,6 @@ const results = await store.query({
    - Invalid: `{ "field": { "$gt": { "$and": [{...}] } } }`
 
 4. $not operator:
-
    - Must be an object
    - Cannot be empty
    - Can be used at field level or top level
@@ -317,31 +313,32 @@ const results = await store.query({
 - Indexing metadata fields is recommended for optimal performance
 
 ### Couchbase
+
 - Currently does not have support for metadata filters. Filtering must be done client-side after retrieving results or by using the Couchbase SDK's Search capabilities directly for more complex queries.
 
 ### Amazon S3 Vectors
 
-* Equality values must be primitives (string/number/boolean). `null`/`undefined`, arrays, objects, and Date are not allowed for equality. Range operators accept numbers or Date (Dates are normalized to epoch ms).
-* `$in`/`$nin` require **non-empty arrays of primitives**; Date elements are allowed and normalized to epoch ms. **Array equality** is not supported.
-* Implicit AND is canonicalized (`{a:1,b:2}` → `{$and:[{a:1},{b:2}]}`). Logical operators must contain field conditions, use non-empty arrays, and appear only at the root or within other logical operators (not inside field values).
-* Keys listed in `nonFilterableMetadataKeys` at index creation are stored but not filterable; this setting is immutable.
-* $exists requires a boolean value.
-* undefined/null/empty filters are treated as no filter.
-* Each metadata key name limited to 63 characters.
-* Total metadata per vector: Up to 40 KB (filterable + non-filterable)
-* Total metadata keys per vector: Up to 10
-* Filterable metadata per vector: Up to 2 KB
-* Non-filterable metadata keys per vector index: Up to 10
+- Equality values must be primitives (string/number/boolean). `null`/`undefined`, arrays, objects, and Date are not allowed for equality. Range operators accept numbers or Date (Dates are normalized to epoch ms).
+- `$in`/`$nin` require **non-empty arrays of primitives**; Date elements are allowed and normalized to epoch ms. **Array equality** is not supported.
+- Implicit AND is canonicalized (`{a:1,b:2}` → `{$and:[{a:1},{b:2}]}`). Logical operators must contain field conditions, use non-empty arrays, and appear only at the root or within other logical operators (not inside field values).
+- Keys listed in `nonFilterableMetadataKeys` at index creation are stored but not filterable; this setting is immutable.
+- $exists requires a boolean value.
+- undefined/null/empty filters are treated as no filter.
+- Each metadata key name limited to 63 characters.
+- Total metadata per vector: Up to 40 KB (filterable + non-filterable)
+- Total metadata keys per vector: Up to 10
+- Filterable metadata per vector: Up to 2 KB
+- Non-filterable metadata keys per vector index: Up to 10
 
 ## Related
 
-- [Astra](./astra)
-- [Chroma](./chroma)
-- [Cloudflare Vectorize](./vectorize)
-- [LibSQL](./libsql)
-- [MongoDB](./mongodb)
-- [PgStore](./pg)
-- [Pinecone](./pinecone)
-- [Qdrant](./qdrant)
-- [Upstash](./upstash)
-- [Amazon S3 Vectors](./s3vectors)
+- [Astra](/docs/reference/vectors/astra)
+- [Chroma](/docs/reference/vectors/chroma)
+- [Cloudflare Vectorize](/docs/reference/vectors/vectorize)
+- [LibSQL](/docs/reference/vectors/libsql)
+- [MongoDB](/docs/reference/vectors/mongodb)
+- [PgStore](/docs/reference/vectors/pg)
+- [Pinecone](/docs/reference/vectors/pinecone)
+- [Qdrant](/docs/reference/vectors/qdrant)
+- [Upstash](/docs/reference/vectors/upstash)
+- [Amazon S3 Vectors](/docs/reference/vectors/s3vectors)

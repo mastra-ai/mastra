@@ -130,7 +130,7 @@ You can create a `SummarizationMetric` instance by providing a model. No additio
 const metric = new SummarizationMetric(openai('gpt-4o-mini'));
 ```
 
-> See [SummarizationMetric](/reference/evals/summarization) for a full list of configuration options.
+> See [SummarizationMetric](/docs/reference/evals/summarization) for a full list of configuration options.
 
 ## Understanding the results
 

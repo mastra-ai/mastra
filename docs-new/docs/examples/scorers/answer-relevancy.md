@@ -13,7 +13,7 @@ Use `createAnswerRelevancyScorer` to score how relevant the response is to the o
 npm install @mastra/evals
 ```
 
-> For complete API documentation and configuration options, see [`createAnswerRelevancyScorer`](/reference/scorers/answer-relevancy).
+> For complete API documentation and configuration options, see [`createAnswerRelevancyScorer`](/docs/reference/scorers/answer-relevancy).
 
 ## High relevancy example
 
@@ -128,7 +128,7 @@ const scorer = createAnswerRelevancyScorer({
 });
 ```
 
-> See [createAnswerRelevancyScorer](/reference/scorers/answer-relevancy) for a full list of configuration options.
+> See [createAnswerRelevancyScorer](/docs/reference/scorers/answer-relevancy) for a full list of configuration options.
 
 ## Understanding the results
 

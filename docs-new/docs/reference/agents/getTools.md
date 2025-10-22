@@ -63,5 +63,5 @@ description: "Runtime context for dependency injection and contextual informatio
 
 ## Related
 
-- [Using tools with agents](../../docs/agents/using-tools-and-mcp)
-- [Creating tools](../../docs/tools-mcp/overview)
+- [Using tools with agents](/docs/agents/using-tools-and-mcp)
+- [Creating tools](/docs/tools-mcp/overview)

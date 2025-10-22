@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 
 # Mastra Client SDK
 
-The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/deployment/server) from your client environment.
+The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/deployment/server-deployment) from your client environment.
 
 ## Prerequisites
 
@@ -65,13 +65,13 @@ export const mastraClient = new MastraClient({
 
 The Mastra Client SDK exposes all resources served by the Mastra Server
 
-- **[Agents](/reference/client-js/agents)**: Generate responses and stream conversations.
-- **[Memory](/reference/client-js/memory)**: Manage conversation threads and message history.
-- **[Tools](/reference/client-js/tools)**: Executed and managed tools.
-- **[Workflows](/reference/client-js/workflows)**: Trigger workflows and track their execution.
-- **[Vectors](/reference/client-js/vectors)**: Use vector embeddings for semantic search.
-- **[Logs](/reference/client-js/logs)**: View logs and debug system behavior.
-- **[Telemetry](/reference/client-js/telemetry)**: Monitor app performance and trace activity.
+- **[Agents](/docs/reference/client-js/agents)**: Generate responses and stream conversations.
+- **[Memory](/docs/reference/client-js/memory)**: Manage conversation threads and message history.
+- **[Tools](/docs/reference/client-js/tools)**: Executed and managed tools.
+- **[Workflows](/docs/reference/client-js/workflows)**: Trigger workflows and track their execution.
+- **[Vectors](/docs/reference/client-js/vectors)**: Use vector embeddings for semantic search.
+- **[Logs](/docs/reference/client-js/logs)**: View logs and debug system behavior.
+- **[Telemetry](/docs/reference/client-js/telemetry)**: Monitor app performance and trace activity.
 
 ## Generating responses
 
@@ -100,7 +100,7 @@ const testAgent = async () => {
 };
 ```
 
-> See [.generate()](../../reference/client-js/agents#generate-response) for more information.
+> See [.generate()](/docs/reference/client-js/agents#generate-response) for more information.
 
 ## Streaming responses
 
@@ -133,7 +133,7 @@ const testAgent = async () => {
 };
 ```
 
-> See [.stream()](../../reference/client-js/agents#stream-response) for more information.
+> See [.stream()](/docs/reference/client-js/agents#stream-response) for more information.
 
 ## Configuration options
 
@@ -153,7 +153,7 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-> See [MastraClient](../../reference/client-js/mastra-client) for more configuration options.
+> See [MastraClient](/docs/reference/client-js/mastra-client) for more configuration options.
 
 ## Adding request cancelling
 
@@ -229,7 +229,7 @@ const handleClientTool = async () => {
 
 ### Client tool's agent
 
-This is a standard Mastra [agent](../agents/overview#creating-an-agent) configured to return hex color codes, intended to work with the browser-based client tool defined above.
+This is a standard Mastra [agent](../agents/overview#create-an-agent) configured to return hex color codes, intended to work with the browser-based client tool defined above.
 
 ```typescript filename="src/mastra/agents/color-agent" showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
@@ -262,7 +262,7 @@ export async function action() {
 
 ## Best practices
 
-1. **Error Handling**: Implement proper [error handling](/reference/client-js/error-handling) for development scenarios.
+1. **Error Handling**: Implement proper [error handling](/docs/reference/client-js/error-handling) for development scenarios.
 2. **Environment Variables**: Use environment variables for configuration.
-3. **Debugging**: Enable detailed [logging](/reference/client-js/logs) when needed.
-4. **Performance**: Monitor application performance, [telemetry](/reference/client-js/telemetry) and traces.
+3. **Debugging**: Enable detailed [logging](/docs/reference/client-js/logs) when needed.
+4. **Performance**: Monitor application performance, [telemetry](/docs/reference/client-js/telemetry) and traces.

@@ -63,5 +63,5 @@ description: "Runtime context for dependency injection and contextual informatio
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview)
-- [Workflows overview](../../docs/workflows/overview)
+- [Agents overview](/docs/agents/overview)
+- [Workflows overview](/docs/workflows/overview)

@@ -846,6 +846,6 @@ for await (const chunk of stream.fullStream) {
 
 ## Related Types
 
-- [.stream()](./stream) - Method that returns streams emitting these chunks
+- [.stream()](/docs/reference/streaming/agents/stream) - Method that returns streams emitting these chunks
 - [MastraModelOutput](./agents/MastraModelOutput) - The stream object that emits these chunks
 - [workflow.streamVNext()](./workflows/streamVNext) - Method that returns streams emitting these chunks for workflows

@@ -1,5 +1,5 @@
 ---
-title: "Context Precision Scorer "
+title: 'Context Precision Scorer '
 description: Example of using the Context Precision scorer to evaluate the relevance and positioning of retrieved context for RAG systems using Mean Average Precision.
 ---
 
@@ -45,9 +45,10 @@ const result = await scorer.run({
   },
   output: [
     {
-      id: '2', 
+      id: '2',
       role: 'assistant',
-      content: 'Photosynthesis is the process where plants convert sunlight, CO2, and water into glucose and oxygen using chloroplasts.',
+      content:
+        'Photosynthesis is the process where plants convert sunlight, CO2, and water into glucose and oxygen using chloroplasts.',
     },
   ],
 });
@@ -87,7 +88,7 @@ const result = await scorer.run({
     inputMessages: [
       {
         id: '1',
-        role: 'user', 
+        role: 'user',
         content: 'What are the mental and physical benefits of exercise?',
       },
     ],
@@ -95,8 +96,9 @@ const result = await scorer.run({
   output: [
     {
       id: '2',
-      role: 'assistant', 
-      content: 'Exercise provides cardiovascular benefits, improves mood through endorphin release, and helps maintain healthy body composition.',
+      role: 'assistant',
+      content:
+        'Exercise provides cardiovascular benefits, improves mood through endorphin release, and helps maintain healthy body composition.',
     },
   ],
 });
@@ -109,7 +111,7 @@ console.log(result);
 // }
 ```
 
-## Low precision example  
+## Low precision example
 
 This example shows poor context precision with mostly irrelevant context:
 
@@ -122,7 +124,7 @@ const scorer = createContextPrecisionScorer({
   options: {
     context: [
       'The weather forecast shows sunny skies this weekend.',
-      'Coffee is one of the world\'s most popular beverages.',
+      "Coffee is one of the world's most popular beverages.",
       'Machine learning requires large amounts of training data.',
       'Cats typically sleep 12-16 hours per day.',
       'The capital of France is Paris.',
@@ -186,7 +188,7 @@ const scorer = createContextPrecisionScorer({
     contextExtractor: (input, output) => {
       // Extract context dynamically based on the query
       const query = input?.inputMessages?.[0]?.content || '';
-      
+
       // Example: Retrieve from a vector database
       const searchResults = vectorDB.search(query, { limit: 10 });
       return searchResults.map(result => result.content);
@@ -200,7 +202,7 @@ const scorer = createContextPrecisionScorer({
 
 ```typescript
 const scorer = createContextPrecisionScorer({
-  model: openai('gpt-4o-mini'), 
+  model: openai('gpt-4o-mini'),
   options: {
     context: [
       // Simulate retrieved documents from vector database
@@ -220,7 +222,7 @@ const scorer = createContextPrecisionScorer({
 ### Score interpretation
 
 - **0.9-1.0**: Excellent precision - all relevant context early in sequence
-- **0.7-0.8**: Good precision - most relevant context well-positioned  
+- **0.7-0.8**: Good precision - most relevant context well-positioned
 - **0.4-0.6**: Moderate precision - relevant context mixed with irrelevant
 - **0.1-0.3**: Poor precision - little relevant context or poorly positioned
 - **0.0**: No relevant context found
@@ -228,6 +230,7 @@ const scorer = createContextPrecisionScorer({
 ### Reason analysis
 
 The reason field explains:
+
 - Which context pieces were deemed relevant/irrelevant
 - How positioning affected the MAP calculation
 - Specific relevance criteria used in evaluation
@@ -235,6 +238,7 @@ The reason field explains:
 ### Optimization insights
 
 Use results to:
+
 - **Improve retrieval**: Filter out irrelevant context before ranking
 - **Optimize ranking**: Ensure relevant context appears early
 - **Tune chunk size**: Balance context detail vs. relevance precision
@@ -242,6 +246,6 @@ Use results to:
 
 ## Related examples
 
-- [Answer Relevancy Example](/examples/scorers/answer-relevancy) - Evaluating answer quality
-- [Faithfulness Example](/examples/scorers/faithfulness) - Measuring groundedness in context
-- [Hallucination Example](/examples/scorers/hallucination) - Detecting fabricated information
+- [Answer Relevancy Example](/docs/examples/scorers/answer-relevancy) - Evaluating answer quality
+- [Faithfulness Example](/docs/examples/scorers/faithfulness) - Measuring groundedness in context
+- [Hallucination Example](/docs/examples/scorers/hallucination) - Detecting fabricated information

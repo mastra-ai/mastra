@@ -1,8 +1,7 @@
 ---
-title: "Conditional Branching (experimental) "
+title: 'Conditional Branching (experimental) '
 description: Example of using Mastra to create conditional branches in legacy workflows using if/else statements.
 ---
-
 
 # Workflow (Legacy) with Conditional Branching (experimental)
 
@@ -13,13 +12,13 @@ Workflows often need to follow different paths based on conditions. This example
 This example shows a simple legacy workflow that takes different paths based on a numeric value:
 
 ```ts showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
-import { z } from "zod";
+import { Mastra } from '@mastra/core';
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
+import { z } from 'zod';
 
 // Step that provides the initial value
 const startStep = new LegacyStep({
-  id: "start",
+  id: 'start',
   outputSchema: z.object({
     value: z.number(),
   }),
@@ -32,42 +31,38 @@ const startStep = new LegacyStep({
 
 // Step that handles high values
 const highValueStep = new LegacyStep({
-  id: "highValue",
+  id: 'highValue',
   outputSchema: z.object({
     result: z.string(),
   }),
   execute: async ({ context }) => {
-    const value = context.getStepResult<{ value: number }>("start")?.value;
+    const value = context.getStepResult<{ value: number }>('start')?.value;
     return { result: `High value processed: ${value}` };
   },
 });
 
 // Step that handles low values
 const lowValueStep = new LegacyStep({
-  id: "lowValue",
+  id: 'lowValue',
   outputSchema: z.object({
     result: z.string(),
   }),
   execute: async ({ context }) => {
-    const value = context.getStepResult<{ value: number }>("start")?.value;
+    const value = context.getStepResult<{ value: number }>('start')?.value;
     return { result: `Low value processed: ${value}` };
   },
 });
 
 // Final step that summarizes the result
 const finalStep = new LegacyStep({
-  id: "final",
+  id: 'final',
   outputSchema: z.object({
     summary: z.string(),
   }),
   execute: async ({ context }) => {
     // Get the result from whichever branch executed
-    const highResult = context.getStepResult<{ result: string }>(
-      "highValue",
-    )?.result;
-    const lowResult = context.getStepResult<{ result: string }>(
-      "lowValue",
-    )?.result;
+    const highResult = context.getStepResult<{ result: string }>('highValue')?.result;
+    const lowResult = context.getStepResult<{ result: string }>('lowValue')?.result;
 
     const result = highResult || lowResult;
     return { summary: `Processing complete: ${result}` };
@@ -76,7 +71,7 @@ const finalStep = new LegacyStep({
 
 // Build the workflow with conditional branching
 const conditionalWorkflow = new LegacyWorkflow({
-  name: "conditional-workflow",
+  name: 'conditional-workflow',
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
@@ -85,7 +80,7 @@ const conditionalWorkflow = new LegacyWorkflow({
 conditionalWorkflow
   .step(startStep)
   .if(async ({ context }) => {
-    const value = context.getStepResult<{ value: number }>("start")?.value ?? 0;
+    const value = context.getStepResult<{ value: number }>('start')?.value ?? 0;
     return value >= 10; // Condition: value is 10 or greater
   })
   .then(highValueStep)
@@ -102,14 +97,14 @@ const mastra = new Mastra({
 
 // Example usage
 async function runWorkflow(inputValue: number) {
-  const workflow = mastra.legacy_getWorkflow("conditionalWorkflow");
+  const workflow = mastra.legacy_getWorkflow('conditionalWorkflow');
   const { start } = workflow.createRun();
 
   const result = await start({
     triggerData: { inputValue },
   });
 
-  console.log("Workflow result:", result.results);
+  console.log('Workflow result:', result.results);
   return result;
 }
 
@@ -118,8 +113,8 @@ const result1 = await runWorkflow(15);
 // Run with a low value (follows the "else" branch)
 const result2 = await runWorkflow(5);
 
-console.log("Result 1:", result1);
-console.log("Result 2:", result2);
+console.log('Result 1:', result1);
+console.log('Result 2:', result2);
 ```
 
 ## Using Reference-Based Conditions
@@ -131,7 +126,7 @@ You can also use reference-based conditions with comparison operators:
 conditionalWorkflow
   .step(startStep)
   .if({
-    ref: { step: startStep, path: "value" },
+    ref: { step: startStep, path: 'value' },
     query: { $gte: 10 }, // Condition: value is 10 or greater
   })
   .then(highValueStep)
@@ -157,13 +152,13 @@ conditionalWorkflow
 
 The following links provide example documentation for legacy workflows:
 
-- [Creating a Simple Workflow (Legacy)](/examples/workflows_legacy/creating-a-workflow)
-- [Workflow (Legacy) with Sequential Steps](/examples/workflows_legacy/sequential-steps)
-- [Parallel Execution with Steps](/examples/workflows_legacy/parallel-steps)
-- [Branching Paths](/examples/workflows_legacy/branching-paths)
-- [Calling an Agent From a Workflow (Legacy)](/examples/workflows_legacy/calling-agent)
-- [Tool as a Workflow step (Legacy)](/examples/workflows_legacy/using-a-tool-as-a-step)
-- [Workflow (Legacy) with Cyclical dependencies](/examples/workflows_legacy/cyclical-dependencies)
-- [Data Mapping with Workflow Variables (Legacy)](/examples/workflows_legacy/workflow-variables)
-- [Human in the Loop Workflow (Legacy)](/examples/workflows_legacy/human-in-the-loop)
-- [Workflow (Legacy) with Suspend and Resume](/examples/workflows_legacy/suspend-and-resume)
+- [Creating a Simple Workflow (Legacy)](/docs/examples/workflows_legacy/creating-a-workflow)
+- [Workflow (Legacy) with Sequential Steps](/docs/examples/workflows_legacy/sequential-steps)
+- [Parallel Execution with Steps](/docs/examples/workflows_legacy/parallel-steps)
+- [Branching Paths](/docs/examples/workflows_legacy/branching-paths)
+- [Calling an Agent From a Workflow (Legacy)](/docs/examples/workflows_legacy/calling-agent)
+- [Tool as a Workflow step (Legacy)](/docs/examples/workflows_legacy/using-a-tool-as-a-step)
+- [Workflow (Legacy) with Cyclical dependencies](/docs/examples/workflows_legacy/cyclical-dependencies)
+- [Data Mapping with Workflow Variables (Legacy)](/docs/examples/workflows_legacy/workflow-variables)
+- [Human in the Loop Workflow (Legacy)](/docs/examples/workflows_legacy/human-in-the-loop)
+- [Workflow (Legacy) with Suspend and Resume](/docs/examples/workflows_legacy/suspend-and-resume)

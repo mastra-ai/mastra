@@ -145,7 +145,7 @@ const metric = new HallucinationMetric(openai('gpt-4o-mini'), {
 });
 ```
 
-> See [HallucinationMetric](/reference/evals/hallucination) for a full list of configuration options.
+> See [HallucinationMetric](/docs/reference/evals/hallucination) for a full list of configuration options.
 
 ## Understanding the results
 

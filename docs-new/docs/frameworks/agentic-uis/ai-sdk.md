@@ -1,6 +1,6 @@
 ---
-title: "Using with Vercel AI SDK"
-description: "Learn how Mastra leverages the Vercel AI SDK library and how you can leverage it further with Mastra"
+title: 'Using with Vercel AI SDK'
+description: 'Learn how Mastra leverages the Vercel AI SDK library and how you can leverage it further with Mastra'
 ---
 
 import Tabs from '@theme/Tabs';
@@ -16,8 +16,8 @@ Mastra also supports AI SDK v5 see the following section for v5 specific methods
 
 :::warning
 
-  The code examples contained with this page assume you're using the Next.js App Router at the root of your
-  project, e.g., `app` rather than `src/app`.
+The code examples contained with this page assume you're using the Next.js App Router at the root of your
+project, e.g., `app` rather than `src/app`.
 
 :::
 
@@ -26,17 +26,17 @@ Mastra also supports AI SDK v5 see the following section for v5 specific methods
 When creating agents in Mastra, you can specify any AI SDK-supported model.
 
 ```typescript {7} filename="agents/weather-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
 
 export const weatherAgent = new Agent({
-  name: "Weather Agent",
-  instructions: "Instructions for the agent...",
-  model: openai("gpt-4-turbo"),
+  name: 'Weather Agent',
+  instructions: 'Instructions for the agent...',
+  model: openai('gpt-4-turbo'),
 });
 ```
 
-> See [Model Providers](/docs/getting-started/model-providers) and [Model Capabilities](/docs/getting-started/model-capability) for more information.
+> See [Model Providers](/docs/models/providers) and [Model Capabilities](/docs/models) for more information.
 
 ## React Hooks
 
@@ -67,7 +67,6 @@ Install the required AI SDK React package:
   </TabItem>
 </Tabs>
 
-
 ### Using the `useChat()` Hook
 
 The `useChat` hook handles real-time chat interactions between your frontend and a Mastra agent, enabling you to send prompts and receive streaming responses over HTTP.
@@ -95,18 +94,18 @@ export function Chat() {
 Requests sent using the `useChat` hook are handled by a standard server route. This example shows how to define a POST route using a Next.js Route Handler.
 
 ```typescript filename="app/api/chat/route.ts" showLineNumbers copy
-import { mastra } from "../../mastra";
+import { mastra } from '../../mastra';
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
-  const myAgent = mastra.getAgent("weatherAgent");
+  const myAgent = mastra.getAgent('weatherAgent');
   const stream = await myAgent.stream(messages);
 
   return stream.toDataStreamResponse();
 }
 ```
 
-> When using `useChat` with agent memory, refer to the [Agent Memory section](/docs/agents/agent-memory#usechat) for key implementation details.
+> When using `useChat` with agent memory, refer to the [Agent Memory section](/docs/agents/agent-memory) for key implementation details.
 
 ### Using the `useCompletion()` Hook
 
@@ -136,12 +135,12 @@ export function Completion() {
 Requests sent using the `useCompletion` hook are handled by a standard server route. This example shows how to define a POST route using a Next.js Route Handler.
 
 ```typescript filename="app/api/completion/route.ts" showLineNumbers copy
-import { mastra } from "../../../mastra";
+import { mastra } from '../../../mastra';
 
 export async function POST(req: Request) {
   const { prompt } = await req.json();
-  const myAgent = mastra.getAgent("weatherAgent");
-  const stream = await myAgent.stream([{ role: "user", content: prompt }]);
+  const myAgent = mastra.getAgent('weatherAgent');
+  const stream = await myAgent.stream([{ role: 'user', content: prompt }]);
 
   return stream.toDataStreamResponse();
 }
@@ -177,19 +176,19 @@ export function Object() {
 Requests sent using the `useObject` hook are handled by a standard server route. This example shows how to define a POST route using a Next.js Route Handler.
 
 ```typescript filename="app/api/object/route.ts" showLineNumbers copy
-import { mastra } from "../../../mastra";
-import { z } from "zod";
+import { mastra } from '../../../mastra';
+import { z } from 'zod';
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const myAgent = mastra.getAgent("weatherAgent");
+  const myAgent = mastra.getAgent('weatherAgent');
   const stream = await myAgent.stream(body, {
     structuredOutput: {
       schema: z.object({
-        weather: z.string()
-      })
+        weather: z.string(),
+      }),
     },
-    maxSteps: 1
+    maxSteps: 1,
   });
 
   return stream.toTextStreamResponse();
@@ -238,12 +237,12 @@ export function ChatExtra() {
 Requests sent using `sendExtraMessageFields` are handled by a standard server route. This example shows how to extract the custom data and populate a `RuntimeContext` instance.
 
 ```typescript {8,12} filename="app/api/chat-extra/route.ts" showLineNumbers copy
-import { mastra } from "../../../mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { mastra } from '../../../mastra';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 
 export async function POST(req: Request) {
   const { messages, data } = await req.json();
-  const myAgent = mastra.getAgent("weatherAgent");
+  const myAgent = mastra.getAgent('weatherAgent');
 
   const runtimeContext = new RuntimeContext();
 
@@ -258,22 +257,21 @@ export async function POST(req: Request) {
 }
 ```
 
-
 ### Handling `runtimeContext` with `server.middleware`
 
 You can also populate the `RuntimeContext` by reading custom data in a server middleware:
 
 ```typescript {6} filename="mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra({
   agents: { weatherAgent },
   server: {
     middleware: [
       async (c, next) => {
-        const runtimeContext = c.get("runtimeContext");
+        const runtimeContext = c.get('runtimeContext');
 
-        if (c.req.method === "POST") {
+        if (c.req.method === 'POST') {
           try {
             const clonedReq = c.req.raw.clone();
             const body = await clonedReq.json();
@@ -283,8 +281,7 @@ export const mastra = new Mastra({
                 runtimeContext.set(key, value);
               }
             }
-          } catch {
-          }
+          } catch {}
         }
         await next();
       },
@@ -353,31 +350,31 @@ createDataStream({
 The `createDataStreamResponse` function creates a response object that streams data to the client.
 
 ```typescript {2,9} filename="app/api/chat-stream/route.ts" showLineNumbers copy
-import { mastra } from "../../../mastra";
-import { createDataStreamResponse } from "ai";
+import { mastra } from '../../../mastra';
+import { createDataStreamResponse } from 'ai';
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
-  const myAgent = mastra.getAgent("weatherAgent");
+  const myAgent = mastra.getAgent('weatherAgent');
   const agentStream = await myAgent.stream(messages);
 
   const response = createDataStreamResponse({
     status: 200,
-    statusText: "OK",
+    statusText: 'OK',
     headers: {
-      "Custom-Header": "value"
+      'Custom-Header': 'value',
     },
     async execute(dataStream) {
-      dataStream.writeData({ value: "Hello" });
+      dataStream.writeData({ value: 'Hello' });
 
       dataStream.writeMessageAnnotation({
-        type: "status",
-        value: "processing"
+        type: 'status',
+        value: 'processing',
       });
 
       agentStream.mergeIntoDataStream(dataStream);
     },
-    onError: (error) => `Custom error: ${error}`
+    onError: error => `Custom error: ${error}`,
   });
 
   return response;
@@ -397,7 +394,7 @@ Mastra's experimental `stream` method now includes native AI SDK v5 support thro
 ```typescript
 // Use stream with AI SDK v5 format
 const stream = await agent.stream(messages, {
-  format: 'aisdk'  // Enable AI SDK v5 compatibility
+  format: 'aisdk', // Enable AI SDK v5 compatibility
 });
 
 // The stream is now compatible with AI SDK v5 interfaces
@@ -480,13 +477,13 @@ export const mastra = new Mastra({
 ```
 
 In your application call the `useChat()` hook.
+
 ```typescript
-const { error, status, sendMessage, messages, regenerate, stop } =
-  useChat({
-    transport: new DefaultChatTransport({
-      api: 'http://localhost:4111/chat',
-    }),
-  });
+const { error, status, sendMessage, messages, regenerate, stop } = useChat({
+  transport: new DefaultChatTransport({
+    api: 'http://localhost:4111/chat',
+  }),
+});
 ```
 
 ### Type Inference for Tools
@@ -498,14 +495,14 @@ When using tools with TypeScript in AI SDK v5, Mastra provides type inference he
 The `InferUITool` type helper infers the input and output types of a single Mastra tool:
 
 ```typescript filename="app/types.ts" showLineNumbers copy
-import { InferUITool, createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { InferUITool, createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
 const weatherTool = createTool({
-  id: "get-weather",
-  description: "Get the current weather",
+  id: 'get-weather',
+  description: 'Get the current weather',
   inputSchema: z.object({
-    location: z.string().describe("The city and state"),
+    location: z.string().describe('The city and state'),
   }),
   outputSchema: z.object({
     temperature: z.number(),
@@ -514,7 +511,7 @@ const weatherTool = createTool({
   execute: async ({ context }) => {
     return {
       temperature: 72,
-      conditions: "sunny",
+      conditions: 'sunny',
     };
   },
 });
@@ -533,17 +530,17 @@ type WeatherUITool = InferUITool<typeof weatherTool>;
 The `InferUITools` type helper infers the input and output types of multiple tools:
 
 ```typescript filename="app/mastra/tools.ts" showLineNumbers copy
-import { InferUITools, createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { InferUITools, createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
 // Using weatherTool from the previous example
 const tools = {
   weather: weatherTool,
   calculator: createTool({
-    id: "calculator",
-    description: "Perform basic arithmetic",
+    id: 'calculator',
+    description: 'Perform basic arithmetic',
     inputSchema: z.object({
-      operation: z.enum(["add", "subtract", "multiply", "divide"]),
+      operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
       a: z.number(),
       b: z.number(),
     }),

@@ -13,7 +13,7 @@ Use `createFaithfulnessScorer` to evaluate whether the response makes claims tha
 npm install @mastra/evals
 ```
 
-> For complete API documentation and configuration options, see [`createFaithfulnessScorer`](/reference/scorers/faithfulness).
+> For complete API documentation and configuration options, see [`createFaithfulnessScorer`](/docs/reference/scorers/faithfulness).
 
 ## High faithfulness example
 
@@ -140,7 +140,7 @@ const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options:
 });
 ```
 
-> See [FaithfulnessScorer](/reference/scorers/faithfulness) for a full list of configuration options.
+> See [FaithfulnessScorer](/docs/reference/scorers/faithfulness) for a full list of configuration options.
 
 ## Understanding the results
 

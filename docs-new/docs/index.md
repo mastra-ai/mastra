@@ -20,7 +20,7 @@ Purpose-built for TypeScript and designed around established AI patterns, Mastra
 
 Some highlights include:
 
-- [**Model routing**](/models) - Connect to 40+ providers through one standard interface. Use models from OpenAI, Anthropic, Gemini, and more.
+- [**Model routing**](/docs/models) - Connect to 40+ providers through one standard interface. Use models from OpenAI, Anthropic, Gemini, and more.
 
 - [**Agents**](/docs/agents/overview) - Build autonomous agents that use LLMs and tools to solve open-ended tasks. Agents reason about goals, decide which tools to use, and iterate internally until the model emits a final answer or an optional stopping condition is met.
 
@@ -46,12 +46,12 @@ Some highlights include:
 
 - Decision-support tools that analyse data and provide actionable recommendations.
 
-Explore real-world examples in our [case studies](/blog/category/case-studies) and [community showcase](/showcase).
+Explore real-world examples in our [case studies](https://mastra.ai/blog/category/case-studies) and [community showcase](/showcase).
 
 ## Get started
 
 Follow the [Installation guide](/docs/getting-started/installation) for step-by-step setup with the CLI or a manual install.
 
-If you're new to AI agents, check out our [templates](/docs/getting-started/templates), [course](/course), and [YouTube videos](https://youtube.com/@mastra-ai) to start building with Mastra today.
+If you're new to AI agents, check out our [templates](/docs/getting-started/templates), [course](https://mastra.ai/course), and [YouTube videos](https://youtube.com/@mastra-ai) to start building with Mastra today.
 
 We can't wait to see what you build ✌️

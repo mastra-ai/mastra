@@ -11,7 +11,7 @@ If you ask your friend what they did last weekend, they will search in their mem
 
 ## How Semantic Recall Works
 
-Semantic recall is RAG-based search that helps agents maintain context across longer interactions when messages are no longer within [recent conversation history](./overview#conversation-history).
+Semantic recall is RAG-based search that helps agents maintain context across longer interactions when messages are no longer within [recent conversation history](./overview).
 
 It uses vector embeddings of messages for similarity search, integrates with various vector stores, and has configurable context windows around retrieved messages.
 
@@ -69,7 +69,7 @@ Note: currently, `scope: 'resource'` for semantic recall is supported by the fol
 
 ### Storage configuration
 
-Semantic recall relies on a [storage and vector db](/reference/memory/Memory#parameters) to store messages and their embeddings.
+Semantic recall relies on a storage and vector db to store messages and their embeddings.
 
 ```ts {8-17}
 import { Memory } from '@mastra/memory';
@@ -92,13 +92,13 @@ const agent = new Agent({
 
 **Storage/vector code Examples**:
 
-- [LibSQL](/examples/memory/memory-with-libsql)
-- [Postgres](/examples/memory/memory-with-pg)
-- [Upstash](/examples/memory/memory-with-upstash)
+- [LibSQL](/docs/examples/memory/memory-with-libsql)
+- [Postgres](/docs/examples/memory/memory-with-pg)
+- [Upstash](/docs/examples/memory/memory-with-upstash)
 
 ### Embedder configuration
 
-Semantic recall relies on an [embedding model](/reference/memory/Memory#embedder) to convert messages into embeddings. You can specify any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
+Semantic recall relies on an embedding model to convert messages into embeddings. You can specify any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
 
 To use FastEmbed (a local embedding model), install `@mastra/fastembed`:
 
@@ -170,7 +170,7 @@ const agent = new Agent({
 });
 ```
 
-For detailed information about index configuration options and performance tuning, see the [PgVector configuration guide](/reference/vectors/pg#index-configuration-guide).
+For detailed information about index configuration options and performance tuning, see the [PgVector configuration guide](/docs/reference/vectors/pg#index-configuration-guide).
 
 ### Disabling
 

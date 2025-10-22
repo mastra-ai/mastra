@@ -126,7 +126,7 @@ const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'), {
 });
 ```
 
-> See [AnswerRelevancyMetric](/reference/evals/answer-relevancy) for a full list of configuration options.
+> See [AnswerRelevancyMetric](/docs/reference/evals/answer-relevancy) for a full list of configuration options.
 
 ## Understanding the results
 

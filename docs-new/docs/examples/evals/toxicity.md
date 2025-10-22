@@ -125,7 +125,7 @@ const metric = new ToxicityMetric(openai('gpt-4o-mini'), {
 });
 ```
 
-> See [ToxicityMetric](/reference/evals/toxicity) for a full list of configuration options.
+> See [ToxicityMetric](/docs/reference/evals/toxicity) for a full list of configuration options.
 
 ## Understanding the results
 

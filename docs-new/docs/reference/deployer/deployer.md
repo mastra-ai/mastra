@@ -1,6 +1,7 @@
 ---
-title: "Mastra Deployer"
+title: 'Mastra Deployer'
 description: Documentation for the Deployer abstract class, which handles packaging and deployment of Mastra applications.
+slug: /reference/deployer
 ---
 
 # Deployer
@@ -10,12 +11,12 @@ The Deployer handles the deployment of standalone Mastra applications by packagi
 ## Usage Example
 
 ```typescript
-import { Deployer } from "@mastra/deployer";
+import { Deployer } from '@mastra/deployer';
 
 // Create a custom deployer by extending the abstract Deployer class
 class CustomDeployer extends Deployer {
   constructor() {
-    super({ name: "custom-deployer" });
+    super({ name: 'custom-deployer' });
   }
 
   // Implement the abstract deploy method
@@ -24,7 +25,7 @@ class CustomDeployer extends Deployer {
     await this.prepare(outputDirectory);
 
     // Bundle the application
-    await this._bundle("server.ts", "mastra.ts", outputDirectory);
+    await this._bundle('server.ts', 'mastra.ts', outputDirectory);
 
     // Custom deployment logic
     // ...
@@ -37,53 +38,53 @@ class CustomDeployer extends Deployer {
 ### Constructor Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "args",
-      type: "object",
-      description: "Configuration options for the Deployer.",
-      isOptional: false,
-    },
-    {
-      name: "args.name",
-      type: "string",
-      description: "A unique name for the deployer instance.",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "args",
+type: "object",
+description: "Configuration options for the Deployer.",
+isOptional: false,
+},
+{
+name: "args.name",
+type: "string",
+description: "A unique name for the deployer instance.",
+isOptional: false,
+},
+]}
 />
 
 ### deploy Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "outputDirectory",
-      type: "string",
-      description:
-        "The directory where the bundled and deployment-ready application will be output.",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "outputDirectory",
+type: "string",
+description:
+"The directory where the bundled and deployment-ready application will be output.",
+isOptional: false,
+},
+]}
 />
 
 ## Methods
 
 <PropertiesTable
-  content={[
-    {
-      name: "getEnvFiles",
-      type: "() => Promise<string[]>",
-      description:
-        "Returns a list of environment files to be used during deployment. By default, it looks for '.env.production' and '.env' files.",
-    },
-    {
-      name: "deploy",
-      type: "(outputDirectory: string) => Promise<void>",
-      description:
-        "Abstract method that must be implemented by subclasses. Handles the deployment process to the specified output directory.",
-    },
-  ]}
+content={[
+{
+name: "getEnvFiles",
+type: "() => Promise<string[]>",
+description:
+"Returns a list of environment files to be used during deployment. By default, it looks for '.env.production' and '.env' files.",
+},
+{
+name: "deploy",
+type: "(outputDirectory: string) => Promise<void>",
+description:
+"Abstract method that must be implemented by subclasses. Handles the deployment process to the specified output directory.",
+},
+]}
 />
 
 ## Inherited Methods from Bundler
@@ -91,32 +92,32 @@ class CustomDeployer extends Deployer {
 The Deployer class inherits the following key methods from the Bundler class:
 
 <PropertiesTable
-  content={[
-    {
-      name: "prepare",
-      type: "(outputDirectory: string) => Promise<void>",
-      description:
-        "Prepares the output directory by cleaning it and creating necessary subdirectories.",
-    },
-    {
-      name: "writeInstrumentationFile",
-      type: "(outputDirectory: string) => Promise<void>",
-      description:
-        "Writes an instrumentation file to the output directory for telemetry purposes.",
-    },
-    {
-      name: "writePackageJson",
-      type: "(outputDirectory: string, dependencies: Map<string, string>) => Promise<void>",
-      description:
-        "Generates a package.json file in the output directory with the specified dependencies.",
-    },
-    {
-      name: "_bundle",
-      type: "(serverFile: string, mastraEntryFile: string, outputDirectory: string, bundleLocation?: string) => Promise<void>",
-      description:
-        "Bundles the application using the specified server and Mastra entry files.",
-    },
-  ]}
+content={[
+{
+name: "prepare",
+type: "(outputDirectory: string) => Promise<void>",
+description:
+"Prepares the output directory by cleaning it and creating necessary subdirectories.",
+},
+{
+name: "writeInstrumentationFile",
+type: "(outputDirectory: string) => Promise<void>",
+description:
+"Writes an instrumentation file to the output directory for telemetry purposes.",
+},
+{
+name: "writePackageJson",
+type: "(outputDirectory: string, dependencies: Map<string, string>) => Promise<void>",
+description:
+"Generates a package.json file in the output directory with the specified dependencies.",
+},
+{
+name: "_bundle",
+type: "(serverFile: string, mastraEntryFile: string, outputDirectory: string, bundleLocation?: string) => Promise<void>",
+description:
+"Bundles the application using the specified server and Mastra entry files.",
+},
+]}
 />
 
 ## Core Concepts

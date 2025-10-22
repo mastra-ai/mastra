@@ -144,7 +144,7 @@ const metric = new ContextRelevancyMetric(openai('gpt-4o-mini'), {
 });
 ```
 
-> See [ContextRelevancyMetric](/reference/evals/context-relevancy) for a full list of configuration options.
+> See [ContextRelevancyMetric](/docs/reference/evals/context-relevancy) for a full list of configuration options.
 
 ## Understanding the results
 

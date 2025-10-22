@@ -13,7 +13,7 @@ You'll use the foundational Transformer paper ["Attention Is All You Need"](http
 ## Prerequisites
 
 - Node.js `v20.0` or later installed
-- An API key from a supported [Model Provider](/docs/getting-started/model-providers)
+- An API key from a supported [Model Provider](/docs/models/providers)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
 ## How RAG works
@@ -69,7 +69,7 @@ you'll need to use v4.
 
 Now you'll create your RAG-enabled research assistant. The agent uses:
 
-- A [Vector Query Tool](/reference/tools/vector-query-tool) for performing semantic search over the vector store to find relevant content in papers
+- A [Vector Query Tool](/docs/reference/tools/vector-query-tool) for performing semantic search over the vector store to find relevant content in papers
 - GPT-4o-mini for understanding queries and generating responses
 - Custom instructions that guide the agent on how to analyze papers, use retrieved content effectively, and acknowledge limitations
 
@@ -355,7 +355,7 @@ curl -X POST http://localhost:4111/api/agents/researchAgent/generate \
 
 Explore these examples for more advanced RAG techniques:
 
-- [Filter RAG](/examples/rag/usage/filter-rag) for filtering results using metadata
-- [Cleanup RAG](/examples/rag/usage/cleanup-rag) for optimizing information density
-- [Chain of Thought RAG](/examples/rag/usage/cot-rag) for complex reasoning queries using workflows
-- [Rerank RAG](/examples/rag/usage/rerank-rag) for improved result relevance
+- [Filter RAG](/docs/examples/rag/usage/filter-rag) for filtering results using metadata
+- [Cleanup RAG](/docs/examples/rag/usage/cleanup-rag) for optimizing information density
+- [Chain of Thought RAG](/docs/examples/rag/usage/cot-rag) for complex reasoning queries using workflows
+- [Rerank RAG](/docs/examples/rag/rerank/rerank-rag) for improved result relevance

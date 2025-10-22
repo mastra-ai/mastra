@@ -70,8 +70,8 @@ console.log(thread);
 
 ### Related
 
-- [Memory Class Reference](/reference/memory/Memory)
-- [getThreadsByResourceIdPaginated](/reference/memory/getThreadsByResourceIdPaginated) - Paginated version
+- [Memory Class Reference](/docs/reference/memory)
+- [getThreadsByResourceIdPaginated](/docs/reference/memory/getThreadsByResourceIdPaginated) - Paginated version
 - [Getting Started with Memory](/docs/memory/overview) (Covers threads/resources concept)
-- [createThread](/reference/memory/createThread)
-- [getThreadById](/reference/memory/getThreadById)
+- [createThread](/docs/reference/memory/createThread)
+- [getThreadById](/docs/reference/memory/getThreadById)

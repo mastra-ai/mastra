@@ -46,4 +46,4 @@ description: "The workflow instance for method chaining",
 
 ## Related
 
-- [Sleep & Events](../../../docs/workflows/pausing-execution)
+- [Sleep & Events](/docs/workflows/pausing-execution)

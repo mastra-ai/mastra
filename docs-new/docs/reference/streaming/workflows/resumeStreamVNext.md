@@ -115,6 +115,6 @@ The stream emits various event types during workflow execution. Each event has a
 
 ## Related
 
-- [Workflows overview](../../../docs/workflows/overview#run-workflow)
+- [Workflows overview](/docs/workflows/overview#testing-workflows-locally)
 - [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run)
 - [Run.streamVNext()](./streamVNext)

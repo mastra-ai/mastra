@@ -44,7 +44,7 @@ export const supportAgent = new Agent({
 });
 ```
 
-> See [Agent](../../reference/agents/agent) for a full list of configuration options.
+> See [Agent](/docs/reference/agents/agent) for a full list of configuration options.
 
 ## Registering an agent
 

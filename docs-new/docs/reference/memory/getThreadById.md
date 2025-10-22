@@ -40,7 +40,7 @@ description: "A promise that resolves to the thread associated with the given ID
 
 ### Related
 
-- [Memory Class Reference](/reference/memory/Memory)
+- [Memory Class Reference](/docs/reference/memory)
 - [Getting Started with Memory](/docs/memory/overview) (Covers threads concept)
-- [createThread](/reference/memory/createThread)
-- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId)
+- [createThread](/docs/reference/memory/createThread)
+- [getThreadsByResourceId](/docs/reference/memory/getThreadsByResourceId)

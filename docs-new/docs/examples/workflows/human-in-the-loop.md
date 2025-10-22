@@ -79,4 +79,4 @@ export const humanInLoopWorkflow = createWorkflow({
 
 The following links provide example documentation for legacy workflows:
 
-- [Human in the Loop Workflow (Legacy)](/examples/workflows_legacy/human-in-the-loop)
+- [Human in the Loop Workflow (Legacy)](/docs/examples/workflows_legacy/human-in-the-loop)

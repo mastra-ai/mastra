@@ -1,5 +1,5 @@
 ---
-title: "Reference: Faithfulness "
+title: 'Reference: Faithfulness '
 description: Documentation for the Faithfulness Scorer in Mastra, which evaluates the factual accuracy of LLM outputs compared to the provided context.
 ---
 
@@ -7,34 +7,34 @@ description: Documentation for the Faithfulness Scorer in Mastra, which evaluate
 
 The `createFaithfulnessScorer()` function evaluates how factually accurate an LLM's output is compared to the provided context. It extracts claims from the output and verifies them against the context, making it essential to measure RAG pipeline responses' reliability.
 
-For a usage example, see the [Faithfulness Examples](/examples/scorers/faithfulness).
+For a usage example, see the [Faithfulness Examples](/docs/examples/scorers/faithfulness).
 
 ## Parameters
 
 The `createFaithfulnessScorer()` function accepts a single options object with the following properties:
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "LanguageModel",
-      required: true,
-      description: "Configuration for the model used to evaluate faithfulness.",
-    },
-    {
-      name: "context",
-      type: "string[]",
-      required: true,
-      description: "Array of context chunks against which the output's claims will be verified.",
-    },
-    {
-      name: "scale",
-      type: "number",
-      required: false,
-      defaultValue: "1",
-      description: "The maximum score value. The final score will be normalized to this scale.",
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "LanguageModel",
+required: true,
+description: "Configuration for the model used to evaluate faithfulness.",
+},
+{
+name: "context",
+type: "string[]",
+required: true,
+description: "Array of context chunks against which the output's claims will be verified.",
+},
+{
+name: "scale",
+type: "number",
+required: false,
+defaultValue: "1",
+description: "The maximum score value. The final score will be normalized to this scale.",
+},
+]}
 />
 
 This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
@@ -42,48 +42,48 @@ This function returns an instance of the MastraScorer class. The `.run()` method
 ## .run() Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "preprocessStepResult",
-      type: "string[]",
-      description: "Array of extracted claims from the output.",
-    },
-    {
-      name: "preprocessPrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the preprocess step (optional).",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description: "Object with verdicts: { verdicts: Array<{ verdict: 'yes' | 'no' | 'unsure', reason: string }> }",
-    },
-    {
-      name: "analyzePrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the analyze step (optional).",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "A score between 0 and the configured scale, representing the proportion of claims that are supported by the context.",
-    },
-    {
-      name: "reason",
-      type: "string",
-      description: "A detailed explanation of the score, including which claims were supported, contradicted, or marked as unsure.",
-    },
-    {
-      name: "generateReasonPrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the generateReason step (optional).",
-    },
-  ]}
+content={[
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "preprocessStepResult",
+type: "string[]",
+description: "Array of extracted claims from the output.",
+},
+{
+name: "preprocessPrompt",
+type: "string",
+description: "The prompt sent to the LLM for the preprocess step (optional).",
+},
+{
+name: "analyzeStepResult",
+type: "object",
+description: "Object with verdicts: { verdicts: Array<{ verdict: 'yes' | 'no' | 'unsure', reason: string }> }",
+},
+{
+name: "analyzePrompt",
+type: "string",
+description: "The prompt sent to the LLM for the analyze step (optional).",
+},
+{
+name: "score",
+type: "number",
+description: "A score between 0 and the configured scale, representing the proportion of claims that are supported by the context.",
+},
+{
+name: "reason",
+type: "string",
+description: "A detailed explanation of the score, including which claims were supported, contradicted, or marked as unsure.",
+},
+{
+name: "generateReasonPrompt",
+type: "string",
+description: "The prompt sent to the LLM for the generateReason step (optional).",
+},
+]}
 />
 
 ## Scoring Details

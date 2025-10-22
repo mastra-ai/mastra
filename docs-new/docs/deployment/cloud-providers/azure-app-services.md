@@ -1,6 +1,6 @@
 ---
-title: "Azure App Services"
-description: "Deploy your Mastra applications to Azure App Services."
+title: 'Azure App Services'
+description: 'Deploy your Mastra applications to Azure App Services.'
 ---
 
 # Azure App Services
@@ -9,10 +9,10 @@ Deploy your Mastra applications to Azure App Services.
 
 :::note
 
-  This guide assumes your Mastra application has been created using the default
-  `npx create-mastra@latest` command.
-  For more information on how to create a new Mastra application,
-  refer to our [getting started guide](/docs/getting-started/installation)
+This guide assumes your Mastra application has been created using the default
+`npx create-mastra@latest` command.
+For more information on how to create a new Mastra application,
+refer to our [getting started guide](/docs/getting-started/installation)
 
 :::
 
@@ -23,8 +23,6 @@ Deploy your Mastra applications to Azure App Services.
 - Your Mastra application should be created using `npx create-mastra@latest`
 
 ## Deployment Steps
-
-
 
 ### Create a new App Service
 
@@ -108,19 +106,17 @@ Pull the latest changes to your local repository and modify the generated workfl
 - Access your deployed application using the default URL provided in the **Overview** tab in the Azure portal
 - Your application will be available at `https://<your-app-name>.azurewebsites.net`
 
-
-
 ## Connect to your Mastra server
 
 You can now connect to your Mastra server from your client application using a `MastraClient` from the `@mastra/client-js` package.
 
-Refer to the [`MastraClient` documentation](/docs/client-js/overview) for more information.
+Refer to the [`MastraClient` documentation](/docs/server-db/mastra-client) for more information.
 
 ```typescript copy showLineNumbers
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js';
 
 const mastraClient = new MastraClient({
-  baseUrl: "https://<your-app-name>.azurewebsites.net",
+  baseUrl: 'https://<your-app-name>.azurewebsites.net',
 });
 ```
 
@@ -134,8 +130,7 @@ such as `LibSQLStore` with a file URL. Consider using cloud-based storage soluti
 
 ## Next steps
 
-- [Mastra Client SDK](/docs/client-js/overview)
+- [Mastra Client SDK](/docs/server-db/mastra-client)
 - [Configure custom domains](https://docs.microsoft.com/en-us/azure/app-service/app-service-web-tutorial-custom-domain)
 - [Enable HTTPS](https://docs.microsoft.com/en-us/azure/app-service/configure-ssl-bindings)
 - [Azure App Service documentation](https://docs.microsoft.com/en-us/azure/app-service/)
-

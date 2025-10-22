@@ -1,8 +1,7 @@
 ---
-title: "Reference: Context Relevance Scorer "
+title: 'Reference: Context Relevance Scorer '
 description: Documentation for the Context Relevance Scorer in Mastra. Evaluates the relevance and utility of provided context for generating agent responses using weighted relevance scoring.
 ---
-
 
 # Context Relevance Scorer
 
@@ -11,66 +10,66 @@ The `createContextRelevanceScorerLLM()` function creates a scorer that evaluates
 ## Parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "MastraLanguageModel",
-      description: "The language model to use for evaluating context relevance",
-      required: true,
-    },
-    {
-      name: "options",
-      type: "ContextRelevanceOptions",
-      description: "Configuration options for the scorer",
-      required: true,
-      children: [
-        {
-          name: "context",
-          type: "string[]",
-          description: "Array of context pieces to evaluate for relevance",
-          required: false,
-        },
-        {
-          name: "contextExtractor",
-          type: "(input, output) => string[]",
-          description: "Function to dynamically extract context from the run input and output",
-          required: false,
-        },
-        {
-          name: "scale",
-          type: "number",
-          description: "Scale factor to multiply the final score (default: 1)",
-          required: false,
-        },
-        {
-          name: "penalties",
-          type: "object",
-          description: "Configurable penalty settings for scoring",
-          required: false,
-          children: [
-            {
-              name: "unusedHighRelevanceContext",
-              type: "number",
-              description: "Penalty per unused high-relevance context (default: 0.1)",
-              required: false,
-            },
-            {
-              name: "missingContextPerItem",
-              type: "number",
-              description: "Penalty per missing context item (default: 0.15)",
-              required: false,
-            },
-            {
-              name: "maxMissingContextPenalty",
-              type: "number",
-              description: "Maximum total missing context penalty (default: 0.5)",
-              required: false,
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "MastraLanguageModel",
+description: "The language model to use for evaluating context relevance",
+required: true,
+},
+{
+name: "options",
+type: "ContextRelevanceOptions",
+description: "Configuration options for the scorer",
+required: true,
+children: [
+{
+name: "context",
+type: "string[]",
+description: "Array of context pieces to evaluate for relevance",
+required: false,
+},
+{
+name: "contextExtractor",
+type: "(input, output) => string[]",
+description: "Function to dynamically extract context from the run input and output",
+required: false,
+},
+{
+name: "scale",
+type: "number",
+description: "Scale factor to multiply the final score (default: 1)",
+required: false,
+},
+{
+name: "penalties",
+type: "object",
+description: "Configurable penalty settings for scoring",
+required: false,
+children: [
+{
+name: "unusedHighRelevanceContext",
+type: "number",
+description: "Penalty per unused high-relevance context (default: 0.1)",
+required: false,
+},
+{
+name: "missingContextPerItem",
+type: "number",
+description: "Penalty per missing context item (default: 0.15)",
+required: false,
+},
+{
+name: "maxMissingContextPenalty",
+type: "number",
+description: "Maximum total missing context penalty (default: 0.5)",
+required: false,
+},
+],
+},
+],
+},
+]}
 />
 
 :::note
@@ -80,18 +79,18 @@ Either `context` or `contextExtractor` must be provided. If both are provided, `
 ## .run() Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "score",
-      type: "number",
-      description: "Weighted relevance score between 0 and scale (default 0-1)",
-    },
-    {
-      name: "reason",
-      type: "string",
-      description: "Human-readable explanation of the context relevance evaluation",
-    },
-  ]}
+content={[
+{
+name: "score",
+type: "number",
+description: "Weighted relevance score between 0 and scale (default 0-1)",
+},
+{
+name: "reason",
+type: "string",
+description: "Human-readable explanation of the context relevance evaluation",
+},
+]}
 />
 
 ## Scoring Details
@@ -123,6 +122,7 @@ Final Score = max(0, Base Score - Usage Penalty - Missing Penalty) × scale
 ```
 
 **Default Values**:
+
 - `unusedHighRelevanceContext` = 0.1 (10% penalty per unused high-relevance context)
 - `missingContextPerItem` = 0.15 (15% penalty per missing context item)
 - `maxMissingContextPenalty` = 0.5 (maximum 50% penalty for missing context)
@@ -137,13 +137,13 @@ Final Score = max(0, Base Score - Usage Penalty - Missing Penalty) × scale
 
 ### Difference from Context Precision
 
-| Aspect | Context Relevance | Context Precision |
-|--------|-------------------|-------------------|
-| **Algorithm** | Weighted levels with penalties | Mean Average Precision (MAP) |
-| **Relevance** | Multiple levels (high/medium/low/none) | Binary (yes/no) |
-| **Position** | Not considered | Critical (rewards early placement) |
-| **Usage** | Tracks and penalizes unused context | Not considered |
-| **Missing** | Identifies and penalizes gaps | Not evaluated |
+| Aspect        | Context Relevance                      | Context Precision                  |
+| ------------- | -------------------------------------- | ---------------------------------- |
+| **Algorithm** | Weighted levels with penalties         | Mean Average Precision (MAP)       |
+| **Relevance** | Multiple levels (high/medium/low/none) | Binary (yes/no)                    |
+| **Position**  | Not considered                         | Critical (rewards early placement) |
+| **Usage**     | Tracks and penalizes unused context    | Not considered                     |
+| **Missing**   | Identifies and penalizes gaps          | Not evaluated                      |
 
 ## Usage Examples
 
@@ -186,10 +186,7 @@ const scorer = createContextRelevanceScorerLLM({
       // Extract context based on the query
       const userQuery = input?.inputMessages?.[0]?.content || '';
       if (userQuery.includes('Einstein')) {
-        return [
-          'Einstein won the Nobel Prize for the photoelectric effect',
-          'He developed the theory of relativity'
-        ];
+        return ['Einstein won the Nobel Prize for the photoelectric effect', 'He developed the theory of relativity'];
       }
       return ['General physics information'];
     },
@@ -203,19 +200,23 @@ const scorer = createContextRelevanceScorerLLM({
 ## Usage Patterns
 
 ### Content Generation Evaluation
+
 Best for evaluating context quality in:
+
 - Chat systems where context usage matters
 - RAG pipelines needing nuanced relevance assessment
 - Systems where missing context affects quality
 
 ### Context Selection Optimization
+
 Use when optimizing for:
+
 - Comprehensive context coverage
 - Effective context utilization
 - Identifying context gaps
 
 ## Related
 
-- [Context Precision Scorer](/reference/scorers/context-precision) - Evaluates context ranking using MAP
-- [Faithfulness Scorer](/reference/scorers/faithfulness) - Measures answer groundedness in context
+- [Context Precision Scorer](/docs/reference/scorers/context-precision) - Evaluates context ranking using MAP
+- [Faithfulness Scorer](/docs/reference/scorers/faithfulness) - Measures answer groundedness in context
 - [Custom Scorers](/docs/scorers/custom-scorers) - Creating your own evaluation metrics

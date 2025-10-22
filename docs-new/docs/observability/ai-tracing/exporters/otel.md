@@ -256,4 +256,4 @@ Install the suggested package for your provider.
 
 - [AI Tracing Overview](/docs/observability/ai-tracing/overview)
 - [OpenTelemetry GenAI Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
-- [OTEL Exporter Reference](/reference/observability/ai-tracing/exporters/otel)
+- [OTEL Exporter Reference](/docs/reference/observability/ai-tracing/exporters/otel)

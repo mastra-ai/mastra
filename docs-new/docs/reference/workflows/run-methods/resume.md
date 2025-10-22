@@ -133,7 +133,7 @@ if (result.status === 'suspended') {
 
 ## Related
 
-- [Workflows overview](../../../docs/workflows/overview#run-workflow)
-- [Workflow.createRunAsync()](../create-run)
-- [Suspend and resume](../../../docs/workflows/suspend-and-resume)
-- [Human in the loop example](../../../examples/workflows/human-in-the-loop)
+- [Workflows overview](/docs/workflows/overview#run-workflow)
+- [Run Class](../run)
+- [Suspend and resume](/docs/workflows/suspend-and-resume)
+- [Human in the loop example](/docs/examples/workflows/human-in-the-loop)

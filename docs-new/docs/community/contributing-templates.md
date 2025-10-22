@@ -13,7 +13,7 @@ The Mastra community plays a vital role in creating templates that showcase inno
 
 Before creating a template, ensure you understand:
 
-- [Templates Reference](/reference/templates) - Technical requirements and conventions
+- [Templates Reference](/docs/getting-started/templates) - Technical requirements and conventions
 - [Project Structure](/docs/getting-started/project-structure) - Standard Mastra project organization
 - Community guidelines and quality standards
 
@@ -56,7 +56,7 @@ Templates must meet these quality benchmarks:
 
 ### 1. Prepare Your Template
 
-Ensure your template meets all requirements outlined in the [Templates Reference](/reference/templates):
+Ensure your template meets all requirements outlined in the [Templates Reference](/docs/getting-started/templates):
 
 - Proper project structure in `src/mastra/` directory
 - Standard TypeScript configuration

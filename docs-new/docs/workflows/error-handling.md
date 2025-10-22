@@ -208,4 +208,4 @@ for await (const chunk of stream.stream) {
 
 - [Control Flow](./control-flow)
 - [Conditional Branching](./control-flow#conditional-logic-with-branch)
-- [Running Workflows](../../examples/workflows/running-workflows)
+- [Running Workflows](/docs/examples/workflows/running-workflows)

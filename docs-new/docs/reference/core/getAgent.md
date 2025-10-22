@@ -39,5 +39,5 @@ description: "The agent instance with the specified name. Throws an error if the
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview)
-- [Dynamic agents](../../docs/agents/dynamic-agents)
+- [Agents overview](/docs/agents/overview)
+- [Runtime context](/docs/agents/runtime-context)

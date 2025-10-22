@@ -1,6 +1,6 @@
 ---
-title: "Reference: Moderation Processor "
-description: "Documentation for the ModerationProcessor in Mastra, which provides content moderation using LLM to detect inappropriate content across multiple categories."
+title: 'Reference: Moderation Processor '
+description: 'Documentation for the ModerationProcessor in Mastra, which provides content moderation using LLM to detect inappropriate content across multiple categories.'
 ---
 
 # ModerationProcessor
@@ -10,136 +10,136 @@ The `ModerationProcessor` is a **hybrid processor** that can be used for both in
 ## Usage example
 
 ```typescript copy
-import { openai } from "@ai-sdk/openai";
-import { ModerationProcessor } from "@mastra/core/processors";
+import { openai } from '@ai-sdk/openai';
+import { ModerationProcessor } from '@mastra/core/processors';
 
 const processor = new ModerationProcessor({
-  model: openai("gpt-4.1-nano"),
+  model: openai('gpt-4.1-nano'),
   threshold: 0.7,
-  strategy: "block",
-  categories: ["hate", "harassment", "violence"]
+  strategy: 'block',
+  categories: ['hate', 'harassment', 'violence'],
 });
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
-  content={[
-    {
-      name: "options",
-      type: "Options",
-      description: "Configuration options for content moderation",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "options",
+type: "Options",
+description: "Configuration options for content moderation",
+isOptional: false,
+},
+]}
 />
 
 ### Options
 
 <PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "MastraLanguageModel",
-      description: "Model configuration for the moderation agent",
-      isOptional: false,
-    },
-    {
-      name: "categories",
-      type: "string[]",
-      description: "Categories to check for moderation. If not specified, uses default OpenAI categories",
-      isOptional: true,
-      default: "['hate', 'hate/threatening', 'harassment', 'harassment/threatening', 'self-harm', 'self-harm/intent', 'self-harm/instructions', 'sexual', 'sexual/minors', 'violence', 'violence/graphic']",
-    },
-    {
-      name: "threshold",
-      type: "number",
-      description: "Confidence threshold for flagging (0-1). Content is flagged if any category score exceeds this threshold",
-      isOptional: true,
-      default: "0.5",
-    },
-    {
-      name: "strategy",
-      type: "'block' | 'warn' | 'filter'",
-      description: "Strategy when content is flagged: 'block' rejects with error, 'warn' logs warning but allows through, 'filter' removes flagged messages",
-      isOptional: true,
-      default: "'block'",
-    },
-    {
-      name: "instructions",
-      type: "string",
-      description: "Custom moderation instructions for the agent. If not provided, uses default instructions based on categories",
-      isOptional: true,
-      default: "undefined",
-    },
-    {
-      name: "includeScores",
-      type: "boolean",
-      description: "Whether to include confidence scores in logs. Useful for tuning thresholds and debugging",
-      isOptional: true,
-      default: "false",
-    },
-    {
-      name: "chunkWindow",
-      type: "number",
-      description: "Number of previous chunks to include for context when moderating stream chunks. If set to 1, includes the previous part, etc.",
-      isOptional: true,
-      default: "0 (no context window)",
-    },
-  ]}
+content={[
+{
+name: "model",
+type: "MastraLanguageModel",
+description: "Model configuration for the moderation agent",
+isOptional: false,
+},
+{
+name: "categories",
+type: "string[]",
+description: "Categories to check for moderation. If not specified, uses default OpenAI categories",
+isOptional: true,
+default: "['hate', 'hate/threatening', 'harassment', 'harassment/threatening', 'self-harm', 'self-harm/intent', 'self-harm/instructions', 'sexual', 'sexual/minors', 'violence', 'violence/graphic']",
+},
+{
+name: "threshold",
+type: "number",
+description: "Confidence threshold for flagging (0-1). Content is flagged if any category score exceeds this threshold",
+isOptional: true,
+default: "0.5",
+},
+{
+name: "strategy",
+type: "'block' | 'warn' | 'filter'",
+description: "Strategy when content is flagged: 'block' rejects with error, 'warn' logs warning but allows through, 'filter' removes flagged messages",
+isOptional: true,
+default: "'block'",
+},
+{
+name: "instructions",
+type: "string",
+description: "Custom moderation instructions for the agent. If not provided, uses default instructions based on categories",
+isOptional: true,
+default: "undefined",
+},
+{
+name: "includeScores",
+type: "boolean",
+description: "Whether to include confidence scores in logs. Useful for tuning thresholds and debugging",
+isOptional: true,
+default: "false",
+},
+{
+name: "chunkWindow",
+type: "number",
+description: "Number of previous chunks to include for context when moderating stream chunks. If set to 1, includes the previous part, etc.",
+isOptional: true,
+default: "0 (no context window)",
+},
+]}
 />
 
 ## Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "name",
-      type: "string",
-      description: "Processor name set to 'moderation'",
-      isOptional: false,
-    },
-    {
-      name: "processInput",
-      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
-      description: "Processes input messages to moderate content before sending to LLM",
-      isOptional: false,
-    },
-    {
-      name: "processOutputStream",
-      type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>",
-      description: "Processes streaming output parts to moderate content during streaming",
-      isOptional: false,
-    },
-  ]}
+content={[
+{
+name: "name",
+type: "string",
+description: "Processor name set to 'moderation'",
+isOptional: false,
+},
+{
+name: "processInput",
+type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
+description: "Processes input messages to moderate content before sending to LLM",
+isOptional: false,
+},
+{
+name: "processOutputStream",
+type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>",
+description: "Processes streaming output parts to moderate content during streaming",
+isOptional: false,
+},
+]}
 />
 
 ## Extended usage example
 
 ```typescript filename="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-import { ModerationProcessor } from "@mastra/core/processors";
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { ModerationProcessor } from '@mastra/core/processors';
 
 export const agent = new Agent({
-  name: "moderated-agent",
-  instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  name: 'moderated-agent',
+  instructions: 'You are a helpful assistant',
+  model: openai('gpt-4o-mini'),
   inputProcessors: [
     new ModerationProcessor({
-      model: openai("gpt-4.1-nano"),
-      categories: ["hate", "harassment", "violence"],
+      model: openai('gpt-4.1-nano'),
+      categories: ['hate', 'harassment', 'violence'],
       threshold: 0.7,
-      strategy: "block",
-      instructions: "Detect and flag inappropriate content in user messages",
+      strategy: 'block',
+      instructions: 'Detect and flag inappropriate content in user messages',
       includeScores: true,
-      chunkWindow: 1
-    })
-  ]
+      chunkWindow: 1,
+    }),
+  ],
 });
 ```
 
 ## Related
 
-- [Input Processors](/docs/agents/input-processors)
-- [Output Processors](/docs/agents/output-processors)
+- [Input Processors](/docs/agents/guardrails)
+- [Output Processors](/docs/agents/guardrails)

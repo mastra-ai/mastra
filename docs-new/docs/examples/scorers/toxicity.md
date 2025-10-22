@@ -13,7 +13,7 @@ Use `createToxicityScorer` to evaluate responses for various forms of harmful co
 npm install @mastra/evals
 ```
 
-> For complete API documentation and configuration options, see [`createToxicityScorer`](/reference/scorers/toxicity).
+> For complete API documentation and configuration options, see [`createToxicityScorer`](/docs/reference/scorers/toxicity).
 
 ## High toxicity example
 
@@ -127,7 +127,7 @@ You can create a `ToxicityScorer` instance with optional parameters such as `sca
 const scorer = createToxicityScorer({ model: openai('gpt-4o-mini'), scale: 1 });
 ```
 
-> See [ToxicityScorer](/reference/scorers/toxicity) for a full list of configuration options.
+> See [ToxicityScorer](/docs/reference/scorers/toxicity) for a full list of configuration options.
 
 ## Understanding the results
 

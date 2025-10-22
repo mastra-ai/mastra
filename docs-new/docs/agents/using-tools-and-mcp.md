@@ -230,4 +230,4 @@ const server = new MCPServer({
 
 For an agent to be successfully converted into a tool by `MCPServer`, its `description` property must be set to a non-empty string in its constructor configuration. If the description is missing or empty, `MCPServer` will throw an error during initialization.
 
-For more details on setting up and configuring `MCPServer`, refer to the [MCPServer reference documentation](/reference/tools/mcp-server).
+For more details on setting up and configuring `MCPServer`, refer to the [MCPServer reference documentation](/docs/reference/tools/mcp-server).

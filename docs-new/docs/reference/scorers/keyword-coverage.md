@@ -1,5 +1,5 @@
 ---
-title: "Reference: Keyword Coverage "
+title: 'Reference: Keyword Coverage '
 description: Documentation for the Keyword Coverage Scorer in Mastra, which evaluates how well LLM outputs cover important keywords from the input.
 ---
 
@@ -7,7 +7,7 @@ description: Documentation for the Keyword Coverage Scorer in Mastra, which eval
 
 The `createKeywordCoverageScorer()` function evaluates how well an LLM's output covers the important keywords from the input. It analyzes keyword presence and matches while ignoring common words and stop words.
 
-For a usage example, see the [Keyword Coverage Examples](/examples/scorers/keyword-coverage).
+For a usage example, see the [Keyword Coverage Examples](/docs/examples/scorers/keyword-coverage).
 
 ## Parameters
 
@@ -18,28 +18,28 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 ## .run() Returns
 
 <PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "preprocessStepResult",
-      type: "object",
-      description: "Object with extracted keywords: { referenceKeywords: Set<string>, responseKeywords: Set<string> }",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description: "Object with keyword coverage: { totalKeywords: number, matchedKeywords: number }",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Coverage score (0-1) representing the proportion of matched keywords.",
-    },
-  ]}
+content={[
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "preprocessStepResult",
+type: "object",
+description: "Object with extracted keywords: { referenceKeywords: Set<string>, responseKeywords: Set<string> }",
+},
+{
+name: "analyzeStepResult",
+type: "object",
+description: "Object with keyword coverage: { totalKeywords: number, matchedKeywords: number }",
+},
+{
+name: "score",
+type: "number",
+description: "Coverage score (0-1) representing the proportion of matched keywords.",
+},
+]}
 />
 
 ## Scoring Details

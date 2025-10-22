@@ -168,7 +168,7 @@ console.log(uiMessages);
 
 ### Related
 
-- [Memory Class Reference](/reference/memory/Memory)
+- [Memory Class Reference](/docs/reference/memory)
 - [Getting Started with Memory](/docs/memory/overview)
 - [Semantic Recall](/docs/memory/semantic-recall)
-- [createThread](/reference/memory/createThread)
+- [createThread](/docs/reference/memory/createThread)

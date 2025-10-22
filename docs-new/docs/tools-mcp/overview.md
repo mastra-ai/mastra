@@ -16,7 +16,7 @@ Each tool typically defines:
 
 ## Creating Tools
 
-In Mastra, you create tools using the [`createTool`](/reference/tools/create-tool) function from the `@mastra/core/tools` package.
+In Mastra, you create tools using the [`createTool`](/docs/reference/tools/create-tool) function from the `@mastra/core/tools` package.
 
 ```typescript filename="src/mastra/tools/weatherInfo.ts" copy
 import { createTool } from '@mastra/core/tools';
@@ -52,7 +52,7 @@ When creating tools, keep tool descriptions simple and focused on **what** the t
 
 ## Adding Tools to an Agent
 
-To make tools available to an agent, you configure them in the agent's definition. Mentioning available tools and their general purpose in the agent's system prompt can also improve tool usage. For detailed steps and examples, see the guide on [Using Tools and MCP with Agents](/docs/agents/using-tools-and-mcp#add-tools-to-an-agent).
+To make tools available to an agent, you configure them in the agent's definition. Mentioning available tools and their general purpose in the agent's system prompt can also improve tool usage. For detailed steps and examples, see the guide on [Using Tools and MCP with Agents](/docs/agents/using-tools-and-mcp#adding-tools-to-an-agent).
 
 ## Compatibility Layer for Tool Schemas
 
@@ -96,7 +96,7 @@ const result = await testTool.execute({
 console.log(result);
 ```
 
-> See [createTool()](../../reference/tools/create-tool) for more information.
+> See [createTool()](/docs/reference/tools/create-tool) for more information.
 
 To test this tool, run the following:
 

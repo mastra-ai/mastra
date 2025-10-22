@@ -26,7 +26,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> See the [PinoLogger](../../reference/observability/logger) API reference for all available configuration options.
+> See the [PinoLogger](/docs/reference/observability/logging/pino-logger) API reference for all available configuration options.
 
 ## Logging from workflows and tools
 

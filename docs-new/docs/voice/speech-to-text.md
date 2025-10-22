@@ -34,13 +34,13 @@ const voice = new OpenAIVoice();
 
 Mastra supports several Speech-to-Text providers, each with their own capabilities and strengths:
 
-- [**OpenAI**](/reference/voice/openai/) - High-accuracy transcription with Whisper models
-- [**Azure**](/reference/voice/azure/) - Microsoft's speech recognition with enterprise-grade reliability
-- [**ElevenLabs**](/reference/voice/elevenlabs/) - Advanced speech recognition with support for multiple languages
-- [**Google**](/reference/voice/google/) - Google's speech recognition with extensive language support
-- [**Cloudflare**](/reference/voice/cloudflare/) - Edge-optimized speech recognition for low-latency applications
-- [**Deepgram**](/reference/voice/deepgram/) - AI-powered speech recognition with high accuracy for various accents
-- [**Sarvam**](/reference/voice/sarvam/) - Specialized in Indic languages and accents
+- [**OpenAI**](/docs/reference/voice/openai/) - High-accuracy transcription with Whisper models
+- [**Azure**](/docs/reference/voice/azure/) - Microsoft's speech recognition with enterprise-grade reliability
+- [**ElevenLabs**](/docs/reference/voice/elevenlabs/) - Advanced speech recognition with support for multiple languages
+- [**Google**](/docs/reference/voice/google/) - Google's speech recognition with extensive language support
+- [**Cloudflare**](/docs/reference/voice/cloudflare/) - Edge-optimized speech recognition for low-latency applications
+- [**Deepgram**](/docs/reference/voice/deepgram/) - AI-powered speech recognition with high accuracy for various accents
+- [**Sarvam**](/docs/reference/voice/sarvam/) - Specialized in Indic languages and accents
 
 Each provider is implemented as a separate package that you can install as needed:
 

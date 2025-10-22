@@ -1,21 +1,21 @@
 ---
-title: "Vercel Deployer"
-description: "Documentation for the VercelDeployer class, which deploys Mastra applications to Vercel."
+title: 'Vercel Deployer'
+description: 'Documentation for the VercelDeployer class, which deploys Mastra applications to Vercel.'
 ---
 
 # VercelDeployer
 
-The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/deployer) class with Vercel specific functionality.
+The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/docs/reference/deployer) class with Vercel specific functionality.
 
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { VercelDeployer } from "@mastra/deployer-vercel";
+import { Mastra } from '@mastra/core/mastra';
+import { VercelDeployer } from '@mastra/deployer-vercel';
 
 export const mastra = new Mastra({
   // ...
-  deployer: new VercelDeployer()
+  deployer: new VercelDeployer(),
 });
 ```
 
@@ -32,15 +32,15 @@ These options are merged into `.vercel/output/functions/index.func/.vc-config.js
 ### Example with overrides
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { VercelDeployer } from "@mastra/deployer-vercel";
+import { Mastra } from '@mastra/core/mastra';
+import { VercelDeployer } from '@mastra/deployer-vercel';
 
 export const mastra = new Mastra({
   // ...
   deployer: new VercelDeployer({
     maxDuration: 600,
     memory: 1536,
-    regions: ["sfo1", "iad1"],
+    regions: ['sfo1', 'iad1'],
   }),
 });
 ```

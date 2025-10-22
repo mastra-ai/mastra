@@ -96,4 +96,4 @@ if (result.status === "suspended") {
 ## Related
 
 - [Step Class](./step)
-- [Control flow](../../docs/workflows/control-flow)
+- [Control flow](/docs/workflows/control-flow)

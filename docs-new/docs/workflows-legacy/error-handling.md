@@ -49,7 +49,7 @@ const apiStep = new LegacyStep({
 });
 ```
 
-For more details about step retries, see the [Step Retries](../../reference/legacyWorkflows/step-retries) reference.
+For more details about step retries, see the [Step Retries](/docs/reference/legacyWorkflows/step-retries) reference.
 
 ## Conditional Branching
 
@@ -179,7 +179,7 @@ For more complex error handling scenarios, consider:
 
 ## Related
 
-- [Step Retries Reference](../../reference/legacyWorkflows/step-retries)
-- [Watch Method Reference](../../reference/legacyWorkflows/watch)
-- [Step Conditions](../../reference/legacyWorkflows/step-condition)
+- [Step Retries Reference](/docs/reference/legacyWorkflows/step-retries)
+- [Watch Method Reference](/docs/reference/legacyWorkflows/watch)
+- [Step Conditions](/docs/reference/legacyWorkflows/step-condition)
 - [Control Flow](./control-flow)

@@ -125,7 +125,7 @@ const metric = new BiasMetric(openai('gpt-4o-mini'), {
 });
 ```
 
-> See [BiasMetric](/reference/evals/bias) for a full list of configuration options.
+> See [BiasMetric](/docs/reference/evals/bias) for a full list of configuration options.
 
 ## Understanding the results
 

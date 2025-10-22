@@ -111,7 +111,7 @@ description:
 ]}
 />
 
-See [ExtractParams reference](/reference/rag/extract-params) for details on the `extract` parameter.
+See [ExtractParams reference](/docs/reference/rag/extract-params) for details on the `extract` parameter.
 
 ## Strategy-Specific Options
 

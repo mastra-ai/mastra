@@ -47,6 +47,6 @@ description: "The workflow instance for method chaining",
 
 ## Related
 
-- [Control Flow](../../../docs/workflows/control-flow)
+- [Control Flow](/docs/workflows/control-flow)
 
-- [ExecuteParams](../step#ExecuteParams)
+- [ExecuteParams](../step#executeparams)

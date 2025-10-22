@@ -126,7 +126,7 @@ You can create a `TextualDifferenceMetric` instance with default settings. No ad
 const metric = new TextualDifferenceMetric();
 ```
 
-> See [TextualDifferenceMetric](/reference/evals/textual-difference) for a full list of configuration options.
+> See [TextualDifferenceMetric](/docs/reference/evals/textual-difference) for a full list of configuration options.
 
 ## Understanding the results
 

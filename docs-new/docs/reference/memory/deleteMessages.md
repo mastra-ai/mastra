@@ -55,6 +55,6 @@ await memory?.deleteMessages([...messageIds]);
 
 ## Related
 
-- [Memory Class Reference](/reference/memory/Memory)
-- [query](/reference/memory/query)
+- [Memory Class Reference](/docs/reference/memory)
+- [query](/docs/reference/memory/query)
 - [Getting Started with Memory](/docs/memory/overview)

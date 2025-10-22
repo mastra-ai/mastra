@@ -1,6 +1,6 @@
 ---
-title: "AWS Lambda"
-description: "Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter."
+title: 'AWS Lambda'
+description: 'Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter.'
 ---
 
 # AWS Lambda
@@ -10,10 +10,10 @@ This approach allows you to run your Mastra server as a containerized Lambda fun
 
 :::note
 
-  This guide assumes your Mastra application has been created using the default
-  `npx create-mastra@latest` command.
-  For more information on how to create a new Mastra application,
-  refer to our [getting started guide](/docs/getting-started/installation)
+This guide assumes your Mastra application has been created using the default
+`npx create-mastra@latest` command.
+For more information on how to create a new Mastra application,
+refer to our [getting started guide](/docs/getting-started/installation)
 
 :::
 
@@ -30,10 +30,10 @@ Before deploying to AWS Lambda, ensure you have:
 
 :::note
 
-  AWS Lambda uses an ephemeral file system,
-  meaning that any files written to the file system are short-lived and may be lost.
-  Avoid using a Mastra storage provider that uses the file system,
-  such as `LibSQLStore` with a file URL.
+AWS Lambda uses an ephemeral file system,
+meaning that any files written to the file system are short-lived and may be lost.
+Avoid using a Mastra storage provider that uses the file system,
+such as `LibSQLStore` with a file URL.
 
 :::
 
@@ -42,10 +42,10 @@ Lambda functions have limitations with file system storage. Configure your Mastr
 ### Option 1: In-Memory (Simplest)
 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers
-import { LibSQLStore } from "@mastra/libsql";
+import { LibSQLStore } from '@mastra/libsql';
 
 const storage = new LibSQLStore({
-  url: ":memory:", // in-memory storage
+  url: ':memory:', // in-memory storage
 });
 ```
 
@@ -54,10 +54,10 @@ const storage = new LibSQLStore({
 For persistent memory across Lambda invocations, use external storage providers like `LibSQLStore` with Turso or other storage providers like `PostgreStore`:
 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers
-import { LibSQLStore } from "@mastra/libsql";
+import { LibSQLStore } from '@mastra/libsql';
 
 const storage = new LibSQLStore({
-  url: "libsql://your-database.turso.io", // External Turso database
+  url: 'libsql://your-database.turso.io', // External Turso database
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 ```
@@ -95,8 +95,6 @@ CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/in
 ```
 
 ## Building and Deploying
-
-
 
 ### Set up environment variables
 
@@ -187,8 +185,6 @@ Configure the function's memory and timeout settings:
    - **Timeout**: 30 seconds (adjust based on your application needs)
    - **Ephemeral storage**: 512 MB (optional, for temporary files)
 
-
-
 ## Testing your deployment
 
 Once deployed, test your Lambda function:
@@ -197,17 +193,17 @@ Once deployed, test your Lambda function:
 2. Visit the URL in your browser to see your Mastra's server home screen
 3. Test your agents and workflows using the generated API endpoints
 
-For more information about available API endpoints, see the [Server documentation](/docs/deployment/server).
+For more information about available API endpoints, see the [Server documentation](/docs/deployment/server-deployment).
 
 ## Connecting your client
 
 Update your client application to use the Lambda function URL:
 
 ```typescript filename="src/client.ts" copy showLineNumbers
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js';
 
 const mastraClient = new MastraClient({
-  baseUrl: "https://your-function-url.lambda-url.us-east-1.on.aws",
+  baseUrl: 'https://your-function-url.lambda-url.us-east-1.on.aws',
 });
 ```
 
@@ -270,6 +266,6 @@ For production deployments:
 
 ## Next steps
 
-- [Mastra Client SDK](/docs/client-js/overview)
+- [Mastra Client SDK](/docs/server-db/mastra-client)
 - [AWS Lambda documentation](https://docs.aws.amazon.com/lambda/)
 - [AWS Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter)

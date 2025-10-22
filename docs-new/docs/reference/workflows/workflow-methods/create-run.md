@@ -9,7 +9,7 @@ The `.createRunAsync()` method creates a new workflow run instance, allowing you
 
 :::note
 
-For the legacy `createRun()` method that returns an object with methods, see the [Legacy Workflows](../../legacyWorkflows/createRun) section.
+For the legacy `createRun()` method that returns an object with methods, see the [Legacy Workflows](/docs/reference/legacyWorkflows/createRun) section.
 
 :::
 
@@ -62,4 +62,4 @@ const result = await run.start({
 ## Related
 
 - [Run Class](../run)
-- [Running workflows](../../../examples/workflows/running-workflows)
+- [Running workflows](/docs/examples/workflows/running-workflows)

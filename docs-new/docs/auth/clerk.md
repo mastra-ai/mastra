@@ -50,7 +50,7 @@ export const mastra = new Mastra({
 
 > **Note:** The default `authorizeUser` method allows all authenticated users. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
 
-> See the [MastraAuthClerk](/reference/auth/clerk) API reference for all available configuration options.
+> See the [MastraAuthClerk](/docs/reference/auth/clerk) API reference for all available configuration options.
 
 ## Client-side setup
 

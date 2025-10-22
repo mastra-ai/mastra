@@ -76,8 +76,8 @@ try {
 
 ## Related
 
-- [Example: Creating a Workflow](../../examples/workflows_legacy/creating-a-workflow)
-- [Example: Suspend and Resume](../../examples/workflows_legacy/suspend-and-resume)
+- [Example: Creating a Workflow](/docs/examples/workflows_legacy/creating-a-workflow)
+- [Example: Suspend and Resume](/docs/examples/workflows_legacy/suspend-and-resume)
 - [createRun Reference](./createRun)
 - [Workflow Class Reference](./workflow)
 - [Step Class Reference](./step-class)

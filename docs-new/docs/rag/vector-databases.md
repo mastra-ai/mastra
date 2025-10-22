@@ -477,7 +477,7 @@ The upsert operation:
 - Creates new vectors if they don't exist
 - Automatically handles batching for large datasets
 
-For complete examples of upserting embeddings in different vector stores, see the [Upsert Embeddings](../../examples/rag/upsert/upsert-embeddings) guide.
+For complete examples of upserting embeddings in different vector stores, see the [Upsert Embeddings](/docs/examples/rag/upsert/upsert-embeddings) guide.
 
 ## Adding Metadata
 
