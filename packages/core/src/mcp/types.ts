@@ -1,7 +1,6 @@
 import type * as http from 'node:http';
 import type { Context } from 'hono';
 import type { ToolsInput, Agent } from '../agent';
-import type { InternalCoreTool } from '../tools';
 import type { Workflow } from '../workflows';
 
 interface MCPServerSSEOptionsBase {
