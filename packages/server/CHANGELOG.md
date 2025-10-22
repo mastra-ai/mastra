@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 0.22.1-alpha.0
+
+### Patch Changes
+
+- Get agent registered on a parent agent via API ([#9106](https://github.com/mastra-ai/mastra/pull/9106))
+
+- Updated dependencies []:
+  - @mastra/core@0.22.1-alpha.0
+
 ## 0.22.0
 
 ### Minor Changes
