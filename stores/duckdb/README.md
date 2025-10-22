@@ -4,14 +4,14 @@ DuckDB vector database provider for Mastra - embedded vector search with VSS ext
 
 ## Features
 
-- 🚀 **Embedded Database**: Zero network latency, runs in-process
-- 🔍 **HNSW Indexing**: Fast approximate nearest neighbor search
-- 📊 **Multiple Metrics**: Cosine similarity, Euclidean distance, Dot product
-- 🔄 **Hybrid Search**: Combine vector similarity with full-text search
-- 📦 **Parquet Support**: Direct import from Parquet files (S3/local)
-- 🎯 **Rich Filtering**: Complex metadata queries with JSON paths
-- 💾 **Persistent or In-Memory**: Choose between file-based or memory storage
-- 🔧 **Production Ready**: Connection pooling, transactions, error handling
+- **Embedded Database**: Zero network latency, runs in-process
+- **HNSW Indexing**: Fast approximate nearest neighbor search
+- **Multiple Metrics**: Cosine similarity, Euclidean distance, Dot product
+- **Hybrid Search**: Combine vector similarity with full-text search
+- **Parquet Support**: Direct import from Parquet files (S3/local)
+- **Rich Filtering**: Complex metadata queries with JSON paths
+- **Persistent or In-Memory**: Choose between file-based or memory storage
+- **Connection Pooling**: Connection pooling, transactions, error handling
 
 ## Installation
 
