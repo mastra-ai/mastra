@@ -1,11 +1,10 @@
-import { useWorkingMemory } from '@mastra/playground-ui';
+import { useWorkingMemory, useMemoryConfig } from '@mastra/playground-ui';
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { useMemoryConfig } from '@/hooks/use-memory';
 import MarkdownRenderer from '@/components/ui/markdown-renderer';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { CodeDisplay } from '@/components/ui/code-display';

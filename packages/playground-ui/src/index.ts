@@ -33,6 +33,7 @@ export * from './components/ui/radio-group';
 export * from './components/ui/entry';
 export * from './hooks';
 export * from './lib/tanstack-query';
+export * from './domains/memory/hooks';
 
 export type { TraceContextType } from './domains/traces/context/trace-context';
 
