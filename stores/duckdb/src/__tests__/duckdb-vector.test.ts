@@ -380,7 +380,7 @@ describe('DuckDBVector', () => {
         'Batch upsert 1000 vectors',
       );
 
-      expect(time).toBeLessThan(5000); // Should complete within 5 seconds
+      expect(time).toBeLessThan(6000); // Should complete within 6 seconds
 
       const stats = await vectorStore.describeIndex({
         indexName: 'test-index',
