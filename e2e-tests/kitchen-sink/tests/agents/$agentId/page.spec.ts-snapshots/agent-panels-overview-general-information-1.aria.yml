@@ -36,7 +36,11 @@
         - link:
             - /url: https://mastra.ai/en/docs/workflows/overview
             - img
-    - paragraph: No workflows
+    - list:
+        - listitem:
+            - link "lessComplexWorkflow":
+                - /url: /workflows/lessComplexWorkflow
+                - img
     - heading "Scorers" [level=3]
     - paragraph: No Scorers
     - heading "System Prompt" [level=3]
