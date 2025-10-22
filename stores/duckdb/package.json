@@ -30,7 +30,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "async-mutex": "^0.5.0",
-    "duckdb": "^1.1.0"
+    "duckdb": "1.4.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
