@@ -18,7 +18,7 @@ const memory = new Memory({
 
 let count = 0;
 
-const subAgent = new Agent({
+export const subAgent = new Agent({
   name: 'Sub Agent',
   instructions: `You are a helpful sub agent that provides accurate weather information.`,
   model: 'google/gemini-2.5-pro',
