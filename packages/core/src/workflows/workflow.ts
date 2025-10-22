@@ -1175,6 +1175,7 @@ export class Workflow<
           step: resume.steps as any,
           runtimeContext,
           tracingContext,
+          writableStream: writer,
           outputOptions: { includeState: true },
         })
       : await run.start({
@@ -2347,6 +2348,7 @@ export class Run<
         runtimeContext: runtimeContextToUse,
         abortController: this.abortController,
         workflowAISpan,
+        writableStream: params.writableStream,
         outputOptions: params.outputOptions,
       })
       .then(result => {
