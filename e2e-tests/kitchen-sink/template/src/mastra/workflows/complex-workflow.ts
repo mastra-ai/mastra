@@ -12,7 +12,7 @@ const addLetterStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { text } = inputData;
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 100));
     return { text: text + 'A' };
   },
 });
@@ -28,7 +28,7 @@ const addLetterBStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { text } = inputData;
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 100));
     return { text: text + 'B' };
   },
 });
@@ -45,7 +45,7 @@ const addLetterCStep = createStep({
   execute: async ({ inputData }) => {
     const { text } = inputData;
     // Make sure it runs after the other branch
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 100));
     return { text: text + 'C' };
   },
 });
@@ -63,7 +63,7 @@ const addLetterWithCountStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { text, iterationCount = 0 } = inputData;
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 100));
     return {
       text: text + 'D',
       iterationCount: iterationCount + 1,
@@ -96,7 +96,7 @@ const suspendResumeStep = createStep({
       });
     }
 
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     return { text: text + resumeData.userInput };
   },
@@ -113,7 +113,7 @@ const shortTextStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { text } = inputData;
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 100));
     return { text: text + 'S' };
   },
 });
@@ -129,7 +129,7 @@ const longTextStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { text } = inputData;
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 100));
     return { text: text + 'L' };
   },
 });
@@ -144,7 +144,7 @@ const finalStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { text } = inputData;
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 100));
     return { text: text + '-ENDED' };
   },
 });
