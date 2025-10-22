@@ -25,7 +25,7 @@ async function getMemoryFromContext({
   let agent;
   if (agentId) {
     try {
-      agent = await mastra.getAgent(agentId);
+      agent = mastra.getAgent(agentId);
     } catch (error) {
       logger.debug('Error getting agent from mastra, searching agents for agent', error);
     }

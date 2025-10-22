@@ -249,6 +249,47 @@ async function formatAgentList({
   };
 }
 
+async function getAgentFromSystem({ mastra, agentId }: { mastra: Context['mastra']; agentId: string }) {
+  const logger = mastra.getLogger();
+
+  if (!agentId) {
+    throw new HTTPException(400, { message: 'Agent ID is required' });
+  }
+
+  let agent;
+
+  try {
+    agent = mastra.getAgent(agentId);
+  } catch (error) {
+    logger.debug('Error getting agent from mastra, searching agents for agent', error);
+  }
+
+  if (!agent) {
+    logger.debug('Agent not found, searching agents for agent', { agentId });
+    const agents = mastra.getAgents();
+    if (Object.keys(agents || {}).length) {
+      for (const [_, ag] of Object.entries(agents)) {
+        try {
+          const agents = await ag.listAgents();
+
+          if (agents[agentId]) {
+            agent = agents[agentId];
+            break;
+          }
+        } catch (error) {
+          logger.debug('Error getting agent from agent', error);
+        }
+      }
+    }
+  }
+
+  if (!agent) {
+    throw new HTTPException(404, { message: 'Agent not found' });
+  }
+
+  return agent;
+}
+
 // Agent handlers
 export async function getAgentsHandler({
   mastra,
@@ -393,7 +434,7 @@ export async function getAgentByIdHandler({
   SerializedAgent | ReturnType<typeof handleError>
 > {
   try {
-    const agent = mastra.getAgent(agentId);
+    const agent = await getAgentFromSystem({ mastra, agentId });
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
     }
