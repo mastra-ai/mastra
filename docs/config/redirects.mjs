@@ -1,5 +1,10 @@
 export const redirectList = [
   {
+    source: "/:locale/docs/server-db/local-dev-playground",
+    destination: "/:locale/docs/getting-started/studio",
+    permanent: true,
+  },
+  {
     source: "/:locale/docs/getting-started/model-providers",
     destination: "/:locale/models",
     permanent: true,
@@ -1256,6 +1261,16 @@ export const redirectList = [
   {
     source: "/:locale/docs/server-db/snapshots",
     destination: "/:locale/docs/workflows/snapshots",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/workflows/pausing-execution",
+    destination: "/:locale/docs/workflows/suspend-and-resume",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/workflows/using-with-agents-and-tools",
+    destination: "/:locale/docs/workflows/agents-and-tools",
     permanent: true,
   },
 ];

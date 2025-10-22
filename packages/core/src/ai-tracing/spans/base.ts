@@ -10,6 +10,7 @@ import type {
   CreateSpanOptions,
   AITracing,
   ExportedAISpan,
+  TraceState,
 } from '../types';
 
 import { AISpanType, InternalSpans } from '../types';
@@ -46,6 +47,7 @@ function isSpanInternal(spanType: AISpanType, flags?: InternalSpans): boolean {
 
     // LLM-related spans
     case AISpanType.LLM_GENERATION:
+    case AISpanType.LLM_STEP:
     case AISpanType.LLM_CHUNK:
       return (flags & InternalSpans.LLM) !== 0;
 
@@ -78,6 +80,9 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
     details?: Record<string, any>;
   };
   public metadata?: Record<string, any>;
+  public traceState?: TraceState;
+  /** Parent span ID (for root spans that are children of external spans) */
+  protected parentSpanId?: string;
 
   constructor(options: CreateSpanOptions<TType>, aiTracing: AITracing) {
     this.name = options.name;
@@ -89,6 +94,7 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
     this.aiTracing = aiTracing;
     this.isEvent = options.isEvent ?? false;
     this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
+    this.traceState = options.traceState;
 
     if (this.isEvent) {
       // Event spans don't have endTime or input.
@@ -127,7 +133,10 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
 
   /** Get the closest parent spanId that isn't an internal span */
   public getParentSpanId(includeInternalSpans?: boolean): string | undefined {
-    if (!this.parent) return undefined; // no parent at all
+    if (!this.parent) {
+      // Return parent span ID if available, otherwise undefined
+      return this.parentSpanId;
+    }
     if (includeInternalSpans) return this.parent.id;
     if (this.parent.isInternal) return this.parent.getParentSpanId(includeInternalSpans);
 

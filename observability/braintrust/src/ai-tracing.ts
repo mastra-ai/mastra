@@ -6,27 +6,24 @@
  * Events are handled as zero-duration spans with matching start/end times.
  */
 
+import { AISpanType, omitKeys, BaseExporter } from '@mastra/core/ai-tracing';
 import type {
-  AITracingExporter,
   AITracingEvent,
   AnyExportedAISpan,
   LLMGenerationAttributes,
+  BaseExporterConfig,
 } from '@mastra/core/ai-tracing';
-import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
-import { ConsoleLogger } from '@mastra/core/logger';
 import { initLogger } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
 import { normalizeUsageMetrics } from './metrics';
 
-export interface BraintrustExporterConfig {
+export interface BraintrustExporterConfig extends BaseExporterConfig {
   /** Braintrust API key */
   apiKey?: string;
   /** Optional custom endpoint */
   endpoint?: string;
   /** Braintrust project name (default: 'mastra-tracing') */
   projectName?: string;
-  /** Logger level for diagnostic messages (default: 'warn') */
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Support tuning parameters */
   tuningParameters?: Record<string, any>;
 }
@@ -55,19 +52,16 @@ function mapSpanType(spanType: AISpanType): 'llm' | 'score' | 'function' | 'eval
   return (SPAN_TYPE_EXCEPTIONS[spanType] as any) ?? DEFAULT_SPAN_TYPE;
 }
 
-export class BraintrustExporter implements AITracingExporter {
+export class BraintrustExporter extends BaseExporter {
   name = 'braintrust';
   private traceMap = new Map<string, SpanData>();
-  private logger: ConsoleLogger;
   private config: BraintrustExporterConfig;
 
   constructor(config: BraintrustExporterConfig) {
-    this.logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
+    super(config);
 
     if (!config.apiKey) {
-      this.logger.error('BraintrustExporter: Missing required credentials, exporter will be disabled', {
-        hasApiKey: !!config.apiKey,
-      });
+      this.setDisabled(`Missing required credentials (apiKey: ${!!config.apiKey})`);
       this.config = null as any;
       return;
     }
@@ -75,11 +69,7 @@ export class BraintrustExporter implements AITracingExporter {
     this.config = config;
   }
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
-    if (!this.config) {
-      return;
-    }
-
+  protected async _exportEvent(event: AITracingEvent): Promise<void> {
     if (event.exportedSpan.isEvent) {
       await this.handleEventSpan(event.exportedSpan);
       return;
@@ -365,5 +355,6 @@ export class BraintrustExporter implements AITracingExporter {
       // Loggers don't have an explicit shutdown method
     }
     this.traceMap.clear();
+    await super.shutdown();
   }
 }

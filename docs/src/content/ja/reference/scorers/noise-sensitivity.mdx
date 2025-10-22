@@ -21,7 +21,7 @@ import { PropertiesTable } from "@/components/properties-table";
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
+      type: "MastraModelConfig",
       description: "ノイズ感受性の評価に使用する言語モデル",
       required: true,
     },
@@ -152,7 +152,6 @@ import { PropertiesTable } from "@/components/properties-table";
 ```typescript
 import { describe, it, expect } from "vitest";
 import { createNoiseSensitivityScorerLLM } from "@mastra/evals/scorers/llm";
-import { openai } from "@ai-sdk/openai";
 import { myAgent } from "./agents";
 
 describe("Agent Noise Resistance Tests", () => {
@@ -171,7 +170,7 @@ describe("Agent Noise Resistance Tests", () => {
     
     // Step 4: Evaluate using noise sensitivity scorer
     const scorer = createNoiseSensitivityScorerLLM({
-      model: openai("gpt-4o-mini"),
+      model: 'openai/gpt-4o-mini',
       options: {
         baselineResponse,
         noisyQuery,

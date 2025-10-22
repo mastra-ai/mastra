@@ -40,8 +40,8 @@ export type AgentExecutionOptions<
   FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
 > = {
   /**
-   * Determines the output stream format. Use 'mastra' for Mastra's native format (default) or 'aisdk' for AI SDK v5 compatibility.
-   * @default 'mastra'
+   * Determines the output stream format.
+   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
    */
   format?: FORMAT;
 
@@ -152,5 +152,9 @@ export type InnerAgentExecutionOptions<
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
   model?: MastraLanguageModel;
   /** Internal: Whether the execution is a resume */
-  resumeContext?: any;
+  resumeContext?: {
+    resumeData: any;
+    snapshot: any;
+  };
+  toolCallId?: string;
 };

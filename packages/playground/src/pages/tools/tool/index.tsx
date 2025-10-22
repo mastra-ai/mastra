@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
 
 import { useTool } from '@/hooks/use-all-tools';
-import { useExecuteTool } from '@/hooks/use-execute-tool';
+import { useExecuteTool } from '@mastra/playground-ui';
 
 import ToolExecutor from '../tool-executor';
 import {

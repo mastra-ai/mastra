@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
+import slugify from '@sindresorhus/slugify';
 import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
@@ -1347,6 +1348,10 @@ export class Agent<
     }
   }
 
+  public __setMemory(memory: DynamicArgument<MastraMemory>) {
+    this.#memory = memory;
+  }
+
   /* @deprecated use agent.getMemory() and query memory directly */
   async fetchMemory({
     threadId,
@@ -1887,12 +1892,14 @@ export class Agent<
 
         const agentOutputSchema = z.object({
           text: z.string().describe('The response from the agent'),
+          subAgentThreadId: z.string().describe('The thread ID of the agent').optional(),
+          subAgentResourceId: z.string().describe('The resource ID of the agent').optional(),
         });
 
         const modelVersion = (await agent.getModel()).specificationVersion;
 
         const toolObj = createTool({
-          id: agentName,
+          id: `agent-${agentName}`,
           description: `Agent: ${agentName}`,
           inputSchema: agentInputSchema,
           outputSchema: agentOutputSchema,
@@ -1924,9 +1931,23 @@ export class Agent<
                 });
                 result = { text: generateResult.text };
               } else if ((methodType === 'stream' || methodType === 'streamLegacy') && modelVersion === 'v2') {
+                if (!agent.hasOwnMemory() && this.#memory) {
+                  agent.__setMemory(this.#memory);
+                }
+                const subAgentThreadId = randomUUID();
+                const subAgentResourceId = `${slugify(this.id)}-${agentName}`;
+
                 const streamResult = await agent.stream((context as any).prompt, {
                   runtimeContext,
                   tracingContext: innerTracingContext,
+                  ...(resourceId && threadId
+                    ? {
+                        memory: {
+                          resource: subAgentResourceId,
+                          thread: subAgentThreadId,
+                        },
+                      }
+                    : {}),
                 });
 
                 // Collect full text
@@ -1941,7 +1962,7 @@ export class Agent<
                   }
                 }
 
-                result = { text: fullText };
+                result = { text: fullText, subAgentThreadId, subAgentResourceId };
               } else {
                 // streamLegacy
                 const streamResult = await agent.streamLegacy((context as any).prompt, {
@@ -1989,7 +2010,7 @@ export class Agent<
         });
 
         const options: ToolOptions = {
-          name: agentName,
+          name: `agent-${agentName}`,
           runId,
           threadId,
           resourceId,
@@ -2003,7 +2024,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
         };
 
-        convertedAgentTools[agentName] = makeCoreTool(toolObj, options);
+        convertedAgentTools[`agent-${agentName}`] = makeCoreTool(toolObj, options);
       }
     }
 
@@ -2034,7 +2055,7 @@ export class Agent<
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const toolObj = createTool({
-          id: workflowName,
+          id: `workflow-${workflowName}`,
           description: workflow.description || `Workflow: ${workflowName}`,
           inputSchema: workflow.inputSchema,
           outputSchema: workflow.outputSchema,
@@ -2062,7 +2083,7 @@ export class Agent<
                   tracingContext: innerTracingContext,
                 });
               } else if (methodType === 'streamLegacy') {
-                const streamResult = run.stream({
+                const streamResult = run.streamLegacy({
                   inputData: context,
                   runtimeContext,
                   tracingContext: innerTracingContext,
@@ -2079,14 +2100,14 @@ export class Agent<
                 result = await streamResult.getWorkflowState();
               } else if (methodType === 'stream') {
                 // TODO: add support for format
-                const streamResult = run.streamVNext({
+                const streamResult = run.stream({
                   inputData: context,
                   runtimeContext,
                   tracingContext: innerTracingContext,
                 });
 
                 if (writer) {
-                  await streamResult.pipeTo(writer);
+                  await streamResult.fullStream.pipeTo(writer);
                 }
 
                 result = await streamResult.result;
@@ -2117,7 +2138,7 @@ export class Agent<
         });
 
         const options: ToolOptions = {
-          name: workflowName,
+          name: `workflow-${workflowName}`,
           runId,
           threadId,
           resourceId,
@@ -2131,7 +2152,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
         };
 
-        convertedWorkflowTools[workflowName] = makeCoreTool(toolObj, options);
+        convertedWorkflowTools[`workflow-${workflowName}`] = makeCoreTool(toolObj, options);
       }
     }
 
@@ -3425,10 +3446,24 @@ export class Agent<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
   >({ methodType, format = 'mastra', resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
+    const existingSnapshot = resumeContext?.snapshot;
+    let snapshotMemoryInfo;
+    if (existingSnapshot) {
+      for (const key in existingSnapshot?.context) {
+        const step = existingSnapshot?.context[key];
+        if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
+          snapshotMemoryInfo = step.suspendPayload?.__streamState?.messageList?.memoryInfo;
+          break;
+        }
+      }
+    }
     const runtimeContext = options.runtimeContext || new RuntimeContext();
-    const threadFromArgs = resolveThreadIdFromArgs({ threadId: options.threadId, memory: options.memory });
+    const threadFromArgs = resolveThreadIdFromArgs({
+      threadId: options.threadId || snapshotMemoryInfo?.threadId,
+      memory: options.memory,
+    });
 
-    const resourceId = options.memory?.resource || options.resourceId;
+    const resourceId = options.memory?.resource || options.resourceId || snapshotMemoryInfo?.resourceId;
     const memoryConfig = options.memory?.options;
 
     if (resourceId && threadFromArgs && !this.hasOwnMemory()) {
@@ -3537,6 +3572,7 @@ export class Agent<
       requireToolApproval: options.requireToolApproval,
       resumeContext,
       agentId: this.id,
+      toolCallId: options.toolCallId,
     });
 
     const run = await executionWorkflow.createRunAsync();
@@ -3767,6 +3803,7 @@ export class Agent<
       routingAgentOptions: {
         telemetry: options?.telemetry,
         modelSettings: options?.modelSettings,
+        memory: options?.memory,
       },
       generateId: () => this.#mastra?.generateId() || randomUUID(),
       maxIterations: options?.maxSteps || 1,
@@ -3832,6 +3869,8 @@ export class Agent<
     if (fullOutput.finishReason === 'error' && error) {
       throw error;
     }
+
+    // Warning already logged in stream() method
 
     return fullOutput as FORMAT extends 'aisdk'
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
@@ -3939,6 +3978,11 @@ export class Agent<
       });
     }
 
+    if (streamOptions?.format === 'aisdk') {
+      this.logger.warn(
+        'The `format: "aisdk"` is deprecated in stream/generate options. Use the @mastra/ai-sdk package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming',
+      );
+    }
     return result.result as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
@@ -3955,12 +3999,12 @@ export class Agent<
    * );
    * ```
    */
-  async resumeStreamVNext<
+  async resumeStream<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
-    resumeContext: any,
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
+    resumeData: any,
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> & { toolCallId?: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
       runtimeContext: streamOptions?.runtimeContext,
@@ -3985,10 +4029,18 @@ export class Agent<
       });
     }
 
+    const existingSnapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+      workflowName: 'agentic-loop',
+      runId: streamOptions?.runId ?? '',
+    });
+
     const result = await this.#execute({
       ...mergedStreamOptions,
       messages: [],
-      resumeContext,
+      resumeContext: {
+        resumeData,
+        snapshot: existingSnapshot,
+      },
       methodType: 'stream',
     } as InnerAgentExecutionOptions<OUTPUT, FORMAT>);
 
@@ -4034,9 +4086,9 @@ export class Agent<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
-    options: AgentExecutionOptions<OUTPUT, FORMAT> & { runId: string },
+    options: AgentExecutionOptions<OUTPUT, FORMAT> & { runId: string; toolCallId?: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    return this.resumeStreamVNext({ approved: true }, options);
+    return this.resumeStream({ approved: true }, options);
   }
 
   /**
@@ -4058,9 +4110,9 @@ export class Agent<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
-    options: AgentExecutionOptions<OUTPUT, FORMAT> & { runId: string },
+    options: AgentExecutionOptions<OUTPUT, FORMAT> & { runId: string; toolCallId?: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    return this.resumeStreamVNext({ approved: false }, options);
+    return this.resumeStream({ approved: false }, options);
   }
 
   /**
@@ -4797,10 +4849,9 @@ export class Agent<
 
   /**
    * Resolves the configuration for title generation.
-   * @private
    * @internal
    */
-  private resolveTitleGenerationConfig(
+  resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
       | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }
@@ -4827,10 +4878,9 @@ export class Agent<
 
   /**
    * Resolves title generation instructions, handling both static strings and dynamic functions
-   * @private
    * @internal
    */
-  private async resolveTitleInstructions(
+  async resolveTitleInstructions(
     runtimeContext: RuntimeContext,
     instructions?: DynamicArgument<string>,
   ): Promise<string> {

@@ -2,9 +2,12 @@ import { Agent } from '@mastra/core/agent';
 import { openai, openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { myWorkflow } from '../workflows';
+import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
+import { logDataMiddleware } from '../../model-middleware';
+import { wrapLanguageModel } from 'ai-v5';
+import { cookingTool } from '../tools';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
@@ -22,6 +25,7 @@ export const weatherInfo = createTool({
       wind: '10 mph',
     };
   },
+  // requireApproval: true,
 });
 
 const memory = new Memory();
@@ -37,13 +41,18 @@ export const chefModelV2Agent = new Agent({
       `,
     role: 'system',
   },
-  model: openai_v5('gpt-4o-mini'),
+  model: wrapLanguageModel({
+    model: openai_v5('gpt-4o-mini'),
+    middleware: logDataMiddleware,
+  }),
 
   tools: {
     weatherInfo,
+    cookingTool,
   },
   workflows: {
     myWorkflow,
+    lessComplexWorkflow,
   },
   scorers: ({ mastra }) => {
     if (!mastra) {

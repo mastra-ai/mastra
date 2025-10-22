@@ -6,7 +6,7 @@ import { DepsService } from '../../services/service.deps';
 import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
 import { createComponentsDir, createMastraDir, getAPIKey, writeAPIKey, writeCodeSample, writeIndexFile } from './utils';
-import type { Components, LLMProvider } from './utils';
+import type { Component, LLMProvider } from './utils';
 
 const s = p.spinner();
 
@@ -19,7 +19,7 @@ export const init = async ({
   configureEditorWithDocsMCP,
 }: {
   directory?: string;
-  components: string[];
+  components: Component[];
   llmProvider?: LLMProvider;
   llmApiKey?: string;
   addExample?: boolean;
@@ -43,6 +43,7 @@ export const init = async ({
         addExample,
         addWorkflow: components.includes('workflows'),
         addAgent: components.includes('agents'),
+        addScorers: components.includes('scorers'),
       }),
       ...components.map(component => createComponentsDir(dirPath, component)),
       writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }),
@@ -51,7 +52,7 @@ export const init = async ({
     if (addExample) {
       await Promise.all([
         ...components.map(component =>
-          writeCodeSample(dirPath, component as Components, llmProvider, components as Components[]),
+          writeCodeSample(dirPath, component as Component, llmProvider, components as Component[]),
         ),
       ]);
 
@@ -69,6 +70,12 @@ export const init = async ({
       const needsLoggers = (await depService.checkDependencies(['@mastra/loggers'])) !== `ok`;
       if (needsLoggers) {
         await depService.installPackages(['@mastra/loggers']);
+      }
+
+      const needsEvals =
+        components.includes(`scorers`) && (await depService.checkDependencies(['@mastra/evals'])) !== `ok`;
+      if (needsEvals) {
+        await depService.installPackages(['@mastra/evals']);
       }
     }
 

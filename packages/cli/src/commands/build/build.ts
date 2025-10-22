@@ -5,7 +5,6 @@ import { FileService } from '../../services/service.file';
 import { BuildBundler } from './BuildBundler';
 import { getDeployer } from '@mastra/deployer';
 import { createLogger } from '../../utils/logger';
-import { MastraError } from '@mastra/core/error';
 
 export async function build({
   dir,
@@ -64,11 +63,18 @@ export async function build({
     });
     logger.info('You can now deploy the .mastra/output directory to your target platform.');
   } catch (error) {
-    if (error instanceof MastraError) {
-      const { message, ...details } = error.toJSONDetails();
-      logger.error(`${message}`, details);
-    } else if (error instanceof Error) {
-      logger.error(`Mastra Build failed`, { error });
+    try {
+      const { MastraError } = await import('@mastra/core/error');
+      if (error instanceof MastraError) {
+        const { message, ...details } = error.toJSONDetails();
+        logger.error(`${message}`, details);
+      } else if (error instanceof Error) {
+        logger.error(`Mastra Build failed`, { error });
+      }
+    } catch {
+      if (error instanceof Error) {
+        logger.error(`Mastra Build failed`, { error });
+      }
     }
     process.exit(1);
   }

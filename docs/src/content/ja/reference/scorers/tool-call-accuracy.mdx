@@ -136,10 +136,9 @@ const orderScorer = createToolCallAccuracyScorerCode({
 
 ```typescript
 import { createToolCallAccuracyScorerLLM } from '@mastra/evals/scorers/llm';
-import { openai } from '@ai-sdk/openai';
 
 const llmScorer = createToolCallAccuracyScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   availableTools: [
     {
       name: 'weather-tool',

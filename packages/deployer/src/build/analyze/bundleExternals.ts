@@ -225,7 +225,9 @@ async function getInputPlugins(
               importFile: importer,
               packageName,
             },
-            text: `We found a binary dependency in your bundle. Please add \`${packageName}\` to your externals.
+            text: `We found a possible binary dependency in your bundle. ${id} was not found when imported at ${importer}.
+            
+Please consider adding \`${packageName}\` to your externals, or updating this import to not end with ".node".
   
 export const mastra = new Mastra({
   bundler: {
@@ -299,7 +301,47 @@ async function buildExternalDependencies(
      * Rollup creates chunks for common dependencies, but these chunks are by default written to the root directory instead of respecting the entryFileNames structure.
      * So we want to write them to the `.mastra/output` folder as well.
      */
-    chunkFileNames: `${outputDirRelative}/[name].mjs`,
+    chunkFileNames: chunkInfo => {
+      /**
+       * This whole bunch of logic directly below is for the edge case shown in the e2e-tests/monorepo with "tinyrainbow" package. It's used in multiple places in the package and as such Rollup creates a shared chunk for it. During 'mastra dev', we don't want that chunk to show up in the '.mastra/output' folder (outputDirRelative) but inside <pkg>/node_modules/.cache instead.
+       * We only care about this during 'mastra dev'!
+       */
+      if (bundlerOptions.isDev) {
+        const importedFromPackages = new Set<string>();
+
+        for (const moduleId of chunkInfo.moduleIds) {
+          const normalized = slash(moduleId);
+          for (const [pkgName, pkgInfo] of workspaceMap.entries()) {
+            const location = slash(pkgInfo.location);
+            if (normalized.startsWith(location)) {
+              importedFromPackages.add(pkgName);
+              break;
+            }
+          }
+        }
+
+        if (importedFromPackages.size > 1) {
+          throw new MastraBaseError({
+            id: 'DEPLOYER_BUNDLE_EXTERNALS_SHARED_CHUNK',
+            domain: ErrorDomain.DEPLOYER,
+            category: ErrorCategory.USER,
+            details: {
+              chunkName: chunkInfo.name,
+              packages: JSON.stringify(Array.from(importedFromPackages)),
+            },
+            text: `Please open an issue. We found a shared chunk "${chunkInfo.name}" used by multiple workspace packages: ${Array.from(importedFromPackages).join(', ')}.`,
+          });
+        }
+
+        if (importedFromPackages.size === 1) {
+          const [pkgName] = importedFromPackages;
+          const workspaceLocation = workspaceMap.get(pkgName!)!.location;
+          return prepareEntryFileName(getCompiledDepCachePath(workspaceLocation, '[name].mjs'), rootDir);
+        }
+      }
+
+      return `${outputDirRelative}/[name].mjs`;
+    },
     hoistTransitiveImports: false,
   });
 

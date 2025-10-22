@@ -1,12 +1,29 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { weatherTool } from '../tools';
+import { LibSQLStore } from '@mastra/libsql';
+
+import { weatherInfo } from '../tools';
 import { simulateReadableStream } from 'ai';
 import * as aiTest from 'ai/test';
 import { fixtures } from '../../../fixtures';
 import { Fixtures } from '../../../types';
+import { lessComplexWorkflow } from '../workflows/complex-workflow';
 
-const memory = new Memory();
+const memory = new Memory({
+  // ...
+  storage: new LibSQLStore({
+    url: 'file:../mastra.db',
+  }),
+  // ...
+});
+
+let count = 0;
+
+export const subAgent = new Agent({
+  name: 'Sub Agent',
+  instructions: `You are a helpful sub agent that provides accurate weather information.`,
+  model: 'google/gemini-2.5-pro',
+});
 
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
@@ -22,15 +39,29 @@ export const weatherAgent = new Agent({
 `,
   model: ({ runtimeContext }) => {
     const fixture = runtimeContext.get('fixture') as Fixtures;
+    const fixtureData = fixtures[fixture];
 
     return new aiTest.MockLanguageModelV2({
-      doStream: async () => ({
-        stream: simulateReadableStream({
-          chunks: fixtures[fixture],
-        }),
-      }),
+      doStream: async () => {
+        count++;
+
+        const chunk = fixtureData[count - 1] as Array<any>;
+
+        if (count === fixtureData.length) {
+          count = 0;
+        }
+
+        return {
+          stream: simulateReadableStream({
+            chunks: chunk,
+            delay: 500,
+          }),
+        };
+      },
     });
   },
-  tools: { weatherTool },
+  tools: { weatherInfo },
+  agents: { subAgent },
+  workflows: { lessComplexWorkflow },
   memory,
 });

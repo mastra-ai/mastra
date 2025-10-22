@@ -11,7 +11,7 @@ import type { Emitter, StepResult } from './types';
 import type { Workflow } from './workflow';
 
 export type SuspendOptions = {
-  resumeLabel?: string;
+  resumeLabel?: string | string[];
 };
 
 export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = {
