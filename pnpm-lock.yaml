@@ -2620,9 +2620,6 @@ importers:
       '@radix-ui/react-visually-hidden':
         specifier: ^1.2.3
         version: 1.2.3(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      '@tanstack/react-query':
-        specifier: ^5.81.5
-        version: 5.90.5(react@19.2.0)
       '@tanstack/react-table':
         specifier: ^8.21.3
         version: 8.21.3(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -2735,6 +2732,9 @@ importers:
       '@storybook/react-vite':
         specifier: ^9.1.10
         version: 9.1.13(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rollup@4.50.2)(storybook@9.1.13(@testing-library/dom@10.4.1)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(prettier@3.6.2)(vite@7.1.11(@types/node@20.19.23)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1)))(typescript@5.9.3)(vite@7.1.11(@types/node@20.19.23)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
+      '@tanstack/react-query':
+        specifier: ^5.81.5
+        version: 5.90.5(react@19.2.0)
       '@types/node':
         specifier: ^20.19.21
         version: 20.19.23

@@ -1,10 +1,11 @@
-import { client } from '@/lib/client';
 import { RuntimeContext } from '@mastra/core/di';
 
 import { useMutation } from '@tanstack/react-query';
+import { useMastraClient } from '@mastra/react';
 import { toast } from 'sonner';
 
 export const useExecuteTool = () => {
+  const client = useMastraClient();
   return useMutation({
     mutationFn: async ({
       toolId,

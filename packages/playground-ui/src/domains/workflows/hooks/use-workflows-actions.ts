@@ -1,11 +1,10 @@
-import { client } from '@/lib/client';
 import { StreamVNextChunkType, WorkflowWatchResult } from '@mastra/client-js';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { WorkflowStreamResult as CoreWorkflowStreamResult } from '@mastra/core/workflows';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useState, useRef, useEffect } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { mapWorkflowStreamChunkToWatchResult } from '@mastra/react';
+import { mapWorkflowStreamChunkToWatchResult, useMastraClient } from '@mastra/react';
 import type { ReadableStreamDefaultReader } from 'stream/web';
 
 export type ExtendedWorkflowWatchResult = WorkflowWatchResult & {
@@ -55,14 +54,8 @@ const sanitizeWorkflowWatchResult = (record: WorkflowWatchResult) => {
   return sanitizedRecord;
 };
 
-export const useWorkflows = () => {
-  return useQuery({
-    queryKey: ['workflows'],
-    queryFn: () => client.getWorkflows(),
-  });
-};
-
 export const useExecuteWorkflow = () => {
+  const client = useMastraClient();
   const createWorkflowRun = useMutation({
     mutationFn: async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {
       try {
@@ -138,47 +131,10 @@ export const useExecuteWorkflow = () => {
   };
 };
 
-export const useWatchWorkflow = () => {
-  const [watchResult, setWatchResult] = useState<ExtendedWorkflowWatchResult | null>(null);
-  // Debounce the state update to prevent too frequent renders
-  const debouncedSetWorkflowWatchResult = useDebouncedCallback((record: ExtendedWorkflowWatchResult) => {
-    const sanitizedRecord = sanitizeWorkflowWatchResult(record);
-    setWatchResult(sanitizedRecord);
-  }, 100);
-
-  const watchWorkflow = useMutation({
-    mutationFn: async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
-      try {
-        const workflow = client.getWorkflow(workflowId);
-
-        await workflow.watch({ runId }, record => {
-          try {
-            debouncedSetWorkflowWatchResult(record);
-          } catch (err) {
-            console.error('Error processing workflow record:', err);
-            // Set a minimal error state if processing fails
-            setWatchResult({
-              ...record,
-            });
-          }
-        });
-      } catch (error) {
-        console.error('Error watching workflow:', error);
-
-        throw error;
-      }
-    },
-  });
-
-  return {
-    watchWorkflow,
-    watchResult,
-  };
-};
-
 type WorkflowStreamResult = CoreWorkflowStreamResult<any, any, any, any>;
 
 export const useStreamWorkflow = () => {
+  const client = useMastraClient();
   const [streamResult, setStreamResult] = useState<WorkflowStreamResult>({} as WorkflowStreamResult);
   const [isStreaming, setIsStreaming] = useState(false);
   const readerRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
@@ -473,42 +429,8 @@ export const useStreamWorkflow = () => {
   };
 };
 
-export const useResumeWorkflow = () => {
-  const resumeWorkflow = useMutation({
-    mutationFn: async ({
-      workflowId,
-      step,
-      runId,
-      resumeData,
-      runtimeContext: playgroundRuntimeContext,
-    }: {
-      workflowId: string;
-      step: string | string[];
-      runId: string;
-      resumeData: Record<string, unknown>;
-      runtimeContext: Record<string, unknown>;
-    }) => {
-      try {
-        const runtimeContext = new RuntimeContext();
-        Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
-          runtimeContext.set(key, value);
-        });
-        const response = await client.getWorkflow(workflowId).resume({ step, runId, resumeData, runtimeContext });
-
-        return response;
-      } catch (error) {
-        console.error('Error resuming workflow:', error);
-        throw error;
-      }
-    },
-  });
-
-  return {
-    resumeWorkflow,
-  };
-};
-
 export const useCancelWorkflowRun = () => {
+  const client = useMastraClient();
   const cancelWorkflowRun = useMutation({
     mutationFn: async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
       try {
@@ -525,6 +447,7 @@ export const useCancelWorkflowRun = () => {
 };
 
 export const useSendWorkflowRunEvent = (workflowId: string) => {
+  const client = useMastraClient();
   const sendWorkflowRunEvent = useMutation({
     mutationFn: async ({ runId, event, data }: { runId: string; event: string; data: unknown }) => {
       try {

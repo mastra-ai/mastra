@@ -1,8 +1,8 @@
 import type { TestInfo, MetricResult } from '@mastra/core/eval';
 
-import { client } from '@/lib/client';
 import { useQuery } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@mastra/playground-ui';
+import { usePlaygroundStore } from '@/store/playground-store';
+import { useMastraClient } from '@mastra/react';
 
 export type Evals = {
   input: string;
@@ -19,6 +19,7 @@ export type Evals = {
 
 export const useEvalsByAgentId = (agentId: string, type: 'ci' | 'live') => {
   const { runtimeContext } = usePlaygroundStore();
+  const client = useMastraClient();
   return useQuery({
     staleTime: 0,
     gcTime: 0,

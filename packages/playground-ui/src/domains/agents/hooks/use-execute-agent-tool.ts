@@ -1,8 +1,7 @@
-import { client } from '@/lib/client';
-
 import { RuntimeContext } from '@mastra/core/di';
 import { toast } from 'sonner';
 import { useMutation } from '@tanstack/react-query';
+import { useMastraClient } from '@mastra/react';
 
 export interface ExecuteToolInput {
   agentId: string;
@@ -11,7 +10,8 @@ export interface ExecuteToolInput {
   playgroundRuntimeContext?: Record<string, any>;
 }
 
-export const useExecuteTool = () => {
+export const useExecuteAgentTool = () => {
+  const client = useMastraClient();
   return useMutation({
     mutationFn: async ({ agentId, toolId, input, playgroundRuntimeContext }: ExecuteToolInput) => {
       const runtimeContext = new RuntimeContext();
