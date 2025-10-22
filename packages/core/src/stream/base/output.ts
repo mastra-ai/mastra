@@ -507,7 +507,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#streamFinished = true;
 
               // Clear buffers to prevent memory leak
-              self.#clearBuffers();
+              // self.#clearBuffers();
 
               // Resolve all delayed promises before terminating
               self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
@@ -770,7 +770,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#streamFinished = true; // Mark stream as finished for EventEmitter
 
               // Clear buffers to prevent memory leak
-              self.#clearBuffers();
+              // self.#clearBuffers();
 
               // Reject all delayed promises on error
               const errorMessage = (self.#error as any)?.message || safeParseErrorObject(self.#error);
@@ -807,7 +807,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
           self.#streamFinished = true;
 
           // Clear buffers to prevent memory leak
-          self.#clearBuffers();
+          // self.#clearBuffers();
 
           self.#emitter.emit('finish');
         },

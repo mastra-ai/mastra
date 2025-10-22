@@ -256,7 +256,7 @@ export class ProcessorRunner {
             state.span.end({ output: finalOutput });
           }
           // Clear accumulated state to prevent memory leaks (Fix 2 for #6322)
-          state.finalize();
+          // state.finalize();
         }
       }
 
