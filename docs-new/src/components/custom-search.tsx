@@ -281,11 +281,10 @@ export const CustomSearch: FC<SearchProps> = ({
 
   return (
     <div className={cn('overflow-hidden w-full max-h-[600px]')}>
-      {/* header */}
       <div
         className={cn(
           className,
-          'flex items-center p-2 w-full border-b border-neutral-200 dark:border-neutral-800 md:p-4 gap-[14px]',
+          'flex items-center p-2 w-full border-b border-(--border)/50 dark:border-(--border) md:p-4 gap-[14px]',
         )}
       >
         <span className="relative" onClick={() => inputRef.current.focus()}>
@@ -366,26 +365,28 @@ export const CustomSearch: FC<SearchProps> = ({
                         className={cn(
                           'flex flex-col gap-1 p-2 rounded-md cursor-pointer',
                           isSelected
-                            ? 'dark:bg-surface-5 bg-[var(--light-color-surface-2)]'
-                            : 'bg-[var(--light-color-surface-15)] dark:bg-surface-4',
+                            ? 'dark:bg-surface-5 bg-(--mastra-surface-2)'
+                            : 'bg-(--ifm-background-color) dark:bg-surface-4',
                         )}
                         onClick={() => handleSelect(subResult)}
                         onMouseEnter={() => setSelectedIndex(virtualItem.index)}
                       >
-                        <span className="pl-7 text-xs font-medium capitalize text-icons-3">{subResult.section}</span>
+                        <span className="pl-7 text-xs font-medium capitalize text-(--mastra-icons-3)">
+                          {subResult.section}
+                        </span>
                         <div className="flex gap-2 items-center">
-                          <IconComponent className="w-4 h-4 md:w-5 md:h-5 text-icons-3 shrink-0" />
+                          <IconComponent className="w-4 h-4 text-(--mastra-icons-3) shrink-0" />
                           <span
-                            className="text-sm font-medium truncate dark:text-icons-6 text-(--mastra-text-tertiary) [&_mark]:text-(--mastra-green-accent-2) dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
+                            className="text-sm font-medium truncate text-(--mastra-text-tertiary) [&_mark]:!text-pink-400 [&_mark]:bg-transparent"
                             dangerouslySetInnerHTML={{
                               __html: subResult.title,
                             }}
                           />
                         </div>
-                        <div className="ml-2 flex items-center gap-2 truncate border-l-2 dark:border-borders-2 border-[var(--light-border-code)] pl-4">
-                          <BurgerIcon className="w-3 h-3 md:w-3.5 md:h-3.5 shrink-0 text-icons-3" />
+                        <div className="ml-2 flex items-center gap-2 truncate border-l-2 dark:border-borders-2 border-(--border-code) pl-4">
+                          <BurgerIcon className="w-3 h-3 md:w-3.5 md:h-3.5 shrink-0 text-(--mastra-icons-3)" />
                           <div
-                            className="text-sm font-normal truncate text-icons-3 [&_mark]:text-accent-green-2 dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
+                            className="text-sm font-normal truncate text-(--mastra-icons-3) [&_mark]:text-accent-green-2 dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
                             dangerouslySetInnerHTML={{
                               __html: subResult.excerpt,
                             }}
