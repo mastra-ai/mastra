@@ -116,4 +116,28 @@ test('workflow stream', async () => {
   await expect(page.getByTestId('thread-wrapper').getByText('tomatoABtomatoACLABD-ENDED')).toBeVisible({
     timeout: 20000,
   });
+
+  // Memory
+  await page.reload();
+  await expect(page.locator('[data-workflow-node]').nth(0)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(page.locator('[data-workflow-node]').nth(1)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(page.locator('[data-workflow-node]').nth(2)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(page.locator('[data-workflow-node]').nth(3)).toHaveAttribute('data-workflow-step-status', 'success');
+  // 4 and 6 are conditional
+
+  await expect(page.locator('[data-workflow-node]').nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
+  await expect(page.locator('[data-workflow-node]').nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(page.locator('[data-workflow-node]').nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(page.locator('[data-workflow-node]').nth(8)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(page.locator('[data-workflow-node]').nth(9)).toHaveAttribute('data-workflow-step-status', 'success');
+
+  // Text delta result
+  await expect(
+    page
+      .getByTestId('thread-wrapper')
+      .getByText(`It looks like the process I ran with "tomato" resulted in a playful transformation: `),
+  ).toBeVisible({ timeout: 20000 });
+  await expect(page.getByTestId('thread-wrapper').getByText('tomatoABtomatoACLABD-ENDED')).toBeVisible({
+    timeout: 20000,
+  });
 });
