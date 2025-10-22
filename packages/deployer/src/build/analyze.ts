@@ -139,9 +139,9 @@ async function validateOutput(
               packageName,
               messagePrefix: errorConfig.messagePrefix,
             });
+          } else {
+            logger.debug(`Could not determine the module name for file ${file.fileName}`);
           }
-
-          logger.debug(`Could not determine the module name for file ${file.fileName}`);
         }
       }
     }
