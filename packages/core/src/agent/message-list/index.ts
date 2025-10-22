@@ -2242,11 +2242,11 @@ export class MessageList {
             ...(part.providerMetadata && { providerMetadata: part.providerMetadata }),
           } as AIV5Type.SourceUrlUIPart);
         } else if (part.type === 'text') {
-          // Text parts need providerMetadata preserved
+          // Text parts need providerMetadata preserved (only if defined)
           parts.push({
             type: 'text',
             text: part.text,
-            providerMetadata: part.providerMetadata,
+            ...(part.providerMetadata && { providerMetadata: part.providerMetadata }),
           });
           hasNonToolReasoningParts = true;
         } else {
