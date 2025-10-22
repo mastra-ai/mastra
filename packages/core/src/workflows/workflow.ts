@@ -1899,7 +1899,7 @@ export class Run<
             runId: self.runId,
             from,
             payload: {
-              stepName: (payload as unknown as { id: string }).id,
+              stepName: (payload as unknown as { id: string })?.id,
               ...payload,
             },
           } as WorkflowStreamEvent);
