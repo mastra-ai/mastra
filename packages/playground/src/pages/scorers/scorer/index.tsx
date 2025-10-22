@@ -19,12 +19,12 @@ import {
   EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
+  useAgents,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams } from 'react-router';
 import { Skeleton } from '@/components/ui/skeleton';
 import { GaugeIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useAgents } from '@/hooks/use-agents';
 import { cn } from '@/lib/utils';
 import { useWorkflows } from '@/hooks/use-workflows';
 

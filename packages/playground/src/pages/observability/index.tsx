@@ -18,9 +18,9 @@ import {
   getToNextEntryFn,
   getToPreviousEntryFn,
   useLinkComponent,
+  useAgents,
 } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
-import { useAgents } from '@/hooks/use-agents';
 import { EyeIcon } from 'lucide-react';
 import { useAITraces } from '@/domains/observability/hooks/use-ai-traces';
 import { useAITrace } from '@/domains/observability/hooks/use-ai-trace';

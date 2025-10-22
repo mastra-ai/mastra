@@ -1,4 +1,3 @@
-import { useAgents } from '@/hooks/use-agents';
 import {
   MainContentLayout,
   Header,
@@ -10,6 +9,7 @@ import {
   DocsIcon,
   Button,
   ToolTable,
+  useAgents,
 } from '@mastra/playground-ui';
 
 import { useTools } from '@/hooks/use-all-tools';

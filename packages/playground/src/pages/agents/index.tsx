@@ -8,9 +8,9 @@ import {
   HeaderAction,
   useLinkComponent,
   DocsIcon,
+  useAgents,
 } from '@mastra/playground-ui';
 
-import { useAgents } from '@/hooks/use-agents';
 import { AgentsTable } from '@mastra/playground-ui';
 import { AgentIcon } from '@mastra/playground-ui';
 

@@ -9,3 +9,5 @@ export * from './components/agent-metadata';
 export * from './components/agent-entity-header';
 export * from './components/chat-threads';
 export * from './utils/extractPrompt';
+export * from './hooks/use-agents';
+export * from './hooks/use-agent';

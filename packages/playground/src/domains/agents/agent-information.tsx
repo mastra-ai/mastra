@@ -1,10 +1,3 @@
-import {
-  useAgent,
-  useModelProviders,
-  useReorderModelList,
-  useUpdateAgentModel,
-  useUpdateModelInModelList,
-} from '@/hooks/use-agents';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   AgentSettings,
@@ -15,6 +8,11 @@ import {
   AgentMetadata,
   AgentEntityHeader,
   useAgentSettings,
+  useAgent,
+  useModelProviders,
+  useReorderModelList,
+  useUpdateAgentModel,
+  useUpdateModelInModelList,
 } from '@mastra/playground-ui';
 
 import { useMemory } from '@/hooks/use-memory';

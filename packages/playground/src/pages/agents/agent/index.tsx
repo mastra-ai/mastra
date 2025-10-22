@@ -4,6 +4,7 @@ import {
   AgentSettingsProvider,
   WorkingMemoryProvider,
   ThreadInputProvider,
+  useAgent,
 } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -11,7 +12,7 @@ import { v4 as uuid } from '@lukeed/uuid';
 
 import { AgentInformation } from '@/domains/agents/agent-information';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
-import { useAgent } from '@/hooks/use-agents';
+
 import { useMemory, useThreads } from '@/hooks/use-memory';
 
 function Agent() {

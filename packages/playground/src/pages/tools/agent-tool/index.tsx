@@ -5,8 +5,7 @@ import { parse } from 'superjson';
 import { z } from 'zod';
 
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
-
-import { useAgent } from '@/hooks/use-agents';
+import { useAgent } from '@mastra/playground-ui';
 import { useExecuteTool } from '@/hooks/use-execute-agent-tool';
 
 import ToolExecutor from '../tool-executor';
