@@ -46,7 +46,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
   });
 
   const { scorer, isLoading: isScorerLoading } = useScorer(scorerId!);
-  const { data: agents, isLoading: isLoadingAgents } = useAgents();
+  const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
   const {
     data: scoresData,

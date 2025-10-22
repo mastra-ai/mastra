@@ -16,7 +16,7 @@ import { AgentIcon } from '@mastra/playground-ui';
 
 function Agents() {
   const { Link } = useLinkComponent();
-  const { data: agents, isLoading } = useAgents();
+  const { data: agents = {}, isLoading } = useAgents();
 
   return (
     <MainContentLayout>

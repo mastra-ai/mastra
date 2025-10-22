@@ -39,7 +39,7 @@ export default function Observability() {
   const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(undefined);
   const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
-  const { data: agents, isLoading: isLoadingAgents } = useAgents();
+  const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
 
   const { data: aiTrace, isLoading: isLoadingAiTrace } = useAITrace(selectedTraceId, { enabled: !!selectedTraceId });
