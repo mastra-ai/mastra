@@ -76,6 +76,37 @@ async function validateOutput(
         await validate(join(projectRoot, file.fileName));
       }
     } catch (err) {
+      if (err instanceof Error && err.message.includes('[ERR_MODULE_NOT_FOUND]')) {
+        const moduleName = file.moduleIds[file.moduleIds.length - 2];
+
+        if (!moduleName) {
+          logger.debug(`Could not determine the module name for file ${file.fileName}`);
+          continue;
+        }
+
+        const pkgInfo = await getPackageInfo(moduleName);
+        const packageName = pkgInfo?.packageJson?.name;
+
+        if (packageName) {
+          throw new MastraError({
+            id: 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND',
+            domain: ErrorDomain.DEPLOYER,
+            category: ErrorCategory.USER,
+            details: {
+              importFile: moduleName,
+              packageName: packageName,
+            },
+            text: `Mastra wasn't able to build your project. Please add \`${packageName}\` to your externals.
+
+export const mastra = new Mastra({
+  bundler: {
+    externals: ["${packageName}"],
+  }
+})`,
+          });
+        }
+      }
+
       if (err instanceof Error && err.message.includes('Error: No native build was found for ')) {
         const moduleName = findNativePackageModule(file.moduleIds);
 
