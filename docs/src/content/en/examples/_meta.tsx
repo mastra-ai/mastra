@@ -10,10 +10,6 @@ const meta = {
     title: "Workflows",
     theme: { collapsed: true },
   },
-  tools: {
-    title: "Tools",
-    theme: { collapsed: true },
-  },
   processors: {
     title: "Processors",
     theme: { collapsed: true },

@@ -1263,4 +1263,69 @@ export const redirectList = [
     destination: "/:locale/docs/workflows/suspend-and-resume",
     permanent: true,
   },
+  {
+    source: "/:locale/examples/workflows/agent-as-step",
+    destination: "/:locale/docs/workflows/using-with-agents-and-tools",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/array-as-input",
+    destination: "/:locale/docs/workflows/control-flow",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/calling-agent",
+    destination: "/:locale/docs/workflows/using-with-agents-and-tools",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/conditional-branching",
+    destination: "/:locale/docs/workflows/control-flow",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/human-in-the-loop-multi-turn",
+    destination: "/:locale/docs/workflows/human-in-the-loop",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/human-in-the-loop",
+    destination: "/:locale/docs/workflows/human-in-the-loop",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/parallel-steps",
+    destination: "/:locale/docs/workflows/control-flow",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/sequential-steps",
+    destination: "/:locale/docs/workflows/control-flow",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/running-workflows",
+    destination: "/:locale/docs/workflows/overview",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/tool-as-step",
+    destination: "/:locale/docs/workflows/using-with-agents-and-tools",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/tools/calling-tools",
+    destination: "/:locale/docs/agents/using-tools",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/tools/dynamic-tools",
+    destination: "/:locale/docs/server-db/runtime-context",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/tools/workflow-as-tools",
+    destination: "/:locale/docs/workflows/using-with-agents-and-tools",
+    permanent: true,
+  },
 ];
