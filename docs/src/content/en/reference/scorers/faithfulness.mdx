@@ -15,18 +15,24 @@ The `createFaithfulnessScorer()` function accepts a single options object with t
   content={[
     {
       name: "model",
-      type: "LanguageModel",
+      type: "MastraModelConfig",
       required: true,
       description: "Configuration for the model used to evaluate faithfulness.",
     },
     {
-      name: "context",
-      type: "string[]",
-      required: true,
-      description: "Array of context chunks against which the output's claims will be verified.",
+      name: "options",
+      type: "object",
+      required: false,
+      description: "Optional configuration object.",
     },
     {
-      name: "scale",
+      name: "options.context",
+      type: "string[]",
+      required: false,
+      description: "Array of context chunks against which the output's claims will be verified. If not provided, will use context from tool invocations in the output.",
+    },
+    {
+      name: "options.scale",
       type: "number",
       required: false,
       defaultValue: "1",
@@ -44,27 +50,32 @@ This function returns an instance of the MastraScorer class. The `.run()` method
     {
       name: "runId",
       type: "string",
-      description: "The id of the run (optional).",
+      description: "The id of the run.",
     },
     {
-      name: "preprocessStepResult",
-      type: "string[]",
-      description: "Array of extracted claims from the output.",
+      name: "input",
+      type: "any",
+      description: "The input that was scored (optional).",
     },
     {
-      name: "preprocessPrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the preprocess step (optional).",
+      name: "output",
+      type: "any",
+      description: "The output that was scored.",
     },
     {
-      name: "analyzeStepResult",
-      type: "object",
-      description: "Object with verdicts: { verdicts: Array<{ verdict: 'yes' | 'no' | 'unsure', reason: string }> }",
+      name: "groundTruth",
+      type: "any",
+      description: "The ground truth value for comparison (optional).",
     },
     {
-      name: "analyzePrompt",
-      type: "string",
-      description: "The prompt sent to the LLM for the analyze step (optional).",
+      name: "runtimeContext",
+      type: "Record<string, any>",
+      description: "Runtime context used during scoring (optional).",
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "Tracing context for observability (optional).",
     },
     {
       name: "score",
@@ -74,7 +85,27 @@ This function returns an instance of the MastraScorer class. The `.run()` method
     {
       name: "reason",
       type: "string",
-      description: "A detailed explanation of the score, including which claims were supported, contradicted, or marked as unsure.",
+      description: "A detailed explanation of the score, including which claims were supported, contradicted, or marked as unsure (optional).",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "string[]",
+      description: "Array of extracted claims from the output (optional).",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description: "The prompt sent to the LLM for the preprocess step (optional).",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "{ verdicts: Array<{ verdict: string, reason: string }> }",
+      description: "Object with verdicts for each claim (optional).",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description: "The prompt sent to the LLM for the analyze step (optional).",
     },
     {
       name: "generateReasonPrompt",
@@ -129,14 +160,19 @@ const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: 
     "It has a range of up to 358 miles.",
     "The base model accelerates 0-60 mph in 5.8 seconds."
   ]
-});
+}});
 
 const query = "Tell me about the Tesla Model 3.";
 const response = "The Tesla Model 3 was introduced in 2017. It can travel up to 358 miles on a single charge and the base version goes from 0 to 60 mph in 5.8 seconds.";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: query }],
-  output: { text: response },
+  input: {
+    inputMessages: [{ id: '1', role: 'user', content: query, parts: [{ type: 'text', text: query }] }],
+    rememberedMessages: [],
+    systemMessages: [],
+    taggedSystemMessages: {},
+  },
+  output: [{ id: '2', role: 'assistant', content: response, parts: [{ type: 'text', text: response }] }],
 });
 
 console.log(result);
@@ -166,14 +202,19 @@ const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: 
     "The first version was released in 1991.",
     "Python emphasizes code readability."
   ]
-});
+}});
 
 const query = "What can you tell me about Python?";
 const response = "Python was created by Guido van Rossum and released in 1991. It is the most popular programming language today and is used by millions of developers worldwide.";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: query }],
-  output: { text: response },
+  input: {
+    inputMessages: [{ id: '1', role: 'user', content: query, parts: [{ type: 'text', text: query }] }],
+    rememberedMessages: [],
+    systemMessages: [],
+    taggedSystemMessages: {},
+  },
+  output: [{ id: '2', role: 'assistant', content: response, parts: [{ type: 'text', text: response }] }],
 });
 
 console.log(result);
@@ -203,14 +244,19 @@ const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: 
     "It has a thin atmosphere of mostly carbon dioxide.",
     "Two small moons orbit Mars: Phobos and Deimos."
   ]
-});
+}});
 
 const query = "What do we know about Mars?";
 const response = "Mars is the third planet from the Sun. It has a thick atmosphere rich in oxygen and nitrogen, and is orbited by three large moons.";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: query }],
-  output: { text: response },
+  input: {
+    inputMessages: [{ id: '1', role: 'user', content: query, parts: [{ type: 'text', text: query }] }],
+    rememberedMessages: [],
+    systemMessages: [],
+    taggedSystemMessages: {},
+  },
+  output: [{ id: '2', role: 'assistant', content: response, parts: [{ type: 'text', text: response }] }],
 });
 
 console.log(result);
@@ -230,4 +276,4 @@ Each claim is inaccurate or conflicts with the context, resulting in a score of 
 ## Related
 
 - [Answer Relevancy Scorer](./answer-relevancy)
-- [Hallucination Scorer](./hallucination)
+- [Hallucination Scorer](./hallucination
