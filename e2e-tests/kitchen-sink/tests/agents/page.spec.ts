@@ -11,11 +11,7 @@ test('has overall information', async ({ page }) => {
   );
 
   const table = page.locator('table');
-  const firstRow = table.locator('tr:first-child');
-  await expect(firstRow.locator('text=1 tool')).toBeVisible();
-  await expect(firstRow.locator('text=0 workflow')).toBeVisible();
-  await expect(firstRow.locator('text=1 agent')).toBeVisible();
-  await expect(firstRow.locator('text=Weather Agent')).toHaveAttribute('href', '/agents/weatherAgent');
+  await expect(table).toMatchAriaSnapshot();
 });
 
 test('clicking on the agent row redirects', async ({ page }) => {
