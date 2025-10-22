@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 
+import { RuntimeContext } from '../runtime-context';
 import { createTool } from './tool';
 
 const mockFindUser = vi.fn().mockImplementation(async nameS => {
@@ -27,26 +28,56 @@ describe('createTool', () => {
   });
 
   it('should call mockFindUser', async () => {
-    await testTool.execute({
-      context: { name: 'Dero Israel' },
-    });
+    await testTool.execute?.(
+      {
+        context: { name: 'Dero Israel' },
+        runtimeContext: new RuntimeContext(),
+      },
+      {
+        toolCallId: '123',
+        messages: [],
+        writableStream: undefined,
+        suspend: async () => {},
+        resumeData: {},
+      },
+    );
 
     expect(mockFindUser).toHaveBeenCalledTimes(1);
     expect(mockFindUser).toHaveBeenCalledWith('Dero Israel');
   });
 
   it("should return an object containing 'Dero Israel' as name and 'dero@mail.com' as email", async () => {
-    const user = await testTool.execute({
-      context: { name: 'Dero Israel' },
-    });
+    const user = await testTool.execute?.(
+      {
+        context: { name: 'Dero Israel' },
+        runtimeContext: new RuntimeContext(),
+      },
+      {
+        toolCallId: '123',
+        messages: [],
+        writableStream: undefined,
+        suspend: async () => {},
+        resumeData: {},
+      },
+    );
 
     expect(user).toStrictEqual({ name: 'Dero Israel', email: 'dero@mail.com' });
   });
 
   it("should return an object containing 'User not found' message", async () => {
-    const user = await testTool.execute({
-      context: { name: 'Taofeeq Oluderu' },
-    });
+    const user = await testTool.execute?.(
+      {
+        context: { name: 'Taofeeq Oluderu' },
+        runtimeContext: new RuntimeContext(),
+      },
+      {
+        toolCallId: '123',
+        messages: [],
+        writableStream: undefined,
+        suspend: async () => {},
+        resumeData: {},
+      },
+    );
     expect(user).toStrictEqual({ message: 'User not found' });
   });
 });

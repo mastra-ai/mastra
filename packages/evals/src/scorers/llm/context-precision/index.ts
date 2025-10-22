@@ -1,4 +1,4 @@
-import type { MastraLanguageModel } from '@mastra/core/agent';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import { z } from 'zod';
@@ -29,7 +29,7 @@ export function createContextPrecisionScorer({
   model,
   options,
 }: {
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   options: ContextPrecisionMetricOptions;
 }) {
   if (!options.context && !options.contextExtractor) {

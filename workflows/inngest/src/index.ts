@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { ReadableStream } from 'node:stream/web';
+import { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
 import { AISpanType, wrapMastra } from '@mastra/core/ai-tracing';
@@ -7,6 +7,7 @@ import type { TracingContext, AnyAISpan } from '@mastra/core/ai-tracing';
 import { RuntimeContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import { WorkflowRunOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, ToolStream } from '@mastra/core/tools';
 import { getStepResult, Workflow, Run, DefaultExecutionEngine, validateStepInput } from '@mastra/core/workflows';
@@ -29,6 +30,7 @@ import type {
   ExecutionEngineOptions,
   StepWithComponent,
   SuspendOptions,
+  WorkflowStreamEvent,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -332,7 +334,12 @@ export class InngestRun<
     return result;
   }
 
-  watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
+  watch(cb: (event: WatchEvent) => void, type: 'watch'): () => void;
+  watch(cb: (event: WorkflowStreamEvent) => void, type: 'watch-v2'): () => void;
+  watch(
+    cb: ((event: WatchEvent) => void) | ((event: WorkflowStreamEvent) => void),
+    type: 'watch' | 'watch-v2' = 'watch',
+  ): () => void {
     let active = true;
     const streamPromise = subscribe(
       {
@@ -359,7 +366,7 @@ export class InngestRun<
     };
   }
 
-  stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
+  streamLegacy({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   } {
@@ -401,6 +408,70 @@ export class InngestRun<
       stream: readable as ReadableStream<StreamEvent>,
       getWorkflowState: () => this.executionResults!,
     };
+  }
+
+  stream({
+    inputData,
+    runtimeContext,
+    closeOnSuspend = true,
+  }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext; closeOnSuspend?: boolean } = {}): ReturnType<
+    Run<InngestEngineType, TSteps, TState, TInput, TOutput>['stream']
+  > {
+    const self = this;
+    let streamOutput: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> | undefined;
+    const stream = new ReadableStream<WorkflowStreamEvent>({
+      async start(controller) {
+        // TODO: fix this, watch-v2 doesn't have a type
+        // @ts-ignore
+        const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
+          controller.enqueue({
+            type,
+            runId: self.runId,
+            from,
+            payload: {
+              stepName: (payload as unknown as { id: string }).id,
+              ...payload,
+            },
+          } as WorkflowStreamEvent);
+        }, 'watch-v2');
+
+        self.closeStreamAction = async () => {
+          unwatch();
+
+          try {
+            await controller.close();
+          } catch (err) {
+            console.error('Error closing stream:', err);
+          }
+        };
+
+        const executionResultsPromise = self.start({
+          inputData,
+          runtimeContext,
+        });
+
+        const executionResults = await executionResultsPromise;
+
+        if (closeOnSuspend) {
+          // always close stream, even if the workflow is suspended
+          // this will trigger a finish event with workflow status set to suspended
+          self.closeStreamAction?.().catch(() => {});
+        } else if (executionResults.status !== 'suspended') {
+          self.closeStreamAction?.().catch(() => {});
+        }
+        if (streamOutput) {
+          streamOutput.updateResults(executionResults as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>);
+        }
+      },
+    });
+
+    streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      stream,
+    });
+
+    return streamOutput;
   }
 }
 
