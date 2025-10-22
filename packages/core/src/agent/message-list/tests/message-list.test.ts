@@ -82,9 +82,7 @@ describe('MessageList', () => {
 
       // Third message: final assistant response
       expect(responseMessages[2].role).toBe('assistant');
-      expect(responseMessages[2].content).toEqual(
-        expect.arrayContaining([expect.objectContaining({ type: 'text' })]),
-      );
+      expect(responseMessages[2].content).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'text' })]));
     });
   });
 
