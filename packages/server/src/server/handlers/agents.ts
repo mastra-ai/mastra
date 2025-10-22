@@ -270,10 +270,10 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
     if (Object.keys(agents || {}).length) {
       for (const [_, ag] of Object.entries(agents)) {
         try {
-          const agents = await ag.listAgents();
+          const subAgents = await ag.listAgents();
 
-          if (agents[agentId]) {
-            agent = agents[agentId];
+          if (subAgents[agentId]) {
+            agent = subAgents[agentId];
             break;
           }
         } catch (error) {
@@ -284,7 +284,7 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
   }
 
   if (!agent) {
-    throw new HTTPException(404, { message: 'Agent not found' });
+    throw new HTTPException(404, { message: `Agent with name ${agentId} not found` });
   }
 
   return agent;
