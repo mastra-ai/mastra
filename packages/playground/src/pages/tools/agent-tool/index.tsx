@@ -5,8 +5,7 @@ import { parse } from 'superjson';
 import { z } from 'zod';
 
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
-import { useAgent } from '@mastra/playground-ui';
-import { useExecuteTool } from '@/hooks/use-execute-agent-tool';
+import { useAgent, useExecuteAgentTool } from '@mastra/playground-ui';
 
 import ToolExecutor from '../tool-executor';
 import {
@@ -27,7 +26,7 @@ const AgentTool = () => {
   const { toolId, agentId } = useParams();
   const { runtimeContext: playgroundRuntimeContext } = usePlaygroundStore();
 
-  const { mutateAsync: executeTool, isPending: isExecutingTool, error } = useExecuteTool();
+  const { mutateAsync: executeTool, isPending: isExecutingTool, error } = useExecuteAgentTool();
   const [result, setResult] = useState<any>(null);
 
   const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);

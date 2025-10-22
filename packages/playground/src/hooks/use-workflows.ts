@@ -55,13 +55,6 @@ const sanitizeWorkflowWatchResult = (record: WorkflowWatchResult) => {
   return sanitizedRecord;
 };
 
-export const useWorkflows = () => {
-  return useQuery({
-    queryKey: ['workflows'],
-    queryFn: () => client.getWorkflows(),
-  });
-};
-
 export const useExecuteWorkflow = () => {
   const createWorkflowRun = useMutation({
     mutationFn: async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {

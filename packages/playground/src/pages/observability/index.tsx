@@ -17,20 +17,18 @@ import {
   EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
-  useLinkComponent,
   useAgents,
+  useWorkflows,
 } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { EyeIcon } from 'lucide-react';
 import { useAITraces } from '@/domains/observability/hooks/use-ai-traces';
 import { useAITrace } from '@/domains/observability/hooks/use-ai-trace';
 
-import { useWorkflows } from '@/hooks/use-workflows';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 
 export default function Observability() {
   const navigate = useNavigate();
-  const { paths } = useLinkComponent();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
   const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({

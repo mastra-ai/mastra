@@ -20,13 +20,13 @@ import {
   getToNextEntryFn,
   getToPreviousEntryFn,
   useAgents,
+  useWorkflows,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams } from 'react-router';
 import { Skeleton } from '@/components/ui/skeleton';
 import { GaugeIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { useWorkflows } from '@/hooks/use-workflows';
 
 export interface ScorerProps {
   computeTraceLink: (traceId: string) => string;
