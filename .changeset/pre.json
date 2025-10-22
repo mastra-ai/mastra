@@ -82,6 +82,7 @@
     "@mastra/inngest": "0.17.0"
   },
   "changesets": [
-    "breezy-deer-flow"
+    "breezy-deer-flow",
+    "polite-ads-post"
   ]
 }
