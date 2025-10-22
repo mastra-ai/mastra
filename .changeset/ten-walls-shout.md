@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-fix template background image overflow
+Fix wrong MCP link in playground

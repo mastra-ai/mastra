@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "0.14.10-alpha.1",
+  "version": "0.14.10",
   "description": "",
   "type": "module",
   "files": [

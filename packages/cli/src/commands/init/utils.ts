@@ -533,55 +533,42 @@ export const checkInitialization = async (dirPath: string) => {
 };
 
 export const checkAndInstallCoreDeps = async (addExample: boolean) => {
-  const depService = new DepsService();
-  const needsCore = (await depService.checkDependencies(['@mastra/core'])) !== `ok`;
-  const needsZod = (await depService.checkDependencies(['zod'])) !== `ok`;
+  const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies' });
+  let packages: Array<{ name: string; version: string }> = [];
 
-  if (needsCore) {
-    await installCoreDeps('@mastra/core');
-  }
-
-  if (needsZod) {
-    await installCoreDeps('zod', '^4');
-  }
-
-  if (addExample) {
-    const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
-
-    if (needsLibsql) {
-      await installCoreDeps('@mastra/libsql');
-    }
-  }
-};
-
-const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies\n' });
-export async function installCoreDeps(pkg: string, version = 'latest') {
   try {
-    const confirm = await p.confirm({
-      message: `You do not have the ${pkg} package installed. Would you like to install it?`,
-      initialValue: false,
-    });
-
-    if (p.isCancel(confirm)) {
-      p.cancel('Installation Cancelled');
-      process.exit(0);
-    }
-
-    if (!confirm) {
-      p.cancel('Installation Cancelled');
-      process.exit(0);
-    }
+    const depService = new DepsService();
 
     spinner.start();
 
-    const depsService = new DepsService();
+    const needsCore = (await depService.checkDependencies(['@mastra/core'])) !== `ok`;
+    const needsZod = (await depService.checkDependencies(['zod'])) !== `ok`;
 
-    await depsService.installPackages([`${pkg}@${version}`]);
-    spinner.success(`${pkg} installed successfully`);
+    if (needsCore) {
+      packages.push({ name: '@mastra/core', version: 'latest' });
+    }
+
+    if (needsZod) {
+      packages.push({ name: 'zod', version: '^4' });
+    }
+
+    if (addExample) {
+      const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
+
+      if (needsLibsql) {
+        packages.push({ name: '@mastra/libsql', version: 'latest' });
+      }
+    }
+
+    if (packages.length > 0) {
+      await depService.installPackages(packages.map(pkg => `${pkg.name}@${pkg.version}`));
+    }
+
+    spinner.success('Successfully installed Mastra core dependencies');
   } catch (err) {
-    console.error(err);
+    spinner.error(`Failed to install core dependencies: ${err instanceof Error ? err.message : 'Unknown error'}`);
   }
-}
+};
 
 export const getAPIKey = async (provider: LLMProvider) => {
   let key = 'OPENAI_API_KEY';
