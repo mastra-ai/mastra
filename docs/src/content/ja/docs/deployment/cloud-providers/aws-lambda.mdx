@@ -169,7 +169,7 @@ AWS コンソールで Lambda 関数を作成します:
 3. **Auth type** を **NONE** に設定（パブリックアクセス）
 4. **CORS** を設定:
    - **Allow-Origin**: `*`（本番では自ドメインに制限）
-   - **Allow-Headers**: `content-type`（Cloudfront・API Gateway と組み合わせる場合は `x-amzn-request-context` も必要）
+   - **Allow-Headers**: `content-type`（Cloudfront・API Gateway などのサービスと組み合わせる場合は `x-amzn-request-context` も必要）
    - **Allow-Methods**: `*`（本番では精査のうえ制限）
 5. **Save** をクリック
 
