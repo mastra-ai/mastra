@@ -15,6 +15,37 @@ import { getPackageInfo } from 'local-pkg';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { findNativePackageModule } from './utils';
 
+type ErrorId = 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND' | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD';
+
+function throwExternalDependencyError({
+  errorId,
+  moduleName,
+  packageName,
+  messagePrefix,
+}: {
+  errorId: ErrorId;
+  moduleName: string;
+  packageName: string;
+  messagePrefix: string;
+}): never {
+  throw new MastraError({
+    id: errorId,
+    domain: ErrorDomain.DEPLOYER,
+    category: ErrorCategory.USER,
+    details: {
+      importFile: moduleName,
+      packageName: packageName,
+    },
+    text: `${messagePrefix} \`${packageName}\` to your externals.
+
+export const mastra = new Mastra({
+  bundler: {
+    externals: ["${packageName}"],
+  }
+})`,
+  });
+}
+
 /**
  * Validates the bundled output by attempting to import each generated module.
  * Tracks external dependencies that couldn't be bundled.
@@ -76,65 +107,41 @@ async function validateOutput(
         await validate(join(projectRoot, file.fileName));
       }
     } catch (err) {
-      if (err instanceof Error && err.message.includes('[ERR_MODULE_NOT_FOUND]')) {
-        const moduleName = file.moduleIds[file.moduleIds.length - 2];
+      if (err instanceof Error) {
+        let moduleName: string | undefined | null = null;
+        let errorConfig: {
+          id: ErrorId;
+          messagePrefix: string;
+        } | null = null;
 
-        if (!moduleName) {
-          logger.debug(`Could not determine the module name for file ${file.fileName}`);
-          continue;
-        }
-
-        const pkgInfo = await getPackageInfo(moduleName);
-        const packageName = pkgInfo?.packageJson?.name;
-
-        if (packageName) {
-          throw new MastraError({
+        if (err.message.includes('[ERR_MODULE_NOT_FOUND]')) {
+          moduleName = file.moduleIds[file.moduleIds.length - 2];
+          errorConfig = {
             id: 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND',
-            domain: ErrorDomain.DEPLOYER,
-            category: ErrorCategory.USER,
-            details: {
-              importFile: moduleName,
-              packageName: packageName,
-            },
-            text: `Mastra wasn't able to build your project. Please add \`${packageName}\` to your externals.
-
-export const mastra = new Mastra({
-  bundler: {
-    externals: ["${packageName}"],
-  }
-})`,
-          });
-        }
-      }
-
-      if (err instanceof Error && err.message.includes('Error: No native build was found for ')) {
-        const moduleName = findNativePackageModule(file.moduleIds);
-
-        if (!moduleName) {
-          logger.debug(`Could not determine the module name for file ${file.fileName}`);
-          continue;
-        }
-
-        const pkgInfo = await getPackageInfo(moduleName);
-        const packageName = pkgInfo?.packageJson?.name;
-
-        if (packageName) {
-          throw new MastraError({
+            messagePrefix: "Mastra wasn't able to build your project. Please add",
+          };
+        } else if (err.message.includes('Error: No native build was found for ')) {
+          moduleName = findNativePackageModule(file.moduleIds);
+          errorConfig = {
             id: 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD',
-            domain: ErrorDomain.DEPLOYER,
-            category: ErrorCategory.USER,
-            details: {
-              importFile: moduleName,
-              packageName: packageName,
-            },
-            text: `We found a binary dependency in your bundle. Please add \`${packageName}\` to your externals.
+            messagePrefix: 'We found a binary dependency in your bundle. Please add',
+          };
+        }
 
-export const mastra = new Mastra({
-  bundler: {
-    externals: ["${packageName}"],
-  }
-})`,
-          });
+        if (moduleName && errorConfig) {
+          const pkgInfo = await getPackageInfo(moduleName);
+          const packageName = pkgInfo?.packageJson?.name;
+
+          if (packageName) {
+            throwExternalDependencyError({
+              errorId: errorConfig.id,
+              moduleName,
+              packageName,
+              messagePrefix: errorConfig.messagePrefix,
+            });
+          }
+
+          logger.debug(`Could not determine the module name for file ${file.fileName}`);
         }
       }
     }
