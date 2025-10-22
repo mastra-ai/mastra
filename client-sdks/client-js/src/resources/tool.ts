@@ -26,7 +26,14 @@ export class Tool extends BaseResource {
    * @param params - Parameters required for tool execution
    * @returns Promise containing the tool execution results
    */
-  execute(params: { data: any; runId?: string; runtimeContext?: RuntimeContext | Record<string, any> }): Promise<any> {
+  execute(params: {
+    data: any;
+    runId?: string;
+    /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+    runtimeContext?: RuntimeContext;
+    /** Request context for the tool execution */
+    requestContext?: RuntimeContext | Record<string, any>;
+  }): Promise<any> {
     const url = new URLSearchParams();
 
     if (params.runId) {
@@ -35,7 +42,7 @@ export class Tool extends BaseResource {
 
     const body = {
       data: params.data,
-      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      runtimeContext: parseClientRuntimeContext(params.requestContext ?? params.runtimeContext),
     };
 
     return this.request(`/api/tools/${this.toolId}/execute?${url.toString()}`, {

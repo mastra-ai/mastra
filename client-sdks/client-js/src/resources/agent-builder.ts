@@ -9,8 +9,10 @@ const RECORD_SEPARATOR = '\x1E';
 export interface AgentBuilderActionRequest {
   /** Input data specific to the workflow type */
   inputData: any;
-  /** Runtime context for the action execution */
+  /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
   runtimeContext?: RuntimeContext;
+  /** Request context for the action execution */
+  requestContext?: RuntimeContext;
 }
 
 export interface AgentBuilderActionResult {
@@ -107,7 +109,7 @@ export class AgentBuilder extends BaseResource {
       searchParams.set('runId', runId);
     }
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const runtimeContext = parseClientRuntimeContext(params.requestContext ?? params.runtimeContext);
     const { runtimeContext: _, ...actionParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/start-async${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
@@ -127,7 +129,7 @@ export class AgentBuilder extends BaseResource {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', runId);
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext ?? params.requestContext);
     const { runtimeContext: _, ...actionParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/start?${searchParams.toString()}`;
@@ -145,14 +147,17 @@ export class AgentBuilder extends BaseResource {
     params: {
       step: string | string[];
       resumeData?: unknown;
+      /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
       runtimeContext?: RuntimeContext;
+      /** Request context for the action execution */
+      requestContext?: RuntimeContext;
     },
     runId: string,
   ): Promise<{ message: string }> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', runId);
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext ?? params.requestContext);
     const { runtimeContext: _, ...resumeParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/resume?${searchParams.toString()}`;
@@ -170,14 +175,17 @@ export class AgentBuilder extends BaseResource {
     params: {
       step: string | string[];
       resumeData?: unknown;
+      /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
       runtimeContext?: RuntimeContext;
+      /** Request context for the action execution */
+      requestContext?: RuntimeContext;
     },
     runId: string,
   ): Promise<AgentBuilderActionResult> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', runId);
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext ?? params.requestContext);
     const { runtimeContext: _, ...resumeParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/resume-async?${searchParams.toString()}`;
@@ -272,7 +280,7 @@ export class AgentBuilder extends BaseResource {
       searchParams.set('runId', runId);
     }
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext ?? params.requestContext);
     const { runtimeContext: _, ...actionParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/stream${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
@@ -335,7 +343,7 @@ export class AgentBuilder extends BaseResource {
       searchParams.set('runId', runId);
     }
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext ?? params.requestContext ?? undefined);
     const { runtimeContext: _, ...actionParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/streamVNext${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;

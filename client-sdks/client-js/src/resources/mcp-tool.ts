@@ -1,6 +1,6 @@
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { ClientOptions, McpToolInfo } from '../types';
-import { runtimeContextQueryString } from '../utils';
+import { parseClientRuntimeContext, runtimeContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
 /**
@@ -31,15 +31,21 @@ export class MCPTool extends BaseResource {
    * @param params - Parameters for tool execution, including data/args and optional runtimeContext.
    * @returns Promise containing the result of the tool execution.
    */
-  execute(params: { data?: any; runtimeContext?: RuntimeContext }): Promise<any> {
+  execute(params: {
+    data?: any;
+    /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+    runtimeContext?: RuntimeContext;
+    /** Request context for the tool execution */
+    requestContext?: RuntimeContext | Record<string, any>;
+  }): Promise<any> {
     const body: any = {};
     if (params.data !== undefined) body.data = params.data;
     // If none of data, args the body might be empty or just contain runtimeContext.
     // The handler will look for these, so an empty args object might be appropriate if that's the intent.
     // else body.data = {}; // Or let it be empty if no specific input fields are used
 
-    if (params.runtimeContext !== undefined) {
-      body.runtimeContext = params.runtimeContext;
+    if (params.runtimeContext !== undefined || params.requestContext !== undefined) {
+      body.runtimeContext = parseClientRuntimeContext(params.requestContext ?? params.runtimeContext);
     }
 
     return this.request(`/api/mcp/${this.serverId}/tools/${this.toolId}/execute`, {

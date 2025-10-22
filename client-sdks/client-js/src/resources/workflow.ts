@@ -241,35 +241,60 @@ export class Workflow extends BaseResource {
     runId: string;
     start: (params: {
       inputData: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
+      /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+      runtimeContext?: RuntimeContext;
+      /** Request context for the workflow execution */
+      requestContext?: RuntimeContext | Record<string, any>;
       tracingOptions?: TracingOptions;
     }) => Promise<{ message: string }>;
     watch: (onRecord: (record: WorkflowWatchResult) => void) => Promise<void>;
     resume: (params: {
       step: string | string[];
       resumeData?: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
+      /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+      runtimeContext?: RuntimeContext;
+      /** Request context for the workflow execution */
+      requestContext?: RuntimeContext | Record<string, any>;
       tracingOptions?: TracingOptions;
     }) => Promise<{ message: string }>;
     stream: (params: {
       inputData: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
+      /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+      runtimeContext?: RuntimeContext;
+      /** Request context for the workflow execution */
+      requestContext?: RuntimeContext | Record<string, any>;
     }) => Promise<ReadableStream>;
     startAsync: (params: {
       inputData: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
+      /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+      runtimeContext?: RuntimeContext;
+      /** Request context for the workflow execution */
+      requestContext?: RuntimeContext | Record<string, any>;
       tracingOptions?: TracingOptions;
     }) => Promise<WorkflowRunResult>;
     resumeAsync: (params: {
       step: string | string[];
       resumeData?: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
+      /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+      runtimeContext?: RuntimeContext;
+      /** Request context for the workflow execution */
+      requestContext?: RuntimeContext | Record<string, any>;
       tracingOptions?: TracingOptions;
     }) => Promise<WorkflowRunResult>;
     resumeStreamVNext: (params: {
       step: string | string[];
       resumeData?: Record<string, any>;
-      runtimeContext?: RuntimeContext | Record<string, any>;
+      /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+      runtimeContext?: RuntimeContext;
+      /** Request context for the workflow execution */
+      requestContext?: RuntimeContext | Record<string, any>;
+    }) => Promise<ReadableStream>;
+    streamVNext: (params: {
+      inputData?: Record<string, any>;
+      /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+      runtimeContext?: RuntimeContext;
+      /** Request context for the workflow execution */
+      requestContext?: RuntimeContext | Record<string, any>;
     }) => Promise<ReadableStream>;
   }> {
     const searchParams = new URLSearchParams();
@@ -291,38 +316,60 @@ export class Workflow extends BaseResource {
       runId,
       start: async (p: {
         inputData: Record<string, any>;
-        runtimeContext?: RuntimeContext | Record<string, any>;
+        /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+        runtimeContext?: RuntimeContext;
+        /** Request context for the workflow execution */
+        requestContext?: RuntimeContext | Record<string, any>;
         tracingOptions?: TracingOptions;
       }) => {
         return this.start({
           runId,
           inputData: p.inputData,
           runtimeContext: p.runtimeContext,
+          requestContext: p.requestContext,
           tracingOptions: p.tracingOptions,
         });
       },
       startAsync: async (p: {
         inputData: Record<string, any>;
-        runtimeContext?: RuntimeContext | Record<string, any>;
+        /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+        runtimeContext?: RuntimeContext;
+        /** Request context for the workflow execution */
+        requestContext?: RuntimeContext | Record<string, any>;
         tracingOptions?: TracingOptions;
       }) => {
         return this.startAsync({
           runId,
           inputData: p.inputData,
           runtimeContext: p.runtimeContext,
+          requestContext: p.requestContext,
           tracingOptions: p.tracingOptions,
         });
       },
       watch: async (onRecord: (record: WorkflowWatchResult) => void) => {
         return this.watch({ runId }, onRecord);
       },
-      stream: async (p: { inputData: Record<string, any>; runtimeContext?: RuntimeContext | Record<string, any> }) => {
-        return this.stream({ runId, inputData: p.inputData, runtimeContext: p.runtimeContext });
+      stream: async (p: {
+        inputData: Record<string, any>;
+        /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+        runtimeContext?: RuntimeContext;
+        /** Request context for the workflow execution */
+        requestContext?: RuntimeContext | Record<string, any>;
+      }) => {
+        return this.stream({
+          runId,
+          inputData: p.inputData,
+          runtimeContext: p.runtimeContext,
+          requestContext: p.requestContext,
+        });
       },
       resume: async (p: {
         step: string | string[];
         resumeData?: Record<string, any>;
-        runtimeContext?: RuntimeContext | Record<string, any>;
+        /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+        runtimeContext?: RuntimeContext;
+        /** Request context for the workflow execution */
+        requestContext?: RuntimeContext | Record<string, any>;
         tracingOptions?: TracingOptions;
       }) => {
         return this.resume({
@@ -330,13 +377,17 @@ export class Workflow extends BaseResource {
           step: p.step,
           resumeData: p.resumeData,
           runtimeContext: p.runtimeContext,
+          requestContext: p.requestContext,
           tracingOptions: p.tracingOptions,
         });
       },
       resumeAsync: async (p: {
         step: string | string[];
         resumeData?: Record<string, any>;
-        runtimeContext?: RuntimeContext | Record<string, any>;
+        /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+        runtimeContext?: RuntimeContext;
+        /** Request context for the workflow execution */
+        requestContext?: RuntimeContext | Record<string, any>;
         tracingOptions?: TracingOptions;
       }) => {
         return this.resumeAsync({
@@ -344,19 +395,38 @@ export class Workflow extends BaseResource {
           step: p.step,
           resumeData: p.resumeData,
           runtimeContext: p.runtimeContext,
+          requestContext: p.requestContext,
           tracingOptions: p.tracingOptions,
         });
       },
       resumeStreamVNext: async (p: {
         step: string | string[];
         resumeData?: Record<string, any>;
-        runtimeContext?: RuntimeContext | Record<string, any>;
+        /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+        runtimeContext?: RuntimeContext;
+        /** Request context for the workflow execution */
+        requestContext?: RuntimeContext | Record<string, any>;
       }) => {
         return this.resumeStreamVNext({
           runId,
           step: p.step,
           resumeData: p.resumeData,
           runtimeContext: p.runtimeContext,
+          requestContext: p.requestContext,
+        });
+      },
+      streamVNext: async (p: {
+        inputData?: Record<string, any>;
+        /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+        runtimeContext?: RuntimeContext;
+        /** Request context for the workflow execution */
+        requestContext?: RuntimeContext | Record<string, any>;
+      }) => {
+        return this.streamVNext({
+          runId,
+          inputData: p.inputData,
+          runtimeContext: p.runtimeContext,
+          requestContext: p.requestContext,
         });
       },
     };
@@ -370,10 +440,13 @@ export class Workflow extends BaseResource {
   start(params: {
     runId: string;
     inputData: Record<string, any>;
-    runtimeContext?: RuntimeContext | Record<string, any>;
+    /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+    runtimeContext?: RuntimeContext;
+    /** Request context for the workflow execution */
+    requestContext?: RuntimeContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }): Promise<{ message: string }> {
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const runtimeContext = parseClientRuntimeContext(params.requestContext ?? params.runtimeContext);
     return this.request(`/api/workflows/${this.workflowId}/start?runId=${params.runId}`, {
       method: 'POST',
       body: { inputData: params?.inputData, runtimeContext, tracingOptions: params.tracingOptions },
@@ -395,10 +468,13 @@ export class Workflow extends BaseResource {
     step: string | string[];
     runId: string;
     resumeData?: Record<string, any>;
-    runtimeContext?: RuntimeContext | Record<string, any>;
+    /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+    runtimeContext?: RuntimeContext;
+    /** Request context for the workflow execution */
+    requestContext?: RuntimeContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }): Promise<{ message: string }> {
-    const runtimeContext = parseClientRuntimeContext(rest.runtimeContext);
+    const runtimeContext = parseClientRuntimeContext(rest.requestContext ?? rest.runtimeContext);
     return this.request(`/api/workflows/${this.workflowId}/resume?runId=${runId}`, {
       method: 'POST',
       body: {
@@ -418,7 +494,10 @@ export class Workflow extends BaseResource {
   startAsync(params: {
     runId?: string;
     inputData: Record<string, any>;
-    runtimeContext?: RuntimeContext | Record<string, any>;
+    /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+    runtimeContext?: RuntimeContext;
+    /** Request context for the workflow execution */
+    requestContext?: RuntimeContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }): Promise<WorkflowRunResult> {
     const searchParams = new URLSearchParams();
@@ -427,7 +506,7 @@ export class Workflow extends BaseResource {
       searchParams.set('runId', params.runId);
     }
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const runtimeContext = parseClientRuntimeContext(params.requestContext ?? params.runtimeContext);
 
     return this.request(`/api/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
       method: 'POST',
@@ -443,7 +522,10 @@ export class Workflow extends BaseResource {
   async stream(params: {
     runId?: string;
     inputData: Record<string, any>;
+    /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
     runtimeContext?: RuntimeContext | Record<string, any>;
+    /** Request context for the workflow execution */
+    requestContext?: RuntimeContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }) {
     const searchParams = new URLSearchParams();
@@ -452,7 +534,7 @@ export class Workflow extends BaseResource {
       searchParams.set('runId', params.runId);
     }
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const runtimeContext = parseClientRuntimeContext(params.requestContext ?? params.runtimeContext);
     const response: Response = await this.request(
       `/api/workflows/${this.workflowId}/stream?${searchParams.toString()}`,
       {
@@ -576,7 +658,10 @@ export class Workflow extends BaseResource {
   async streamVNext(params: {
     runId?: string;
     inputData?: Record<string, any>;
+    /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
     runtimeContext?: RuntimeContext;
+    /** Request context for the workflow execution */
+    requestContext?: RuntimeContext | Record<string, any>;
     closeOnSuspend?: boolean;
     tracingOptions?: TracingOptions;
   }) {
@@ -586,7 +671,7 @@ export class Workflow extends BaseResource {
       searchParams.set('runId', params.runId);
     }
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const runtimeContext = parseClientRuntimeContext(params.requestContext ?? params.runtimeContext);
     const response: Response = await this.request(
       `/api/workflows/${this.workflowId}/streamVNext?${searchParams.toString()}`,
       {
@@ -717,10 +802,13 @@ export class Workflow extends BaseResource {
     runId: string;
     step: string | string[];
     resumeData?: Record<string, any>;
-    runtimeContext?: RuntimeContext | Record<string, any>;
+    /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+    runtimeContext?: RuntimeContext;
+    /** Request context for the workflow execution */
+    requestContext?: RuntimeContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }): Promise<WorkflowRunResult> {
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const runtimeContext = parseClientRuntimeContext(params.requestContext ?? params.runtimeContext);
     return this.request(`/api/workflows/${this.workflowId}/resume-async?runId=${params.runId}`, {
       method: 'POST',
       body: {
@@ -741,12 +829,15 @@ export class Workflow extends BaseResource {
     runId: string;
     step: string | string[];
     resumeData?: Record<string, any>;
-    runtimeContext?: RuntimeContext | Record<string, any>;
+    /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
+    runtimeContext?: RuntimeContext;
+    /** Request context for the workflow execution */
+    requestContext?: RuntimeContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }): Promise<ReadableStream> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const runtimeContext = parseClientRuntimeContext(params.requestContext ?? params.runtimeContext);
     const response: Response = await this.request(
       `/api/workflows/${this.workflowId}/resume-stream?${searchParams.toString()}`,
       {

@@ -126,12 +126,15 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
 export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
   messages: MessageListInput;
   structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;
+  /** @deprecated Use `requestContext` instead. This will be removed in a future version. */
   runtimeContext?: RuntimeContext | Record<string, any>;
+  /** Request context for the action execution */
+  requestContext?: RuntimeContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   Omit<
     AgentExecutionOptions<OUTPUT>,
-    'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
+    'output' | 'runtimeContext' | 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
   >
 > &
   DeprecatedOutputOptions<OUTPUT>;
