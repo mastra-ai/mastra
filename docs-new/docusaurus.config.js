@@ -6,6 +6,7 @@
 
 import prismMastraDark from './src/theme/prism-mastra-dark.js';
 import prismMastraLight from './src/theme/prism-mastra-light.js';
+import 'dotenv/config';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
