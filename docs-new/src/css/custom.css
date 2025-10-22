@@ -116,6 +116,7 @@
   --mastra-icons-4: hsla(0, 0%, 66%, 1);
   --mastra-icons-5: hsla(0, 0%, 90%, 1);
   --mastra-icons-6: hsla(0, 0%, 100%, 1);
+  --mastra-icons-7: #808080;
 
   /* Nextra surface colors - Light mode */
   --mastra-surface-1: #f0f0f0;
@@ -959,7 +960,10 @@ kbd {
   background: var(--ifm-background-color);
   border-radius: 4px;
   padding-inline: 0.38rem;
+  padding-block: 0.2rem;
+  display: flex;
 }
+
 
 /* Hide in Safari */
 input,
@@ -1014,4 +1018,8 @@ textarea:-webkit-autofill:focus {
   -webkit-box-shadow: 0 0 0px 1000px var(--ifm-background-color) inset !important;
   /* you might also set text-fill colour if needed */
   -webkit-text-fill-color: #000 !important;
+}
+
+#docs-search-results {
+  scrollbar-width: none;
 }
