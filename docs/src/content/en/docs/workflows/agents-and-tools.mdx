@@ -22,7 +22,7 @@ const step1 = createStep({
     const { message } = inputData;
 
     const testAgent = mastra.getAgent("testAgent");
-    const response = await testAgent.generate(`Summarize this message in one sentence: ${message}`, {
+    const response = await testAgent.generate(`Convert this message into bullet points: ${message}`, {
       memory: {
         thread: "user-123",
         resource: "test-123"
@@ -30,7 +30,7 @@ const step1 = createStep({
     });
 
     return {
-      summary: response.text
+      list: response.text
     };
   }
 });
@@ -55,7 +55,7 @@ export const testWorkflow = createWorkflow({
   .map(async ({ inputData }) => {
     const { message } = inputData;
     return {
-      prompt: `Summarize this message in one sentence: ${message}`
+      prompt: `Convert this message into bullet points: ${message}`
     };
   })
   .then(step1)
