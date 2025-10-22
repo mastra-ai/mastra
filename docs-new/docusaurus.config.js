@@ -36,21 +36,7 @@ const config = {
         useCssCascadeLayers: false,
         removeLegacyPostBuildHeadAttribute: true,
       },
-      experimental_faster: {
-        swcJsLoader: true,
-        swcJsMinimizer: true,
-        swcHtmlMinimizer: true,
-        lightningCssMinimizer: true,
-        rspackBundler: true,
-        rspackPersistentCache: true,
-        ssgWorkerThreads: true,
-        mdxCrossCompilerCache: true,
-      },
-      experimental_storage: {
-        type: 'localStorage',
-        namespace: true,
-      },
-      experimental_router: 'hash',
+      experimental_faster: true,
     },
   }),
 
