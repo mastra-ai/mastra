@@ -1225,10 +1225,20 @@ export class MessageList {
     }
 
     if (MessageList.isAIV5CoreMessage(message)) {
-      return MessageList.aiV5ModelMessageToMastraMessageV2(message, messageSource);
+      const v2Msg = MessageList.aiV5ModelMessageToMastraMessageV2(message, messageSource);
+      return {
+        ...v2Msg,
+        threadId: this.memoryInfo?.threadId,
+        resourceId: this.memoryInfo?.resourceId,
+      };
     }
     if (MessageList.isAIV5UIMessage(message)) {
-      return MessageList.aiV5UIMessageToMastraMessageV2(message);
+      const v2Msg = MessageList.aiV5UIMessageToMastraMessageV2(message);
+      return {
+        ...v2Msg,
+        threadId: this.memoryInfo?.threadId,
+        resourceId: this.memoryInfo?.resourceId,
+      };
     }
 
     throw new Error(`Found unhandled message ${JSON.stringify(message)}`);
