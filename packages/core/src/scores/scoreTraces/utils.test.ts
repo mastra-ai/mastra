@@ -60,7 +60,7 @@ class TransformerTestBuilder {
       spanId: config.spanId,
       parentSpanId: config.parentSpanId,
       name: config.name || `llm: ${config.spanId}`,
-      spanType: 'llm_generation',
+      spanType: 'model_generation',
       startedAt: config.startedAt || '2025-01-01T00:01:00Z',
       input: {
         messages: config.messages || [
