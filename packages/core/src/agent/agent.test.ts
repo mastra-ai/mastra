@@ -5130,10 +5130,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         const result = await agent.stream('Hello', {
           onError: ({ error }) => {
-            console.log('====');
-            console.log('onErrorCallbackError', error);
-            console.log('====');
-
             onErrorCallbackError = error;
           },
           modelSettings: {
@@ -5144,36 +5140,33 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         // Consume fullStream to capture error chunk
         for await (const chunk of result.fullStream) {
           if (chunk.type === 'error') {
-            console.log('====');
-            console.log('fullStreamError chunk.payload.error', chunk.payload.error);
-            console.log('====');
-
             fullStreamError = chunk.payload.error;
           }
         }
 
         // Get result.error
         const resultError = result.error;
-        console.log('====');
-        console.log('resultError', resultError);
-        console.log('====');
 
-        // All three should be defined
+        // should be defined
         expect(onErrorCallbackError).toBeDefined();
         expect(fullStreamError).toBeDefined();
         expect(resultError).toBeDefined();
 
-        // All three should be Error instances
+        // should be Error instances
         expect(onErrorCallbackError instanceof Error).toBe(true);
         expect(fullStreamError instanceof Error).toBe(true);
         expect(resultError instanceof Error).toBe(true);
 
-        // All three should have the same message
+        expect(onErrorCallbackError).toBe(testError);
+        expect(fullStreamError).toBe(testError);
+        expect(resultError).toBe(testError);
+
+        // should have the same message
         expect(onErrorCallbackError.message).toBe(testErrorMessage);
         expect(fullStreamError.message).toBe(testErrorMessage);
         expect((resultError as Error).message).toBe(testErrorMessage);
 
-        // All three should preserve custom properties
+        // should preserve custom properties
         expect(onErrorCallbackError.statusCode).toBe(testErrorStatusCode);
         expect(onErrorCallbackError.requestId).toBe(testErrorRequestId);
         expect(fullStreamError.statusCode).toBe(testErrorStatusCode);
