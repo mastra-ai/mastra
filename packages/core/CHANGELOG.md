@@ -1,5 +1,209 @@
 # @mastra/core
 
+## 0.22.2-alpha.0
+
+### Patch Changes
+
+- Fix nested workflow events and networks ([#9132](https://github.com/mastra-ai/mastra/pull/9132))
+
+## 0.22.1
+
+## 0.22.1-alpha.0
+
+## 0.22.0
+
+### Minor Changes
+
+- Consolidate streamVNext logic into stream, move old stream function into streamLegacy ([#9092](https://github.com/mastra-ai/mastra/pull/9092))
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`c67ca32`](https://github.com/mastra-ai/mastra/commit/c67ca32e3c2cf69bfc146580770c720220ca44ac))
+
+- Update provider registry and model documentation with latest models and providers ([`efb5ed9`](https://github.com/mastra-ai/mastra/commit/efb5ed946ae7f410bc68c9430beb4b010afd25ec))
+
+- Add deprecation warnings for format:ai-sdk ([#9018](https://github.com/mastra-ai/mastra/pull/9018))
+
+- network routing agent text delta ai-sdk streaming ([#8979](https://github.com/mastra-ai/mastra/pull/8979))
+
+- Support writing custom top level stream chunks ([#8922](https://github.com/mastra-ai/mastra/pull/8922))
+
+- Fix incorrect type assertions in Tool class. Created `MastraToolInvocationOptions` type to properly extend AI SDK's `ToolInvocationOptions` with Mastra-specific properties (`suspend`, `resumeData`, `writableStream`). Removed unsafe type assertions from tool execution code. ([#9033](https://github.com/mastra-ai/mastra/pull/9033))
+
+- fix(core): Fix Gemini message ordering validation errors (#7287, #8053) ([#8069](https://github.com/mastra-ai/mastra/pull/8069))
+
+  Fixes Gemini API "single turn requests" validation error by ensuring the first non-system message is from the user role. This resolves errors when:
+  - Messages start with assistant role (e.g., from memory truncation)
+  - Tool-call sequences begin with assistant messages
+
+  **Breaking Change**: Empty or system-only message lists now throw an error instead of adding a placeholder user message, preventing confusing LLM responses.
+
+  This fix handles both issue #7287 (tool-call ordering) and #8053 (single-turn validation) by inserting a placeholder user message when needed.
+
+- Add support for external trace and parent span IDs in TracingOptions. This enables integration with external tracing systems by allowing new AI traces to be started with existing traceId and parentSpanId values. The implementation includes OpenTelemetry-compatible ID validation (32 hex chars for trace IDs, 16 hex chars for span IDs). ([#9053](https://github.com/mastra-ai/mastra/pull/9053))
+
+- Updated `watch` and `watchAsync` methods to use proper function overloads instead of generic conditional types, ensuring compatibility with the base Run class signatures. ([#9048](https://github.com/mastra-ai/mastra/pull/9048))
+
+- Fix tracing context propagation to agent steps in workflows ([#9074](https://github.com/mastra-ai/mastra/pull/9074))
+
+  When creating a workflow step from an agent using `createStep(myAgent)`, the tracing context was not being passed to the agent's `stream()` and `streamLegacy()` methods. This caused tracing spans to break in the workflow chain.
+
+  This fix ensures that `tracingContext` is properly propagated to both agent.stream() and agent.streamLegacy() calls, matching the behavior of tool steps which already propagate tracingContext correctly.
+
+- Fixes how reasoning chunks are stored in memory to prevent data loss and ensure they are consolidated as single message parts rather than split into word-level fragments. ([#9041](https://github.com/mastra-ai/mastra/pull/9041))
+
+- fixes an issue where input processors couldn't add system or assistant messages. Previously all messages from input processors were forced to be user messages, causing an error when trying to add other role types. ([#8835](https://github.com/mastra-ai/mastra/pull/8835))
+
+- fix(core): Validate structured output at text-end instead of flush ([#8934](https://github.com/mastra-ai/mastra/pull/8934))
+
+  Fixes structured output validation for Bedrock and LMStudio by moving validation from `flush()` to `text-end` chunk. Eliminates `finishReason` heuristics, adds special token extraction for LMStudio, and validates at the correct point in stream lifecycle.
+
+- fix model.loop.test.ts tests to use structuredOutput.schema and add assertions ([#8926](https://github.com/mastra-ai/mastra/pull/8926))
+
+- Add `initialState` as an option to `.streamVNext()` ([#9071](https://github.com/mastra-ai/mastra/pull/9071))
+
+- added resourceId and runId to workflow_run metadata in ai tracing ([#9031](https://github.com/mastra-ai/mastra/pull/9031))
+
+- When using OpenAI models with JSON response format, automatically enable strict schema validation. ([#8924](https://github.com/mastra-ai/mastra/pull/8924))
+
+- Fix custom metadata preservation in UIMessages when loading threads. The `getMessagesHandler` now converts `messagesV2` (V2 format with metadata) instead of `messages` (V1 format without metadata) to AIV5.UI format. Also updates the abstract `MastraMemory.query()` return type to include `messagesV2` for proper type safety. ([#9029](https://github.com/mastra-ai/mastra/pull/9029))
+
+- Fix TypeScript type errors when using provider-defined tools from external AI SDK packages. ([#8940](https://github.com/mastra-ai/mastra/pull/8940))
+
+  Agents can now accept provider tools like `google.tools.googleSearch()` without type errors. Creates new `@internal/external-types` package to centralize AI SDK type re-exports and adds `ProviderDefinedTool` structural type to handle tools from different package versions/instances due to TypeScript's module path discrimination.
+
+- feat(ai-tracing): Add automatic metadata extraction from RuntimeContext to spans ([#9072](https://github.com/mastra-ai/mastra/pull/9072))
+
+  Enables automatic extraction of RuntimeContext values as metadata for AI tracing spans across entire traces.
+
+  Key features:
+  - Configure `runtimeContextKeys` in TracingConfig to extract specific keys from RuntimeContext
+  - Add per-request keys via `tracingOptions.runtimeContextKeys` for trace-specific additions
+  - Supports dot notation for nested values (e.g., 'user.id', 'session.data.experimentId')
+  - TraceState computed once at root span and inherited by all child spans
+  - Explicit metadata in span options takes precedence over extracted metadata
+
+  Example:
+
+  ```typescript
+  const mastra = new Mastra({
+    observability: {
+      configs: {
+        default: {
+          runtimeContextKeys: ['userId', 'environment', 'tenantId'],
+        },
+      },
+    },
+  });
+
+  await agent.generate({
+    messages,
+    runtimeContext,
+    tracingOptions: {
+      runtimeContextKeys: ['experimentId'], // Adds to configured keys
+    },
+  });
+  ```
+
+- Fix provider tools for popular providers and add support for anthropic/claude skills. ([#9038](https://github.com/mastra-ai/mastra/pull/9038))
+
+- Refactor workflowstream into workflow output with fullStream property ([#9048](https://github.com/mastra-ai/mastra/pull/9048))
+
+- Added the ability to use model router configs for embedders (eg "openai/text-embedding-ada-002") ([#8992](https://github.com/mastra-ai/mastra/pull/8992))
+
+- Always set supportsStructuredOutputs true for openai compatible provider. ([#8933](https://github.com/mastra-ai/mastra/pull/8933))
+
+- Support for custom resume labels mapping to step to be resumed ([#8941](https://github.com/mastra-ai/mastra/pull/8941))
+
+- added tracing of LLM steps & chunks ([#9058](https://github.com/mastra-ai/mastra/pull/9058))
+
+- Fixed an issue where a custom URL in model router still validated unknown providers against the known providers list. Custom URL means we don't necessarily know the provider. This allows local providers like Ollama to work properly ([#8989](https://github.com/mastra-ai/mastra/pull/8989))
+
+- Show agent tool output better in playground ([#9021](https://github.com/mastra-ai/mastra/pull/9021))
+
+- feat: inject schema context into main agent for processor mode structured output ([#8886](https://github.com/mastra-ai/mastra/pull/8886))
+
+- Added providerOptions types to generate/stream for main builtin model router providers (openai/anthropic/google/xai) ([#8995](https://github.com/mastra-ai/mastra/pull/8995))
+
+- Generate a title for Agent.network() threads ([#8853](https://github.com/mastra-ai/mastra/pull/8853))
+
+## 0.22.0-alpha.1
+
+### Minor Changes
+
+- Consolidate streamVNext logic into stream, move old stream function into streamLegacy ([#9092](https://github.com/mastra-ai/mastra/pull/9092))
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`efb5ed9`](https://github.com/mastra-ai/mastra/commit/efb5ed946ae7f410bc68c9430beb4b010afd25ec))
+
+- Fix incorrect type assertions in Tool class. Created `MastraToolInvocationOptions` type to properly extend AI SDK's `ToolInvocationOptions` with Mastra-specific properties (`suspend`, `resumeData`, `writableStream`). Removed unsafe type assertions from tool execution code. ([#9033](https://github.com/mastra-ai/mastra/pull/9033))
+
+- Add support for external trace and parent span IDs in TracingOptions. This enables integration with external tracing systems by allowing new AI traces to be started with existing traceId and parentSpanId values. The implementation includes OpenTelemetry-compatible ID validation (32 hex chars for trace IDs, 16 hex chars for span IDs). ([#9053](https://github.com/mastra-ai/mastra/pull/9053))
+
+- Updated `watch` and `watchAsync` methods to use proper function overloads instead of generic conditional types, ensuring compatibility with the base Run class signatures. ([#9048](https://github.com/mastra-ai/mastra/pull/9048))
+
+- Fix tracing context propagation to agent steps in workflows ([#9074](https://github.com/mastra-ai/mastra/pull/9074))
+
+  When creating a workflow step from an agent using `createStep(myAgent)`, the tracing context was not being passed to the agent's `stream()` and `streamLegacy()` methods. This caused tracing spans to break in the workflow chain.
+
+  This fix ensures that `tracingContext` is properly propagated to both agent.stream() and agent.streamLegacy() calls, matching the behavior of tool steps which already propagate tracingContext correctly.
+
+- Fixes how reasoning chunks are stored in memory to prevent data loss and ensure they are consolidated as single message parts rather than split into word-level fragments. ([#9041](https://github.com/mastra-ai/mastra/pull/9041))
+
+- fixes an issue where input processors couldn't add system or assistant messages. Previously all messages from input processors were forced to be user messages, causing an error when trying to add other role types. ([#8835](https://github.com/mastra-ai/mastra/pull/8835))
+
+- Add `initialState` as an option to `.streamVNext()` ([#9071](https://github.com/mastra-ai/mastra/pull/9071))
+
+- added resourceId and runId to workflow_run metadata in ai tracing ([#9031](https://github.com/mastra-ai/mastra/pull/9031))
+
+- Fix custom metadata preservation in UIMessages when loading threads. The `getMessagesHandler` now converts `messagesV2` (V2 format with metadata) instead of `messages` (V1 format without metadata) to AIV5.UI format. Also updates the abstract `MastraMemory.query()` return type to include `messagesV2` for proper type safety. ([#9029](https://github.com/mastra-ai/mastra/pull/9029))
+
+- Fix TypeScript type errors when using provider-defined tools from external AI SDK packages. ([#8940](https://github.com/mastra-ai/mastra/pull/8940))
+
+  Agents can now accept provider tools like `google.tools.googleSearch()` without type errors. Creates new `@internal/external-types` package to centralize AI SDK type re-exports and adds `ProviderDefinedTool` structural type to handle tools from different package versions/instances due to TypeScript's module path discrimination.
+
+- feat(ai-tracing): Add automatic metadata extraction from RuntimeContext to spans ([#9072](https://github.com/mastra-ai/mastra/pull/9072))
+
+  Enables automatic extraction of RuntimeContext values as metadata for AI tracing spans across entire traces.
+
+  Key features:
+  - Configure `runtimeContextKeys` in TracingConfig to extract specific keys from RuntimeContext
+  - Add per-request keys via `tracingOptions.runtimeContextKeys` for trace-specific additions
+  - Supports dot notation for nested values (e.g., 'user.id', 'session.data.experimentId')
+  - TraceState computed once at root span and inherited by all child spans
+  - Explicit metadata in span options takes precedence over extracted metadata
+
+  Example:
+
+  ```typescript
+  const mastra = new Mastra({
+    observability: {
+      configs: {
+        default: {
+          runtimeContextKeys: ['userId', 'environment', 'tenantId'],
+        },
+      },
+    },
+  });
+
+  await agent.generate({
+    messages,
+    runtimeContext,
+    tracingOptions: {
+      runtimeContextKeys: ['experimentId'], // Adds to configured keys
+    },
+  });
+  ```
+
+- Fix provider tools for popular providers and add support for anthropic/claude skills. ([#9038](https://github.com/mastra-ai/mastra/pull/9038))
+
+- Refactor workflowstream into workflow output with fullStream property ([#9048](https://github.com/mastra-ai/mastra/pull/9048))
+
+- added tracing of LLM steps & chunks ([#9058](https://github.com/mastra-ai/mastra/pull/9058))
+
+- Show agent tool output better in playground ([#9021](https://github.com/mastra-ai/mastra/pull/9021))
+
 ## 0.21.2-alpha.0
 
 ### Patch Changes
