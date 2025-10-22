@@ -7,9 +7,11 @@ import {
   EntityHeader,
   useWorkflow,
   WorkflowRunDetail,
+  useExecuteWorkflow,
+  useStreamWorkflow,
+  useCancelWorkflowRun,
 } from '@mastra/playground-ui';
 
-import { useExecuteWorkflow, useStreamWorkflow, useCancelWorkflowRun } from '@/hooks/use-workflows';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { CopyIcon } from 'lucide-react';
