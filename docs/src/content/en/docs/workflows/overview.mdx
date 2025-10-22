@@ -92,7 +92,7 @@ Workflows can be composed using a number of different methods. The method you ch
 
 #### Composing workflow steps
 
-When using `.then()`, steps run sequentially. Each step’s `inputSchema` must match the `outputSchema` of the previous step. The final step’s `outputSchema` should match the workflow’s `outputSchema` to ensure end-to-end type safety.
+When using `.then()`, steps run sequentially. Each step’s `inputSchema` must match the `outputSchema` of the previous step. The first step's `inputSchema` should match the workflow's `inputSchema` and the final step’s `outputSchema` should match the workflow’s `outputSchema` to ensure end-to-end type safety.
 
 ```typescript {4,7,14,17,24,27} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({

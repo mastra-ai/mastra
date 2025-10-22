@@ -1268,4 +1268,9 @@ export const redirectList = [
     destination: "/:locale/docs/workflows/agents-and-tools",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/workflows/input-data-mapping",
+    destination: "/:locale/docs/workflows/control-flow",
+    permanent: true,
+  },
 ];

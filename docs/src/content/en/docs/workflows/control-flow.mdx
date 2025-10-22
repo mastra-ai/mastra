@@ -8,28 +8,83 @@ description: "Control flow in Mastra workflows allows you to manage branching, m
 When you build a workflow, you typically break down operations into smaller tasks that can be linked and reused. **Steps** provide a structured way to manage these tasks by defining inputs, outputs, and execution logic.
 
 - If the schemas match, the `outputSchema` from each step is automatically passed to the `inputSchema` of the next step.
-- If the schemas don't match, use [Input data mapping](./input-data-mapping.mdx) to transform the `outputSchema` into the expected `inputSchema`.
+- If the schemas don't match, use [Input data mapping](#input-data-mapping) to transform the `outputSchema` into the expected `inputSchema`.
 
-## Chaining steps with `.then()`
+## Sequential steps with `.then()`
 
-Chain steps to execute sequentially using `.then()`:
+When using `.then()`, steps run sequentially. Each step’s `inputSchema` must match the `outputSchema` of the previous step. The first step's `inputSchema` should match the workflow's `inputSchema` and the final step’s `outputSchema` should match the workflow’s `outputSchema` to ensure end-to-end type safety.
 
 ![Chaining steps with .then()](/image/workflows/workflows-control-flow-then.jpg)
 
-```typescript {8-9,4-5} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+```typescript {4,7,14,17,24,27} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  //...
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    formatted: z.string()
+  })
+});
 
-const step1 = createStep({...});
-const step2 = createStep({...});
+const step2 = createStep({
+  // ...
+  inputSchema: z.object({
+    formatted: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+});
 
-export const testWorkflow = createWorkflow({...})
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
   .then(step1)
   .then(step2)
   .commit();
 ```
 
-This does what you'd expect: it executes `step1`, then it executes `step2`.
+### Sequential output
+
+If the above workflow was invoked with a message of "Hello world" it would produce output similar to the below:
+
+```typescript
+{
+  status: 'success',
+  steps: {
+    input: { message: 'Hello world' },
+    'step-1': {
+      payload: {
+        message: 'Hello world'
+      },
+      output: {
+        formatted: 'HELLO WORLD'
+      },
+    },
+    'step-2': {
+      payload: {
+        formatted: 'HELLO WORLD'
+      },
+      output: {
+        emphasized: 'HELLO WORLD!!!'
+      },
+    }
+  },
+  input: {
+    message: 'Hello world'
+  },
+  result: {
+    emphasized: 'HELLO WORLD!!!'
+  },
+}
+```
 
 ## Simultaneous steps with `.parallel()`
 
@@ -81,6 +136,30 @@ export const testWorkflow = createWorkflow({...})
 Branch conditions are evaluated sequentially, but steps with matching conditions are executed in parallel.
 
 > See [Workflow with Conditional Branching](../../examples/workflows/conditional-branching.mdx) for more information.
+
+
+## Input data mapping
+
+When using `.then()`, `.parallel()` or `.branch()` it is sometimes necessary to transform the output of a previous step to match the input of the next. In these cases you can use `.map()` to access the `inputData` and transform it to create a suitable data shape for the next step and allow your workflow to continue.
+
+![Mapping with .map()](/image/workflows/workflows-data-mapping-map.jpg)
+
+```typescript {9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .map(async ({ inputData }) => {
+    const { foo } = inputData;
+    return {
+      bar: `new ${foo}`,
+    };
+  })
+  .then(step2)
+  .commit();
+```
+
 
 ## Looping steps
 
