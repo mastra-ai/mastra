@@ -59,7 +59,7 @@ export const ToolBadge = ({
           />
         )
       }
-      initialCollapsed={!!toolApprovalMetadata}
+      initialCollapsed={!!!toolApprovalMetadata}
     >
       <div className="space-y-4">
         <div>
