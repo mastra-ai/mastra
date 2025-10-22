@@ -1,5 +1,13 @@
 # create-mastra
 
+## 0.17.1-alpha.1
+
+### Patch Changes
+
+- Add scorers to the default weather agent in the create command. ([#9042](https://github.com/mastra-ai/mastra/pull/9042))
+
+- Fix tool result in playground ([#9087](https://github.com/mastra-ai/mastra/pull/9087))
+
 ## 0.17.1-alpha.0
 
 ## 0.17.0
