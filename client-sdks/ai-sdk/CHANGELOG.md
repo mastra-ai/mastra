@@ -1,5 +1,11 @@
 # @mastra/ai-sdk
 
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- Fix streaming of custom chunks, workflow & network support ([#9109](https://github.com/mastra-ai/mastra/pull/9109))
+
 ## 0.2.2
 
 ### Patch Changes
