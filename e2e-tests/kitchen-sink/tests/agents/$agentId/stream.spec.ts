@@ -83,7 +83,7 @@ If you have any questions or need further assistance, feel free to ask!`;
   await page.click('button:has-text("Send")');
 
   // Assert partial streaming chunks
-  await expect(page.getByTestId('thread-wrapper').getByRole('button', { name: `less-complex-workflow` })).toBeVisible({
+  await expect(page.getByTestId('thread-wrapper').getByRole('button', { name: `lessComplexWorkflow` })).toBeVisible({
     timeout: 20000,
   });
 
@@ -101,5 +101,12 @@ If you have any questions or need further assistance, feel free to ask!`;
   await expect(page.locator('[data-workflow-node]').nth(9)).toHaveAttribute('data-workflow-step-status', 'running');
 
   // Text delta result
-  await expect(page.getByTestId('thread-wrapper').getByText(expectedTextResult)).toBeVisible({ timeout: 20000 });
+  await expect(
+    page
+      .getByTestId('thread-wrapper')
+      .getByText(`It looks like the process I ran with "tomato" resulted in a playful transformation: `),
+  ).toBeVisible({ timeout: 20000 });
+  await expect(page.getByTestId('thread-wrapper').getByText('tomatoABtomatoACLABD-ENDED')).toBeVisible({
+    timeout: 20000,
+  });
 });
