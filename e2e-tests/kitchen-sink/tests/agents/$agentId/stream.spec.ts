@@ -34,6 +34,13 @@ test('text stream', async () => {
   await expect(page.getByTestId('thread-list').getByRole('link', { name: expectedResult })).toBeVisible({
     timeout: 20000,
   });
+
+  // Memory
+  await page.reload();
+  await expect(page.getByTestId('thread-list').getByRole('link', { name: expectedResult })).toBeVisible({
+    timeout: 20000,
+  });
+  await expect(page.getByTestId('thread-wrapper').getByText(expectedResult)).toBeVisible({ timeout: 20000 });
 });
 
 test('tool stream', async () => {
