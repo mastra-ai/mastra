@@ -14,6 +14,7 @@ import type {
   StoragePagination,
   StorageResourceType,
   TABLE_NAMES,
+  ThreadSortOptions,
   WorkflowRun,
   WorkflowRuns,
 } from '@mastra/core/storage';
@@ -231,7 +232,7 @@ export class MongoDBStore extends MastraStorage {
     resourceId: string;
     page: number;
     perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+  } & ThreadSortOptions): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     return this.stores.memory.getThreadsByResourceIdPaginated(_args);
   }
 

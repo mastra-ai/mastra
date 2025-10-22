@@ -10,7 +10,7 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StorageGetMessagesArg, StorageResourceType } from '@mastra/core/storage';
+import type { PaginationInfo, StorageGetMessagesArg, StorageResourceType, ThreadSortOptions } from '@mastra/core/storage';
 import type { StoreOperationsMongoDB } from '../operations';
 import { formatDateForMongoDB } from '../utils';
 
@@ -646,17 +646,20 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     resourceId: string;
     page: number;
     perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+  } & ThreadSortOptions): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     try {
-      const { resourceId, page, perPage } = args;
+      const { resourceId, page, perPage, orderBy: orderByArg, sortDirection: sortDirectionArg } = args;
       const collection = await this.operations.getCollection(TABLE_THREADS);
 
       const query = { resourceId };
       const total = await collection.countDocuments(query);
 
+      const orderBy = this.castThreadOrderBy(orderByArg);
+      const sortDirection = this.castThreadSortDirection(sortDirectionArg) === 'DESC' ? -1 : 1;
+
       const threads = await collection
         .find(query)
-        .sort({ updatedAt: -1 })
+        .sort({ [orderBy]: sortDirection })
         .skip(page * perPage)
         .limit(perPage)
         .toArray();
