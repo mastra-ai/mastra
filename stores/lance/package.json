@@ -1,6 +1,6 @@
 {
   "name": "@mastra/lance",
-  "version": "0.3.6",
+  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
   "description": "Lance provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
-    "@mastra/core": "workspace:^",
+    "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
     "eslint": "^9.37.0",
@@ -42,7 +42,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.23.0-0"
+    "@mastra/core": "workspace:*"
   },
   "files": [
     "dist",

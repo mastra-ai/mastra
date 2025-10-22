@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastembed",
-  "version": "0.10.5",
+  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",

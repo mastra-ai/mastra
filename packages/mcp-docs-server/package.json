@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-docs-server",
-  "version": "0.13.32",
+  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
   "description": "MCP server for accessing Mastra.ai documentation, changelogs, and news.",
   "type": "module",
   "main": "dist/index.js",
@@ -33,7 +33,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/core": "workspace:*",
-    "@mastra/mcp": "workspace:^",
+    "@mastra/mcp": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.17.5",
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",

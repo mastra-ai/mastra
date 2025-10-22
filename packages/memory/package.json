@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.15.8",
+  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -75,7 +75,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.20.1-0 <0.23.0-0",
+    "@mastra/core": "workspace:*",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",

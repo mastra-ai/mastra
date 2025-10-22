@@ -1,5 +1,15 @@
 # @mastra/react-hooks
 
+## 0.0.0-kitchen-sink-e2e-test-20251022105747
+
+### Patch Changes
+
+- 5416ade: Add tool call approval
+-
+- Updated dependencies [5416ade]
+- Updated dependencies
+  - @mastra/client-js@0.0.0-kitchen-sink-e2e-test-20251022105747
+
 ## 0.0.8
 
 ### Patch Changes

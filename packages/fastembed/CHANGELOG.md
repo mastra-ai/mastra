@@ -1,5 +1,11 @@
 # @mastra/fastembed
 
+## 0.0.0-kitchen-sink-e2e-test-20251022105747
+
+### Patch Changes
+
+-
+
 ## 0.10.5
 
 ### Patch Changes

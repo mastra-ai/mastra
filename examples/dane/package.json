@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dane",
-  "version": "0.1.10",
+  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
   "main": "dist/index.js",
   "type": "module",
   "files": [

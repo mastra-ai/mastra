@@ -12,6 +12,7 @@ import { publishPackages } from '../_local-registry-setup/publish.js';
 const require = createRequire(import.meta.url);
 
 export default async function setup() {
+  console.log('[Setup] Starting setup');
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const rootDir = join(__dirname, '..', '..');
   const tag = 'kitchen-sink-e2e-test';

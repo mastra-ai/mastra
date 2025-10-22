@@ -1,5 +1,16 @@
 # @mastra/deployer-cloudflare
 
+## 0.0.0-kitchen-sink-e2e-test-20251022105747
+
+### Patch Changes
+
+-
+- Updated dependencies [5416ade]
+- Updated dependencies [5416ade]
+- Updated dependencies
+  - @mastra/deployer@0.0.0-kitchen-sink-e2e-test-20251022105747
+  - @mastra/core@0.0.0-kitchen-sink-e2e-test-20251022105747
+
 ## 0.14.10
 
 ### Patch Changes

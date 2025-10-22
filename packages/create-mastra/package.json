@@ -1,6 +1,6 @@
 {
   "name": "create-mastra",
-  "version": "0.17.1",
+  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
   "description": "Create Mastra apps with one command",
   "license": "Apache-2.0",
   "type": "module",
@@ -53,7 +53,7 @@
     "@types/node": "^20.19.0",
     "esbuild": "^0.25.10",
     "eslint": "^9.37.0",
-    "mastra": "workspace:^",
+    "mastra": "workspace:*",
     "rollup": "^4.50.2",
     "rollup-plugin-esbuild": "^6.2.1",
     "rollup-plugin-node-externals": "^8.0.1",

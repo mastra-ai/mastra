@@ -1,6 +1,6 @@
 {
   "name": "@mastra/turbopuffer",
-  "version": "0.11.14",
+  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
   "description": "Turbopuffer vector store provider for Mastra",
   "type": "module",
   "files": [
@@ -45,7 +45,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.23.0-0"
+    "@mastra/core": "workspace:*"
   },
   "homepage": "https://mastra.ai",
   "repository": {

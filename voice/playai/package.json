@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-playai",
-  "version": "0.11.10",
+  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
   "description": "Mastra PlayAI voice integration",
   "type": "module",
   "files": [
@@ -42,7 +42,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.23.0-0",
+    "@mastra/core": "workspace:*",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",

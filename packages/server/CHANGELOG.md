@@ -1,5 +1,19 @@
 # @mastra/server
 
+## 0.0.0-kitchen-sink-e2e-test-20251022105747
+
+### Minor Changes
+
+- 5416ade: Update peer dependencies to match core package version bump (0.21.2)
+
+### Patch Changes
+
+- 5416ade: Add tool call approval
+-
+- Updated dependencies [5416ade]
+- Updated dependencies
+  - @mastra/core@0.0.0-kitchen-sink-e2e-test-20251022105747
+
 ## 0.22.0
 
 ### Minor Changes
