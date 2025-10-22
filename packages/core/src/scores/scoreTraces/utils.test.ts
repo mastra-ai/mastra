@@ -396,10 +396,10 @@ describe('Transformer Functions', () => {
       expect(() => transformTraceToScorerInputAndOutput(invalidTrace)).toThrow(/Trace has no spans/);
     });
 
-    it('should handle missing LLM spans gracefully', () => {
+    it('should handle missing model spans gracefully', () => {
       const trace = testBuilder.addAgentSpan({ spanId: 'agent-only' }).buildTrace();
 
-      expect(() => transformTraceToScorerInputAndOutput(trace)).toThrow('No LLM generation span found');
+      expect(() => transformTraceToScorerInputAndOutput(trace)).toThrow('No model generation span found');
     });
   });
 
