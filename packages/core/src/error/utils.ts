@@ -61,10 +61,12 @@ export function getErrorFromUnknown(
 
     // Only process cause if we haven't exceeded max depth
     const errorCause =
-      maxDepth > 0 && 'cause' in unknown && unknown.cause !== undefined
+      'cause' in unknown && unknown.cause !== undefined
         ? unknown.cause instanceof Error
           ? unknown.cause
-          : getErrorFromUnknown(unknown.cause, fallbackErrorMessage, maxDepth - 1)
+          : maxDepth > 0
+            ? getErrorFromUnknown(unknown.cause, fallbackErrorMessage, maxDepth - 1)
+            : undefined
         : undefined;
 
     error = new Error(errorMessage, { cause: errorCause });
