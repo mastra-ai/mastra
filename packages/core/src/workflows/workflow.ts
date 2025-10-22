@@ -1692,9 +1692,7 @@ export class Run<
       includeResumeLabels?: boolean;
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    const streamResult = await this.streamVNext(args);
-
-    return streamResult.result;
+    return this._start(args);
   }
 
   /**
