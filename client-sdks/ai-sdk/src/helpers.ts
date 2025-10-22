@@ -3,6 +3,7 @@ import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core
 import type { PartialSchemaOutput, OutputSchema, DataChunkType } from '@mastra/core/stream';
 
 import type { InferUIMessageChunk, ObjectStreamPart, TextStreamPart, ToolSet, UIMessage } from 'ai';
+import { isDataChunkType } from './utils';
 
 export type OutputChunkType<OUTPUT extends OutputSchema = undefined> =
   | TextStreamPart<ToolSet>
@@ -467,7 +468,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
 
     default: {
       // return the chunk as is if it's not a known type
-      if ('type' in part && part.type?.startsWith('data-')) {
+      if (isDataChunkType(part)) {
         if (!('data' in part)) {
           throw new Error(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(part)}`,

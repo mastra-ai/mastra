@@ -66,7 +66,7 @@ export const AgentMetadata = ({
   modelVersion,
 }: AgentMetadataProps) => {
   const networkAgentsMap = agent.agents ?? {};
-  const networkAgents = Object.values(networkAgentsMap);
+  const networkAgents = Object.keys(networkAgentsMap).map(key => ({ ...networkAgentsMap[key], id: key }));
 
   const agentTools = agent.tools ?? {};
   const tools = Object.keys(agentTools).map(key => agentTools[key]);

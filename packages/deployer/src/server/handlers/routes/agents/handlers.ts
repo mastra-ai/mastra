@@ -20,6 +20,7 @@ import {
   streamNetworkHandler as getOriginalStreamNetworkHandler,
   approveToolCallHandler as getOriginalApproveToolCallHandler,
   declineToolCallHandler as getOriginalDeclineToolCallHandler,
+  getAgentFromSystem as getOriginalGetAgentFromSystem,
 } from '@mastra/server/handlers/agents';
 import type { Context } from 'hono';
 
@@ -453,18 +454,7 @@ export async function streamNetworkHandler(c: Context) {
   const logger = mastra.getLogger();
 
   // Validate agent exists and has memory before starting stream
-  const agent = mastra.getAgent(agentId);
-  if (!agent) {
-    return handleError(
-      new MastraError({
-        id: 'AGENT_NOT_FOUND',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'Agent not found',
-      }),
-      'Agent not found',
-    );
-  }
+  const agent = await getOriginalGetAgentFromSystem({ mastra, agentId });
 
   // Check if agent has memory configured before starting the stream
   const memory = await agent.getMemory({ runtimeContext });
@@ -582,10 +572,7 @@ export async function setAgentInstructionsHandler(c: Context) {
     }
 
     const mastra: Mastra = c.get('mastra');
-    const agent = mastra.getAgent(agentId);
-    if (!agent) {
-      return c.json({ error: 'Agent not found' }, 404);
-    }
+    const agent = await getOriginalGetAgentFromSystem({ mastra, agentId });
 
     agent.__updateInstructions(instructions);
 
