@@ -19,7 +19,13 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
   resourceId?: string;
   workflowId: string;
   mastra: Mastra;
+  /** Runtime context containing dynamic configuration and state */
+  /**
+   * @deprecated Use `requestContext` instead. This will be removed in a future version.
+   */
   runtimeContext: RuntimeContext;
+  /** Request context containing dynamic configuration and state */
+  requestContext: RuntimeContext;
   inputData: TStepInput;
   state: TState;
   setState(state: TState): void;

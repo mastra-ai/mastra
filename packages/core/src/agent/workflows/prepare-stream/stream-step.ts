@@ -51,7 +51,8 @@ export function createStreamStep<
         (capabilities.outputProcessors
           ? typeof capabilities.outputProcessors === 'function'
             ? await capabilities.outputProcessors({
-                runtimeContext: validatedInputData.runtimeContext || new RuntimeContext(),
+                runtimeContext: validatedInputData.runtimeContext ?? new RuntimeContext(),
+                requestContext: validatedInputData.resumeContext || new RuntimeContext(),
               })
             : capabilities.outputProcessors
           : []);

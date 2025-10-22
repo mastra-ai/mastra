@@ -1058,7 +1058,14 @@ export class Workflow<
 
   async getScorers({
     runtimeContext = new RuntimeContext(),
-  }: { runtimeContext?: RuntimeContext } = {}): Promise<MastraScorers> {
+    requestContext,
+  }: {
+    /**
+     * @deprecated Use `requestContext` instead. This will be removed in a future version.
+     */
+    runtimeContext?: RuntimeContext;
+    requestContext?: RuntimeContext;
+  } = {}): Promise<MastraScorers> {
     const steps = this.steps;
 
     if (!steps || Object.keys(steps).length === 0) {
@@ -1066,13 +1073,14 @@ export class Workflow<
     }
 
     const scorers: MastraScorers = {};
+    const contextToUse = requestContext || runtimeContext;
 
     for (const step of Object.values(steps)) {
       if (step.scorers) {
         let scorersToUse = step.scorers;
 
         if (typeof scorersToUse === 'function') {
-          scorersToUse = await scorersToUse({ runtimeContext });
+          scorersToUse = await scorersToUse({ runtimeContext: contextToUse, requestContext: contextToUse });
         }
 
         for (const [id, scorer] of Object.entries(scorersToUse)) {
@@ -1121,6 +1129,7 @@ export class Workflow<
     [EMITTER_SYMBOL]: { emit: (event: string, data: any) => void };
     mastra: Mastra;
     runtimeContext?: RuntimeContext;
+    requestContext?: RuntimeContext;
     engine: DefaultEngineType;
     abortSignal: AbortSignal;
     bail: (result: any) => any;
@@ -1579,6 +1588,7 @@ export class Run<
     inputData,
     initialState,
     runtimeContext,
+    requestContext,
     writableStream,
     tracingContext,
     tracingOptions,
@@ -1588,6 +1598,7 @@ export class Run<
     inputData?: z.input<TInput>;
     initialState?: z.input<TState>;
     runtimeContext?: RuntimeContext;
+    requestContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -1647,7 +1658,7 @@ export class Run<
         },
       },
       retryConfig: this.retryConfig,
-      runtimeContext: runtimeContext ?? new RuntimeContext(),
+      runtimeContext: (requestContext || runtimeContext) ?? new RuntimeContext(),
       abortController: this.abortController,
       writableStream,
       workflowAISpan,
@@ -1672,6 +1683,7 @@ export class Run<
     inputData,
     initialState,
     runtimeContext,
+    requestContext,
     writableStream,
     tracingContext,
     tracingOptions,
@@ -1679,7 +1691,11 @@ export class Run<
   }: {
     inputData?: z.input<TInput>;
     initialState?: z.input<TState>;
+    /**
+     * @deprecated Use `requestContext` instead. This will be removed in a future version.
+     */
     runtimeContext?: RuntimeContext;
+    requestContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -1691,6 +1707,7 @@ export class Run<
       inputData,
       initialState,
       runtimeContext,
+      requestContext,
       writableStream,
       tracingContext,
       tracingOptions,
@@ -1706,12 +1723,20 @@ export class Run<
    */
   streamLegacy({
     inputData,
+    requestContext,
+    /**
+     * @deprecated Use `requestContext` instead. This will be removed in a future version.
+     */
     runtimeContext,
     onChunk,
     tracingContext,
     tracingOptions,
   }: {
     inputData?: z.input<TInput>;
+    requestContext?: RuntimeContext;
+    /**
+     * @deprecated Use `requestContext` instead. This will be removed in a future version.
+     */
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     onChunk?: (chunk: StreamEvent) => Promise<unknown>;
@@ -1768,7 +1793,8 @@ export class Run<
     });
     this.executionResults = this._start({
       inputData,
-      runtimeContext,
+      runtimeContext: requestContext || runtimeContext,
+
       format: 'legacy',
       tracingContext,
       tracingOptions,
@@ -1794,7 +1820,11 @@ export class Run<
   stream(
     args: {
       inputData?: z.input<TInput>;
+      /**
+       * @deprecated Use `requestContext` instead. This will be removed in a future version.
+       */
       runtimeContext?: RuntimeContext;
+      requestContext?: RuntimeContext;
       tracingContext?: TracingContext;
       onChunk?: (chunk: StreamEvent) => Promise<unknown>;
       tracingOptions?: TracingOptions;
@@ -1922,12 +1952,23 @@ export class Run<
 
   async streamAsync({
     inputData,
+    requestContext,
+    /**
+     * @deprecated Use `requestContext` instead. This will be removed in a future version.
+     */
     runtimeContext,
-  }: { inputData?: z.input<TInput>; runtimeContext?: RuntimeContext } = {}): Promise<{
+  }: {
+    inputData?: z.input<TInput>;
+    requestContext?: RuntimeContext;
+    /**
+     * @deprecated Use `requestContext` instead. This will be removed in a future version.
+     */
+    runtimeContext?: RuntimeContext;
+  } = {}): Promise<{
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   }> {
-    return this.stream({ inputData, runtimeContext });
+    return this.stream({ inputData, requestContext, runtimeContext });
   }
 
   /**
@@ -1937,6 +1978,10 @@ export class Run<
    */
   streamVNext({
     inputData,
+    requestContext,
+    /**
+     * @deprecated Use `requestContext` instead. This will be removed in a future version.
+     */
     runtimeContext,
     tracingContext,
     tracingOptions,
@@ -1944,6 +1989,10 @@ export class Run<
     onChunk,
   }: {
     inputData?: z.input<TInput>;
+    requestContext?: RuntimeContext;
+    /**
+     * @deprecated Use `requestContext` instead. This will be removed in a future version.
+     */
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -2023,7 +2072,7 @@ export class Run<
 
         const executionResults = this._start({
           inputData,
-          runtimeContext,
+          runtimeContext: requestContext || runtimeContext,
           tracingContext,
           tracingOptions,
           writableStream: writable,
@@ -2055,6 +2104,10 @@ export class Run<
   resumeStreamVNext({
     step,
     resumeData,
+    requestContext,
+    /**
+     * @deprecated Use `requestContext` instead. This will be removed in a future version.
+     */
     runtimeContext,
     tracingContext,
     tracingOptions,
@@ -2066,6 +2119,10 @@ export class Run<
       | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, any, TEngineType>]
       | string
       | string[];
+    requestContext?: RuntimeContext;
+    /**
+     * @deprecated Use `requestContext` instead. This will be removed in a future version.
+     */
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -2141,7 +2198,8 @@ export class Run<
         const executionResults = this._resume({
           resumeData,
           step,
-          runtimeContext,
+          runtimeContext: requestContext || runtimeContext,
+          requestContext,
           tracingContext,
           tracingOptions,
           writableStream: writable,
@@ -2240,6 +2298,10 @@ export class Run<
       | string
       | string[];
     label?: string;
+    requestContext?: RuntimeContext;
+    /**
+     * @deprecated Use `requestContext` instead. This will be removed in a future version.
+     */
     runtimeContext?: RuntimeContext;
     runCount?: number;
     tracingContext?: TracingContext;
@@ -2263,7 +2325,11 @@ export class Run<
       | string
       | string[];
     label?: string;
+    /**
+     * @deprecated Use `requestContext` instead. This will be removed in a future version.
+     */
     runtimeContext?: RuntimeContext;
+    requestContext?: RuntimeContext;
     runCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -2357,7 +2423,7 @@ export class Run<
 
     const stepResults = { ...(snapshot?.context ?? {}), input: runtimeContextInput ?? snapshot?.context?.input } as any;
 
-    let runtimeContextToUse = params.runtimeContext ?? new RuntimeContext();
+    let runtimeContextToUse = (params.requestContext || params.runtimeContext) ?? new RuntimeContext();
 
     Object.entries(snapshot?.runtimeContext ?? {}).forEach(([key, value]) => {
       if (!runtimeContextToUse.has(key)) {

@@ -124,7 +124,8 @@ export function createMapResultsStep<
       (capabilities.outputProcessors
         ? typeof capabilities.outputProcessors === 'function'
           ? await capabilities.outputProcessors({
-              runtimeContext: result.runtimeContext!,
+              runtimeContext: result.requestContext ?? result.runtimeContext!,
+              requestContext: result.requestContext ?? result.runtimeContext!,
             })
           : capabilities.outputProcessors
         : []);

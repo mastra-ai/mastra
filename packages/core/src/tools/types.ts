@@ -69,7 +69,13 @@ export interface ToolExecutionContext<
   TResumeSchema extends ZodLikeSchema = any,
 > extends IExecutionContext<TSchemaIn> {
   mastra?: MastraUnion;
-  runtimeContext: RuntimeContext;
+  /** Runtime context containing dynamic configuration and state */
+  /**
+   * @deprecated Use `requestContext` instead. This will be removed in a future version.
+   */
+  runtimeContext?: RuntimeContext;
+  /** Request context containing dynamic configuration and state */
+  requestContext?: RuntimeContext;
   writer?: ToolStream<any>;
   tracingContext?: TracingContext;
   suspend?: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;

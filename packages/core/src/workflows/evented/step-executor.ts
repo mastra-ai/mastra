@@ -74,6 +74,7 @@ export class StepExecutor extends MastraBase {
         runId,
         mastra: this.mastra!,
         runtimeContext,
+        requestContext: runtimeContext,
         inputData,
         state: params.state,
         setState: (state: any) => {
@@ -230,6 +231,7 @@ export class StepExecutor extends MastraBase {
       runId,
       mastra: this.mastra!,
       runtimeContext,
+      requestContext: runtimeContext,
       inputData,
       state,
       setState: (_state: any) => {
@@ -290,6 +292,7 @@ export class StepExecutor extends MastraBase {
         runId,
         mastra: this.mastra!,
         runtimeContext,
+        requestContext: runtimeContext,
         inputData: params.input,
         // TODO: implement state
         state: {},
@@ -354,6 +357,7 @@ export class StepExecutor extends MastraBase {
         runId,
         mastra: this.mastra!,
         runtimeContext,
+        requestContext: runtimeContext,
         inputData: params.input,
         // TODO: implement state
         state: {},

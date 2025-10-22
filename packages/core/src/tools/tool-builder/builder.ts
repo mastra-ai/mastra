@@ -208,6 +208,7 @@ export class CoreToolBuilder extends MastraBase {
               memory: options.memory,
               runId: options.runId,
               runtimeContext: options.runtimeContext ?? new RuntimeContext(),
+              requestContext: options.runtimeContext ?? new RuntimeContext(),
               writer: new ToolStream(
                 {
                   prefix: 'tool',

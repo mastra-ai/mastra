@@ -247,6 +247,7 @@ export function createStep<
           context: inputData,
           mastra,
           runtimeContext,
+          requestContext: runtimeContext,
           // TODO: Pass proper tracing context when evented workflows support tracing
           tracingContext: { currentSpan: undefined },
           suspend,
@@ -399,9 +400,14 @@ export class EventedRun<
   async start({
     inputData,
     initialState,
+    requestContext,
     runtimeContext,
   }: {
     inputData?: z.infer<TInput>;
+    requestContext?: RuntimeContext;
+    /**
+     * @deprecated Use `requestContext` instead. This will be removed in a future version.
+     */
     runtimeContext?: RuntimeContext;
     initialState?: z.infer<TState>;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
@@ -415,7 +421,7 @@ export class EventedRun<
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
     }
 
-    runtimeContext = runtimeContext ?? new RuntimeContext();
+    runtimeContext = requestContext ?? runtimeContext ?? new RuntimeContext();
 
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -489,6 +495,10 @@ export class EventedRun<
         ]
       | string
       | string[];
+    requestContext?: RuntimeContext;
+    /**
+     * @deprecated Use `requestContext` instead. This will be removed in a future version.
+     */
     runtimeContext?: RuntimeContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
@@ -525,8 +535,9 @@ export class EventedRun<
     }
 
     // Then, override with any values from the passed runtime context (new values take precedence)
-    if (params.runtimeContext) {
-      for (const [key, value] of params.runtimeContext.entries()) {
+    const requestContextToUse = params.requestContext || params.runtimeContext;
+    if (requestContextToUse) {
+      for (const [key, value] of requestContextToUse.entries()) {
         runtimeContext.set(key, value);
       }
     }

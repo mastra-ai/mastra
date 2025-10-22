@@ -1,5 +1,6 @@
 import type { Mastra } from '../../mastra';
 import { RuntimeContext } from '../../runtime-context';
+import type { DynamicArgument } from '../../types/dynamic-argument';
 import { ModelRouterLanguageModel } from './router';
 import type { MastraModelConfig, MastraLanguageModel, OpenAICompatibleConfig } from './shared.types';
 
@@ -8,15 +9,7 @@ import type { MastraModelConfig, MastraLanguageModel, OpenAICompatibleConfig } f
  * @internal
  */
 export function isOpenAICompatibleObjectConfig(
-  modelConfig:
-    | MastraModelConfig
-    | (({
-        runtimeContext,
-        mastra,
-      }: {
-        runtimeContext: RuntimeContext;
-        mastra?: Mastra;
-      }) => MastraModelConfig | Promise<MastraModelConfig>),
+  modelConfig: MastraModelConfig | DynamicArgument<MastraModelConfig> | DynamicArgument<Promise<MastraModelConfig>>,
 ): modelConfig is OpenAICompatibleConfig {
   if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) return false;
   // Check for OpenAICompatibleConfig - it should have either:
@@ -60,15 +53,7 @@ export function isOpenAICompatibleObjectConfig(
  * ```
  */
 export async function resolveModelConfig(
-  modelConfig:
-    | MastraModelConfig
-    | (({
-        runtimeContext,
-        mastra,
-      }: {
-        runtimeContext: RuntimeContext;
-        mastra?: Mastra;
-      }) => MastraModelConfig | Promise<MastraModelConfig>),
+  modelConfig: MastraModelConfig | DynamicArgument<MastraModelConfig> | DynamicArgument<Promise<MastraModelConfig>>,
   runtimeContext: RuntimeContext = new RuntimeContext(),
   mastra?: Mastra,
 ): Promise<MastraLanguageModel> {
@@ -84,7 +69,7 @@ export async function resolveModelConfig(
 
   // If it's a function, resolve it first
   if (typeof modelConfig === 'function') {
-    const fromDynamic = await modelConfig({ runtimeContext, mastra });
+    const fromDynamic = await modelConfig({ runtimeContext, mastra, requestContext: runtimeContext });
     if (typeof fromDynamic === 'string' || isOpenAICompatibleObjectConfig(fromDynamic)) {
       return new ModelRouterLanguageModel(fromDynamic);
     }

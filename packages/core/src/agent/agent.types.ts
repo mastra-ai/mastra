@@ -21,7 +21,13 @@ export type MultiPrimitiveExecutionOptions = {
   runId?: string;
 
   /** Runtime context containing dynamic configuration and state */
+  /**
+   * @deprecated Use `requestContext` instead. This will be removed in a future version.
+   */
   runtimeContext?: RuntimeContext;
+
+  /** Request context containing dynamic configuration and state */
+  requestContext?: RuntimeContext;
 
   /** Maximum number of steps to run */
   maxSteps?: number;
@@ -64,7 +70,13 @@ export type AgentExecutionOptions<
   savePerStep?: boolean;
 
   /** Runtime context containing dynamic configuration and state */
+  /**
+   * @deprecated Use `requestContext` instead. This will be removed in a future version.
+   */
   runtimeContext?: RuntimeContext;
+
+  /** Request context containing dynamic configuration and state */
+  requestContext?: RuntimeContext;
 
   /** @deprecated Use memory.resource instead. Identifier for the resource/user */
   resourceId?: string;

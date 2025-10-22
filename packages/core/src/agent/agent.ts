@@ -343,7 +343,7 @@ export class Agent<
   public listAgents({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}) {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
-        ? this.#agents({ runtimeContext })
+        ? this.#agents({ runtimeContext, requestContext: runtimeContext })
         : this.#agents
       : {};
 
@@ -385,7 +385,7 @@ export class Agent<
       inputProcessorOverrides ??
       (this.#inputProcessors
         ? typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({ runtimeContext })
+          ? await this.#inputProcessors({ runtimeContext, requestContext: runtimeContext })
           : this.#inputProcessors
         : []);
 
@@ -393,7 +393,7 @@ export class Agent<
       outputProcessorOverrides ??
       (this.#outputProcessors
         ? typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({ runtimeContext })
+          ? await this.#outputProcessors({ runtimeContext, requestContext: runtimeContext })
           : this.#outputProcessors
         : []);
 
@@ -417,7 +417,10 @@ export class Agent<
     }
 
     if (typeof this.#outputProcessors === 'function') {
-      return await this.#outputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() });
+      return await this.#outputProcessors({
+        runtimeContext: runtimeContext || new RuntimeContext(),
+        requestContext: runtimeContext || new RuntimeContext(),
+      });
     }
 
     return this.#outputProcessors;
@@ -433,7 +436,10 @@ export class Agent<
     }
 
     if (typeof this.#inputProcessors === 'function') {
-      return await this.#inputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() });
+      return await this.#inputProcessors({
+        runtimeContext: runtimeContext || new RuntimeContext(),
+        requestContext: runtimeContext || new RuntimeContext(),
+      });
     }
 
     return this.#inputProcessors;
@@ -491,7 +497,7 @@ export class Agent<
     if (typeof this.#memory !== 'function') {
       resolvedMemory = this.#memory;
     } else {
-      const result = this.#memory({ runtimeContext, mastra: this.#mastra });
+      const result = this.#memory({ runtimeContext, requestContext: runtimeContext, mastra: this.#mastra });
       resolvedMemory = await Promise.resolve(result);
 
       if (!resolvedMemory) {
@@ -558,7 +564,9 @@ export class Agent<
   }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any>>> {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
-      workflowRecord = await Promise.resolve(this.#workflows({ runtimeContext, mastra: this.#mastra }));
+      workflowRecord = await Promise.resolve(
+        this.#workflows({ runtimeContext, requestContext: runtimeContext, mastra: this.#mastra }),
+      );
     } else {
       workflowRecord = this.#workflows ?? {};
     }
@@ -579,7 +587,7 @@ export class Agent<
       return this.#scorers;
     }
 
-    const result = this.#scorers({ runtimeContext, mastra: this.#mastra });
+    const result = this.#scorers({ runtimeContext, requestContext: runtimeContext, mastra: this.#mastra });
     return resolveMaybePromise(result, scorers => {
       if (!scorers) {
         const mastraError = new MastraError({
@@ -674,7 +682,7 @@ export class Agent<
     | AgentInstructions
     | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
-      const result = this.#instructions({ runtimeContext, mastra: this.#mastra });
+      const result = this.#instructions({ runtimeContext, requestContext: runtimeContext, mastra: this.#mastra });
       return resolveMaybePromise(result, instructions => {
         if (!instructions) {
           const mastraError = new MastraError({
@@ -756,7 +764,11 @@ export class Agent<
       return this.#defaultGenerateOptions;
     }
 
-    const result = this.#defaultGenerateOptions({ runtimeContext, mastra: this.#mastra });
+    const result = this.#defaultGenerateOptions({
+      runtimeContext,
+      requestContext: runtimeContext,
+      mastra: this.#mastra,
+    });
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
@@ -794,7 +806,7 @@ export class Agent<
       return this.#defaultStreamOptions;
     }
 
-    const result = this.#defaultStreamOptions({ runtimeContext, mastra: this.#mastra });
+    const result = this.#defaultStreamOptions({ runtimeContext, requestContext: runtimeContext, mastra: this.#mastra });
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
@@ -845,7 +857,11 @@ export class Agent<
       } as AgentExecutionOptions<OUTPUT>;
     }
 
-    const result = this.#defaultVNextStreamOptions({ runtimeContext, mastra: this.#mastra }) as
+    const result = this.#defaultVNextStreamOptions({
+      runtimeContext,
+      requestContext: runtimeContext,
+      mastra: this.#mastra,
+    }) as
       | (AgentExecutionOptions<OUTPUT> & DeprecatedOutputOptions<OUTPUT>)
       | Promise<AgentExecutionOptions<OUTPUT> & DeprecatedOutputOptions<OUTPUT>>;
 
@@ -921,7 +937,7 @@ export class Agent<
       return ensureToolProperties(this.#tools) as TTools;
     }
 
-    const result = this.#tools({ runtimeContext, mastra: this.#mastra });
+    const result = this.#tools({ runtimeContext, requestContext: runtimeContext, mastra: this.#mastra });
 
     return resolveMaybePromise(result, tools => {
       if (!tools) {
@@ -3318,7 +3334,9 @@ export class Agent<
     if (model || !Array.isArray(this.model)) {
       const modelToUse = model ?? this.model;
       const resolvedModel =
-        typeof modelToUse === 'function' ? await modelToUse({ runtimeContext, mastra: this.#mastra }) : modelToUse;
+        typeof modelToUse === 'function'
+          ? await modelToUse({ runtimeContext, requestContext: runtimeContext, mastra: this.#mastra })
+          : modelToUse;
 
       if ((resolvedModel as MastraLanguageModel).specificationVersion !== 'v2') {
         const mastraError = new MastraError({
@@ -3757,7 +3775,7 @@ export class Agent<
    */
   async network(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions) {
     const runId = options?.runId || this.#mastra?.generateId() || randomUUID();
-    const runtimeContextToUse = options?.runtimeContext || new RuntimeContext();
+    const runtimeContextToUse = options?.requestContext || options?.runtimeContext || new RuntimeContext();
 
     return await networkLoop({
       networkName: this.name,
@@ -3861,7 +3879,7 @@ export class Agent<
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> & DeprecatedOutputOptions<OUTPUT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const defaultStreamOptions = await this.getDefaultVNextStreamOptions<OUTPUT>({
-      runtimeContext: streamOptions?.runtimeContext,
+      runtimeContext: streamOptions?.requestContext || streamOptions?.runtimeContext,
     });
     if (streamOptions?.structuredOutput?.schema && streamOptions?.output) {
       throw new MastraError({
@@ -3892,7 +3910,7 @@ export class Agent<
       : baseStreamOptions;
 
     const llm = await this.getLLM({
-      runtimeContext: mergedStreamOptions.runtimeContext,
+      runtimeContext: mergedStreamOptions.requestContext || mergedStreamOptions.runtimeContext,
     });
 
     if (llm.getModel().specificationVersion !== 'v2') {
@@ -3971,7 +3989,7 @@ export class Agent<
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
-      runtimeContext: streamOptions?.runtimeContext,
+      runtimeContext: streamOptions?.requestContext || streamOptions?.runtimeContext,
     });
 
     let mergedStreamOptions = {
@@ -3981,7 +3999,7 @@ export class Agent<
     };
 
     const llm = await this.getLLM({
-      runtimeContext: mergedStreamOptions.runtimeContext,
+      runtimeContext: mergedStreamOptions.requestContext || mergedStreamOptions.runtimeContext,
     });
 
     if (llm.getModel().specificationVersion !== 'v2') {
@@ -4854,7 +4872,7 @@ export class Agent<
     if (typeof instructions === 'string') {
       return instructions;
     } else {
-      const result = instructions({ runtimeContext, mastra: this.#mastra });
+      const result = instructions({ runtimeContext, requestContext: runtimeContext, mastra: this.#mastra });
       return resolveMaybePromise(result, resolvedInstructions => {
         return resolvedInstructions || DEFAULT_TITLE_INSTRUCTIONS;
       });

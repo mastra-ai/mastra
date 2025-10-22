@@ -507,6 +507,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         workflowId,
         mastra: this.mastra!,
         runtimeContext,
+        requestContext: runtimeContext,
         inputData: prevOutput,
         state: executionContext.state,
         setState: (state: any) => {
@@ -613,6 +614,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         workflowId,
         mastra: this.mastra!,
         runtimeContext,
+        requestContext: runtimeContext,
         inputData: prevOutput,
         state: executionContext.state,
         setState: (state: any) => {
@@ -879,6 +881,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           workflowId,
           mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepAISpan }) : undefined,
           runtimeContext,
+          requestContext: runtimeContext,
           inputData,
           state: executionContext.state,
           setState: (state: any) => {
@@ -1076,6 +1079,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       try {
         scorersToUse = await scorersToUse({
           runtimeContext: runtimeContext,
+          requestContext: runtimeContext,
         });
       } catch (error) {
         this.preprocessExecutionError(
@@ -1310,6 +1314,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               workflowId,
               mastra: this.mastra!,
               runtimeContext,
+              requestContext: runtimeContext,
               inputData: prevOutput,
               state: executionContext.state,
               setState: (state: any) => {
@@ -1602,6 +1607,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runId,
         mastra: this.mastra!,
         runtimeContext,
+        requestContext: runtimeContext,
         inputData: result.output,
         state: executionContext.state,
         setState: (state: any) => {
