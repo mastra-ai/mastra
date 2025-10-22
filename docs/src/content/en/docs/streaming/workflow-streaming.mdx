@@ -64,23 +64,23 @@ const testWorkflow = mastra.getWorkflow("testWorkflow");
 
 const run = await testWorkflow.createRunAsync();
 
-const stream = await run.streamVNext({
+const stream = await run.stream({
   inputData: {
     value: "initial data"
   }
 });
 
-for await (const chunk of stream) {
+for await (const chunk of stream.fullStream) {
   console.log(chunk);
 }
 
 if (result!.status === "suspended") {
-  // if the workflow is suspended, we can resume it with the resumeStreamVNext method
-  const resumedStream = await run.resumeStreamVNext({
+  // if the workflow is suspended, we can resume it with the resumeStream method
+  const resumedStream = await run.resumeStream({
     resumeData: { value: "resume data" }
   });
 
-  for await (const chunk of resumedStream) {
+  for await (const chunk of resumedStream.fullStream) {
     console.log(chunk);
   }
 }
@@ -91,9 +91,9 @@ if (result!.status === "suspended") {
 If a workflow stream is closed or interrupted for any reason, you can resume it with the `resumeStreamVNext` method. This will return a new `ReadableStream` that you can use to observe the workflow events.
 
 ```typescript showLineNumbers copy
-const newStream = await run.resumeStreamVNext();
+const newStream = await run.resumeStream();
 
-for await (const chunk of newStream) {
+for await (const chunk of newStream.fullStream) {
   console.log(chunk);
 }
 ```

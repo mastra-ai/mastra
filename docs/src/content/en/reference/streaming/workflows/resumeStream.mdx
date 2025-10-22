@@ -1,22 +1,18 @@
 ---
-title: "Reference: Run.resumeStreamVNext() | Workflows | Mastra Docs"
-description: Documentation for the `Run.resumeStreamVNext()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
+title: "Reference: Run.resumeStream() | Workflows | Mastra Docs"
+description: Documentation for the `Run.resumeStream()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
 ---
 
-import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
+# Run.resumeStream()
 
-# Run.resumeStreamVNext() (Experimental)
-
-<StreamVNextCallout />
-
-The `.resumeStreamVNext()` method resumes a suspended workflow run with new data, allowing you to continue execution from a specific step and to observe the stream of events.
+The `.resumeStream()` method resumes a suspended workflow run with new data, allowing you to continue execution from a specific step and to observe the stream of events.
 
 ## Usage example
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
 
-const stream = run.streamVNext({
+const stream = run.stream({
   inputData: {
     value: "initial data"
   }
@@ -25,7 +21,7 @@ const stream = run.streamVNext({
 const result = await stream.result;
 
 if (result!.status === "suspended") {
-  const resumedStream = await run.resumeStreamVNext({
+  const resumedStream = await run.resumeStream({
     resumeData: {
       value: "resume data"
     }
@@ -115,4 +111,4 @@ The stream emits various event types during workflow execution. Each event has a
 
 - [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
 - [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run.mdx)
-- [Run.streamVNext()](./streamVNext.mdx)
+- [Run.streamVNext()](./stream.mdx)
