@@ -1,5 +1,25 @@
 # mastra
 
+## 0.17.2
+
+### Patch Changes
+
+- Fix a bug where `mastra init` didn't work correctly when core dependencies were missing in the project ([#9070](https://github.com/mastra-ai/mastra/pull/9070))
+
+- Updated dependencies [[`69ff5d5`](https://github.com/mastra-ai/mastra/commit/69ff5d58e4bc4054ce76bbb25a8fa5d3177c49ea)]:
+  - @mastra/deployer@0.22.1
+  - @mastra/core@0.22.1
+
+## 0.17.2-alpha.0
+
+### Patch Changes
+
+- Fix a bug where `mastra init` didn't work correctly when core dependencies were missing in the project ([#9070](https://github.com/mastra-ai/mastra/pull/9070))
+
+- Updated dependencies [[`69ff5d5`](https://github.com/mastra-ai/mastra/commit/69ff5d58e4bc4054ce76bbb25a8fa5d3177c49ea)]:
+  - @mastra/deployer@0.22.1-alpha.0
+  - @mastra/core@0.22.1-alpha.0
+
 ## 0.17.1
 
 ### Patch Changes

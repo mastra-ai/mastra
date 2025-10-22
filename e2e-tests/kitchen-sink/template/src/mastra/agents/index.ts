@@ -7,6 +7,7 @@ import { simulateReadableStream } from 'ai';
 import * as aiTest from 'ai/test';
 import { fixtures } from '../../../fixtures';
 import { Fixtures } from '../../../types';
+import { lessComplexWorkflow } from '../workflows/complex-workflow';
 
 const memory = new Memory({
   // ...
@@ -53,7 +54,7 @@ export const weatherAgent = new Agent({
         return {
           stream: simulateReadableStream({
             chunks: chunk,
-            delay: 100,
+            delay: 500,
           }),
         };
       },
@@ -61,5 +62,6 @@ export const weatherAgent = new Agent({
   },
   tools: { weatherInfo },
   agents: { subAgent },
+  workflows: { lessComplexWorkflow },
   memory,
 });
