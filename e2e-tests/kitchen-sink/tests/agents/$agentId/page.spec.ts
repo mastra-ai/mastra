@@ -36,24 +36,6 @@ test.describe('agent panels', () => {
       const overview = await page.getByLabel('Overview');
       await expect(overview).toBeVisible();
       await expect(overview).toMatchAriaSnapshot();
-
-      // const searchProviderInput = await page.locator('input[aria-label="Search providers"]');
-      // await expect(searchProviderInput).toBeVisible();
-      // await expect(searchProviderInput).toHaveAttribute('value', 'mock-provider');
-
-      // const searchModelInput = await page.locator('input[aria-label="Search models"]');
-      // await expect(searchModelInput).toBeVisible();
-      // await expect(searchModelInput).toHaveAttribute('value', 'mock-model-id');
-
-      // await expect(page.locator('text=Memory is enabled')).toBeDefined();
-
-      // const toolBadge = await page.locator('[data-testid="tool-badge"]');
-      // await expect(toolBadge).toBeVisible();
-      // await expect(toolBadge).toHaveText('weatherInfo');
-      // await expect(toolBadge).toHaveAttribute('href', '/agents/weatherAgent/tools/weatherInfo');
-
-      // await expect(page.locator('text=No workflows')).toBeVisible();
-      // await expect(page.locator('text=No scorers')).toBeVisible();
     });
   });
 
