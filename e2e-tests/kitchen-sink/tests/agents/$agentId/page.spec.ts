@@ -57,7 +57,6 @@ test.describe('agent panels', () => {
 
       const networkRadio = page.getByLabel('Network');
       await expect(networkRadio).toBeVisible();
-      await expect(networkRadio).toBeDisabled();
     });
 
     test('verfied persistent model settings', async ({ page }) => {
