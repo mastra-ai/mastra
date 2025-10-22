@@ -1,31 +1,22 @@
-import { client } from '@/lib/client';
+import { usePlaygroundStore } from '@/store/playground-store';
 import { ReorderModelListParams, UpdateModelInModelListParams, UpdateModelParams } from '@mastra/client-js';
-import { usePlaygroundStore } from '@mastra/playground-ui';
+import { useMastraClient } from '@mastra/react';
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 export const useAgents = () => {
+  const client = useMastraClient();
   const { runtimeContext } = usePlaygroundStore();
-  const query = useQuery({
+
+  return useQuery({
     queryKey: ['agents', JSON.stringify(runtimeContext)],
     queryFn: () => client.getAgents(runtimeContext),
-  });
-
-  return {
-    ...query,
-    data: query.data ?? {},
-  };
-};
-
-export const useAgent = (agentId: string) => {
-  const { runtimeContext } = usePlaygroundStore();
-  return useQuery({
-    queryKey: ['agent', agentId, JSON.stringify(runtimeContext)],
-    queryFn: () => client.getAgent(agentId).details(runtimeContext),
-    enabled: !!agentId,
   });
 };
 
 export const useModelProviders = () => {
+  const client = useMastraClient();
+
   return useQuery({
     queryKey: ['model-providers'],
     queryFn: () => client.getModelProviders(),
@@ -33,7 +24,9 @@ export const useModelProviders = () => {
 };
 
 export const useUpdateAgentModel = (agentId: string) => {
+  const client = useMastraClient();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async (payload: UpdateModelParams) => client.getAgent(agentId).updateModel(payload),
     onSuccess: () => {
@@ -46,7 +39,9 @@ export const useUpdateAgentModel = (agentId: string) => {
 };
 
 export const useReorderModelList = (agentId: string) => {
+  const client = useMastraClient();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async (payload: ReorderModelListParams) => client.getAgent(agentId).reorderModelList(payload),
     onSuccess: () => {
@@ -59,7 +54,9 @@ export const useReorderModelList = (agentId: string) => {
 };
 
 export const useUpdateModelInModelList = (agentId: string) => {
+  const client = useMastraClient();
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async (payload: UpdateModelInModelListParams) =>
       client.getAgent(agentId).updateModelInModelList(payload),

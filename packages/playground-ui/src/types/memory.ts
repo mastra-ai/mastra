@@ -28,3 +28,8 @@ export interface MemorySearchResponse {
   searchType?: string;
   searchScope?: 'thread' | 'resource';
 }
+
+export interface MemorySearchParams {
+  lastMessages?: number | false;
+  // Add other memory config overrides as needed
+}
