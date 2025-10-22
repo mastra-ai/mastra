@@ -3,7 +3,6 @@ import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } 
 import type { Span } from '@opentelemetry/api';
 import { APICallError } from 'ai-v5';
 import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
-// import pRetry from 'p-retry';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
