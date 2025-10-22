@@ -2083,7 +2083,7 @@ export class Agent<
                   tracingContext: innerTracingContext,
                 });
               } else if (methodType === 'streamLegacy') {
-                const streamResult = run.stream({
+                const streamResult = run.streamLegacy({
                   inputData: context,
                   runtimeContext,
                   tracingContext: innerTracingContext,
@@ -2100,14 +2100,14 @@ export class Agent<
                 result = await streamResult.getWorkflowState();
               } else if (methodType === 'stream') {
                 // TODO: add support for format
-                const streamResult = run.streamVNext({
+                const streamResult = run.stream({
                   inputData: context,
                   runtimeContext,
                   tracingContext: innerTracingContext,
                 });
 
                 if (writer) {
-                  await streamResult.pipeTo(writer);
+                  await streamResult.fullStream.pipeTo(writer);
                 }
 
                 result = await streamResult.result;
