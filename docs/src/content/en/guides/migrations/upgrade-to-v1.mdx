@@ -12,12 +12,34 @@ In this guide you'll learn how to upgrade through breaking changes in pre-v1 ver
 Use your package manager to update your project's versions. Be sure to update **all** Mastra packages at the same time.
 
 <Callout type="info">
-Versions mentioned in the headings refer to the `@mastra/core` package.
+
+Versions mentioned in the headings refer to the `@mastra/core` package. If necessary, versions of other Mastra packages are called out in the detailed description.
+
+All Mastra packages have a peer dependency on `@mastra/core` so once you upgrade it, your package manager is able to tell you the correct package versions for the rest of Mastra.
+
 </Callout>
 
-## Migrate to v1.0.0-beta
+## Migrate to v0.22
 
-TODO
+### Deprecated: `format: "aisdk"`
+
+The `format: "aisdk"` option in `stream()`/`generate()` methods is deprecated. Use the `@mastra/ai-sdk` package instead. Learn more in the [Using Vercel AI SDK documentation](../../docs/frameworks/agentic-uis/ai-sdk.mdx).
+
+### Removed: MCP Classes
+
+- Removed `MastraMCPClient` class. Use [`MCPClient`](../../reference/tools/mcp-client.mdx) class instead.
+- Removed `MCPConfigurationOptions` type. Use [`MCPClientOptions`](../../reference/tools/mcp-client.mdx#mcpclientoptions) type instead. The API is identical.
+- Removed `MCPConfiguration` class. Use [`MCPClient`](../../reference/tools/mcp-client.mdx) class instead.
+
+### Removed: CLI flags & commands
+
+- Removed the `mastra deploy` CLI command. Use the deploy instructions of your individual platform.
+- Removed `--env` flag from `mastra build` command. To start the build output with a custom env use `mastra start --env <env>` instead.
+- Remove `--port` flag from `mastra dev`. Use `server.port` on the `new Mastra()` class instead.
+
+## Migrate to v0.21
+
+No changes needed.
 
 ## Migrate to v0.20
 
