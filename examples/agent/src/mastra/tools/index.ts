@@ -8,6 +8,7 @@ export const cookingTool = createTool({
     ingredient: z.string(),
   }),
   execute: async ({ context }, options) => {
+    await new Promise(resolve => setTimeout(resolve, 5000));
     console.log('My cooking tool is running!', context.ingredient);
     if (options?.toolCallId) {
       console.log('Cooking tool call ID:', options.toolCallId);
