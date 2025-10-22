@@ -26,9 +26,9 @@ export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
  */
 export interface MCPExecutionContext {
   /** MCP protocol context passed by the server */
-  extra?: RequestHandlerExtra<any, any>;
+  extra: RequestHandlerExtra<any, any>;
   /** Elicitation handler for interactive user input during tool execution */
-  elicitation?: {
+  elicitation: {
     sendRequest: (request: ElicitRequest['params']) => Promise<ElicitResult>;
   };
 }
