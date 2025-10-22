@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
+  "version": "0.14.10",
   "description": "",
   "type": "module",
   "files": [
@@ -43,7 +43,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@babel/core": "^7.28.4",
-    "@mastra/deployer": "workspace:*",
+    "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "3.0.2",
     "cloudflare": "^4.5.0",
     "rollup": "~4.50.2",
@@ -73,7 +73,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": ">=0.20.1-0 <0.23.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   }
 }

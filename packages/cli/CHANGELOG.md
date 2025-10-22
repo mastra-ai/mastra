@@ -1,18 +1,5 @@
 # mastra
 
-## 0.0.0-kitchen-sink-e2e-test-20251022105747
-
-### Patch Changes
-
-- 6378d24: Fix a bug where `mastra init` didn't work correctly when core dependencies were missing in the project
--
-- Updated dependencies [5416ade]
-- Updated dependencies [5416ade]
-- Updated dependencies
-  - @mastra/deployer@0.0.0-kitchen-sink-e2e-test-20251022105747
-  - @mastra/core@0.0.0-kitchen-sink-e2e-test-20251022105747
-  - @mastra/loggers@0.0.0-kitchen-sink-e2e-test-20251022105747
-
 ## 0.17.1
 
 ### Patch Changes

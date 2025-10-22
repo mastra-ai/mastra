@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
+  "version": "6.6.0",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -111,7 +111,7 @@
     "zustand": "^5.0.8"
   },
   "peerDependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": ">=0.21.2-0 <0.23.0-0",
     "lucide-react": "^0.474.0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
@@ -120,7 +120,7 @@
     "@mastra/react": "workspace:*"
   },
   "devDependencies": {
-    "@mastra/client-js": "workspace:*",
+    "@mastra/client-js": "workspace:^",
     "@mastra/react": "workspace:*",
     "@mastra/core": "workspace:*",
     "@storybook/addon-docs": "^9.1.10",

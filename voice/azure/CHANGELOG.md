@@ -1,14 +1,5 @@
 # @mastra/voice-azure
 
-## 0.0.0-kitchen-sink-e2e-test-20251022105747
-
-### Patch Changes
-
--
-- Updated dependencies [5416ade]
-- Updated dependencies
-  - @mastra/core@0.0.0-kitchen-sink-e2e-test-20251022105747
-
 ## 0.10.17
 
 ### Patch Changes

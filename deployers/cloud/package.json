@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloud",
-  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
+  "version": "0.22.0",
   "description": "",
   "type": "module",
   "files": [
@@ -34,7 +34,7 @@
   "keywords": [],
   "license": "Apache-2.0",
   "dependencies": {
-    "@mastra/deployer": "workspace:*",
+    "@mastra/deployer": "workspace:^",
     "@mastra/loggers": "workspace:*",
     "execa": "^9.6.0",
     "fs-extra": "^11.3.2",
@@ -53,7 +53,7 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": "workspace:*"
+    "@mastra/core": ">=0.20.1-0 <0.23.0-0"
   },
   "repository": {
     "type": "git",

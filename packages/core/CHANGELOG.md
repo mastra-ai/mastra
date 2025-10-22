@@ -1,14 +1,5 @@
 # @mastra/core
 
-## 0.0.0-kitchen-sink-e2e-test-20251022105747
-
-### Patch Changes
-
-- 5416ade: Add tool call approval
--
-- Updated dependencies
-  - @mastra/schema-compat@0.0.0-kitchen-sink-e2e-test-20251022105747
-
 ## 0.22.0
 
 ### Minor Changes

@@ -16,7 +16,7 @@
   "license": "Apache-2.0",
   "peerDependencies": {
     "vitest": "*",
-    "@mastra/core": "workspace:*"
+    "@mastra/core": "*"
   },
   "devDependencies": {
     "@mastra/core": "workspace:*"

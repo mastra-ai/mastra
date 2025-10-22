@@ -1,6 +1,6 @@
 {
   "name": "@mastra/observability",
-  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
+  "version": "0.0.2",
   "description": "Core observability package for Mastra - includes AI tracing and scoring features",
   "type": "module",
   "main": "dist/index.js",
@@ -43,7 +43,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": "workspace:*"
+    "@mastra/core": ">=0.18.1-0 <0.23.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

@@ -1,18 +1,5 @@
 # @mastra/longmemeval
 
-## 0.0.0-kitchen-sink-e2e-test-20251022105747
-
-### Patch Changes
-
--
-- Updated dependencies [5416ade]
-- Updated dependencies
-  - @mastra/core@0.0.0-kitchen-sink-e2e-test-20251022105747
-  - @mastra/fastembed@0.0.0-kitchen-sink-e2e-test-20251022105747
-  - @mastra/memory@0.0.0-kitchen-sink-e2e-test-20251022105747
-  - @mastra/rag@0.0.0-kitchen-sink-e2e-test-20251022105747
-  - @mastra/libsql@0.0.0-kitchen-sink-e2e-test-20251022105747
-
 ## 0.1.29
 
 ### Patch Changes

@@ -1,23 +1,5 @@
 # @mastra/playground-ui
 
-## 0.0.0-kitchen-sink-e2e-test-20251022105747
-
-### Minor Changes
-
-- 5416ade: Update peer dependencies to match core package version bump (0.21.2)
-
-### Patch Changes
-
-- 39f7ff3: Fix subagent link not working in agents overview pane
-- 5416ade: Add tool call approval
-- 1b8d504: Fix wrong MCP link in playground
--
-- Updated dependencies [5416ade]
-- Updated dependencies
-  - @mastra/client-js@0.0.0-kitchen-sink-e2e-test-20251022105747
-  - @mastra/react@0.0.0-kitchen-sink-e2e-test-20251022105747
-  - @mastra/core@0.0.0-kitchen-sink-e2e-test-20251022105747
-
 ## 6.6.0
 
 ### Minor Changes

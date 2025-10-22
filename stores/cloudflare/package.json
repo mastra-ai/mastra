@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloudflare",
-  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
+  "version": "0.13.0",
   "description": "Cloudflare provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
@@ -48,7 +48,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": "workspace:*"
+    "@mastra/core": ">=0.21.2-0 <0.23.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

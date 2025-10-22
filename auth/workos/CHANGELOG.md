@@ -1,13 +1,5 @@
 # @mastra/auth-workos
 
-## 0.0.0-kitchen-sink-e2e-test-20251022105747
-
-### Patch Changes
-
--
-- Updated dependencies
-  - @mastra/auth@0.0.0-kitchen-sink-e2e-test-20251022105747
-
 ## 0.10.7
 
 ### Patch Changes

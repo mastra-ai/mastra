@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
+  "version": "0.12.10",
   "description": "",
   "type": "module",
   "files": [
@@ -32,7 +32,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@mastra/deployer": "workspace:*",
+    "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "3.0.2",
     "fs-extra": "^11.3.2"
   },
@@ -58,6 +58,6 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@mastra/core": "workspace:*"
+    "@mastra/core": ">=0.20.1-0 <0.23.0-0"
   }
 }

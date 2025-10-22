@@ -1,6 +1,6 @@
 {
   "name": "@internal/types-builder",
-  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
+  "version": "0.0.26",
   "description": "",
   "type": "module",
   "main": "src/index.js",

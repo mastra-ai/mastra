@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "0.0.0-kitchen-sink-e2e-test-20251022105747",
+  "version": "0.22.0",
   "description": "",
   "type": "module",
   "files": [
@@ -63,7 +63,7 @@
   "author": "",
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": ">=0.22.0-0 <0.23.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
