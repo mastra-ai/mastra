@@ -15,6 +15,8 @@ import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } fro
 
 const testStorage = new MockStore();
 
+(globalThis as any).___MASTRA_TELEMETRY___ = true;
+
 vi.mock('crypto', () => {
   return {
     randomUUID: vi.fn(() => 'mock-uuid-1'),
@@ -63,7 +65,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -240,7 +242,7 @@ describe('Workflow', () => {
 
       const run = await promptEvalWorkflow.createRunAsync();
 
-      const { stream, getWorkflowState } = run.stream({ inputData: { input: 'test' } });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: { input: 'test' } });
 
       for await (const data of stream) {
         if (data.type === 'step-suspended') {
@@ -380,7 +382,7 @@ describe('Workflow', () => {
 
       const run = await promptEvalWorkflow.createRunAsync();
 
-      const { stream, getWorkflowState } = run.stream({ inputData: { input: 'test' } });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: { input: 'test' } });
 
       for await (const data of stream) {
         if (data.type === 'step-suspended') {
@@ -520,7 +522,7 @@ describe('Workflow', () => {
 
       const run = await promptEvalWorkflow.createRunAsync();
 
-      const { getWorkflowState } = run.stream({ inputData: { input: 'test' } });
+      const { getWorkflowState } = run.streamLegacy({ inputData: { input: 'test' } });
 
       const result = await getWorkflowState();
 
@@ -536,7 +538,7 @@ describe('Workflow', () => {
       expect(evaluateToneAction).not.toHaveBeenCalledTimes(1);
       run.resume({ resumeData: resumeData as any, step: promptAgent });
 
-      const { stream, getWorkflowState: getWorkflowState2 } = run.stream();
+      const { stream, getWorkflowState: getWorkflowState2 } = run.streamLegacy();
 
       let index = 0;
 
@@ -699,7 +701,7 @@ describe('Workflow', () => {
       const run = await workflow.createRunAsync({
         runId: 'test-run-id',
       });
-      const { stream } = run.stream({
+      const { stream } = run.streamLegacy({
         inputData: {
           prompt1: 'Capital of France, just the name',
           prompt2: 'Capital of UK, just the name',
@@ -960,7 +962,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -1127,7 +1129,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -1290,7 +1292,7 @@ describe('Workflow', () => {
       const run = await workflow.createRunAsync({ runId: 'test-run-id' });
       const originalInput = { originalInput: 'original-data' };
 
-      const { stream, getWorkflowState } = run.stream({ inputData: originalInput });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: originalInput });
 
       for await (const data of stream) {
         if (data.type === 'step-suspended') {
@@ -1352,7 +1354,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       setTimeout(() => {
         run.sendEvent('user-event-test', {
@@ -1496,7 +1498,7 @@ describe('Workflow', () => {
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
-      for await (const data of streamResult) {
+      for await (const data of streamResult.fullStream) {
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
       watchData = collectedStreamData;
@@ -1677,7 +1679,7 @@ describe('Workflow', () => {
 
       let streamResult = run.streamVNext({ inputData: { input: 'test' } });
 
-      for await (const data of streamResult) {
+      for await (const data of streamResult.fullStream) {
         if (data.type === 'workflow-step-suspended') {
           expect(promptAgentAction).toHaveBeenCalledTimes(1);
 
@@ -1688,7 +1690,7 @@ describe('Workflow', () => {
 
       const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
       streamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: promptAgent });
-      for await (const _data of streamResult) {
+      for await (const _data of streamResult.fullStream) {
       }
 
       expect(evaluateToneAction).toHaveBeenCalledTimes(1);
@@ -1821,7 +1823,7 @@ describe('Workflow', () => {
 
       let streamResult = run.streamVNext({ inputData: { input: 'test' }, closeOnSuspend: false });
 
-      for await (const data of streamResult) {
+      for await (const data of streamResult.fullStream) {
         if (data.type === 'workflow-step-suspended') {
           expect(promptAgentAction).toHaveBeenCalledTimes(1);
 
@@ -1997,7 +1999,7 @@ describe('Workflow', () => {
       });
 
       const values: ChunkType[] = [];
-      for await (const value of streamResult) {
+      for await (const value of streamResult.fullStream) {
         values.push(value);
       }
       const workflowEvents = values.filter(value => value.type !== 'workflow-step-output');
@@ -2299,7 +2301,7 @@ describe('Workflow', () => {
       });
 
       const values: ChunkType[] = [];
-      for await (const value of streamResult) {
+      for await (const value of streamResult.fullStream) {
         values.push(value);
       }
       const workflowEvents = values.filter(value => value.type !== 'workflow-step-output');
@@ -2523,7 +2525,7 @@ describe('Workflow', () => {
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
-      for await (const data of streamResult) {
+      for await (const data of streamResult.fullStream) {
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
       watchData = collectedStreamData;
@@ -2693,7 +2695,7 @@ describe('Workflow', () => {
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
-      for await (const data of streamResult) {
+      for await (const data of streamResult.fullStream) {
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
       watchData = collectedStreamData;
@@ -2928,7 +2930,7 @@ describe('Workflow', () => {
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
-      for await (const data of streamResult) {
+      for await (const data of streamResult.fullStream) {
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
       watchData = collectedStreamData;
@@ -3242,62 +3244,6 @@ describe('Workflow', () => {
         inputData: {},
         initialState: { value: 'test-state', otherValue: 'test-other-state' },
       });
-
-      expect(calls).toBe(1);
-      expect(result.steps['step1']).toEqual({
-        status: 'success',
-        output: { result: 'success', value: 'test-state' },
-        payload: {},
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-    });
-
-    it('should execute a single step workflow successfully with state (stream)', async () => {
-      let calls = 0;
-      const step1 = createStep({
-        id: 'step1',
-        execute: async ({ state }) => {
-          calls++;
-          return { result: 'success', value: state.value };
-        },
-        inputSchema: z.object({}),
-        outputSchema: z.object({ result: z.string(), value: z.string() }),
-        stateSchema: z.object({
-          value: z.string(),
-          // someOtherValue: z.string(),
-        }),
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({}),
-        outputSchema: z.object({
-          result: z.string(),
-          value: z.string(),
-        }),
-        stateSchema: z.object({
-          value: z.string(),
-          otherValue: z.string(),
-        }),
-        steps: [step1],
-      });
-
-      workflow.then(step1).commit();
-
-      const run = await workflow.createRunAsync();
-      const stream = await run.streamVNext({
-        inputData: {},
-        initialState: { value: 'test-state', otherValue: 'test-other-state' },
-      });
-
-      const result = await stream.result;
-      for await (const _chunk of stream) {
-      }
-
-      if (!result) {
-        expect.fail('Result is not set');
-      }
 
       expect(calls).toBe(1);
       expect(result.steps['step1']).toEqual({
@@ -5225,7 +5171,7 @@ describe('Workflow', () => {
       });
 
       const run = await incrementWorkflow.createRunAsync();
-      const { stream, getWorkflowState } = run.stream({ inputData: { value: 0 } });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: { value: 0 } });
 
       for await (const data of stream) {
         if (data.type === 'step-finish' && (data as any).payload.id === 'increment') {
@@ -8287,7 +8233,7 @@ describe('Workflow', () => {
 
       workflow.then(step1).then(createStep(randomTool)).commit();
 
-      const { stream, getWorkflowState } = (await workflow.createRunAsync()).stream({ inputData: {} });
+      const { stream, getWorkflowState } = (await workflow.createRunAsync()).streamLegacy({ inputData: {} });
 
       const values: StreamEvent[] = [];
       for await (const value of stream.values()) {

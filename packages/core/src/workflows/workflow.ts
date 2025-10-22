@@ -180,6 +180,7 @@ export function createStep<
         [EMITTER_SYMBOL]: emitter,
         [STREAM_FORMAT_SYMBOL]: streamFormat,
         runtimeContext,
+        tracingContext,
         abortSignal,
         abort,
         writer,
@@ -206,6 +207,7 @@ export function createStep<
             // resourceId: inputData.resourceId,
             // threadId: inputData.threadId,
             runtimeContext,
+            tracingContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
             },
@@ -215,6 +217,7 @@ export function createStep<
         } else {
           const modelOutput = await params.stream(inputData.prompt, {
             runtimeContext,
+            tracingContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
             },
@@ -1677,15 +1680,7 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  async start({
-    inputData,
-    initialState,
-    runtimeContext,
-    writableStream,
-    tracingContext,
-    tracingOptions,
-    outputOptions,
-  }: {
+  async start(args: {
     inputData?: z.input<TInput>;
     initialState?: z.input<TState>;
     runtimeContext?: RuntimeContext;
@@ -1697,16 +1692,9 @@ export class Run<
       includeResumeLabels?: boolean;
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    return this._start({
-      inputData,
-      initialState,
-      runtimeContext,
-      writableStream,
-      tracingContext,
-      tracingOptions,
-      format: 'legacy',
-      outputOptions,
-    });
+    const streamResult = await this.streamVNext(args);
+
+    return streamResult.result;
   }
 
   /**
@@ -1732,7 +1720,7 @@ export class Run<
   } {
     if (this.closeStreamAction) {
       return {
-        stream: this.observeStream().stream,
+        stream: this.observeStreamLegacy().stream,
         getWorkflowState: () => this.executionResults!,
       };
     }
@@ -1806,14 +1794,11 @@ export class Run<
       inputData?: z.input<TInput>;
       runtimeContext?: RuntimeContext;
       tracingContext?: TracingContext;
-      onChunk?: (chunk: StreamEvent) => Promise<unknown>;
       tracingOptions?: TracingOptions;
+      closeOnSuspend?: boolean;
     } = {},
-  ): ReturnType<typeof this.streamLegacy> {
-    console.warn(
-      "Deprecation NOTICE: stream method will switch to use streamVNext implementation October 21st, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
-    );
-    return this.streamLegacy(args);
+  ): ReturnType<typeof this.streamVNext> {
+    return this.streamVNext(args);
   }
 
   /**
@@ -1857,22 +1842,24 @@ export class Run<
    * Observe the workflow stream
    * @returns A readable stream of the workflow events
    */
-  observeStream(): {
-    stream: ReadableStream<StreamEvent>;
-  } {
-    console.warn(
-      "Deprecation NOTICE: observeStream method will switch to use observeStreamVNext implementation October 21st, 2025. Please use observeStreamLegacy if you don't want to upgrade just yet.",
-    );
-    return this.observeStreamLegacy();
+  observeStream(): ReturnType<typeof this.observeStreamVNext> {
+    return this.observeStreamVNext();
   }
 
   /**
    * Observe the workflow stream vnext
    * @returns A readable stream of the workflow events
    */
-  observeStreamVNext(): ReadableStream<ChunkType> {
+  observeStreamVNext(): ReadableStream<WorkflowStreamEvent> {
     if (!this.#streamOutput) {
-      throw new Error('Stream has not been started yet. Please start the stream first.');
+      return new ReadableStream<WorkflowStreamEvent>({
+        pull(controller) {
+          controller.close();
+        },
+        cancel(controller) {
+          controller.close();
+        },
+      });
     }
 
     return this.#streamOutput.fullStream;
@@ -1881,10 +1868,7 @@ export class Run<
   async streamAsync({
     inputData,
     runtimeContext,
-  }: { inputData?: z.input<TInput>; runtimeContext?: RuntimeContext } = {}): Promise<{
-    stream: ReadableStream<StreamEvent>;
-    getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
-  }> {
+  }: { inputData?: z.input<TInput>; runtimeContext?: RuntimeContext } = {}): Promise<ReturnType<typeof this.stream>> {
     return this.stream({ inputData, runtimeContext });
   }
 
@@ -1925,7 +1909,7 @@ export class Run<
             runId: self.runId,
             from,
             payload: {
-              stepName: (payload as unknown as { id: string }).id,
+              stepName: (payload as unknown as { id: string })?.id,
               ...payload,
             },
           } as WorkflowStreamEvent);
@@ -1940,6 +1924,7 @@ export class Run<
             console.error('Error closing stream:', err);
           }
         };
+
         const executionResultsPromise = self._start({
           inputData,
           runtimeContext,
@@ -1952,20 +1937,25 @@ export class Run<
             },
           }),
         });
+        let executionResults;
+        try {
+          executionResults = await executionResultsPromise;
 
-        const executionResults = await executionResultsPromise;
-
-        if (closeOnSuspend) {
-          // always close stream, even if the workflow is suspended
-          // this will trigger a finish event with workflow status set to suspended
+          if (closeOnSuspend) {
+            // always close stream, even if the workflow is suspended
+            // this will trigger a finish event with workflow status set to suspended
+            self.closeStreamAction?.().catch(() => {});
+          } else if (executionResults.status !== 'suspended') {
+            self.closeStreamAction?.().catch(() => {});
+          }
+          if (self.#streamOutput) {
+            self.#streamOutput.updateResults(
+              executionResults as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>,
+            );
+          }
+        } catch (err) {
+          self.#streamOutput?.rejectResults(err as unknown as Error);
           self.closeStreamAction?.().catch(() => {});
-        } else if (executionResults.status !== 'suspended') {
-          self.closeStreamAction?.().catch(() => {});
-        }
-        if (self.#streamOutput) {
-          self.#streamOutput.updateResults(
-            executionResults as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>,
-          );
         }
       },
     });
@@ -1977,6 +1967,37 @@ export class Run<
     });
 
     return this.#streamOutput;
+  }
+
+  /**
+   * Resumes the workflow execution with the provided input as a stream
+   * @param input The input data for the workflow
+   * @returns A promise that resolves to the workflow output
+   */
+  resumeStream({
+    step,
+    resumeData,
+    runtimeContext,
+    tracingContext,
+    tracingOptions,
+  }: {
+    resumeData?: z.input<TInput>;
+    step?:
+      | Step<string, any, any, any, any, any, TEngineType>
+      | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, any, TEngineType>]
+      | string
+      | string[];
+    runtimeContext?: RuntimeContext;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+  } = {}) {
+    return this.resumeStreamVNext({
+      resumeData,
+      step,
+      runtimeContext,
+      tracingContext,
+      tracingOptions,
+    });
   }
 
   /**
