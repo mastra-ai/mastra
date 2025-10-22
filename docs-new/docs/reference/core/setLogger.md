@@ -1,0 +1,47 @@
+---
+title: 'Mastra.setLogger() '
+description: 'Documentation for the `Mastra.setLogger()` method in Mastra, which sets the logger for all components (agents, workflows, etc.).'
+---
+
+# Mastra.setLogger()
+
+The `.setLogger()` method is used to set the logger for all components (agents, workflows, etc.) in the Mastra instance. This method accepts a single object parameter with a logger property.
+
+## Usage example
+
+```typescript copy
+mastra.setLogger({ logger: new PinoLogger({ name: 'testLogger' }) });
+```
+
+## Parameters
+
+<PropertiesTable
+content={[
+{
+name: "options",
+type: "{ logger: TLogger }",
+description: "An object containing the logger instance to set for all components.",
+},
+]}
+/>
+
+### Options
+
+<PropertiesTable
+content={[
+{
+name: "logger",
+type: "TLogger",
+description: "The logger instance to set for all components (agents, workflows, etc.).",
+},
+]}
+/>
+
+## Returns
+
+This method does not return a value.
+
+## Related
+
+- [Logging overview](/docs/observability/logging)
+- [Logger reference](/docs/reference/observability/logging/pino-logger)

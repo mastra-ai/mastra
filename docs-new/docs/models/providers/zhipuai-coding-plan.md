@@ -1,0 +1,136 @@
+---
+title: 'Zhipu AI Coding Plan '
+description: 'Use Zhipu AI Coding Plan models with Mastra. 5 models available.'
+---
+
+# <img src="https://models.dev/logos/zhipuai-coding-plan.svg" alt="Zhipu AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI Coding Plan
+
+Access 5 Zhipu AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+
+Learn more in the [Zhipu AI Coding Plan documentation](https://docs.bigmodel.cn/cn/coding-plan/overview).
+
+```bash
+ZHIPU_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from '@mastra/core';
+
+const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant',
+  model: 'zhipuai-coding-plan/glm-4.5',
+});
+
+// Generate a response
+const response = await agent.generate('Hello!');
+
+// Stream a response
+const stream = await agent.stream('Tell me a story');
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::note OpenAI Compatibility
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Zhipu AI Coding Plan documentation](https://docs.bigmodel.cn/cn/coding-plan/overview) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+models={[
+{
+"model": "zhipuai-coding-plan/glm-4.6",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 204800,
+"maxOutput": 131072,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "zhipuai-coding-plan/glm-4.5v",
+"imageInput": true,
+"audioInput": false,
+"videoInput": true,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 64000,
+"maxOutput": 16384,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "zhipuai-coding-plan/glm-4.5-air",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 131072,
+"maxOutput": 98304,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "zhipuai-coding-plan/glm-4.5",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 131072,
+"maxOutput": 98304,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "zhipuai-coding-plan/glm-4.5-flash",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 131072,
+"maxOutput": 98304,
+"inputCost": null,
+"outputCost": null
+}
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: 'custom-agent',
+  model: {
+    url: 'https://open.bigmodel.cn/api/coding/paas/v4',
+    modelId: 'glm-4.5',
+    apiKey: process.env.ZHIPU_API_KEY,
+    headers: {
+      'X-Custom-Header': 'value',
+    },
+  },
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: 'dynamic-agent',
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === 'complex';
+    return useAdvanced ? 'zhipuai-coding-plan/glm-4.6' : 'zhipuai-coding-plan/glm-4.5';
+  },
+});
+```

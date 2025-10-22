@@ -1,8 +1,10 @@
 import type { LLMStepResult } from '@mastra/core/agent';
-import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '@mastra/core/workflows';
+import type { InferUIMessageChunk, UIMessage } from 'ai';
 import type { ZodType } from 'zod';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
+import { isDataChunkType } from './utils';
 
 type StepResult = {
   name: string;
@@ -90,15 +92,8 @@ export function AgentNetworkToAISDKTransformer() {
         type?: 'start' | 'finish';
       }
     | NetworkDataPart
-    | {
-        type: 'text-delta';
-        id: string;
-        delta: string;
-      }
-    | {
-        type: 'text-start';
-        id: string;
-      }
+    | InferUIMessageChunk<UIMessage>
+    | DataChunkType
   >({
     start(controller) {
       controller.enqueue({
@@ -389,8 +384,18 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
         },
       } as const;
     }
-    default:
+    default: {
+      // return the chunk as is if it's not a known type
+      if (isDataChunkType(payload)) {
+        if (!('data' in payload)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
+          );
+        }
+        return payload;
+      }
       return null;
+    }
   }
 }
 
@@ -398,7 +403,7 @@ export function transformNetwork(
   payload: NetworkChunkType,
   bufferedNetworks: Map<string, { name: string; steps: StepResult[] }>,
   isNested?: boolean,
-) {
+): InferUIMessageChunk<UIMessage> | NetworkDataPart | DataChunkType | null {
   switch (payload.type) {
     case 'routing-agent-start': {
       if (!bufferedNetworks.has(payload.payload.runId)) {
@@ -597,7 +602,17 @@ export function transformNetwork(
         },
       } as const;
     }
-    default:
+    default: {
+      // return the chunk as is if it's not a known type
+      if (isDataChunkType(payload)) {
+        if (!('data' in payload)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
+          );
+        }
+        return payload;
+      }
       return null;
+    }
   }
 }

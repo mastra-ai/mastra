@@ -1,0 +1,185 @@
+---
+title: 'Context Position '
+description: Example of using the Context Position metric to evaluate sequential ordering in responses.
+---
+
+# Context Position Evaluation
+
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
+
+Use `ContextPositionMetric` to evaluate whether the response is supported by the most relevant context segments. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
+
+## Installation
+
+```bash copy
+npm install @mastra/evals
+```
+
+## High position example
+
+In this example, the response directly answers the query using the first statement from the provided context. The surrounding context further supports the response with consistent and reinforcing information, resulting in strong positional alignment.
+
+```typescript filename="src/example-high-position.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { ContextPositionMetric } from '@mastra/evals/llm';
+
+const metric = new ContextPositionMetric(openai('gpt-4o-mini'), {
+  context: [
+    'The capital of France is Paris.',
+    'Paris has been the capital since 508 CE.',
+    "Paris serves as France's political center.",
+    'The capital city hosts the French government.',
+  ],
+});
+
+const query = 'What is the capital of France?';
+const response = 'The capital of France is Paris.';
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### High position output
+
+The output receives a perfect score because the relevant information appears at the top of the context and directly supports the response without distraction or noise.
+
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'The score is 1 because all provided context directly supports the output by confirming that Paris is the capital of France, with each statement reinforcing the answer through historical, political, and functional relevance.'
+  }
+}
+```
+
+## Mixed position example
+
+In this example, the response combines highly relevant information with additional details drawn from later in the context. While the weight-related fact answers the query, the inclusion of less relevant facts reduces the response’s positional precision.
+
+```typescript filename="src/example-mixed-position.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { ContextPositionMetric } from '@mastra/evals/llm';
+
+const metric = new ContextPositionMetric(openai('gpt-4o-mini'), {
+  context: [
+    'Elephants are herbivores.',
+    'Adult elephants can weigh up to 13,000 pounds.',
+    'Elephants are the largest land animals.',
+    'Elephants eat plants and grass.',
+  ],
+});
+
+const query = 'How much do elephants weigh?';
+const response = 'Adult elephants can weigh up to 13,000 pounds, making them the largest land animals.';
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Mixed position output
+
+The output receives a mid-range score because the relevant information is present but is blended with lower-priority context. This weakens the alignment between context order and response focus.
+
+```typescript
+{
+  score: 0.4,
+  info: {
+    reason: 'The score is 0.4 because the response includes a direct answer regarding the weight of adult elephants, which is highly relevant. However, it also contains irrelevant information about elephants being herbivores and their eating habits, which do not contribute to understanding their weight. The presence of both relevant and irrelevant context leads to a lower overall score.'
+  }
+}
+```
+
+## Low position example
+
+In this example, the response references relevant information located at the end of the context. The earlier parts of the context introduce unrelated descriptive details, which disrupt the expected sequence of supporting information.
+
+```typescript filename="src/example-low-position.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { ContextPositionMetric } from '@mastra/evals/llm';
+
+const metric = new ContextPositionMetric(openai('gpt-4o-mini'), {
+  context: [
+    'Rainbows appear in the sky.',
+    'Rainbows have different colors.',
+    'Rainbows are curved in shape.',
+    'Rainbows form when sunlight hits water droplets.',
+  ],
+});
+
+const query = 'How do rainbows form?';
+const response = 'Rainbows are created when sunlight interacts with water droplets in the air.';
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Low position output
+
+The output receives a low score because the key supporting information appears late in the context, and earlier content provides little to no value in relation to the query.
+
+```typescript
+{
+  score: 0.12,
+  info: {
+    reason: 'The score is 0.12 because the relevant context directly explains how rainbows form, while the other statements provide information that is either unrelated or only tangentially related to the formation process.'
+  }
+}
+```
+
+## Metric configuration
+
+You can create a `ContextPositionMetric` instance by providing a `context` array that represents the expected sequence of information. You can also configure optional parameters such as `scale` to set the maximum possible score.
+
+```typescript showLineNumbers copy
+const metric = new ContextPositionMetric(openai('gpt-4o-mini'), {
+  context: [''],
+  scale: 1,
+});
+```
+
+> See [ContextPositionMetric](/docs/reference/evals/context-position) for a full list of configuration options.
+
+## Understanding the results
+
+`ContextPositionMetric` returns a result in the following shape:
+
+```typescript
+{
+  score: number,
+  info: {
+    reason: string
+  }
+}
+```
+
+### Position score
+
+A position score between 0 and 1:
+
+- **1.0**: Perfect position – most relevant information appears first.
+- **0.7–0.9**: Strong position – relevant information mostly at the beginning.
+- **0.4–0.6**: Mixed position – relevant information scattered throughout.
+- **0.1–0.3**: Weak position – relevant information mostly at the end.
+- **0.0**: No position – completely irrelevant or reversed positioning.
+
+### Position info
+
+An explanation for the score, with details including:
+
+- Relevance of context to the query and response.
+- Position of relevant content within the context sequence.
+- Emphasis on early context over later context.
+- Overall organization and structure of the context.
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-position"
+/>

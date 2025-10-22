@@ -160,7 +160,7 @@ Enable Function URL for external access:
 3. Set **Auth type** to **NONE** (for public access)
 4. Configure **CORS** settings:
    - **Allow-Origin**: `*` (restrict to your domain in production)
-   - **Allow-Headers**: `content-type`
+   - **Allow-Headers**: `content-type` (`x-amzn-request-context` is also required when used with services like Cloudfront/API Gateway)
    - **Allow-Methods**: `*` (audit and restrict in production)
 5. Click **Save**
 
