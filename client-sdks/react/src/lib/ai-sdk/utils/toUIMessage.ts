@@ -286,6 +286,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       ];
     }
 
+    case 'tool-error':
     case 'tool-result': {
       const lastMessage = result[result.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') return result;
@@ -300,14 +301,15 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
         const toolPart = parts[toolPartIndex];
 
         if (toolPart.type === 'dynamic-tool') {
-          if (chunk.payload.isError) {
+          if ((chunk.type === 'tool-result' && chunk.payload.isError) || chunk.type === 'tool-error') {
+            const error = chunk.type === 'tool-error' ? chunk.payload.error : chunk.payload.result;
             parts[toolPartIndex] = {
               type: 'dynamic-tool',
               toolName: toolPart.toolName,
               toolCallId: toolPart.toolCallId,
               state: 'output-error',
               input: toolPart.input,
-              errorText: String(chunk.payload.result),
+              errorText: String(error),
               callProviderMetadata: chunk.payload.providerMetadata,
             };
           } else {
@@ -317,7 +319,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             if (isWorkflow) {
               output = (chunk.payload.result as any)?.result;
             } else if (isAgent) {
-              output = (parts[toolPartIndex] as any).output;
+              output = (parts[toolPartIndex] as any).output ?? chunk.payload.result;
             } else {
               output = chunk.payload.result;
             }
@@ -466,6 +468,35 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
         {
           ...lastMessage,
           parts,
+        },
+      ];
+    }
+
+    case 'tool-call-approval': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      // Find and update the corresponding tool call
+
+      const lastRequireApprovalMetadata =
+        lastMessage.metadata?.mode === 'stream' ? lastMessage.metadata?.requireApprovalMetadata : {};
+
+      return [
+        ...result.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            ...lastMessage.metadata,
+            mode: 'stream',
+            requireApprovalMetadata: {
+              ...lastRequireApprovalMetadata,
+              [chunk.payload.toolCallId]: {
+                toolCallId: chunk.payload.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+              },
+            },
+          },
         },
       ];
     }

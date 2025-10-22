@@ -37,7 +37,6 @@ export interface MCPClientOptions {
  * ```typescript
  * import { MCPClient } from '@mastra/mcp';
  * import { Agent } from '@mastra/core/agent';
- * import { openai } from '@ai-sdk/openai';
  *
  * const mcp = new MCPClient({
  *   servers: {
@@ -56,7 +55,7 @@ export interface MCPClientOptions {
  * const agent = new Agent({
  *   name: 'Multi-tool Agent',
  *   instructions: 'You have access to multiple tools.',
- *   model: openai('gpt-4'),
+ *   model: 'openai/gpt-4o',
  *   tools: await mcp.getTools(),
  * });
  * ```
@@ -686,7 +685,7 @@ To fix this you have three different options:
    * const agent = new Agent({
    *   name: 'Multi-tool Agent',
    *   instructions: 'You have access to weather and stock tools.',
-   *   model: openai('gpt-4'),
+   *   model: 'openai/gpt-4',
    *   tools: await mcp.getTools(), // weather_getWeather, stockPrice_getPrice
    * });
    * ```
@@ -729,7 +728,7 @@ To fix this you have three different options:
    * const agent = new Agent({
    *   name: 'Dynamic Agent',
    *   instructions: 'You can use tools dynamically.',
-   *   model: openai('gpt-4'),
+   *   model: 'openai/gpt-4',
    * });
    *
    * const response = await agent.stream(prompt, {
@@ -914,8 +913,13 @@ export class MCPConfiguration extends MCPClient {
    */
   constructor(args: MCPClientOptions) {
     super(args);
-    this.logger.warn(
-      `MCPConfiguration has been renamed to MCPClient and MCPConfiguration is deprecated. The API is identical but the MCPConfiguration export will be removed in the future. Update your imports now to prevent future errors.`,
+    throw new MastraError(
+      {
+        id: 'MCP_CLIENT_CONFIGURATION_DEPRECATED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        text: '[DEPRECATION] MCPConfiguration has been renamed to MCPClient and MCPConfiguration is deprecated. The API is identical but the MCPConfiguration export will be removed in the future. Update your imports now to prevent future errors.',
+      },
     );
   }
 }

@@ -7,6 +7,7 @@ import React from 'react';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import Markdown from 'react-markdown';
 import { MastraUIMessage } from '@mastra/react';
+import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
 
 type TextMessage = {
   type: 'text';
@@ -24,13 +25,13 @@ type ToolMessage = {
 
 export type AgentMessage = TextMessage | ToolMessage;
 
-export interface AgentBadgeProps {
+export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   agentId: string;
   messages: AgentMessage[];
   metadata?: MastraUIMessage['metadata'];
 }
 
-export const AgentBadge = ({ agentId, messages = [], metadata }: AgentBadgeProps) => {
+export const AgentBadge = ({ agentId, messages = [], metadata, toolCallId, toolApprovalMetadata }: AgentBadgeProps) => {
   const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
 
@@ -74,6 +75,12 @@ export const AgentBadge = ({ agentId, messages = [], metadata }: AgentBadgeProps
           </React.Fragment>
         );
       })}
+
+      <ToolApprovalButtons
+        toolCalled={messages?.length > 0}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+      />
     </BadgeWrapper>
   );
 };
