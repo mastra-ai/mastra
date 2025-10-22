@@ -34,9 +34,49 @@ export class ModelSpanTracker {
   }
 
   /**
+   * Get the tracing context for creating child spans.
+   * Returns the current step span if active, otherwise the model span.
+   */
+  getTracingContext(): { currentSpan?: AISpan<any> } {
+    return {
+      currentSpan: this.currentStepSpan ?? this.modelSpan,
+    };
+  }
+
+  /**
+   * Report an error on the generation span
+   */
+  reportGenerationError(options: { error: Error; endSpan?: boolean }): void {
+    this.modelSpan?.error(options);
+  }
+
+  /**
+   * End the generation span
+   */
+  endGeneration(options?: {
+    output?: any;
+    attributes?: Partial<any>;
+    metadata?: Record<string, any>;
+  }): void {
+    this.modelSpan?.end(options);
+  }
+
+  /**
+   * Update the generation span
+   */
+  updateGeneration(options?: {
+    input?: any;
+    output?: any;
+    attributes?: Partial<any>;
+    metadata?: Record<string, any>;
+  }): void {
+    this.modelSpan?.update(options);
+  }
+
+  /**
    * Start a new Model execution step
    */
-  startStepSpan(payload?: StepStartPayload) {
+  private startStepSpan(payload?: StepStartPayload) {
     this.currentStepSpan = this.modelSpan?.createChildSpan({
       name: `step: ${this.stepIndex}`,
       type: AISpanType.MODEL_STEP,
@@ -54,7 +94,7 @@ export class ModelSpanTracker {
   /**
    * End the current Model execution step with token usage, finish reason, output, and metadata
    */
-  endStepSpan<OUTPUT extends OutputSchema>(payload: StepFinishPayload<ToolSet, OUTPUT>) {
+  private endStepSpan<OUTPUT extends OutputSchema>(payload: StepFinishPayload<ToolSet, OUTPUT>) {
     if (!this.currentStepSpan) return;
 
     // Extract all data from step-finish chunk
@@ -88,7 +128,7 @@ export class ModelSpanTracker {
   /**
    * Create a new chunk span (for multi-part chunks like text-start/delta/end)
    */
-  startChunkSpan(chunkType: string, initialData?: Record<string, any>) {
+  private startChunkSpan(chunkType: string, initialData?: Record<string, any>) {
     // Auto-create step if we see a chunk before step-start
     if (!this.currentStepSpan) {
       this.startStepSpan();
@@ -108,7 +148,7 @@ export class ModelSpanTracker {
   /**
    * Append string content to a specific field in the accumulator
    */
-  appendToAccumulator(field: string, text: string) {
+  private appendToAccumulator(field: string, text: string) {
     if (this.accumulator[field] === undefined) {
       this.accumulator[field] = text;
     } else {
@@ -120,7 +160,7 @@ export class ModelSpanTracker {
    * End the current chunk span.
    * Safe to call multiple times - will no-op if span already ended.
    */
-  endChunkSpan(output?: any) {
+  private endChunkSpan(output?: any) {
     if (!this.currentChunkSpan) return;
 
     this.currentChunkSpan.end({
@@ -134,7 +174,7 @@ export class ModelSpanTracker {
   /**
    * Create an event span (for single chunks like tool-call)
    */
-  createEventSpan(chunkType: string, output: any) {
+  private createEventSpan(chunkType: string, output: any) {
     // Auto-create step if we see a chunk before step-start
     if (!this.currentStepSpan) {
       this.startStepSpan();
@@ -158,22 +198,15 @@ export class ModelSpanTracker {
   /**
    * Check if there is currently an active chunk span
    */
-  hasActiveChunkSpan(): boolean {
+  private hasActiveChunkSpan(): boolean {
     return !!this.currentChunkSpan;
   }
 
   /**
    * Get the current accumulator value
    */
-  getAccumulator(): Record<string, any> {
+  private getAccumulator(): Record<string, any> {
     return this.accumulator;
-  }
-
-  /**
-   * Get the current step span (for making tool calls children of steps)
-   */
-  getCurrentStepSpan(): AISpan<AISpanType.MODEL_STEP> | undefined {
-    return this.currentStepSpan;
   }
 
   /**
