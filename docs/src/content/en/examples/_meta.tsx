@@ -14,16 +14,16 @@ const meta = {
     title: "Processors",
     theme: { collapsed: true },
   },
+  memory: {
+    title: "Memory",
+    theme: { collapsed: true },
+  },
   workflows_legacy: {
     title: "Workflows (Legacy)",
     display: "hidden",
   },
   rag: {
     title: "RAG",
-    theme: { collapsed: true },
-  },
-  memory: {
-    title: "Memory",
     theme: { collapsed: true },
   },
   evals: {

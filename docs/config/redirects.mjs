@@ -193,7 +193,27 @@ export const redirectList = [
   },
   {
     source: "/:locale/examples/memory",
-    destination: "/:locale/examples/memory/memory-with-libsql",
+    destination: "/:locale/docs/memory/storage/memory-with-libsql",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/memory/memory-with-libsql",
+    destination: "/:locale/docs/memory/storage/memory-with-libsql",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/memory/memory-with-pg",
+    destination: "/:locale/docs/memory/storage/memory-with-pg",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/memory/memory-with-upstash",
+    destination: "/:locale/docs/memory/storage/memory-with-upstash",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/memory/memory-processors",
+    destination: "/:locale/docs/memory/memory-processors",
     permanent: true,
   },
   {
@@ -243,7 +263,7 @@ export const redirectList = [
   },
   {
     source: "/:locale/examples/memory/short-term-working-memory",
-    destination: "/:locale/examples/memory/memory-with-libsql",
+    destination: "/:locale/docs/memory/storage/memory-with-libsql",
     permanent: true,
   },
   {
@@ -1328,4 +1348,9 @@ export const redirectList = [
     destination: "/:locale/docs/workflows/using-with-agents-and-tools",
     permanent: true,
   },
+  {
+    source: "/:locale/examples/memory/working-memory-basic",
+    destination: "/:locale/docs/memory/working-memory",
+    permanent: true,
+  }
 ];
