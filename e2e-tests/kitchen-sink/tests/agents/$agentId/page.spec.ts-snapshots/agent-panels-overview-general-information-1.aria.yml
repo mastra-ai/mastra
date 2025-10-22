@@ -21,7 +21,7 @@
   - list:
     - listitem:
       - link "Sub Agent":
-        - /url: /agents/Sub Agent
+        - /url: /agents/subAgent
         - img
   - heading "Tools" [level=3]:
     - link:
