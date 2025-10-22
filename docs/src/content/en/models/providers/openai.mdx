@@ -414,7 +414,7 @@ for await (const chunk of stream) {
 const agent = new Agent({
   name: "custom-agent",
   model: {
-    modelId: "codex-mini-latest",
+    id: "openai/codex-mini-latest",
     apiKey: process.env.OPENAI_API_KEY,
     headers: {
       "X-Custom-Header": "value"
