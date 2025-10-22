@@ -1,6 +1,5 @@
 import { spawn } from 'child_process';
 import path from 'path';
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/di';
 import type { ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
@@ -709,7 +708,7 @@ describe('MCPClient', () => {
       const agentName = 'stockAgentForContextTest';
       const agent = new Agent({
         name: agentName,
-        model: openai('gpt-4o'),
+        model: 'openai/gpt-4o',
         instructions: 'Use the getStockPrice tool to find the price of MSFT.',
         tools: await mcpClientForAgentTest.getTools(),
       });

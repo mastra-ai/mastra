@@ -7,7 +7,7 @@
 
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Project, TypeFormatFlags } from 'ts-morph';
+import { Node, Project, TypeFormatFlags } from 'ts-morph';
 import type { Type } from 'ts-morph';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -104,6 +104,17 @@ function generateProviderDocs(providerName: string, typeName: string, project: P
       targetType = interfaceDecl.getType();
       break;
     }
+
+    // Also check exported declarations (for InferValidator types)
+    const exportedDeclarations = sourceFile.getExportedDeclarations();
+    const declarations = exportedDeclarations.get(typeName);
+    if (declarations && declarations.length > 0) {
+      const decl = declarations[0];
+      if (Node.isTypeAliasDeclaration(decl)) {
+        targetType = decl.getType();
+        break;
+      }
+    }
   }
 
   if (!targetType) {
@@ -171,6 +182,14 @@ export function generateProviderOptionsSection(providerId: string): string {
     const interfaceDecl = sourceFile.getInterface(providerInfo.typeName);
     if (interfaceDecl) {
       targetType = interfaceDecl.getType();
+      break;
+    }
+
+    // Also check exported declarations
+    const exportedDeclarations = sourceFile.getExportedDeclarations();
+    const typeExport = exportedDeclarations.get(providerInfo.typeName);
+    if (typeExport && typeExport.length > 0) {
+      targetType = typeExport[0].getType();
       break;
     }
   }

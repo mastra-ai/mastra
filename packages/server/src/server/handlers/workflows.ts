@@ -2,7 +2,14 @@ import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { TracingOptions } from '@mastra/core/ai-tracing';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { WorkflowRuns } from '@mastra/core/storage';
-import type { Workflow, WatchEvent, WorkflowInfo, StreamEvent, ChunkType } from '@mastra/core/workflows';
+import type {
+  Workflow,
+  WatchEvent,
+  WorkflowInfo,
+  ChunkType,
+  WorkflowStreamEvent,
+  StreamEvent,
+} from '@mastra/core/workflows';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
@@ -295,24 +302,45 @@ export async function watchWorkflowHandler({
     let asyncRef: NodeJS.Immediate | null = null;
     const stream = new ReadableStream<string>({
       start(controller) {
-        unwatch = _run.watch((event: any) => {
-          const { type, payload, eventTimestamp } = event;
-          controller.enqueue(JSON.stringify({ type, payload, eventTimestamp, runId }));
+        if (eventType === 'watch') {
+          unwatch = _run.watch((event: WatchEvent) => {
+            const { type, payload, eventTimestamp } = event;
+            controller.enqueue(JSON.stringify({ type, payload, eventTimestamp, runId }));
 
-          if (asyncRef) {
-            clearImmediate(asyncRef);
-            asyncRef = null;
-          }
-
-          // a run is finished if the status is not running
-          asyncRef = setImmediate(async () => {
-            const runDone = eventType === 'watch' ? payload.workflowState.status !== 'running' : type === 'finish';
-            if (runDone) {
-              controller.close();
-              unwatch?.();
+            if (asyncRef) {
+              clearImmediate(asyncRef);
+              asyncRef = null;
             }
-          });
-        }, eventType);
+
+            // a run is finished if the status is not running
+            asyncRef = setImmediate(async () => {
+              const runDone = (payload as WatchEvent['payload']).workflowState?.status !== 'running';
+              if (runDone) {
+                controller.close();
+                unwatch?.();
+              }
+            });
+          }, eventType);
+        } else {
+          unwatch = _run.watch((event: WorkflowStreamEvent) => {
+            const { type, payload } = event;
+            controller.enqueue(JSON.stringify({ type, payload, runId }));
+
+            if (asyncRef) {
+              clearImmediate(asyncRef);
+              asyncRef = null;
+            }
+
+            // a run is finished if the status is not running
+            asyncRef = setImmediate(async () => {
+              const runDone = type === 'workflow-finish';
+              if (runDone) {
+                controller.close();
+                unwatch?.();
+              }
+            });
+          }, eventType);
+        }
       },
       cancel() {
         if (asyncRef) {
@@ -330,6 +358,21 @@ export async function watchWorkflowHandler({
 }
 
 export async function streamWorkflowHandler({
+  mastra,
+  runtimeContext,
+  workflowId,
+  runId,
+  inputData,
+  tracingOptions,
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
+  inputData?: unknown;
+  runtimeContext?: RuntimeContext;
+  tracingOptions?: TracingOptions;
+}) {
+  return streamVNextWorkflowHandler({ mastra, workflowId, runId, inputData, runtimeContext, tracingOptions });
+}
+
+export async function streamLegacyWorkflowHandler({
   mastra,
   runtimeContext,
   workflowId,
@@ -359,7 +402,7 @@ export async function streamWorkflowHandler({
     const serverCache = mastra.getServerCache();
 
     const run = await workflow.createRunAsync({ runId });
-    const result = run.stream({
+    const result = run.streamLegacy({
       inputData,
       runtimeContext,
       onChunk: async chunk => {
@@ -377,7 +420,7 @@ export async function streamWorkflowHandler({
   }
 }
 
-export async function observeStreamWorkflowHandler({
+export async function observeStreamLegacyWorkflowHandler({
   mastra,
   workflowId,
   runId,
@@ -421,11 +464,19 @@ export async function observeStreamWorkflowHandler({
 
     writer.releaseLock();
 
-    const result = _run.observeStream();
+    const result = _run.observeStreamLegacy();
     return result.stream?.pipeThrough(transformStream);
   } catch (error) {
     return handleError(error, 'Error observing workflow stream');
   }
+}
+
+export async function observeStreamWorkflowHandler({
+  mastra,
+  workflowId,
+  runId,
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'>) {
+  return observeStreamVNextWorkflowHandler({ mastra, workflowId, runId });
 }
 
 export async function streamVNextWorkflowHandler({
@@ -460,19 +511,23 @@ export async function streamVNextWorkflowHandler({
     const serverCache = mastra.getServerCache();
 
     const run = await workflow.createRunAsync({ runId });
-    const result = run.streamVNext({
+    const result = run.stream({
       inputData,
       runtimeContext,
       closeOnSuspend,
-      onChunk: async chunk => {
-        if (serverCache) {
-          const cacheKey = runId;
-          await serverCache.listPush(cacheKey, chunk);
-        }
-      },
       tracingOptions,
     });
-    return result;
+    return result.fullStream.pipeThrough(
+      new TransformStream<ChunkType, ChunkType>({
+        transform(chunk, controller) {
+          if (serverCache) {
+            const cacheKey = runId;
+            serverCache.listPush(cacheKey, chunk).catch(() => {});
+          }
+          controller.enqueue(chunk);
+        },
+      }),
+    );
   } catch (error) {
     return handleError(error, 'Error streaming workflow');
   }
@@ -524,7 +579,7 @@ export async function observeStreamVNextWorkflowHandler({
         };
 
         // Then, pipe the live stream
-        const liveStream = _run.observeStreamVNext();
+        const liveStream = _run.observeStream();
         const reader = liveStream.getReader();
 
         const pump = async () => {
@@ -704,18 +759,25 @@ export async function resumeStreamWorkflowHandler({
     const _run = await workflow.createRunAsync({ runId, resourceId: run.resourceId });
     const serverCache = mastra.getServerCache();
 
-    const stream = _run.resumeStreamVNext({
-      step: body.step,
-      resumeData: body.resumeData,
-      runtimeContext,
-      tracingOptions,
-      onChunk: async chunk => {
-        if (serverCache) {
-          const cacheKey = runId;
-          await serverCache.listPush(cacheKey, chunk);
-        }
-      },
-    });
+    const stream = _run
+      .resumeStream({
+        step: body.step,
+        resumeData: body.resumeData,
+        runtimeContext,
+        tracingOptions,
+      })
+      .fullStream.pipeThrough(
+        new TransformStream<ChunkType, ChunkType>({
+          transform(chunk, controller) {
+            if (serverCache) {
+              const cacheKey = runId;
+              serverCache.listPush(cacheKey, chunk).catch(() => {});
+            }
+
+            controller.enqueue(chunk);
+          },
+        }),
+      );
 
     return stream;
   } catch (error) {

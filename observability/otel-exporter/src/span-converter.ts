@@ -275,6 +275,7 @@ export class SpanConverter {
       const agentAttrs = aiSpan.attributes as AgentRunAttributes;
       if (agentAttrs.agentId) {
         attributes['agent.id'] = agentAttrs.agentId;
+        attributes['gen_ai.agent.id'] = agentAttrs.agentId;
       }
       if (agentAttrs.maxSteps) {
         attributes['agent.max_steps'] = agentAttrs.maxSteps;
