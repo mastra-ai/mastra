@@ -33,7 +33,9 @@ test.describe('agent panels', () => {
   test.describe('overview', () => {
     test('general information', async ({ page }) => {
       await page.goto('http://localhost:4111/agents/weatherAgent/chat/1234');
-      await expect(page.getByLabel('Overview')).toBeVisible();
+      const overview = await page.getByLabel('Overview');
+      await expect(overview).toBeVisible();
+      await expect(overview).toMatchAriaSnapshot();
 
       // const searchProviderInput = await page.locator('input[aria-label="Search providers"]');
       // await expect(searchProviderInput).toBeVisible();

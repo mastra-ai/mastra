@@ -1,0 +1,46 @@
+- tabpanel "Overview":
+  - heading "Model" [level=3]
+  - img "mock-provider logo"
+  - textbox "Search providers":
+    - /placeholder: Search providers...
+  - textbox "Search models":
+    - /placeholder: Enter model name or select from suggestions...
+    - text: mock-model-id
+  - button "Reset to original model":
+    - img
+  - heading "Memory" [level=3]:
+    - link:
+      - /url: https://mastra.ai/en/docs/agents/agent-memory
+      - img
+  - img
+  - text: Memory is enabled
+  - heading "Agents" [level=3]:
+    - link:
+      - /url: https://mastra.ai/en/docs/agents/overview
+      - img
+  - list:
+    - listitem:
+      - link "Sub Agent":
+        - /url: /agents/Sub Agent
+        - img
+  - heading "Tools" [level=3]:
+    - link:
+      - /url: https://mastra.ai/en/docs/agents/using-tools-and-mcp
+      - img
+  - list:
+    - listitem:
+      - link "weatherInfo":
+        - /url: /agents/weatherAgent/tools/weatherInfo
+        - img
+  - heading "Workflows" [level=3]:
+    - link:
+      - /url: https://mastra.ai/en/docs/workflows/overview
+      - img
+  - paragraph: No workflows
+  - heading "Scorers" [level=3]
+  - paragraph: No Scorers
+  - heading "System Prompt" [level=3]
+  - button
+  - text: "You are a helpful weather assistant that provides accurate weather information. Your primary function is to help users get weather details for specific locations. When responding: - Always ask for a location if none is provided - If the location name isn’t in English, please translate it - If giving a location with multiple parts (e.g. \"New York, NY\"), use the most relevant part (e.g. \"New York\") - Include relevant details like humidity, wind conditions, and precipitation - Keep responses concise but informative Click to copy"
+  - textbox "Add your comments or requirements for enhancing your agent's prompt..."
+  - button
