@@ -12,7 +12,7 @@ import type {
 } from '@mastra/core/mcp';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { createTool } from '@mastra/core/tools';
-import type { InternalCoreTool, MCPToolType, MCPToolInvocationOptions } from '@mastra/core/tools';
+import type { InternalCoreTool, MCPToolType, MastraToolInvocationOptions } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -415,11 +415,14 @@ export class MCPServer extends MCPServerBase {
           },
         };
 
-        const mcpOptions: MCPToolInvocationOptions = {
+        const mcpOptions: MastraToolInvocationOptions = {
           messages: [],
           toolCallId: '',
-          elicitation: sessionElicitation,
-          extra,
+          // Pass MCP-specific context through the mcp property
+          mcp: {
+            elicitation: sessionElicitation,
+            extra,
+          },
         };
         const result = await tool.execute(validation?.value ?? request.params.arguments ?? {}, mcpOptions);
 

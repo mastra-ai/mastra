@@ -22,6 +22,18 @@ export type VercelToolV5 = ToolV5;
 export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 
 /**
+ * MCP-specific context properties available during tool execution in MCP environments.
+ */
+export interface MCPExecutionContext {
+  /** MCP protocol context passed by the server */
+  extra?: RequestHandlerExtra<any, any>;
+  /** Elicitation handler for interactive user input during tool execution */
+  elicitation?: {
+    sendRequest: (request: ElicitRequest['params']) => Promise<ElicitResult>;
+  };
+}
+
+/**
  * Extended version of ToolInvocationOptions that includes Mastra-specific properties
  * for suspend/resume functionality, stream writing, and tracing context.
  */
@@ -30,6 +42,11 @@ export type MastraToolInvocationOptions = ToolInvocationOptions & {
   resumeData?: any;
   writableStream?: WritableStream<any> | ToolStream<any>;
   tracingContext?: TracingContext;
+  /**
+   * Optional MCP-specific context passed when tool is executed in MCP server.
+   * This is populated by the MCP server and passed through to the tool's execution context.
+   */
+  mcp?: MCPExecutionContext;
 };
 
 /**
@@ -38,19 +55,6 @@ export type MastraToolInvocationOptions = ToolInvocationOptions & {
  * If not specified, it defaults to a regular tool.
  */
 export type MCPToolType = 'agent' | 'workflow';
-
-/**
- * MCP-specific tool invocation options that extend the base Mastra options.
- * These are passed to tools when they're executed in an MCP context.
- */
-export type MCPToolInvocationOptions = MastraToolInvocationOptions & {
-  /** MCP protocol context passed by the server */
-  extra?: RequestHandlerExtra<any, any>;
-  /** Elicitation handler for interactive user input during tool execution */
-  elicitation?: {
-    sendRequest: (request: ElicitRequest['params']) => Promise<ElicitResult>;
-  };
-};
 
 // MCP-specific properties for tools
 export interface MCPToolProperties {
@@ -119,6 +123,11 @@ export interface ToolExecutionContext<
   tracingContext?: TracingContext;
   suspend?: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;
   resumeData?: InferZodLikeSchema<TResumeSchema>;
+  /**
+   * Optional MCP-specific context.
+   * Only populated when the tool is executed in an MCP server context.
+   */
+  mcp?: MCPExecutionContext;
 }
 
 export interface ToolAction<
