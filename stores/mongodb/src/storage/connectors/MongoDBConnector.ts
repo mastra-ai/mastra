@@ -1,8 +1,8 @@
 import { MongoClient } from 'mongodb';
 import type { Db } from 'mongodb';
+import packageJson from '../../../package.json';
 import type { DatabaseConfig } from '../types';
 import type { ConnectorHandler } from './base';
-import packageJson from '../../../package.json';
 
 type MongoDBConnectorOptions =
   | {
@@ -48,8 +48,8 @@ export class MongoDBConnector {
       driverInfo: {
         name: 'mastra-storage',
         version: packageJson.version || '0.0.0',
-        platform: 'Node.js'
-      }
+        platform: 'Node.js',
+      },
     });
     return new MongoDBConnector({
       client,
