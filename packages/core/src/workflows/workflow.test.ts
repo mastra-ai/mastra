@@ -12586,7 +12586,8 @@ describe('Workflow', () => {
         outputSchema: z.object({
           count: z.number(),
         }),
-        execute: async ({ runCount }) => {
+        execute: async ({ runCount, retryCount }) => {
+          expect(retryCount).toBe(runCount);
           return { count: runCount };
         },
       });
@@ -12597,7 +12598,8 @@ describe('Workflow', () => {
         outputSchema: z.object({
           count: z.number(),
         }),
-        execute: async ({ retryCount }) => {
+        execute: async ({ retryCount, runCount }) => {
+          expect(retryCount).toBe(runCount);
           return { count: retryCount };
         },
       });
