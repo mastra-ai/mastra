@@ -1,10 +1,11 @@
-import { join, posix } from 'node:path';
+import { join } from 'node:path';
 
 import { FileService } from '../../services/service.file';
 
 import { BuildBundler } from './BuildBundler';
 import { getDeployer } from '@mastra/deployer';
 import { createLogger } from '../../utils/logger';
+import { prepareToolsPaths } from '@mastra/deployer/utils';
 
 export async function build({
   dir,
@@ -22,15 +23,8 @@ export async function build({
   const outputDirectory = join(rootDir, '.mastra');
   const logger = createLogger(debug);
 
-  // You cannot express an "include all js/ts except these" in one single string glob pattern so by default an array is passed to negate test files.
-  const normalizedMastraDir = mastraDir.replaceAll('\\', '/');
-  const defaultToolsPath = posix.join(normalizedMastraDir, 'tools/**/*.{js,ts}');
-  const defaultToolsIgnorePaths = [
-    `!${posix.join(normalizedMastraDir, 'tools/**/*.{test,spec}.{js,ts}')}`,
-    `!${posix.join(normalizedMastraDir, 'tools/**/__tests__/**')}`,
-  ];
+  const defaultTools = prepareToolsPaths({ mastraDir });
   // We pass an array to tinyglobby to allow for the aforementioned negations
-  const defaultTools = [defaultToolsPath, ...defaultToolsIgnorePaths];
   const discoveredTools = [defaultTools, ...(tools ?? [])];
 
   try {
@@ -38,6 +32,7 @@ export async function build({
     const mastraEntryFile = fs.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
     const platformDeployer = await getDeployer(mastraEntryFile, outputDirectory);
+
     if (!platformDeployer) {
       const deployer = new BuildBundler();
       deployer.__setLogger(logger);

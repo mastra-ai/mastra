@@ -8,6 +8,7 @@ import { MASTRA_DIRECTORY, BUILD_ID, PROJECT_ID, TEAM_ID } from './utils/constan
 import { installDeps } from './utils/deps.js';
 import { getMastraEntryFile } from './utils/file.js';
 import { successEntrypoint } from './utils/report.js';
+import { prepareToolsPaths } from '@mastra/deployer/utils';
 
 export class CloudDeployer extends Deployer {
   constructor() {
@@ -44,7 +45,7 @@ export class CloudDeployer extends Deployer {
 
     const mastraEntryFile = getMastraEntryFile(mastraDir);
 
-    const defaultToolsPath = join(mastraDir, MASTRA_DIRECTORY, 'tools');
+    const defaultTools = prepareToolsPaths({ mastraDir });
 
     await this._bundle(
       this.getEntry(),
@@ -53,7 +54,7 @@ export class CloudDeployer extends Deployer {
         outputDirectory,
         projectRoot: mastraDir,
       },
-      [defaultToolsPath],
+      [defaultTools],
     );
     process.chdir(currentCwd);
   }

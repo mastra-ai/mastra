@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
-
+import { CloudDeployer } from '@mastra/deployer-cloud';
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
@@ -41,6 +41,7 @@ export const mastra = new Mastra({
   bundler: {
     sourcemap: true,
   },
+  // deployer: new CloudDeployer(),
   serverMiddleware: [
     {
       handler: (c, next) => {

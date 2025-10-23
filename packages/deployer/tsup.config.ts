@@ -5,6 +5,7 @@ export default defineConfig({
   entry: [
     'src/index.ts',
     'src/build/index.ts',
+    'src/utils/index.ts',
     'src/server/index.ts',
     'src/services/index.ts',
     'src/bundler/index.ts',
