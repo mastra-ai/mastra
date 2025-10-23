@@ -295,7 +295,7 @@ export const CustomSearch: FC<SearchProps> = ({
           spellCheck={false}
           className={cn(
             'x:[&::-webkit-search-cancel-button]:appearance-none',
-            'outline-none caret-(--mastra-green-accent) dark:caret-accent-green dark:text-icons-6 text-(--mastra-text-tertiary) focus:outline-none w-full placeholder:text-icons-4 dark:placeholder:text-icons-2 placeholder:text-small md:placeholder:text-base placeholder:font-medium',
+            'outline-none caret-(--mastra-green-accent-3) dark:caret-(--mastra-green-accent-2) dark:text-icons-6 text-(--mastra-text-tertiary) focus:outline-none w-full placeholder:text-icons-4 dark:placeholder:text-icons-2 placeholder:text-small md:placeholder:text-base placeholder:font-medium',
           )}
           autoComplete="off"
           type="search"
@@ -377,7 +377,7 @@ export const CustomSearch: FC<SearchProps> = ({
                         <div className="flex gap-2 items-center">
                           <IconComponent className="w-4 h-4 text-(--mastra-icons-3) shrink-0" />
                           <span
-                            className="text-sm font-medium truncate text-(--mastra-text-tertiary) [&_mark]:!text-pink-400 [&_mark]:bg-transparent"
+                            className="text-sm font-medium truncate text-(--mastra-text-tertiary) [&_mark]:!text-(--mastra-green-accent-3) [&_mark]:bg-transparent"
                             dangerouslySetInnerHTML={{
                               __html: subResult.title,
                             }}
@@ -386,7 +386,7 @@ export const CustomSearch: FC<SearchProps> = ({
                         <div className="ml-2 flex items-center gap-2 truncate border-l-2 dark:border-borders-2 border-(--border-code) pl-4">
                           <BurgerIcon className="w-3 h-3 md:w-3.5 md:h-3.5 shrink-0 text-(--mastra-icons-3)" />
                           <div
-                            className="text-sm font-normal truncate text-(--mastra-icons-3) [&_mark]:text-accent-green-2 dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
+                            className="text-sm font-normal truncate text-(--mastra-icons-3) [&_mark]:text-(--mastra-green-accent-3) dark:[&_mark]:text-(--mastra-green-accent-2) [&_mark]:bg-transparent"
                             dangerouslySetInnerHTML={{
                               __html: subResult.excerpt,
                             }}
