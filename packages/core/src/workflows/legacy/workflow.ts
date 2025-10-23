@@ -958,7 +958,7 @@ export class LegacyWorkflow<
       this.logger.debug('Cannot get workflow run. Mastra engine is not initialized');
       return null;
     }
-    return await storage.getWorkflowRunById({ runId, workflowName: this.name });
+    return await storage.getWorkflowRunById({ runId, workflowId: this.name });
   }
 
   /**
@@ -1016,7 +1016,7 @@ export class LegacyWorkflow<
       return { runs: [], total: 0 };
     }
 
-    return storage.getWorkflowRuns({ workflowName: this.name, ...(args ?? {}) }) as unknown as LegacyWorkflowRuns;
+    return storage.getWorkflowRuns({ workflowId: this.name, ...(args ?? {}) }) as unknown as LegacyWorkflowRuns;
   }
 
   getExecutionSpan(runId: string) {
@@ -1179,7 +1179,7 @@ export class LegacyWorkflow<
     const storage = this.#mastra?.getStorage();
     const storedSnapshot = await storage?.loadWorkflowSnapshot({
       runId,
-      workflowName: this.name,
+      workflowId: this.name,
     });
 
     if (storedSnapshot) {

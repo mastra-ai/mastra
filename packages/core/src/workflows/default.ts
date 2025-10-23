@@ -1952,7 +1952,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
-      workflowName: workflowId,
+      workflowId,
       runId,
       resourceId,
       snapshot: {

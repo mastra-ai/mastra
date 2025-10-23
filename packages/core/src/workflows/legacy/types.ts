@@ -274,7 +274,7 @@ export interface WorkflowContext<
 
 export interface WorkflowLogMessage extends BaseLogMessage {
   type: typeof RegisteredLogger.WORKFLOW;
-  workflowName: string;
+  workflowId: string;
   stepId?: StepId;
   data?: unknown;
   runId?: string;

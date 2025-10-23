@@ -346,7 +346,7 @@ export class EventedWorkflow<
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
-        workflowName: this.id,
+        workflowId: this.id,
         runId: runIdToUse,
         snapshot: {
           runId: runIdToUse,
@@ -418,7 +418,7 @@ export class EventedRun<
     runtimeContext = runtimeContext ?? new RuntimeContext();
 
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
-      workflowName: this.workflowId,
+      workflowId: this.workflowId,
       runId: this.runId,
       snapshot: {
         runId: this.runId,
@@ -500,7 +500,7 @@ export class EventedRun<
     }
 
     const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
-      workflowName: this.workflowId,
+      workflowId: this.workflowId,
       runId: this.runId,
     });
 

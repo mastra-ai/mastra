@@ -1032,7 +1032,7 @@ export class Workflow<
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
-        workflowName: this.id,
+        workflowId: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
         snapshot: {
@@ -1224,7 +1224,7 @@ export class Workflow<
       return { runs: [], total: 0 };
     }
 
-    return storage.getWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
+    return storage.getWorkflowRuns({ workflowId: this.id, ...(args ?? {}) });
   }
 
   async getWorkflowRunById(runId: string) {
@@ -1233,14 +1233,14 @@ export class Workflow<
       this.logger.debug('Cannot get workflow runs from storage. Mastra storage is not initialized');
       //returning in memory run if no storage is initialized
       return this.#runs.get(runId)
-        ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
+        ? ({ ...this.#runs.get(runId), workflowId: this.id } as unknown as WorkflowRun)
         : null;
     }
-    const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
+    const run = await storage.getWorkflowRunById({ runId, workflowId: this.id });
 
     return (
       run ??
-      (this.#runs.get(runId) ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun) : null)
+      (this.#runs.get(runId) ? ({ ...this.#runs.get(runId), workflowId: this.id } as unknown as WorkflowRun) : null)
     );
   }
 
@@ -1251,7 +1251,7 @@ export class Workflow<
       return {};
     }
 
-    const run = await storage.getWorkflowRunById({ runId, workflowName: workflowId });
+    const run = await storage.getWorkflowRunById({ runId, workflowId });
 
     let snapshot: WorkflowRunState | string = run?.snapshot!;
 
@@ -1305,7 +1305,7 @@ export class Workflow<
       return null;
     }
 
-    const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
+    const run = await storage.getWorkflowRunById({ runId, workflowId: this.id });
 
     let snapshot: WorkflowRunState | string = run?.snapshot!;
 
@@ -2271,7 +2271,7 @@ export class Run<
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
-      workflowName: this.workflowId,
+      workflowId: this.workflowId,
       runId: this.runId,
     });
 

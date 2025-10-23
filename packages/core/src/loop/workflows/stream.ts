@@ -126,7 +126,7 @@ export function workflowLoopStream<
       }
 
       const existingSnapshot = await rest.mastra?.getStorage()?.loadWorkflowSnapshot({
-        workflowName: 'agentic-loop',
+        workflowId: 'agentic-loop',
         runId,
       });
       if (existingSnapshot) {

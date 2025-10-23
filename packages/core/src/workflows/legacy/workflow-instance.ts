@@ -417,7 +417,7 @@ export class WorkflowInstance<
     }
 
     const existingSnapshot = (await storage.loadWorkflowSnapshot({
-      workflowName: this.name,
+      workflowId: this.name,
       runId: this.#runId,
     })) as unknown as WorkflowRunState;
 
@@ -444,7 +444,7 @@ export class WorkflowInstance<
       existingSnapshot.childStates = { ...existingSnapshot.childStates, ...machineSnapshots };
       existingSnapshot.suspendedSteps = { ...existingSnapshot.suspendedSteps, ...suspendedSteps };
       await storage.persistWorkflowSnapshot({
-        workflowName: this.name,
+        workflowId: this.name,
         runId: this.#runId,
         snapshot: existingSnapshot as unknown as NewWorkflowRunState,
       });
@@ -454,7 +454,7 @@ export class WorkflowInstance<
       snapshot.suspendedSteps = suspendedSteps;
       snapshot.childStates = { ...machineSnapshots };
       await storage.persistWorkflowSnapshot({
-        workflowName: this.name,
+        workflowId: this.name,
         runId: this.#runId,
         snapshot: snapshot as unknown as NewWorkflowRunState,
       });
@@ -468,7 +468,7 @@ export class WorkflowInstance<
 
     if (!existingSnapshot || snapshot === existingSnapshot) {
       await storage.persistWorkflowSnapshot({
-        workflowName: this.name,
+        workflowId: this.name,
         runId: this.#runId,
         snapshot: snapshot as unknown as NewWorkflowRunState,
       });
@@ -483,7 +483,7 @@ export class WorkflowInstance<
     }
 
     await storage.persistWorkflowSnapshot({
-      workflowName: this.name,
+      workflowId: this.name,
       runId: this.#runId,
       snapshot: snapshot as unknown as NewWorkflowRunState,
     });
@@ -491,7 +491,7 @@ export class WorkflowInstance<
 
   async getState(): Promise<WorkflowRunState | null> {
     const storedSnapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
-      workflowName: this.name,
+      workflowId: this.name,
       runId: this.runId,
     });
     const prevSnapshot = storedSnapshot
@@ -575,7 +575,7 @@ export class WorkflowInstance<
 
     await this.persistWorkflowSnapshot();
 
-    return storage.loadWorkflowSnapshot({ runId, workflowName: this.name });
+    return storage.loadWorkflowSnapshot({ runId, workflowId: this.name });
   }
 
   async _resume({
