@@ -294,7 +294,7 @@ for await (const chunk of stream) {
 const agent = new Agent({
   name: "custom-agent",
   model: {
-    modelId: "grok-2",
+    id: "xai/grok-2",
     apiKey: process.env.XAI_API_KEY,
     headers: {
       "X-Custom-Header": "value"

@@ -163,6 +163,7 @@ export class MastraLLMVNext extends MastraBase {
     requireToolApproval,
     _internal,
     agentId,
+    toolCallId,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
@@ -185,7 +186,7 @@ export class MastraLLMVNext extends MastraBase {
 
     const llmAISpan = tracingContext?.currentSpan?.createChildSpan({
       name: `llm: '${firstModel.modelId}'`,
-      type: AISpanType.LLM_GENERATION,
+      type: AISpanType.MODEL_GENERATION,
       input: {
         messages: [...messageList.getSystemMessages(), ...messages],
       },
@@ -211,6 +212,7 @@ export class MastraLLMVNext extends MastraBase {
         mastra: this.#mastra,
         resumeContext,
         runId,
+        toolCallId,
         messageList,
         models: this.#models,
         tools: tools as Tools,

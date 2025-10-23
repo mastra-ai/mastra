@@ -7,6 +7,7 @@ import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
 import { logDataMiddleware } from '../../model-middleware';
 import { wrapLanguageModel } from 'ai-v5';
+import { cookingTool } from '../tools';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
@@ -24,6 +25,7 @@ export const weatherInfo = createTool({
       wind: '10 mph',
     };
   },
+  // requireApproval: true,
 });
 
 const memory = new Memory();
@@ -46,6 +48,7 @@ export const chefModelV2Agent = new Agent({
 
   tools: {
     weatherInfo,
+    cookingTool,
   },
   workflows: {
     myWorkflow,

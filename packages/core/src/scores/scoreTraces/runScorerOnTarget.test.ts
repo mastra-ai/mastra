@@ -99,7 +99,7 @@ class TestContext {
               traceId: target.traceId,
               parentSpanId: 'span-1',
               name: 'child-span',
-              spanType: AISpanType.LLM_GENERATION,
+              spanType: AISpanType.MODEL_GENERATION,
             }),
           ]
         : [
@@ -168,7 +168,7 @@ class TestContext {
               traceId: errorDetails?.traceId || 'trace-1',
               parentSpanId: 'parent-span', // Not a root span
               name: 'child-span',
-              spanType: AISpanType.LLM_GENERATION,
+              spanType: AISpanType.MODEL_GENERATION,
             }),
           ],
         };
@@ -348,7 +348,7 @@ describe('runScorerOnTarget Function', () => {
           traceId: 'trace-1',
           spanId: 'span-2',
           entityId: 'child-span',
-          entityType: AISpanType.LLM_GENERATION,
+          entityType: AISpanType.MODEL_GENERATION,
           entity: { traceId: 'trace-1', spanId: 'span-2' },
           source: 'TEST',
           scorerId: 'test-scorer',

@@ -1,0 +1,35 @@
+---
+title: 'Mastra.getMemory() '
+description: 'Documentation for the `Mastra.getMemory()` method in Mastra, which retrieves the configured memory instance.'
+---
+
+# Mastra.getMemory()
+
+The `.getMemory()` method is used to retrieve the memory instance that has been configured in the Mastra instance.
+
+## Usage example
+
+```typescript copy
+mastra.getMemory();
+```
+
+## Parameters
+
+This method does not accept any parameters.
+
+## Returns
+
+<PropertiesTable
+content={[
+{
+name: "memory",
+type: "MastraMemory | undefined",
+description: "The configured memory instance, or undefined if no memory has been configured.",
+},
+]}
+/>
+
+## Related
+
+- [Memory overview](/docs/memory/overview)
+- [Memory reference](/docs/reference/memory)

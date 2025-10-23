@@ -5,6 +5,7 @@ const meta = {
   "conversation-history": "Conversation History",
   "semantic-recall": "Semantic Recall",
   "memory-processors": "Memory Processors",
+  storage: "Storage",
 };
 
 export default meta;

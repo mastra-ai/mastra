@@ -1,5 +1,25 @@
 # @mastra/playground-ui
 
+## 6.6.2
+
+### Patch Changes
+
+- Move all the fetching hooks that should be shared with cloud into playground-ui ([#9133](https://github.com/mastra-ai/mastra/pull/9133))
+
+- Updated dependencies [[`2b031e2`](https://github.com/mastra-ai/mastra/commit/2b031e25ca10cd3e4d63e6a27f909cba26d91405)]:
+  - @mastra/core@0.22.2
+  - @mastra/client-js@0.16.4
+  - @mastra/react@0.0.10
+
+## 6.6.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`2b031e2`](https://github.com/mastra-ai/mastra/commit/2b031e25ca10cd3e4d63e6a27f909cba26d91405)]:
+  - @mastra/core@0.22.2-alpha.0
+  - @mastra/client-js@0.16.4-alpha.0
+  - @mastra/react@0.0.10-alpha.0
+
 ## 6.6.1
 
 ### Patch Changes

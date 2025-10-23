@@ -1,0 +1,179 @@
+---
+title: 'CloudExporter '
+description: API reference for the CloudExporter
+---
+
+# CloudExporter
+
+Sends traces to Mastra Cloud for online visualization and monitoring.
+
+## Constructor
+
+```typescript
+new CloudExporter(config?: CloudExporterConfig)
+```
+
+<PropertiesTable
+props={[
+{
+name: "config",
+type: "CloudExporterConfig",
+description: "Configuration options",
+required: false,
+},
+]}
+/>
+
+## CloudExporterConfig
+
+```typescript
+interface CloudExporterConfig {
+  /** Maximum number of spans per batch. Default: 1000 */
+  maxBatchSize?: number;
+
+  /** Maximum wait time before flushing in milliseconds. Default: 5000 */
+  maxBatchWaitMs?: number;
+
+  /** Maximum retry attempts. Default: 3 */
+  maxRetries?: number;
+
+  /** Cloud access token (from env or config) */
+  accessToken?: string;
+
+  /** Cloud AI tracing endpoint */
+  endpoint?: string;
+
+  /** Optional logger */
+  logger?: IMastraLogger;
+}
+```
+
+## Environment Variables
+
+The exporter reads these environment variables if not provided in config:
+
+- `MASTRA_CLOUD_ACCESS_TOKEN` - Access token for authentication
+- `MASTRA_CLOUD_AI_TRACES_ENDPOINT` - Custom endpoint (defaults to `https://api.mastra.ai/ai/spans/publish`)
+
+## Properties
+
+```typescript
+readonly name = 'mastra-cloud-ai-tracing-exporter';
+```
+
+## Methods
+
+### exportEvent
+
+```typescript
+async exportEvent(event: AITracingEvent): Promise<void>
+```
+
+Processes tracing events. Only exports SPAN_ENDED events to Cloud.
+
+<PropertiesTable
+props={[
+{
+name: "event",
+type: "AITracingEvent",
+description: "The tracing event to export",
+required: true,
+},
+]}
+/>
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Flushes remaining events and performs cleanup.
+
+## Behavior
+
+### Authentication
+
+If no access token is provided via config or environment variable, the exporter:
+
+- Logs a warning with sign-up information
+- Operates as a no-op (discards all events)
+
+### Batching
+
+The exporter batches spans for efficient network usage:
+
+- Flushes when batch size reaches `maxBatchSize`
+- Flushes when `maxBatchWaitMs` elapsed since first span in batch
+- Flushes on `shutdown()`
+
+### Error Handling
+
+- Uses exponential backoff retry with `maxRetries` attempts
+- Drops batches after all retries fail
+- Logs errors but continues processing new events
+
+### Event Processing
+
+- Only processes `SPAN_ENDED` events
+- Ignores `SPAN_STARTED` and `SPAN_UPDATED` events
+- Formats spans to MastraCloudSpanRecord format
+
+## MastraCloudSpanRecord
+
+Internal format for cloud spans:
+
+```typescript
+interface MastraCloudSpanRecord {
+  traceId: string;
+  spanId: string;
+  parentSpanId: string | null;
+  name: string;
+  spanType: string;
+  attributes: Record<string, any> | null;
+  metadata: Record<string, any> | null;
+  startedAt: Date;
+  endedAt: Date | null;
+  input: any;
+  output: any;
+  error: any;
+  isEvent: boolean;
+  createdAt: Date;
+  updatedAt: Date | null;
+}
+```
+
+## Usage
+
+```typescript
+import { CloudExporter } from '@mastra/core/ai-tracing';
+
+// Uses environment variable for token
+const exporter = new CloudExporter();
+
+// Explicit configuration
+const customExporter = new CloudExporter({
+  accessToken: 'your-token',
+  maxBatchSize: 500,
+  maxBatchWaitMs: 2000,
+});
+```
+
+## See Also
+
+### Documentation
+
+- [AI Tracing Overview](/docs/observability/ai-tracing/overview) - Complete guide
+- [Exporters](/docs/observability/ai-tracing/overview#exporters) - Exporter concepts
+
+### Other Exporters
+
+- [DefaultExporter](/docs/reference/observability/ai-tracing/exporters/default-exporter) - Storage persistence
+- [ConsoleExporter](/docs/reference/observability/ai-tracing/exporters/console-exporter) - Debug output
+- [Langfuse](/docs/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
+- [Braintrust](/docs/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration
+
+### Reference
+
+- [Configuration](/docs/reference/observability/ai-tracing/configuration) - Configuration options
+- [Interfaces](/docs/reference/observability/ai-tracing/interfaces) - Type definitions

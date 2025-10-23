@@ -1,6 +1,4 @@
-import { AlertDialog, extractPrompt } from '@mastra/playground-ui';
-
-import { useAgent } from '@/hooks/use-agents';
+import { AlertDialog, extractPrompt, useAgent } from '@mastra/playground-ui';
 
 import { CurrentInstructions } from './components/current-instructions';
 

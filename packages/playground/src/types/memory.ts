@@ -4,11 +4,6 @@ export interface MemoryConfigResponse {
   config: MemoryConfig;
 }
 
-export interface MemorySearchParams {
-  lastMessages?: number | false;
-  // Add other memory config overrides as needed
-}
-
 export interface MemorySearchResult {
   id: string;
   role: string;
