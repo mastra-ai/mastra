@@ -80,7 +80,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   /**
-   * The retryCounts map is used to keep track of the run count for each step.
+   * The retryCounts map is used to keep track of the retry count for each step.
    * The step id is used as the key and the retry count is the value.
    */
   protected retryCounts = new Map<string, number>();
