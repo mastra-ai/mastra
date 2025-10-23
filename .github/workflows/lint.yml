@@ -127,10 +127,10 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Node.js 20.x
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v4
         with:
           node-version: 20.19.5
-          registry-url: 'https://registry.yarnpkg.com'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm install semver --no-package-lock
@@ -174,7 +174,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 20.19.5
-          registry-url: 'https://registry.yarnpkg.com'
+          cache: 'npm'
 
       - name: Run package.json validator
         run: node .github/scripts/validate-pkg-json.mjs
