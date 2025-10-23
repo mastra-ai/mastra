@@ -23,7 +23,7 @@ const docsTabs = [
   },
   {
     id: 'Guides',
-    label: 'Guides',
+    label: 'Guides & Migrations',
     href: '/docs/guides',
     basePath: '/docs/guides',
   },
