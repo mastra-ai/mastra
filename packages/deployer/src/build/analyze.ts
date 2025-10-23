@@ -148,6 +148,8 @@ async function validateOutput(
             logger.debug(`Could not determine the module name for file ${file.fileName}`);
           }
         }
+
+        logger.debug(`Error while validating module ${file.fileName}: ${err.message}`);
       }
     }
   }
