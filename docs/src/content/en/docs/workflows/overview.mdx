@@ -197,6 +197,10 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
+<Callout type="info">
+  Workflow state is currently supported only when using [Run.start()](../../reference/workflows/run-methods/start.mdx). Support for `Run.stream()` will be added soon.
+</Callout>
+
 ### Registering a workflow
 
 Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
@@ -234,6 +238,8 @@ Workflows can be run in two modes: start waits for all steps to complete before 
   <Tabs.Tab>
 Create a workflow run with `createRunAsync()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. To initialize workflow state, include `initialState` alongside `inputData`. The workflow runs all steps and returns the final result.
 
+To return state values in the result, set `includeState: true` in `outputOptions`.
+
 ```typescript showLineNumbers copy
 const run = await testWorkflow.createRunAsync();
 
@@ -254,10 +260,12 @@ const result = await run.start({
 
 console.log(result);
 ```
-Set `includeState: true` in `outputOptions` to include state values in the final result.
+
+> See [Run.start()](../../reference/workflows/run-methods/start.mdx) for a full list of configuration options.
+
   </Tabs.Tab>
   <Tabs.Tab>
-Create a workflow run with `createRunAsync()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. To initialize workflow state, include `initialState` alongside `inputData`. The workflow emits events as steps run, allowing you to monitor progress in real time.
+Create a workflow run with `createRunAsync()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as steps run, allowing you to monitor progress in real time.
 
 ```typescript showLineNumbers copy
 const run = await testWorkflow.createRunAsync();
@@ -265,15 +273,6 @@ const run = await testWorkflow.createRunAsync();
 const result = await run.stream({
   inputData: {
     message: "Hello world"
-  },
-  initialState: {
-    processedItems: [],
-    metadata: {
-      processedBy: "ADMIN"
-    }
-  },
-  outputOptions: {
-    includeState: true
   }
 });
 
@@ -281,7 +280,8 @@ for await (const chunk of result.stream) {
   console.log(chunk);
 }
 ```
-Set `includeState: true` in `outputOptions` to include state values in the final result.
+> See [Run.stream()](../../reference/streaming/workflows/stream.mdx) for a full list of configuration options.
+
   </Tabs.Tab>
 </Tabs>
 
