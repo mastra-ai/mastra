@@ -14,7 +14,6 @@ overrides:
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/evals': link:../../packages/evals
   mastra: link:../../packages/cli
-  '@mastra/deployer-cloud': link:../../deployers/cloud
 
 importers:
 
@@ -38,9 +37,6 @@ importers:
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
-      '@mastra/deployer-cloud':
-        specifier: link:../../deployers/cloud
-        version: link:../../deployers/cloud
       '@mastra/evals':
         specifier: link:../../packages/evals
         version: link:../../packages/evals
