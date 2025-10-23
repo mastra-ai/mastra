@@ -116,25 +116,32 @@ function addErrorToJSON(error: Error): void {
   if ((error as SerializableError).toJSON) {
     return;
   }
-  (error as SerializableError).toJSON = function (this: Error) {
-    const json: Record<string, any> = {
-      message: this.message,
-      name: this.name,
-    };
-    if (this.stack !== undefined) {
-      json.stack = this.stack;
-    }
-    if (this.cause !== undefined) {
-      json.cause = this.cause;
-    }
-    // Include all enumerable custom properties
-    const errorAsAny = this as any;
-    for (const key in errorAsAny) {
-      if (errorAsAny.hasOwnProperty(key) && !(key in json) && key !== 'toJSON') {
-        json[key] = errorAsAny[key];
-      }
-    }
 
-    return json;
-  };
+  // Define toJSON as non-enumerable to avoid interfering with object comparisons
+  Object.defineProperty(error, 'toJSON', {
+    value: function (this: Error) {
+      const json: Record<string, any> = {
+        message: this.message,
+        name: this.name,
+      };
+      if (this.stack !== undefined) {
+        json.stack = this.stack;
+      }
+      if (this.cause !== undefined) {
+        json.cause = this.cause;
+      }
+      // Include all enumerable custom properties
+      const errorAsAny = this as any;
+      for (const key in errorAsAny) {
+        if (errorAsAny.hasOwnProperty(key) && !(key in json) && key !== 'toJSON') {
+          json[key] = errorAsAny[key];
+        }
+      }
+
+      return json;
+    },
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  });
 }
