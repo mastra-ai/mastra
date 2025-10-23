@@ -12,7 +12,7 @@
 import type {
   AITracingEvent,
   AnyExportedAISpan,
-  LLMGenerationAttributes,
+  ModelGenerationAttributes,
   ToolCallAttributes,
 } from '@mastra/core/ai-tracing';
 import { AISpanType, AITracingEventType } from '@mastra/core/ai-tracing';
@@ -215,11 +215,11 @@ describe('BraintrustExporter', () => {
   });
 
   describe('Span Type Mappings', () => {
-    it('should map LLM_GENERATION to "llm" type', async () => {
+    it('should map MODEL_GENERATION to "llm" type', async () => {
       const llmSpan = createMockSpan({
         id: 'llm-span',
         name: 'gpt-4-call',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         isRoot: true,
         attributes: { model: 'gpt-4' },
       });
@@ -236,11 +236,11 @@ describe('BraintrustExporter', () => {
       );
     });
 
-    it('should map LLM_CHUNK to "llm" type', async () => {
+    it('should map MODEL_CHUNK to "llm" type', async () => {
       const chunkSpan = createMockSpan({
         id: 'chunk-span',
         name: 'llm-chunk',
-        type: AISpanType.LLM_CHUNK,
+        type: AISpanType.MODEL_CHUNK,
         isRoot: true,
         attributes: { chunkType: 'text-delta' },
       });
@@ -389,7 +389,7 @@ describe('BraintrustExporter', () => {
       const llmSpan = createMockSpan({
         id: 'llm-span',
         name: 'gpt-4-call',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         isRoot: true,
         input: { messages: [{ role: 'user', content: 'Hello' }] },
         output: { content: 'Hi there!' },
@@ -434,7 +434,7 @@ describe('BraintrustExporter', () => {
           tokens: 15,
         },
         metadata: {
-          spanType: 'llm_generation',
+          spanType: 'model_generation',
           model: 'gpt-4',
           provider: 'openai',
           streaming: false,
@@ -451,7 +451,7 @@ describe('BraintrustExporter', () => {
       const llmSpan = createMockSpan({
         id: 'minimal-llm',
         name: 'simple-llm',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         isRoot: true,
         attributes: {
           model: 'gpt-3.5-turbo',
@@ -475,7 +475,7 @@ describe('BraintrustExporter', () => {
           rootSpanId: llmSpan.traceId,
         },
         metadata: {
-          spanType: 'llm_generation',
+          spanType: 'model_generation',
           model: 'gpt-3.5-turbo',
         },
       });
@@ -524,7 +524,7 @@ describe('BraintrustExporter', () => {
       const llmSpan = createMockSpan({
         id: 'llm-span',
         name: 'gpt-4-call',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         isRoot: true,
         attributes: { model: 'gpt-4' },
       });
@@ -538,7 +538,7 @@ describe('BraintrustExporter', () => {
       llmSpan.attributes = {
         ...llmSpan.attributes,
         usage: { totalTokens: 150 },
-      } as LLMGenerationAttributes;
+      } as ModelGenerationAttributes;
       llmSpan.output = { content: 'Updated response' };
 
       await exporter.exportEvent({
@@ -550,7 +550,7 @@ describe('BraintrustExporter', () => {
         output: { content: 'Updated response' },
         metrics: { tokens: 150 },
         metadata: {
-          spanType: 'llm_generation',
+          spanType: 'model_generation',
           model: 'gpt-4',
         },
       });

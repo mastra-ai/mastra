@@ -90,7 +90,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   returnScorerData?: boolean;
   downloadRetries?: number;
   downloadConcurrency?: number;
-  llmAISpan?: AISpan<AISpanType.LLM_GENERATION>;
+  llmAISpan?: AISpan<AISpanType.MODEL_GENERATION>;
   modelSpanTracker?: ModelSpanTracker;
   requireToolApproval?: boolean;
   agentId: string;
