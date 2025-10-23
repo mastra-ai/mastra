@@ -5,7 +5,7 @@ description: "Learn how to migrate from AgentNetwork primitives to .network() in
 
 ## Overview
 
-As of `v0.20.0`, the following changes apply:
+As of `v0.20.0` for `@mastra/core`, the following changes apply.
 
 ### Upgrade from AI SDK v4 to v5
 
@@ -24,9 +24,9 @@ As of `v0.20.0`, the following changes apply:
 If you were using the `AgentNetwork` primitive, you can replace the `AgentNetwork` with `Agent`.
 
 Before:
+
 ```typescript
 import { AgentNetwork } from '@mastra/core/network';
-import { Agent } from '@mastra/core/agent';
 
 const agent = new AgentNetwork({
   name: 'agent-network',
@@ -40,6 +40,7 @@ await agent.stream('Find me the weather in Tokyo.');
 ```
 
 After:
+
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
@@ -61,9 +62,9 @@ await agent.network('Find me the weather in Tokyo.');
 If you were using the `NewAgentNetwork` primitive, you can replace the `NewAgentNetwork` with `Agent`.
 
 Before:
+
 ```typescript
 import { NewAgentNetwork } from '@mastra/core/network/vnext';
-import { Agent } from '@mastra/core/agent';
 
 const agent = new NewAgentNetwork({
   name: 'agent-network',
@@ -78,6 +79,7 @@ await agent.loop('Find me the weather in Tokyo.');
 ```
 
 After:
+
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
