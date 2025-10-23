@@ -313,7 +313,7 @@ const agent = new Agent({
     url: "${provider.url}",`
       : ''
   }
-    modelId: "${provider.models[0]}",
+    id: "${provider.id}/${provider.models[0]}",
     apiKey: process.env.${provider.apiKeyEnvVar},
     headers: {
       "X-Custom-Header": "value"

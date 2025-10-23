@@ -342,7 +342,7 @@ for await (const chunk of stream) {
 const agent = new Agent({
   name: "custom-agent",
   model: {
-    modelId: "gemini-1.5-flash",
+    id: "google/gemini-1.5-flash",
     apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
     headers: {
       "X-Custom-Header": "value"

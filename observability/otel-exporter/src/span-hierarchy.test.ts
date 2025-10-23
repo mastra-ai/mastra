@@ -6,7 +6,7 @@ import { AISpanType } from '@mastra/core/ai-tracing';
 import type {
   ExportedAISpan,
   AgentRunAttributes,
-  LLMGenerationAttributes,
+  ModelGenerationAttributes,
   ToolCallAttributes,
   WorkflowRunAttributes,
   WorkflowStepAttributes,
@@ -38,11 +38,11 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
         } as AgentRunAttributes,
       };
 
-      const childSpan: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const childSpan: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'child-span',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -50,7 +50,7 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
         parentSpanId: 'root-span', // Child references parent
         attributes: {
           model: 'gpt-4',
-        } as LLMGenerationAttributes,
+        } as ModelGenerationAttributes,
       };
 
       const rootResult = converter.convertSpan(rootSpan);
@@ -91,11 +91,11 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
         } as WorkflowStepAttributes,
       };
 
-      const llmSpan: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const llmSpan: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'llm-1',
         traceId: 'trace-1',
         name: 'llm',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -103,7 +103,7 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
         parentSpanId: 'step-1',
         attributes: {
           model: 'claude-3',
-        } as LLMGenerationAttributes,
+        } as ModelGenerationAttributes,
       };
 
       const toolSpan: ExportedAISpan<AISpanType.TOOL_CALL> = {
@@ -155,13 +155,13 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
           id: 'span-2',
           traceId,
           name: 'llm',
-          type: AISpanType.LLM_GENERATION,
+          type: AISpanType.MODEL_GENERATION,
           startTime: new Date(),
           endTime: new Date(),
           isEvent: false,
           isRootSpan: false,
           parentSpanId: 'span-1',
-          attributes: { model: 'gpt-4' } as LLMGenerationAttributes,
+          attributes: { model: 'gpt-4' } as ModelGenerationAttributes,
         },
         {
           id: 'span-3',
@@ -236,7 +236,7 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
           id: 'llm-1',
           traceId: 'trace-1',
           name: 'llm-planning',
-          type: AISpanType.LLM_GENERATION,
+          type: AISpanType.MODEL_GENERATION,
           startTime: new Date(baseTime.getTime() + 100),
           endTime: new Date(baseTime.getTime() + 1100),
           isEvent: false,
@@ -245,7 +245,7 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
           attributes: {
             model: 'gpt-4',
             resultType: 'tool_selection',
-          } as LLMGenerationAttributes,
+          } as ModelGenerationAttributes,
         },
         // Tool call based on LLM decision
         {
@@ -268,7 +268,7 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
           id: 'llm-2',
           traceId: 'trace-1',
           name: 'llm-response',
-          type: AISpanType.LLM_GENERATION,
+          type: AISpanType.MODEL_GENERATION,
           startTime: new Date(baseTime.getTime() + 2300),
           endTime: new Date(baseTime.getTime() + 3300),
           isEvent: false,
@@ -277,7 +277,7 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
           attributes: {
             model: 'gpt-4',
             resultType: 'response_generation',
-          } as LLMGenerationAttributes,
+          } as ModelGenerationAttributes,
         },
       ];
 
