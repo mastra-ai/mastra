@@ -1,6 +1,7 @@
 ---
-title: Speech-to-Text (STT) in Mastra | Mastra Docs
+title: Speech-to-Text
 description: Overview of Speech-to-Text capabilities in Mastra, including configuration, usage, and integration with voice providers.
+sidebar_position: 3
 ---
 
 # Speech-to-Text (STT)

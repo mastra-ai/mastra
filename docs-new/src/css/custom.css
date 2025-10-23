@@ -582,6 +582,7 @@ pre {
 
 pre * {
   font-size: 13px;
+  font-weight: 500;
 }
 
 code {
@@ -592,6 +593,7 @@ code {
   border: 1px solid color-mix(in oklab, #000 4%, transparent);
   background: color-mix(in oklab, #000 3%, transparent);
   padding: 0.12em 0.25em;
+
 }
 
 pre code {

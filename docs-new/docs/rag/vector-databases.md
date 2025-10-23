@@ -1,6 +1,7 @@
 ---
-title: 'Storing Embeddings in A Vector Database '
+title: Vector Databases
 description: Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
+sidebar_position: 3
 ---
 
 import Tabs from '@theme/Tabs';

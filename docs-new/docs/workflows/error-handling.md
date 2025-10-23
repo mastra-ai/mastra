@@ -1,6 +1,7 @@
 ---
-title: 'Error Handling in Workflows '
+title: 'Error Handling'
 description: 'Learn how to handle errors in Mastra workflows using step retries, conditional branching, and monitoring.'
+sidebar_position: 5
 ---
 
 # Error Handling

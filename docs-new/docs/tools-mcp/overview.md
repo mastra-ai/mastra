@@ -1,9 +1,10 @@
 ---
-title: 'Tools Overview '
+title: 'Overview '
 description: Understand what tools are in Mastra, how to add them to agents, and best practices for designing effective tools.
+sidebar_position: 1
 ---
 
-# Tools Overview
+# Overview
 
 Tools are functions that agents can execute to perform specific tasks or access external information. They extend an agent's capabilities beyond simple text generation, allowing interaction with APIs, databases, or other systems.
 

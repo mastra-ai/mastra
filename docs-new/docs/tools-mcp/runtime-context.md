@@ -1,6 +1,7 @@
 ---
 title: 'Runtime context '
 description: Learn how to use Mastra's RuntimeContext to provide dynamic, request-specific configuration to tools.
+unlisted: true
 ---
 
 # Tool Runtime Context

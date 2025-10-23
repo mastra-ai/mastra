@@ -1,6 +1,7 @@
 ---
 title: 'Overview'
 description: Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
+sidebar_position: 1
 ---
 
 # Scorers overview

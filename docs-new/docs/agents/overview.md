@@ -1,6 +1,7 @@
 ---
-title: 'Agent Overview '
+title: 'Overview'
 description: Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
+sidebar_position: 1
 ---
 
 import Tabs from '@theme/Tabs';

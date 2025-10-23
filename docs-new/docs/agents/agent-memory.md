@@ -1,6 +1,7 @@
 ---
-title: 'Using Agent Memory '
+title: 'Memory'
 description: Documentation on how agents in Mastra use memory to store conversation history and contextual information.
+sidebar_position: 3
 ---
 
 # Agent Memory

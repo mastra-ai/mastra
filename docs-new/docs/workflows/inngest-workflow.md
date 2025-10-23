@@ -1,6 +1,7 @@
 ---
-title: 'Inngest Workflows '
+title: 'Inngest Workflow'
 description: 'Inngest workflow allows you to run Mastra workflows with Inngest'
+sidebar_position: 9
 ---
 
 # Inngest Workflow

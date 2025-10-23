@@ -1,6 +1,7 @@
 ---
-title: 'Handling Complex LLM Operations '
+title: 'Overview'
 description: 'Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more.'
+sidebar_position: 1
 ---
 
 # Workflows overview

@@ -1,6 +1,7 @@
 ---
 title: 'Conversation History '
 description: 'Learn how to configure conversation history in Mastra to store recent messages from the current conversation.'
+sidebar_position: 4
 ---
 
 # Conversation History

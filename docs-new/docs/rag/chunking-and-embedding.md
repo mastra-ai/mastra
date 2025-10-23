@@ -1,5 +1,5 @@
 ---
-title: Chunking and Embedding Documents
+title: Chunking and Embedding
 description: Guide on chunking and embedding documents in Mastra for efficient processing and retrieval.
 ---
 
