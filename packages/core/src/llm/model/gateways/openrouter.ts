@@ -1,5 +1,5 @@
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { OpenRouter } from '@openrouter/sdk';
 import { InMemoryServerCache } from '../../../cache/inmemory.js';
 import { MastraError } from '../../../error/index.js';
@@ -139,14 +139,8 @@ export class OpenRouterGateway extends MastraModelGateway {
     providerId: string;
     apiKey: string;
   }): Promise<LanguageModelV2> {
-    const baseURL = await this.buildUrl(`${providerId}/${modelId}`);
-
-    // OpenRouter uses OpenAI-compatible API for all models
-    return createOpenAICompatible({
-      name: 'openrouter',
+    return createOpenRouter({
       apiKey,
-      baseURL,
-      supportsStructuredOutputs: true,
-    }).chatModel(modelId);
+    })(modelId);
   }
 }
