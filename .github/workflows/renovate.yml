@@ -39,8 +39,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'mastra-ai/mastra'
     steps:
-      - uses: actions/create-github-app-token@v2
-        id: app-token
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
         with:
           app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
@@ -54,15 +55,15 @@ jobs:
 
       - name: Get GitHub App User ID
         id: get-user-id
-        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        run: echo "user-id=$(gh api "/users/${{ steps.app-auth.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ steps.app-auth.outputs.token }}
 
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ steps.app-auth.outputs.token }}
           persist-credentials: false
 
       # This third party action allows you to download the cache artifact from different workflow runs
@@ -103,21 +104,21 @@ jobs:
       - run: |
           cat <<- EOF > $HOME/.netrc
             machine github.com
-            login ${{ steps.app-token.outputs.app-slug }}
-            password ${{ steps.app-token.outputs.token }}
+            login ${{ steps.app-auth.outputs.app-slug }}
+            password ${{ steps.app-auth.outputs.token }}
             machine api.github.com
-            login ${{ steps.app-token.outputs.app-slug }}
-            password ${{ steps.app-token.outputs.token }}
+            login ${{ steps.app-auth.outputs.app-slug }}
+            password ${{ steps.app-auth.outputs.token }}
           EOF
-          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
-          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+          git config --global user.name '${{ steps.app-auth.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-auth.outputs.app-slug }}[bot]@users.noreply.github.com'
 
       - name: Self-hosted Renovate
         uses: renovatebot/github-action@v43.0.17
         with:
           configurationFile: renovate.json
           docker-user: '${{ steps.id.outputs.user }}:${{ steps.id.outputs.group }}'
-          token: ${{ steps.app-token.outputs.token  }}
+          token: ${{ steps.app-auth.outputs.token  }}
         env:
           LOG_LEVEL: ${{ github.event.inputs.logLevel }}
           RENOVATE_REPOSITORIES: ${{ github.repository }}
