@@ -1,6 +1,7 @@
-import { ToolIconMap } from '@/types';
+import { ToolIconMap } from '@/domains/tools/components/ToolIcon';
 import { MCPToolType } from '@mastra/core/mcp';
-import { Icon, Txt } from '@mastra/playground-ui';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons';
 
 export interface ToolInformationProps {
   toolDescription: string;
