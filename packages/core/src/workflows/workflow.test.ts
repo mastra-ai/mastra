@@ -931,6 +931,81 @@ describe('Workflow', () => {
       ]);
     });
 
+    it('should pass agentOptions when wrapping agent with createStep', async () => {
+      const onFinishSpy = vi.fn();
+      const maxSteps = 5;
+
+      const agent = new Agent({
+        name: 'test-agent-with-options',
+        instructions: 'test agent instructions',
+        model: new MockLanguageModelV1({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'Response' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow-agent-options',
+        inputSchema: z.object({
+          prompt: z.string(),
+        }),
+        outputSchema: z.object({
+          text: z.string(),
+        }),
+      });
+
+      new Mastra({
+        workflows: { 'test-workflow-agent-options': workflow },
+        agents: { 'test-agent-with-options': agent },
+        idGenerator: randomUUID,
+      });
+
+      // Create step with agent options
+      const agentStep = createStep(agent, {
+        maxSteps,
+        onFinish: onFinishSpy,
+        memory: {
+          resource: 'test-resource-123',
+          thread: 'test-thread-456',
+        },
+      });
+
+      workflow
+        .map({ prompt: { value: 'test', schema: z.string() } })
+        .then(agentStep)
+        .commit();
+
+      const run = await workflow.createRunAsync({
+        runId: 'test-run-id-options',
+      });
+
+      const result = await run.start({
+        inputData: {
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result).toEqual({ text: 'Response' });
+      }
+
+      // Verify that onFinish was called, proving options were passed through
+      expect(onFinishSpy).toHaveBeenCalled();
+    });
+
     it('should handle sleep waiting flow', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
@@ -2593,6 +2668,83 @@ describe('Workflow', () => {
           },
         },
       ]);
+    });
+
+    it('should pass agentOptions when wrapping agent with createStep', async () => {
+      const onFinishSpy = vi.fn();
+      const maxSteps = 5;
+
+      const agent = new Agent({
+        name: 'test-agent-with-options-v2',
+        instructions: 'test agent instructions',
+        model: new MockLanguageModelV2({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Response' },
+                {
+                  type: 'finish',
+                  id: '2',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow-agent-options-v2',
+        inputSchema: z.object({
+          prompt: z.string(),
+        }),
+        outputSchema: z.object({
+          text: z.string(),
+        }),
+      });
+
+      new Mastra({
+        workflows: { 'test-workflow-agent-options-v2': workflow },
+        agents: { 'test-agent-with-options-v2': agent },
+        idGenerator: randomUUID,
+      });
+
+      // Create step with agent options
+      const agentStep = createStep(agent, {
+        maxSteps,
+        onFinish: onFinishSpy,
+        memory: {
+          resource: 'test-resource-123',
+          thread: 'test-thread-456',
+        },
+      });
+
+      workflow
+        .map({ prompt: { value: 'test', schema: z.string() } })
+        .then(agentStep)
+        .commit();
+
+      const run = await workflow.createRunAsync({
+        runId: 'test-run-id-options-v2',
+      });
+
+      const result = await run.start({
+        inputData: {
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result).toEqual({ text: 'Response' });
+      }
+
+      // Verify that onFinish was called, proving options were passed through
+      expect(onFinishSpy).toHaveBeenCalled();
     });
 
     it('should handle sleep waiting flow', async () => {
