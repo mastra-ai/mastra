@@ -652,6 +652,7 @@ describe('Tool Tracing Context Injection', () => {
         toolDescription: 'Test tool that captures tracing context',
         toolType: 'tool',
       },
+      tracingPolicy: undefined,
     });
 
     // Verify tracingContext was injected with the tool span
@@ -752,6 +753,7 @@ describe('Tool Tracing Context Injection', () => {
         toolDescription: 'Vercel tool test',
         toolType: 'tool',
       },
+      tracingPolicy: undefined,
     });
 
     // Verify Vercel tool execute was called (without tracingContext)
@@ -865,6 +867,7 @@ describe('Tool Tracing Context Injection', () => {
         toolDescription: 'Tool from a toolset',
         toolType: 'toolset',
       },
+      tracingPolicy: undefined,
     });
   });
 });

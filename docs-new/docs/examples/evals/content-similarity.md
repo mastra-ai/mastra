@@ -1,0 +1,157 @@
+---
+title: 'Content Similarity '
+description: Example of using the Content Similarity metric to evaluate text similarity between content.
+---
+
+# Content Similarity Evaluation
+
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
+
+Use `ContentSimilarityMetric` to evaluate how similar the response is to a reference based on content overlap. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a similarity value.
+
+## Installation
+
+```bash copy
+npm install @mastra/evals
+```
+
+## High similarity example
+
+In this example, the response closely resembles the query in both structure and meaning. Minor differences in tense and phrasing do not significantly affect the overall similarity.
+
+```typescript filename="src/example-high-similarity.ts" showLineNumbers copy
+import { ContentSimilarityMetric } from '@mastra/evals/nlp';
+
+const metric = new ContentSimilarityMetric();
+
+const query = 'The quick brown fox jumps over the lazy dog.';
+const response = 'A quick brown fox jumped over a lazy dog.';
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### High similarity output
+
+The output receives a high score because the response preserves the intent and content of the query with only subtle wording changes.
+
+```typescript
+{
+  score: 0.7761194029850746,
+  info: {
+    similarity: 0.7761194029850746
+  }
+}
+```
+
+## Moderate similarity example
+
+In this example, the response shares some conceptual overlap with the query but diverges in structure and wording. Key elements remain present, but the phrasing introduces moderate variation.
+
+```typescript filename="src/example-moderate-similarity.ts" showLineNumbers copy
+import { ContentSimilarityMetric } from '@mastra/evals/nlp';
+
+const metric = new ContentSimilarityMetric();
+
+const query = 'A brown fox quickly leaps across a sleeping dog.';
+const response = 'The quick brown fox jumps over the lazy dog.';
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Moderate similarity output
+
+The output receives a mid-range score because the response captures the general idea of the query, though it differs enough in wording to reduce overall similarity.
+
+```typescript
+{
+  score: 0.40540540540540543,
+  info: {
+    similarity: 0.40540540540540543
+  }
+}
+```
+
+## Low similarity example
+
+In this example, the response and query are unrelated in meaning, despite having a similar grammatical structure. There is little to no shared content overlap.
+
+```typescript filename="src/example-low-similarity.ts" showLineNumbers copy
+import { ContentSimilarityMetric } from '@mastra/evals/nlp';
+
+const metric = new ContentSimilarityMetric();
+
+const query = 'The cat sleeps on the windowsill.';
+const response = 'The quick brown fox jumps over the lazy dog.';
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Low similarity output
+
+The output receives a low score because the response does not align with the content or intent of the query.
+
+```typescript
+{
+  score: 0.25806451612903225,
+  info: {
+    similarity: 0.25806451612903225
+  }
+}
+```
+
+## Metric configuration
+
+You can create a `ContentSimilarityMetric` instance with default settings. No additional configuration is required.
+
+```typescript showLineNumbers copy
+const metric = new ContentSimilarityMetric();
+```
+
+> See [ContentSimilarityMetric](/docs/reference/evals/content-similarity) for a full list of configuration options.
+
+## Understanding the results
+
+`ContentSimilarityMetric` returns a result in the following shape:
+
+```typescript
+{
+  score: number,
+  info: {
+    similarity: number
+  }
+}
+```
+
+### Similarity score
+
+A similarity score between 0 and 1:
+
+- **1.0**: Perfect match – content is nearly identical.
+- **0.7–0.9**: High similarity – minor differences in word choice or structure.
+- **0.4–0.6**: Moderate similarity – general overlap with noticeable variation.
+- **0.1–0.3**: Low similarity – few common elements or shared meaning.
+- **0.0**: No similarity – completely different content.
+
+### Similarity info
+
+An explanation for the score, with details including:
+
+- Degree of overlap between query and response.
+- Matching phrases or keywords.
+- Semantic closeness based on text similarity.
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/content-similarity"
+/>

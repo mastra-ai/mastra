@@ -8,6 +8,13 @@ export type MastraUIMessageMetadata = {
     }
   | {
       mode: 'stream';
+      requireApprovalMetadata?: {
+        [toolCallId: string]: {
+          toolCallId: string;
+          toolName: string;
+          args: Record<string, any>;
+        };
+      };
     }
   | {
       mode: 'network';

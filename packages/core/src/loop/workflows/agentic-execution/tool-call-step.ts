@@ -16,16 +16,16 @@ export function createToolCallStep<
   options,
   telemetry_settings,
   writer,
-  requireToolApproval,
   controller,
   runId,
   streamState,
+  modelSpanTracker,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
-    execute: async ({ inputData, suspend, resumeData }) => {
+    execute: async ({ inputData, suspend, resumeData, runtimeContext }) => {
       // If the tool was already executed by the provider, skip execution
       if (inputData.providerExecuted) {
         // Still emit telemetry for provider-executed tools
@@ -101,6 +101,7 @@ export function createToolCallStep<
       });
 
       try {
+        const requireToolApproval = runtimeContext.get('__mastra_requireToolApproval');
         if (requireToolApproval || (tool as any).requireApproval) {
           if (!resumeData) {
             controller.enqueue({
@@ -113,27 +114,27 @@ export function createToolCallStep<
                 args: inputData.args,
               },
             });
-            await suspend({
-              requireToolApproval: {
-                toolCallId: inputData.toolCallId,
-                toolName: inputData.toolName,
-                args: inputData.args,
+            return suspend(
+              {
+                requireToolApproval: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  args: inputData.args,
+                },
+                __streamState: streamState.serialize(),
               },
-              __streamState: streamState.serialize(),
-            });
+              {
+                resumeLabel: inputData.toolCallId,
+              },
+            );
           } else {
             if (!resumeData.approved) {
-              const error = new Error(
-                'Tool call was declined: ' +
-                  JSON.stringify({
-                    toolCallId: inputData.toolCallId,
-                    toolName: inputData.toolName,
-                    args: inputData.args,
-                  }),
-              );
-
+              span.end();
+              span.setAttributes({
+                'stream.toolCall.result': 'Tool call was not approved by the user',
+              });
               return {
-                error,
+                result: 'Tool call was not approved by the user',
                 ...inputData,
               };
             }
@@ -145,6 +146,8 @@ export function createToolCallStep<
           toolCallId: inputData.toolCallId,
           messages: messageList.get.input.aiV5.model(),
           writableStream: writer,
+          // Pass current step span as parent for tool call spans
+          tracingContext: { currentSpan: modelSpanTracker?.getCurrentStepSpan() },
           suspend: async (suspendPayload: any) => {
             controller.enqueue({
               type: 'tool-call-suspended',
@@ -153,10 +156,15 @@ export function createToolCallStep<
               payload: { toolCallId: inputData.toolCallId, toolName: inputData.toolName, suspendPayload },
             });
 
-            return await suspend({
-              toolCallSuspended: suspendPayload,
-              __streamState: streamState.serialize(),
-            });
+            return await suspend(
+              {
+                toolCallSuspended: suspendPayload,
+                __streamState: streamState.serialize(),
+              },
+              {
+                resumeLabel: inputData.toolCallId,
+              },
+            );
           },
           resumeData,
         };
