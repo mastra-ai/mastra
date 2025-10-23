@@ -14,7 +14,8 @@
  * 3. Full project type checking often runs out of memory
  *
  * Run manually: npm run test:types:zod
- * Runs in CI: As part of npm test
+ * Runs in CI: As a separate step before unit tests
+ * Local dev: Skipped by default (use npm test for faster local testing)
  */
 
 import { exec } from 'child_process';

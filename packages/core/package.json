@@ -186,7 +186,8 @@
     "generate:model-router": "pnpx tsx scripts/generate-providers.ts && pnpx tsx scripts/generate-model-docs.ts && cd ../.. && pnpm prettier:changed",
     "test:unit": "vitest run --exclude '**/tool-builder/**'",
     "test:types:zod": "node test-zod-compat.mjs",
-    "test": "npm run test:types:zod && npm run test:unit"
+    "test": "npm run test:unit",
+    "test:ci": "npm run test:types:zod && npm run test:unit"
   },
   "dependencies": {
     "@a2a-js/sdk": "~0.2.4",
