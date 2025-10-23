@@ -9633,7 +9633,7 @@ describe('Workflow', () => {
       expect(total).toBe(2);
       expect(runs).toHaveLength(2);
       expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId, run2.runId]));
-      expect(runs[0]?.workflowName).toBe('test-workflow');
+      expect(runs[0]?.workflowId).toBe('test-workflow');
       expect(runs[0]?.snapshot).toBeDefined();
       expect(runs[1]?.snapshot).toBeDefined();
     });
@@ -9697,7 +9697,7 @@ describe('Workflow', () => {
       expect(afterResumeTotal).toBe(1);
       expect(afterResumeRuns).toHaveLength(1);
       expect(afterResumeRuns.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));
-      expect(afterResumeRuns[0]?.workflowName).toBe('test-workflow');
+      expect(afterResumeRuns[0]?.workflowId).toBe('test-workflow');
       expect(afterResumeRuns[0]?.snapshot).toBeDefined();
       expect((afterResumeRuns[0]?.snapshot as any).status).toBe('suspended');
     });
@@ -9738,12 +9738,12 @@ describe('Workflow', () => {
       expect(total).toBe(1);
       expect(runs).toHaveLength(1);
       expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));
-      expect(runs[0]?.workflowName).toBe('test-workflow');
+      expect(runs[0]?.workflowId).toBe('test-workflow');
       expect(runs[0]?.snapshot).toBeDefined();
 
       const run3 = await workflow.getWorkflowRunById(run1.runId);
       expect(run3?.runId).toBe(run1.runId);
-      expect(run3?.workflowName).toBe('test-workflow');
+      expect(run3?.workflowId).toBe('test-workflow');
       expect(run3?.snapshot).toEqual(runs[0].snapshot);
     });
 

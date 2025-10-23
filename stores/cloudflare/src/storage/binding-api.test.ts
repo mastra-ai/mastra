@@ -1135,8 +1135,8 @@ createTestSuite(new CloudflareStore(TEST_CONFIG));
 //       const { runs, total } = await store.getWorkflowRuns({ namespace: 'test' });
 //       expect(runs).toHaveLength(2);
 //       expect(total).toBe(2);
-//       expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
-//       expect(runs[1]!.workflowName).toBe(workflowName1);
+//       expect(runs[0]!.workflowId).toBe(workflowName2); // Most recent first
+//       expect(runs[1]!.workflowId).toBe(workflowName1);
 //       const firstSnapshot = runs[0]!.snapshot;
 //       const secondSnapshot = runs[1]!.snapshot;
 //       checkWorkflowSnapshot(firstSnapshot, stepId2, 'waiting');
@@ -1172,7 +1172,7 @@ createTestSuite(new CloudflareStore(TEST_CONFIG));
 //       const { runs, total } = await store.getWorkflowRuns({ namespace: 'test', workflowName: workflowName1 });
 //       expect(runs).toHaveLength(1);
 //       expect(total).toBe(1);
-//       expect(runs[0]!.workflowName).toBe(workflowName1);
+//       expect(runs[0]!.workflowId).toBe(workflowName1);
 //       const snapshot = runs[0]!.snapshot;
 //       if (typeof snapshot === 'string') {
 //         throw new Error('Expected WorkflowRunState, got string');
@@ -1242,8 +1242,8 @@ createTestSuite(new CloudflareStore(TEST_CONFIG));
 //       });
 
 //       expect(runs).toHaveLength(2);
-//       expect(runs[0]!.workflowName).toBe(workflowName3);
-//       expect(runs[1]!.workflowName).toBe(workflowName2);
+//       expect(runs[0]!.workflowId).toBe(workflowName3);
+//       expect(runs[1]!.workflowId).toBe(workflowName2);
 //       const firstSnapshot = runs[0]!.snapshot;
 //       const secondSnapshot = runs[1]!.snapshot;
 //       checkWorkflowSnapshot(firstSnapshot, stepId3, 'skipped');
@@ -1301,8 +1301,8 @@ createTestSuite(new CloudflareStore(TEST_CONFIG));
 //       });
 //       expect(page1.runs).toHaveLength(2);
 //       expect(page1.total).toBe(3); // Total count of all records
-//       expect(page1.runs[0]!.workflowName).toBe(workflowName3);
-//       expect(page1.runs[1]!.workflowName).toBe(workflowName2);
+//       expect(page1.runs[0]!.workflowId).toBe(workflowName3);
+//       expect(page1.runs[1]!.workflowId).toBe(workflowName2);
 //       const firstSnapshot = page1.runs[0]!.snapshot;
 //       const secondSnapshot = page1.runs[1]!.snapshot;
 //       checkWorkflowSnapshot(firstSnapshot, stepId3, 'skipped');
@@ -1316,7 +1316,7 @@ createTestSuite(new CloudflareStore(TEST_CONFIG));
 //       });
 //       expect(page2.runs).toHaveLength(1);
 //       expect(page2.total).toBe(3);
-//       expect(page2.runs[0]!.workflowName).toBe(workflowName1);
+//       expect(page2.runs[0]!.workflowId).toBe(workflowName1);
 //       const snapshot = page2.runs[0]!.snapshot;
 //       checkWorkflowSnapshot(snapshot, stepId1, 'success');
 //     });

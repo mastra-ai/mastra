@@ -3162,7 +3162,7 @@ describe('LegacyWorkflow', async () => {
       expect(total).toBe(2);
       expect(runs).toHaveLength(2);
       expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId, run2.runId]));
-      expect(runs[0]?.workflowName).toBe('test-workflow');
+      expect(runs[0]?.workflowId).toBe('test-workflow');
       expect(runs[0]?.snapshot).toBeDefined();
       expect(runs[1]?.snapshot).toBeDefined();
     });

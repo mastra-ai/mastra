@@ -1252,7 +1252,7 @@ describe('DynamoDBStore', () => {
 //       const found = await store.getWorkflowRunById({ runId: runId1, workflowName: wfName });
 //       expect(found).toBeDefined();
 //       expect(found!.runId).toBe(runId1);
-//       expect(found!.workflowName).toBe(wfName);
+//       expect(found!.workflowId).toBe(wfName);
 
 //       const notFound = await store.getWorkflowRunById({ runId: 'non-existent', workflowName: wfName });
 //       expect(notFound).toBeNull();
