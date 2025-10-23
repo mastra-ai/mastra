@@ -3933,8 +3933,9 @@ export class Agent<
       runtimeContext: mergedStreamOptions.runtimeContext,
     });
 
-    if (llm.getModel().specificationVersion !== 'v2') {
-      const modelInfo = llm.getModel();
+    const modelInfo = llm.getModel();
+
+    if (modelInfo.specificationVersion !== 'v2') {
       const modelId = modelInfo.modelId || 'unknown';
       const provider = modelInfo.provider || 'unknown';
 
