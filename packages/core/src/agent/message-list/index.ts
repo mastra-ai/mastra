@@ -952,6 +952,11 @@ export class MessageList {
   }
 
   private addOne(message: MessageInput, messageSource: MessageSource) {
+    // Skip invalid messages gracefully (e.g., numbers from malformed Memory.query() results)
+    if (!MessageList.checkIfMessageObject(message)) {
+      return null;
+    }
+
     if (
       (!(`content` in message) ||
         (!message.content &&
@@ -1645,8 +1650,13 @@ export class MessageList {
     };
   }
 
+  private static checkIfMessageObject(msg: MessageInput): boolean {
+    return msg && typeof msg === 'object';
+  }
+
   static isAIV4UIMessage(msg: MessageInput): msg is AIV4Type.UIMessage {
     return (
+      MessageList.checkIfMessageObject(msg) &&
       !MessageList.isMastraMessage(msg) &&
       !MessageList.isAIV4CoreMessage(msg) &&
       `parts` in msg &&
@@ -1656,6 +1666,7 @@ export class MessageList {
 
   static isAIV5CoreMessage(msg: MessageInput): msg is AIV5Type.ModelMessage {
     return (
+      MessageList.checkIfMessageObject(msg) &&
       !MessageList.isMastraMessage(msg) &&
       !(`parts` in msg) &&
       `content` in msg &&
@@ -1665,6 +1676,7 @@ export class MessageList {
   static isAIV4CoreMessage(msg: MessageInput): msg is AIV4Type.CoreMessage {
     // V4 CoreMessage has role and content like V5, but content can be array of parts
     return (
+      MessageList.checkIfMessageObject(msg) &&
       !MessageList.isMastraMessage(msg) &&
       !(`parts` in msg) &&
       `content` in msg &&
@@ -1680,6 +1692,7 @@ export class MessageList {
 
   static isMastraMessageV1(msg: MessageInput): msg is MastraMessageV1 {
     return (
+      MessageList.checkIfMessageObject(msg) &&
       !MessageList.isMastraMessageV2(msg) &&
       !MessageList.isMastraMessageV3(msg) &&
       (`threadId` in msg || `resourceId` in msg)
@@ -1688,7 +1701,8 @@ export class MessageList {
 
   static isMastraMessageV2(msg: MessageInput): msg is MastraMessageV2 {
     return Boolean(
-      `content` in msg &&
+      MessageList.checkIfMessageObject(msg) &&
+        `content` in msg &&
         msg.content &&
         !Array.isArray(msg.content) &&
         typeof msg.content !== `string` &&
@@ -1699,7 +1713,8 @@ export class MessageList {
 
   static isMastraMessageV3(msg: MessageInput): msg is MastraMessageV3 {
     return Boolean(
-      `content` in msg &&
+      MessageList.checkIfMessageObject(msg) &&
+        `content` in msg &&
         msg.content &&
         !Array.isArray(msg.content) &&
         typeof msg.content !== `string` &&
@@ -2916,6 +2931,11 @@ export class MessageList {
   static hasAIV5UIMessageCharacteristics(
     msg: AIV5Type.UIMessage | AIV4Type.UIMessage | AIV4Type.Message,
   ): msg is AIV5Type.UIMessage {
+    // Fix for #6322: Add type guard before using 'in' operator
+    if (!msg || typeof msg !== 'object') {
+      return false;
+    }
+
     // ai v4 has these separated arrays of parts that don't record overall order
     // so we can check for their presence as a faster/early check
     if (
@@ -2957,6 +2977,7 @@ export class MessageList {
   }
   static isAIV5UIMessage(msg: MessageInput): msg is AIV5Type.UIMessage {
     return (
+      MessageList.checkIfMessageObject(msg) &&
       !MessageList.isMastraMessage(msg) &&
       !MessageList.isAIV5CoreMessage(msg) &&
       `parts` in msg &&
@@ -2971,6 +2992,8 @@ export class MessageList {
       // This is here because AIV4 "Message" type can omit parts! 😱
       | AIV4Type.Message,
   ): msg is AIV5Type.ModelMessage {
+    if (!MessageList.checkIfMessageObject(msg)) return false;
+
     if (`experimental_providerMetadata` in msg) return false; // is v4 cause v5 doesn't have this property
 
     // it's compatible with either if content is a string, no difference
