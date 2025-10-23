@@ -23,28 +23,24 @@ function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id
 function createMockPIIResult(
   piiTypes: string[] = [],
   detections: PIIDetection[] = [],
-  redactedContent?: string,
+  redactedContent?: string | null,
 ): PIIDetectionResult {
-  const result: PIIDetectionResult = {};
+  // Ensure all detections have redacted_value (required in new schema)
+  const normalizedDetections = detections.map(det => ({
+    ...det,
+    redacted_value: det.redacted_value ?? null,
+  }));
 
-  // Only include categories if there are detected PII types
-  if (piiTypes.length > 0) {
-    result.categories = piiTypes.reduce(
-      (scores, type) => {
-        scores[type] = 0.8; // High confidence score for detected types
-        return scores;
-      },
-      {} as Record<string, number>,
-    );
-  }
+  const result: PIIDetectionResult = {
+    categories:
+      piiTypes.length > 0
+        ? piiTypes.map(type => ({ type, score: 0.8 })) // High confidence score for detected types
+        : null,
+    detections: normalizedDetections.length > 0 ? normalizedDetections : null,
+  };
 
-  // Only include detections if provided
-  if (detections.length > 0) {
-    result.detections = detections;
-  }
-
-  // Only include redacted content if provided
-  if (redactedContent) {
+  // Only include redacted content if provided (for 'redact' strategy)
+  if (redactedContent !== undefined) {
     result.redacted_content = redactedContent;
   }
 
@@ -506,8 +502,8 @@ describe('PIIDetector', () => {
 
   describe('custom detection types', () => {
     it('should work with custom PII types', async () => {
-      const mockResult = {
-        categories: { 'employee-id': 0.9, 'customer-id': 0.1 },
+      const mockResult: PIIDetectionResult = {
+        categories: [{ type: 'employee-id', score: 0.9 }],
         detections: [
           {
             type: 'employee-id',
@@ -515,9 +511,10 @@ describe('PIIDetector', () => {
             confidence: 0.9,
             start: 0,
             end: 9,
+            redacted_value: null,
           },
         ],
-        reason: 'Detected employee ID',
+        redacted_content: null,
       };
       const model = setupMockModel(mockResult);
       const detector = new PIIDetector({
