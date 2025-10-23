@@ -15,6 +15,26 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./v5": {
+      "import": {
+        "types": "./dist/v5.d.ts",
+        "default": "./dist/v5.js"
+      },
+      "require": {
+        "types": "./dist/v5.d.ts",
+        "default": "./dist/v5.cjs"
+      }
+    },
+    "./v4": {
+      "import": {
+        "types": "./dist/v4.d.ts",
+        "default": "./dist/v4.js"
+      },
+      "require": {
+        "types": "./dist/v4.d.ts",
+        "default": "./dist/v4.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
