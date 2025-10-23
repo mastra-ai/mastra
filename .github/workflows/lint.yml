@@ -103,6 +103,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 20.19.5
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm install globby --no-package-lock
