@@ -1,6 +1,6 @@
 'use client';
 
-import { MastraReactProvider, MastraUIMessage, toNetworkUIMessage, useChat } from '@mastra/react';
+import { MastraReactProvider, useChat } from '@mastra/react';
 import {
   Conversation,
   ConversationContent,
@@ -17,11 +17,10 @@ import {
 } from '@/components/ai-elements/prompt-input';
 import { FormEvent, useState } from 'react';
 import { Response } from '@/components/ai-elements/response';
-import { PlaygroundQueryClient } from '@mastra/playground-ui';
 
 function HomeInner() {
   const [input, setInput] = useState('');
-  const { messages, setMessages, network, isRunning } = useChat<MastraUIMessage>({
+  const { messages, setMessages, sendMessage, isRunning } = useChat({
     agentId: 'networkAgent',
   });
 
@@ -36,16 +35,9 @@ function HomeInner() {
         },
       ]);
 
-      network({
-        coreUserMessages: [
-          {
-            role: 'user',
-            content: input,
-          },
-        ],
-        onNetworkChunk: (chunk, conversation) => {
-          return toNetworkUIMessage({ chunk, conversation });
-        },
+      sendMessage({
+        message: input,
+        mode: 'network',
       });
 
       setInput('');
@@ -114,10 +106,8 @@ function HomeInner() {
 
 export default function Home() {
   return (
-    <PlaygroundQueryClient>
-      <MastraReactProvider baseUrl="http://localhost:4111">
-        <HomeInner />
-      </MastraReactProvider>
-    </PlaygroundQueryClient>
+    <MastraReactProvider baseUrl="http://localhost:4111">
+      <HomeInner />
+    </MastraReactProvider>
   );
 }

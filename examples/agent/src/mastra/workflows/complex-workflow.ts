@@ -1,56 +1,10 @@
-import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { createWorkflow, createStep, cloneStep } from '@mastra/core/workflows';
 import { z } from 'zod';
-
-export const workflowRecipeMaker = createWorkflow({
-  id: 'workflow-recipe-maker',
-  description: 'Returns a recipe based on an ingredient',
-  inputSchema: z.object({
-    ingredient: z.string(),
-  }),
-  outputSchema: z.object({
-    result: z.string(),
-  }),
-});
-
-const step = createStep({
-  id: 'my-step',
-  description: 'My step description',
-  inputSchema: z.object({
-    ingredient: z.string(),
-  }),
-  outputSchema: z.object({
-    result: z.string(),
-  }),
-  execute: async ({ inputData }) => {
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    return {
-      result: inputData.ingredient,
-    };
-  },
-});
-
-const step2 = createStep({
-  id: 'my-step-2',
-  description: 'My step description',
-  inputSchema: z.object({
-    result: z.string(),
-  }),
-  outputSchema: z.object({
-    result: z.string(),
-  }),
-  execute: async () => {
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    return {
-      result: 'suh',
-    };
-  },
-});
-
-workflowRecipeMaker.then(step).then(step2).commit();
 
 // Simple step that adds a letter to a string
 const addLetterStep = createStep({
   id: 'add-letter',
+  description: 'Adds a letter to the input text',
   inputSchema: z.object({
     text: z.string(),
   }),
@@ -59,7 +13,6 @@ const addLetterStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { text } = inputData;
-    await new Promise(resolve => setTimeout(resolve, 500));
     return { text: text + 'A' };
   },
 });
@@ -67,6 +20,7 @@ const addLetterStep = createStep({
 // Step that adds a different letter
 const addLetterBStep = createStep({
   id: 'add-letter-b',
+  description: 'Adds B letter to the input text',
   inputSchema: z.object({
     text: z.string(),
   }),
@@ -75,7 +29,6 @@ const addLetterBStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { text } = inputData;
-    await new Promise(resolve => setTimeout(resolve, 500));
     return { text: text + 'B' };
   },
 });
@@ -83,6 +36,7 @@ const addLetterBStep = createStep({
 // Step that adds another letter
 const addLetterCStep = createStep({
   id: 'add-letter-c',
+  description: 'Adds C letter to the input text',
   inputSchema: z.object({
     text: z.string(),
   }),
@@ -92,7 +46,7 @@ const addLetterCStep = createStep({
   execute: async ({ inputData }) => {
     const { text } = inputData;
     // Make sure it runs after the other branch
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 100));
     return { text: text + 'C' };
   },
 });
@@ -100,6 +54,7 @@ const addLetterCStep = createStep({
 // Step that adds a letter and tracks iteration count
 const addLetterWithCountStep = createStep({
   id: 'add-letter-with-count',
+  description: 'Adds a letter and tracks iteration count',
   inputSchema: z.object({
     text: z.string(),
     iterationCount: z.number().optional(),
@@ -110,7 +65,6 @@ const addLetterWithCountStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { text, iterationCount = 0 } = inputData;
-    await new Promise(resolve => setTimeout(resolve, 500));
     return {
       text: text + 'D',
       iterationCount: iterationCount + 1,
@@ -121,6 +75,7 @@ const addLetterWithCountStep = createStep({
 // Step with suspend/resume functionality
 const suspendResumeStep = createStep({
   id: 'suspend-resume',
+  description: 'Suspend/resume step - requires user input',
   inputSchema: z.object({
     text: z.string(),
     iterationCount: z.number(),
@@ -143,8 +98,6 @@ const suspendResumeStep = createStep({
       });
     }
 
-    await new Promise(resolve => setTimeout(resolve, 500));
-
     return { text: text + resumeData.userInput };
   },
 });
@@ -152,6 +105,7 @@ const suspendResumeStep = createStep({
 // Step for short text (used in conditional branching)
 const shortTextStep = createStep({
   id: 'short-text',
+  description: 'Step for short text (used in conditional branching)',
   inputSchema: z.object({
     text: z.string(),
   }),
@@ -160,7 +114,6 @@ const shortTextStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { text } = inputData;
-    await new Promise(resolve => setTimeout(resolve, 500));
     return { text: text + 'S' };
   },
 });
@@ -168,6 +121,7 @@ const shortTextStep = createStep({
 // Step for long text (used in conditional branching)
 const longTextStep = createStep({
   id: 'long-text',
+  description: 'Step for long text (used in conditional branching)',
   inputSchema: z.object({
     text: z.string(),
   }),
@@ -176,13 +130,13 @@ const longTextStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { text } = inputData;
-    await new Promise(resolve => setTimeout(resolve, 500));
     return { text: text + 'L' };
   },
 });
 
 const finalStep = createStep({
   id: 'final-step',
+  description: 'Final step',
   inputSchema: z.object({
     text: z.string(),
   }),
@@ -191,7 +145,6 @@ const finalStep = createStep({
   }),
   execute: async ({ inputData }) => {
     const { text } = inputData;
-    await new Promise(resolve => setTimeout(resolve, 500));
     return { text: text + '-ENDED' };
   },
 });
@@ -199,6 +152,7 @@ const finalStep = createStep({
 // Nested workflow that processes text
 export const nestedTextProcessor = createWorkflow({
   id: 'nested-text-processor',
+  description: 'Nested workflow that processes text',
   inputSchema: z.object({
     text: z.string(),
   }),
@@ -206,12 +160,13 @@ export const nestedTextProcessor = createWorkflow({
     text: z.string(),
   }),
 })
-  .then(addLetterStep)
-  .then(addLetterBStep)
+  .then(cloneStep(addLetterStep, { id: 'add-letter-clone-nested' }))
+  .then(cloneStep(addLetterBStep, { id: 'add-letter-b-clone-nested' }))
   .commit();
 
-export const lessComplexWorkflow = createWorkflow({
-  id: 'lessComplexWorkflow',
+// Main comprehensive workflow showcasing all features
+export const complexWorkflow = createWorkflow({
+  id: 'complex-workflow',
   inputSchema: z.object({
     text: z.string(),
   }),
@@ -249,6 +204,9 @@ export const lessComplexWorkflow = createWorkflow({
 
   // doUntil loop - continues until text has 20+ characters
   .dountil(addLetterWithCountStep, async ({ inputData: { text } }) => text.length >= 20)
+
+  // Suspend/resume step - requires user input
+  .then(suspendResumeStep)
 
   // Final step
   .then(finalStep)

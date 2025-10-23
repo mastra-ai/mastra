@@ -43,8 +43,10 @@
     "CHANGELOG.md"
   ],
   "dependencies": {
+    "@dagrejs/dagre": "^1.1.5",
     "@mastra/client-js": "workspace:*",
     "@radix-ui/react-tooltip": "^1.2.7",
+    "@xyflow/react": "^12.8.6",
     "hast-util-to-jsx-runtime": "^2.3.6",
     "lucide-react": "^0.522.0",
     "shiki": "^1.29.2",

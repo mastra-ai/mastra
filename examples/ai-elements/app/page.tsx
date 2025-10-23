@@ -1,28 +1,6 @@
 'use client';
 
-import {
-  MastraReactProvider,
-  useChat,
-  MessageList,
-  Message,
-  MessageContent,
-  Entity,
-  EntityContent,
-  EntityTrigger,
-  EntityCaret,
-  Icon,
-  Entry,
-  EntryTitle,
-  CodeBlock,
-  CodeCopyButton,
-  ToolsIcon,
-  MessageUsage,
-  MessageUsageEntry,
-  MessageUsageValue,
-  MessageUsages,
-  MessageActions,
-  IconButton,
-} from '@mastra/react';
+import { MastraReactProvider, useChat, MessageList, Message, MessageActions, IconButton } from '@mastra/react';
 import '@mastra/react/styles.css';
 
 import {
@@ -32,37 +10,24 @@ import {
   PromptInputTextarea,
 } from '@/components/ai-elements/prompt-input';
 import { FormEvent, useState } from 'react';
-import { Copy, Hash, Mic } from 'lucide-react';
+import { TextMessage } from '@/components/mastra-components/TextMessage';
+import { Tool } from '@/components/mastra-components/Tool';
+import { ToolWorkflow } from '@/components/mastra-components/ToolWorkflow';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 function HomeInner() {
   const [input, setInput] = useState('');
-  const { messages, setMessages, stream, isRunning } = useChat({
+
+  const { messages, sendMessage, isRunning } = useChat({
     agentId: 'chefModelV2Agent',
   });
 
-  const handleSubmit = (message: PromptInputMessage, event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (_: PromptInputMessage, event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (input.trim()) {
-      setMessages(state => [
-        ...state,
-        {
-          role: 'user',
-          parts: [{ type: 'text', text: input }],
-          id: 'init',
-        },
-      ]);
 
-      stream({
-        coreUserMessages: [
-          {
-            role: 'user',
-            content: input,
-          },
-        ],
-      });
+    sendMessage({ message: input });
 
-      setInput('');
-    }
+    setInput('');
   };
 
   return (
@@ -73,67 +38,41 @@ function HomeInner() {
             const isStreaming = message.role === 'assistant' && isRunning;
             const position = message.role === 'user' ? 'right' : 'left';
 
-            return message.parts.map((part, index) => (
-              <Message key={message.id + index} position={position}>
-                {part.type === 'text' ? (
-                  <>
-                    {message.role === 'assistant' && (
-                      <MessageUsages>
-                        <MessageUsage>
-                          <MessageUsageEntry>
-                            <Icon>
-                              <Hash />
-                            </Icon>
-                            Tokens:
-                          </MessageUsageEntry>
-                          <MessageUsageValue>100</MessageUsageValue>
-                        </MessageUsage>
-                      </MessageUsages>
-                    )}
-                    <MessageContent isStreaming={isStreaming}>{part.text}</MessageContent>
-                  </>
-                ) : part.type === 'dynamic-tool' ? (
-                  <Entity key={message.id + index} variant="tool">
-                    <EntityTrigger>
-                      <Icon>
-                        <ToolsIcon />
-                      </Icon>
-                      {part.toolName}
-                      <EntityCaret />
-                    </EntityTrigger>
+            return message.parts.map((part, index) => {
+              if (part.type === 'text') {
+                return (
+                  <Message key={message.id + index} position={position}>
+                    <TextMessage role={message.role} isStreaming={isStreaming} message={part.text} />
+                  </Message>
+                );
+              }
 
-                    <EntityContent>
-                      <Entry>
-                        <EntryTitle>Tool input</EntryTitle>
-                        <CodeBlock
-                          code={JSON.stringify(part.input, null, 2)}
-                          language="json"
-                          cta={<CodeCopyButton code={JSON.stringify(part.input, null, 2)} />}
-                        />
-                      </Entry>
+              if (part.type === 'dynamic-tool') {
+                if (part.toolName.startsWith('workflow')) {
+                  return (
+                    <Message key={message.id + index} position={position}>
+                      <ToolWorkflow
+                        workflowId={part.toolName}
+                        input={part.input as Record<string, any>}
+                        output={part.output as Record<string, any>}
+                      />
+                    </Message>
+                  );
+                }
 
-                      <Entry>
-                        <EntryTitle>Tool output</EntryTitle>
-                        <CodeBlock
-                          cta={<CodeCopyButton code={JSON.stringify(part.output, null, 2)} />}
-                          code={JSON.stringify(part.output, null, 2)}
-                          language="json"
-                        />
-                      </Entry>
-                    </EntityContent>
-                  </Entity>
-                ) : null}
-                <MessageActions>
-                  <IconButton tooltip="Voice message">
-                    <Mic />
-                  </IconButton>
+                return (
+                  <Message key={message.id + index} position={position}>
+                    <Tool
+                      toolName={part.toolName}
+                      input={part.input as Record<string, any>}
+                      output={part.output as Record<string, any>}
+                    />
+                  </Message>
+                );
+              }
 
-                  <IconButton tooltip="Copy">
-                    <Copy />
-                  </IconButton>
-                </MessageActions>
-              </Message>
-            ));
+              return null;
+            });
           })}
         </MessageList>
 
@@ -157,8 +96,10 @@ function HomeInner() {
 
 export default function Home() {
   return (
-    <MastraReactProvider baseUrl="http://localhost:4111">
-      <HomeInner />
-    </MastraReactProvider>
+    <QueryClientProvider client={new QueryClient()}>
+      <MastraReactProvider baseUrl="http://localhost:4111">
+        <HomeInner />
+      </MastraReactProvider>
+    </QueryClientProvider>
   );
 }

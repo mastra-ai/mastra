@@ -9,7 +9,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@mastra/playground-ui": "file:../../packages/playground-ui",
     "@mastra/react": "file:../../client-sdks/react",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -21,6 +20,7 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
+    "@tanstack/react-query": "^5.81.5",
     "ai": "^5.0.57",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -51,7 +51,6 @@
   },
   "pnpm": {
     "overrides": {
-      "@mastra/playground-ui": "link:../../packages/playground-ui",
       "@mastra/react": "link:../../client-sdks/react"
     }
   }

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mastra } from './mastra';
 
-const workflow = mastra.getWorkflow('myWorkflow');
+const workflow = mastra.getWorkflow('workflowRecipeMaker');
 
 async function main() {
   const resourceId = randomUUID();

@@ -5,7 +5,7 @@ import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
 import { Agent, InputProcessor } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
-import { myWorkflow } from '../workflows/index.js';
+import { workflowRecipeMaker } from '../workflows/index.js';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
@@ -53,7 +53,7 @@ export const chefAgent = new Agent({
     weatherInfo,
   },
   workflows: {
-    myWorkflow,
+    workflowRecipeMaker,
   },
   memory,
   voice: new OpenAIVoice(),
@@ -144,7 +144,7 @@ export const chefAgentResponses = new Agent({
     };
   },
   workflows: {
-    myWorkflow,
+    workflowRecipeMaker,
   },
   inputProcessors: [
     piiDetector,
