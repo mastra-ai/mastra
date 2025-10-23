@@ -1,6 +1,5 @@
-import { AgentEvals } from '@mastra/playground-ui';
+import { AgentEvals, useEvalsByAgentId } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
-import { useEvalsByAgentId } from '@/domains/evals/hooks/use-evals-by-agent-id';
 
 function AgentEvalsPage() {
   const { agentId } = useParams();

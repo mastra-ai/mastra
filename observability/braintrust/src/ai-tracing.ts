@@ -6,7 +6,7 @@
  * Events are handled as zero-duration spans with matching start/end times.
  */
 
-import type { AITracingEvent, AnyExportedAISpan, LLMGenerationAttributes } from '@mastra/core/ai-tracing';
+import type { AITracingEvent, AnyExportedAISpan, ModelGenerationAttributes } from '@mastra/core/ai-tracing';
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
 import { BaseExporter } from '@mastra/core/ai-tracing/exporters';
 import type { BaseExporterConfig } from '@mastra/core/ai-tracing/exporters';
@@ -36,8 +36,8 @@ const DEFAULT_SPAN_TYPE = 'task';
 
 // Exceptions to the default mapping
 const SPAN_TYPE_EXCEPTIONS: Partial<Record<AISpanType, string>> = {
-  [AISpanType.LLM_GENERATION]: 'llm',
-  [AISpanType.LLM_CHUNK]: 'llm',
+  [AISpanType.MODEL_GENERATION]: 'llm',
+  [AISpanType.MODEL_CHUNK]: 'llm',
   [AISpanType.TOOL_CALL]: 'tool',
   [AISpanType.MCP_TOOL_CALL]: 'tool',
   [AISpanType.WORKFLOW_CONDITIONAL_EVAL]: 'function',
@@ -290,25 +290,25 @@ export class BraintrustExporter extends BaseExporter {
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
 
-    if (span.type === AISpanType.LLM_GENERATION) {
-      const llmAttr = attributes as LLMGenerationAttributes;
+    if (span.type === AISpanType.MODEL_GENERATION) {
+      const modelAttr = attributes as ModelGenerationAttributes;
 
       // Model goes to metadata
-      if (llmAttr.model !== undefined) {
-        payload.metadata.model = llmAttr.model;
+      if (modelAttr.model !== undefined) {
+        payload.metadata.model = modelAttr.model;
       }
 
       // Provider goes to metadata (if provided by attributes)
-      if (llmAttr.provider !== undefined) {
-        payload.metadata.provider = llmAttr.provider;
+      if (modelAttr.provider !== undefined) {
+        payload.metadata.provider = modelAttr.provider;
       }
 
       // Usage/token info goes to metrics
-      payload.metrics = normalizeUsageMetrics(llmAttr);
+      payload.metrics = normalizeUsageMetrics(modelAttr);
 
       // Model parameters go to metadata
-      if (llmAttr.parameters !== undefined) {
-        payload.metadata.modelParameters = llmAttr.parameters;
+      if (modelAttr.parameters !== undefined) {
+        payload.metadata.modelParameters = modelAttr.parameters;
       }
 
       // Other LLM attributes go to metadata

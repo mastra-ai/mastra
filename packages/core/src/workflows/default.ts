@@ -25,15 +25,23 @@ import type {
   StepFlowEntry,
   StepResult,
   StepSuccess,
+  StepSuspended,
 } from './types';
-import { validateStepInput } from './utils';
+import { getResumeLabelsByStepId, validateStepInput } from './utils';
 
 export type ExecutionContext = {
   workflowId: string;
   runId: string;
   executionPath: number[];
+  foreachIndex?: number;
   suspendedPaths: Record<string, number[]>;
-  resumeLabels: Record<string, string>;
+  resumeLabels: Record<
+    string,
+    {
+      stepId: string;
+      foreachIndex?: number;
+    }
+  >;
   waitingPaths?: Record<string, number[]>;
   retryConfig: {
     attempts: number;
@@ -205,6 +213,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
+      label?: string;
+      forEachIndex?: number;
     };
     emitter: Emitter;
     retryConfig?: {
@@ -218,6 +228,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     format?: 'legacy' | 'vnext' | undefined;
     outputOptions?: {
       includeState?: boolean;
+      includeResumeLabels?: boolean;
     };
   }): Promise<TOutput> {
     const {
@@ -342,6 +353,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 status: result.status,
               },
             });
+          }
+          if (lastOutput.result.status === 'suspended' && params.outputOptions?.includeResumeLabels) {
+            return { ...result, resumeLabels: lastOutput.executionContext?.resumeLabels };
           }
           return result;
         }
@@ -747,6 +761,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume?: {
       steps: string[];
       resumePayload: any;
+      label?: string;
+      forEachIndex?: number;
     };
     prevOutput: any;
     emitter: Emitter;
@@ -897,7 +913,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions): Promise<any> => {
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
             if (suspendOptions?.resumeLabel) {
-              executionContext.resumeLabels[suspendOptions.resumeLabel] = step.id;
+              const resumeLabel = Array.isArray(suspendOptions.resumeLabel)
+                ? suspendOptions.resumeLabel
+                : [suspendOptions.resumeLabel];
+              for (const label of resumeLabel) {
+                executionContext.resumeLabels[label] = {
+                  stepId: step.id,
+                  foreachIndex: executionContext.foreachIndex,
+                };
+              }
             }
 
             suspended = { payload: suspendPayload };
@@ -917,6 +941,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                   resumePayload: resume?.resumePayload,
                   // @ts-ignore
                   runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
+                  label: resume?.label,
+                  forEachIndex: resume?.forEachIndex,
                 }
               : undefined,
           [EMITTER_SYMBOL]: emitter,
@@ -1692,6 +1718,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
+      forEachIndex?: number;
     };
     executionContext: ExecutionContext;
     tracingContext: TracingContext;
@@ -1759,21 +1786,49 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     const prevPayload = stepResults[step.id];
+    const foreachIndexObj: Record<number, any> = {};
     const resumeIndex =
       prevPayload?.status === 'suspended' ? prevPayload?.suspendPayload?.__workflow_meta?.foreachIndex || 0 : 0;
 
-    for (let i = resumeIndex; i < prevOutput.length; i += concurrency) {
+    const prevForeachOutput = (prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput || []) as StepResult<
+      any,
+      any,
+      any,
+      any
+    >[];
+    const prevResumeLabels = prevPayload?.suspendPayload?.__workflow_meta?.resumeLabels || {};
+    const resumeLabels = getResumeLabelsByStepId(prevResumeLabels, step.id);
+
+    for (let i = 0; i < prevOutput.length; i += concurrency) {
       const items = prevOutput.slice(i, i + concurrency);
       const itemsResults = await Promise.all(
         items.map((item: any, j: number) => {
+          const k = i + j;
+          const prevItemResult = prevForeachOutput[k];
+          if (
+            prevItemResult?.status === 'success' ||
+            (prevItemResult?.status === 'suspended' && resume?.forEachIndex !== k && resume?.forEachIndex !== undefined)
+          ) {
+            return prevItemResult;
+          }
+          let resumeToUse = undefined;
+          if (resume?.forEachIndex !== undefined) {
+            resumeToUse = resume.forEachIndex === k ? resume : undefined;
+          } else {
+            const isIndexSuspended = prevItemResult?.status === 'suspended' || resumeIndex === k;
+            if (isIndexSuspended) {
+              resumeToUse = resume;
+            }
+          }
+
           return this.executeStep({
             workflowId,
             runId,
             resourceId,
             step,
             stepResults,
-            executionContext,
-            resume: resumeIndex === i + j ? resume : undefined,
+            executionContext: { ...executionContext, foreachIndex: k },
+            resume: resumeToUse,
             prevOutput: item,
             tracingContext: { currentSpan: loopSpan },
             emitter,
@@ -1787,7 +1842,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         }),
       );
 
-      for (const result of itemsResults) {
+      for (const [resultIndex, result] of itemsResults.entries()) {
         if (result.status !== 'success') {
           const { status, error, suspendPayload, suspendedAt, endedAt, output } = result;
           const execResults = { status, error, suspendPayload, suspendedAt, endedAt, output };
@@ -1818,27 +1873,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           });
 
           if (execResults.status === 'suspended') {
-            await emitter.emit('watch-v2', {
-              type: 'workflow-step-suspended',
-              payload: {
-                id: step.id,
-                ...execResults,
-              },
-            });
-
-            return {
-              ...stepInfo,
-              status: 'suspended',
-              suspendPayload: {
-                ...execResults.suspendPayload,
-                __workflow_meta: {
-                  ...execResults.suspendPayload?.__workflow_meta,
-                  foreachIndex: i,
-                },
-              },
-              //@ts-ignore
-              endedAt: Date.now(),
-            };
+            foreachIndexObj[i + resultIndex] = execResults;
           } else {
             await emitter.emit('watch-v2', {
               type: 'workflow-step-result',
@@ -1858,9 +1893,48 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
             return result;
           }
+        } else {
+          const indexResumeLabel = Object.keys(resumeLabels).find(
+            key => resumeLabels[key]?.foreachIndex === i + resultIndex,
+          )!;
+          delete resumeLabels[indexResumeLabel];
         }
 
-        results.push(result?.output);
+        if (result?.output) {
+          results[i + resultIndex] = result?.output;
+        }
+
+        prevForeachOutput[i + resultIndex] = { ...result, suspendPayload: {} };
+      }
+
+      if (Object.keys(foreachIndexObj).length > 0) {
+        const suspendedIndices = Object.keys(foreachIndexObj).map(Number);
+        const foreachIndex = suspendedIndices[0]!;
+        await emitter.emit('watch-v2', {
+          type: 'workflow-step-suspended',
+          payload: {
+            id: step.id,
+            ...foreachIndexObj[foreachIndex],
+          },
+        });
+
+        executionContext.suspendedPaths[step.id] = executionContext.executionPath;
+        executionContext.resumeLabels = { ...resumeLabels, ...executionContext.resumeLabels };
+
+        return {
+          ...stepInfo,
+          suspendedAt: Date.now(),
+          status: 'suspended',
+          suspendPayload: {
+            ...foreachIndexObj[foreachIndex].suspendPayload,
+            __workflow_meta: {
+              ...foreachIndexObj[foreachIndex].suspendPayload?.__workflow_meta,
+              foreachIndex,
+              foreachOutput: prevForeachOutput,
+              resumeLabels: executionContext.resumeLabels,
+            },
+          },
+        } as StepSuspended<any, any>;
       }
     }
 

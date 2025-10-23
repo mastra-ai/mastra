@@ -1,6 +1,6 @@
 {
   "name": "@mastra/langsmith",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Langsmith observability provider for Mastra - includes AI tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",
@@ -48,7 +48,7 @@
     "zod": "^3.25.76"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.23.0-0"
+    "@mastra/core": ">=0.18.1-0 <0.24.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

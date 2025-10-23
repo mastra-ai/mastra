@@ -132,9 +132,21 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     ...rest,
   };
 
+  const existingSnapshot = resumeContext?.snapshot;
+  let initialStreamState: any;
+
+  if (existingSnapshot) {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
+        initialStreamState = step.suspendPayload?.__streamState;
+        break;
+      }
+    }
+  }
   const baseStream = workflowLoopStream(workflowLoopProps);
 
-  // Apply chunk tracing transform to track LLM_STEP and LLM_CHUNK spans
+  // Apply chunk tracing transform to track MODEL_STEP and MODEL_CHUNK spans
   const stream = rest.modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
 
   modelOutput = new MastraModelOutput({
@@ -159,6 +171,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       returnScorerData,
       tracingContext: { currentSpan: llmAISpan },
     },
+    initialState: initialStreamState,
   });
 
   return createDestructurableOutput(modelOutput);

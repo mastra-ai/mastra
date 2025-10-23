@@ -26,8 +26,69 @@ let registryData: RegistryData | null = null;
 // Cache file helpers (dev mode only)
 const CACHE_DIR = path.join(os.homedir(), '.cache', 'mastra');
 const CACHE_FILE = path.join(CACHE_DIR, 'gateway-refresh-time');
+const GLOBAL_PROVIDER_REGISTRY_JSON = path.join(CACHE_DIR, 'provider-registry.json');
+const GLOBAL_PROVIDER_TYPES_DTS = path.join(CACHE_DIR, 'provider-types.generated.d.ts');
 
 let modelRouterCacheFailed = false;
+
+/**
+ * Syncs provider files from global cache to local dist/ directory if needed.
+ * Compares file contents to determine if copy is necessary.
+ */
+function syncGlobalCacheToLocal(): void {
+  try {
+    // Check if global cache files exist
+    const globalJsonExists = fs.existsSync(GLOBAL_PROVIDER_REGISTRY_JSON);
+    const globalDtsExists = fs.existsSync(GLOBAL_PROVIDER_TYPES_DTS);
+
+    if (!globalJsonExists && !globalDtsExists) {
+      // No global cache, nothing to sync
+      return;
+    }
+
+    // Use getPackageRoot() to find the correct location in node_modules or local dev
+    const packageRoot = getPackageRoot();
+    const localJsonPath = path.join(packageRoot, 'dist', 'provider-registry.json');
+    const localDtsPath = path.join(packageRoot, 'dist', 'llm', 'model', 'provider-types.generated.d.ts');
+
+    // Ensure local dist directory exists
+    fs.mkdirSync(path.dirname(localJsonPath), { recursive: true });
+    fs.mkdirSync(path.dirname(localDtsPath), { recursive: true });
+
+    // Sync JSON file if global exists and differs from local
+    if (globalJsonExists) {
+      const globalJsonContent = fs.readFileSync(GLOBAL_PROVIDER_REGISTRY_JSON, 'utf-8');
+      let shouldCopyJson = true;
+
+      if (fs.existsSync(localJsonPath)) {
+        const localJsonContent = fs.readFileSync(localJsonPath, 'utf-8');
+        shouldCopyJson = globalJsonContent !== localJsonContent;
+      }
+
+      if (shouldCopyJson) {
+        fs.writeFileSync(localJsonPath, globalJsonContent, 'utf-8');
+      }
+    }
+
+    // Sync .d.ts file if global exists and differs from local
+    if (globalDtsExists) {
+      const globalDtsContent = fs.readFileSync(GLOBAL_PROVIDER_TYPES_DTS, 'utf-8');
+      let shouldCopyDts = true;
+
+      if (fs.existsSync(localDtsPath)) {
+        const localDtsContent = fs.readFileSync(localDtsPath, 'utf-8');
+        shouldCopyDts = globalDtsContent !== localDtsContent;
+      }
+
+      if (shouldCopyDts) {
+        fs.writeFileSync(localDtsPath, globalDtsContent, 'utf-8');
+      }
+    }
+  } catch (error) {
+    // Silent fail - backwards compatibility means we fall back to existing files
+    console.warn('Failed to sync global cache to local:', error);
+  }
+}
 
 function getLastRefreshTimeFromDisk(): Date | null {
   try {
@@ -72,6 +133,9 @@ function loadRegistry(useDynamicLoading: boolean): RegistryData {
   if (!useDynamicLoading) {
     return staticRegistry;
   }
+
+  // Dynamic loading mode: sync global cache to local before loading
+  syncGlobalCacheToLocal();
 
   // Dynamic loading mode: check in-memory cache first
   if (registryData) {
@@ -305,6 +369,15 @@ export class GatewayRegistry {
       // Get package root for file paths
       const packageRoot = getPackageRoot();
 
+      // Write to global cache first (so all projects can benefit)
+      try {
+        fs.mkdirSync(CACHE_DIR, { recursive: true });
+        await writeRegistryFiles(GLOBAL_PROVIDER_REGISTRY_JSON, GLOBAL_PROVIDER_TYPES_DTS, providers, models);
+        // console.debug(`[GatewayRegistry] ✅ Updated global cache at ${CACHE_DIR}`);
+      } catch (error) {
+        console.warn('[GatewayRegistry] Failed to write to global cache:', error);
+      }
+
       // Write to dist/ (the bundled location that gets distributed)
       const distJsonPath = path.join(packageRoot, 'dist', 'provider-registry.json');
       const distTypesPath = path.join(packageRoot, 'dist', 'llm', 'model', 'provider-types.generated.d.ts');
@@ -312,8 +385,9 @@ export class GatewayRegistry {
       await writeRegistryFiles(distJsonPath, distTypesPath, providers, models);
       // console.debug(`[GatewayRegistry] ✅ Updated registry files in dist/`);
 
-      // Also copy to src/ when explicitly requested or when using dynamic loading
-      if (writeToSrc || this.useDynamicLoading) {
+      // Copy to src/ only when explicitly requested (e.g., running the generation script)
+      const shouldWriteToSrc = writeToSrc;
+      if (shouldWriteToSrc) {
         const srcJsonPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-registry.json');
         const srcTypesPath = path.join(packageRoot, 'src', 'llm', 'model', 'provider-types.generated.d.ts');
 

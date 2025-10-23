@@ -1,6 +1,5 @@
-import { ChatThreads, useLinkComponent } from '@mastra/playground-ui';
+import { ChatThreads, useLinkComponent, useDeleteThread } from '@mastra/playground-ui';
 
-import { useDeleteThread } from '@/hooks/use-memory';
 import { StorageThreadType } from '@mastra/core/memory';
 
 export function AgentSidebar({
