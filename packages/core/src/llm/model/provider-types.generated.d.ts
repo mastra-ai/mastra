@@ -75,6 +75,13 @@ export type ProviderModelsMap = {
     'grok-code-fast-1',
     'grok-vision-beta',
   ];
+  readonly vultr: readonly [
+    'deepseek-r1-distill-llama-70b',
+    'deepseek-r1-distill-qwen-32b',
+    'gpt-oss-120b',
+    'kimi-k2-instruct',
+    'qwen2.5-coder-32b-instruct',
+  ];
   readonly nvidia: readonly [
     'black-forest-labs/flux.1-dev',
     'deepseek-ai/deepseek-v3.1',
