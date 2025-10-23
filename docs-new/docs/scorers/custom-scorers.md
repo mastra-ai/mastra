@@ -1,5 +1,6 @@
 ---
 title: Creating Scorers
+sidebar_position: 3
 ---
 
 ## Creating scorers
