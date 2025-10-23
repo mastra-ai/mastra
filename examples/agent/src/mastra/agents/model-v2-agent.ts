@@ -43,14 +43,9 @@ const testAPICallError = new APICallError({
 export const errorAgent = new Agent({
   name: 'Error Agent',
   instructions: 'You are an error agent that always errors',
-  // model: {
-  //   id: 'anthropic/claude-3-5-haiku-20241022',
-  //   apiKey: 'kjashdkjashd',
-  // },
   model: new MockLanguageModelV2({
     doStream: async () => {
       throw testAPICallError;
-      // throw new Error('Test error');
     },
   }),
 });
