@@ -4,7 +4,7 @@
 
 import type {
   AnyExportedAISpan,
-  LLMGenerationAttributes,
+  ModelGenerationAttributes,
   AgentRunAttributes,
   ToolCallAttributes,
   MCPToolCallAttributes,
@@ -20,9 +20,9 @@ import { MastraReadableSpan } from './mastra-span.js';
 // Map Mastra span types to OpenTelemetry span kinds following OTEL conventions
 // Only non-INTERNAL mappings are specified - all others default to SpanKind.INTERNAL
 const SPAN_KIND_MAPPING: Partial<Record<AISpanType, SpanKind>> = {
-  // LLM operations are CLIENT spans (calling external AI services)
-  [AISpanType.LLM_GENERATION]: SpanKind.CLIENT,
-  [AISpanType.LLM_CHUNK]: SpanKind.CLIENT,
+  // Model operations are CLIENT spans (calling external AI services)
+  [AISpanType.MODEL_GENERATION]: SpanKind.CLIENT,
+  [AISpanType.MODEL_CHUNK]: SpanKind.CLIENT,
 
   // MCP tool calls are CLIENT (external service calls)
   [AISpanType.MCP_TOOL_CALL]: SpanKind.CLIENT,
@@ -84,8 +84,8 @@ export class SpanConverter {
    */
   private buildSpanName(aiSpan: AnyExportedAISpan): string {
     switch (aiSpan.type) {
-      case AISpanType.LLM_GENERATION: {
-        const attrs = aiSpan.attributes as LLMGenerationAttributes;
+      case AISpanType.MODEL_GENERATION: {
+        const attrs = aiSpan.attributes as ModelGenerationAttributes;
         const operation = attrs?.resultType === 'tool_selection' ? 'tool_selection' : 'chat';
         const model = attrs?.model || 'unknown';
         return `${operation} ${model}`;
@@ -151,7 +151,7 @@ export class SpanConverter {
       attributes['input'] = inputStr;
 
       // Add specific attributes based on span type
-      if (aiSpan.type === AISpanType.LLM_GENERATION) {
+      if (aiSpan.type === AISpanType.MODEL_GENERATION) {
         attributes['gen_ai.prompt'] = inputStr;
       } else if (aiSpan.type === AISpanType.TOOL_CALL || aiSpan.type === AISpanType.MCP_TOOL_CALL) {
         attributes['gen_ai.tool.input'] = inputStr;
@@ -164,31 +164,31 @@ export class SpanConverter {
       attributes['output'] = outputStr;
 
       // Add specific attributes based on span type
-      if (aiSpan.type === AISpanType.LLM_GENERATION) {
+      if (aiSpan.type === AISpanType.MODEL_GENERATION) {
         attributes['gen_ai.completion'] = outputStr;
       } else if (aiSpan.type === AISpanType.TOOL_CALL || aiSpan.type === AISpanType.MCP_TOOL_CALL) {
         attributes['gen_ai.tool.output'] = outputStr;
       }
     }
 
-    // Add LLM-specific attributes using OTEL semantic conventions
-    if (aiSpan.type === AISpanType.LLM_GENERATION && aiSpan.attributes) {
-      const llmAttrs = aiSpan.attributes as LLMGenerationAttributes;
+    // Add model-specific attributes using OTEL semantic conventions
+    if (aiSpan.type === AISpanType.MODEL_GENERATION && aiSpan.attributes) {
+      const modelAttrs = aiSpan.attributes as ModelGenerationAttributes;
 
       // Model and provider
-      if (llmAttrs.model) {
-        attributes['gen_ai.request.model'] = llmAttrs.model;
+      if (modelAttrs.model) {
+        attributes['gen_ai.request.model'] = modelAttrs.model;
       }
 
-      if (llmAttrs.provider) {
-        attributes['gen_ai.system'] = llmAttrs.provider;
+      if (modelAttrs.provider) {
+        attributes['gen_ai.system'] = modelAttrs.provider;
       }
 
       // Token usage - use OTEL standard naming
-      if (llmAttrs.usage) {
+      if (modelAttrs.usage) {
         // Handle both v5 format (inputTokens/outputTokens) and legacy format (promptTokens/completionTokens)
-        const inputTokens = llmAttrs.usage.inputTokens ?? llmAttrs.usage.promptTokens;
-        const outputTokens = llmAttrs.usage.outputTokens ?? llmAttrs.usage.completionTokens;
+        const inputTokens = modelAttrs.usage.inputTokens ?? modelAttrs.usage.promptTokens;
+        const outputTokens = modelAttrs.usage.outputTokens ?? modelAttrs.usage.completionTokens;
 
         if (inputTokens !== undefined) {
           attributes['gen_ai.usage.input_tokens'] = inputTokens;
@@ -196,47 +196,47 @@ export class SpanConverter {
         if (outputTokens !== undefined) {
           attributes['gen_ai.usage.output_tokens'] = outputTokens;
         }
-        if (llmAttrs.usage.totalTokens !== undefined) {
-          attributes['gen_ai.usage.total_tokens'] = llmAttrs.usage.totalTokens;
+        if (modelAttrs.usage.totalTokens !== undefined) {
+          attributes['gen_ai.usage.total_tokens'] = modelAttrs.usage.totalTokens;
         }
 
         // Add other token metrics if present
-        if (llmAttrs.usage.reasoningTokens !== undefined) {
-          attributes['gen_ai.usage.reasoning_tokens'] = llmAttrs.usage.reasoningTokens;
+        if (modelAttrs.usage.reasoningTokens !== undefined) {
+          attributes['gen_ai.usage.reasoning_tokens'] = modelAttrs.usage.reasoningTokens;
         }
-        if (llmAttrs.usage.cachedInputTokens !== undefined) {
-          attributes['gen_ai.usage.cached_input_tokens'] = llmAttrs.usage.cachedInputTokens;
+        if (modelAttrs.usage.cachedInputTokens !== undefined) {
+          attributes['gen_ai.usage.cached_input_tokens'] = modelAttrs.usage.cachedInputTokens;
         }
       }
 
       // Parameters using OTEL conventions
-      if (llmAttrs.parameters) {
-        if (llmAttrs.parameters.temperature !== undefined) {
-          attributes['gen_ai.request.temperature'] = llmAttrs.parameters.temperature;
+      if (modelAttrs.parameters) {
+        if (modelAttrs.parameters.temperature !== undefined) {
+          attributes['gen_ai.request.temperature'] = modelAttrs.parameters.temperature;
         }
-        if (llmAttrs.parameters.maxOutputTokens !== undefined) {
-          attributes['gen_ai.request.max_tokens'] = llmAttrs.parameters.maxOutputTokens;
+        if (modelAttrs.parameters.maxOutputTokens !== undefined) {
+          attributes['gen_ai.request.max_tokens'] = modelAttrs.parameters.maxOutputTokens;
         }
-        if (llmAttrs.parameters.topP !== undefined) {
-          attributes['gen_ai.request.top_p'] = llmAttrs.parameters.topP;
+        if (modelAttrs.parameters.topP !== undefined) {
+          attributes['gen_ai.request.top_p'] = modelAttrs.parameters.topP;
         }
-        if (llmAttrs.parameters.topK !== undefined) {
-          attributes['gen_ai.request.top_k'] = llmAttrs.parameters.topK;
+        if (modelAttrs.parameters.topK !== undefined) {
+          attributes['gen_ai.request.top_k'] = modelAttrs.parameters.topK;
         }
-        if (llmAttrs.parameters.presencePenalty !== undefined) {
-          attributes['gen_ai.request.presence_penalty'] = llmAttrs.parameters.presencePenalty;
+        if (modelAttrs.parameters.presencePenalty !== undefined) {
+          attributes['gen_ai.request.presence_penalty'] = modelAttrs.parameters.presencePenalty;
         }
-        if (llmAttrs.parameters.frequencyPenalty !== undefined) {
-          attributes['gen_ai.request.frequency_penalty'] = llmAttrs.parameters.frequencyPenalty;
+        if (modelAttrs.parameters.frequencyPenalty !== undefined) {
+          attributes['gen_ai.request.frequency_penalty'] = modelAttrs.parameters.frequencyPenalty;
         }
-        if (llmAttrs.parameters.stopSequences) {
-          attributes['gen_ai.request.stop_sequences'] = JSON.stringify(llmAttrs.parameters.stopSequences);
+        if (modelAttrs.parameters.stopSequences) {
+          attributes['gen_ai.request.stop_sequences'] = JSON.stringify(modelAttrs.parameters.stopSequences);
         }
       }
 
       // Response attributes
-      if (llmAttrs.finishReason) {
-        attributes['gen_ai.response.finish_reasons'] = llmAttrs.finishReason;
+      if (modelAttrs.finishReason) {
+        attributes['gen_ai.response.finish_reasons'] = modelAttrs.finishReason;
       }
     }
 
@@ -345,8 +345,8 @@ export class SpanConverter {
    */
   private getOperationName(aiSpan: AnyExportedAISpan): string {
     switch (aiSpan.type) {
-      case AISpanType.LLM_GENERATION: {
-        const attrs = aiSpan.attributes as LLMGenerationAttributes;
+      case AISpanType.MODEL_GENERATION: {
+        const attrs = aiSpan.attributes as ModelGenerationAttributes;
         return attrs?.resultType === 'tool_selection' ? 'tool_selection' : 'chat';
       }
       case AISpanType.TOOL_CALL:

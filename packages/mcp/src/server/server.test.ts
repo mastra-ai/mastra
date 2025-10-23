@@ -4,7 +4,8 @@ import type { ServerType } from '@hono/node-server';
 import { serve } from '@hono/node-server';
 import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
-import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo, ConvertedTool } from '@mastra/core/mcp';
+import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo } from '@mastra/core/mcp';
+import type { InternalCoreTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type {
@@ -1436,7 +1437,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
       workflows: { execWorkflowKey: testWorkflow },
     });
 
-    const workflowTool = server.tools()['run_execWorkflowKey'] as ConvertedTool;
+    const workflowTool = server.tools()['run_execWorkflowKey'] as InternalCoreTool;
     expect(workflowTool).toBeDefined();
 
     const inputData = { data: 'Hello Workflow' };

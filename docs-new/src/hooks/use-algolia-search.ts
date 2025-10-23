@@ -349,7 +349,7 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
               {
                 title: displayTitle,
                 excerpt: excerpt,
-                url: typedHit.url || '',
+                url: toRelativePath(typedHit.url || ''),
               },
             ];
 
@@ -357,7 +357,7 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
               objectID: typedHit.objectID,
               title: displayTitle,
               excerpt: excerpt,
-              url: typedHit.url || '',
+              url: toRelativePath(typedHit.url || ''),
               section: typedHit.section,
               priority: typedHit.priority,
               depth: typedHit.depth,
@@ -508,13 +508,13 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
             objectID: typedHit.objectID,
             title: displayTitle,
             excerpt,
-            url: typedHit.url || '',
+            url: toRelativePath(typedHit.url || ''),
             section: typedHit.section,
             priority: typedHit.priority,
             depth: typedHit.depth,
             _highlightResult: typedHit._highlightResult,
             _snippetResult: typedHit._snippetResult,
-            sub_results: [{ title: displayTitle, excerpt, url: typedHit.url || '' }],
+            sub_results: [{ title: displayTitle, excerpt, url: toRelativePath(typedHit.url || '') }],
           };
         });
 
@@ -549,4 +549,22 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
 
 function stripColon(title: string) {
   return title.charAt(title.length - 1) === ':' ? title.slice(0, -1) : title;
+}
+
+/**
+ * Convert absolute URLs to relative paths to prevent issues with preview branches
+ * @param url - URL from Algolia (could be absolute or relative)
+ * @returns Relative path with hash if present
+ */
+function toRelativePath(url: string): string {
+  if (!url) return '';
+
+  try {
+    // Try to parse as URL - if it's absolute, extract pathname + hash
+    const urlObj = new URL(url);
+    return urlObj.pathname + urlObj.hash;
+  } catch {
+    // If URL parsing fails, it's likely already a relative path
+    return url;
+  }
 }

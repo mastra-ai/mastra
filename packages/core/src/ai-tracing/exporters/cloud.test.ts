@@ -55,7 +55,7 @@ describe('CloudExporter', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
-      type: AISpanType.LLM_GENERATION,
+      type: AISpanType.MODEL_GENERATION,
       isEvent: false,
       traceId: 'trace-456',
       input: { prompt: 'test' },
@@ -124,7 +124,7 @@ describe('CloudExporter', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
-      type: AISpanType.LLM_GENERATION,
+      type: AISpanType.MODEL_GENERATION,
       isEvent: false,
       traceId: 'trace-456',
       input: { prompt: 'test' },
@@ -270,7 +270,7 @@ describe('CloudExporter', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
-      type: AISpanType.LLM_GENERATION,
+      type: AISpanType.MODEL_GENERATION,
       isEvent: false,
       traceId: 'trace-456',
       input: { prompt: 'test' },
@@ -376,7 +376,7 @@ describe('CloudExporter', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
-      type: AISpanType.LLM_GENERATION,
+      type: AISpanType.MODEL_GENERATION,
       isEvent: false,
       traceId: 'trace-456',
       input: { prompt: 'test' },
@@ -540,7 +540,7 @@ describe('CloudExporter', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
-      type: AISpanType.LLM_GENERATION,
+      type: AISpanType.MODEL_GENERATION,
       isEvent: false,
       traceId: 'trace-456',
       input: { prompt: 'test' },
@@ -674,7 +674,7 @@ describe('CloudExporter', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
-      type: AISpanType.LLM_GENERATION,
+      type: AISpanType.MODEL_GENERATION,
       isEvent: false,
       traceId: 'trace-456',
       input: { prompt: 'test' },
@@ -798,7 +798,7 @@ describe('CloudExporter', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
-      type: AISpanType.LLM_GENERATION,
+      type: AISpanType.MODEL_GENERATION,
       isEvent: false,
       traceId: 'trace-456',
       input: { prompt: 'test' },

@@ -19,12 +19,12 @@ export enum AISpanType {
   AGENT_RUN = 'agent_run',
   /** Generic span for custom operations */
   GENERIC = 'generic',
-  /** LLM generation with model calls, token usage, prompts, completions */
-  LLM_GENERATION = 'llm_generation',
-  /** Single LLM execution step within a generation (one API call) */
-  LLM_STEP = 'llm_step',
-  /** Individual LLM streaming chunk/event */
-  LLM_CHUNK = 'llm_chunk',
+  /** Model generation with model calls, token usage, prompts, completions */
+  MODEL_GENERATION = 'model_generation',
+  /** Single model execution step within a generation (one API call) */
+  MODEL_STEP = 'model_step',
+  /** Individual model streaming chunk/event */
+  MODEL_CHUNK = 'model_chunk',
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
   /** Input or Output Processor execution */
@@ -91,9 +91,9 @@ export interface UsageStats {
 }
 
 /**
- * LLM Generation attributes
+ * Model Generation attributes
  */
-export interface LLMGenerationAttributes extends AIBaseAttributes {
+export interface ModelGenerationAttributes extends AIBaseAttributes {
   /** Model name (e.g., 'gpt-4', 'claude-3') */
   model?: string;
   /** Model provider (e.g., 'openai', 'anthropic') */
@@ -123,9 +123,9 @@ export interface LLMGenerationAttributes extends AIBaseAttributes {
 }
 
 /**
- * LLM Step attributes - for a single LLM execution within a generation
+ * Model Step attributes - for a single model execution within a generation
  */
-export interface LLMStepAttributes extends AIBaseAttributes {
+export interface ModelStepAttributes extends AIBaseAttributes {
   /** Index of this step in the generation (0, 1, 2, ...) */
   stepIndex?: number;
   /** Token usage statistics */
@@ -139,9 +139,9 @@ export interface LLMStepAttributes extends AIBaseAttributes {
 }
 
 /**
- * LLM Chunk attributes - for individual streaming chunks/events
+ * Model Chunk attributes - for individual streaming chunks/events
  */
-export interface LLMChunkAttributes extends AIBaseAttributes {
+export interface ModelChunkAttributes extends AIBaseAttributes {
   /** Type of chunk (text-delta, reasoning-delta, tool-call, etc.) */
   chunkType?: string;
   /** Sequence number of this chunk in the stream */
@@ -282,9 +282,9 @@ export interface WorkflowWaitEventAttributes extends AIBaseAttributes {
 export interface AISpanTypeMap {
   [AISpanType.AGENT_RUN]: AgentRunAttributes;
   [AISpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
-  [AISpanType.LLM_GENERATION]: LLMGenerationAttributes;
-  [AISpanType.LLM_STEP]: LLMStepAttributes;
-  [AISpanType.LLM_CHUNK]: LLMChunkAttributes;
+  [AISpanType.MODEL_GENERATION]: ModelGenerationAttributes;
+  [AISpanType.MODEL_STEP]: ModelStepAttributes;
+  [AISpanType.MODEL_CHUNK]: ModelChunkAttributes;
   [AISpanType.TOOL_CALL]: ToolCallAttributes;
   [AISpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
   [AISpanType.PROCESSOR_RUN]: ProcessorRunAttributes;
@@ -569,8 +569,8 @@ export enum InternalSpans {
   AGENT = 1 << 1, // 0010
   /** Tool spans are marked internal */
   TOOL = 1 << 2, // 0100
-  /** LLM spans are marked internal */
-  LLM = 1 << 3, // 1000
+  /** Model spans are marked internal */
+  MODEL = 1 << 3, // 1000
 
   /** All spans are marked internal */
   ALL = (1 << 4) - 1, // 1111 (all bits set up to 3)
