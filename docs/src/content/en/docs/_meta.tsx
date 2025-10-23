@@ -18,7 +18,6 @@ const meta = {
     title: "Server & DB",
   },
   deployment: { title: "Deployment" },
-  "mastra-cloud": { title: "Mastra Cloud" },
   observability: { title: "Observability" },
   scorers: <Tag text="experimental">Scorers</Tag>,
   auth: <Tag text="experimental">Auth</Tag>,
