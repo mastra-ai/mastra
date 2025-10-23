@@ -3139,6 +3139,248 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
     });
+
+    it('should support initialState in streamVNext', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state }) => {
+          return { result: 'success', stateValue: state.value };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), stateValue: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          stateValue: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRunAsync();
+      const streamResult = run.streamVNext({
+        inputData: {},
+        initialState: { value: 'test-initial-state' },
+      });
+
+      const executionResult = await streamResult.result;
+
+      expect(executionResult?.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success', stateValue: 'test-initial-state' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
+    it('should support initialState in stream', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state }) => {
+          return { result: 'success', stateValue: state.value };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), stateValue: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          stateValue: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRunAsync();
+      const streamResult = run.stream({
+        inputData: {},
+        initialState: { value: 'test-initial-state' },
+      });
+
+      const executionResult = await streamResult.result;
+
+      expect(executionResult?.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success', stateValue: 'test-initial-state' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
+    it('should support outputOptions.includeState in streamVNext', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state, setState }) => {
+          setState({ value: 'updated-state' });
+          return { result: 'success' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRunAsync();
+      const streamResult = run.streamVNext({
+        inputData: {},
+        initialState: { value: 'initial-state' },
+        outputOptions: { includeState: true },
+      });
+
+      const executionResult = await streamResult.result;
+
+      expect(executionResult?.state).toEqual({ value: 'updated-state' });
+    });
+
+    it('should support outputOptions.includeState in stream', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state, setState }) => {
+          setState({ value: 'updated-state' });
+          return { result: 'success' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRunAsync();
+      const streamResult = run.stream({
+        inputData: {},
+        initialState: { value: 'initial-state' },
+        outputOptions: { includeState: true },
+      });
+
+      const executionResult = await streamResult.result;
+
+      expect(executionResult?.state).toEqual({ value: 'updated-state' });
+    });
+
+    it('should support outputOptions.includeResumeLabels in streamVNext', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ suspend }) => {
+          await suspend({ data: 'suspended' }, { resumeLabel: ['label1'] });
+          return { result: 'success' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        suspendSchema: z.object({ data: z.string() }),
+        resumeSchema: z.object({ resumeData: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRunAsync();
+      const streamResult = run.streamVNext({
+        inputData: {},
+        outputOptions: { includeResumeLabels: true },
+      });
+
+      const executionResult = await streamResult.result;
+
+      expect(executionResult?.resumeLabels).toBeDefined();
+      expect(executionResult?.resumeLabels?.label1).toBeDefined();
+    });
+
+    it('should support outputOptions.includeResumeLabels in stream', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ suspend }) => {
+          await suspend({ data: 'suspended' }, { resumeLabel: ['label1'] });
+          return { result: 'success' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        suspendSchema: z.object({ data: z.string() }),
+        resumeSchema: z.object({ resumeData: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRunAsync();
+      const streamResult = run.stream({
+        inputData: {},
+        outputOptions: { includeResumeLabels: true },
+      });
+
+      const executionResult = await streamResult.result;
+
+      expect(executionResult?.resumeLabels).toBeDefined();
+      expect(executionResult?.resumeLabels?.label1).toBeDefined();
+    });
   });
 
   describe('Basic Workflow Execution', () => {
