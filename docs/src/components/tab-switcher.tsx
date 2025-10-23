@@ -26,8 +26,8 @@ const docsTabs = [
     href: "guides",
   },
   {
-    id: "API Reference",
-    label: "API Reference",
+    id: "Reference",
+    label: "Reference",
     href: "reference",
   },
   {
