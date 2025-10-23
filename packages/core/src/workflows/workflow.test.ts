@@ -1887,6 +1887,111 @@ describe('Workflow', () => {
       });
     });
 
+    it('should handle custom event emission using writer', async () => {
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+        execute: async ({ inputData }) => {
+          return {
+            userInput: inputData.input,
+          };
+        },
+      });
+
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+        execute: async ({ suspend, writer, inputData, resumeData }) => {
+          await writer.write({
+            type: 'custom-event',
+            payload: {
+              input: resumeData?.userInput || inputData.userInput,
+            },
+          });
+
+          if (!resumeData) {
+            await suspend({});
+          }
+
+          return { modelOutput: 'test output' };
+        },
+      });
+
+      const resumableWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [getUserInput, promptAgent],
+      });
+
+      resumableWorkflow.then(getUserInput).then(promptAgent).commit();
+
+      new Mastra({
+        storage: testStorage,
+        workflows: { 'test-workflow': resumableWorkflow },
+      });
+
+      const run = await resumableWorkflow.createRunAsync();
+
+      let streamResult = run.streamVNext({ inputData: { input: 'test input for stream' } });
+
+      for await (const data of streamResult.fullStream) {
+        if (data.type === 'workflow-step-output') {
+          expect(data.payload.output).toMatchObject({
+            type: 'custom-event',
+            payload: {
+              input: 'test input for stream',
+            },
+          });
+        }
+      }
+
+      let result = await streamResult.result;
+
+      const resumeData = { userInput: 'test input for resumption' };
+      streamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: promptAgent });
+      for await (const data of streamResult.fullStream) {
+        if (data.type === 'workflow-step-output') {
+          expect(data.payload.output).toMatchObject({
+            type: 'custom-event',
+            payload: {
+              input: 'test input for resumption',
+            },
+          });
+        }
+      }
+
+      result = await streamResult.result;
+      if (!result) {
+        expect.fail('Resume result is not set');
+      }
+
+      expect(result.steps).toEqual({
+        input: { input: 'test input for stream' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input for stream' },
+          payload: { input: 'test input for stream' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input for stream' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          resumePayload: { userInput: 'test input for resumption' },
+          resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          suspendPayload: {},
+        },
+      });
+    });
+
     it('should be able to use an agent as a step', async () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
