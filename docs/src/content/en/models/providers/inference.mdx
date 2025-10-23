@@ -167,7 +167,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://inference.net/v1",
-    modelId: "google/gemma-3",
+    id: "inference/google/gemma-3",
     apiKey: process.env.INFERENCE_API_KEY,
     headers: {
       "X-Custom-Header": "value"

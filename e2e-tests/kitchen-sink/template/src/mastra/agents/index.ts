@@ -1,11 +1,13 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
+
 import { weatherInfo } from '../tools';
 import { simulateReadableStream } from 'ai';
 import * as aiTest from 'ai/test';
 import { fixtures } from '../../../fixtures';
 import { Fixtures } from '../../../types';
+import { lessComplexWorkflow } from '../workflows/complex-workflow';
 
 const memory = new Memory({
   // ...
@@ -16,6 +18,12 @@ const memory = new Memory({
 });
 
 let count = 0;
+
+export const subAgent = new Agent({
+  name: 'Sub Agent',
+  instructions: `You are a helpful sub agent that provides accurate weather information.`,
+  model: 'google/gemini-2.5-pro',
+});
 
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
@@ -46,12 +54,14 @@ export const weatherAgent = new Agent({
         return {
           stream: simulateReadableStream({
             chunks: chunk,
-            delay: 100,
+            delay: 500,
           }),
         };
       },
     });
   },
   tools: { weatherInfo },
+  agents: { subAgent },
+  workflows: { lessComplexWorkflow },
   memory,
 });

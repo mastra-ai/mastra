@@ -1,0 +1,112 @@
+---
+title: 'LMStudio '
+description: 'Use LMStudio models with Mastra. 3 models available.'
+---
+
+# <img src="https://models.dev/logos/lmstudio.svg" alt="LMStudio logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LMStudio
+
+Access 3 LMStudio models through Mastra's model router. Authentication is handled automatically using the `LMSTUDIO_API_KEY` environment variable.
+
+Learn more in the [LMStudio documentation](https://lmstudio.ai/models).
+
+```bash
+LMSTUDIO_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from '@mastra/core';
+
+const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant',
+  model: 'lmstudio/openai/gpt-oss-20b',
+});
+
+// Generate a response
+const response = await agent.generate('Hello!');
+
+// Stream a response
+const stream = await agent.stream('Tell me a story');
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::note OpenAI Compatibility
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [LMStudio documentation](https://lmstudio.ai/models) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+models={[
+{
+"model": "lmstudio/openai/gpt-oss-20b",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": true,
+"contextWindow": 131072,
+"maxOutput": 32768,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "lmstudio/qwen/qwen3-30b-a3b-2507",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 262144,
+"maxOutput": 16384,
+"inputCost": null,
+"outputCost": null
+},
+{
+"model": "lmstudio/qwen/qwen3-coder-30b",
+"imageInput": false,
+"audioInput": false,
+"videoInput": false,
+"toolUsage": true,
+"reasoning": false,
+"contextWindow": 262144,
+"maxOutput": 65536,
+"inputCost": null,
+"outputCost": null
+}
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: 'custom-agent',
+  model: {
+    url: 'http://127.0.0.1:1234/v1',
+    modelId: 'openai/gpt-oss-20b',
+    apiKey: process.env.LMSTUDIO_API_KEY,
+    headers: {
+      'X-Custom-Header': 'value',
+    },
+  },
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: 'dynamic-agent',
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === 'complex';
+    return useAdvanced ? 'lmstudio/qwen/qwen3-coder-30b' : 'lmstudio/openai/gpt-oss-20b';
+  },
+});
+```

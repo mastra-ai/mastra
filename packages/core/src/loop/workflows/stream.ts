@@ -1,5 +1,6 @@
 import { ReadableStream } from 'stream/web';
 import type { ToolSet } from 'ai-v5';
+import { RuntimeContext } from '../../runtime-context';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -41,6 +42,7 @@ export function workflowLoopStream<
   startTimestamp,
   streamState,
   agentId,
+  toolCallId,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
@@ -61,7 +63,6 @@ export function workflowLoopStream<
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
-        requireToolApproval,
         messageId: messageId!,
         models,
         telemetry_settings,
@@ -125,32 +126,26 @@ export function workflowLoopStream<
         });
       }
 
-      const existingSnapshot = await rest.mastra?.getStorage()?.loadWorkflowSnapshot({
-        workflowName: 'agentic-loop',
-        runId,
-      });
-      if (existingSnapshot) {
-        for (const key in existingSnapshot?.context) {
-          const step = existingSnapshot?.context[key];
-          if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
-            streamState.deserialize(step.suspendPayload?.__streamState);
-            break;
-          }
-        }
-      }
-
       const run = await agenticLoopWorkflow.createRunAsync({
         runId,
       });
 
+      const runtimeContext = new RuntimeContext();
+
+      if (requireToolApproval) {
+        runtimeContext.set('__mastra_requireToolApproval', true);
+      }
+
       const executionResult = resumeContext
         ? await run.resume({
-            resumeData: resumeContext,
+            resumeData: resumeContext.resumeData,
             tracingContext: { currentSpan: llmAISpan },
+            label: toolCallId,
           })
         : await run.start({
             inputData: initialData,
             tracingContext: { currentSpan: llmAISpan },
+            runtimeContext,
           });
 
       if (executionResult.status !== 'success') {
