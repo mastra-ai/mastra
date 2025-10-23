@@ -2366,6 +2366,7 @@ export class Run<
         abortController: this.abortController,
         workflowAISpan,
         outputOptions: params.outputOptions,
+        writableStream: params.writableStream,
       })
       .then(result => {
         if (!params.isVNext && result.status !== 'suspended') {
