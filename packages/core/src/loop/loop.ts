@@ -146,7 +146,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   }
   const baseStream = workflowLoopStream(workflowLoopProps);
 
-  // Apply chunk tracing transform to track LLM_STEP and LLM_CHUNK spans
+  // Apply chunk tracing transform to track MODEL_STEP and MODEL_CHUNK spans
   const stream = rest.modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
 
   modelOutput = new MastraModelOutput({

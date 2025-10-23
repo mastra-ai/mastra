@@ -3,7 +3,7 @@
  *
  * This exporter sends tracing data to Langfuse for AI observability.
  * Root spans start traces in Langfuse.
- * LLM_GENERATION spans become Langfuse generations, all others become spans.
+ * MODEL_GENERATION spans become Langfuse generations, all others become spans.
  *
  * Compatible with both AI SDK v4 and v5:
  * - Handles both legacy token usage format (promptTokens/completionTokens)
@@ -12,13 +12,10 @@
  * - Adapts to v5 streaming protocol changes
  */
 
-import { AISpanType, omitKeys, BaseExporter } from '@mastra/core/ai-tracing';
-import type {
-  AITracingEvent,
-  AnyExportedAISpan,
-  LLMGenerationAttributes,
-  BaseExporterConfig,
-} from '@mastra/core/ai-tracing';
+import type { AITracingEvent, AnyExportedAISpan, ModelGenerationAttributes } from '@mastra/core/ai-tracing';
+import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
+import { BaseExporter } from '@mastra/core/ai-tracing/exporters';
+import type { BaseExporterConfig } from '@mastra/core/ai-tracing/exporters';
 import { Langfuse } from 'langfuse';
 import type { LangfuseTraceClient, LangfuseSpanClient, LangfuseGenerationClient, LangfuseEventClient } from 'langfuse';
 
@@ -179,7 +176,7 @@ export class LangfuseExporter extends BaseExporter {
     const payload = this.buildSpanPayload(span, true);
 
     const langfuseSpan =
-      span.type === AISpanType.LLM_GENERATION ? langfuseParent.generation(payload) : langfuseParent.span(payload);
+      span.type === AISpanType.MODEL_GENERATION ? langfuseParent.generation(payload) : langfuseParent.span(payload);
 
     traceData.spans.set(span.id, langfuseSpan);
     traceData.activeSpans.add(span.id); // Track as active
@@ -360,7 +357,7 @@ export class LangfuseExporter extends BaseExporter {
    * @param usage - Token usage data from AI SDK (v4 or v5 format)
    * @returns Normalized usage object, or undefined if no usage data available
    */
-  private normalizeUsage(usage: LLMGenerationAttributes['usage']): NormalizedUsage | undefined {
+  private normalizeUsage(usage: ModelGenerationAttributes['usage']): NormalizedUsage | undefined {
     if (!usage) return undefined;
 
     const normalized: NormalizedUsage = {};
@@ -424,25 +421,25 @@ export class LangfuseExporter extends BaseExporter {
     // Strip special fields from metadata if used in top-level keys
     const attributesToOmit: string[] = [];
 
-    if (span.type === AISpanType.LLM_GENERATION) {
-      const llmAttr = attributes as LLMGenerationAttributes;
+    if (span.type === AISpanType.MODEL_GENERATION) {
+      const modelAttr = attributes as ModelGenerationAttributes;
 
-      if (llmAttr.model !== undefined) {
-        payload.model = llmAttr.model;
+      if (modelAttr.model !== undefined) {
+        payload.model = modelAttr.model;
         attributesToOmit.push('model');
       }
 
-      if (llmAttr.usage !== undefined) {
+      if (modelAttr.usage !== undefined) {
         // Normalize usage to handle both v4 and v5 formats
-        const normalizedUsage = this.normalizeUsage(llmAttr.usage);
+        const normalizedUsage = this.normalizeUsage(modelAttr.usage);
         if (normalizedUsage) {
           payload.usage = normalizedUsage;
         }
         attributesToOmit.push('usage');
       }
 
-      if (llmAttr.parameters !== undefined) {
-        payload.modelParameters = llmAttr.parameters;
+      if (modelAttr.parameters !== undefined) {
+        payload.modelParameters = modelAttr.parameters;
         attributesToOmit.push('parameters');
       }
     }
