@@ -78,12 +78,11 @@ export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
         ? unknown.message
         : safeParseErrorObject(unknown);
 
-    // Only process cause if we haven't exceeded max depth
     const errorCause =
       'cause' in unknown && unknown.cause !== undefined
         ? unknown.cause instanceof Error
           ? unknown.cause
-          : maxDepth > 0
+          : maxDepth > 0 // Only process cause if we haven't exceeded max depth
             ? getErrorFromUnknown(unknown.cause, { ...mergedOptions, maxDepth: maxDepth - 1 })
             : undefined
         : undefined;
