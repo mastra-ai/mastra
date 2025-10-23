@@ -230,7 +230,7 @@ export function createStep<
             tracingContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
-              agentOptions?.onFinish?.(result as any);
+              void agentOptions?.onFinish?.(result);
             },
             abortSignal,
           });
@@ -242,7 +242,7 @@ export function createStep<
             tracingContext,
             onFinish: result => {
               streamPromise.resolve(result.text);
-              agentOptions?.onFinish?.(result as any);
+              void agentOptions?.onFinish?.(result);
             },
             abortSignal,
           });

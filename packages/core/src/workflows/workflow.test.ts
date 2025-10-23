@@ -933,26 +933,40 @@ describe('Workflow', () => {
 
     it('should pass agentOptions when wrapping agent with createStep', async () => {
       const onFinishSpy = vi.fn();
+      const onChunkSpy = vi.fn();
       const maxSteps = 5;
+
+      // Spy to capture what's passed to the model
+      const doStreamSpy = vi.fn<any>(async ({ prompt, temperature }) => {
+        // Verify instructions were overridden in the messages
+        const systemMessage = prompt?.find((m: any) => m.role === 'system');
+        expect(systemMessage?.content).toContain('overridden instructions');
+        expect(systemMessage?.content).not.toContain('original instructions');
+
+        // Verify temperature was passed through
+        expect(temperature).toBe(0.7);
+
+        return {
+          stream: simulateReadableStream({
+            chunks: [
+              { type: 'text-delta', textDelta: 'Response' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { completionTokens: 10, promptTokens: 3 },
+              },
+            ],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      });
 
       const agent = new Agent({
         name: 'test-agent-with-options',
-        instructions: 'test agent instructions',
+        instructions: 'original instructions',
         model: new MockLanguageModelV1({
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-delta', textDelta: 'Response' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
+          doStream: doStreamSpy,
         }),
       });
 
@@ -972,14 +986,13 @@ describe('Workflow', () => {
         idGenerator: randomUUID,
       });
 
-      // Create step with agent options
+      // Create step with multiple agent options to verify they're all passed through
       const agentStep = createStep(agent, {
         maxSteps,
         onFinish: onFinishSpy,
-        memory: {
-          resource: 'test-resource-123',
-          thread: 'test-thread-456',
-        },
+        onChunk: onChunkSpy,
+        instructions: 'overridden instructions',
+        temperature: 0.7,
       });
 
       workflow
@@ -1002,9 +1015,10 @@ describe('Workflow', () => {
         expect(result.result).toEqual({ text: 'Response' });
       }
 
-      // Verify that onFinish was called, proving options were passed through
+      expect(doStreamSpy).toHaveBeenCalled();
       expect(onFinishSpy).toHaveBeenCalled();
-    });
+      expect(onChunkSpy).toHaveBeenCalled();
+    }, 10000);
 
     it('should handle sleep waiting flow', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
@@ -2672,28 +2686,42 @@ describe('Workflow', () => {
 
     it('should pass agentOptions when wrapping agent with createStep', async () => {
       const onFinishSpy = vi.fn();
+      const onChunkSpy = vi.fn();
       const maxSteps = 5;
+
+      // Spy to capture what's passed to the model
+      const doStreamSpy = vi.fn<any>(async ({ prompt, temperature }) => {
+        // Verify instructions were overridden in the messages
+        const systemMessage = prompt?.find((m: any) => m.role === 'system');
+        expect(systemMessage?.content).toContain('overridden instructions');
+        expect(systemMessage?.content).not.toContain('original instructions');
+
+        // Verify temperature was passed through
+        expect(temperature).toBe(0.7);
+
+        return {
+          stream: simulateReadableStream({
+            chunks: [
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Response' },
+              {
+                type: 'finish',
+                id: '2',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      });
 
       const agent = new Agent({
         name: 'test-agent-with-options-v2',
-        instructions: 'test agent instructions',
+        instructions: 'original instructions',
         model: new MockLanguageModelV2({
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Response' },
-                {
-                  type: 'finish',
-                  id: '2',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
+          doStream: doStreamSpy,
         }),
       });
 
@@ -2713,13 +2741,14 @@ describe('Workflow', () => {
         idGenerator: randomUUID,
       });
 
-      // Create step with agent options
+      // Create step with multiple agent options to verify they're all passed through
       const agentStep = createStep(agent, {
         maxSteps,
         onFinish: onFinishSpy,
-        memory: {
-          resource: 'test-resource-123',
-          thread: 'test-thread-456',
+        onChunk: onChunkSpy,
+        instructions: 'overridden instructions',
+        modelSettings: {
+          temperature: 0.7,
         },
       });
 
@@ -2743,9 +2772,10 @@ describe('Workflow', () => {
         expect(result.result).toEqual({ text: 'Response' });
       }
 
-      // Verify that onFinish was called, proving options were passed through
+      expect(doStreamSpy).toHaveBeenCalled();
       expect(onFinishSpy).toHaveBeenCalled();
-    });
+      expect(onChunkSpy).toHaveBeenCalled();
+    }, 10000);
 
     it('should handle sleep waiting flow', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
