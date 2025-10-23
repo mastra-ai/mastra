@@ -64,5 +64,5 @@ runs:
 
     - name: Configure git
       run: |
-        git config --global user.name '${{ steps.app-auth.outputs.app-slug }}[bot]'
-        git config --global user.email '${{ steps.app-auth.outputs.user-id }}+${{ steps.app-auth.outputs.app-slug }}[bot]@users.noreply.github.com'
+        git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+        git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
