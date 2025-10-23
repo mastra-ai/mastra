@@ -75,7 +75,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   telemetry_settings?: TelemetrySettings;
   messageList: MessageList;
   includeRawChunks?: boolean;
-  modelSettings?: CallSettings;
+  modelSettings?: Omit<CallSettings, 'abortSignal'>;
   headers?: Record<string, string>;
   toolChoice?: ToolChoice<any>;
   options?: LoopConfig<OUTPUT>;
