@@ -1,6 +1,5 @@
 import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
-import { prepareToolsPaths } from '@mastra/deployer/utils';
 
 export class BuildBundler extends Bundler {
   constructor() {
