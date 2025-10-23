@@ -1,7 +1,6 @@
-import { TracesView } from '@mastra/playground-ui';
+import { TracesView, useAgent } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
 
-import { useAgent } from '@/hooks/use-agents';
 import { useTraces } from '@/domains/traces/hooks/use-traces';
 
 function AgentTracesPage() {

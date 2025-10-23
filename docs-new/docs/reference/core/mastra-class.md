@@ -1,0 +1,139 @@
+---
+title: 'Reference: Mastra Class '
+description: 'Documentation for the `Mastra` class in Mastra, the core entry point for managing agents, workflows, MCP servers, and server endpoints.'
+---
+
+# Mastra Class
+
+The `Mastra` class is the central orchestrator in any Mastra application, managing agents, workflows, storage, logging, telemetry, and more. Typically, you create a single instance of `Mastra` to coordinate your application.
+
+Think of `Mastra` as a top-level registry:
+
+- Registering **integrations** makes them accessible to **agents**, **workflows**, and **tools** alike.
+- **tools** aren’t registered on `Mastra` directly but are associated with agents and discovered automatically.
+
+## Usage example
+
+```typescript filename="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra';
+import { PinoLogger } from '@mastra/loggers';
+import { LibSQLStore } from '@mastra/libsql';
+import { weatherWorkflow } from './workflows/weather-workflow';
+import { weatherAgent } from './agents/weather-agent';
+
+export const mastra = new Mastra({
+  workflows: { weatherWorkflow },
+  agents: { weatherAgent },
+  storage: new LibSQLStore({
+    url: ':memory:',
+  }),
+  logger: new PinoLogger({
+    name: 'Mastra',
+    level: 'info',
+  }),
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+content={[
+{
+name: "agents",
+type: "Agent[]",
+description: "Array of Agent instances to register",
+isOptional: true,
+defaultValue: "[]",
+},
+{
+name: "tools",
+type: "Record<string, ToolApi>",
+description:
+"Custom tools to register. Structured as a key-value pair, with keys being the tool name and values being the tool function.",
+isOptional: true,
+defaultValue: "{}",
+},
+{
+name: "storage",
+type: "MastraStorage",
+description: "Storage engine instance for persisting data",
+isOptional: true,
+},
+{
+name: "vectors",
+type: "Record<string, MastraVector>",
+description:
+"Vector store instance, used for semantic search and vector-based tools (eg Pinecone, PgVector or Qdrant)",
+isOptional: true,
+},
+{
+name: "logger",
+type: "Logger",
+description: "Logger instance created with new PinoLogger()",
+isOptional: true,
+defaultValue: "Console logger with INFO level",
+},
+{
+name: "idGenerator",
+type: "() => string",
+description: "Custom ID generator function. Used by agents, workflows, memory, and other components to generate unique identifiers.",
+isOptional: true,
+},
+{
+name: "workflows",
+type: "Record<string, Workflow>",
+description:
+"Workflows to register. Structured as a key-value pair, with keys being the workflow name and values being the workflow instance.",
+isOptional: true,
+defaultValue: "{}",
+},
+{
+name: "tts",
+type: "Record<string, MastraTTS>",
+isOptional: true,
+description: "An object for registering Text-To-Speech services.",
+},
+{
+name: "telemetry",
+type: "OtelConfig",
+isOptional: true,
+description: "Configuration for OpenTelemetry integration.",
+},
+{
+name: "deployer",
+type: "MastraDeployer",
+isOptional: true,
+description: "An instance of a MastraDeployer for managing deployments.",
+},
+{
+name: "server",
+type: "ServerConfig",
+description:
+"Server configuration including port, host, timeout, API routes, middleware, CORS settings, and build options for Swagger UI, API request logging, and OpenAPI docs.",
+isOptional: true,
+defaultValue:
+"{ port: 4111, host: localhost, cors: { origin: '\*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false } }",
+},
+{
+name: "mcpServers",
+type: "Record<string, MCPServerBase>",
+isOptional: true,
+description:
+"An object where keys are unique server identifiers and values are instances of MCPServer or classes extending MCPServerBase. This allows Mastra to be aware of and potentially manage these MCP servers.",
+},
+{
+name: "bundler",
+type: "BundlerConfig",
+description: "Configuration for the asset bundler with options for externals, sourcemap, and transpilePackages.",
+isOptional: true,
+defaultValue: "{ externals: [], sourcemap: false, transpilePackages: [] }",
+},
+{
+name: "scorers",
+type: "Record<string, MastraScorer>",
+description: "Scorers to register for scoring traces and overriding default scorers used during agent generation or workflow execution. Structured as a key-value pair, with keys being the scorer name and values being the scorer instance.",
+isOptional: true,
+defaultValue: "{}",
+},
+]}
+/>

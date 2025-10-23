@@ -317,7 +317,7 @@ const exporter = new OtelExporter({
 The exporter maps Mastra AI spans to OpenTelemetry spans following GenAI semantic conventions:
 
 ### Span Names
-- `LLM_GENERATION` → `chat {model}` or `tool_selection {model}`
+- `MODEL_GENERATION` → `chat {model}` or `tool_selection {model}`
 - `TOOL_CALL` → `tool.execute {tool_name}`
 - `AGENT_RUN` → `agent.{agent_id}`
 - `WORKFLOW_RUN` → `workflow.{workflow_id}`
