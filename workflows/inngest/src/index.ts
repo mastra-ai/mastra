@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { ReadableStream } from 'node:stream/web';
+import { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
 import { AISpanType, wrapMastra } from '@mastra/core/ai-tracing';
@@ -7,9 +7,18 @@ import type { TracingContext, AnyAISpan } from '@mastra/core/ai-tracing';
 import { RuntimeContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import { WorkflowRunOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, ToolStream } from '@mastra/core/tools';
-import { getStepResult, Workflow, Run, DefaultExecutionEngine, validateStepInput } from '@mastra/core/workflows';
+import {
+  getStepResult,
+  Workflow,
+  Run,
+  DefaultExecutionEngine,
+  validateStepInput,
+  createDeprecationProxy,
+  runCountDeprecationMessage,
+} from '@mastra/core/workflows';
 import type {
   ExecuteFunction,
   ExecutionContext,
@@ -29,6 +38,7 @@ import type {
   ExecutionEngineOptions,
   StepWithComponent,
   SuspendOptions,
+  WorkflowStreamEvent,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -332,7 +342,12 @@ export class InngestRun<
     return result;
   }
 
-  watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
+  watch(cb: (event: WatchEvent) => void, type: 'watch'): () => void;
+  watch(cb: (event: WorkflowStreamEvent) => void, type: 'watch-v2'): () => void;
+  watch(
+    cb: ((event: WatchEvent) => void) | ((event: WorkflowStreamEvent) => void),
+    type: 'watch' | 'watch-v2' = 'watch',
+  ): () => void {
     let active = true;
     const streamPromise = subscribe(
       {
@@ -359,7 +374,7 @@ export class InngestRun<
     };
   }
 
-  stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
+  streamLegacy({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   } {
@@ -401,6 +416,70 @@ export class InngestRun<
       stream: readable as ReadableStream<StreamEvent>,
       getWorkflowState: () => this.executionResults!,
     };
+  }
+
+  stream({
+    inputData,
+    runtimeContext,
+    closeOnSuspend = true,
+  }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext; closeOnSuspend?: boolean } = {}): ReturnType<
+    Run<InngestEngineType, TSteps, TState, TInput, TOutput>['stream']
+  > {
+    const self = this;
+    let streamOutput: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> | undefined;
+    const stream = new ReadableStream<WorkflowStreamEvent>({
+      async start(controller) {
+        // TODO: fix this, watch-v2 doesn't have a type
+        // @ts-ignore
+        const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
+          controller.enqueue({
+            type,
+            runId: self.runId,
+            from,
+            payload: {
+              stepName: (payload as unknown as { id: string }).id,
+              ...payload,
+            },
+          } as WorkflowStreamEvent);
+        }, 'watch-v2');
+
+        self.closeStreamAction = async () => {
+          unwatch();
+
+          try {
+            await controller.close();
+          } catch (err) {
+            console.error('Error closing stream:', err);
+          }
+        };
+
+        const executionResultsPromise = self.start({
+          inputData,
+          runtimeContext,
+        });
+
+        const executionResults = await executionResultsPromise;
+
+        if (closeOnSuspend) {
+          // always close stream, even if the workflow is suspended
+          // this will trigger a finish event with workflow status set to suspended
+          self.closeStreamAction?.().catch(() => {});
+        } else if (executionResults.status !== 'suspended') {
+          self.closeStreamAction?.().catch(() => {});
+        }
+        if (streamOutput) {
+          streamOutput.updateResults(executionResults as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>);
+        }
+      },
+    });
+
+    streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      stream,
+    });
+
+    return streamOutput;
   }
 }
 
@@ -1159,43 +1238,53 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     if (fn) {
       const stepCallId = randomUUID();
       duration = await this.inngestStep.run(`workflow.${workflowId}.sleep.${entry.id}`, async () => {
-        return await fn({
-          runId,
-          workflowId,
-          mastra: this.mastra!,
-          runtimeContext,
-          inputData: prevOutput,
-          state: executionContext.state,
-          setState: (state: any) => {
-            executionContext.state = state;
-          },
-          runCount: -1,
-          tracingContext: {
-            currentSpan: sleepSpan,
-          },
-          getInitData: () => stepResults?.input as any,
-          getStepResult: getStepResult.bind(this, stepResults),
-          // TODO: this function shouldn't have suspend probably?
-          suspend: async (_suspendPayload: any): Promise<any> => {},
-          bail: () => {},
-          abort: () => {
-            abortController?.abort();
-          },
-          [EMITTER_SYMBOL]: emitter,
-          // TODO: add streamVNext support
-          [STREAM_FORMAT_SYMBOL]: executionContext.format,
-          engine: { step: this.inngestStep },
-          abortSignal: abortController?.signal,
-          writer: new ToolStream(
+        return await fn(
+          createDeprecationProxy(
             {
-              prefix: 'workflow-step',
-              callId: stepCallId,
-              name: 'sleep',
               runId,
+              workflowId,
+              mastra: this.mastra!,
+              runtimeContext,
+              inputData: prevOutput,
+              state: executionContext.state,
+              setState: (state: any) => {
+                executionContext.state = state;
+              },
+              runCount: -1,
+              retryCount: -1,
+              tracingContext: {
+                currentSpan: sleepSpan,
+              },
+              getInitData: () => stepResults?.input as any,
+              getStepResult: getStepResult.bind(this, stepResults),
+              // TODO: this function shouldn't have suspend probably?
+              suspend: async (_suspendPayload: any): Promise<any> => {},
+              bail: () => {},
+              abort: () => {
+                abortController?.abort();
+              },
+              [EMITTER_SYMBOL]: emitter,
+              // TODO: add streamVNext support
+              [STREAM_FORMAT_SYMBOL]: executionContext.format,
+              engine: { step: this.inngestStep },
+              abortSignal: abortController?.signal,
+              writer: new ToolStream(
+                {
+                  prefix: 'workflow-step',
+                  callId: stepCallId,
+                  name: 'sleep',
+                  runId,
+                },
+                writableStream,
+              ),
             },
-            writableStream,
+            {
+              paramName: 'runCount',
+              deprecationMessage: runCountDeprecationMessage,
+              logger: this.logger,
+            },
           ),
-        });
+        );
       });
 
       // Update sleep span with dynamic duration
@@ -1269,42 +1358,52 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     if (fn) {
       date = await this.inngestStep.run(`workflow.${workflowId}.sleepUntil.${entry.id}`, async () => {
         const stepCallId = randomUUID();
-        return await fn({
-          runId,
-          workflowId,
-          mastra: this.mastra!,
-          runtimeContext,
-          inputData: prevOutput,
-          state: executionContext.state,
-          setState: (state: any) => {
-            executionContext.state = state;
-          },
-          runCount: -1,
-          tracingContext: {
-            currentSpan: sleepUntilSpan,
-          },
-          getInitData: () => stepResults?.input as any,
-          getStepResult: getStepResult.bind(this, stepResults),
-          // TODO: this function shouldn't have suspend probably?
-          suspend: async (_suspendPayload: any): Promise<any> => {},
-          bail: () => {},
-          abort: () => {
-            abortController?.abort();
-          },
-          [EMITTER_SYMBOL]: emitter,
-          [STREAM_FORMAT_SYMBOL]: executionContext.format, // TODO: add streamVNext support
-          engine: { step: this.inngestStep },
-          abortSignal: abortController?.signal,
-          writer: new ToolStream(
+        return await fn(
+          createDeprecationProxy(
             {
-              prefix: 'workflow-step',
-              callId: stepCallId,
-              name: 'sleep',
               runId,
+              workflowId,
+              mastra: this.mastra!,
+              runtimeContext,
+              inputData: prevOutput,
+              state: executionContext.state,
+              setState: (state: any) => {
+                executionContext.state = state;
+              },
+              runCount: -1,
+              retryCount: -1,
+              tracingContext: {
+                currentSpan: sleepUntilSpan,
+              },
+              getInitData: () => stepResults?.input as any,
+              getStepResult: getStepResult.bind(this, stepResults),
+              // TODO: this function shouldn't have suspend probably?
+              suspend: async (_suspendPayload: any): Promise<any> => {},
+              bail: () => {},
+              abort: () => {
+                abortController?.abort();
+              },
+              [EMITTER_SYMBOL]: emitter,
+              [STREAM_FORMAT_SYMBOL]: executionContext.format, // TODO: add streamVNext support
+              engine: { step: this.inngestStep },
+              abortSignal: abortController?.signal,
+              writer: new ToolStream(
+                {
+                  prefix: 'workflow-step',
+                  callId: stepCallId,
+                  name: 'sleep',
+                  runId,
+                },
+                writableStream,
+              ),
             },
-            writableStream,
+            {
+              paramName: 'runCount',
+              deprecationMessage: runCountDeprecationMessage,
+              logger: this.logger,
+            },
           ),
-        });
+        );
       });
 
       // Update sleep until span with dynamic duration
@@ -1731,7 +1830,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
               executionContext.suspendedPaths[step.id] = executionContext.executionPath;
               if (suspendOptions?.resumeLabel) {
-                executionContext.resumeLabels[suspendOptions.resumeLabel] = step.id;
+                const resumeLabel = Array.isArray(suspendOptions.resumeLabel)
+                  ? suspendOptions.resumeLabel
+                  : [suspendOptions.resumeLabel];
+                for (const label of resumeLabel) {
+                  executionContext.resumeLabels[label] = {
+                    stepId: step.id,
+                    foreachIndex: executionContext.foreachIndex,
+                  };
+                }
               }
               suspended = { payload: suspendPayload };
             },
@@ -2021,44 +2128,54 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             });
 
             try {
-              const result = await cond({
-                runId,
-                workflowId,
-                mastra: this.mastra!,
-                runtimeContext,
-                runCount: -1,
-                inputData: prevOutput,
-                state: executionContext.state,
-                setState: (state: any) => {
-                  executionContext.state = state;
-                },
-                tracingContext: {
-                  currentSpan: evalSpan,
-                },
-                getInitData: () => stepResults?.input as any,
-                getStepResult: getStepResult.bind(this, stepResults),
-                // TODO: this function shouldn't have suspend probably?
-                suspend: async (_suspendPayload: any) => {},
-                bail: () => {},
-                abort: () => {
-                  abortController.abort();
-                },
-                [EMITTER_SYMBOL]: emitter,
-                [STREAM_FORMAT_SYMBOL]: executionContext.format, // TODO: add streamVNext support
-                engine: {
-                  step: this.inngestStep,
-                },
-                abortSignal: abortController.signal,
-                writer: new ToolStream(
+              const result = await cond(
+                createDeprecationProxy(
                   {
-                    prefix: 'workflow-step',
-                    callId: randomUUID(),
-                    name: 'conditional',
                     runId,
+                    workflowId,
+                    mastra: this.mastra!,
+                    runtimeContext,
+                    runCount: -1,
+                    retryCount: -1,
+                    inputData: prevOutput,
+                    state: executionContext.state,
+                    setState: (state: any) => {
+                      executionContext.state = state;
+                    },
+                    tracingContext: {
+                      currentSpan: evalSpan,
+                    },
+                    getInitData: () => stepResults?.input as any,
+                    getStepResult: getStepResult.bind(this, stepResults),
+                    // TODO: this function shouldn't have suspend probably?
+                    suspend: async (_suspendPayload: any) => {},
+                    bail: () => {},
+                    abort: () => {
+                      abortController.abort();
+                    },
+                    [EMITTER_SYMBOL]: emitter,
+                    [STREAM_FORMAT_SYMBOL]: executionContext.format, // TODO: add streamVNext support
+                    engine: {
+                      step: this.inngestStep,
+                    },
+                    abortSignal: abortController.signal,
+                    writer: new ToolStream(
+                      {
+                        prefix: 'workflow-step',
+                        callId: randomUUID(),
+                        name: 'conditional',
+                        runId,
+                      },
+                      writableStream,
+                    ),
                   },
-                  writableStream,
+                  {
+                    paramName: 'runCount',
+                    deprecationMessage: runCountDeprecationMessage,
+                    logger: this.logger,
+                  },
                 ),
-              });
+              );
 
               evalSpan?.end({
                 output: result,

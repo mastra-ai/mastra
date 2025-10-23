@@ -1,5 +1,4 @@
-import { MemorySearch, useThreadInput } from '@mastra/playground-ui';
-import { useMemorySearch, useMemoryConfig } from '@/hooks/use-memory';
+import { MemorySearch, useThreadInput, useMemoryConfig, useMemorySearch } from '@mastra/playground-ui';
 import { AgentWorkingMemory } from './agent-working-memory';
 import { AgentMemoryConfig } from './agent-memory-config';
 import { useParams, useNavigate } from 'react-router';

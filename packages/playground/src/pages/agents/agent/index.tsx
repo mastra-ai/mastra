@@ -4,16 +4,16 @@ import {
   AgentSettingsProvider,
   WorkingMemoryProvider,
   ThreadInputProvider,
+  useAgent,
+  useMemory,
+  useThreads,
 } from '@mastra/playground-ui';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
-import { MastraUIMessage } from '@mastra/react';
 
 import { AgentInformation } from '@/domains/agents/agent-information';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
-import { useAgent } from '@/hooks/use-agents';
-import { useMemory, useMessages, useThreads } from '@/hooks/use-memory';
 
 function Agent() {
   const { agentId, threadId } = useParams();
@@ -21,11 +21,6 @@ function Agent() {
   const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
-  const { data: messages, isLoading: isMessagesLoading } = useMessages({
-    agentId: agentId!,
-    threadId: threadId!,
-    memory: !!memory?.result,
-  });
   const {
     data: threads,
     isLoading: isThreadsLoading,
@@ -40,23 +35,21 @@ function Agent() {
     }
   }, [memory?.result, threadId]);
 
-  // Handle scrolling to message after navigation
-  useEffect(() => {
-    const messageId = searchParams.get('messageId');
-    if (messageId && messages && !isMessagesLoading) {
-      // Small delay to ensure DOM is ready
-      setTimeout(() => {
-        const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-        if (messageElement) {
-          messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          messageElement.classList.add('bg-surface4');
-          setTimeout(() => {
-            messageElement.classList.remove('bg-surface4');
-          }, 2000);
-        }
-      }, 100);
+  const messageId = searchParams.get('messageId') ?? undefined;
+
+  const defaultSettings = useMemo(() => {
+    if (agent) {
+      let providerOptions = undefined;
+      if (typeof agent.instructions === 'object' && 'providerOptions' in agent.instructions) {
+        providerOptions = agent.instructions.providerOptions;
+      }
+      return {
+        modelSettings: {
+          providerOptions,
+        },
+      };
     }
-  }, [searchParams, messages, isMessagesLoading]);
+  }, [agent]);
 
   if (isAgentLoading) {
     return null;
@@ -65,7 +58,7 @@ function Agent() {
   const withSidebar = Boolean(memory?.result);
 
   return (
-    <AgentSettingsProvider agentId={agentId!}>
+    <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
       <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
         <ThreadInputProvider>
           <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
@@ -79,19 +72,16 @@ function Agent() {
             )}
 
             <div className="grid overflow-y-auto relative bg-surface1 py-4">
-              {isMessagesLoading ? null : (
-                <AgentChat
-                  agentId={agentId!}
-                  agentName={agent?.name}
-                  modelVersion={agent?.modelVersion}
-                  threadId={threadId!}
-                  initialMessages={(messages?.uiMessages || []) as MastraUIMessage[]}
-                  initialLegacyMessages={messages?.legacyMessages || []}
-                  memory={memory?.result}
-                  refreshThreadList={refreshThreads}
-                  modelList={agent?.modelList}
-                />
-              )}
+              <AgentChat
+                agentId={agentId!}
+                agentName={agent?.name}
+                modelVersion={agent?.modelVersion}
+                threadId={threadId!}
+                memory={memory?.result}
+                refreshThreadList={refreshThreads}
+                modelList={agent?.modelList}
+                messageId={messageId}
+              />
             </div>
 
             <AgentInformation agentId={agentId!} />

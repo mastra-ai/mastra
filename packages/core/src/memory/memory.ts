@@ -347,13 +347,13 @@ export abstract class MastraMemory extends MastraBase {
   /**
    * Retrieves all messages for a specific thread
    * @param threadId - The unique identifier of the thread
-   * @returns Promise resolving to array of messages and uiMessages
+   * @returns Promise resolving to array of messages, uiMessages, and messagesV2
    */
-  abstract query({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: UIMessageWithMetadata[] }>;
+  abstract query({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<{
+    messages: CoreMessage[];
+    uiMessages: UIMessageWithMetadata[];
+    messagesV2: MastraMessageV2[];
+  }>;
 
   /**
    * Helper method to create a new thread

@@ -1,4 +1,3 @@
-import { useAgents } from '@/hooks/use-agents';
 import {
   MainContentLayout,
   Header,
@@ -10,13 +9,14 @@ import {
   DocsIcon,
   Button,
   ToolTable,
+  useAgents,
 } from '@mastra/playground-ui';
 
 import { useTools } from '@/hooks/use-all-tools';
 import { Link } from 'react-router';
 
 export default function Tools() {
-  const { data: agentsRecord, isLoading: isLoadingAgents } = useAgents();
+  const { data: agentsRecord = {}, isLoading: isLoadingAgents } = useAgents();
   const { tools, isLoading: isLoadingTools } = useTools();
 
   const isEmpty = !isLoadingTools && Object.keys(tools).length === 0;

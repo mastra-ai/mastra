@@ -1,0 +1,130 @@
+---
+title: 'createTool() '
+description: Documentation for the `createTool()` function in Mastra, used to define custom tools for agents.
+---
+
+# createTool()
+
+The `createTool()` function is used to define custom tools that your Mastra agents can execute. Tools extend an agent's capabilities by allowing it to interact with external systems, perform calculations, or access specific data.
+
+## Usage example
+
+```typescript filename="src/mastra/tools/reverse-tool.ts" showLineNumbers copy
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+
+export const tool = createTool({
+  id: 'test-tool',
+  description: 'Reverse the input string',
+  inputSchema: z.object({
+    input: z.string(),
+  }),
+  outputSchema: z.object({
+    output: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const { input } = context;
+    const reversed = input.split('').reverse().join('');
+
+    return {
+      output: reversed,
+    };
+  },
+});
+```
+
+## Parameters
+
+<PropertiesTable
+content={[
+{
+name: "id",
+type: "string",
+description: "A unique identifier for the tool.",
+isOptional: false,
+},
+{
+name: "description",
+type: "string",
+description:
+"A description of what the tool does. This is used by the agent to decide when to use the tool.",
+isOptional: false,
+},
+{
+name: "inputSchema",
+type: "Zod schema",
+description:
+"A Zod schema defining the expected input parameters for the tool's `execute` function.",
+isOptional: true,
+},
+{
+name: "outputSchema",
+type: "Zod schema",
+description:
+"A Zod schema defining the expected output structure of the tool's `execute` function.",
+isOptional: true,
+},
+{
+name: "execute",
+type: "function",
+description:
+"The function that contains the tool's logic. It receives an object with `context` (the parsed input based on `inputSchema`), `runtimeContext`, `tracingContext`, and an object containing `abortSignal`.",
+isOptional: false,
+properties: [
+{
+parameters: [{
+name: "context",
+type: "z.infer<TInput>",
+description: "The parsed input based on inputSchema"
+}]
+},
+{
+parameters: [{
+name: "runtimeContext",
+type: "RuntimeContext",
+isOptional: true,
+description: "Runtime context for accessing shared state and dependencies"
+}]
+},
+{
+parameters: [{
+name: "tracingContext",
+type: "TracingContext",
+isOptional: true,
+description: "AI tracing context for creating child spans and adding metadata. Automatically injected when the tool is called within a traced operation."
+}]
+},
+{
+parameters: [{
+name: "abortSignal",
+type: "AbortSignal",
+isOptional: true,
+description: "Signal for aborting the tool execution"
+}]
+}
+]
+},
+]}
+/>
+
+## Returns
+
+The `createTool()` function returns a `Tool` object.
+
+<PropertiesTable
+content={[
+{
+name: "Tool",
+type: "object",
+description:
+"An object representing the defined tool, ready to be added to an agent.",
+},
+]}
+/>
+
+## Related
+
+- [Tools Overview](/docs/tools-mcp/overview)
+- [Using Tools with Agents](/docs/agents/using-tools-and-mcp)
+- [Tool Runtime Context](/docs/tools-mcp/runtime-context)
+- [Advanced Tool Usage](/docs/tools-mcp/advanced-usage)

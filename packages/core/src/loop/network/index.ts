@@ -1188,7 +1188,7 @@ export async function networkLoop<
           isOneOff: false,
           verboseIntrospection: true,
         },
-      });
+      }).fullStream;
     },
   });
 }

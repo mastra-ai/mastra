@@ -1,4 +1,4 @@
-import type { ToolCallOptions } from '@ai-sdk/provider-utils-v5';
+import type { ToolCallOptions, ProviderDefinedTool } from '@internal/external-types';
 import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
@@ -18,10 +18,14 @@ import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { ToolStream } from '../stream';
-import type { CoreTool, ToolAction, ToolInvocationOptions, VercelTool, VercelToolV5 } from '../types';
+import type { CoreTool, MastraToolInvocationOptions, ToolAction, VercelTool, VercelToolV5 } from '../types';
 import { validateToolInput } from '../validation';
 
-export type ToolToConvert = VercelTool | ToolAction<any, any, any> | VercelToolV5;
+/**
+ * Types that can be converted to Mastra tools.
+ * Includes provider-defined tools from external packages via ProviderDefinedTool.
+ */
+export type ToolToConvert = VercelTool | ToolAction<any, any, any> | VercelToolV5 | ProviderDefinedTool;
 export type LogType = 'tool' | 'toolset' | 'client-tool';
 
 interface LogOptions {
@@ -104,7 +108,7 @@ export class CoreToolBuilder extends MastraBase {
 
       return {
         type: 'provider-defined' as const,
-        id: tool.id,
+        id: tool.id as `${string}.${string}`,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
         parameters: parameters.jsonSchema ? parameters : convertZodSchemaToAISDKSchema(parameters),
@@ -157,9 +161,13 @@ export class CoreToolBuilder extends MastraBase {
       type: logType,
     });
 
-    const execFunction = async (args: unknown, execOptions: ToolInvocationOptions) => {
-      // Create tool span if we have an current span available
-      const toolSpan = options.tracingContext?.currentSpan?.createChildSpan({
+    const execFunction = async (args: unknown, execOptions: MastraToolInvocationOptions) => {
+      // Prefer execution-time tracingContext (passed at runtime for VNext methods)
+      // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
+      const tracingContext = execOptions.tracingContext || options.tracingContext;
+
+      // Create tool span if we have a current span available
+      const toolSpan = tracingContext?.currentSpan?.createChildSpan({
         type: AISpanType.TOOL_CALL,
         name: `tool: '${options.name}'`,
         input: args,
@@ -215,7 +223,7 @@ export class CoreToolBuilder extends MastraBase {
                   name: options.name,
                   runId: options.runId!,
                 },
-                options.writableStream || (execOptions as any).writableStream,
+                options.writableStream || execOptions.writableStream,
               ),
               tracingContext: { currentSpan: toolSpan },
             },
@@ -231,7 +239,7 @@ export class CoreToolBuilder extends MastraBase {
       }
     };
 
-    return async (args: unknown, execOptions?: ToolInvocationOptions) => {
+    return async (args: unknown, execOptions?: MastraToolInvocationOptions) => {
       let logger = options.logger || this.logger;
       try {
         logger.debug(start, { ...rest, model: logModelObject, args });
@@ -289,13 +297,28 @@ export class CoreToolBuilder extends MastraBase {
       throw new Error('Tool parameters are required');
     }
 
-    return {
+    const base = {
       ...builtTool,
       inputSchema: builtTool.parameters,
       onInputStart: 'onInputStart' in this.originalTool ? this.originalTool.onInputStart : undefined,
       onInputDelta: 'onInputDelta' in this.originalTool ? this.originalTool.onInputDelta : undefined,
       onInputAvailable: 'onInputAvailable' in this.originalTool ? this.originalTool.onInputAvailable : undefined,
-    } as VercelToolV5;
+    };
+
+    // For provider-defined tools, exclude execute and add name as per v5 spec
+    if (builtTool.type === 'provider-defined') {
+      const { execute, parameters, ...rest } = base;
+      const name = builtTool.id.split('.')[1] || builtTool.id;
+      return {
+        ...rest,
+        type: builtTool.type,
+        id: builtTool.id,
+        name,
+        args: builtTool.args,
+      } as VercelToolV5;
+    }
+
+    return base as VercelToolV5;
   }
 
   build(): CoreTool {
@@ -364,6 +387,6 @@ export class CoreToolBuilder extends MastraBase {
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
       parameters: processedSchema,
       outputSchema: processedOutputSchema,
-    };
+    } as unknown as CoreTool;
   }
 }

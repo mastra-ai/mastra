@@ -282,7 +282,7 @@ for await (const chunk of stream) {
 const agent = new Agent({
   name: "custom-agent",
   model: {
-    modelId: "claude-3-5-haiku-20241022",
+    id: "anthropic/claude-3-5-haiku-20241022",
     apiKey: process.env.ANTHROPIC_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -344,6 +344,12 @@ const response = await agent.generate("Hello!", {
     {
         "name": "cacheControl",
         "type": "{ type: \"ephemeral\"; ttl?: \"5m\" | \"1h\" | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "container",
+        "type": "{ id?: string | undefined; skills?: { type: \"anthropic\" | \"custom\"; skillId: string; version?: string | undefined; }[] | undefined; } | undefined",
         "description": "",
         "isOptional": true
     }
