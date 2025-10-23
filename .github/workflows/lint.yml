@@ -100,7 +100,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup Node.js 20.x
-        uses: pnpm/setup-node@v5
+        uses: actions/setup-node@v5
         with:
           node-version: 20.19.5
 
@@ -127,7 +127,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Node.js 20.x
-        uses: pnpm/setup-node@v5
+        uses: actions/setup-node@v5
         with:
           node-version: 20.19.5
           registry-url: 'https://registry.yarnpkg.com'
@@ -171,7 +171,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup Node.js 20.x
-        uses: pnpm/setup-node@v5
+        uses: actions/setup-node@v5
         with:
           node-version: 20.19.5
           registry-url: 'https://registry.yarnpkg.com'
