@@ -115,7 +115,12 @@ async function validateOutput(
         } | null = null;
 
         if (err.message.includes('[ERR_MODULE_NOT_FOUND]')) {
-          moduleName = file.moduleIds.length >= 2 ? file.moduleIds[file.moduleIds.length - 2] : undefined;
+          // This is the preferred way to get the module name that caused the issue
+          const moduleIdName = file.moduleIds.length >= 2 ? file.moduleIds[file.moduleIds.length - 2] : undefined;
+          // For some reason some virtual modules are quite sparse on their details, so name (e.g. '.mastra/.build/puppeteer') is a good enough fallback
+          const fallbackName = file.name.split('/').pop();
+
+          moduleName = moduleIdName ?? fallbackName;
           errorConfig = {
             id: 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND',
             messagePrefix: "Mastra wasn't able to build your project. Please add",
