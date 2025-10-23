@@ -1131,10 +1131,7 @@ describe('toUIMessage', () => {
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
 
       const toolPart = result[0].parts[0] as any;
-      expect(toolPart.output).toEqual([
-        { data: 'existing-output' },
-        { data: 'new-output' },
-      ]);
+      expect(toolPart.output).toEqual([{ data: 'existing-output' }, { data: 'new-output' }]);
     });
 
     it('should initialize output array if not exists', () => {
@@ -1790,9 +1787,7 @@ describe('toUIMessage', () => {
               state: 'input-available',
               input: {},
               output: {
-                childMessages: [
-                  { type: 'text', content: 'Hello' },
-                ],
+                childMessages: [{ type: 'text', content: 'Hello' }],
               },
             } as any,
           ],
@@ -1812,9 +1807,7 @@ describe('toUIMessage', () => {
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
 
       const toolPart = result[0].parts[0] as any;
-      expect(toolPart.output.childMessages).toEqual([
-        { type: 'text', content: 'Hello world' },
-      ]);
+      expect(toolPart.output.childMessages).toEqual([{ type: 'text', content: 'Hello world' }]);
     });
 
     it('should create new text message if last is not text', () => {
@@ -1836,9 +1829,7 @@ describe('toUIMessage', () => {
               state: 'input-available',
               input: {},
               output: {
-                childMessages: [
-                  { type: 'tool', toolCallId: 'tool-1' },
-                ],
+                childMessages: [{ type: 'tool', toolCallId: 'tool-1' }],
               },
             } as any,
           ],

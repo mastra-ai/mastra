@@ -117,9 +117,7 @@ describe('toAssistantUIMessage', () => {
     });
 
     it('should include experimental_attachments when present', () => {
-      const attachments = [
-        { id: 'attach-1', name: 'file.txt', type: 'text/plain' as const },
-      ];
+      const attachments = [{ id: 'attach-1', name: 'file.txt', type: 'text/plain' as const }];
       const message = {
         id: 'msg-5',
         role: 'assistant',
@@ -1020,9 +1018,7 @@ describe('toAssistantUIMessage', () => {
 
     it('should handle message with all extended properties', () => {
       const createdAt = new Date('2024-01-15T10:30:00Z');
-      const attachments = [
-        { id: 'attach-1', name: 'data.csv', type: 'text/csv' as const },
-      ];
+      const attachments = [{ id: 'attach-1', name: 'data.csv', type: 'text/csv' as const }];
 
       const message = {
         id: 'msg-40',
