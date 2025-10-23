@@ -277,13 +277,15 @@ export class PIIDetector implements Processor {
         detections: z.array(detectionSchema).describe('Array of specific PII detections with locations').nullable(),
       });
 
-      const schema = this.strategy === 'redact' ? baseSchema.extend({
-        redacted_content: z
-          .string()
-          .describe('The content with all PII redacted according to the redaction method')
-          .nullable(),
-      }) : baseSchema;
-
+      const schema =
+        this.strategy === 'redact'
+          ? baseSchema.extend({
+              redacted_content: z
+                .string()
+                .describe('The content with all PII redacted according to the redaction method')
+                .nullable(),
+            })
+          : baseSchema;
 
       let response;
       if (model.specificationVersion === 'v2') {
@@ -306,7 +308,7 @@ export class PIIDetector implements Processor {
       }
 
       const result = response.object as PIIDetectionResult;
-
+      console.log('pii detector result', result);
       // Apply redaction method if not already provided and we have detections
       if (this.strategy === 'redact') {
         if (!result.redacted_content && result.detections && result.detections.length > 0) {
