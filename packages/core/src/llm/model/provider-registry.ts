@@ -358,10 +358,11 @@ export class GatewayRegistry {
       // Import gateway classes and generation functions
       const { ModelsDevGateway } = await import('./gateways/models-dev.js');
       const { NetlifyGateway } = await import('./gateways/netlify.js');
+      const { OpenRouterGateway } = await import('./gateways/openrouter.js');
       const { fetchProvidersFromGateways, writeRegistryFiles } = await import('./registry-generator.js');
 
       // Initialize gateways
-      const gateways = [new ModelsDevGateway({}), new NetlifyGateway()];
+      const gateways = [new ModelsDevGateway({}), new NetlifyGateway(), new OpenRouterGateway()];
 
       // Fetch provider data
       const { providers, models } = await fetchProvidersFromGateways(gateways);
