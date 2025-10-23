@@ -267,12 +267,12 @@ export class SystemPromptScrubber implements Processor {
         reason: z.string().describe('Reason for detection').nullable(),
       });
 
-      let schema = baseSchema;
-      if (this.strategy === 'redact') {
-        schema = baseSchema.extend({
-          redacted_content: z.string().describe('Redacted content').nullable(),
-        });
-      }
+      const schema =
+        this.strategy === 'redact'
+          ? baseSchema.extend({
+              redacted_content: z.string().describe('Redacted content').nullable(),
+            })
+          : baseSchema;
 
       if (model.specificationVersion === 'v2') {
         result = await this.detectionAgent.generate(text, {
