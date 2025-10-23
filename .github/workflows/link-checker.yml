@@ -34,7 +34,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '20.19.5'
-          registry-url: 'https://registry.yarnpkg.com'
+          cache: 'npm'
 
       - name: Install dependencies for docs
         run: npm ci --registry=https://registry.yarnpkg.com
