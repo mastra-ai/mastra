@@ -3,8 +3,8 @@ pnpm --version || {
   exit 0
 }
 
-# Run TS typecheck
-pnpm typecheck
+# Run TS typecheck only on changed packages
+pnpm typecheck:changed
 
 # Formatting on staged files
 pnpm lint-staged
