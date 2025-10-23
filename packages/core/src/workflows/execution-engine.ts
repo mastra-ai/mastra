@@ -1,3 +1,4 @@
+import type { WritableStream } from 'node:stream/web';
 import type { Mastra, SerializedStepFlowEntry } from '..';
 import type { AISpan, AISpanType, TracingPolicy } from '../ai-tracing';
 import { MastraBase } from '../base';
