@@ -1,10 +1,5 @@
 export const redirectList = [
   {
-    source: "/:locale/docs/server-db/local-dev-playground",
-    destination: "/:locale/docs/getting-started/studio",
-    permanent: true,
-  },
-  {
     source: "/:locale/docs/getting-started/model-providers",
     destination: "/:locale/models",
     permanent: true,
@@ -1361,6 +1356,11 @@ export const redirectList = [
   {
     source: "/:locale/examples/memory/working-memory-basic",
     destination: "/:locale/docs/memory/working-memory",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/server-db/local-dev-playground",
+    destination: "/:locale/docs/getting-started/studio",
     permanent: true,
   },
 ];

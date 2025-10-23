@@ -9035,16 +9035,16 @@ describe('Workflow', () => {
     });
   });
 
-  describe('Run count', () => {
-    it('runCount property should increment the run count when a step is executed multiple times', async () => {
+  describe('Retry count', () => {
+    it('retryCount property should increment the run count when a step is executed multiple times', async () => {
       const repeatingStep = createStep({
         id: 'repeatingStep',
         inputSchema: z.object({}),
         outputSchema: z.object({
           count: z.number(),
         }),
-        execute: async ({ runCount }) => {
-          return { count: runCount };
+        execute: async ({ retryCount }) => {
+          return { count: retryCount };
         },
       });
 
@@ -9079,8 +9079,8 @@ describe('Workflow', () => {
         outputSchema: z.object({
           count: z.number(),
         }),
-        execute: async ({ runCount }) => {
-          return { count: runCount };
+        execute: async ({ retryCount }) => {
+          return { count: retryCount };
         },
       });
 
@@ -9090,8 +9090,8 @@ describe('Workflow', () => {
         outputSchema: z.object({
           count: z.number(),
         }),
-        execute: async ({ runCount }) => {
-          return { count: runCount };
+        execute: async ({ retryCount }) => {
+          return { count: retryCount };
         },
       });
 
@@ -9123,9 +9123,9 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    it('runCount should exist and equal zero for the first run', async () => {
-      const mockExec = vi.fn().mockImplementation(async ({ runCount }) => {
-        return { count: runCount };
+    it('retryCount should exist and equal zero for the first run', async () => {
+      const mockExec = vi.fn().mockImplementation(async ({ retryCount }) => {
+        return { count: retryCount };
       });
       const step = createStep({
         id: 'step',
@@ -9155,7 +9155,7 @@ describe('Workflow', () => {
       await run.start({ inputData: {} });
 
       expect(mockExec).toHaveBeenCalledTimes(1);
-      expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ runCount: 0 }));
+      expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 0 }));
 
       await mastra.stopEventEngine();
     });
