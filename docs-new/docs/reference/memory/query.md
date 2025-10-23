@@ -41,12 +41,6 @@ type: "MemoryConfig",
 description: "Configuration options for message retrieval and semantic search",
 isOptional: true,
 },
-{
-name: "format",
-type: "'v1' | 'v2'",
-description: "Message format to return. Defaults to 'v2' for current format, 'v1' for backwards compatibility",
-isOptional: true,
-},
 ]}
 />
 
@@ -122,13 +116,8 @@ defaultValue: "{ generateTitle: false }",
 content={[
 {
 name: "messages",
-type: "CoreMessage[]",
-description: "Array of retrieved messages in their core format",
-},
-{
-name: "uiMessages",
-type: "UIMessageWithMetadata[]",
-description: "Array of messages formatted for UI display, including proper threading of tool calls and results",
+type: "MastraMessageV2[]",
+description: "Array of messages in Mastra's internal storage format (V2). Use toAISdkMessages() from @mastra/ai-sdk to convert to AI SDK format for frontend use.",
 },
 ]}
 />
@@ -137,11 +126,12 @@ description: "Array of messages formatted for UI display, including proper threa
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
 import { mastra } from './mastra';
+import { toAISdkMessages } from '@mastra/ai-sdk';
 
 const agent = mastra.getAgent('agent');
 const memory = await agent.getMemory();
 
-const { messages, uiMessages } = await memory!.query({
+const { messages } = await memory!.query({
   threadId: 'thread-123',
   selectBy: {
     last: 50,
@@ -162,7 +152,11 @@ const { messages, uiMessages } = await memory!.query({
   },
 });
 
+// messages is MastraMessageV2[] - Mastra's internal format
 console.log(messages);
+
+// Convert to AI SDK format for frontend use
+const uiMessages = toAISdkMessages(messages);
 console.log(uiMessages);
 ```
 

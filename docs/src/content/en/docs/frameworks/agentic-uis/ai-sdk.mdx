@@ -578,19 +578,21 @@ Mastra automatically handles AI SDK v4 data using its internal `MessageList` cla
 
 ### Message Format Conversion
 
-For cases where you need to manually convert messages between AI SDK and Mastra formats, use the `convertMessages()` utility:
+For cases where you need to convert Mastra messages to AI SDK format, use the `toAISdkMessages()` function from `@mastra/ai-sdk`:
 
 ```typescript
+import { toAISdkMessages } from '@mastra/ai-sdk'; // AI SDK v5 (default)
+import { toAISdkMessages as toAISdkV4Messages } from '@mastra/ai-sdk/v4'; // AI SDK v4
+
+// Convert Mastra messages to AI SDK v5 UI format (default)
+const v5Messages = toAISdkMessages(mastraMessages);
+
+// Convert Mastra messages to AI SDK v4 UI format
+const v4Messages = toAISdkV4Messages(mastraMessages);
+
+// For advanced conversions, you can still use convertMessages():
 import { convertMessages } from '@mastra/core/agent';
-
-// Convert AI SDK v4 messages to v5
-const aiv5Messages = convertMessages(aiv4Messages).to('AIV5.UI');
-
-// Convert Mastra messages to AI SDK v5
-const aiv5Messages = convertMessages(mastraMessages).to('AIV5.Core');
-
-// Supported output formats:
-// 'Mastra.V2', 'AIV4.UI', 'AIV5.UI', 'AIV5.Core', 'AIV5.Model'
+const coreMessages = convertMessages(mastraMessages).to('AIV5.Core');
 ```
 
 This utility is helpful when you want to fetch messages directly from your storage DB and convert them for use in AI SDK.

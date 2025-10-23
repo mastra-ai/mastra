@@ -412,19 +412,21 @@ Mastra は内部の `MessageList` クラスで AI SDK v4 のデータを自動�
 
 ### メッセージ形式の変換
 
-AI SDK と Mastra の形式間でメッセージを手動で変換する必要がある場合は、`convertMessages` ユーティリティを使用してください:
+Mastra のメッセージを AI SDK 形式に変換する必要がある場合は、`@mastra/ai-sdk` の `toAISdkMessages()` 関数を使用してください:
 
 ```typescript
+import { toAISdkMessages } from '@mastra/ai-sdk'; // AI SDK v5 (デフォルト)
+import { toAISdkMessages as toAISdkV4Messages } from '@mastra/ai-sdk/v4'; // AI SDK v4
+
+// Mastra のメッセージを AI SDK v5 UI 形式に変換（デフォルト）
+const v5Messages = toAISdkMessages(mastraMessages);
+
+// Mastra のメッセージを AI SDK v4 UI 形式に変換
+const v4Messages = toAISdkV4Messages(mastraMessages);
+
+// 高度な変換には、引き続き convertMessages() を使用できます:
 import { convertMessages } from '@mastra/core/agent';
-
-// AI SDK v4 のメッセージを v5 に変換
-const aiv5Messages = convertMessages(aiv4Messages).to('AIV5.UI');
-
-// Mastra のメッセージを AI SDK v5 に変換
-const aiv5Messages = convertMessages(mastraMessages).to('AIV5.Core');
-
-// 対応している出力形式:
-// 'Mastra.V2', 'AIV4.UI', 'AIV5.UI', 'AIV5.Core', 'AIV5.Model'
+const coreMessages = convertMessages(mastraMessages).to('AIV5.Core');
 ```
 
 このユーティリティは、ストレージ DB からメッセージを直接取得し、AI SDK で使えるように変換したい場合に役立ちます。
