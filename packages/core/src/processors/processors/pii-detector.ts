@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import z from 'zod';
 import { Agent } from '../../agent';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { TracingContext } from '../../ai-tracing';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
@@ -180,10 +180,10 @@ export class PIIDetector implements Processor {
   }
 
   async processInput(args: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     try {
       const { messages, abort, tracingContext } = args;
 
@@ -191,7 +191,7 @@ export class PIIDetector implements Processor {
         return messages;
       }
 
-      const processedMessages: MastraMessageV2[] = [];
+      const processedMessages: MastraDBMessage[] = [];
 
       // Evaluate each message
       for (const message of messages) {
@@ -329,11 +329,11 @@ export class PIIDetector implements Processor {
    * Handle detected PII based on strategy
    */
   private handleDetectedPII(
-    message: MastraMessageV2,
+    message: MastraDBMessage,
     result: PIIDetectionResult,
     strategy: 'block' | 'warn' | 'filter' | 'redact',
     abort: (reason?: string) => never,
-  ): MastraMessageV2 | null {
+  ): MastraDBMessage | null {
     const detectedTypes = Object.entries(result.categories || {})
       .filter(([_, detected]) => detected)
       .map(([type]) => type);
@@ -371,7 +371,7 @@ export class PIIDetector implements Processor {
   /**
    * Create a redacted message with PII removed/masked
    */
-  private createRedactedMessage(originalMessage: MastraMessageV2, redactedContent: string): MastraMessageV2 {
+  private createRedactedMessage(originalMessage: MastraDBMessage, redactedContent: string): MastraDBMessage {
     return {
       ...originalMessage,
       content: {
@@ -499,7 +499,7 @@ export class PIIDetector implements Processor {
   /**
    * Extract text content from message for analysis
    */
-  private extractTextContent(message: MastraMessageV2): string {
+  private extractTextContent(message: MastraDBMessage): string {
     let text = '';
 
     if (message.content.parts) {
@@ -610,16 +610,16 @@ IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHIN
     abort,
     tracingContext,
   }: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     try {
       if (messages.length === 0) {
         return messages;
       }
 
-      const processedMessages: MastraMessageV2[] = [];
+      const processedMessages: MastraDBMessage[] = [];
 
       // Evaluate each message
       for (const message of messages) {

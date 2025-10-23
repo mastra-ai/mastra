@@ -1,7 +1,7 @@
 import type { CoreMessage } from 'ai';
 import type { UIMessage as AIV5UIMessage, ModelMessage as AIV5ModelMessage } from 'ai-v5';
 
-import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
+import type { MastraDBMessage, UIMessageWithMetadata } from '../agent/message-list';
 
 /**
  * Public-facing message format keys for the `format` parameter in memory queries.
@@ -10,7 +10,7 @@ import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-li
  * These lowercase, hyphenated keys are used for the new `format` parameter API.
  * They differ from the `OutputFormat` keys used in `convertMessages().to()` for backward compatibility.
  * 
- * - `mastra-db` - Mastra database storage format (MastraMessageV2) - **default**
+ * - `mastra-db` - Mastra database storage format (MastraDBMessage) - **default**
  * - `aiv4-ui` - AI SDK v4 UIMessage format (for frontend components)
  * - `aiv4-core` - AI SDK v4 CoreMessage format (for LLM API calls)
  * - `aiv5-ui` - AI SDK v5 UIMessage format (for frontend components)
@@ -20,7 +20,7 @@ import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-li
  * ```typescript
  * // Default - no conversion overhead
  * const { messages } = await memory.query({ threadId: 'thread-123' });
- * // messages is MastraMessageV2[]
+ * // messages is MastraDBMessage[]
  * 
  * // Explicit format for frontend
  * const { messages } = await memory.query({ 
@@ -86,7 +86,7 @@ export function validateMessageFormat(format: unknown): asserts format is Messag
  * ```
  */
 export type MessageFormatResult<F extends MessageFormat> = F extends 'mastra-db'
-  ? MastraMessageV2[]
+  ? MastraDBMessage[]
   : F extends 'aiv4-ui'
     ? UIMessageWithMetadata[]
     : F extends 'aiv4-core'

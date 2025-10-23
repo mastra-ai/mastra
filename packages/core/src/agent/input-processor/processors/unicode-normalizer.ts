@@ -1,6 +1,6 @@
 import { UnicodeNormalizer } from '../../../processors/processors/unicode-normalizer';
 import type { UnicodeNormalizerOptions } from '../../../processors/processors/unicode-normalizer';
-import type { MastraMessageV2 } from '../../message-list';
+import type { MastraDBMessage } from '../../message-list';
 import type { InputProcessor } from '../index';
 
 /**
@@ -16,9 +16,9 @@ export class UnicodeNormalizerInputProcessor implements InputProcessor {
   }
 
   process(args: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     abort: (reason?: string) => never;
-  }): Promise<MastraMessageV2[]> | MastraMessageV2[] {
+  }): Promise<MastraDBMessage[]> | MastraDBMessage[] {
     return this.processor.processInput(args);
   }
 }

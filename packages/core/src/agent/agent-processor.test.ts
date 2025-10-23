@@ -6,11 +6,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { Processor } from '../processors/index';
 import { RuntimeContext } from '../runtime-context';
-import type { MastraMessageV2 } from './types';
+import type { MastraDBMessage } from './types';
 import { Agent } from './index';
 
-// Helper function to create a MastraMessageV2
-const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): MastraMessageV2 => ({
+// Helper function to create a MastraDBMessage
+const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage => ({
   id: crypto.randomUUID(),
   role,
   content: {
@@ -282,7 +282,7 @@ describe('Input and Output Processors', () => {
         name: 'system-message-processor',
         processInput: async ({ messages }) => {
           // Add a system message to provide additional context
-          const systemMessage: MastraMessageV2 = {
+          const systemMessage: MastraDBMessage = {
             id: crypto.randomUUID(),
             role: 'system',
             content: { content: 'You are a helpful assistant.', format: 2, parts: [] },
@@ -313,7 +313,7 @@ describe('Input and Output Processors', () => {
         name: 'assistant-message-processor',
         processInput: async ({ messages }) => {
           // Add an assistant message (e.g., from previous conversation)
-          const assistantMessage: MastraMessageV2 = {
+          const assistantMessage: MastraDBMessage = {
             id: crypto.randomUUID(),
             role: 'assistant',
             content: {

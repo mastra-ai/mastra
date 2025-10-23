@@ -1,7 +1,7 @@
 import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai';
 import { MessageList } from '../agent/message-list';
-import type { MastraMessageV2 } from '../agent/message-list';
+import type { MastraDBMessage } from '../agent/message-list';
 import { MastraBase } from '../base';
 import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
@@ -268,7 +268,7 @@ export abstract class MastraMemory extends MastraBase {
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<MastraMessageV2[]>;
+  }): Promise<MastraDBMessage[]>;
 
   estimateTokens(text: string): number {
     return Math.ceil(text.split(' ').length * 1.3);
@@ -324,20 +324,20 @@ export abstract class MastraMemory extends MastraBase {
    * @returns Promise resolving to the saved messages
    */
   abstract saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    messages: (MastraMessageV1 | MastraDBMessage)[] | MastraMessageV1[] | MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
     format?: 'v1';
   }): Promise<MastraMessageV1[]>;
   abstract saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    messages: (MastraMessageV1 | MastraDBMessage)[] | MastraMessageV1[] | MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
     format: 'v2';
-  }): Promise<MastraMessageV2[]>;
+  }): Promise<MastraDBMessage[]>;
   abstract saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    messages: (MastraMessageV1 | MastraDBMessage)[] | MastraMessageV1[] | MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
     format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV2[] | MastraMessageV1[]>;
+  }): Promise<MastraDBMessage[] | MastraMessageV1[]>;
 
   /**
    * Retrieves all messages for a specific thread
@@ -348,7 +348,7 @@ export abstract class MastraMemory extends MastraBase {
     args: StorageGetMessagesArg & {
       threadConfig?: MemoryConfig;
     },
-  ): Promise<{ messages: MastraMessageV2[] }>;
+  ): Promise<{ messages: MastraDBMessage[] }>;
 
   /**
    * Helper method to create a new thread

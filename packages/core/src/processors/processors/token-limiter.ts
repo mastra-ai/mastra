@@ -1,7 +1,7 @@
 import { Tiktoken } from 'js-tiktoken/lite';
 import type { TiktokenBPE } from 'js-tiktoken/lite';
 import o200k_base from 'js-tiktoken/ranks/o200k_base';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
@@ -141,9 +141,9 @@ export class TokenLimiterProcessor implements Processor {
    * Truncates the text content if it exceeds the token limit
    */
   async processOutputResult(args: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     abort: (reason?: string) => never;
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     const { messages, abort } = args;
     // Reset token count for result processing
     this.currentTokens = 0;

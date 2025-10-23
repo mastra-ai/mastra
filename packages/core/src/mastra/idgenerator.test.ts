@@ -2,7 +2,7 @@ import { MockLanguageModelV1 } from 'ai/test';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
-import type { MastraMessageV2 } from '../agent/types';
+import type { MastraDBMessage } from '../agent/types';
 import { MastraError } from '../error';
 import type { StorageThreadType, MemoryConfig, MastraMessageV1 } from '../memory';
 import { MastraMemory } from '../memory/memory';
@@ -56,20 +56,20 @@ class MockMemory extends MastraMemory {
   }
 
   async saveMessages(args: {
-    messages: MastraMessageV1[] | MastraMessageV2[] | (MastraMessageV1 | MastraMessageV2)[];
+    messages: MastraMessageV1[] | MastraDBMessage[] | (MastraMessageV1 | MastraDBMessage)[];
     memoryConfig?: MemoryConfig | undefined;
     format?: 'v1' | undefined;
   }): Promise<MastraMessageV1[]>;
   async saveMessages(args: {
-    messages: MastraMessageV1[] | MastraMessageV2[] | (MastraMessageV1 | MastraMessageV2)[];
+    messages: MastraMessageV1[] | MastraDBMessage[] | (MastraMessageV1 | MastraDBMessage)[];
     memoryConfig?: MemoryConfig | undefined;
     format: 'v2';
-  }): Promise<MastraMessageV2[]>;
+  }): Promise<MastraDBMessage[]>;
   async saveMessages(args: {
-    messages: MastraMessageV1[] | MastraMessageV2[] | (MastraMessageV1 | MastraMessageV2)[];
+    messages: MastraMessageV1[] | MastraDBMessage[] | (MastraMessageV1 | MastraDBMessage)[];
     memoryConfig?: MemoryConfig | undefined;
     format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
     const { messages } = args as any;
     for (const msg of messages) {
       const existing = this.messages.get(msg.id);

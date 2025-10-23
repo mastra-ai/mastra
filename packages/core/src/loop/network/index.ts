@@ -3,7 +3,7 @@ import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
 import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
-import type { MastraMessageV2, MessageListInput } from '../../agent/message-list';
+import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
 import type { TracingContext } from '../../ai-tracing/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { RuntimeContext } from '../../runtime-context';
@@ -151,7 +151,7 @@ export async function prepareMemoryStep({
               threadId: thread?.id,
               resourceId: thread?.resourceId,
             },
-          ] as MastraMessageV2[],
+          ] as MastraDBMessage[],
           format: 'v2',
         }),
       );
@@ -390,7 +390,7 @@ export async function createNetworkLoop({
                 threadId: initData?.threadId || runId,
                 resourceId: initData?.threadResourceId || networkName,
               },
-            ] as MastraMessageV2[],
+            ] as MastraDBMessage[],
             format: 'v2',
           });
 
@@ -578,7 +578,7 @@ export async function createNetworkLoop({
             threadId: initData?.threadId || runId,
             resourceId: initData?.threadResourceId || networkName,
           },
-        ] as MastraMessageV2[],
+        ] as MastraDBMessage[],
         format: 'v2',
       });
 
@@ -737,7 +737,7 @@ export async function createNetworkLoop({
             threadId: initData?.threadId || runId,
             resourceId: initData?.threadResourceId || networkName,
           },
-        ] as MastraMessageV2[],
+        ] as MastraDBMessage[],
         format: 'v2',
       });
 
@@ -894,7 +894,7 @@ export async function createNetworkLoop({
             threadId: initData.threadId || runId,
             resourceId: initData.threadResourceId || networkName,
           },
-        ] as MastraMessageV2[],
+        ] as MastraDBMessage[],
         format: 'v2',
       });
 

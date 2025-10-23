@@ -74,7 +74,7 @@ import type {
   MultiPrimitiveExecutionOptions,
 } from './agent.types';
 import { MessageList } from './message-list';
-import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraMessageV2 } from './message-list';
+import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
 import type {
@@ -2589,7 +2589,7 @@ export class Agent<
 
         messageList
           .add(
-            memoryMessages.filter((m: MastraMessageV2) => m.threadId === threadObject.id), // filter out messages from other threads. those are added to system message above
+            memoryMessages.filter((m: MastraDBMessage) => m.threadId === threadObject.id), // filter out messages from other threads. those are added to system message above
             'memory',
           )
           // add new user messages to the list AFTER remembered messages to make ordering more reliable

@@ -1,7 +1,7 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
   MemoryStorage,
   resolveMessageLimit,
@@ -22,7 +22,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     this.operations = operations;
   }
 
-  private parseRow(row: any): MastraMessageV2 {
+  private parseRow(row: any): MastraDBMessage {
     let content = row.content;
     if (typeof content === 'string') {
       try {
@@ -39,7 +39,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       createdAt: formatDateForMongoDB(row.createdAt),
       threadId: row.thread_id,
       resourceId: row.resourceId,
-    } as MastraMessageV2;
+    } as MastraDBMessage;
 
     if (row.type && row.type !== 'v2') result.type = row.type;
     return result;
@@ -99,7 +99,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
    * @deprecated use getMessagesPaginated instead for paginated results.
    */
   public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraDBMessage[]>;
   public async getMessages({
     threadId,
     resourceId,
@@ -107,11 +107,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     format,
   }: StorageGetMessagesArg & {
     format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
-      const messages: MastraMessageV2[] = [];
+      const messages: MastraDBMessage[] = [];
       const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
 
       if (selectBy?.include?.length) {
@@ -168,14 +168,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }: {
     messageIds: string[];
     format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
+  }): Promise<MastraDBMessage[]>;
   public async getMessagesById({
     messageIds,
     format,
   }: {
     messageIds: string[];
     format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
     if (messageIds.length === 0) return [];
     try {
       const collection = await this.operations.getCollection(TABLE_MESSAGES);
@@ -204,7 +204,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     args: StorageGetMessagesArg & {
       format?: 'v1' | 'v2';
     },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraDBMessage[] }> {
     const { threadId, resourceId, format, selectBy } = args;
     const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
     const perPage =
@@ -212,7 +212,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     const fromDate = dateRange?.start;
     const toDate = dateRange?.end;
 
-    const messages: MastraMessageV2[] = [];
+    const messages: MastraDBMessage[] = [];
 
     if (selectBy?.include?.length) {
       try {
@@ -303,13 +303,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(args: { messages: MastraDBMessage[]; format: 'v2' }): Promise<MastraDBMessage[]>;
   async saveMessages({
     messages,
     format,
   }:
     | { messages: MastraMessageV1[]; format?: undefined | 'v1' }
-    | { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    | { messages: MastraDBMessage[]; format: 'v2' }): Promise<MastraDBMessage[] | MastraMessageV1[]> {
     if (messages.length === 0) return messages;
 
     try {
@@ -378,11 +378,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async updateMessages({
     messages,
   }: {
-    messages: (Partial<Omit<MastraMessageV2, 'createdAt'>> & {
+    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
     })[];
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) {
       return [];
     }
@@ -392,7 +392,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
     const existingMessages = await collection.find({ id: { $in: messageIds } }).toArray();
 
-    const existingMessagesParsed: MastraMessageV2[] = existingMessages.map((msg: any) => this.parseRow(msg));
+    const existingMessagesParsed: MastraDBMessage[] = existingMessages.map((msg: any) => this.parseRow(msg));
 
     if (existingMessagesParsed.length === 0) {
       return [];

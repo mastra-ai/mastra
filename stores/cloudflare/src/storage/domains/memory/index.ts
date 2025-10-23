@@ -1,7 +1,7 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type { PaginationInfo, StorageGetMessagesArg, StorageResourceType } from '@mastra/core/storage';
 import {
   ensureDate,
@@ -433,10 +433,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(args: { messages: MastraDBMessage[]; format: 'v2' }): Promise<MastraDBMessage[]>;
   async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraDBMessage[]; format: 'v2' },
+  ): Promise<MastraDBMessage[] | MastraMessageV1[]> {
     const { messages, format = 'v1' } = args;
     if (!Array.isArray(messages) || messages.length === 0) return [];
 
@@ -705,13 +705,13 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   }
 
   async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraDBMessage[]>;
   async getMessages({
     threadId,
     resourceId,
     selectBy,
     format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
     console.info(`getMessages called with format: ${format}, threadId: ${threadId}`);
 
     // Default to v1 format if not specified
@@ -826,14 +826,14 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   }: {
     messageIds: string[];
     format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
+  }): Promise<MastraDBMessage[]>;
   public async getMessagesById({
     messageIds,
     format,
   }: {
     messageIds: string[];
     format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
     if (messageIds.length === 0) return [];
 
     try {
@@ -873,7 +873,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
   async getMessagesPaginated(
     args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraDBMessage[] }> {
     const { threadId, resourceId, selectBy, format = 'v1' } = args;
     const { page = 0, perPage = 100 } = selectBy?.pagination || {};
 
@@ -895,7 +895,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           if (dateStart && messageDate < dateStart) return false;
           if (dateEnd && messageDate > dateEnd) return false;
           return true;
-        }) as MastraMessageV1[] | MastraMessageV2[];
+        }) as MastraMessageV1[] | MastraDBMessage[];
       }
 
       // Apply pagination
@@ -908,7 +908,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         perPage,
         total: filteredMessages.length,
         hasMore: start + perPage < filteredMessages.length,
-        messages: paginatedMessages as MastraMessageV1[] | MastraMessageV2[],
+        messages: paginatedMessages as MastraMessageV1[] | MastraDBMessage[],
       };
     } catch (error) {
       const mastraError = new MastraError(
@@ -931,7 +931,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   }
 
   async updateMessages(args: {
-    messages: (Partial<Omit<MastraMessageV2, 'createdAt'>> & {
+    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       threadId?: string;
       content?: {
@@ -939,10 +939,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         content?: MastraMessageContentV2['content'];
       };
     })[];
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     try {
       const { messages } = args;
-      const updatedMessages: MastraMessageV2[] = [];
+      const updatedMessages: MastraDBMessage[] = [];
 
       for (const messageUpdate of messages) {
         const { id, content, ...otherFields } = messageUpdate;
@@ -952,13 +952,13 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         const prefix = this.operations.namespacePrefix ? `${this.operations.namespacePrefix}:` : '';
         const keyObjs = await this.operations.listKV(TABLE_MESSAGES, { prefix: `${prefix}${TABLE_MESSAGES}` });
 
-        let existingMessage: MastraMessageV2 | null = null;
+        let existingMessage: MastraDBMessage | null = null;
         let messageKey = '';
 
         for (const { name: key } of keyObjs) {
           const data = await this.operations.getKV(TABLE_MESSAGES, key);
           if (data && data.id === id) {
-            existingMessage = data as MastraMessageV2;
+            existingMessage = data as MastraDBMessage;
             messageKey = key;
             break;
           }
@@ -970,7 +970,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         }
 
         // Merge the updates
-        const updatedMessage: MastraMessageV2 = {
+        const updatedMessage: MastraDBMessage = {
           ...existingMessage,
           ...otherFields,
           id,

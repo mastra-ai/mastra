@@ -15,7 +15,7 @@ import { z } from 'zod';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
-import type { MastraMessageV2, StorageThreadType } from '../memory';
+import type { MastraDBMessage, StorageThreadType } from '../memory';
 import { RuntimeContext } from '../runtime-context';
 import { createScorer } from '../scores';
 import { runScorer } from '../scores/hooks';
@@ -6602,8 +6602,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   describe(`${version} - Input Processors`, () => {
     let mockModel: MockLanguageModelV1 | MockLanguageModelV2;
 
-    // Helper function to create a MastraMessageV2
-    const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): MastraMessageV2 => ({
+    // Helper function to create a MastraDBMessage
+    const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage => ({
       id: crypto.randomUUID(),
       role,
       content: {
@@ -7445,7 +7445,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(savedMessages.length).toBeGreaterThan(0);
 
       // Find messages and check metadata
-      const messagesAsV2 = savedMessages as MastraMessageV2[];
+      const messagesAsV2 = savedMessages as MastraDBMessage[];
       const firstUserMessage = messagesAsV2.find(
         m =>
           m.role === 'user' &&

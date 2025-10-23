@@ -16,7 +16,7 @@ import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type {
   AiMessageType,
   MastraMessageV1,
-  MastraMessageV2,
+  MastraDBMessage,
   MemoryConfig,
   StorageThreadType,
 } from '@mastra/core/memory';
@@ -246,16 +246,16 @@ export interface GetVectorIndexResponse {
 }
 
 export interface SaveMessageToMemoryParams {
-  messages: (MastraMessageV1 | MastraMessageV2)[];
+  messages: (MastraMessageV1 | MastraDBMessage)[];
   agentId: string;
 }
 
 export interface SaveNetworkMessageToMemoryParams {
-  messages: (MastraMessageV1 | MastraMessageV2)[];
+  messages: (MastraMessageV1 | MastraDBMessage)[];
   networkId: string;
 }
 
-export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraMessageV2)[];
+export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraDBMessage)[];
 
 export interface CreateMemoryThreadParams {
   title?: string;
@@ -309,11 +309,11 @@ export interface GetMemoryThreadMessagesParams {
 export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg, 'threadConfig' | 'threadId'>;
 
 export interface GetMemoryThreadMessagesResponse {
-  messages: MastraMessageV2[];
+  messages: MastraDBMessage[];
 }
 
 export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
-  messages: MastraMessageV1[] | MastraMessageV2[];
+  messages: MastraMessageV1[] | MastraDBMessage[];
 };
 
 export interface GetLogsParams {

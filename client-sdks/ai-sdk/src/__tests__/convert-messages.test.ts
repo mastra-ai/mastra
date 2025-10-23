@@ -1,10 +1,10 @@
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { describe, expect, it } from 'vitest';
 
 import { toAISdkV4Messages, toAISdkV5Messages } from '../convert-messages';
 
 describe('toAISdkFormat', () => {
-  const sampleMessages: MastraMessageV2[] = [
+  const sampleMessages: MastraDBMessage[] = [
     {
       id: 'msg-1',
       role: 'user',

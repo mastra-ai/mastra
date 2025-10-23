@@ -535,7 +535,7 @@ createTestSuite(new CloudflareStore(TEST_CONFIG));
 //     });
 
 //     // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
-//     //   const messages: MastraMessageV2[] = [
+//     //   const messages: MastraDBMessage[] = [
 //     //     createSampleMessageV2({
 //     //       threadId: 'thread-one',
 //     //       content: 'First',

@@ -1,4 +1,4 @@
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
@@ -621,7 +621,7 @@ export async function searchMemoryHandler({
         const { messages: threadMessages } = await memory.query({ threadId: thread.id });
 
         // Process results
-        messagesV2.forEach((msg: MastraMessageV2) => {
+        messagesV2.forEach((msg: MastraDBMessage) => {
           if (messageMap.has(msg.id)) return;
           messageMap.set(msg.id, true);
 
@@ -688,7 +688,7 @@ export async function searchMemoryHandler({
 
       const { messages: threadMessages } = await memory.query({ threadId });
 
-      messagesV2.forEach((msg: MastraMessageV2) => {
+      messagesV2.forEach((msg: MastraDBMessage) => {
         // Skip duplicates
         if (messageMap.has(msg.id)) return;
         messageMap.set(msg.id, true);

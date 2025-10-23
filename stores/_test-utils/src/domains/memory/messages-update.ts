@@ -1,4 +1,4 @@
-import type { MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createSampleMessageV2, createSampleThread } from './data';
 import { MastraStorage } from '@mastra/core/storage';
@@ -17,7 +17,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
       await storage.saveMessages({ messages: [originalMessage], format: 'v2' });
 
       const updatedMessages = await storage.updateMessages({
-        messages: [{ id: originalMessage.id, role: 'assistant' }] as MastraMessageV2[],
+        messages: [{ id: originalMessage.id, role: 'assistant' }] as MastraDBMessage[],
       });
 
       expect(updatedMessages).toHaveLength(1);
@@ -87,7 +87,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
 
       await storage.updateMessages({
         messages: [
-          { id: msg1.id, role: 'assistant' } as MastraMessageV2,
+          { id: msg1.id, role: 'assistant' } as MastraDBMessage,
           { id: msg2.id, content: { content: 'updated' } as any },
         ],
       });
@@ -107,7 +107,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
 
       await new Promise(r => setTimeout(r, 10));
 
-      await storage.updateMessages({ messages: [{ id: originalMessage.id, role: 'assistant' }] as MastraMessageV2[] });
+      await storage.updateMessages({ messages: [{ id: originalMessage.id, role: 'assistant' }] as MastraDBMessage[] });
 
       const updatedThread = await storage.getThreadById({ threadId: thread.id });
 
@@ -127,7 +127,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
       await new Promise(r => setTimeout(r, 10));
 
       await storage.updateMessages({
-        messages: [{ id: message.id, threadId: thread2.id } as MastraMessageV2],
+        messages: [{ id: message.id, threadId: thread2.id } as MastraDBMessage],
       });
 
       const updatedThread1 = await storage.getThreadById({ threadId: thread.id });
@@ -152,7 +152,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
       const originalMessage = createSampleMessageV2({ threadId: thread.id });
       await storage.saveMessages({ messages: [originalMessage], format: 'v2' });
 
-      const messages = [{ id: randomUUID(), role: 'assistant' }] as MastraMessageV2[];
+      const messages = [{ id: randomUUID(), role: 'assistant' }] as MastraDBMessage[];
 
       await expect(
         storage.updateMessages({

@@ -1,11 +1,11 @@
-import type { MastraMessageV2 } from '../message-list';
+import type { MastraDBMessage } from '../message-list';
 
 export interface InputProcessor {
   readonly name: string;
   process(args: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     abort: (reason?: string) => never;
-  }): Promise<MastraMessageV2[]> | MastraMessageV2[];
+  }): Promise<MastraDBMessage[]> | MastraDBMessage[];
 }
 
 export * from './processors';

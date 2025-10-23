@@ -1,6 +1,6 @@
 import z from 'zod';
 import { Agent } from '../../agent';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { TracingContext } from '../../ai-tracing';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
@@ -131,10 +131,10 @@ export class ModerationProcessor implements Processor {
   }
 
   async processInput(args: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     try {
       const { messages, abort, tracingContext } = args;
 
@@ -143,7 +143,7 @@ export class ModerationProcessor implements Processor {
       }
 
       const results: ModerationResult[] = [];
-      const passedMessages: MastraMessageV2[] = [];
+      const passedMessages: MastraDBMessage[] = [];
 
       // Evaluate each message
       for (const message of messages) {
@@ -179,10 +179,10 @@ export class ModerationProcessor implements Processor {
   }
 
   async processOutputResult(args: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     return this.processInput(args);
   }
 
@@ -328,7 +328,7 @@ export class ModerationProcessor implements Processor {
   /**
    * Extract text content from message for moderation
    */
-  private extractTextContent(message: MastraMessageV2): string {
+  private extractTextContent(message: MastraDBMessage): string {
     let text = '';
 
     if (message.content.parts) {

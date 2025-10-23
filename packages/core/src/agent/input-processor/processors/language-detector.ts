@@ -5,7 +5,7 @@ import type {
   LanguageDetection,
   TranslationResult,
 } from '../../../processors/processors/language-detector';
-import type { MastraMessageV2 } from '../../message-list';
+import type { MastraDBMessage } from '../../message-list';
 import type { InputProcessor } from '../index';
 
 /**
@@ -20,7 +20,7 @@ export class LanguageDetectorInputProcessor implements InputProcessor {
     this.processor = new LanguageDetector(options);
   }
 
-  async process(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): Promise<MastraMessageV2[]> {
+  async process(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }): Promise<MastraDBMessage[]> {
     return this.processor.processInput(args);
   }
 }

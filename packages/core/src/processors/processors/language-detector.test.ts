@@ -1,11 +1,11 @@
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { LanguageDetectionResult, TranslationResult } from './language-detector';
 import { LanguageDetector } from './language-detector';
 
-function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraMessageV2 {
+function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraDBMessage {
   return {
     id,
     role,
@@ -474,7 +474,7 @@ describe('LanguageDetector', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -498,7 +498,7 @@ describe('LanguageDetector', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {

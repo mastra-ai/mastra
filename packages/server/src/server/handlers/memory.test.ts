@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
-import type { MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
 import { MastraMemory } from '@mastra/core/memory';
 import { MockStore } from '@mastra/core/storage';
 import type { Mock } from 'vitest';
@@ -433,7 +433,7 @@ describe('Memory Handlers', () => {
         saveMessagesHandler({
           mastra,
           agentId: 'test-agent',
-          body: {} as { messages: MastraMessageV2[] },
+          body: {} as { messages: MastraDBMessage[] },
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Messages are required' }));
     });
@@ -449,7 +449,7 @@ describe('Memory Handlers', () => {
         saveMessagesHandler({
           mastra,
           agentId: 'test-agent',
-          body: { messages: 'not-an-array' as unknown as MastraMessageV2[] },
+          body: { messages: 'not-an-array' as unknown as MastraDBMessage[] },
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Messages should be an array' }));
     });
@@ -500,7 +500,7 @@ describe('Memory Handlers', () => {
       };
 
       // Create v2 message
-      const v2Message: MastraMessageV2 = {
+      const v2Message: MastraDBMessage = {
         id: 'msg-v2-456',
         role: 'assistant',
         createdAt: new Date(now.getTime() + 1000), // 1 second later
@@ -601,7 +601,7 @@ describe('Memory Handlers', () => {
             parts: [{ type: 'text', text: 'First v2 message' }],
             content: 'First v2 message',
           },
-        } as MastraMessageV2,
+        } as MastraDBMessage,
         // Another v1 message
         {
           id: 'msg-3',
@@ -644,7 +644,7 @@ describe('Memory Handlers', () => {
               },
             ],
           },
-        } as MastraMessageV2,
+        } as MastraDBMessage,
       ];
 
       const mastra = new Mastra({
@@ -782,7 +782,7 @@ describe('Memory Handlers', () => {
 
     it('should return messages for valid thread', async () => {
       const mockMessages: CoreMessage[] = [{ role: 'user', content: 'Test message' }];
-      const mockMessagesV2: MastraMessageV2[] = [
+      const mockMessagesV2: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
@@ -835,7 +835,7 @@ describe('Memory Handlers', () => {
       });
 
       // Create a V2 message with custom metadata (simulating what the client sends)
-      const messagesV2: MastraMessageV2[] = [
+      const messagesV2: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
@@ -899,7 +899,7 @@ describe('Memory Handlers', () => {
         },
       });
 
-      const messagesV2: MastraMessageV2[] = [
+      const messagesV2: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'assistant',
@@ -959,7 +959,7 @@ describe('Memory Handlers', () => {
         },
       });
 
-      const messagesV2: MastraMessageV2[] = [
+      const messagesV2: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
@@ -1007,7 +1007,7 @@ describe('Memory Handlers', () => {
         },
       });
 
-      const messagesV2: MastraMessageV2[] = [
+      const messagesV2: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',

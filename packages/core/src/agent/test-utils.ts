@@ -1,12 +1,12 @@
 import { expect } from 'vitest';
 
 import { MastraMemory } from '../memory';
-import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig } from '../memory';
+import type { StorageThreadType, MastraMessageV1, MastraDBMessage, MemoryConfig } from '../memory';
 import type { StorageGetMessagesArg } from '../storage';
 
 export class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
-  messages: Map<string, MastraMessageV1 | MastraMessageV2> = new Map();
+  messages: Map<string, MastraMessageV1 | MastraDBMessage> = new Map();
 
   constructor() {
     super({ name: 'mock' });
@@ -39,10 +39,10 @@ export class MockMemory extends MastraMemory {
 
   // Overloads for getMessages
   async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraDBMessage[]>;
   async getMessages(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<MastraMessageV1[] | MastraMessageV2[]>;
+  ): Promise<MastraMessageV1[] | MastraDBMessage[]>;
 
   // Implementation for getMessages
   async getMessages({
@@ -50,7 +50,7 @@ export class MockMemory extends MastraMemory {
     resourceId,
     format = 'v1',
     selectBy,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
     let results = Array.from(this.messages.values());
     if (threadId) results = results.filter(m => m.threadId === threadId);
     if (resourceId) results = results.filter(m => m.resourceId === resourceId);
@@ -62,16 +62,16 @@ export class MockMemory extends MastraMemory {
         results = results.slice(-selectBy.last);
       }
     }
-    if (format === 'v2') return results as MastraMessageV2[];
+    if (format === 'v2') return results as MastraDBMessage[];
     return results as MastraMessageV1[];
   }
 
   // saveMessages for both v1 and v2
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(args: { messages: MastraDBMessage[]; format: 'v2' }): Promise<MastraDBMessage[]>;
   async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraDBMessage[]; format: 'v2' },
+  ): Promise<MastraDBMessage[] | MastraMessageV1[]> {
     const { messages, format } = args as any;
 
     for (const msg of messages) {
@@ -99,13 +99,13 @@ export class MockMemory extends MastraMemory {
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<MastraMessageV2[]> {
-    const messagesV2: MastraMessageV2[] = [];
+  }): Promise<MastraDBMessage[]> {
+    const messagesV2: MastraDBMessage[] = [];
 
     for (const [, message] of this.messages) {
       if ('threadId' in message && message.threadId === threadId) {
         if (!('role' in message)) {
-          messagesV2.push(message as MastraMessageV2);
+          messagesV2.push(message as MastraDBMessage);
         }
       }
     }
@@ -140,14 +140,14 @@ export class MockMemory extends MastraMemory {
     args: StorageGetMessagesArg & {
       threadConfig?: MemoryConfig;
     },
-  ): Promise<{ messages: MastraMessageV2[] }> {
+  ): Promise<{ messages: MastraDBMessage[] }> {
     const { threadId, selectBy } = args;
-    const messagesV2: MastraMessageV2[] = [];
+    const messagesV2: MastraDBMessage[] = [];
 
     for (const [, message] of this.messages) {
       if ('threadId' in message && message.threadId === threadId) {
         if (!('role' in message)) {
-          messagesV2.push(message as MastraMessageV2);
+          messagesV2.push(message as MastraDBMessage);
         }
       }
     }
@@ -230,7 +230,7 @@ export class MockMemory extends MastraMemory {
     return { success: true, reason: 'Mock implementation' };
   }
 
-  async updateMessages({ messages }: { messages: MastraMessageV2[] }) {
+  async updateMessages({ messages }: { messages: MastraDBMessage[] }) {
     return this.saveMessages({ messages, format: 'v2' });
   }
 }
