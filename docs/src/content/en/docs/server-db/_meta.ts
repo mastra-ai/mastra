@@ -1,5 +1,5 @@
 const meta = {
-  "production-server": "Production Server",
+  "mastra-server": "Mastra Server",
   middleware: "Middleware",
   "runtime-context": "Runtime Context",
   "custom-api-routes": "Custom API Routes",
