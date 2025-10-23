@@ -1363,4 +1363,9 @@ export const redirectList = [
     destination: "/:locale/docs/deployment/building-mastra",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/server-db/production-server",
+    destination: "/:locale/docs/server-db/mastra-server",
+    permanent: true,
+  },
 ];
