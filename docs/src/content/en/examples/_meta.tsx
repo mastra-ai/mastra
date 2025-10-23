@@ -10,12 +10,12 @@ const meta = {
     title: "Workflows",
     theme: { collapsed: true },
   },
-  tools: {
-    title: "Tools",
-    theme: { collapsed: true },
-  },
   processors: {
     title: "Processors",
+    theme: { collapsed: true },
+  },
+  memory: {
+    title: "Memory",
     theme: { collapsed: true },
   },
   workflows_legacy: {
@@ -24,10 +24,6 @@ const meta = {
   },
   rag: {
     title: "RAG",
-    theme: { collapsed: true },
-  },
-  memory: {
-    title: "Memory",
     theme: { collapsed: true },
   },
   evals: {

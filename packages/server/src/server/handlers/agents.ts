@@ -697,6 +697,14 @@ export async function approveToolCallHandler({
   try {
     const agent = await getAgentFromSystem({ mastra, agentId });
 
+    if (!body.runId) {
+      throw new HTTPException(400, { message: 'Run id is required' });
+    }
+
+    if (!body.toolCallId) {
+      throw new HTTPException(400, { message: 'Tool call id is required' });
+    }
+
     // UI Frameworks may send "client tools" in the body,
     // but it interferes with llm providers tool handling, so we remove them
     sanitizeBody(body, ['tools']);
@@ -739,6 +747,14 @@ export async function declineToolCallHandler({
 }): ReturnType<Agent['declineToolCall']> {
   try {
     const agent = await getAgentFromSystem({ mastra, agentId });
+
+    if (!body.runId) {
+      throw new HTTPException(400, { message: 'Run id is required' });
+    }
+
+    if (!body.toolCallId) {
+      throw new HTTPException(400, { message: 'Tool call id is required' });
+    }
 
     // UI Frameworks may send "client tools" in the body,
     // but it interferes with llm providers tool handling, so we remove them

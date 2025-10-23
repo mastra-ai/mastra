@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AISpanType, AITracingEventType } from '../types';
-import type { LLMGenerationAttributes, WorkflowStepAttributes, AITracingEvent, AnyExportedAISpan } from '../types';
+import type { ModelGenerationAttributes, WorkflowStepAttributes, AITracingEvent, AnyExportedAISpan } from '../types';
 import { DefaultExporter } from './default';
 
 // Mock Mastra and logger
@@ -22,7 +22,7 @@ describe('DefaultExporter', () => {
 
       const mockSpan = {
         id: 'span-1',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
@@ -35,7 +35,7 @@ describe('DefaultExporter', () => {
             temperature: 0.7,
             maxTokens: 1000,
           },
-        } as LLMGenerationAttributes,
+        } as ModelGenerationAttributes,
       } as any;
 
       const result = (exporter as any).serializeAttributes(mockSpan);

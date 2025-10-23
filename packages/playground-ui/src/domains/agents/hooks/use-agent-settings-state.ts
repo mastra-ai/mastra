@@ -3,6 +3,7 @@ import { AgentSettingsType as AgentSettings, ModelSettings } from '@/types';
 
 export interface AgentSettingsStateProps {
   agentId: string;
+  defaultSettings?: AgentSettings;
 }
 
 const defaultSettings: AgentSettings = {
@@ -16,8 +17,8 @@ const defaultSettings: AgentSettings = {
   },
 };
 
-export function useAgentSettingsState({ agentId }: AgentSettingsStateProps) {
-  const [settings, setSettingsState] = useState<AgentSettings | undefined>(undefined);
+export function useAgentSettingsState({ agentId, defaultSettings: defaultSettingsProp }: AgentSettingsStateProps) {
+  const [settings, setSettingsState] = useState<AgentSettings | undefined>(defaultSettingsProp);
 
   const LOCAL_STORAGE_KEY = `mastra-agent-store-${agentId}`;
 
@@ -26,7 +27,14 @@ export function useAgentSettingsState({ agentId }: AgentSettingsStateProps) {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        setSettingsState(parsed ?? undefined);
+        const settings = {
+          ...parsed,
+          modelSettings: {
+            ...(defaultSettingsProp?.modelSettings ?? {}),
+            ...(parsed?.modelSettings ?? {}),
+          },
+        };
+        setSettingsState(settings ?? undefined);
       }
     } catch (e) {
       // ignore
@@ -42,9 +50,15 @@ export function useAgentSettingsState({ agentId }: AgentSettingsStateProps) {
   };
 
   const resetAll = () => {
-    setSettingsState(defaultSettings);
+    const settings = {
+      modelSettings: {
+        ...(defaultSettingsProp?.modelSettings ?? {}),
+        ...defaultSettings.modelSettings,
+      },
+    };
+    setSettingsState(settings);
 
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(defaultSettings));
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings));
   };
 
   return {

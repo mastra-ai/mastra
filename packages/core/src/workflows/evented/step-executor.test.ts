@@ -11,7 +11,7 @@ interface SleepFnContext {
   mastra: Mastra;
   runtimeContext: RuntimeContext;
   inputData: any;
-  runCount: number;
+  retryCount: number;
   resumeData: any;
   getInitData: () => any;
   getStepResult: (step: { id?: string }) => any;
@@ -111,7 +111,7 @@ describe('StepExecutor', () => {
     const runId = 'test-run';
     const inputData = { key: 'value' };
     const resumeData = { state: 'resumed' };
-    const runCount = 2;
+    const retryCount = 2;
     const runtimeContext = new RuntimeContext();
 
     const step: Extract<StepFlowEntry, { type: 'sleep' }> = {
@@ -149,7 +149,7 @@ describe('StepExecutor', () => {
       stepResults,
       emitter,
       runtimeContext,
-      runCount,
+      retryCount,
     });
 
     // Assert: Verify context passed to fn and return value
@@ -161,7 +161,7 @@ describe('StepExecutor', () => {
     expect(capturedContext.mastra).toBe(mastra);
     expect(capturedContext.runtimeContext).toBe(runtimeContext);
     expect(capturedContext.inputData).toBe(inputData);
-    expect(capturedContext.runCount).toBe(runCount);
+    expect(capturedContext.retryCount).toBe(retryCount);
     expect(capturedContext.resumeData).toBe(resumeData);
 
     // Verify helper functions work correctly

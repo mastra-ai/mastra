@@ -10,7 +10,7 @@ describe('createToolCallStep tool approval workflow', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
   let streamState: { serialize: Mock };
-  let tools: Record<string, { execute: Mock }>;
+  let tools: Record<string, { execute: Mock; requireApproval: boolean }>;
   let messageList: MessageList;
   let toolCallStep: ReturnType<typeof createToolCallStep>;
   let neverResolve: Promise<never>;
@@ -30,6 +30,7 @@ describe('createToolCallStep tool approval workflow', () => {
     state: {},
     setState: vi.fn(),
     runCount: 1,
+    retryCount: 1,
     tracingContext: {} as any,
     getInitData: vi.fn(),
     getStepResult: vi.fn(),
@@ -65,6 +66,7 @@ describe('createToolCallStep tool approval workflow', () => {
     tools = {
       'test-tool': {
         execute: vi.fn(),
+        requireApproval: true,
       },
     };
     messageList = {
@@ -111,14 +113,19 @@ describe('createToolCallStep tool approval workflow', () => {
       },
     });
 
-    expect(suspend).toHaveBeenCalledWith({
-      requireToolApproval: {
-        toolCallId: 'test-call-id',
-        toolName: 'test-tool',
-        args: { param: 'test' },
+    expect(suspend).toHaveBeenCalledWith(
+      {
+        requireToolApproval: {
+          toolCallId: 'test-call-id',
+          toolName: 'test-tool',
+          args: { param: 'test' },
+        },
+        __streamState: 'serialized-state',
       },
-      __streamState: 'serialized-state',
-    });
+      {
+        resumeLabel: 'test-call-id',
+      },
+    );
 
     expectNoToolExecution();
 
@@ -136,17 +143,9 @@ describe('createToolCallStep tool approval workflow', () => {
 
     // Assert: Verify error handling and execution prevention
     expect(result).toEqual({
-      error: expect.any(Error),
+      result: 'Tool call was not approved by the user',
       ...inputData,
     });
-    expect(result.error.message).toContain('Tool call was declined');
-    expect(result.error.message).toContain(
-      JSON.stringify({
-        toolCallId: 'test-call-id',
-        toolName: 'test-tool',
-        args: { param: 'test' },
-      }),
-    );
     expectNoToolExecution();
   });
 

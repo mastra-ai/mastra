@@ -1887,6 +1887,111 @@ describe('Workflow', () => {
       });
     });
 
+    it('should handle custom event emission using writer', async () => {
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+        execute: async ({ inputData }) => {
+          return {
+            userInput: inputData.input,
+          };
+        },
+      });
+
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+        execute: async ({ suspend, writer, inputData, resumeData }) => {
+          await writer.write({
+            type: 'custom-event',
+            payload: {
+              input: resumeData?.userInput || inputData.userInput,
+            },
+          });
+
+          if (!resumeData) {
+            await suspend({});
+          }
+
+          return { modelOutput: 'test output' };
+        },
+      });
+
+      const resumableWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [getUserInput, promptAgent],
+      });
+
+      resumableWorkflow.then(getUserInput).then(promptAgent).commit();
+
+      new Mastra({
+        storage: testStorage,
+        workflows: { 'test-workflow': resumableWorkflow },
+      });
+
+      const run = await resumableWorkflow.createRunAsync();
+
+      let streamResult = run.streamVNext({ inputData: { input: 'test input for stream' } });
+
+      for await (const data of streamResult.fullStream) {
+        if (data.type === 'workflow-step-output') {
+          expect(data.payload.output).toMatchObject({
+            type: 'custom-event',
+            payload: {
+              input: 'test input for stream',
+            },
+          });
+        }
+      }
+
+      let result = await streamResult.result;
+
+      const resumeData = { userInput: 'test input for resumption' };
+      streamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: promptAgent });
+      for await (const data of streamResult.fullStream) {
+        if (data.type === 'workflow-step-output') {
+          expect(data.payload.output).toMatchObject({
+            type: 'custom-event',
+            payload: {
+              input: 'test input for resumption',
+            },
+          });
+        }
+      }
+
+      result = await streamResult.result;
+      if (!result) {
+        expect.fail('Resume result is not set');
+      }
+
+      expect(result.steps).toEqual({
+        input: { input: 'test input for stream' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input for stream' },
+          payload: { input: 'test input for stream' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input for stream' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          resumePayload: { userInput: 'test input for resumption' },
+          resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          suspendPayload: {},
+        },
+      });
+    });
+
     it('should be able to use an agent as a step', async () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
@@ -6004,6 +6109,95 @@ describe('Workflow', () => {
       });
     });
 
+    it('should suspend and resume when running a single item concurrency (default) for loop', async () => {
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + resumeData.resumeValue };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
+
+      counterWorkflow.foreach(mapStep).then(finalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { counterWorkflow },
+      });
+
+      const run = await counterWorkflow.createRunAsync();
+      const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 0 } });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 5 } });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 0 } });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(6);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 12 }, { value: 33 + 5 }, { value: 344 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          resumePayload: { resumeValue: 0 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + (22 + 11 + 5) + (333 + 11) },
+          payload: [{ value: 12 }, { value: 33 + 5 }, { value: 344 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
     it('should run a all item concurrency for loop', async () => {
       const startTime = Date.now();
       const map = vi.fn().mockImplementation(async ({ inputData }) => {
@@ -6074,6 +6268,304 @@ describe('Workflow', () => {
       });
     });
 
+    it('should suspend and resume when running all items concurrency for loop', async () => {
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData && inputData.value > 5) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + (resumeData?.resumeValue ?? 0) };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { counterWorkflow },
+      });
+
+      const run = await counterWorkflow.createRunAsync();
+      const result = await run.start({ inputData: [{ value: 22 }, { value: 1 }, { value: 333 }] });
+
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 } });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(5);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 22 }, { value: 1 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 33 + 5 }, { value: 12 }, { value: 344 + 5 }],
+          payload: [{ value: 22 }, { value: 1 }, { value: 333 }],
+          resumePayload: { resumeValue: 5 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 22 + 11 + 5 + 1 + 11 + (333 + 11 + 5) },
+          payload: [{ value: 33 + 5 }, { value: 12 }, { value: 344 + 5 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should suspend and resume provided index when running all items concurrency for loop', async () => {
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + resumeData.resumeValue };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { counterWorkflow },
+      });
+
+      const run = await counterWorkflow.createRunAsync();
+      const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 }, forEachIndex: 2 });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 0 }, forEachIndex: 1 });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 3 }, forEachIndex: 0 });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(6);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 12 + 3 }, { value: 33 + 0 }, { value: 344 + 5 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          resumePayload: { resumeValue: 3 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + 3 + (22 + 11 + 0) + (333 + 11 + 5) },
+          payload: [{ value: 12 + 3 }, { value: 33 + 0 }, { value: 344 + 5 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      const run2 = await counterWorkflow.createRunAsync();
+      const result2 = await run2.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+      expect(result2.status).toBe('suspended');
+
+      let resumedResult2 = await run2.resume({ resumeData: { resumeValue: 5 }, forEachIndex: 0 });
+      expect(resumedResult2.status).toBe('suspended');
+
+      resumedResult2 = await run2.resume({ resumeData: { resumeValue: 0 }, forEachIndex: 1 });
+      expect(resumedResult2.status).toBe('suspended');
+
+      resumedResult2 = await run2.resume({ resumeData: { resumeValue: 3 }, forEachIndex: 2 });
+      expect(resumedResult2.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(12);
+      expect(resumedResult2.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 12 + 5 }, { value: 33 + 0 }, { value: 344 + 3 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          resumePayload: { resumeValue: 3 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + 5 + (22 + 11 + 0) + (333 + 11 + 3) },
+          payload: [{ value: 12 + 5 }, { value: 33 + 0 }, { value: 344 + 3 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should suspend and resume provided label when running all items concurrency for loop', async () => {
+      let rl = 0;
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          const newRl = rl++;
+          console.log('suspend', `test-label-${newRl}`);
+          return suspend({}, { resumeLabel: `test-label-${newRl}` });
+        }
+        return { value: inputData.value + 11 + resumeData.resumeValue };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { counterWorkflow },
+      });
+
+      const run = await counterWorkflow.createRunAsync();
+      const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 }, label: 'test-label-2' });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 0 }, label: 'test-label-1' });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 3 }, label: 'test-label-0' });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(6);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 12 + 3 }, { value: 33 + 0 }, { value: 344 + 5 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          resumePayload: { resumeValue: 3 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + 3 + (22 + 11 + 0) + (333 + 11 + 5) },
+          payload: [{ value: 12 + 3 }, { value: 33 + 0 }, { value: 344 + 5 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
     it('should run a partial item concurrency for loop', async () => {
       const startTime = Date.now();
       const map = vi.fn().mockImplementation(async ({ inputData }) => {
@@ -6137,6 +6629,188 @@ describe('Workflow', () => {
           status: 'success',
           output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) },
           payload: [{ value: 12 }, { value: 33 }, { value: 344 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should suspend and resume when running a partial item concurrency for loop', async () => {
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData && inputData.value > 5) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + (resumeData?.resumeValue ?? 0) };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { counterWorkflow },
+      });
+
+      const run = await counterWorkflow.createRunAsync();
+      const result = await run.start({
+        inputData: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+      });
+
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 } });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 5 } });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(9);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+        map: {
+          status: 'success',
+          output: [{ value: 33 + 5 }, { value: 12 }, { value: 344 + 5 }, { value: 455 + 5 }, { value: 1011 + 5 }],
+          payload: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+          resumePayload: { resumeValue: 5 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 22 + 11 + 5 + 1 + 11 + (333 + 11 + 5) + (444 + 11 + 5) + (1000 + 11 + 5) },
+          payload: [{ value: 33 + 5 }, { value: 12 }, { value: 344 + 5 }, { value: 455 + 5 }, { value: 1011 + 5 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    it('should suspend and resume provided index when running a partial item concurrency for loop', async () => {
+      const map = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData && inputData.value > 5) {
+          return suspend({});
+        }
+        return { value: inputData.value + 11 + (resumeData?.resumeValue ?? 0) };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        resumeSchema: z.object({
+          resumeValue: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
+
+      counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { counterWorkflow },
+      });
+
+      const run = await counterWorkflow.createRunAsync();
+      const result = await run.start({
+        inputData: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+      });
+
+      expect(result.status).toBe('suspended');
+
+      let resumedResult = await run.resume({ resumeData: { resumeValue: 5 }, forEachIndex: 2 });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 3 }, forEachIndex: 0 });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 2 }, forEachIndex: 3 });
+      expect(resumedResult.status).toBe('suspended');
+
+      resumedResult = await run.resume({ resumeData: { resumeValue: 8 }, forEachIndex: 4 });
+      expect(resumedResult.status).toBe('success');
+
+      expect(map).toHaveBeenCalledTimes(9);
+      expect(resumedResult.steps).toEqual({
+        input: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+        map: {
+          status: 'success',
+          output: [{ value: 33 + 3 }, { value: 12 }, { value: 344 + 5 }, { value: 455 + 2 }, { value: 1011 + 8 }],
+          payload: [{ value: 22 }, { value: 1 }, { value: 333 }, { value: 444 }, { value: 1000 }],
+          resumePayload: { resumeValue: 8 },
+          suspendPayload: { __workflow_meta: expect.any(Object) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 22 + 11 + 3 + 1 + 11 + (333 + 11 + 5) + (444 + 11 + 2) + (1000 + 11 + 8) },
+          payload: [{ value: 33 + 3 }, { value: 12 }, { value: 344 + 5 }, { value: 455 + 2 }, { value: 1011 + 8 }],
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -12586,8 +13260,21 @@ describe('Workflow', () => {
         outputSchema: z.object({
           count: z.number(),
         }),
-        execute: async ({ runCount }) => {
+        execute: async ({ runCount, retryCount }) => {
+          expect(retryCount).toBe(runCount);
           return { count: runCount };
+        },
+      });
+
+      const repeatingStepWithRetryCount = createStep({
+        id: 'repeatingStepWithRetryCount',
+        inputSchema: repeatingStep.outputSchema,
+        outputSchema: z.object({
+          count: z.number(),
+        }),
+        execute: async ({ retryCount, runCount }) => {
+          expect(retryCount).toBe(runCount);
+          return { count: retryCount };
         },
       });
 
@@ -12597,6 +13284,7 @@ describe('Workflow', () => {
         outputSchema: repeatingStep.outputSchema,
       })
         .dountil(repeatingStep, async ({ inputData }) => inputData.count === 3)
+        .dountil(repeatingStepWithRetryCount, async ({ inputData }) => inputData.count === 3)
         .commit();
 
       const run = await workflow.createRunAsync();
@@ -12624,8 +13312,8 @@ describe('Workflow', () => {
         outputSchema: z.object({
           count: z.number(),
         }),
-        execute: async ({ runCount }) => {
-          return { count: runCount };
+        execute: async ({ retryCount }) => {
+          return { count: retryCount };
         },
       });
 
@@ -12650,6 +13338,9 @@ describe('Workflow', () => {
       const mockExec = vi.fn().mockImplementation(async ({ runCount }) => {
         return { count: runCount };
       });
+      const mockExecWithRetryCount = vi.fn().mockImplementation(async ({ retryCount }) => {
+        return { count: retryCount };
+      });
       const step = createStep({
         id: 'step',
         inputSchema: z.object({}),
@@ -12658,6 +13349,14 @@ describe('Workflow', () => {
         }),
         execute: mockExec,
       });
+      const step2 = createStep({
+        id: 'step2',
+        inputSchema: z.object({ count: z.number() }),
+        outputSchema: z.object({
+          count: z.number(),
+        }),
+        execute: mockExecWithRetryCount,
+      });
 
       const workflow = createWorkflow({
         id: 'test-workflow',
@@ -12665,6 +13364,7 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       })
         .then(step)
+        .then(step2)
         .commit();
 
       const run = await workflow.createRunAsync();
@@ -12672,6 +13372,8 @@ describe('Workflow', () => {
 
       expect(mockExec).toHaveBeenCalledTimes(1);
       expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ runCount: 0 }));
+      expect(mockExecWithRetryCount).toHaveBeenCalledTimes(1);
+      expect(mockExecWithRetryCount).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 0 }));
     });
   });
   describe('Parallel Suspended Steps', () => {

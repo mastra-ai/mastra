@@ -382,8 +382,8 @@ The exporter maps Mastra's AI tracing data to OTEL-compliant attributes:
 - `gen_ai.request.top_p` - Top-p sampling parameter
 - `gen_ai.request.top_k` - Top-k sampling parameter
 - `gen_ai.response.finish_reasons` - Reason for completion
-- `gen_ai.prompt` - Input prompt (for LLM spans)
-- `gen_ai.completion` - Model output (for LLM spans)
+- `gen_ai.prompt` - Input prompt (for Model spans)
+- `gen_ai.completion` - Model output (for Model spans)
 
 #### Tool Attributes
 

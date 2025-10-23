@@ -3,7 +3,7 @@ import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';
 import { MessageList } from '../../../agent/message-list';
-import { safeParseErrorObject } from '../../../error/utils.js';
+import { getErrorFromUnknown } from '../../../error/utils.js';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
@@ -349,18 +349,13 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
           },
         });
 
-        let e = chunk.payload.error as any;
-        if (typeof e === 'object') {
-          const errorMessage = safeParseErrorObject(e);
-          const originalCause = e instanceof Error ? e.cause : undefined;
-          e = new Error(errorMessage, originalCause ? { cause: originalCause } : undefined);
-          Object.assign(e, chunk.payload.error);
-        }
-
-        controller.enqueue({ ...chunk, payload: { ...chunk.payload, error: e } });
-        await options?.onError?.({ error: e });
-
+        const error = getErrorFromUnknown(chunk.payload.error, {
+          fallbackMessage: 'Unknown error in agent stream',
+        });
+        controller.enqueue({ ...chunk, payload: { ...chunk.payload, error } });
+        await options?.onError?.({ error });
         break;
+
       default:
         if (isControllerOpen(controller)) {
           controller.enqueue(chunk);
