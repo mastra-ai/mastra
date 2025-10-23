@@ -10,7 +10,7 @@
     "build": {
       "dependsOn": ["build:lib"],
       "outputs": ["dist/**"],
-      "inputs": ["$TURBO_DEFAULT$", "../playground/dist/**"]
+      "inputs": ["$TURBO_DEFAULT$"]
     }
   }
 }
