@@ -73,6 +73,16 @@ export interface ModerationOptions {
    * Default: 0 (no context window)
    */
   chunkWindow?: number;
+
+  /**
+   * Structured output options used for the moderation agent
+   */
+  structuredOutputOptions?: {
+    /**
+     * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+     */
+    jsonPromptInjection?: boolean;
+  };
 }
 
 /**
@@ -91,6 +101,7 @@ export class ModerationProcessor implements Processor {
   private strategy: 'block' | 'warn' | 'filter';
   private includeScores: boolean;
   private chunkWindow: number;
+  private structuredOutputOptions?: ModerationOptions['structuredOutputOptions'];
 
   // Default OpenAI moderation categories
   private static readonly DEFAULT_CATEGORIES = [
@@ -113,6 +124,7 @@ export class ModerationProcessor implements Processor {
     this.strategy = options.strategy || 'block';
     this.includeScores = options.includeScores ?? false;
     this.chunkWindow = options.chunkWindow ?? 0;
+    this.structuredOutputOptions = options.structuredOutputOptions;
 
     // Create internal moderation agent
     this.moderationAgent = new Agent({
@@ -253,6 +265,7 @@ export class ModerationProcessor implements Processor {
         response = await this.moderationAgent.generate(prompt, {
           structuredOutput: {
             schema,
+            ...(this.structuredOutputOptions ?? {}),
           },
           modelSettings: {
             temperature: 0,
