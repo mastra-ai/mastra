@@ -47,7 +47,7 @@ export interface PIIDetection {
   confidence: number;
   start: number;
   end: number;
-  redacted_value: string | null;
+  redacted_value?: string | null; // Only present when strategy is 'redact'
 }
 
 /**
@@ -243,6 +243,21 @@ export class PIIDetector implements Processor {
     try {
       const model = await this.detectionAgent.getModel();
 
+      const baseDetectionSchema = z.object({
+        type: z.string().describe('Type of PII detected'),
+        value: z.string().describe('The actual PII value found'),
+        confidence: z.number().min(0).max(1).describe('Confidence of this detection'),
+        start: z.number().describe('Start position in the text'),
+        end: z.number().describe('End position in the text'),
+      });
+
+      const detectionSchema =
+        this.strategy === 'redact'
+          ? baseDetectionSchema.extend({
+              redacted_value: z.string().describe('Redacted version of the value').nullable(),
+            })
+          : baseDetectionSchema;
+
       const baseSchema = z.object({
         categories: z
           .array(
@@ -259,19 +274,7 @@ export class PIIDetector implements Processor {
           )
           .describe('Array of detected PII types with their confidence scores')
           .nullable(),
-        detections: z
-          .array(
-            z.object({
-              type: z.string().describe('Type of PII detected'),
-              value: z.string().describe('The actual PII value found'),
-              confidence: z.number().min(0).max(1).describe('Confidence of this detection'),
-              start: z.number().describe('Start position in the text'),
-              end: z.number().describe('End position in the text'),
-              redacted_value: z.string().describe('Redacted version of the value').nullable(),
-            }),
-          )
-          .describe('Array of specific PII detections with locations')
-          .nullable(),
+        detections: z.array(detectionSchema).describe('Array of specific PII detections with locations').nullable(),
       });
 
       let schema = baseSchema;
