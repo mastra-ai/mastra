@@ -22,33 +22,52 @@ export function safeParseErrorObject(obj: unknown): string {
   }
 }
 
+type SerializableError = Error & { toJSON: () => Record<string, any> };
+
 /**
  * Safely converts an unknown error to an Error instance.
- *
- * @param unknown - The value to convert to an Error
- * @param fallbackErrorMessage - Message to use if error cannot be parsed
- * @param maxDepth - Maximum depth for recursive cause parsing (default: 5)
- * @returns An Error instance, preserving the original if already an Error
- *
- * @example
- * // Preserves original Error
- * const err = new Error('test');
- * getErrorFromUnknown(err) === err; // true
- *
- * @example
- * // Converts object with custom properties
- * const apiError = { message: 'Failed', statusCode: 500 };
- * const err = getErrorFromUnknown(apiError);
- * err.message === 'Failed'; // true
- * err.statusCode === 500; // true
  */
-export function getErrorFromUnknown(
+export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
   unknown: unknown,
-  fallbackErrorMessage: string = 'Unknown error',
-  maxDepth: number = 5,
-): Error {
+  options: {
+    /**
+     * The fallback error message to use if the unknown error cannot be parsed.
+     */
+    fallbackMessage?: string;
+    /**
+     * The maximum depth to parse the cause of the error.
+     */
+    maxDepth?: number;
+    /**
+     * Whether to add .toJSON() method to the error instance to support serialization. (JSON.stringify)
+     * @example
+     * const error = getErrorFromUnknown(new Error('test'), { supportSerialization: true });
+     * JSON.stringify(error) // { message: 'test', name: 'Error', stack: 'Error: test\n    at ...' }
+     */
+    supportSerialization?: SERIALIZABLE;
+    /**
+     * Whether to include the stack of the error.
+     */
+    includeStack?: boolean;
+  } = {},
+): SERIALIZABLE extends true ? SerializableError : Error {
+  const defaultOptions = {
+    fallbackMessage: 'Unknown error',
+    maxDepth: 5,
+    supportSerialization: true,
+    includeStack: true,
+  };
+  const mergedOptions = options ? { ...defaultOptions, ...options } : defaultOptions;
+  const { fallbackMessage, maxDepth, supportSerialization, includeStack } = mergedOptions;
+
   if (unknown && unknown instanceof Error) {
-    return unknown;
+    if (includeStack === false) {
+      unknown.stack = undefined;
+    }
+    if (supportSerialization) {
+      addErrorToJSON(unknown);
+    }
+    return unknown as SERIALIZABLE extends true ? SerializableError : Error;
   }
 
   let error: Error | undefined;
@@ -65,25 +84,58 @@ export function getErrorFromUnknown(
         ? unknown.cause instanceof Error
           ? unknown.cause
           : maxDepth > 0
-            ? getErrorFromUnknown(unknown.cause, fallbackErrorMessage, maxDepth - 1)
+            ? getErrorFromUnknown(unknown.cause, { ...mergedOptions, maxDepth: maxDepth - 1 })
             : undefined
         : undefined;
 
     error = new Error(errorMessage, { cause: errorCause });
-    error.stack = 'stack' in unknown && typeof unknown.stack === 'string' ? unknown.stack : undefined;
-    Object.assign(error as Error, unknown);
-    return error;
-  }
 
-  if (unknown && typeof unknown === 'string') {
+    const { stack: _, ...propsWithoutStack } = unknown as any;
+    Object.assign(error as Error, propsWithoutStack);
+    if (includeStack) {
+      error.stack = 'stack' in unknown && typeof unknown.stack === 'string' ? unknown.stack : undefined;
+    }
+  } else if (unknown && typeof unknown === 'string') {
     error = new Error(unknown);
     error.stack = undefined;
-    return error;
-  }
-
-  if (!error) {
-    error = new Error(fallbackErrorMessage);
+  } else {
+    error = new Error(fallbackMessage);
     error.stack = undefined;
   }
-  return error;
+
+  if (supportSerialization) {
+    addErrorToJSON(error);
+  }
+  return error as SERIALIZABLE extends true ? SerializableError : Error;
+}
+
+/**
+ * Adds a toJSON method to an Error instance for proper serialization.
+ * Ensures that message, name, stack, cause, and custom properties are all serialized.
+ */
+function addErrorToJSON(error: Error): void {
+  if ((error as SerializableError).toJSON) {
+    return;
+  }
+  (error as SerializableError).toJSON = function (this: Error) {
+    const json: Record<string, any> = {
+      message: this.message,
+      name: this.name,
+    };
+    if (this.stack !== undefined) {
+      json.stack = this.stack;
+    }
+    if (this.cause !== undefined) {
+      json.cause = this.cause;
+    }
+    // Include all enumerable custom properties
+    const errorAsAny = this as any;
+    for (const key in errorAsAny) {
+      if (errorAsAny.hasOwnProperty(key) && !(key in json) && key !== 'toJSON') {
+        json[key] = errorAsAny[key];
+      }
+    }
+
+    return json;
+  };
 }
