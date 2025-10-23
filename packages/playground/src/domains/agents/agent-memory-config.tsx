@@ -37,8 +37,8 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
           { label: 'Last Messages', value: config.lastMessages || 0 },
           {
             label: 'Auto-generate Titles',
-            value: !!config.threads?.generateTitle,
-            badge: config.threads?.generateTitle ? 'info' : undefined,
+            value: !!config.generateTitle,
+            badge: config.generateTitle ? 'info' : undefined,
           },
         ],
       },

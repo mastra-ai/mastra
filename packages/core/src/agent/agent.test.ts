@@ -1137,10 +1137,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Override getMergedThreadConfig to return our test config
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel,
-            },
+          generateTitle: {
+            model: titleModel,
           },
         };
       };
@@ -1321,12 +1319,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Override getMergedThreadConfig to return dynamic model selection
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-                const userTier = runtimeContext.get('userTier');
-                return userTier === 'premium' ? premiumModel : standardModel;
-              },
+          generateTitle: {
+            model: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
+              const userTier = runtimeContext.get('userTier');
+              return userTier === 'premium' ? premiumModel : standardModel;
             },
           },
         };
@@ -1565,9 +1561,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Test with generateTitle: true
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: true,
-          },
+          generateTitle: true,
         };
       };
 
@@ -1737,9 +1731,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       agentCallCount = 0;
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: false,
-          },
+          generateTitle: false,
         };
       };
 
@@ -1806,10 +1798,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: errorModel,
-            },
+          generateTitle: {
+            model: errorModel,
           },
         };
       };
@@ -2180,15 +2170,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Override getMergedThreadConfig to return dynamic instructions selection
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel,
-              instructions: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-                const language = runtimeContext.get('language');
-                return language === 'ja'
-                  ? '会話内容に基づいて簡潔なタイトルを生成してください'
-                  : 'Generate a concise title based on the conversation';
-              },
+          generateTitle: {
+            model: titleModel,
+            instructions: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
+              const language = runtimeContext.get('language');
+              return language === 'ja'
+                ? '会話内容に基づいて簡潔なタイトルを生成してください'
+                : 'Generate a concise title based on the conversation';
             },
           },
         };
@@ -2363,11 +2351,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Override getMergedThreadConfig to return our test config with custom instructions
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel,
-              instructions: customInstructions,
-            },
+          generateTitle: {
+            model: titleModel,
+            instructions: customInstructions,
           },
         };
       };
@@ -2504,11 +2490,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel,
-              // instructions field is intentionally omitted
-            },
+          generateTitle: {
+            model: titleModel,
+            // instructions field is intentionally omitted
           },
         };
       };
@@ -2629,12 +2613,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel,
-              instructions: () => {
-                throw new Error('Instructions selection failed');
-              },
+          generateTitle: {
+            model: titleModel,
+            instructions: () => {
+              throw new Error('Instructions selection failed');
             },
           },
         };
@@ -2851,11 +2833,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Test with empty string instructions
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel1,
-              instructions: '', // Empty string
-            },
+          generateTitle: {
+            model: titleModel1,
+            instructions: '', // Empty string
           },
         };
       };

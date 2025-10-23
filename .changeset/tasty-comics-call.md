@@ -1,6 +1,15 @@
 ---
-'@mastra/playground-ui': minor
-'@mastra/core': minor
+'@mastra/playground-ui': patch
+'@mastra/core': major
 ---
 
-Changed default value of `threads.generateTitle` from `true` to `false`. Thread title auto-generation is now opt-in to avoid unexpected LLM API calls and costs. To maintain previous behavior, explicitly set `threads: { generateTitle: true }` in your memory configuration. The playground UI now displays thread IDs instead of "Chat from" when titles aren't generated.
+**Breaking Changes:**
+- Moved `generateTitle` from `threads.generateTitle` to top-level memory option
+- Changed default value from `true` to `false`
+- Using `threads.generateTitle` now throws an error
+
+**Migration:**
+Replace `threads: { generateTitle: true }` with `generateTitle: true` at the top level of memory options.
+
+**Playground:**
+The playground UI now displays thread IDs instead of "Chat from" when titles aren't generated.
