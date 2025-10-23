@@ -13,6 +13,7 @@ import type { ChunkType } from '../stream/types';
 import { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
+import { createDeprecationProxy, runCountDeprecationMessage } from './utils';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step, SuspendOptions } from './step';
@@ -852,17 +853,24 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     const _runStep = (step: Step<any, any, any, any>, spanName: string, attributes?: Record<string, string>) => {
       return async (data: any) => {
+        // Wrap data with a Proxy to show deprecation warning for runCount
+        const proxiedData = createDeprecationProxy(data, {
+          paramName: 'runCount',
+          deprecationMessage: runCountDeprecationMessage,
+          logger: this.logger,
+        });
+
         const telemetry = this.mastra?.getTelemetry();
         const span = executionContext.executionSpan;
         if (!telemetry || !span) {
-          return step.execute(data);
+          return step.execute(proxiedData);
         }
 
         return otlpContext.with(trace.setSpan(otlpContext.active(), span), async () => {
           return telemetry.traceMethod(step.execute.bind(step), {
             spanName,
             attributes,
-          })(data);
+          })(proxiedData);
         });
       };
     };
@@ -1336,43 +1344,52 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           });
 
           try {
-            const result = await cond({
-              runId,
-              workflowId,
-              mastra: this.mastra!,
-              runtimeContext,
-              inputData: prevOutput,
-              state: executionContext.state,
-              setState: (state: any) => {
-                executionContext.state = state;
-              },
-              runCount: -1,
-              retryCount: -1,
-              tracingContext: {
-                currentSpan: evalSpan,
-              },
-              getInitData: () => stepResults?.input as any,
-              getStepResult: getStepResult.bind(this, stepResults),
-              // TODO: this function shouldn't have suspend probably?
-              suspend: async (_suspendPayload: any): Promise<any> => {},
-              bail: () => {},
-              abort: () => {
-                abortController?.abort();
-              },
-              [EMITTER_SYMBOL]: emitter,
-              [STREAM_FORMAT_SYMBOL]: executionContext.format,
-              engine: {},
-              abortSignal: abortController?.signal,
-              writer: new ToolStream(
+            const result = await cond(
+              createDeprecationProxy(
                 {
-                  prefix: 'workflow-step',
-                  callId: randomUUID(),
-                  name: 'conditional',
                   runId,
+                  workflowId,
+                  mastra: this.mastra!,
+                  runtimeContext,
+                  inputData: prevOutput,
+                  state: executionContext.state,
+                  setState: (state: any) => {
+                    executionContext.state = state;
+                  },
+                  runCount: -1,
+                  retryCount: -1,
+                  tracingContext: {
+                    currentSpan: evalSpan,
+                  },
+                  getInitData: () => stepResults?.input as any,
+                  getStepResult: getStepResult.bind(this, stepResults),
+                  // TODO: this function shouldn't have suspend probably?
+                  suspend: async (_suspendPayload: any): Promise<any> => {},
+                  bail: () => {},
+                  abort: () => {
+                    abortController?.abort();
+                  },
+                  [EMITTER_SYMBOL]: emitter,
+                  [STREAM_FORMAT_SYMBOL]: executionContext.format,
+                  engine: {},
+                  abortSignal: abortController?.signal,
+                  writer: new ToolStream(
+                    {
+                      prefix: 'workflow-step',
+                      callId: randomUUID(),
+                      name: 'conditional',
+                      runId,
+                    },
+                    writableStream,
+                  ),
                 },
-                writableStream,
+                {
+                  paramName: 'runCount',
+                  deprecationMessage: runCountDeprecationMessage,
+                  logger: this.logger,
+                },
               ),
-            });
+            );
 
             evalSpan?.end({
               output: result,
@@ -1629,43 +1646,52 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         tracingPolicy: this.options?.tracingPolicy,
       });
 
-      isTrue = await condition({
-        workflowId,
-        runId,
-        mastra: this.mastra!,
-        runtimeContext,
-        inputData: result.output,
-        state: executionContext.state,
-        setState: (state: any) => {
-          executionContext.state = state;
-        },
-        runCount: -1,
-        retryCount: -1,
-        tracingContext: {
-          currentSpan: evalSpan,
-        },
-        iterationCount: iteration + 1,
-        getInitData: () => stepResults?.input as any,
-        getStepResult: getStepResult.bind(this, stepResults),
-        suspend: async (_suspendPayload: any): Promise<any> => {},
-        bail: () => {},
-        abort: () => {
-          abortController?.abort();
-        },
-        [EMITTER_SYMBOL]: emitter,
-        [STREAM_FORMAT_SYMBOL]: executionContext.format,
-        engine: {},
-        abortSignal: abortController?.signal,
-        writer: new ToolStream(
+      isTrue = await condition(
+        createDeprecationProxy(
           {
-            prefix: 'workflow-step',
-            callId: randomUUID(),
-            name: 'loop',
+            workflowId,
             runId,
+            mastra: this.mastra!,
+            runtimeContext,
+            inputData: result.output,
+            state: executionContext.state,
+            setState: (state: any) => {
+              executionContext.state = state;
+            },
+            runCount: -1,
+            retryCount: -1,
+            tracingContext: {
+              currentSpan: evalSpan,
+            },
+            iterationCount: iteration + 1,
+            getInitData: () => stepResults?.input as any,
+            getStepResult: getStepResult.bind(this, stepResults),
+            suspend: async (_suspendPayload: any): Promise<any> => {},
+            bail: () => {},
+            abort: () => {
+              abortController?.abort();
+            },
+            [EMITTER_SYMBOL]: emitter,
+            [STREAM_FORMAT_SYMBOL]: executionContext.format,
+            engine: {},
+            abortSignal: abortController?.signal,
+            writer: new ToolStream(
+              {
+                prefix: 'workflow-step',
+                callId: randomUUID(),
+                name: 'loop',
+                runId,
+              },
+              writableStream,
+            ),
           },
-          writableStream,
+          {
+            paramName: 'runCount',
+            deprecationMessage: runCountDeprecationMessage,
+            logger: this.logger,
+          },
         ),
-      });
+      );
       evalSpan?.end({
         output: isTrue,
       });
