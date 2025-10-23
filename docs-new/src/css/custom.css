@@ -97,6 +97,7 @@
   /* Nextra green accent colors */
   --mastra-green-accent: hsl(143, 97%, 54%);
   --mastra-green-accent-2: hsla(125, 66%, 50%, 1);
+  --mastra-green-accent-3: hsla(143, 97%, 24%, 1);
   --mastra-green-muted: #84d291;
   --mastra-green-code: #177326;
 
