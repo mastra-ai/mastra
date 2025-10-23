@@ -10,8 +10,6 @@ import type {
 } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
-import type { MessageFormat, MessageFormatResult } from '@mastra/core/types';
-import { validateMessageFormat } from '@mastra/core/types';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { embedMany } from 'ai';
@@ -96,38 +94,12 @@ export class Memory extends MastraMemory {
     }
   }
 
-  /**
-   * Type-safe return type based on the format parameter.
-   */
-  private convertToFormat<F extends MessageFormat>(
-    messageList: MessageList,
-    format: F,
-  ): MessageFormatResult<F> {
-    switch (format) {
-      case 'mastra-db':
-        return messageList.get.all.v2() as any;
-      case 'aiv4-ui':
-        return messageList.get.all.aiV4.ui() as any;
-      case 'aiv4-core':
-        return messageList.get.all.aiV4.core() as any;
-      case 'aiv5-ui':
-        return messageList.get.all.aiV5.ui() as any;
-      case 'aiv5-model':
-        return messageList.get.all.aiV5.model() as any;
-      default:
-        throw new Error(`Unsupported format: ${format}`);
-    }
-  }
-
-  async query<F extends MessageFormat = 'mastra-db'>(
+  async query(
     args: StorageGetMessagesArg & {
       threadConfig?: MemoryConfig;
-      format?: F;
     },
-  ): Promise<any> {
-    const { threadId, resourceId, selectBy, threadConfig, format = 'mastra-db' as F } = args;
-    // Validate format parameter
-    validateMessageFormat(format);
+  ): Promise<{ messages: MastraMessageV2[] }> {
+    const { threadId, resourceId, selectBy, threadConfig } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
@@ -253,28 +225,25 @@ export class Memory extends MastraMemory {
 
     const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
 
-    // Convert to requested format
-    const messages = this.convertToFormat(list, format);
+    // Always return mastra-db format (V2)
+    const messages = list.get.all.v2();
 
-    return { messages } as any;
+    return { messages };
   }
 
-  async rememberMessages<F extends MessageFormat = 'mastra-db'>(args: {
+  async rememberMessages(args: {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-    format?: F;
-  }): Promise<any> {
-    const { threadId, resourceId, vectorMessageSearch, config, format = 'mastra-db' as F } = args;
-    // Validate format parameter
-    validateMessageFormat(format);
+  }): Promise<MastraMessageV2[]> {
+    const { threadId, resourceId, vectorMessageSearch, config } = args;
 
     const threadConfig = this.getMergedThreadConfig(config || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, threadConfig);
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
-      return [] as any;
+      return [];
     }
 
     const messagesResult = await this.query({
@@ -285,15 +254,13 @@ export class Memory extends MastraMemory {
         vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
       },
       threadConfig: config,
-      // format defaults to 'mastra-db'
     });
 
-    // Convert to requested format
-    const list = new MessageList({ threadId, resourceId }).add(messagesResult.messages, 'memory');
-    const messages = this.convertToFormat(list, format);
+    // Always return mastra-db format (V2)
+    const messages = messagesResult.messages;
 
     this.logger.debug(`Remembered message history includes ${messages.length} messages.`);
-    return messages as any;
+    return messages;
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {

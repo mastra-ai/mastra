@@ -8,7 +8,6 @@ import type { Mastra } from '../mastra';
 import type { MastraStorage, PaginationInfo, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
-import type { MessageFormat, MessageFormatResult } from '../types';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 
@@ -264,13 +263,12 @@ export abstract class MastraMemory extends MastraBase {
     return this.applyProcessors(messages, { processors: processors || this.processors, ...opts });
   }
 
-  abstract rememberMessages<F extends MessageFormat = 'mastra-db'>(args: {
+  abstract rememberMessages(args: {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-    format?: F;
-  }): Promise<MessageFormatResult<F>>;
+  }): Promise<MastraMessageV2[]>;
 
   estimateTokens(text: string): number {
     return Math.ceil(text.split(' ').length * 1.3);
@@ -344,14 +342,13 @@ export abstract class MastraMemory extends MastraBase {
   /**
    * Retrieves all messages for a specific thread
    * @param threadId - The unique identifier of the thread
-   * @returns Promise resolving to array of messages in the requested format
+   * @returns Promise resolving to array of messages in mastra-db format
    */
-  abstract query<F extends MessageFormat = 'mastra-db'>(
-    args: Omit<StorageGetMessagesArg, 'format'> & {
+  abstract query(
+    args: StorageGetMessagesArg & {
       threadConfig?: MemoryConfig;
-      format?: F;
     },
-  ): Promise<{ messages: MessageFormatResult<F> }>;
+  ): Promise<{ messages: MastraMessageV2[] }>;
 
   /**
    * Helper method to create a new thread

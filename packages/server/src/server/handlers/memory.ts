@@ -2,7 +2,6 @@ import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
-import type { MessageFormat } from '@mastra/core/types';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
@@ -374,11 +373,9 @@ export async function getMessagesHandler({
   agentId,
   threadId,
   limit,
-  format = 'mastra-db',
   runtimeContext,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'runtimeContext'> & {
   limit?: number;
-  format?: MessageFormat;
 }) {
   if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
     throw new HTTPException(400, { message: 'Invalid limit: must be a positive integer' });
@@ -399,7 +396,6 @@ export async function getMessagesHandler({
 
     const { messages } = await memory.query({
       threadId: threadId!,
-      format,
       ...(limit && { selectBy: { last: limit } }),
     });
     return { messages };
@@ -619,11 +615,10 @@ export async function searchMemoryHandler({
           resourceId,
           vectorMessageSearch: searchQuery,
           config,
-          format: 'mastra-db' as const,
         });
 
-        // Get thread messages for context (as aiv5-ui for frontend compatibility)
-        const { messages: threadMessages } = await memory.query({ threadId: thread.id, format: 'aiv5-ui' as const });
+        // Get thread messages for context
+        const { messages: threadMessages } = await memory.query({ threadId: thread.id });
 
         // Process results
         messagesV2.forEach((msg: MastraMessageV2) => {
@@ -689,10 +684,9 @@ export async function searchMemoryHandler({
         resourceId,
         vectorMessageSearch: searchQuery,
         config,
-        format: 'mastra-db' as const,
       });
 
-      const { messages: threadMessages } = await memory.query({ threadId, format: 'aiv5-ui' as const });
+      const { messages: threadMessages } = await memory.query({ threadId });
 
       messagesV2.forEach((msg: MastraMessageV2) => {
         // Skip duplicates

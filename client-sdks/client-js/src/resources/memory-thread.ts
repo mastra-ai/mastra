@@ -1,5 +1,4 @@
 import type { StorageThreadType } from '@mastra/core/memory';
-import type { MessageFormat } from '@mastra/core/types';
 
 import type {
   GetMemoryThreadMessagesResponse,
@@ -52,17 +51,14 @@ export class MemoryThread extends BaseResource {
   }
 
   /**
-   * Retrieves messages associated with the thread
-   * @param params - Optional parameters including limit for number of messages to retrieve and format
-   * @returns Promise containing thread messages in the requested format
+   * Retrieves messages associated with the thread (always returns mastra-db format)
+   * @param params - Optional parameters including limit for number of messages to retrieve
+   * @returns Promise containing thread messages in mastra-db format
    */
-  getMessages<F extends MessageFormat = 'mastra-db'>(
-    params?: GetMemoryThreadMessagesParams<F>,
-  ): Promise<GetMemoryThreadMessagesResponse<F>> {
+  getMessages(params?: GetMemoryThreadMessagesParams): Promise<GetMemoryThreadMessagesResponse> {
     const query = new URLSearchParams({
       agentId: this.agentId,
       ...(params?.limit ? { limit: params.limit.toString() } : {}),
-      ...(params?.format ? { format: params.format } : {}),
     });
     return this.request(`/api/memory/threads/${this.threadId}/messages?${query.toString()}`);
   }

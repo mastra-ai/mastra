@@ -38,7 +38,6 @@ import type {
   GetScorerResponse,
   GetScoresByScorerIdParams,
   GetScoresResponse,
-  MessageFormat,
   GetScoresByRunIdParams,
   GetScoresByEntityIdParams,
   GetScoresBySpanParams,
@@ -121,19 +120,16 @@ export class MastraClient extends BaseResource {
     return new MemoryThread(this.options, threadId, agentId);
   }
 
-  public getThreadMessages<F extends MessageFormat = 'mastra-db'>(
+  public getThreadMessages(
     threadId: string,
-    opts: { agentId?: string; networkId?: string; format?: F } = {},
-  ): Promise<GetMemoryThreadMessagesResponse<F>> {
-    const { agentId, networkId, format } = opts;
+    opts: { agentId?: string; networkId?: string } = {},
+  ): Promise<GetMemoryThreadMessagesResponse> {
+    const { agentId, networkId } = opts;
     let url = '';
     if (agentId) {
       url = `/api/memory/threads/${threadId}/messages?agentId=${agentId}`;
     } else if (networkId) {
       url = `/api/memory/network/threads/${threadId}/messages?networkId=${networkId}`;
-    }
-    if (format) {
-      url += url.includes('?') ? `&format=${format}` : `?format=${format}`;
     }
     return this.request(url);
   }
