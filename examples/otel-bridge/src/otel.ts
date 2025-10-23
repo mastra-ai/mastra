@@ -14,11 +14,36 @@ const sdk = new NodeSDK({
   }),
   instrumentations: [
     getNodeAutoInstrumentations({
+      // HTTP instrumentation is required for proper span naming with Fastify
+      '@opentelemetry/instrumentation-http': {
+        enabled: true,
+      },
       '@opentelemetry/instrumentation-fastify': {
         enabled: true,
+        requestHook: (span, info) => {
+          // Get the route pattern (e.g., "/api/stories/:id") from Fastify routeOptions
+          // This is the route definition, not the actual URL being requested
+          const route = info.request.routeOptions?.url;
+          console.log("ROUTE", route)
+
+          // Set http.route attribute - the HTTP instrumentation uses this
+          // to rename the span to "${method} ${route}" format
+          if (route) {
+            span.setAttribute('http.route', route);
+            console.log("SPAN", span)
+          }
+        },
       },
       '@opentelemetry/instrumentation-pg': {
         enabled: true,
+      },
+      // Disable DNS tracing to reduce noise in Jaeger
+      '@opentelemetry/instrumentation-dns': {
+        enabled: false,
+      },
+      // Disable TCP tracing to reduce noise in Jaeger
+      '@opentelemetry/instrumentation-net': {
+        enabled: false,
       },
     }),
   ],
