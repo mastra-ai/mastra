@@ -28,8 +28,8 @@ const docsTabs = [
     basePath: '/docs/guides',
   },
   {
-    id: 'API Reference',
-    label: 'API Reference',
+    id: 'Reference',
+    label: 'Reference',
     href: '/docs/reference',
     basePath: '/docs/reference',
   },
