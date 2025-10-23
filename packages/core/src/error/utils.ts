@@ -88,7 +88,7 @@ export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
             : undefined
         : undefined;
 
-    error = new Error(errorMessage, { cause: errorCause });
+    error = new Error(errorMessage, errorCause ? { cause: errorCause } : undefined);
 
     const { stack: _, ...propsWithoutStack } = unknown as any;
     Object.assign(error as Error, propsWithoutStack);
