@@ -135,13 +135,6 @@ export type AgentExecutionOptions<
   structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
 };
 
-export type DeprecatedOutputOptions<OUTPUT extends OutputSchema = undefined> = {
-  /** Schema for structured output generation (Zod schema or JSON Schema)
-   * @deprecated Use `structuredOutput.schema` instead. The `output` property will be removed in a future version.
-   */
-  output?: OUTPUT;
-};
-
 export type InnerAgentExecutionOptions<
   OUTPUT extends OutputSchema = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
