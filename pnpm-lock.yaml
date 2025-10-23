@@ -1508,6 +1508,9 @@ importers:
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.17.5
+        version: 1.20.1
       '@openrouter/ai-sdk-provider-v5':
         specifier: npm:@openrouter/ai-sdk-provider@1.2.0
         version: '@openrouter/ai-sdk-provider@1.2.0(ai@4.3.19(react@19.2.0)(zod@3.25.76))(zod@3.25.76)'
