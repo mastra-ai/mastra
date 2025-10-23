@@ -349,7 +349,9 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
           },
         });
 
-        const error = getErrorFromUnknown(chunk.payload.error, 'Unknown error in agent stream');
+        const error = getErrorFromUnknown(chunk.payload.error, {
+          fallbackMessage: 'Unknown error in agent stream',
+        });
         controller.enqueue({ ...chunk, payload: { ...chunk.payload, error } });
         await options?.onError?.({ error });
         break;

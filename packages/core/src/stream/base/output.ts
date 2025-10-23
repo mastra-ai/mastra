@@ -23,19 +23,6 @@ import { createJsonTextStreamTransformer, createObjectStreamTransformer } from '
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
 
-export class JsonToSseTransformStream extends TransformStream<unknown, string> {
-  constructor() {
-    super({
-      transform(part, controller) {
-        controller.enqueue(`data: ${JSON.stringify(part)}\n\n`);
-      },
-      flush(controller) {
-        controller.enqueue('data: [DONE]\n\n');
-      },
-    });
-  }
-}
-
 /**
  * Helper function to create a destructurable version of MastraModelOutput.
  * This wraps the output to ensure properties maintain their context when destructured.
@@ -614,7 +601,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   self.#delayedPromises.finishReason.resolve('other');
                   self.#delayedPromises.text.resolve('');
                 } else {
-                  self.#error = getErrorFromUnknown(error, 'Unknown error in stream');
+                  self.#error = getErrorFromUnknown(error, {
+                    fallbackMessage: 'Unknown error in stream',
+                  });
                   self.#delayedPromises.finishReason.resolve('error');
                   self.#delayedPromises.text.resolve('');
                 }
@@ -764,7 +753,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               break;
 
             case 'error':
-              const error = getErrorFromUnknown(chunk.payload.error, 'Unknown error chunk in stream');
+              const error = getErrorFromUnknown(chunk.payload.error, {
+                fallbackMessage: 'Unknown error chunk in stream',
+              });
               self.#error = error;
               self.#status = 'failed';
               self.#streamFinished = true; // Mark stream as finished for EventEmitter
