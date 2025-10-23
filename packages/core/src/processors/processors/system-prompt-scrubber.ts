@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import type { TracingContext } from '../../ai-tracing';
-import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
@@ -20,7 +20,7 @@ export interface SystemPromptScrubberOptions {
   /** Custom placeholder text for redaction */
   placeholderText?: string;
   /** Model to use for the detection agent */
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   /**
    * Structured output options used for the detection agent
    */
@@ -65,7 +65,7 @@ export class SystemPromptScrubber implements Processor {
   private instructions: string;
   private redactionMethod: 'mask' | 'placeholder' | 'remove';
   private placeholderText: string;
-  private model: MastraLanguageModel;
+  private model: MastraModelConfig;
   private detectionAgent: Agent;
   private structuredOutputOptions?: SystemPromptScrubberOptions['structuredOutputOptions'];
 
