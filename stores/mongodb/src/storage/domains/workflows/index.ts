@@ -14,13 +14,13 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
 
   updateWorkflowResults(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // stepId,
       // result,
       // runtimeContext,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
@@ -31,11 +31,11 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   }
   updateWorkflowState(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // opts,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       opts: {
         status: string;
@@ -50,12 +50,12 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   }
 
   async persistWorkflowSnapshot({
-    workflowName,
+    workflowId,
     runId,
     resourceId,
     snapshot,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
@@ -63,10 +63,10 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     try {
       const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       await collection.updateOne(
-        { workflow_name: workflowName, run_id: runId },
+        { workflow_name: workflowId, run_id: runId },
         {
           $set: {
-            workflow_name: workflowName,
+            workflow_name: workflowId,
             run_id: runId,
             resourceId,
             snapshot,
@@ -82,7 +82,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
           id: 'STORAGE_MONGODB_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
@@ -90,17 +90,17 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   }
 
   async loadWorkflowSnapshot({
-    workflowName,
+    workflowId,
     runId,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
       const result = await this.operations.load<any[]>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
-          workflow_name: workflowName,
+          workflow_name: workflowId,
           run_id: runId,
         },
       });
@@ -116,7 +116,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
           id: 'STORAGE_MONGODB_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
@@ -124,7 +124,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   }
 
   async getWorkflowRuns(args?: {
-    workflowName?: string;
+    workflowId?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
@@ -134,8 +134,8 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     const options = args || {};
     try {
       const query: any = {};
-      if (options.workflowName) {
-        query['workflow_name'] = options.workflowName;
+      if (options.workflowId) {
+        query['workflow_name'] = options.workflowId;
       }
       if (options.fromDate) {
         query['createdAt'] = { $gte: options.fromDate };
@@ -176,21 +176,21 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
           id: 'STORAGE_MONGODB_STORE_GET_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName: options.workflowName || 'unknown' },
+          details: { workflowId: options.workflowId || 'unknown' },
         },
         error,
       );
     }
   }
 
-  async getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
+  async getWorkflowRunById(args: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
     try {
       const query: any = {};
       if (args.runId) {
         query['run_id'] = args.runId;
       }
-      if (args.workflowName) {
-        query['workflow_name'] = args.workflowName;
+      if (args.workflowId) {
+        query['workflow_name'] = args.workflowId;
       }
 
       const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
@@ -225,7 +225,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     }
 
     return {
-      workflowName: row.workflow_name as string,
+      workflowId: row.workflow_name as string,
       runId: row.run_id as string,
       snapshot: parsedSnapshot,
       createdAt: new Date(row.createdAt as string),

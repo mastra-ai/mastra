@@ -16,7 +16,7 @@ function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
     }
   }
   return {
-    workflowName: row.workflow_name as string,
+    workflowId: row.workflow_name as string,
     runId: row.run_id as string,
     snapshot: parsedSnapshot,
     resourceId: row.resourceId as string,
@@ -133,13 +133,13 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   async updateWorkflowResults({
-    workflowName,
+    workflowId,
     runId,
     stepId,
     result,
     runtimeContext,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
@@ -152,7 +152,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         // Load existing snapshot within transaction
         const existingSnapshotResult = await tx.execute({
           sql: `SELECT snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
-          args: [workflowName, runId],
+          args: [workflowId, runId],
         });
 
         let snapshot: WorkflowRunState;
@@ -184,7 +184,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         // Update the snapshot within the same transaction
         await tx.execute({
           sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = ? WHERE workflow_name = ? AND run_id = ?`,
-          args: [JSON.stringify(snapshot), workflowName, runId],
+          args: [JSON.stringify(snapshot), workflowId, runId],
         });
 
         await tx.commit();
@@ -199,11 +199,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   async updateWorkflowState({
-    workflowName,
+    workflowId,
     runId,
     opts,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     opts: {
       status: string;
@@ -220,7 +220,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         // Load existing snapshot within transaction
         const existingSnapshotResult = await tx.execute({
           sql: `SELECT snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
-          args: [workflowName, runId],
+          args: [workflowId, runId],
         });
 
         if (!existingSnapshotResult.rows?.[0]) {
@@ -243,7 +243,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         // Update the snapshot within the same transaction
         await tx.execute({
           sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = ? WHERE workflow_name = ? AND run_id = ?`,
-          args: [JSON.stringify(updatedSnapshot), workflowName, runId],
+          args: [JSON.stringify(updatedSnapshot), workflowId, runId],
         });
 
         await tx.commit();
@@ -258,18 +258,18 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   async persistWorkflowSnapshot({
-    workflowName,
+    workflowId,
     runId,
     resourceId,
     snapshot,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
   }) {
     const data = {
-      workflow_name: workflowName,
+      workflow_name: workflowId,
       run_id: runId,
       resourceId,
       snapshot,
@@ -277,7 +277,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       updatedAt: new Date(),
     };
 
-    this.logger.debug('Persisting workflow snapshot', { workflowName, runId, data });
+    this.logger.debug('Persisting workflow snapshot', { workflowId, runId, data });
     await this.operations.insert({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       record: data,
@@ -285,28 +285,22 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   async loadWorkflowSnapshot({
-    workflowName,
+    workflowId,
     runId,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
-    this.logger.debug('Loading workflow snapshot', { workflowName, runId });
+    this.logger.debug('Loading workflow snapshot', { workflowId, runId });
     const d = await this.operations.load<{ snapshot: WorkflowRunState }>({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
-      keys: { workflow_name: workflowName, run_id: runId },
+      keys: { workflow_name: workflowId, run_id: runId },
     });
 
     return d ? d.snapshot : null;
   }
 
-  async getWorkflowRunById({
-    runId,
-    workflowName,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
+  async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
     const conditions: string[] = [];
     const args: (string | number)[] = [];
 
@@ -315,9 +309,9 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       args.push(runId);
     }
 
-    if (workflowName) {
+    if (workflowId) {
       conditions.push('workflow_name = ?');
-      args.push(workflowName);
+      args.push(workflowId);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -346,14 +340,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   async getWorkflowRuns({
-    workflowName,
+    workflowId,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
   }: {
-    workflowName?: string;
+    workflowId?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
@@ -364,9 +358,9 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       const conditions: string[] = [];
       const args: InValue[] = [];
 
-      if (workflowName) {
+      if (workflowId) {
         conditions.push('workflow_name = ?');
-        args.push(workflowName);
+        args.push(workflowId);
       }
 
       if (fromDate) {

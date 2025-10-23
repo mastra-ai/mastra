@@ -16,7 +16,7 @@ function parseWorkflowRun(row: any): WorkflowRun {
   }
 
   return {
-    workflowName: row.workflow_name,
+    workflowId: row.workflow_name,
     runId: row.run_id,
     snapshot: parsedSnapshot,
     createdAt: ensureDate(row.createdAt)!,
@@ -34,13 +34,13 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
 
   updateWorkflowResults(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // stepId,
       // result,
       // runtimeContext,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
@@ -51,11 +51,11 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
   }
   updateWorkflowState(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // opts,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       opts: {
         status: string;
@@ -70,12 +70,12 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
   }
 
   async persistWorkflowSnapshot({
-    workflowName,
+    workflowId,
     runId,
     resourceId,
     snapshot,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
@@ -84,7 +84,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
 
       // Try to find the existing record
-      const query = table.query().where(`workflow_name = '${workflowName}' AND run_id = '${runId}'`);
+      const query = table.query().where(`workflow_name = '${workflowId}' AND run_id = '${runId}'`);
       const records = await query.toArray();
       let createdAt: number;
       const now = Date.now();
@@ -96,7 +96,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       }
 
       const record = {
-        workflow_name: workflowName,
+        workflow_name: workflowId,
         run_id: runId,
         resourceId,
         snapshot: JSON.stringify(snapshot),
@@ -115,22 +115,22 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
           id: 'LANCE_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
     }
   }
   async loadWorkflowSnapshot({
-    workflowName,
+    workflowId,
     runId,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
-      const query = table.query().where(`workflow_name = '${workflowName}' AND run_id = '${runId}'`);
+      const query = table.query().where(`workflow_name = '${workflowId}' AND run_id = '${runId}'`);
       const records = await query.toArray();
       return records.length > 0 ? JSON.parse(records[0].snapshot) : null;
     } catch (error: any) {
@@ -139,15 +139,15 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
           id: 'LANCE_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
     }
   }
 
-  async getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<{
-    workflowName: string;
+  async getWorkflowRunById(args: { runId: string; workflowId?: string }): Promise<{
+    workflowId: string;
     runId: string;
     snapshot: any;
     createdAt: Date;
@@ -156,8 +156,8 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
       let whereClause = `run_id = '${args.runId}'`;
-      if (args.workflowName) {
-        whereClause += ` AND workflow_name = '${args.workflowName}'`;
+      if (args.workflowId) {
+        whereClause += ` AND workflow_name = '${args.workflowId}'`;
       }
       const query = table.query().where(whereClause);
       const records = await query.toArray();
@@ -170,7 +170,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
           id: 'LANCE_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { runId: args.runId, workflowName: args.workflowName ?? '' },
+          details: { runId: args.runId, workflowId: args.workflowId ?? '' },
         },
         error,
       );
@@ -180,7 +180,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
   async getWorkflowRuns(args?: {
     namespace?: string;
     resourceId?: string;
-    workflowName?: string;
+    workflowId?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
@@ -193,8 +193,8 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
 
       const conditions: string[] = [];
 
-      if (args?.workflowName) {
-        conditions.push(`workflow_name = '${args.workflowName.replace(/'/g, "''")}'`);
+      if (args?.workflowId) {
+        conditions.push(`workflow_name = '${args.workflowId.replace(/'/g, "''")}'`);
       }
 
       if (args?.resourceId) {
@@ -239,7 +239,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
           id: 'LANCE_STORE_GET_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { namespace: args?.namespace ?? '', workflowName: args?.workflowName ?? '' },
+          details: { namespace: args?.namespace ?? '', workflowId: args?.workflowId ?? '' },
         },
         error,
       );

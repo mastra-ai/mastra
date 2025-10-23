@@ -394,12 +394,12 @@ export abstract class MastraStorage extends MastraBase {
   }
 
   async persistWorkflowSnapshot({
-    workflowName,
+    workflowId,
     runId,
     resourceId,
     snapshot,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
@@ -407,14 +407,14 @@ export abstract class MastraStorage extends MastraBase {
     await this.init();
 
     const data = {
-      workflow_name: workflowName,
+      workflow_name: workflowId,
       run_id: runId,
       resourceId,
       snapshot,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    this.logger.debug('Persisting workflow snapshot', { workflowName, runId, data });
+    this.logger.debug('Persisting workflow snapshot', { workflowId, runId, data });
     await this.insert({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       record: data,
@@ -422,12 +422,12 @@ export abstract class MastraStorage extends MastraBase {
   }
 
   abstract updateWorkflowResults({
-    workflowName,
+    workflowId,
     runId,
     stepId,
     result,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
@@ -435,11 +435,11 @@ export abstract class MastraStorage extends MastraBase {
   }): Promise<Record<string, StepResult<any, any, any, any>>>;
 
   abstract updateWorkflowState({
-    workflowName,
+    workflowId,
     runId,
     opts,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     opts: {
       status: string;
@@ -451,19 +451,19 @@ export abstract class MastraStorage extends MastraBase {
   }): Promise<WorkflowRunState | undefined>;
 
   async loadWorkflowSnapshot({
-    workflowName,
+    workflowId,
     runId,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
     if (!this.hasInitialized) {
       await this.init();
     }
-    this.logger.debug('Loading workflow snapshot', { workflowName, runId });
+    this.logger.debug('Loading workflow snapshot', { workflowId, runId });
     const d = await this.load<{ snapshot: WorkflowRunState }>({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
-      keys: { workflow_name: workflowName, run_id: runId },
+      keys: { workflow_name: workflowId, run_id: runId },
     });
 
     return d ? d.snapshot : null;
@@ -536,7 +536,7 @@ export abstract class MastraStorage extends MastraBase {
   abstract getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]>;
 
   abstract getWorkflowRuns(args?: {
-    workflowName?: string;
+    workflowId?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
@@ -544,7 +544,7 @@ export abstract class MastraStorage extends MastraBase {
     resourceId?: string;
   }): Promise<WorkflowRuns>;
 
-  abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
+  abstract getWorkflowRunById(args: { runId: string; workflowId?: string }): Promise<WorkflowRun | null>;
 
   abstract getThreadsByResourceIdPaginated(
     args: {

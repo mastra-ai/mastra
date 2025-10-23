@@ -247,27 +247,27 @@ export class CloudflareStore extends MastraStorage {
   }
 
   async updateWorkflowResults({
-    workflowName,
+    workflowId,
     runId,
     stepId,
     result,
     runtimeContext,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     runtimeContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+    return this.stores.workflows.updateWorkflowResults({ workflowId, runId, stepId, result, runtimeContext });
   }
 
   async updateWorkflowState({
-    workflowName,
+    workflowId,
     runId,
     opts,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     opts: {
       status: string;
@@ -277,7 +277,7 @@ export class CloudflareStore extends MastraStorage {
       waitingPaths?: Record<string, number[]>;
     };
   }): Promise<WorkflowRunState | undefined> {
-    return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
+    return this.stores.workflows.updateWorkflowState({ workflowId, runId, opts });
   }
 
   async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
@@ -293,7 +293,7 @@ export class CloudflareStore extends MastraStorage {
   }
 
   async persistWorkflowSnapshot(params: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
@@ -301,7 +301,7 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.workflows.persistWorkflowSnapshot(params);
   }
 
-  async loadWorkflowSnapshot(params: { workflowName: string; runId: string }): Promise<WorkflowRunState | null> {
+  async loadWorkflowSnapshot(params: { workflowId: string; runId: string }): Promise<WorkflowRunState | null> {
     return this.stores.workflows.loadWorkflowSnapshot(params);
   }
 
@@ -348,14 +348,14 @@ export class CloudflareStore extends MastraStorage {
   }
 
   async getWorkflowRuns({
-    workflowName,
+    workflowId,
     limit = 20,
     offset = 0,
     resourceId,
     fromDate,
     toDate,
   }: {
-    workflowName?: string;
+    workflowId?: string;
     limit?: number;
     offset?: number;
     resourceId?: string;
@@ -363,7 +363,7 @@ export class CloudflareStore extends MastraStorage {
     toDate?: Date;
   } = {}): Promise<WorkflowRuns> {
     return this.stores.workflows.getWorkflowRuns({
-      workflowName,
+      workflowId,
       limit,
       offset,
       resourceId,
@@ -372,14 +372,8 @@ export class CloudflareStore extends MastraStorage {
     });
   }
 
-  async getWorkflowRunById({
-    runId,
-    workflowName,
-  }: {
-    runId: string;
-    workflowName: string;
-  }): Promise<WorkflowRun | null> {
-    return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
+  async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId: string }): Promise<WorkflowRun | null> {
+    return this.stores.workflows.getWorkflowRunById({ runId, workflowId });
   }
 
   async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {

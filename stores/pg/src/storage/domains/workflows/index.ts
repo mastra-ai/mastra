@@ -16,7 +16,7 @@ function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
     }
   }
   return {
-    workflowName: row.workflow_name as string,
+    workflowId: row.workflow_name as string,
     runId: row.run_id as string,
     snapshot: parsedSnapshot,
     resourceId: row.resourceId as string,
@@ -47,13 +47,13 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   updateWorkflowResults(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // stepId,
       // result,
       // runtimeContext,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
@@ -64,11 +64,11 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
   updateWorkflowState(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // opts,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       opts: {
         status: string;
@@ -83,12 +83,12 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async persistWorkflowSnapshot({
-    workflowName,
+    workflowId,
     runId,
     resourceId,
     snapshot,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
@@ -100,7 +100,7 @@ export class WorkflowsPG extends WorkflowsStorage {
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
-        [workflowName, runId, resourceId, JSON.stringify(snapshot), now, now],
+        [workflowId, runId, resourceId, JSON.stringify(snapshot), now, now],
       );
     } catch (error) {
       throw new MastraError(
@@ -115,16 +115,16 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async loadWorkflowSnapshot({
-    workflowName,
+    workflowId,
     runId,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
       const result = await this.operations.load<{ snapshot: WorkflowRunState }>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: { workflow_name: workflowName, run_id: runId },
+        keys: { workflow_name: workflowId, run_id: runId },
       });
 
       return result ? result.snapshot : null;
@@ -140,13 +140,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRunById({
-    runId,
-    workflowName,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
+  async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
     try {
       const conditions: string[] = [];
       const values: any[] = [];
@@ -158,9 +152,9 @@ export class WorkflowsPG extends WorkflowsStorage {
         paramIndex++;
       }
 
-      if (workflowName) {
+      if (workflowId) {
         conditions.push(`workflow_name = $${paramIndex}`);
-        values.push(workflowName);
+        values.push(workflowId);
         paramIndex++;
       }
 
@@ -190,7 +184,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             runId,
-            workflowName: workflowName || '',
+            workflowId: workflowId || '',
           },
         },
         error,
@@ -199,14 +193,14 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async getWorkflowRuns({
-    workflowName,
+    workflowId,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
   }: {
-    workflowName?: string;
+    workflowId?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
@@ -218,9 +212,9 @@ export class WorkflowsPG extends WorkflowsStorage {
       const values: any[] = [];
       let paramIndex = 1;
 
-      if (workflowName) {
+      if (workflowId) {
         conditions.push(`workflow_name = $${paramIndex}`);
-        values.push(workflowName);
+        values.push(workflowId);
         paramIndex++;
       }
 
@@ -283,7 +277,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            workflowName: workflowName || 'all',
+            workflowId: workflowId || 'all',
           },
         },
         error,

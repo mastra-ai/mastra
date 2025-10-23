@@ -15,7 +15,7 @@ function parseWorkflowRun(row: any): WorkflowRun {
     }
   }
   return {
-    workflowName: row.workflow_name,
+    workflowId: row.workflow_name,
     runId: row.run_id,
     snapshot: parsedSnapshot,
     createdAt: row.createdAt,
@@ -46,13 +46,13 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
 
   updateWorkflowResults(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // stepId,
       // result,
       // runtimeContext,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
@@ -63,11 +63,11 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
   }
   updateWorkflowState(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // opts,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       opts: {
         status: string;
@@ -82,12 +82,12 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
   }
 
   async persistWorkflowSnapshot({
-    workflowName,
+    workflowId,
     runId,
     resourceId,
     snapshot,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
@@ -96,7 +96,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     const now = new Date().toISOString();
     try {
       const request = this.pool.request();
-      request.input('workflow_name', workflowName);
+      request.input('workflow_name', workflowId);
       request.input('run_id', runId);
       request.input('resourceId', resourceId);
       request.input('snapshot', JSON.stringify(snapshot));
@@ -119,7 +119,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            workflowName,
+            workflowId,
             runId,
           },
         },
@@ -129,17 +129,17 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
   }
 
   async loadWorkflowSnapshot({
-    workflowName,
+    workflowId,
     runId,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
       const result = await this.operations.load({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
-          workflow_name: workflowName,
+          workflow_name: workflowId,
           run_id: runId,
         },
       });
@@ -154,7 +154,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            workflowName,
+            workflowId,
             runId,
           },
         },
@@ -163,13 +163,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRunById({
-    runId,
-    workflowName,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
+  async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
     try {
       const conditions: string[] = [];
       const paramMap: Record<string, any> = {};
@@ -179,9 +173,9 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         paramMap['runId'] = runId;
       }
 
-      if (workflowName) {
-        conditions.push(`[workflow_name] = @workflowName`);
-        paramMap['workflowName'] = workflowName;
+      if (workflowId) {
+        conditions.push(`[workflow_name] = @workflowId`);
+        paramMap['workflowId'] = workflowId;
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -204,7 +198,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             runId,
-            workflowName: workflowName || '',
+            workflowId: workflowId || '',
           },
         },
         error,
@@ -213,14 +207,14 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
   }
 
   async getWorkflowRuns({
-    workflowName,
+    workflowId,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
   }: {
-    workflowName?: string;
+    workflowId?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
@@ -231,9 +225,9 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       const conditions: string[] = [];
       const paramMap: Record<string, any> = {};
 
-      if (workflowName) {
-        conditions.push(`[workflow_name] = @workflowName`);
-        paramMap['workflowName'] = workflowName;
+      if (workflowId) {
+        conditions.push(`[workflow_name] = @workflowId`);
+        paramMap['workflowId'] = workflowId;
       }
 
       if (resourceId) {
@@ -290,7 +284,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            workflowName: workflowName || 'all',
+            workflowId: workflowId || 'all',
           },
         },
         error,

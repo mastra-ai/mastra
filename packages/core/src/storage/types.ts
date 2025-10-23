@@ -25,7 +25,7 @@ export interface LegacyWorkflowRuns {
 }
 
 export interface LegacyWorkflowRun {
-  workflowName: string;
+  workflowId: string;
   runId: string;
   snapshot: LegacyWorkflowRunState | string;
   createdAt: Date;
@@ -47,7 +47,7 @@ export interface StorageWorkflowRun {
   updatedAt: Date;
 }
 export interface WorkflowRun {
-  workflowName: string;
+  workflowId: string;
   runId: string;
   snapshot: WorkflowRunState | string;
   createdAt: Date;

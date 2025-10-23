@@ -17,13 +17,13 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
 
   updateWorkflowResults(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // stepId,
       // result,
       // runtimeContext,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
@@ -34,11 +34,11 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
   }
   updateWorkflowState(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // opts,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       opts: {
         status: string;
@@ -53,12 +53,12 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
   }
 
   async persistWorkflowSnapshot({
-    workflowName,
+    workflowId,
     runId,
     resourceId,
     snapshot,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
@@ -68,7 +68,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
 
     const currentSnapshot = await this.operations.load({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
-      keys: { workflow_name: workflowName, run_id: runId },
+      keys: { workflow_name: workflowId, run_id: runId },
     });
 
     const persisting = currentSnapshot
@@ -79,7 +79,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           updatedAt: now,
         }
       : {
-          workflow_name: workflowName,
+          workflow_name: workflowId,
           run_id: runId,
           resourceId,
           snapshot: snapshot as Record<string, any>,
@@ -99,7 +99,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
       updatedAt: 'excluded.updatedAt',
     };
 
-    this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
+    this.logger.debug('Persisting workflow snapshot', { workflowId, runId });
 
     // Use the new insert method with ON CONFLICT
     const query = createSqlBuilder().insert(fullTableName, columns, values, ['workflow_name', 'run_id'], updateMap);
@@ -115,23 +115,23 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to persist workflow snapshot: ${error instanceof Error ? error.message : String(error)}`,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
     }
   }
 
-  async loadWorkflowSnapshot(params: { workflowName: string; runId: string }): Promise<WorkflowRunState | null> {
-    const { workflowName, runId } = params;
+  async loadWorkflowSnapshot(params: { workflowId: string; runId: string }): Promise<WorkflowRunState | null> {
+    const { workflowId, runId } = params;
 
-    this.logger.debug('Loading workflow snapshot', { workflowName, runId });
+    this.logger.debug('Loading workflow snapshot', { workflowId, runId });
 
     try {
       const d = await this.operations.load<{ snapshot: unknown }>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
-          workflow_name: workflowName,
+          workflow_name: workflowId,
           run_id: runId,
         },
       });
@@ -144,7 +144,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to load workflow snapshot: ${error instanceof Error ? error.message : String(error)}`,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
@@ -163,7 +163,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     }
 
     return {
-      workflowName: row.workflow_name,
+      workflowId: row.workflow_name,
       runId: row.run_id,
       snapshot: parsedSnapshot,
       createdAt: ensureDate(row.createdAt)!,
@@ -173,14 +173,14 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
   }
 
   async getWorkflowRuns({
-    workflowName,
+    workflowId,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
   }: {
-    workflowName?: string;
+    workflowId?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
@@ -192,7 +192,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
       const builder = createSqlBuilder().select().from(fullTableName);
       const countBuilder = createSqlBuilder().count().from(fullTableName);
 
-      if (workflowName) builder.whereAnd('workflow_name = ?', workflowName);
+      if (workflowId) builder.whereAnd('workflow_name = ?', workflowId);
       if (resourceId) {
         const hasResourceId = await this.operations.hasColumn(fullTableName, 'resourceId');
         if (hasResourceId) {
@@ -240,7 +240,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to retrieve workflow runs: ${error instanceof Error ? error.message : String(error)}`,
           details: {
-            workflowName: workflowName ?? '',
+            workflowId: workflowId ?? '',
             resourceId: resourceId ?? '',
           },
         },
@@ -249,13 +249,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRunById({
-    runId,
-    workflowName,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
+  async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
     const fullTableName = this.operations.getTableName(TABLE_WORKFLOW_SNAPSHOT);
     try {
       const conditions: string[] = [];
@@ -264,9 +258,9 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
         conditions.push('run_id = ?');
         params.push(runId);
       }
-      if (workflowName) {
+      if (workflowId) {
         conditions.push('workflow_name = ?');
-        params.push(workflowName);
+        params.push(workflowId);
       }
       const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
       const sql = `SELECT * FROM ${fullTableName} ${whereClause} ORDER BY createdAt DESC LIMIT 1`;
@@ -280,7 +274,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to retrieve workflow run by ID: ${error instanceof Error ? error.message : String(error)}`,
-          details: { runId, workflowName: workflowName ?? '' },
+          details: { runId, workflowId: workflowId ?? '' },
         },
         error,
       );

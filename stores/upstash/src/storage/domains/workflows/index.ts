@@ -17,7 +17,7 @@ function parseWorkflowRun(row: any): WorkflowRun {
   }
 
   return {
-    workflowName: row.workflow_name,
+    workflowId: row.workflow_name,
     runId: row.run_id,
     snapshot: parsedSnapshot,
     createdAt: ensureDate(row.createdAt)!,
@@ -37,13 +37,13 @@ export class WorkflowsUpstash extends WorkflowsStorage {
 
   updateWorkflowResults(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // stepId,
       // result,
       // runtimeContext,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
@@ -54,11 +54,11 @@ export class WorkflowsUpstash extends WorkflowsStorage {
   }
   updateWorkflowState(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // opts,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       opts: {
         status: string;
@@ -74,18 +74,18 @@ export class WorkflowsUpstash extends WorkflowsStorage {
 
   async persistWorkflowSnapshot(params: {
     namespace: string;
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    const { namespace = 'workflows', workflowName, runId, resourceId, snapshot } = params;
+    const { namespace = 'workflows', workflowId, runId, resourceId, snapshot } = params;
     try {
       await this.operations.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {
           namespace,
-          workflow_name: workflowName,
+          workflow_name: workflowId,
           run_id: runId,
           resourceId,
           snapshot,
@@ -101,7 +101,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             namespace,
-            workflowName,
+            workflowId,
             runId,
           },
         },
@@ -112,13 +112,13 @@ export class WorkflowsUpstash extends WorkflowsStorage {
 
   async loadWorkflowSnapshot(params: {
     namespace: string;
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
-    const { namespace = 'workflows', workflowName, runId } = params;
+    const { namespace = 'workflows', workflowId, runId } = params;
     const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
       namespace,
-      workflow_name: workflowName,
+      workflow_name: workflowId,
       run_id: runId,
     });
     try {
@@ -138,7 +138,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             namespace,
-            workflowName,
+            workflowId,
             runId,
           },
         },
@@ -147,16 +147,10 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRunById({
-    runId,
-    workflowName,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
+  async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
     try {
       const key =
-        getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId }) + '*';
+        getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowId, run_id: runId }) + '*';
       const keys = await this.operations.scanKeys(key);
       const workflows = await Promise.all(
         keys.map(async key => {
@@ -171,7 +165,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           return data;
         }),
       );
-      const data = workflows.find(w => w?.run_id === runId && w?.workflow_name === workflowName) as WorkflowRun | null;
+      const data = workflows.find(w => w?.run_id === runId && w?.workflow_name === workflowId) as WorkflowRun | null;
       if (!data) return null;
       return parseWorkflowRun(data);
     } catch (error) {
@@ -183,7 +177,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           details: {
             namespace: 'workflows',
             runId,
-            workflowName: workflowName || '',
+            workflowId: workflowId || '',
           },
         },
         error,
@@ -192,14 +186,14 @@ export class WorkflowsUpstash extends WorkflowsStorage {
   }
 
   async getWorkflowRuns({
-    workflowName,
+    workflowId,
     fromDate,
     toDate,
     limit,
     offset,
     resourceId,
   }: {
-    workflowName?: string;
+    workflowId?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
@@ -209,15 +203,15 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     try {
       // Get all workflow keys
       let pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }) + ':*';
-      if (workflowName && resourceId) {
+      if (workflowId && resourceId) {
         pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, {
           namespace: 'workflows',
-          workflow_name: workflowName,
+          workflow_name: workflowId,
           run_id: '*',
           resourceId,
         });
-      } else if (workflowName) {
-        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName }) + ':*';
+      } else if (workflowId) {
+        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowId }) + ':*';
       } else if (resourceId) {
         pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, {
           namespace: 'workflows',
@@ -245,8 +239,8 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           (record): record is Record<string, any> =>
             record !== null && record !== undefined && typeof record === 'object' && 'workflow_name' in record,
         )
-        // Only filter by workflowName if it was specifically requested
-        .filter(record => !workflowName || record.workflow_name === workflowName)
+        // Only filter by workflowId if it was specifically requested
+        .filter(record => !workflowId || record.workflow_name === workflowId)
         .map(w => parseWorkflowRun(w!))
         .filter(w => {
           if (fromDate && w.createdAt < fromDate) return false;
@@ -271,7 +265,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             namespace: 'workflows',
-            workflowName: workflowName || '',
+            workflowId: workflowId || '',
             resourceId: resourceId || '',
           },
         },

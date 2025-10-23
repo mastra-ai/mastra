@@ -11,13 +11,13 @@ export abstract class WorkflowsStorage extends MastraBase {
   }
 
   abstract updateWorkflowResults({
-    workflowName,
+    workflowId,
     runId,
     stepId,
     result,
     runtimeContext,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
@@ -25,11 +25,11 @@ export abstract class WorkflowsStorage extends MastraBase {
   }): Promise<Record<string, StepResult<any, any, any, any>>>;
 
   abstract updateWorkflowState({
-    workflowName,
+    workflowId,
     runId,
     opts,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     opts: {
       status: string;
@@ -41,22 +41,22 @@ export abstract class WorkflowsStorage extends MastraBase {
   }): Promise<WorkflowRunState | undefined>;
 
   abstract persistWorkflowSnapshot(_: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void>;
 
   abstract loadWorkflowSnapshot({
-    workflowName,
+    workflowId,
     runId,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null>;
 
   abstract getWorkflowRuns(args?: {
-    workflowName?: string;
+    workflowId?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
@@ -64,5 +64,5 @@ export abstract class WorkflowsStorage extends MastraBase {
     resourceId?: string;
   }): Promise<WorkflowRuns>;
 
-  abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
+  abstract getWorkflowRunById(args: { runId: string; workflowId?: string }): Promise<WorkflowRun | null>;
 }
