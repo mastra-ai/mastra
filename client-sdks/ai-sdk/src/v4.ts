@@ -1,1 +1,1 @@
-export { toAISdkV4Format as toAISdkFormat } from './convert-messages';
+export { toAISdkV4Messages as toAISdkMessages } from './convert-messages';

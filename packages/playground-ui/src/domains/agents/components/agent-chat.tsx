@@ -7,7 +7,7 @@ import { usePlaygroundStore } from '@/store/playground-store';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { MastraUIMessage } from '@mastra/react';
 import { useEffect } from 'react';
-import { convertMessages } from '@mastra/core/agent';
+import { toAISdkMessages } from '@mastra/ai-sdk';
 
 export const AgentChat = ({
   agentId,
@@ -54,7 +54,7 @@ export const AgentChat = ({
       agentName={agentName}
       modelVersion={modelVersion}
       threadId={threadId}
-      initialMessages={messages?.messages ? (convertMessages(messages.messages).to('aiv5-ui') as MastraUIMessage[]) : []}
+      initialMessages={messages?.messages ? toAISdkMessages(messages.messages) : []}
       memory={memory}
       refreshThreadList={refreshThreadList}
       settings={settings}

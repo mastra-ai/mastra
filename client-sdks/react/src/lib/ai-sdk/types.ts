@@ -1,4 +1,4 @@
-import { UIMessage } from '@ai-sdk/react';
+import type { UIMessage } from 'ai-v5';
 
 export type MastraUIMessageMetadata = {
   status?: 'warning' | 'error';

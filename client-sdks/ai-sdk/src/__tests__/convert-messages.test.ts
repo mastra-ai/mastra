@@ -1,7 +1,7 @@
 import type { MastraMessageV2 } from '@mastra/core/agent';
 import { describe, expect, it } from 'vitest';
 
-import { toAISdkV4Format, toAISdkV5Format } from '../convert-messages';
+import { toAISdkV4Messages, toAISdkV5Messages } from '../convert-messages';
 
 describe('toAISdkFormat', () => {
   const sampleMessages: MastraMessageV2[] = [
@@ -19,9 +19,9 @@ describe('toAISdkFormat', () => {
     },
   ];
 
-  describe('toAISdkV5Format', () => {
+  describe('toAISdkV5Messages', () => {
     it('should convert Mastra V2 messages to AI SDK V5 UI format', () => {
-      const result = toAISdkV5Format(sampleMessages);
+      const result = toAISdkV5Messages(sampleMessages);
 
       expect(result).toHaveLength(2);
       expect(result[0]).toHaveProperty('id', 'msg-1');
@@ -31,14 +31,14 @@ describe('toAISdkFormat', () => {
     });
 
     it('should handle empty array', () => {
-      const result = toAISdkV5Format([]);
+      const result = toAISdkV5Messages([]);
       expect(result).toEqual([]);
     });
   });
 
-  describe('toAISdkV4Format', () => {
+  describe('toAISdkV4Messages', () => {
     it('should convert Mastra V2 messages to AI SDK V4 UI format', () => {
-      const result = toAISdkV4Format(sampleMessages);
+      const result = toAISdkV4Messages(sampleMessages);
 
       expect(result).toHaveLength(2);
       expect(result[0]).toHaveProperty('id', 'msg-1');
@@ -48,7 +48,7 @@ describe('toAISdkFormat', () => {
     });
 
     it('should handle empty array', () => {
-      const result = toAISdkV4Format([]);
+      const result = toAISdkV4Messages([]);
       expect(result).toEqual([]);
     });
   });
