@@ -20,7 +20,7 @@ jobs:
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

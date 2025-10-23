@@ -16,6 +16,14 @@ jobs:
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          # Use default GITHUB_TOKEN for initial checkout
+          # This is needed to access the .github/actions/app-auth action
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Dane App Auth
         id: app-auth
         uses: ./.github/actions/app-auth
@@ -23,14 +31,14 @@ jobs:
           app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
 
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Re-checkout with app token
+        uses: actions/checkout@v5
         with:
           token: ${{ steps.app-auth.outputs.token }}
-          # Fetch entire git history so  Changesets can generate changelogs
+          # Fetch entire git history so Changesets can generate changelogs
           # with the correct commits
           fetch-depth: 0
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -44,8 +52,6 @@ jobs:
           cd packages/mcp-docs-server
           pnpm version prerelease --preid alpha --no-git-tag-version
           cd ../..
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
           git add packages/mcp-docs-server/package.json
           git commit -m "chore: bump @mastra/mcp-docs-server prerelease version"
 
