@@ -166,7 +166,7 @@ Load conversation history from Mastra Memory:
 ```typescript showLineNumbers copy filename="app/api/initial-chat/route.ts"
 import { mastra } from "@/src/mastra";
 import { NextResponse } from "next/server";
-import { toAISdkMessages } from "@mastra/ai-sdk";
+import { toAISdkMessages } from "@mastra/ai-sdk/v5";
 
 const myAgent = mastra.getAgent("weatherAgent");
 

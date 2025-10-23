@@ -412,13 +412,13 @@ Mastra は内部の `MessageList` クラスで AI SDK v4 のデータを自動�
 
 ### メッセージ形式の変換
 
-Mastra のメッセージを AI SDK 形式に変換する必要がある場合は、`@mastra/ai-sdk` の `toAISdkMessages()` 関数を使用してください:
+Mastra のメッセージを AI SDK 形式に変換する必要がある場合は、`toAISdkMessages()` 関数を使用してください:
 
 ```typescript
-import { toAISdkMessages } from '@mastra/ai-sdk'; // AI SDK v5 (デフォルト)
+import { toAISdkMessages } from '@mastra/ai-sdk/v5'; // AI SDK v5
 import { toAISdkMessages as toAISdkV4Messages } from '@mastra/ai-sdk/v4'; // AI SDK v4
 
-// Mastra のメッセージを AI SDK v5 UI 形式に変換（デフォルト）
+// Mastra のメッセージを AI SDK v5 UI 形式に変換
 const v5Messages = toAISdkMessages(mastraMessages);
 
 // Mastra のメッセージを AI SDK v4 UI 形式に変換

@@ -126,7 +126,7 @@ description: "Array of messages in Mastra's internal storage format (V2). Use to
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
 import { mastra } from './mastra';
-import { toAISdkMessages } from '@mastra/ai-sdk';
+import { toAISdkMessages } from '@mastra/ai-sdk/v5';
 
 const agent = mastra.getAgent('agent');
 const memory = await agent.getMemory();

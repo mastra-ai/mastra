@@ -578,13 +578,13 @@ Mastra automatically handles AI SDK v4 data using its internal `MessageList` cla
 
 ### Message Format Conversion
 
-For cases where you need to convert Mastra messages to AI SDK format, use the `toAISdkMessages()` function from `@mastra/ai-sdk`:
+For cases where you need to convert Mastra messages to AI SDK format, use the `toAISdkMessages()` function:
 
 ```typescript
-import { toAISdkMessages } from '@mastra/ai-sdk'; // AI SDK v5 (default)
+import { toAISdkMessages } from '@mastra/ai-sdk/v5'; // AI SDK v5
 import { toAISdkMessages as toAISdkV4Messages } from '@mastra/ai-sdk/v4'; // AI SDK v4
 
-// Convert Mastra messages to AI SDK v5 UI format (default)
+// Convert Mastra messages to AI SDK v5 UI format
 const v5Messages = toAISdkMessages(mastraMessages);
 
 // Convert Mastra messages to AI SDK v4 UI format
