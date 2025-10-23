@@ -1,5 +1,57 @@
 # @mastra/core
 
+## 0.23.0-alpha.0
+
+### Minor Changes
+
+- Rename LLM span types and attributes to use Model prefix ([#9105](https://github.com/mastra-ai/mastra/pull/9105))
+
+  BREAKING CHANGE: This release renames AI tracing span types and attribute interfaces to use the "Model" prefix instead of "LLM":
+  - `AISpanType.LLM_GENERATION` → `AISpanType.MODEL_GENERATION`
+  - `AISpanType.LLM_STEP` → `AISpanType.MODEL_STEP`
+  - `AISpanType.LLM_CHUNK` → `AISpanType.MODEL_CHUNK`
+  - `LLMGenerationAttributes` → `ModelGenerationAttributes`
+  - `LLMStepAttributes` → `ModelStepAttributes`
+  - `LLMChunkAttributes` → `ModelChunkAttributes`
+  - `InternalSpans.LLM` → `InternalSpans.MODEL`
+
+  This change better reflects that these span types apply to all AI models, not just Large Language Models.
+
+  Migration guide:
+  - Update all imports: `import { ModelGenerationAttributes } from '@mastra/core/ai-tracing'`
+  - Update span type references: `AISpanType.MODEL_GENERATION`
+  - Update InternalSpans usage: `InternalSpans.MODEL`
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`f743dbb`](https://github.com/mastra-ai/mastra/commit/f743dbb8b40d1627b5c10c0e6fc154f4ebb6e394))
+
+- Deprecate `runCount` parameter in favor of `retryCount` for better naming clarity. The name `runCount` was misleading as it doesn't represent the total number of times a step has run, but rather the number of retry attempts made for a step. ([#9153](https://github.com/mastra-ai/mastra/pull/9153))
+
+  `runCount` is available in `execute()` functions and methods that interact with the step execution. This also applies to condition functions and loop condition functions that use this parameter. If your code uses `runCount`, change the name to `retryCount`.
+
+  Here's an example migration:
+
+  ```diff
+  const myStep = createStep({
+    // Rest of step...
+  -  execute: async ({ runCount, ...params }) => {
+  +  execute: async ({ retryCount, ...params }) => {
+      // ... rest of your logic
+    }
+  });
+  ```
+
+- Breaking change to move mcp related tool execute arguments nested under an `mcp` argument that is only populated if the tool is passed to an MCPServer. This simpliflies tool definitions and gives you the correct types when working with tools meant for MCP servers. ([#9134](https://github.com/mastra-ai/mastra/pull/9134))
+
+- Add tool call approval ([#8649](https://github.com/mastra-ai/mastra/pull/8649))
+
+- Fix error handling and serialization in agent streaming to ensure errors are consistently exposed and preserved. ([#9144](https://github.com/mastra-ai/mastra/pull/9144))
+
+- Add import for WriteableStream in execution-engine and dedupe llm.getModel in agent.ts ([#9185](https://github.com/mastra-ai/mastra/pull/9185))
+
+- pass writableStream parameter to workflow execution ([#9139](https://github.com/mastra-ai/mastra/pull/9139))
+
 ## 0.22.2
 
 ### Patch Changes

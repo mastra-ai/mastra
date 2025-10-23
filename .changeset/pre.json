@@ -81,5 +81,27 @@
     "@mastra/voice-speechify": "0.11.10",
     "@mastra/inngest": "0.17.0"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_lance-8693-dependencies",
+    "automated-provider-registry-20251022-181340",
+    "bright-taxis-raise",
+    "cute-trees-sit",
+    "fair-donuts-occur",
+    "fancy-suns-go",
+    "forty-rockets-push",
+    "honest-pianos-roll",
+    "hungry-hands-win",
+    "late-moons-hug",
+    "proud-bananas-smoke",
+    "quiet-cups-play",
+    "quiet-ducks-speak",
+    "sharp-windows-glow",
+    "six-keys-wink",
+    "slow-files-lie",
+    "sour-ants-bake",
+    "strong-dogs-press",
+    "tasty-coats-sip",
+    "update-llm-span-types-to-model",
+    "wet-webs-appear"
+  ]
 }

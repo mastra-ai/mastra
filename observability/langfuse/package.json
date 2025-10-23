@@ -1,6 +1,6 @@
 {
   "name": "@mastra/langfuse",
-  "version": "0.1.2",
+  "version": "0.2.0-alpha.0",
   "description": "Langfuse observability provider for Mastra - includes AI tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",

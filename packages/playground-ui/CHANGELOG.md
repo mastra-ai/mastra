@@ -1,5 +1,51 @@
 # @mastra/playground-ui
 
+## 6.7.0-alpha.0
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (0.22.1) ([#8649](https://github.com/mastra-ai/mastra/pull/8649))
+
+### Patch Changes
+
+- Prefill `providerOptions` on Mastra Studio. When creating your agent, you can add `providerOptions` to the Agent `instructions`, we now prefill the `providerOptions` field on Mastra Studio model settings advanced settings section with the `instructions.providerOptions` added. ([#9156](https://github.com/mastra-ai/mastra/pull/9156))
+
+  Example agent code
+
+  ```@typescript
+  export const chefModelV2Agent = new Agent({
+    name: 'Chef Agent V2 Model',
+    description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
+    instructions: {
+      content: `
+        You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
+        ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
+        You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
+        `,
+      role: 'system',
+      providerOptions: {
+        openai: {
+          reasoning_effort: 'high',
+        },
+      },
+    },
+    model: openai('gpt-4o-mini'),
+    tools: {
+      cookingTool,
+    },
+    memory
+  });
+  ```
+
+- Add tool call approval ([#8649](https://github.com/mastra-ai/mastra/pull/8649))
+
+- Fix studio crashing when message contains non JSON text output of tool call ([#9189](https://github.com/mastra-ai/mastra/pull/9189))
+
+- Updated dependencies [[`f743dbb`](https://github.com/mastra-ai/mastra/commit/f743dbb8b40d1627b5c10c0e6fc154f4ebb6e394), [`6c049d9`](https://github.com/mastra-ai/mastra/commit/6c049d94063fdcbd5b81c4912a2bf82a92c9cc0b), [`9d819d5`](https://github.com/mastra-ai/mastra/commit/9d819d54b61481639f4008e4694791bddf187edd), [`5df9cce`](https://github.com/mastra-ai/mastra/commit/5df9cce1a753438413f64c11eeef8f845745c2a8), [`c576fc0`](https://github.com/mastra-ai/mastra/commit/c576fc0b100b2085afded91a37c97a0ea0ec09c7), [`e3dfda7`](https://github.com/mastra-ai/mastra/commit/e3dfda7b11bf3b8c4bb55637028befb5f387fc74), [`d36cfbb`](https://github.com/mastra-ai/mastra/commit/d36cfbbb6565ba5f827883cc9bb648eb14befdc1), [`2c4438b`](https://github.com/mastra-ai/mastra/commit/2c4438b87817ab7eed818c7990fef010475af1a3)]:
+  - @mastra/core@0.23.0-alpha.0
+  - @mastra/client-js@0.16.5-alpha.0
+  - @mastra/react@0.0.11-alpha.0
+
 ## 6.6.2
 
 ### Patch Changes

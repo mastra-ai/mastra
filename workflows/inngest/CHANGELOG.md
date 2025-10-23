@@ -1,5 +1,36 @@
 # @mastra/inngest
 
+## 0.18.0-alpha.0
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (0.22.1) ([#8649](https://github.com/mastra-ai/mastra/pull/8649))
+
+- Update peer dependencies to match core package version bump (0.22.3) ([#9153](https://github.com/mastra-ai/mastra/pull/9153))
+
+### Patch Changes
+
+- Deprecate `runCount` parameter in favor of `retryCount` for better naming clarity. The name `runCount` was misleading as it doesn't represent the total number of times a step has run, but rather the number of retry attempts made for a step. ([#9153](https://github.com/mastra-ai/mastra/pull/9153))
+
+  `runCount` is available in `execute()` functions and methods that interact with the step execution. This also applies to condition functions and loop condition functions that use this parameter. If your code uses `runCount`, change the name to `retryCount`.
+
+  Here's an example migration:
+
+  ```diff
+  const myStep = createStep({
+    // Rest of step...
+  -  execute: async ({ runCount, ...params }) => {
+  +  execute: async ({ retryCount, ...params }) => {
+      // ... rest of your logic
+    }
+  });
+  ```
+
+- Add tool call approval ([#8649](https://github.com/mastra-ai/mastra/pull/8649))
+
+- Updated dependencies [[`f743dbb`](https://github.com/mastra-ai/mastra/commit/f743dbb8b40d1627b5c10c0e6fc154f4ebb6e394), [`6c049d9`](https://github.com/mastra-ai/mastra/commit/6c049d94063fdcbd5b81c4912a2bf82a92c9cc0b), [`9d819d5`](https://github.com/mastra-ai/mastra/commit/9d819d54b61481639f4008e4694791bddf187edd), [`5df9cce`](https://github.com/mastra-ai/mastra/commit/5df9cce1a753438413f64c11eeef8f845745c2a8), [`c576fc0`](https://github.com/mastra-ai/mastra/commit/c576fc0b100b2085afded91a37c97a0ea0ec09c7), [`e3dfda7`](https://github.com/mastra-ai/mastra/commit/e3dfda7b11bf3b8c4bb55637028befb5f387fc74), [`d36cfbb`](https://github.com/mastra-ai/mastra/commit/d36cfbbb6565ba5f827883cc9bb648eb14befdc1), [`2c4438b`](https://github.com/mastra-ai/mastra/commit/2c4438b87817ab7eed818c7990fef010475af1a3)]:
+  - @mastra/core@0.23.0-alpha.0
+
 ## 0.17.0
 
 ### Minor Changes

@@ -1,5 +1,17 @@
 # mastra
 
+## 0.17.4-alpha.0
+
+### Patch Changes
+
+- Use dynamic model for scorers in create cli ([#9188](https://github.com/mastra-ai/mastra/pull/9188))
+
+- Better handle errors during `mastra start` and throw them with Mastra's logger. Also add special error handling for `ERR_MODULE_NOT_FOUND` cases. ([#9127](https://github.com/mastra-ai/mastra/pull/9127))
+
+- Updated dependencies [[`f743dbb`](https://github.com/mastra-ai/mastra/commit/f743dbb8b40d1627b5c10c0e6fc154f4ebb6e394), [`6c049d9`](https://github.com/mastra-ai/mastra/commit/6c049d94063fdcbd5b81c4912a2bf82a92c9cc0b), [`5df9cce`](https://github.com/mastra-ai/mastra/commit/5df9cce1a753438413f64c11eeef8f845745c2a8), [`9d819d5`](https://github.com/mastra-ai/mastra/commit/9d819d54b61481639f4008e4694791bddf187edd), [`5df9cce`](https://github.com/mastra-ai/mastra/commit/5df9cce1a753438413f64c11eeef8f845745c2a8), [`c576fc0`](https://github.com/mastra-ai/mastra/commit/c576fc0b100b2085afded91a37c97a0ea0ec09c7), [`c576fc0`](https://github.com/mastra-ai/mastra/commit/c576fc0b100b2085afded91a37c97a0ea0ec09c7), [`e3dfda7`](https://github.com/mastra-ai/mastra/commit/e3dfda7b11bf3b8c4bb55637028befb5f387fc74), [`d36cfbb`](https://github.com/mastra-ai/mastra/commit/d36cfbbb6565ba5f827883cc9bb648eb14befdc1), [`056d075`](https://github.com/mastra-ai/mastra/commit/056d075598761a47c4f6f48c0ba8f793ca915c7f), [`2c4438b`](https://github.com/mastra-ai/mastra/commit/2c4438b87817ab7eed818c7990fef010475af1a3)]:
+  - @mastra/core@0.23.0-alpha.0
+  - @mastra/deployer@0.23.0-alpha.0
+
 ## 0.17.3
 
 ### Patch Changes
