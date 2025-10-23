@@ -315,7 +315,7 @@ export class CoreToolBuilder extends MastraBase {
         id: builtTool.id,
         name,
         args: builtTool.args,
-      } satisfies VercelToolV5;
+      } as VercelToolV5;
     }
 
     return base as VercelToolV5;
@@ -387,6 +387,6 @@ export class CoreToolBuilder extends MastraBase {
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
       parameters: processedSchema,
       outputSchema: processedOutputSchema,
-    };
+    } as unknown as CoreTool;
   }
 }
