@@ -60,7 +60,7 @@ class TransformerTestBuilder {
       spanId: config.spanId,
       parentSpanId: config.parentSpanId,
       name: config.name || `llm: ${config.spanId}`,
-      spanType: 'llm_generation',
+      spanType: 'model_generation',
       startedAt: config.startedAt || '2025-01-01T00:01:00Z',
       input: {
         messages: config.messages || [
@@ -396,10 +396,10 @@ describe('Transformer Functions', () => {
       expect(() => transformTraceToScorerInputAndOutput(invalidTrace)).toThrow(/Trace has no spans/);
     });
 
-    it('should handle missing LLM spans gracefully', () => {
+    it('should handle missing model spans gracefully', () => {
       const trace = testBuilder.addAgentSpan({ spanId: 'agent-only' }).buildTrace();
 
-      expect(() => transformTraceToScorerInputAndOutput(trace)).toThrow('No LLM generation span found');
+      expect(() => transformTraceToScorerInputAndOutput(trace)).toThrow('No model generation span found');
     });
   });
 

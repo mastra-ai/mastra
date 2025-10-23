@@ -163,7 +163,7 @@ export class MastraLLMV1 extends MastraBase {
 
     const llmSpan = tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
-      type: AISpanType.LLM_GENERATION,
+      type: AISpanType.MODEL_GENERATION,
       input: {
         messages,
         schema,
@@ -313,7 +313,7 @@ export class MastraLLMV1 extends MastraBase {
 
     const llmSpan = tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
-      type: AISpanType.LLM_GENERATION,
+      type: AISpanType.MODEL_GENERATION,
       input: {
         messages,
       },
@@ -470,7 +470,7 @@ export class MastraLLMV1 extends MastraBase {
 
     const llmSpan = tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
-      type: AISpanType.LLM_GENERATION,
+      type: AISpanType.MODEL_GENERATION,
       input: {
         messages,
       },
@@ -656,7 +656,7 @@ export class MastraLLMV1 extends MastraBase {
 
     const llmSpan = tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
-      type: AISpanType.LLM_GENERATION,
+      type: AISpanType.MODEL_GENERATION,
       input: {
         messages,
       },

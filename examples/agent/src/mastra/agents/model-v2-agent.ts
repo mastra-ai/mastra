@@ -1,3 +1,4 @@
+import { MockLanguageModelV2 } from 'ai-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { openai, openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { createTool } from '@mastra/core/tools';
@@ -6,7 +7,7 @@ import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
 import { logDataMiddleware } from '../../model-middleware';
-import { wrapLanguageModel } from 'ai-v5';
+import { APICallError, wrapLanguageModel } from 'ai-v5';
 import { cookingTool } from '../tools';
 
 export const weatherInfo = createTool({
@@ -29,6 +30,30 @@ export const weatherInfo = createTool({
 });
 
 const memory = new Memory();
+
+const testAPICallError = new APICallError({
+  message: 'Test API error',
+  url: 'https://test.api.com',
+  requestBodyValues: { test: 'test' },
+  statusCode: 401,
+  isRetryable: false,
+  responseBody: 'Test API error response',
+});
+
+export const errorAgent = new Agent({
+  name: 'Error Agent',
+  instructions: 'You are an error agent that always errors',
+  // model: {
+  //   id: 'anthropic/claude-3-5-haiku-20241022',
+  //   apiKey: 'kjashdkjashd',
+  // },
+  model: new MockLanguageModelV2({
+    doStream: async () => {
+      throw testAPICallError;
+      // throw new Error('Test error');
+    },
+  }),
+});
 
 export const chefModelV2Agent = new Agent({
   name: 'Chef Agent V2 Model',

@@ -186,7 +186,7 @@ export class MastraLLMVNext extends MastraBase {
 
     const llmAISpan = tracingContext?.currentSpan?.createChildSpan({
       name: `llm: '${firstModel.modelId}'`,
-      type: AISpanType.LLM_GENERATION,
+      type: AISpanType.MODEL_GENERATION,
       input: {
         messages: [...messageList.getSystemMessages(), ...messages],
       },

@@ -4,7 +4,7 @@ import { MastraError } from '../error';
 import { RuntimeContext } from '../runtime-context';
 import { clearAITracingRegistry } from './registry';
 import { DefaultAITracing } from './tracers';
-import type { AITracingEvent, AITracingExporter, LLMGenerationAttributes, AITracing, ExportedAISpan } from './types';
+import type { AITracingEvent, AITracingExporter, ModelGenerationAttributes, AITracing, ExportedAISpan } from './types';
 import { AISpanType, SamplingStrategyType, AITracingEventType } from './types';
 
 // Custom matchers for OpenTelemetry ID validation
@@ -176,7 +176,7 @@ describe('AI Tracing', () => {
 
       // Create child span
       const childSpan = rootSpan.createChildSpan({
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         name: 'child-llm',
         attributes: {
           model: 'gpt-4',
@@ -219,7 +219,7 @@ describe('AI Tracing', () => {
 
       // Create child span
       const childSpan = rootSpan.createChildSpan({
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         name: 'child-llm',
         attributes: {
           model: 'gpt-4',
@@ -256,7 +256,7 @@ describe('AI Tracing', () => {
       });
 
       const span = tracing.startSpan({
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         name: 'test-llm',
         attributes: { model: 'gpt-4', provider: 'openai' },
       });
@@ -272,7 +272,9 @@ describe('AI Tracing', () => {
       // Should emit span_updated
       expect(testExporter.events).toHaveLength(2);
       expect(testExporter.events[1].type).toBe(AITracingEventType.SPAN_UPDATED);
-      expect((testExporter.events[1].exportedSpan.attributes as LLMGenerationAttributes).usage?.totalTokens).toBe(100);
+      expect((testExporter.events[1].exportedSpan.attributes as ModelGenerationAttributes).usage?.totalTokens).toBe(
+        100,
+      );
 
       // End span
       span.end({ attributes: { usage: { totalTokens: 150 } } });
@@ -281,7 +283,9 @@ describe('AI Tracing', () => {
       expect(testExporter.events).toHaveLength(3);
       expect(testExporter.events[2].type).toBe(AITracingEventType.SPAN_ENDED);
       expect(testExporter.events[2].exportedSpan.endTime).toBeInstanceOf(Date);
-      expect((testExporter.events[2].exportedSpan.attributes as LLMGenerationAttributes).usage?.totalTokens).toBe(150);
+      expect((testExporter.events[2].exportedSpan.attributes as ModelGenerationAttributes).usage?.totalTokens).toBe(
+        150,
+      );
     });
 
     it('should handle errors with default endSpan=true', () => {
@@ -566,7 +570,7 @@ describe('AI Tracing', () => {
 
       // LLM attributes
       const llmSpan = tracing.startSpan({
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         name: 'llm-test',
         attributes: {
           model: 'gpt-4',
@@ -616,7 +620,7 @@ describe('AI Tracing', () => {
       });
 
       const eventSpan = rootSpan.createEventSpan({
-        type: AISpanType.LLM_CHUNK,
+        type: AISpanType.MODEL_CHUNK,
         name: 'llm chunk: text-delta',
         output: 'Hello world',
         attributes: {
@@ -654,7 +658,7 @@ describe('AI Tracing', () => {
       testExporter.events = [];
 
       const eventSpan = rootSpan.createEventSpan({
-        type: AISpanType.LLM_CHUNK,
+        type: AISpanType.MODEL_CHUNK,
         name: 'llm chunk: text-delta',
         output: 'Hello',
         attributes: {
@@ -680,7 +684,7 @@ describe('AI Tracing', () => {
       });
 
       const eventSpan = rootSpan.createEventSpan({
-        type: AISpanType.LLM_CHUNK,
+        type: AISpanType.MODEL_CHUNK,
         name: 'llm chunk: text-delta',
         output: 'Hello',
         attributes: {
@@ -708,7 +712,7 @@ describe('AI Tracing', () => {
       testExporter.events = [];
 
       const eventSpan = rootSpan.createEventSpan({
-        type: AISpanType.LLM_CHUNK,
+        type: AISpanType.MODEL_CHUNK,
         name: 'llm chunk: text-delta',
         output: 'Hello',
         attributes: {
@@ -748,7 +752,7 @@ describe('AI Tracing', () => {
 
       // Test different span types as events
       const llmChunkEvent = rootSpan.createEventSpan({
-        type: AISpanType.LLM_CHUNK,
+        type: AISpanType.MODEL_CHUNK,
         name: 'llm chunk event',
         output: 'chunk data',
         attributes: {
@@ -779,7 +783,7 @@ describe('AI Tracing', () => {
       expect(genericEvent.isEvent).toBe(true);
 
       // All should have proper type safety
-      expect(llmChunkEvent.type).toBe(AISpanType.LLM_CHUNK);
+      expect(llmChunkEvent.type).toBe(AISpanType.MODEL_CHUNK);
       expect(toolCallEvent.type).toBe(AISpanType.TOOL_CALL);
       expect(genericEvent.type).toBe(AISpanType.GENERIC);
 
@@ -796,7 +800,7 @@ describe('AI Tracing', () => {
       });
 
       const llmSpan = rootSpan.createChildSpan({
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         name: 'llm generation',
         attributes: {
           model: 'gpt-4',
@@ -805,7 +809,7 @@ describe('AI Tracing', () => {
       });
 
       const eventSpan1 = llmSpan.createEventSpan({
-        type: AISpanType.LLM_CHUNK,
+        type: AISpanType.MODEL_CHUNK,
         name: 'chunk 1',
         output: 'Hello',
         attributes: {
@@ -814,7 +818,7 @@ describe('AI Tracing', () => {
       });
 
       const eventSpan2 = llmSpan.createEventSpan({
-        type: AISpanType.LLM_CHUNK,
+        type: AISpanType.MODEL_CHUNK,
         name: 'chunk 2',
         output: ' world',
         attributes: {
@@ -853,7 +857,7 @@ describe('AI Tracing', () => {
       });
 
       const eventSpan = rootSpan.createEventSpan({
-        type: AISpanType.LLM_CHUNK,
+        type: AISpanType.MODEL_CHUNK,
         name: 'llm chunk with metadata',
         output: 'Hello world',
         attributes: {
@@ -889,7 +893,7 @@ describe('AI Tracing', () => {
       testExporter.events = [];
 
       rootSpan.createEventSpan({
-        type: AISpanType.LLM_CHUNK,
+        type: AISpanType.MODEL_CHUNK,
         name: 'exported event span',
         output: { text: 'Hello', chunkSize: 5 },
         attributes: {
@@ -905,11 +909,11 @@ describe('AI Tracing', () => {
       // Should have exported the event span
       expect(testExporter.events).toHaveLength(1);
       const exportedEvent = testExporter.events[0];
-      const exportedSpan = exportedEvent.exportedSpan as ExportedAISpan<AISpanType.LLM_CHUNK>;
+      const exportedSpan = exportedEvent.exportedSpan as ExportedAISpan<AISpanType.MODEL_CHUNK>;
 
       // Verify exported span properties
       expect(exportedSpan.isEvent).toBe(true);
-      expect(exportedSpan.type).toBe(AISpanType.LLM_CHUNK);
+      expect(exportedSpan.type).toBe(AISpanType.MODEL_CHUNK);
       expect(exportedSpan.name).toBe('exported event span');
       expect(exportedSpan.output).toEqual({ text: 'Hello', chunkSize: 5 });
       expect(exportedSpan.input).toBeUndefined();
@@ -933,7 +937,7 @@ describe('AI Tracing', () => {
 
       // Create event span with error
       const eventSpan = rootSpan.createEventSpan({
-        type: AISpanType.LLM_CHUNK,
+        type: AISpanType.MODEL_CHUNK,
         name: 'error event span',
         output: null,
         attributes: {
@@ -1193,7 +1197,7 @@ describe('AI Tracing', () => {
       });
 
       const childSpan = rootSpan.createChildSpan({
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         name: 'child llm call',
         attributes: {
           model: 'gpt-4',
@@ -1252,7 +1256,7 @@ describe('AI Tracing', () => {
       });
 
       const childSpan = rootSpan.createChildSpan({
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         name: 'child span',
         attributes: {
           model: 'gpt-4',
@@ -1453,7 +1457,7 @@ describe('AI Tracing', () => {
 
       // Create another child WITHOUT runtimeContext
       const childSpanNoContext = rootSpan.createChildSpan({
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         name: 'llm-call',
         attributes: {
           model: 'gpt-4',
