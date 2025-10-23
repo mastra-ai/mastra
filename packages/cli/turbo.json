@@ -8,7 +8,7 @@
       "inputs": ["$TURBO_DEFAULT$", "./tsup.config.js"]
     },
     "build": {
-      "dependsOn": ["build:lib", "@internal/playground#build"],
+      "dependsOn": ["^build", "build:lib", "@internal/playground#build"],
       "outputs": ["dist/**"]
     }
   }
