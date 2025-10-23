@@ -205,6 +205,21 @@ export async function createHonoServer(
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
   }
 
+  // Health check endpoint (before auth middleware so it's publicly accessible)
+  app.get(
+    '/health',
+    describeRoute({
+      description: 'Health check endpoint',
+      tags: ['system'],
+      responses: {
+        200: {
+          description: 'Service is healthy',
+        },
+      },
+    }),
+    healthHandler,
+  );
+
   // Run AUTH middlewares after CORS middleware
   app.use('*', authenticationMiddleware);
   app.use('*', authorizationMiddleware);
@@ -422,21 +437,6 @@ export async function createHonoServer(
       },
     }),
     rootHandler,
-  );
-  
-  // Health check endpoint
-  app.get(
-    '/health',
-    describeRoute({
-      description: 'Health check endpoint',
-      tags: ['system'],
-      responses: {
-        200: {
-          description: 'Service is healthy',
-        },
-      },
-    }),
-    healthHandler,
   );
 
   // Providers route
