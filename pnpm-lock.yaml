@@ -301,6 +301,9 @@ importers:
       ai:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.0)(zod@3.25.76)
+      ai-v5:
+        specifier: npm:ai@^5
+        version: ai@5.0.76(zod@3.25.76)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
