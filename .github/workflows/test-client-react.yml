@@ -2,7 +2,7 @@ name: Client React SDK Tests
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 0.x]
     paths:
       - 'client-sdks/react/**'
       - 'packages/core/**'

@@ -3,7 +3,7 @@ name: Contributor actions
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
-    branches: [main]
+    branches: [main, 0.x]
 
 jobs:
   contributor-actions:

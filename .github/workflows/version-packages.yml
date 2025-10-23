@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - 0.x
 
 jobs:
   version:
