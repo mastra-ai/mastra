@@ -1358,4 +1358,9 @@ export const redirectList = [
     destination: "/:locale/docs/getting-started/studio",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/deployment/server-deployment",
+    destination: "/:locale/docs/deployment/building-mastra",
+    permanent: true,
+  },
 ];
