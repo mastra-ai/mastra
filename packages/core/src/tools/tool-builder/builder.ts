@@ -226,6 +226,8 @@ export class CoreToolBuilder extends MastraBase {
                 options.writableStream || execOptions.writableStream,
               ),
               tracingContext: { currentSpan: toolSpan },
+              // Pass MCP context if available (when executed in MCP server context)
+              mcp: execOptions.mcp,
             },
             execOptions as ToolExecutionOptions & ToolCallOptions,
           );
