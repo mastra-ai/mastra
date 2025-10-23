@@ -466,8 +466,9 @@ describe('PIIDetector', () => {
         },
       ];
       const mockResult = createMockPIIResult(['email'], detections);
+      // Set score to 0.7 (above threshold of 0.6)
       if (mockResult.categories) {
-        mockResult.categories.email = 0.7; // Above threshold (0.6)
+        mockResult.categories[0].score = 0.7;
       }
 
       const model = setupMockModel(mockResult);
@@ -483,8 +484,9 @@ describe('PIIDetector', () => {
 
     it('should not trigger when below threshold', async () => {
       const mockResult = createMockPIIResult(['email']);
+      // Set score to 0.3 (below threshold of 0.6)
       if (mockResult.categories) {
-        mockResult.categories.email = 0.3; // Below threshold (0.6)
+        mockResult.categories[0].score = 0.3;
       }
 
       const model = setupMockModel(mockResult);
