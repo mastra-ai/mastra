@@ -3,58 +3,18 @@
 '@mastra/core': patch
 ---
 
-Deprecate `runCount` parameter in favor of `retryCount` for better naming clarity.
+Deprecate `runCount` parameter in favor of `retryCount` for better naming clarity. The name `runCount` was misleading as it doesn't represent the total number of times a step has run, but rather the number of retry attempts made for a step.
 
-## What is deprecated
+`runCount` is available in `execute()` functions and methods that interact with the step execution. This also applies to condition functions and loop condition functions that use this parameter. If your code uses `runCount`, change the name to `retryCount`.
 
-The `runCount` parameter in the `ExecuteFunctionParams` type is now deprecated. This parameter is available in:
-- Step `execute` functions
-- `ConditionFunction` 
-- `LoopConditionFunction`
-- All methods in the `StepExecutor` class that interact with step execution
+Here's an example migration:
 
-## Why the change
-
-The name `runCount` was misleading as it doesn't represent the total number of times a step has run, but rather the number of retry attempts made for a step. The new name `retryCount` more accurately reflects this behavior.
-
-## Migration guide
-
-Update your step execute functions to use `retryCount` instead of `runCount`. Both parameters will be available during the deprecation period (until November 4th, 2025), but you should migrate to `retryCount` as soon as possible.
-
-### Before
-
-```typescript
+```diff
 const myStep = createStep({
-  id: 'myStep',
-  inputSchema: z.object({
-    value: z.string()
-  }),
-  outputSchema: z.object({
-    result: z.string()
-  }),
-  execute: async ({ runCount, ...params }) => {
-    console.log(`Retry attempt: ${runCount}`);
+  // Rest of step...
+-  execute: async ({ runCount, ...params }) => {
++  execute: async ({ retryCount, ...params }) => {
     // ... rest of your logic
   }
 });
 ```
-
-### After
-
-```typescript
-const myStep = createStep({
-  id: 'myStep',
-  inputSchema: z.object({
-    value: z.string()
-  }),
-  outputSchema: z.object({
-    result: z.string()
-  }),
-  execute: async ({ retryCount, ...params }) => {
-    console.log(`Retry attempt: ${retryCount}`);
-    // ... rest of your logic
-  }
-});
-```
-
-This also applies to condition functions and loop condition functions that use this parameter.
