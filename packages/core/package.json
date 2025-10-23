@@ -131,16 +131,6 @@
         "default": "./dist/test-utils/llm-mock.cjs"
       }
     },
-    "./agent/input-processor/processors": {
-      "import": {
-        "types": "./dist/agent/index.d.ts",
-        "default": "./dist/agent/index.js"
-      },
-      "require": {
-        "types": "./dist/agent/index.d.ts",
-        "default": "./dist/agent/index.cjs"
-      }
-    },
     "./processors": {
       "import": {
         "types": "./dist/processors/index.d.ts",

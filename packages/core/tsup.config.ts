@@ -57,7 +57,6 @@ export default defineConfig({
     'src/vector/filter/index.ts',
     'src/telemetry/otel-vendor.ts',
     'src/test-utils/llm-mock.ts',
-    'src/agent/input-processor/index.ts',
     'src/processors/index.ts',
     'src/zod-to-json.ts',
     'src/scores/scoreTraces/index.ts',
