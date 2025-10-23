@@ -287,6 +287,144 @@ type ToolChoice<TOOLS extends Record<string, unknown>> =
     };
 ```
 
+## 7. Memory API Changes
+
+### Memory Query Return Format
+
+The memory API has been simplified to always return messages in Mastra's internal format (`MastraMessageV2[]`). Format conversion is now handled explicitly using the `@mastra/ai-sdk` package.
+
+#### Before (v0.x)
+
+```typescript
+// Memory returned multiple format fields
+const result = await memory.query({ threadId });
+const messages = result.messages; // V1 format
+const messagesV2 = result.messagesV2; // V2 format
+const uiMessages = result.uiMessages; // AI SDK V4 UI format
+
+// Or with format parameter
+const result = await memory.query({ threadId, format: 'aiv5-ui' });
+```
+
+#### After (v1.0)
+
+```typescript
+// Memory always returns MastraMessageV2[]
+const { messages } = await memory.query({ threadId });
+
+// Convert to AI SDK format when needed
+import { toAISdkMessages } from '@mastra/ai-sdk';
+const uiMessages = toAISdkMessages(messages);
+```
+
+### Client-JS Memory API
+
+The client-js memory API has also been simplified.
+
+#### Before (v0.x)
+
+```typescript
+const { messages, uiMessages, legacyMessages } = await client
+  .memory
+  .thread(threadId)
+  .getMessages();
+```
+
+#### After (v1.0)
+
+```typescript
+import { toAISdkMessages } from '@mastra/ai-sdk';
+
+// Get messages in Mastra format
+const { messages } = await client.memory.thread(threadId).getMessages();
+
+// Convert to AI SDK format for frontend use
+const uiMessages = toAISdkMessages(messages);
+```
+
+### Format Conversion Functions
+
+The new `@mastra/ai-sdk` package provides explicit conversion functions:
+
+```typescript
+// Default export - converts to AI SDK V5 UI messages
+import { toAISdkMessages } from '@mastra/ai-sdk';
+const v5Messages = toAISdkMessages(mastraMessages);
+
+// Explicit V5 import
+import { toAISdkMessages } from '@mastra/ai-sdk/v5';
+const v5Messages = toAISdkMessages(mastraMessages);
+
+// V4 UI messages
+import { toAISdkMessages } from '@mastra/ai-sdk/v4';
+const v4Messages = toAISdkMessages(mastraMessages);
+
+// Stream conversion (V5 only)
+import { toAISdkStream } from '@mastra/ai-sdk';
+const stream = toAISdkStream(mastraStream);
+```
+
+### Deprecated: `toAISdkFormat` for Streams
+
+The old `toAISdkFormat` function for streams has been deprecated in favor of `toAISdkStream`:
+
+#### Before (v0.x)
+
+```typescript
+import { toAISdkFormat } from '@mastra/ai-sdk';
+const stream = toAISdkFormat(mastraStream);
+```
+
+#### After (v1.0)
+
+```typescript
+import { toAISdkStream } from '@mastra/ai-sdk';
+const stream = toAISdkStream(mastraStream);
+```
+
+### React SDK Changes
+
+The React SDK's `resolveInitialMessages` utility is no longer needed:
+
+#### Before (v0.x)
+
+```typescript
+import { resolveInitialMessages } from '@mastra/react/lib/ai-sdk/memory';
+
+const messages = resolveInitialMessages(await fetchMessages());
+```
+
+#### After (v1.0)
+
+```typescript
+import { toAISdkMessages } from '@mastra/ai-sdk';
+
+const { messages } = await client.memory.thread(threadId).getMessages();
+const uiMessages = toAISdkMessages(messages);
+```
+
+### Server Handler Changes
+
+If you're using custom server handlers, the memory API has been simplified:
+
+#### Before (v0.x)
+
+```typescript
+const result = await memory.query({ threadId, format: 'aiv5-ui' });
+return { messages: result.messages };
+```
+
+#### After (v1.0)
+
+```typescript
+import { toAISdkMessages } from '@mastra/ai-sdk';
+
+const { messages } = await memory.query({ threadId });
+// Convert only if needed for client
+const uiMessages = toAISdkMessages(messages);
+return { messages: uiMessages };
+```
+
 ## Migration Checklist
 
 ### If you're already using `streamVNext` and `generateVNext`
@@ -296,3 +434,12 @@ Just find/replace the methods to `stream` and `generate` respectively.
 ### If you're using the old `stream` and `generate`
 
 Decide whether you want to upgrade or not. If you don't, just find/replace to `streamLegacy` and `generateLegacy`.
+
+### If you're using memory queries
+
+1. Update all `memory.query()` calls to destructure `{ messages }` instead of accessing multiple format fields
+2. Add `import { toAISdkMessages } from '@mastra/ai-sdk'` where you need AI SDK format
+3. Replace `result.uiMessages` with `toAISdkMessages(result.messages)`
+4. Remove any `format` parameters from `memory.query()` calls
+5. Update React SDK code to remove `resolveInitialMessages` usage
+6. Replace `toAISdkFormat` (for streams) with `toAISdkStream`
