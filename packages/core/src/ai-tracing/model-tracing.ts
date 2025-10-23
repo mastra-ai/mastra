@@ -64,7 +64,7 @@ export class ModelSpanTracker {
   /**
    * Update the generation span
    */
-  updateGeneration(options?: {
+  updateGeneration(options: {
     input?: any;
     output?: any;
     attributes?: Partial<any>;
@@ -74,9 +74,9 @@ export class ModelSpanTracker {
   }
 
   /**
-   * Start a new Model execution step
+   * Start a new Model execution step (internal use only)
    */
-  private startStepSpan(payload?: StepStartPayload) {
+  _startStepSpan(payload?: StepStartPayload) {
     this.currentStepSpan = this.modelSpan?.createChildSpan({
       name: `step: ${this.stepIndex}`,
       type: AISpanType.MODEL_STEP,
@@ -92,9 +92,9 @@ export class ModelSpanTracker {
   }
 
   /**
-   * End the current Model execution step with token usage, finish reason, output, and metadata
+   * End the current Model execution step with token usage, finish reason, output, and metadata (internal use only)
    */
-  private endStepSpan<OUTPUT extends OutputSchema>(payload: StepFinishPayload<ToolSet, OUTPUT>) {
+  _endStepSpan<OUTPUT extends OutputSchema>(payload: StepFinishPayload<ToolSet, OUTPUT>) {
     if (!this.currentStepSpan) return;
 
     // Extract all data from step-finish chunk
@@ -126,12 +126,12 @@ export class ModelSpanTracker {
   }
 
   /**
-   * Create a new chunk span (for multi-part chunks like text-start/delta/end)
+   * Create a new chunk span (for multi-part chunks like text-start/delta/end) (internal use only)
    */
-  private startChunkSpan(chunkType: string, initialData?: Record<string, any>) {
+  _startChunkSpan(chunkType: string, initialData?: Record<string, any>) {
     // Auto-create step if we see a chunk before step-start
     if (!this.currentStepSpan) {
-      this.startStepSpan();
+      this._startStepSpan();
     }
 
     this.currentChunkSpan = this.currentStepSpan?.createChildSpan({
@@ -146,9 +146,9 @@ export class ModelSpanTracker {
   }
 
   /**
-   * Append string content to a specific field in the accumulator
+   * Append string content to a specific field in the accumulator (internal use only)
    */
-  private appendToAccumulator(field: string, text: string) {
+  _appendToAccumulator(field: string, text: string) {
     if (this.accumulator[field] === undefined) {
       this.accumulator[field] = text;
     } else {
@@ -158,9 +158,9 @@ export class ModelSpanTracker {
 
   /**
    * End the current chunk span.
-   * Safe to call multiple times - will no-op if span already ended.
+   * Safe to call multiple times - will no-op if span already ended. (internal use only)
    */
-  private endChunkSpan(output?: any) {
+  _endChunkSpan(output?: any) {
     if (!this.currentChunkSpan) return;
 
     this.currentChunkSpan.end({
@@ -172,12 +172,12 @@ export class ModelSpanTracker {
   }
 
   /**
-   * Create an event span (for single chunks like tool-call)
+   * Create an event span (for single chunks like tool-call) (internal use only)
    */
-  private createEventSpan(chunkType: string, output: any) {
+  _createEventSpan(chunkType: string, output: any) {
     // Auto-create step if we see a chunk before step-start
     if (!this.currentStepSpan) {
-      this.startStepSpan();
+      this._startStepSpan();
     }
 
     const span = this.currentStepSpan?.createEventSpan({
@@ -196,16 +196,16 @@ export class ModelSpanTracker {
   }
 
   /**
-   * Check if there is currently an active chunk span
+   * Check if there is currently an active chunk span (internal use only)
    */
-  private hasActiveChunkSpan(): boolean {
+  _hasActiveChunkSpan(): boolean {
     return !!this.currentChunkSpan;
   }
 
   /**
-   * Get the current accumulator value
+   * Get the current accumulator value (internal use only)
    */
-  private getAccumulator(): Record<string, any> {
+  _getAccumulator(): Record<string, any> {
     return this.accumulator;
   }
 
@@ -250,11 +250,11 @@ export class ModelSpanTracker {
               break;
 
             case 'step-start':
-              tracker.startStepSpan(chunk.payload);
+              tracker._startStepSpan(chunk.payload);
               break;
 
             case 'step-finish':
-              tracker.endStepSpan(chunk.payload);
+              tracker._endStepSpan(chunk.payload);
               break;
 
             case 'raw': // Skip raw chunks as they're redundant
@@ -282,7 +282,7 @@ export class ModelSpanTracker {
                 }
               }
 
-              tracker.createEventSpan(chunk.type, outputPayload);
+              tracker._createEventSpan(chunk.type, outputPayload);
               break;
             }
           }
@@ -299,15 +299,15 @@ export class ModelSpanTracker {
 function handleTextChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>, tracker: ModelSpanTracker) {
   switch (chunk.type) {
     case 'text-start':
-      tracker.startChunkSpan('text');
+      tracker._startChunkSpan('text');
       break;
 
     case 'text-delta':
-      tracker.appendToAccumulator('text', chunk.payload.text);
+      tracker._appendToAccumulator('text', chunk.payload.text);
       break;
 
     case 'text-end': {
-      tracker.endChunkSpan();
+      tracker._endChunkSpan();
       break;
     }
   }
@@ -316,15 +316,15 @@ function handleTextChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>, 
 function handleReasoningChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>, tracker: ModelSpanTracker) {
   switch (chunk.type) {
     case 'reasoning-start':
-      tracker.startChunkSpan('reasoning');
+      tracker._startChunkSpan('reasoning');
       break;
 
     case 'reasoning-delta':
-      tracker.appendToAccumulator('text', chunk.payload.text);
+      tracker._appendToAccumulator('text', chunk.payload.text);
       break;
 
     case 'reasoning-end': {
-      tracker.endChunkSpan();
+      tracker._endChunkSpan();
       break;
     }
   }
@@ -333,27 +333,27 @@ function handleReasoningChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTP
 function handleToolCallChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>, tracker: ModelSpanTracker) {
   switch (chunk.type) {
     case 'tool-call-input-streaming-start':
-      tracker.startChunkSpan('tool-call', {
+      tracker._startChunkSpan('tool-call', {
         toolName: chunk.payload.toolName,
         toolCallId: chunk.payload.toolCallId,
       });
       break;
 
     case 'tool-call-delta':
-      tracker.appendToAccumulator('toolInput', chunk.payload.argsTextDelta);
+      tracker._appendToAccumulator('toolInput', chunk.payload.argsTextDelta);
       break;
 
     case 'tool-call-input-streaming-end':
     case 'tool-call': {
       // Build output with toolName, toolCallId, and parsed toolInput
-      const acc = tracker.getAccumulator();
+      const acc = tracker._getAccumulator();
       let toolInput;
       try {
         toolInput = acc.toolInput ? JSON.parse(acc.toolInput) : {};
       } catch {
         toolInput = acc.toolInput; // Keep as string if parsing fails
       }
-      tracker.endChunkSpan({
+      tracker._endChunkSpan({
         toolName: acc.toolName,
         toolCallId: acc.toolCallId,
         toolInput,
@@ -368,14 +368,14 @@ function handleObjectChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>
     case 'object':
       // Start span on first partial object chunk (only if not already started)
       // Multiple object chunks may arrive as the object is being generated
-      if (!tracker.hasActiveChunkSpan()) {
-        tracker.startChunkSpan('object');
+      if (!tracker._hasActiveChunkSpan()) {
+        tracker._startChunkSpan('object');
       }
       break;
 
     case 'object-result':
       // End the span with the final complete object as output
-      tracker.endChunkSpan(chunk.object);
+      tracker._endChunkSpan(chunk.object);
       break;
   }
 }
