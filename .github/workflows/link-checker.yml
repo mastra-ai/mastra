@@ -35,6 +35,7 @@ jobs:
         with:
           node-version: '20.19.5'
           cache: 'npm'
+          cache-dependency-path: docs/package-lock.json
 
       - name: Install dependencies for docs
         run: npm ci --registry=https://registry.yarnpkg.com
