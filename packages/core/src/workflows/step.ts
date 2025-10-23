@@ -24,7 +24,9 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
   state: TState;
   setState(state: TState): void;
   resumeData?: TResumeSchema;
+  /** @deprecated This parameter will be removed on November 4th, 2025. Use `retryCount` instead. */
   runCount: number;
+  retryCount: number;
   tracingContext: TracingContext;
   getInitData<T extends z.ZodType<any>>(): z.infer<T>;
   getInitData<T extends Workflow<any, any, any, any, any>>(): T extends undefined

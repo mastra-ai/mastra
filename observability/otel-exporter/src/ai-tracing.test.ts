@@ -261,7 +261,7 @@ describe('OtelExporter', () => {
         id: 'llm-1',
         traceId: 'trace-1',
         parent: undefined,
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         name: 'LLM Generation',
         startTime: new Date(),
         endTime: new Date(),

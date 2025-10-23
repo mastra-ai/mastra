@@ -1,10 +1,5 @@
 export const redirectList = [
   {
-    source: "/:locale/docs/server-db/local-dev-playground",
-    destination: "/:locale/docs/getting-started/studio",
-    permanent: true,
-  },
-  {
     source: "/:locale/docs/getting-started/model-providers",
     destination: "/:locale/models",
     permanent: true,
@@ -198,7 +193,27 @@ export const redirectList = [
   },
   {
     source: "/:locale/examples/memory",
-    destination: "/:locale/examples/memory/memory-with-libsql",
+    destination: "/:locale/docs/memory/storage/memory-with-libsql",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/memory/memory-with-libsql",
+    destination: "/:locale/docs/memory/storage/memory-with-libsql",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/memory/memory-with-pg",
+    destination: "/:locale/docs/memory/storage/memory-with-pg",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/memory/memory-with-upstash",
+    destination: "/:locale/docs/memory/storage/memory-with-upstash",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/memory/memory-processors",
+    destination: "/:locale/docs/memory/memory-processors",
     permanent: true,
   },
   {
@@ -248,7 +263,7 @@ export const redirectList = [
   },
   {
     source: "/:locale/examples/memory/short-term-working-memory",
-    destination: "/:locale/examples/memory/memory-with-libsql",
+    destination: "/:locale/docs/memory/storage/memory-with-libsql",
     permanent: true,
   },
   {
@@ -1255,7 +1270,7 @@ export const redirectList = [
   {
     source: "/:locale/examples/agents/using-a-workflow",
     destination:
-      "/:locale/docs/workflows/using-with-agents-and-tools#adding-an-agent-as-a-step",
+      "/:locale/docs/workflows/agents-and-tools#adding-an-agent-as-a-step",
     permanent: true,
   },
   {
@@ -1269,8 +1284,78 @@ export const redirectList = [
     permanent: true,
   },
   {
-    source: "/:locale/docs/workflows/using-with-agents-and-tools",
+    source: "/:locale/examples/workflows/agent-as-step",
     destination: "/:locale/docs/workflows/agents-and-tools",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/array-as-input",
+    destination: "/:locale/docs/workflows/control-flow",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/calling-agent",
+    destination: "/:locale/docs/workflows/agents-and-tools",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/conditional-branching",
+    destination: "/:locale/docs/workflows/control-flow",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/human-in-the-loop-multi-turn",
+    destination: "/:locale/docs/workflows/human-in-the-loop",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/human-in-the-loop",
+    destination: "/:locale/docs/workflows/human-in-the-loop",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/parallel-steps",
+    destination: "/:locale/docs/workflows/control-flow",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/sequential-steps",
+    destination: "/:locale/docs/workflows/control-flow",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/running-workflows",
+    destination: "/:locale/docs/workflows/overview",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/workflows/tool-as-step",
+    destination: "/:locale/docs/workflows/agents-and-tools",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/tools/calling-tools",
+    destination: "/:locale/docs/agents/using-tools",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/tools/dynamic-tools",
+    destination: "/:locale/docs/server-db/runtime-context",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/tools/workflow-as-tools",
+    destination: "/:locale/docs/workflows/agents-and-tools",
+    permanent: true,
+  },
+  {
+    source: "/:locale/examples/memory/working-memory-basic",
+    destination: "/:locale/docs/memory/working-memory",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/server-db/local-dev-playground",
+    destination: "/:locale/docs/getting-started/studio",
     permanent: true,
   },
 ];

@@ -75,7 +75,7 @@ describe('ArizeExporter', () => {
     const testSpan: Mutable<AnyExportedAISpan> = {
       id: 'span-1',
       traceId: 'trace-1',
-      type: AISpanType.LLM_GENERATION,
+      type: AISpanType.MODEL_GENERATION,
       name: 'Test LLM Generation',
       startTime: new Date(),
       endTime: new Date(),
