@@ -313,7 +313,7 @@ const result = await memory.query({ threadId, format: 'aiv5-ui' });
 const { messages } = await memory.query({ threadId });
 
 // Convert to AI SDK format when needed
-import { toAISdkMessages } from '@mastra/ai-sdk';
+import { toAISdkMessages } from '@mastra/ai-sdk/v5';
 const uiMessages = toAISdkMessages(messages);
 ```
 
@@ -347,11 +347,7 @@ const uiMessages = toAISdkMessages(messages);
 The new `@mastra/ai-sdk` package provides explicit conversion functions:
 
 ```typescript
-// Default export - converts to AI SDK V5 UI messages
-import { toAISdkMessages } from '@mastra/ai-sdk';
-const v5Messages = toAISdkMessages(mastraMessages);
-
-// Explicit V5 import
+// V5 UI messages (recommended)
 import { toAISdkMessages } from '@mastra/ai-sdk/v5';
 const v5Messages = toAISdkMessages(mastraMessages);
 
@@ -360,7 +356,7 @@ import { toAISdkMessages } from '@mastra/ai-sdk/v4';
 const v4Messages = toAISdkMessages(mastraMessages);
 
 // Stream conversion (V5 only)
-import { toAISdkStream } from '@mastra/ai-sdk';
+import { toAISdkStream } from '@mastra/ai-sdk/v5';
 const stream = toAISdkStream(mastraStream);
 ```
 
@@ -378,7 +374,7 @@ const stream = toAISdkFormat(mastraStream);
 #### After (v1.0)
 
 ```typescript
-import { toAISdkStream } from '@mastra/ai-sdk';
+import { toAISdkStream } from '@mastra/ai-sdk/v5';
 const stream = toAISdkStream(mastraStream);
 ```
 
