@@ -5,9 +5,8 @@ import type { RuntimeContext } from '../../di';
 import type { PubSub } from '../../events';
 import { RegisteredLogger } from '../../logger';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
-import { createDeprecationProxy, runCountDeprecationMessage } from '../utils';
 import { getStepResult } from '../step';
-import { validateStepInput } from '../utils';
+import { validateStepInput, createDeprecationProxy, runCountDeprecationMessage } from '../utils';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;

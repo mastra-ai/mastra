@@ -13,7 +13,6 @@ import type { ChunkType } from '../stream/types';
 import { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
-import { createDeprecationProxy, runCountDeprecationMessage } from './utils';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step, SuspendOptions } from './step';
@@ -28,7 +27,12 @@ import type {
   StepSuccess,
   StepSuspended,
 } from './types';
-import { getResumeLabelsByStepId, validateStepInput } from './utils';
+import {
+  getResumeLabelsByStepId,
+  validateStepInput,
+  createDeprecationProxy,
+  runCountDeprecationMessage,
+} from './utils';
 
 export type ExecutionContext = {
   workflowId: string;
