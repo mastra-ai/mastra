@@ -15,7 +15,6 @@
  *
  * Run manually: npm run test:types:zod
  * Runs in CI: As a separate step before unit tests
- * Local dev: Skipped by default (use npm test for faster local testing)
  */
 
 import { exec } from 'child_process';
