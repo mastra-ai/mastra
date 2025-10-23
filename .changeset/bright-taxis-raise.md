@@ -24,8 +24,14 @@ Update your step execute functions to use `retryCount` instead of `runCount`. Bo
 ### Before
 
 ```typescript
-const myStep = new Step({
+const myStep = createStep({
   id: 'myStep',
+  inputSchema: z.object({
+    value: z.string()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  }),
   execute: async ({ runCount, ...params }) => {
     console.log(`Retry attempt: ${runCount}`);
     // ... rest of your logic
@@ -36,8 +42,14 @@ const myStep = new Step({
 ### After
 
 ```typescript
-const myStep = new Step({
+const myStep = createStep({
   id: 'myStep',
+  inputSchema: z.object({
+    value: z.string()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  }),
   execute: async ({ retryCount, ...params }) => {
     console.log(`Retry attempt: ${retryCount}`);
     // ... rest of your logic
