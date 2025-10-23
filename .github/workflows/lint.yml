@@ -103,7 +103,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 20.19.5
-          cache: 'npm'
+          package-manager-cache: false
 
       - name: Install dependencies
         run: npm install globby --no-package-lock
@@ -131,7 +131,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20.19.5
-          cache: 'npm'
+          package-manager-cache: false
 
       - name: Install dependencies
         run: npm install semver --no-package-lock
@@ -175,7 +175,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 20.19.5
-          cache: 'npm'
+          package-manager-cache: false
 
       - name: Run package.json validator
         run: node .github/scripts/validate-pkg-json.mjs
