@@ -1,5 +1,5 @@
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
 import type {
   MastraMessageV1,
@@ -10,10 +10,12 @@ import type {
 } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
+import type { MessageFormat, MessageFormatResult } from '@mastra/core/types';
+import { validateMessageFormat } from '@mastra/core/types';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { embedMany } from 'ai';
-import type { CoreMessage, TextPart } from 'ai';
+import type { TextPart } from 'ai';
 import { embedMany as embedManyV5 } from 'ai-v5';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
@@ -94,14 +96,38 @@ export class Memory extends MastraMemory {
     }
   }
 
-  async query({
-    threadId,
-    resourceId,
-    selectBy,
-    threadConfig,
-  }: StorageGetMessagesArg & {
-    threadConfig?: MemoryConfig;
-  }): Promise<{ messages: CoreMessage[]; uiMessages: UIMessageWithMetadata[]; messagesV2: MastraMessageV2[] }> {
+  /**
+   * Type-safe return type based on the format parameter.
+   */
+  private convertToFormat<F extends MessageFormat>(
+    messageList: MessageList,
+    format: F,
+  ): MessageFormatResult<F> {
+    switch (format) {
+      case 'mastra-db':
+        return messageList.get.all.v2() as any;
+      case 'aiv4-ui':
+        return messageList.get.all.aiV4.ui() as any;
+      case 'aiv4-core':
+        return messageList.get.all.aiV4.core() as any;
+      case 'aiv5-ui':
+        return messageList.get.all.aiV5.ui() as any;
+      case 'aiv5-model':
+        return messageList.get.all.aiV5.model() as any;
+      default:
+        throw new Error(`Unsupported format: ${format}`);
+    }
+  }
+
+  async query<F extends MessageFormat = 'mastra-db'>(
+    args: StorageGetMessagesArg & {
+      threadConfig?: MemoryConfig;
+      format?: F;
+    },
+  ): Promise<any> {
+    const { threadId, resourceId, selectBy, threadConfig, format = 'mastra-db' as F } = args;
+    // Validate format parameter
+    validateMessageFormat(format);
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
@@ -226,51 +252,29 @@ export class Memory extends MastraMemory {
     }
 
     const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
-    return {
-      get messages() {
-        // returning v1 messages for backwards compat! v1 messages were CoreMessages stored in the db.
-        // returning .v1() takes stored messages which may be in v2 or v1 format and converts them to v1 shape, which is a CoreMessage + id + threadId + resourceId, etc
-        // Perhaps this should be called coreRecord or something ? - for now keeping v1 since it reflects that this used to be our db storage record shape
-        const v1Messages = list.get.all.v1();
-        // the conversion from V2/UIMessage -> V1/CoreMessage can sometimes split the messages up into more messages than before
-        // so slice off the earlier messages if it'll exceed the lastMessages setting
-        if (selectBy?.last && v1Messages.length > selectBy.last) {
-          // ex: 23 (v1 messages) minus 20 (selectBy.last messages)
-          // means we will start from index 3 and keep all the later newer messages from index 3 til the end of the array
-          return v1Messages.slice(v1Messages.length - selectBy.last) as CoreMessage[];
-        }
-        // TODO: this is absolutely wrong but became apparent that this is what we were doing before adding MessageList. Our public types said CoreMessage but we were returning MessageType which is equivalent to MastraMessageV1
-        // In a breaking change we should make this the type it actually is.
-        return v1Messages as CoreMessage[];
-      },
-      get uiMessages() {
-        return list.get.all.ui();
-      },
-      get messagesV2() {
-        return list.get.all.v2();
-      },
-    };
+
+    // Convert to requested format
+    const messages = this.convertToFormat(list, format);
+
+    return { messages } as any;
   }
 
-  async rememberMessages({
-    threadId,
-    resourceId,
-    vectorMessageSearch,
-    config,
-  }: {
+  async rememberMessages<F extends MessageFormat = 'mastra-db'>(args: {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }> {
+    format?: F;
+  }): Promise<any> {
+    const { threadId, resourceId, vectorMessageSearch, config, format = 'mastra-db' as F } = args;
+    // Validate format parameter
+    validateMessageFormat(format);
+
     const threadConfig = this.getMergedThreadConfig(config || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, threadConfig);
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
-      return {
-        messages: [],
-        messagesV2: [],
-      };
+      return [] as any;
     }
 
     const messagesResult = await this.query({
@@ -281,13 +285,15 @@ export class Memory extends MastraMemory {
         vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
       },
       threadConfig: config,
-      format: 'v2',
+      // format defaults to 'mastra-db'
     });
-    // Using MessageList here just to convert mixed input messages to single type output messages
-    const list = new MessageList({ threadId, resourceId }).add(messagesResult.messagesV2, 'memory');
 
-    this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
-    return { messages: list.get.all.v1(), messagesV2: list.get.all.v2() };
+    // Convert to requested format
+    const list = new MessageList({ threadId, resourceId }).add(messagesResult.messages, 'memory');
+    const messages = this.convertToFormat(list, format);
+
+    this.logger.debug(`Remembered message history includes ${messages.length} messages.`);
+    return messages as any;
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -512,7 +518,10 @@ export class Memory extends MastraMemory {
             reason = `appended newMemory to end of working memory`;
           }
 
-          workingMemory = existingWorkingMemory + `\n${workingMemory}`;
+          workingMemory =
+            existingWorkingMemory +
+            `
+${workingMemory}`;
         }
       } else if (workingMemory === template?.content) {
         return {

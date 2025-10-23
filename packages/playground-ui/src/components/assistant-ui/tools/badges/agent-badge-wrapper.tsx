@@ -22,7 +22,7 @@ export const AgentBadgeWrapper = ({
     memory: true,
   });
   const childMessages =
-    result?.childMessages ?? resolveToChildMessages((memoryMessages?.uiMessages ?? []) as MastraUIMessage[]);
+    result?.childMessages ?? resolveToChildMessages((memoryMessages?.messages ?? []) as MastraUIMessage[]);
 
   return (
     <AgentBadge

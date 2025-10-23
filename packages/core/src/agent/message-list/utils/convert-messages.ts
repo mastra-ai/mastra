@@ -1,19 +1,38 @@
 import type * as AIV4 from 'ai';
 import type * as AIV5 from 'ai-v5';
-import { MessageList } from '../index';
+
+import type { MessageFormat } from '../../../types/message-format';
 import type { MastraMessageV2, UIMessageWithMetadata, MessageListInput } from '../index';
+
+import { MessageList } from '../index';
 
 /**
  * Available output formats for message conversion.
  *
  * @remarks
+ * Supports both old (uppercase, dotted) and new (lowercase, hyphenated) format keys:
+ *
+ * **Old keys (backward compatibility):**
  * - `Mastra.V2` - Current database storage format, compatible with AI SDK v4
  * - `AIV4.UI` - AI SDK v4 UIMessage format (for frontend components)
  * - `AIV4.Core` - AI SDK v4 CoreMessage format (for LLM API calls)
  * - `AIV5.UI` - AI SDK v5 UIMessage format (for frontend components)
  * - `AIV5.Model` - AI SDK v5 ModelMessage format (for LLM API calls)
+ *
+ * **New keys (recommended):**
+ * - `mastra-db` - Mastra database storage format (same as Mastra.V2)
+ * - `aiv4-ui` - AI SDK v4 UIMessage (same as AIV4.UI)
+ * - `aiv4-core` - AI SDK v4 CoreMessage (same as AIV4.Core)
+ * - `aiv5-ui` - AI SDK v5 UIMessage (same as AIV5.UI)
+ * - `aiv5-model` - AI SDK v5 ModelMessage (same as AIV5.Model)
  */
-export type OutputFormat = 'Mastra.V2' | 'AIV4.UI' | 'AIV4.Core' | 'AIV5.UI' | 'AIV5.Model';
+export type OutputFormat =
+  | 'Mastra.V2'
+  | 'AIV4.UI'
+  | 'AIV4.Core'
+  | 'AIV5.UI'
+  | 'AIV5.Model' // Old keys
+  | MessageFormat; // New keys
 
 class MessageConverter {
   private messageList: MessageList;
@@ -55,17 +74,28 @@ class MessageConverter {
    * @returns Array of ModelMessages for AI SDK v5 LLM API calls
    */
   to(format: 'AIV5.Model'): AIV5.ModelMessage[];
+  to(format: 'mastra-db'): MastraMessageV2[];
+  to(format: 'aiv4-ui'): UIMessageWithMetadata[];
+  to(format: 'aiv4-core'): AIV4.CoreMessage[];
+  to(format: 'aiv5-ui'): AIV5.UIMessage[];
+  to(format: 'aiv5-model'): AIV5.ModelMessage[];
   to(format: OutputFormat): unknown[] {
     switch (format) {
+      // Old format keys (backward compatibility)
       case 'Mastra.V2':
+      case 'mastra-db':
         return this.messageList.get.all.v2();
       case 'AIV4.UI':
+      case 'aiv4-ui':
         return this.messageList.get.all.aiV4.ui();
       case 'AIV4.Core':
+      case 'aiv4-core':
         return this.messageList.get.all.aiV4.core();
       case 'AIV5.UI':
+      case 'aiv5-ui':
         return this.messageList.get.all.aiV5.ui();
       case 'AIV5.Model':
+      case 'aiv5-model':
         return this.messageList.get.all.aiV5.model();
       default:
         throw new Error(`Unsupported output format: ${format}`);

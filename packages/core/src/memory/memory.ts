@@ -1,13 +1,14 @@
 import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai';
 import { MessageList } from '../agent/message-list';
-import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
+import type { MastraMessageV2 } from '../agent/message-list';
 import { MastraBase } from '../base';
 import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
 import type { MastraStorage, PaginationInfo, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
+import type { MessageFormat, MessageFormatResult } from '../types';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 
@@ -263,17 +264,13 @@ export abstract class MastraMemory extends MastraBase {
     return this.applyProcessors(messages, { processors: processors || this.processors, ...opts });
   }
 
-  abstract rememberMessages({
-    threadId,
-    resourceId,
-    vectorMessageSearch,
-    config,
-  }: {
+  abstract rememberMessages<F extends MessageFormat = 'mastra-db'>(args: {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }>;
+    format?: F;
+  }): Promise<MessageFormatResult<F>>;
 
   estimateTokens(text: string): number {
     return Math.ceil(text.split(' ').length * 1.3);
@@ -347,13 +344,14 @@ export abstract class MastraMemory extends MastraBase {
   /**
    * Retrieves all messages for a specific thread
    * @param threadId - The unique identifier of the thread
-   * @returns Promise resolving to array of messages, uiMessages, and messagesV2
+   * @returns Promise resolving to array of messages in the requested format
    */
-  abstract query({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<{
-    messages: CoreMessage[];
-    uiMessages: UIMessageWithMetadata[];
-    messagesV2: MastraMessageV2[];
-  }>;
+  abstract query<F extends MessageFormat = 'mastra-db'>(
+    args: Omit<StorageGetMessagesArg, 'format'> & {
+      threadConfig?: MemoryConfig;
+      format?: F;
+    },
+  ): Promise<{ messages: MessageFormatResult<F> }>;
 
   /**
    * Helper method to create a new thread

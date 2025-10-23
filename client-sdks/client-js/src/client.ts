@@ -38,6 +38,7 @@ import type {
   GetScorerResponse,
   GetScoresByScorerIdParams,
   GetScoresResponse,
+  MessageFormat,
   GetScoresByRunIdParams,
   GetScoresByEntityIdParams,
   GetScoresBySpanParams,
@@ -120,15 +121,19 @@ export class MastraClient extends BaseResource {
     return new MemoryThread(this.options, threadId, agentId);
   }
 
-  public getThreadMessages(
+  public getThreadMessages<F extends MessageFormat = 'mastra-db'>(
     threadId: string,
-    opts: { agentId?: string; networkId?: string } = {},
-  ): Promise<GetMemoryThreadMessagesResponse> {
+    opts: { agentId?: string; networkId?: string; format?: F } = {},
+  ): Promise<GetMemoryThreadMessagesResponse<F>> {
+    const { agentId, networkId, format } = opts;
     let url = '';
-    if (opts.agentId) {
-      url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}`;
-    } else if (opts.networkId) {
-      url = `/api/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}`;
+    if (agentId) {
+      url = `/api/memory/threads/${threadId}/messages?agentId=${agentId}`;
+    } else if (networkId) {
+      url = `/api/memory/network/threads/${threadId}/messages?networkId=${networkId}`;
+    }
+    if (format) {
+      url += url.includes('?') ? `&format=${format}` : `?format=${format}`;
     }
     return this.request(url);
   }

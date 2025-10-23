@@ -74,7 +74,7 @@ import type {
   MultiPrimitiveExecutionOptions,
 } from './agent.types';
 import { MessageList } from './message-list';
-import type { MessageInput, MessageListInput, UIMessageWithMetadata } from './message-list';
+import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraMessageV2 } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
 import type {
@@ -1672,15 +1672,14 @@ export class Agent<
     if (!memory) {
       return [];
     }
-    return memory
-      .rememberMessages({
-        threadId,
-        resourceId,
-        config: memoryConfig,
-        // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
-        vectorMessageSearch,
-      })
-      .then(r => r.messagesV2);
+    return memory.rememberMessages({
+      threadId,
+      resourceId,
+      config: memoryConfig,
+      // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
+      vectorMessageSearch,
+      format: 'mastra-db', // Explicit format for internal use
+    });
   }
 
   /**
@@ -2591,7 +2590,7 @@ export class Agent<
 
         messageList
           .add(
-            memoryMessages.filter(m => m.threadId === threadObject.id), // filter out messages from other threads. those are added to system message above
+            memoryMessages.filter((m: MastraMessageV2) => m.threadId === threadObject.id), // filter out messages from other threads. those are added to system message above
             'memory',
           )
           // add new user messages to the list AFTER remembered messages to make ordering more reliable

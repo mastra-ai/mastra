@@ -5,16 +5,19 @@
 ### 1. ✅ Default Format Changed to `Mastra.V2` Everywhere
 
 **Before:**
+
 - `memory.query()` → `Mastra.V2`
 - Server handlers → `AIV5.UI`
 - `client-js` → `AIV5.UI`
 
 **After:**
+
 - **All contexts default to `Mastra.V2`**
 - Exception: `ai-sdk` compatibility package (for AI SDK integration)
 - Frontend explicitly requests `AIV5.UI` when needed
 
 **Impact:**
+
 - Consistent behavior across all APIs
 - Zero conversion overhead for server-side use
 - Performance optimization (no unnecessary conversions)
@@ -27,11 +30,13 @@
 **New section:** "Testing Strategy"
 
 **Coverage:**
+
 - **13 test suites** across unit, integration, E2E, and performance tests
 - Specific test files with locations and descriptions
 - Test coverage goals (95%+ for core components)
 
 **Test categories:**
+
 1. **Unit tests** (5 suites)
    - Format conversion
    - Network data parsing
@@ -62,6 +67,7 @@
 **New section:** "Documentation Plan"
 
 **New documentation to write:**
+
 1. Message Formats Guide (`docs/memory/message-formats.md`)
 2. Memory API Reference (`docs/memory/api-reference.md`)
 3. Quick Start Guide (`docs/memory/quick-start.md`)
@@ -71,6 +77,7 @@
 7. Troubleshooting Guide (`docs/guides/troubleshooting/message-formats.md`)
 
 **Existing documentation to update:**
+
 - `docs/memory/README.md`
 - `docs/agent/README.md`
 - `docs/streaming/README.md`
@@ -81,17 +88,20 @@
 - `packages/core/src/storage/README.md`
 
 **Examples to update:**
+
 - All example apps (`examples/*/`)
 - Create new examples:
   - `examples/memory-formats/` - Demonstrates all format options
   - `examples/memory-migration/` - Before/after migration
 
 **API documentation:**
+
 - Update OpenAPI specs
 - Update JSDoc comments
 - Add inline code comments
 
 **Documentation checklist:**
+
 - [ ] Write all new documentation files
 - [ ] Update all existing documentation files
 - [ ] Update all example apps
@@ -108,16 +118,19 @@
 ### 4. ✅ Time Estimates Removed
 
 **Before:**
+
 - "Week 1: Core Implementation"
 - "Week 2: Server Updates"
 - etc.
 
 **After:**
+
 - "Phase 1: Core Implementation"
 - "Phase 2: Server Updates"
 - etc.
 
 **Rationale:**
+
 - Avoids unrealistic time pressure
 - Focuses on what needs to be done, not when
 - Allows for flexibility in implementation
@@ -127,9 +140,11 @@
 ### 5. ✅ Open Questions Expanded and Detailed
 
 **Before:**
+
 - 4 brief questions with minimal discussion
 
 **After:**
+
 - **7 comprehensive questions** with:
   - Clear problem statement
   - Multiple options considered
@@ -171,18 +186,18 @@
 
 ## Summary of Key Decisions
 
-| Topic | Decision | Rationale |
-|-------|----------|-----------|
-| **Default Format** | `Mastra.V2` everywhere | Zero conversion overhead, consistent behavior |
-| **AI SDK Format** | Explicit opt-in | Frontend requests when needed, not forced |
-| **Testing** | 13 comprehensive test suites | 95%+ coverage, all user flows tested |
-| **Documentation** | Write before implementation | Clarifies API design, guides implementation |
-| **Time Estimates** | Removed | Focus on quality, not deadlines |
-| **Open Questions** | 7 detailed questions | Thorough analysis, clear recommendations |
-| **Backward Compat** | Deprecation warnings for 1 cycle | Smooth migration path |
-| **V1 Support** | Via `convertMessages()` only | Discourage legacy format |
-| **Streaming Format** | Keep as-is (ChunkType) | Maintain performance |
-| **Type Safety** | Conditional types | Full IntelliSense support |
+| Topic                | Decision                         | Rationale                                     |
+| -------------------- | -------------------------------- | --------------------------------------------- |
+| **Default Format**   | `Mastra.V2` everywhere           | Zero conversion overhead, consistent behavior |
+| **AI SDK Format**    | Explicit opt-in                  | Frontend requests when needed, not forced     |
+| **Testing**          | 13 comprehensive test suites     | 95%+ coverage, all user flows tested          |
+| **Documentation**    | Write before implementation      | Clarifies API design, guides implementation   |
+| **Time Estimates**   | Removed                          | Focus on quality, not deadlines               |
+| **Open Questions**   | 7 detailed questions             | Thorough analysis, clear recommendations      |
+| **Backward Compat**  | Deprecation warnings for 1 cycle | Smooth migration path                         |
+| **V1 Support**       | Via `convertMessages()` only     | Discourage legacy format                      |
+| **Streaming Format** | Keep as-is (ChunkType)           | Maintain performance                          |
+| **Type Safety**      | Conditional types                | Full IntelliSense support                     |
 
 ---
 

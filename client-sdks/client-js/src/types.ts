@@ -32,10 +32,10 @@ import type {
   WorkflowRuns,
 } from '@mastra/core/storage';
 import type { OutputSchema } from '@mastra/core/stream';
+import type { MessageFormat, MessageFormatResult } from '@mastra/core/types';
 import type { QueryResult } from '@mastra/core/vector';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
 
-import type { UIMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -299,19 +299,21 @@ export interface UpdateMemoryThreadParams {
   resourceId: string;
 }
 
-export interface GetMemoryThreadMessagesParams {
+export interface GetMemoryThreadMessagesParams<F extends MessageFormat = 'mastra-db'> {
   /**
    * Limit the number of messages to retrieve (default: 40)
    */
   limit?: number;
+  /**
+   * Format for the returned messages. Defaults to 'mastra-db'
+   */
+  format?: F;
 }
 
 export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg, 'threadConfig' | 'threadId'>;
 
-export interface GetMemoryThreadMessagesResponse {
-  messages: CoreMessage[];
-  legacyMessages: AiMessageType[];
-  uiMessages: UIMessage[];
+export interface GetMemoryThreadMessagesResponse<F extends MessageFormat = 'mastra-db'> {
+  messages: MessageFormatResult<F>;
 }
 
 export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
@@ -578,3 +580,6 @@ export interface StreamVNextChunkType {
   runId: string;
   from: 'AGENT' | 'WORKFLOW';
 }
+
+// Re-export message format types for external use
+export type { MessageFormat, MessageFormatResult };

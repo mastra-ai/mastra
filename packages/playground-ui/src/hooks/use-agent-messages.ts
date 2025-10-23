@@ -14,7 +14,7 @@ export const useAgentMessages = ({
 
   return useQuery({
     queryKey: ['memory', 'messages', threadId, agentId],
-    queryFn: () => client.getThreadMessages(threadId, { agentId }),
+    queryFn: () => client.getThreadMessages(threadId, { agentId, format: 'aiv5-ui' }),
     enabled: memory && Boolean(threadId),
     staleTime: 0,
     gcTime: 0,

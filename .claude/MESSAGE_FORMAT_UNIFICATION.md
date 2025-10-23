@@ -8,7 +8,7 @@ Unify message format handling across Mastra by adding a single `format` paramete
 
 **"Mastra Format by Default, AI SDK on Demand"**
 
-- **Always default to `Mastra.V2`** for all contexts (memory queries, server handlers, internal agent use)
+- **Always default to `mastra-db`** for all contexts (memory queries, server handlers, internal agent use)
 - Exception: `ai-sdk` compatibility package defaults to AI SDK formats
 - Explicit opt-in for AI SDK formats when needed
 - Single source of truth for format conversion (`MessageList`)
@@ -20,7 +20,7 @@ Unify message format handling across Mastra by adding a single `format` paramete
 ### Current Pain Points
 
 1. **Format Confusion** - Users don't know which format to use when
-2. **Manual Conversion** - Requires explicit `convertMessages(result.messagesV2).to('AIV5.UI')` calls
+2. **Manual Conversion** - Requires explicit `convertMessages(result.messagesV2).to('aiv5-ui')` calls
 3. **Multiple Return Fields** - APIs return `{ messages, uiMessages, legacyMessages }` causing confusion
 4. **Inconsistent Defaults** - Some places default to V1, others to V2, others to V5
 5. **Documentation Gaps** - Unclear when/why to use each format
@@ -39,16 +39,17 @@ Unify message format handling across Mastra by adding a single `format` paramete
 ### Format Keys
 
 ```typescript
-export type MessageFormat = 
-  | 'mastra-db'      // Default - internal storage format V2 (no conversion)
-  | 'mastra-model'   // Legacy V1 format (only via convertMessages)
-  | 'aiv4-ui'        // AI SDK v4 UIMessage (frontend)
-  | 'aiv4-core'      // AI SDK v4 CoreMessage (LLM calls)
-  | 'aiv5-ui'        // AI SDK v5 UIMessage (frontend)
-  | 'aiv5-model';    // AI SDK v5 ModelMessage (LLM calls)
+export type MessageFormat =
+  | 'mastra-db' // Default - internal storage format V2 (no conversion)
+  | 'mastra-model' // Legacy V1 format (only via convertMessages)
+  | 'aiv4-ui' // AI SDK v4 UIMessage (frontend)
+  | 'aiv4-core' // AI SDK v4 CoreMessage (LLM calls)
+  | 'aiv5-ui' // AI SDK v5 UIMessage (frontend)
+  | 'aiv5-model'; // AI SDK v5 ModelMessage (LLM calls)
 ```
 
 **Why these keys?**
+
 - Simplified, lowercase format for consistency
 - Self-documenting (platform + purpose)
 - Type-safe and discoverable
@@ -56,6 +57,7 @@ export type MessageFormat =
 ### Default Behavior
 
 **All contexts default to `mastra-db`:**
+
 - `memory.query()` → `mastra-db`
 - `memory.rememberMessages()` → `mastra-db`
 - Server API handlers → `mastra-db`
@@ -64,18 +66,68 @@ export type MessageFormat =
 - React SDK → Explicitly requests `aiv5-ui` from `client-js`
 
 **Exception:**
+
 - `ai-sdk` compatibility package → AI SDK formats (as needed for compatibility)
 
 **Why `mastra-db` everywhere?**
+
 1. **Consistent behavior across all APIs** - no surprises
 2. **Performance** - no conversion overhead for internal operations
 3. **Explicit opt-in for AI SDK** - users who need AI SDK formats know to request them
 4. **Clear intent** - `mastra-db` signals "database/storage format"
 
-**Note on V1 (`mastra-model`):**
-- V1 format is only supported via `convertMessages().to('mastra-model')`
-- Not available as a `format` parameter in `query()` or API handlers
-- This is a breaking change - V1 is fully deprecated
+**Note on V1 (Legacy Format):**
+
+- V1 is a legacy input format only (for backward compatibility with old stored messages)
+- V1 is **not** available as an output format via the `format` parameter
+- Users who need V1 output can still use `convertMessages().to('Mastra.V1')` (old key only)
+- New code should never output V1 format
+
+---
+
+## Backward Compatibility & Format Keys
+
+### New Format Keys (Lowercase, Hyphenated)
+
+The new `format` parameter uses **lowercase, hyphenated** keys for consistency:
+
+| New Key      | Old Key (convertMessages) | Description                        |
+| ------------ | ------------------------- | ---------------------------------- |
+| `mastra-db`  | `Mastra.V2`               | Mastra database storage format     |
+| `aiv4-ui`    | `AIV4.UI`                 | AI SDK v4 UIMessage (frontend)     |
+| `aiv4-core`  | `AIV4.Core`               | AI SDK v4 CoreMessage (LLM calls)  |
+| `aiv5-ui`    | `AIV5.UI`                 | AI SDK v5 UIMessage (frontend)     |
+| `aiv5-model` | `AIV5.Model`              | AI SDK v5 ModelMessage (LLM calls) |
+
+### convertMessages() Still Works
+
+**Important:** `convertMessages().to()` is **NOT deprecated** and will continue to work with:
+
+- ✅ **Old keys** (`'Mastra.V2'`, `'AIV4.UI'`, etc.) - for backward compatibility
+- ✅ **New keys** (`'mastra-db'`, `'aiv4-ui'`, etc.) - for consistency
+
+**Use cases:**
+
+- **`format` parameter:** For querying from storage/API (new code)
+- **`convertMessages()`:** For converting already-loaded messages (still valid)
+
+**Example:**
+
+```typescript
+// Both of these work:
+convertMessages(messages).to('Mastra.V2'); // Old key ✅
+convertMessages(messages).to('mastra-db'); // New key ✅
+
+// But the new `format` parameter only accepts new keys:
+memory.query({ threadId, format: 'mastra-db' }); // ✅
+memory.query({ threadId, format: 'Mastra.V2' }); // ❌ Error
+```
+
+### Why Two Sets of Keys?
+
+- **New `format` parameter:** Clean, consistent API for new code
+- **Old `convertMessages()` keys:** Backward compatibility for existing code
+- **No breaking changes** to `convertMessages()` - existing code keeps working
 
 ---
 
@@ -121,10 +173,10 @@ async query({
 }> {
   // Fetch from storage (always V2)
   const messagesV2 = await this.storage.getMessages({ threadId, ...selectBy });
-  
+
   // Convert to requested format using MessageList
   const messageList = new MessageList().add(messagesV2, 'memory');
-  
+
   let messages: unknown[];
   switch (format) {
     case 'mastra-db':
@@ -143,8 +195,64 @@ async query({
       messages = messageList.get.all.aiV5.model();
       break;
   }
-  
+
   return { messages };
+}
+```
+
+**Type Safety with Conditional Types:**
+
+```typescript
+// Type-safe return based on format parameter
+type MessageFormatResult<F extends MessageFormat> =
+  F extends 'mastra-db' ? MastraMessageV2[] :
+  F extends 'aiv4-ui' ? AIV4.UIMessage[] :
+  F extends 'aiv4-core' ? AIV4.CoreMessage[] :
+  F extends 'aiv5-ui' ? AIV5.UIMessage[] :
+  F extends 'aiv5-model' ? AIV5.ModelMessage[] :
+  never;
+
+async query<F extends MessageFormat = 'mastra-db'>({
+  threadId,
+  format = 'mastra-db' as F,
+  // ... other params
+}: {
+  threadId: string;
+  format?: F;
+  // ... other params
+}): Promise<{ messages: MessageFormatResult<F> }> {
+  // ... implementation
+}
+
+// Usage - TypeScript knows the exact return type:
+const result1 = await memory.query({ threadId });
+// result1.messages is MastraMessageV2[]
+
+const result2 = toAISdkFormat(await memory.query({ threadId })); // <- DO THIS INSTEAD
+// result2.messages is AIV5.UIMessage[]
+```
+
+**Error Handling:**
+
+```typescript
+// Invalid format parameter
+try {
+  await memory.query({ threadId, format: 'invalid-format' as any });
+} catch (error) {
+  // Error: Invalid format 'invalid-format'.
+  // Supported formats: 'mastra-db', 'aiv4-ui', 'aiv4-core', 'aiv5-ui', 'aiv5-model'
+}
+
+// Empty thread (not an error - returns empty array)
+const result = await memory.query({ threadId: 'empty-thread' });
+// result.messages === []
+
+// Malformed message data (graceful handling)
+try {
+  await memory.query({ threadId: 'corrupted-thread', format: 'aiv5-ui' });
+} catch (error) {
+  // Error: Failed to convert message ID 'msg-123' to format 'aiv5-ui':
+  // Missing required field 'content'
 }
 ```
 
@@ -165,7 +273,7 @@ async rememberMessages({
   format?: MessageFormat;
 }): Promise<MastraMessageV2[] | AIV4.UIMessage[] | /* ... */> {
   // ... existing logic
-  
+
   // Convert to requested format before returning
   const messageList = new MessageList().add(allMessages, 'memory');
   return this.convertToFormat(messageList, format);
@@ -193,7 +301,7 @@ export async function getMessagesHandler({
     threadId: threadId!,
     ...(limit && { selectBy: { last: limit } }),
   });
-  const uiMessages = convertMessages(result.messagesV2).to('AIV5.UI');
+  const uiMessages = convertMessages(result.messagesV2).to('aiv5-ui');
   return { messages: result.messages, uiMessages, legacyMessages: result.uiMessages };
 }
 
@@ -205,12 +313,12 @@ export async function getMessagesHandler({
   limit,
   format = 'mastra-db', // Default to Mastra format
   runtimeContext,
-}: MemoryContext & { 
+}: MemoryContext & {
   limit?: number;
   format?: MessageFormat;
 }) {
   const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
-  
+
   const result = await memory.query({
     threadId: threadId!,
     format, // Pass through format
@@ -230,11 +338,11 @@ export async function getMessagesHandler({
 // In packages/server/src/server/routes/memory.ts
 registerApiRoute('/api/memory/threads/:threadId/messages', {
   method: 'GET',
-  handler: async (c) => {
+  handler: async c => {
     const threadId = c.req.param('threadId');
     const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined;
     const format = (c.req.query('format') as MessageFormat) || 'mastra-db';
-    
+
     return getMessagesHandler({
       mastra: c.get('mastra'),
       agentId: c.req.query('agentId'),
@@ -270,10 +378,10 @@ async getMessages({ limit }: { limit?: number } = {}): Promise<{
 }
 
 // New
-async getMessages({ 
+async getMessages({
   limit,
   format = 'mastra-db', // Default to Mastra format
-}: { 
+}: {
   limit?: number;
   format?: MessageFormat;
 } = {}): Promise<{
@@ -314,13 +422,11 @@ export interface GetMemoryThreadMessagesResponse {
 ```typescript
 // Current
 const [messages, setMessages] = useState<MastraUIMessage[]>(
-  initializeMessages ? resolveInitialMessages(initializeMessages()) : []
+  initializeMessages ? resolveInitialMessages(initializeMessages()) : [],
 );
 
 // New (client explicitly requests aiv5-ui)
-const [messages, setMessages] = useState<MastraUIMessage[]>(
-  initializeMessages ? initializeMessages() : []
-);
+const [messages, setMessages] = useState<MastraUIMessage[]>(initializeMessages ? initializeMessages() : []);
 // Note: client-js will request format: 'aiv5-ui' when calling getMessages()
 ```
 
@@ -328,21 +434,21 @@ const [messages, setMessages] = useState<MastraUIMessage[]>(
 
 #### 4.2 Deprecate `resolveInitialMessages`
 
-```typescript
+````typescript
 /**
- * @deprecated No longer needed - server now returns messages in AIV5.UI format by default.
+ * @deprecated No longer needed - server now returns messages in aiv5-ui format by default.
  * This function will be removed in a future version.
- * 
+ *
  * If you need to parse network data, use the server's format parameter instead:
  * ```typescript
- * const { messages } = await client.memory.thread(threadId).getMessages({ format: 'AIV5.UI' });
+ * const { messages } = await client.memory.thread(threadId).getMessages({ format: 'aiv5-ui' });
  * ```
  */
 export function resolveInitialMessages(messages: MastraUIMessage[]): MastraUIMessage[] {
   console.warn('resolveInitialMessages is deprecated and will be removed in a future version');
   return messages;
 }
-```
+````
 
 ---
 
@@ -377,16 +483,14 @@ function ChatComponent() {
   const { messages, sendMessage } = useChat({
     agentId: 'my-agent',
     threadId: 'thread-123',
-    // Messages need to be requested in AIV5.UI format
+    // Messages need to be requested in aiv5-ui format
     initializeMessages: async () => {
-      const { messages } = await client.memory
-        .thread('thread-123')
-        .getMessages({ format: 'AIV5.UI' }); // Explicit format request
+      const { messages } = await client.memory.thread('thread-123').getMessages({ format: 'aiv5-ui' }); // Explicit format request
       return messages;
     },
   });
-  
-  // messages is MastraUIMessage[] (AIV5.UIMessage)
+
+  // messages is MastraUIMessage[] (aiv5-ui format)
 }
 ```
 
@@ -398,14 +502,10 @@ import { MastraClient } from '@mastra/client-js';
 const client = new MastraClient({ baseUrl: 'http://localhost:3000' });
 
 // Get messages in mastra-db format (default)
-const { messages } = await client.memory
-  .thread('thread-123')
-  .getMessages(); // Returns MastraMessageV2[]
+const { messages } = await client.memory.thread('thread-123').getMessages(); // Returns MastraMessageV2[]
 
 // Explicitly request AI SDK V5 format for frontend
-const { messages: uiMessages } = await client.memory
-  .thread('thread-123')
-  .getMessages({ format: 'aiv5-ui' }); // Returns AIV5.UIMessage[]
+const { messages: uiMessages } = await client.memory.thread('thread-123').getMessages({ format: 'aiv5-ui' }); // Returns MastraUIMessage[]
 ```
 
 ### 3. Server-Side (Direct Memory Usage)
@@ -416,15 +516,15 @@ import { Memory } from '@mastra/memory';
 const memory = new Memory({ storage, vector, embedder });
 
 // Default: mastra-db (no conversion overhead)
-const { messages } = await memory.query({ 
-  threadId: 'thread-123' 
+const { messages } = await memory.query({
+  threadId: 'thread-123',
 }); // Returns MastraMessageV2[]
 
 // Explicit format for AI SDK integration
-const { messages: uiMessages } = await memory.query({ 
+const { messages: uiMessages } = await memory.query({
   threadId: 'thread-123',
-  format: 'aiv5-ui' 
-}); // Returns AIV5.UIMessage[]
+  format: 'aiv5-ui',
+}); // Returns MastraUIMessage[]
 ```
 
 ### 4. API Route Handler
@@ -435,10 +535,10 @@ import { getMessagesHandler } from '@mastra/server/handlers/memory';
 
 registerApiRoute('/api/custom/messages/:threadId', {
   method: 'GET',
-  handler: async (c) => {
+  handler: async c => {
     const threadId = c.req.param('threadId');
-    const format = c.req.query('format') as MessageFormat || 'mastra-db';
-    
+    const format = (c.req.query('format') as MessageFormat) || 'mastra-db';
+
     return getMessagesHandler({
       mastra: c.get('mastra'),
       threadId,
@@ -459,7 +559,7 @@ const { messages } = await response.json(); // MastraMessageV2[]
 
 // Explicit format via query param for frontend
 const response = await fetch('/api/memory/threads/thread-123/messages?format=aiv5-ui');
-const { messages } = await response.json(); // AIV5.UIMessage[]
+const { messages } = await response.json(); // MastraUIMessage[]
 ```
 
 ---
@@ -471,12 +571,12 @@ const { messages } = await response.json(); // AIV5.UIMessage[]
 ```typescript
 // OLD
 const result = await memory.query({ threadId: 'thread-123' });
-const uiMessages = convertMessages(result.messagesV2).to('AIV5.UI');
+const uiMessages = convertMessages(result.messagesV2).to('aiv5-ui');
 
 // NEW
-const { messages } = await memory.query({ 
+const { messages } = await memory.query({
   threadId: 'thread-123',
-  format: 'aiv5-ui' 
+  format: 'aiv5-ui',
 });
 ```
 
@@ -487,8 +587,8 @@ const { messages } = await memory.query({
 const { uiMessages } = await client.memory.thread('thread-123').getMessages();
 
 // NEW
-const { messages } = await client.memory.thread('thread-123').getMessages({ 
-  format: 'aiv5-ui' 
+const { messages } = await client.memory.thread('thread-123').getMessages({
+  format: 'aiv5-ui',
 });
 // Explicitly request aiv5-ui format for frontend use
 ```
@@ -502,8 +602,8 @@ import { resolveInitialMessages } from '@mastra/react/lib/ai-sdk/memory';
 const messages = resolveInitialMessages(await fetchMessages());
 
 // NEW
-const { messages } = await client.memory.thread('thread-123').getMessages({ 
-  format: 'aiv5-ui' 
+const { messages } = await client.memory.thread('thread-123').getMessages({
+  format: 'aiv5-ui',
 });
 // No resolveInitialMessages needed - explicitly request aiv5-ui format
 ```
@@ -512,15 +612,15 @@ const { messages } = await client.memory.thread('thread-123').getMessages({
 
 ## Default Format Summary
 
-| Context | Default Format | Override Example |
-|---------|---------------|------------------|
-| `memory.query()` | `mastra-db` | `format: 'aiv5-ui'` |
-| `memory.rememberMessages()` | `mastra-db` | `format: 'aiv4-core'` |
-| Server API handlers | `mastra-db` | `format: 'aiv5-ui'` |
-| `client-js` | `mastra-db` | `getMessages({ format: 'aiv5-ui' })` |
-| React SDK | Explicitly requests `aiv5-ui` | N/A |
-| Internal agent code | `mastra-db` | N/A |
-| `ai-sdk` package | AI SDK formats | N/A |
+| Context                     | Default Format                | Override Example                     |
+| --------------------------- | ----------------------------- | ------------------------------------ |
+| `memory.query()`            | `mastra-db`                   | `format: 'aiv5-ui'`                  |
+| `memory.rememberMessages()` | `mastra-db`                   | `format: 'aiv4-core'`                |
+| Server API handlers         | `mastra-db`                   | `format: 'aiv5-ui'`                  |
+| `client-js`                 | `mastra-db`                   | `getMessages({ format: 'aiv5-ui' })` |
+| React SDK                   | Explicitly requests `aiv5-ui` | N/A                                  |
+| Internal agent code         | `mastra-db`                   | N/A                                  |
+| `ai-sdk` package            | AI SDK formats                | N/A                                  |
 
 ---
 
@@ -633,6 +733,12 @@ const { messages } = await client.memory.thread('thread-123').getMessages({
     - Test same thread queried with different formats returns equivalent data
     - Test V2 → V5 → V2 round-trip preserves data
     - Test network execution data survives round-trip
+
+12. **Error handling & edge cases (`error-handling.e2e.test.ts`)**
+    - Test invalid format parameter throws descriptive error
+    - Test empty thread returns empty array (not error)
+    - Test malformed V2 messages are handled gracefully
+    - Test missing required fields in format conversion
 
 ### Performance Tests
 
@@ -793,6 +899,7 @@ const { messages } = await client.memory.thread('thread-123').getMessages({
 ## Rollout Plan
 
 ### Phase 1: Core Implementation
+
 - [ ] Add `format` parameter to `Memory.query()`
 - [ ] Add `format` parameter to `Memory.rememberMessages()`
 - [ ] Update `MessageList` to handle all conversions
@@ -801,6 +908,7 @@ const { messages } = await client.memory.thread('thread-123').getMessages({
 - [ ] Add unit tests for network data parsing
 
 ### Phase 2: Server Updates
+
 - [ ] Update `getMessagesHandler` to use `format` parameter
 - [ ] Update route registration to accept `format` query param
 - [ ] Add integration tests for handlers
@@ -808,6 +916,7 @@ const { messages } = await client.memory.thread('thread-123').getMessages({
 - [ ] Update `prepare-memory-step` to use `Mastra.V2` default
 
 ### Phase 3: Client SDK Updates
+
 - [ ] Update `client-js` types and methods
 - [ ] Add `format` parameter to `getMessages()`
 - [ ] Update TypeScript types for format-specific returns
@@ -816,6 +925,7 @@ const { messages } = await client.memory.thread('thread-123').getMessages({
 - [ ] Add E2E tests
 
 ### Phase 4: Documentation & Examples
+
 - [ ] Write all new documentation (see Documentation Plan)
 - [ ] Update all existing documentation
 - [ ] Update all examples to use new API
@@ -824,6 +934,7 @@ const { messages } = await client.memory.thread('thread-123').getMessages({
 - [ ] Review and test all documentation
 
 ### Phase 5: Testing & Validation
+
 - [ ] Run full test suite
 - [ ] Performance benchmarks
 - [ ] Manual testing of all user flows
@@ -831,6 +942,7 @@ const { messages } = await client.memory.thread('thread-123').getMessages({
 - [ ] Address feedback and issues
 
 ### Phase 6: Release & Communication
+
 - [ ] Publish beta release
 - [ ] Gather feedback
 - [ ] Address issues
@@ -847,6 +959,7 @@ const { messages } = await client.memory.thread('thread-123').getMessages({
 **Decision:** This is a breaking change - no backward compatibility needed.
 
 **Rationale:**
+
 - Project is making a major version bump
 - Clean break allows for better architecture
 - No need to support deprecated APIs
@@ -858,6 +971,7 @@ const { messages } = await client.memory.thread('thread-123').getMessages({
 **Decision:** Support V1 only via `convertMessages().to('mastra-model')`.
 
 **Rationale:**
+
 - V1 is fully deprecated
 - Not available as a `format` parameter in `query()` or API handlers
 - Users needing V1 can still use `convertMessages()` for legacy code
@@ -870,6 +984,7 @@ const { messages } = await client.memory.thread('thread-123').getMessages({
 **Question:** Should streaming (e.g., `agent.stream()`) support a `format` parameter to return different stream formats?
 
 **Answer:** ✅ **No - streaming is out of scope for this work**
+
 - This work focuses exclusively on memory fetching (`memory.query()`, `getMessages()`)
 - Streaming will continue to use Mastra `ChunkType` with client-side conversion
 - Streaming and memory are separate concerns
@@ -881,6 +996,7 @@ const { messages } = await client.memory.thread('thread-123').getMessages({
 **Question:** Should we cache converted messages to avoid re-converting on every query?
 
 **Answer:** ✅ **No - skip caching for now**
+
 - We haven't measured if conversion is actually slow
 - Caching adds complexity (invalidation, memory management)
 - Can be added later if benchmarks show it's needed
@@ -893,6 +1009,7 @@ const { messages } = await client.memory.thread('thread-123').getMessages({
 **Decision:** Don't worry about this for now.
 
 **Rationale:**
+
 - Out of scope for current plan
 - Can be addressed in future enhancement
 - Current approach is functional
@@ -904,6 +1021,7 @@ const { messages } = await client.memory.thread('thread-123').getMessages({
 **Decision:** Use conditional types based on format parameter.
 
 **Implementation:**
+
 ```typescript
 type QueryResult<F extends MessageFormat> = {
   messages: F extends 'mastra-db' ? MastraMessageV2[]
@@ -918,6 +1036,7 @@ query<F extends MessageFormat = 'mastra-db'>(
 ```
 
 **Benefits:**
+
 - Full type safety
 - IntelliSense shows correct return type
 - Catches format/type mismatches at compile time
@@ -929,15 +1048,15 @@ query<F extends MessageFormat = 'mastra-db'>(
 **Decision:** Throw descriptive error immediately.
 
 **Implementation:**
+
 ```typescript
 if (!isValidFormat(format)) {
-  throw new Error(
-    `Invalid format: "${format}". Valid formats: ${VALID_FORMATS.join(', ')}`
-  );
+  throw new Error(`Invalid format: "${format}". Valid formats: ${VALID_FORMATS.join(', ')}`);
 }
 ```
 
 **Benefits:**
+
 - Fail fast, clear error messages
 - Prevents silent bugs
 - Easy to debug
@@ -947,11 +1066,13 @@ if (!isValidFormat(format)) {
 ## Success Metrics
 
 ### User-Facing
+
 - Zero GitHub issues about format confusion after release
 - Positive feedback on simplified API
 - Reduced support questions about `convertMessages()`
 
 ### Technical
+
 - 100% test coverage for format conversion
 - All examples updated to new API
 - Documentation accuracy verified

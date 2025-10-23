@@ -1,8 +1,14 @@
+import type { CoreMessage } from 'ai';
+import type { UIMessage as AIV5UIMessage, ModelMessage as AIV5ModelMessage } from 'ai-v5';
 import { expect } from 'vitest';
+
 import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig } from '../memory';
 import type { StorageGetMessagesArg } from '../storage';
+import type { MessageFormat } from '../types';
+
 import { MessageList } from './message-list';
+import type { UIMessageWithMetadata } from './message-list';
 
 export class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
@@ -22,6 +28,39 @@ export class MockMemory extends MastraMemory {
       }),
     });
     this._hasOwnStorage = true;
+  }
+
+  /**
+   * Type-safe helper to convert messages to requested format.
+   */
+  private convertToFormat<F extends MessageFormat>(
+    messageList: MessageList,
+    format: F,
+  ): F extends 'mastra-db'
+    ? MastraMessageV2[]
+    : F extends 'aiv4-ui'
+      ? UIMessageWithMetadata[]
+      : F extends 'aiv4-core'
+        ? CoreMessage[]
+        : F extends 'aiv5-ui'
+          ? AIV5UIMessage[]
+          : F extends 'aiv5-model'
+            ? AIV5ModelMessage[]
+            : never {
+    switch (format) {
+      case 'mastra-db':
+        return messageList.get.all.v2() as any;
+      case 'aiv4-ui':
+        return messageList.get.all.aiV4.ui() as any;
+      case 'aiv4-core':
+        return messageList.get.all.aiV4.core() as any;
+      case 'aiv5-ui':
+        return messageList.get.all.aiV5.ui() as any;
+      case 'aiv5-model':
+        return messageList.get.all.aiV5.model() as any;
+      default:
+        throw new Error(`Unsupported format: ${format}`);
+    }
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -89,9 +128,44 @@ export class MockMemory extends MastraMemory {
     return this.getMessages({ threadId: messages[0].threadId, resourceId: messages[0].resourceId, format });
   }
 
-  async rememberMessages() {
-    const list = new MessageList().add(Array.from(this.messages.values()), `memory`);
-    return { messages: list.get.remembered.v1(), messagesV2: list.get.remembered.v2() };
+  async rememberMessages<F extends MessageFormat = 'mastra-db'>({
+    threadId,
+    resourceId: _resourceId,
+    vectorMessageSearch: _vectorMessageSearch,
+    memoryConfig: _memoryConfig,
+    format = 'mastra-db' as F,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    vectorMessageSearch?: string;
+    memoryConfig?: MemoryConfig;
+    format?: F;
+  }): Promise<
+    F extends 'mastra-db'
+      ? MastraMessageV2[]
+      : F extends 'aiv4-ui'
+        ? UIMessageWithMetadata[]
+        : F extends 'aiv4-core'
+          ? CoreMessage[]
+          : F extends 'aiv5-ui'
+            ? AIV5UIMessage[]
+            : F extends 'aiv5-model'
+              ? AIV5ModelMessage[]
+              : never
+  > {
+    const messagesV2: MastraMessageV2[] = [];
+
+    for (const [, message] of this.messages) {
+      if ('threadId' in message && message.threadId === threadId) {
+        if (!('role' in message)) {
+          messagesV2.push(message as MastraMessageV2);
+        }
+      }
+    }
+
+    // Convert to requested format using MessageList
+    const messageList = new MessageList().add(messagesV2, 'memory');
+    return this.convertToFormat(messageList, format);
   }
 
   async getThreadsByResourceId() {
@@ -116,9 +190,48 @@ export class MockMemory extends MastraMemory {
       hasPreviousPage: false,
     };
   }
-  async query() {
-    return { messages: [], uiMessages: [], messagesV2: [] };
+  async query<F extends MessageFormat = 'mastra-db'>(
+    args: StorageGetMessagesArg & {
+      format?: F;
+    },
+  ): Promise<any> {
+    const { threadId, selectBy, format = 'mastra-db' as F } = args;
+    const messagesV2: MastraMessageV2[] = [];
+
+    for (const [, message] of this.messages) {
+      if ('threadId' in message && message.threadId === threadId) {
+        if (!('role' in message)) {
+          messagesV2.push(message as MastraMessageV2);
+        }
+      }
+    }
+
+    // Apply selectBy filters if provided
+    let filteredMessages = messagesV2;
+    if (selectBy?.last) {
+      filteredMessages = messagesV2.slice(-selectBy.last);
+    }
+
+    // Convert to requested format using MessageList
+    const messageList = new MessageList().add(filteredMessages, 'memory');
+
+    // Use switch statement with type assertions to satisfy TypeScript
+    switch (format) {
+      case 'mastra-db':
+        return { messages: messageList.get.all.v2() } as any;
+      case 'aiv4-ui':
+        return { messages: messageList.get.all.aiV4.ui() } as any;
+      case 'aiv4-core':
+        return { messages: messageList.get.all.aiV4.core() } as any;
+      case 'aiv5-ui':
+        return { messages: messageList.get.all.aiV5.ui() } as any;
+      case 'aiv5-model':
+        return { messages: messageList.get.all.aiV5.model() } as any;
+      default:
+        throw new Error(`Unsupported format: ${format}`);
+    }
   }
+
   async deleteThread(threadId: string) {
     delete this.threads[threadId];
   }

@@ -15,6 +15,7 @@ Cache individual message conversions (per message, per format) to avoid repeated
 **Cache per-message conversions, not entire query results.**
 
 This gives us:
+
 - Simple cache keys (message ID + timestamp + format)
 - Automatic invalidation (timestamp changes on edit)
 - Reusability across queries
@@ -51,15 +52,15 @@ const messageConversionCache = new LRU<string, unknown>({
 export function getCachedConversion<T>(
   message: { id: string; createdAt: Date; updatedAt?: Date },
   format: MessageFormat,
-  converter: () => T
+  converter: () => T,
 ): T {
   const timestamp = message.updatedAt || message.createdAt;
   const cacheKey = `${message.id}-${timestamp.getTime()}-${format}`;
-  
+
   if (messageConversionCache.has(cacheKey)) {
     return messageConversionCache.get(cacheKey) as T;
   }
-  
+
   const converted = converter();
   messageConversionCache.set(cacheKey, converted);
   return converted;
@@ -90,7 +91,7 @@ import { getCachedConversion } from './utils/conversion-cache';
 
 class MessageList {
   // ...
-  
+
   private convertMessageToV5(message: MastraMessageV2): UIMessage {
     return getCachedConversion(
       message,
@@ -98,7 +99,7 @@ class MessageList {
       () => this.performV5Conversion(message)
     );
   }
-  
+
   get.all.v5() {
     return this.messages.map(msg => this.convertMessageToV5(msg));
   }
@@ -171,11 +172,13 @@ const messageConversionCache = new LRU<string, unknown>({
 ```
 
 **Calculation:**
+
 - 10k messages × 5 formats = 50k max entries
 - Average converted message size: ~2KB
 - Max memory: ~100MB
 
 **LRU eviction ensures:**
+
 - Least recently used entries are evicted first
 - Memory usage stays bounded
 - Hot messages (frequently accessed) stay cached
@@ -248,10 +251,12 @@ const messageConversionCache = new LRU<string, unknown>(10000);
 ### 1. Should we cache all formats or just expensive ones?
 
 **Option A:** Cache all formats
+
 - Pro: Consistent behavior
 - Con: More memory usage
 
 **Option B:** Cache only `aiv5-ui` (has network data parsing)
+
 - Pro: Less memory usage
 - Con: Inconsistent behavior
 
@@ -299,12 +304,14 @@ const messageConversionCache = new LRU<string, unknown>({
 **Per-message caching with date-based cache keys is a clean, effective solution for optimizing message conversions.**
 
 Key benefits:
+
 - ✅ Automatic invalidation (no manual cache management)
 - ✅ Reusable across queries (pagination, overlapping queries)
 - ✅ Memory bounded (LRU eviction)
 - ✅ Simple implementation (single utility function)
 
 **But it's not needed right now.** We should:
+
 1. Complete format unification first
 2. Add performance benchmarks
 3. Measure in production
