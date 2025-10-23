@@ -3,6 +3,7 @@ import type { MastraModelGateway } from './base.js';
 export { MastraModelGateway, type ProviderConfig } from './base.js';
 export { ModelsDevGateway } from './models-dev.js';
 export { NetlifyGateway } from './netlify.js';
+export { OpenRouterGateway } from './openrouter.js';
 
 /**
  * Find the gateway that handles a specific model ID based on prefix
