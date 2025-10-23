@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'path';
 import { Deployer } from '@mastra/deployer';
+import { prepareToolsPaths } from '@mastra/deployer/utils';
 import { copy, readJSON } from 'fs-extra/esm';
 
 import { getAuthEntrypoint } from './utils/auth.js';
@@ -8,7 +9,6 @@ import { MASTRA_DIRECTORY, BUILD_ID, PROJECT_ID, TEAM_ID } from './utils/constan
 import { installDeps } from './utils/deps.js';
 import { getMastraEntryFile } from './utils/file.js';
 import { successEntrypoint } from './utils/report.js';
-import { prepareToolsPaths } from '@mastra/deployer/utils';
 
 export class CloudDeployer extends Deployer {
   constructor() {
