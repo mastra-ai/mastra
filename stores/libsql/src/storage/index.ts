@@ -32,28 +32,7 @@ import { StoreOperationsLibSQL } from './domains/operations';
 import { ScoresLibSQL } from './domains/scores';
 import { TracesLibSQL } from './domains/traces';
 import { WorkflowsLibSQL } from './domains/workflows';
-
-export type LibSQLConfig =
-  | {
-      url: string;
-      authToken?: string;
-      /**
-       * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
-       * @default 5
-       */
-      maxRetries?: number;
-      /**
-       * Initial backoff time in milliseconds for retrying write operations on SQLITE_BUSY.
-       * The backoff time will double with each retry (exponential backoff).
-       * @default 100
-       */
-      initialBackoffMs?: number;
-    }
-  | {
-      client: Client;
-      maxRetries?: number;
-      initialBackoffMs?: number;
-    };
+import type { LibSQLConfig } from './types';
 
 export class LibSQLStore extends MastraStorage {
   private client: Client;

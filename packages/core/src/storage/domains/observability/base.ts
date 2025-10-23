@@ -9,13 +9,17 @@ import type {
   PaginationInfo,
   UpdateAISpanRecord,
 } from '../../types';
+import type { StoreOperations } from '../operations';
 
 export class ObservabilityStorage extends MastraBase {
+  operations: StoreOperations | null;
   constructor() {
     super({
       component: 'STORAGE',
       name: 'OBSERVABILITY',
     });
+
+    this.operations = null;
   }
 
   /**

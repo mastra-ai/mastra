@@ -1,13 +1,18 @@
 import { MastraBase } from '../../../base';
 import type { StepResult, WorkflowRunState } from '../../../workflows';
 import type { WorkflowRun, WorkflowRuns } from '../../types';
+import type { StoreOperations } from '../operations';
 
 export abstract class WorkflowsStorage extends MastraBase {
+  operations: StoreOperations | null;
+
   constructor() {
     super({
       component: 'STORAGE',
       name: 'WORKFLOWS',
     });
+
+    this.operations = null;
   }
 
   abstract updateWorkflowResults({

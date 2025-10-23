@@ -2,13 +2,17 @@ import { MastraBase } from '../../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { ScoreRowData, ScoringSource } from '../../../scores/types';
 import type { PaginationInfo, StoragePagination } from '../../types';
+import type { StoreOperations } from '../operations';
 
 export abstract class ScoresStorage extends MastraBase {
+  operations: StoreOperations | null;
   constructor() {
     super({
       component: 'STORAGE',
       name: 'SCORES',
     });
+
+    this.operations = null;
   }
 
   abstract getScoreById({ id }: { id: string }): Promise<ScoreRowData | null>;

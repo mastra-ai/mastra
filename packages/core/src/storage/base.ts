@@ -248,16 +248,16 @@ export abstract class MastraStorage extends MastraBase {
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {
     throw new Error(
       `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-        `To use per-resource working memory, switch to one of these supported storage adapters.`,
+      `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
+      `To use per-resource working memory, switch to one of these supported storage adapters.`,
     );
   }
 
   async saveResource(_: { resource: StorageResourceType }): Promise<StorageResourceType> {
     throw new Error(
       `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-        `To use per-resource working memory, switch to one of these supported storage adapters.`,
+      `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
+      `To use per-resource working memory, switch to one of these supported storage adapters.`,
     );
   }
 
@@ -268,8 +268,8 @@ export abstract class MastraStorage extends MastraBase {
   }): Promise<StorageResourceType> {
     throw new Error(
       `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-        `To use per-resource working memory, switch to one of these supported storage adapters.`,
+      `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
+      `To use per-resource working memory, switch to one of these supported storage adapters.`,
     );
   }
 
@@ -298,16 +298,16 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract updateMessages(args: {
     messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
-      {
-        id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-      }[];
+    {
+      id: string;
+      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+    }[];
   }): Promise<MastraMessageV2[]>;
 
   async deleteMessages(_messageIds: string[]): Promise<void> {
     throw new Error(
       `Message deletion is not supported by this storage adapter (${this.constructor.name}). ` +
-        `The deleteMessages method needs to be implemented in the storage adapter.`,
+      `The deleteMessages method needs to be implemented in the storage adapter.`,
     );
   }
 
@@ -736,7 +736,7 @@ export abstract class MastraStorage extends MastraBase {
    * Lists database indexes for a table or all tables
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async listIndexes(tableName?: string): Promise<IndexInfo[]> {
+  async listIndexes(tableName?: string, _store?: STORAGE_DOMAIN_KEYS): Promise<IndexInfo[]> {
     if (this.stores?.operations) {
       return this.stores.operations.listIndexes(tableName);
     }
@@ -752,9 +752,51 @@ export abstract class MastraStorage extends MastraBase {
    * Gets detailed statistics for a specific index
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async describeIndex(indexName: string): Promise<StorageIndexStats> {
+  async describeIndex(indexName: string, _store?: STORAGE_DOMAIN_KEYS): Promise<StorageIndexStats> {
     if (this.stores?.operations) {
       return this.stores.operations.describeIndex(indexName);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_DESCRIBE_INDEX_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+}
+
+export type STORAGE_DOMAIN_KEYS = 'workflows' | 'scores' | 'memory' | 'observability';
+
+export class CompositeStorage extends MastraStorage {
+  stores: StorageDomains
+  constructor(config: Omit<StorageDomains, 'operations'>) {
+    super({ name: 'CompositeStorage' });
+    this.stores = config as StorageDomains;
+  }
+
+  /**
+   * Lists database indexes for a table or all tables
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async listIndexes(tableName?: string, store?: STORAGE_DOMAIN_KEYS): Promise<IndexInfo[]> {
+    if (store && this.stores?.[store]?.operations) {
+      return this.stores[store].operations.listIndexes(tableName);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_INDEXES_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+ * Gets detailed statistics for a specific index
+ * @throws {MastraError} if not supported by the storage adapter
+ */
+  async describeIndex(indexName: string, store: STORAGE_DOMAIN_KEYS): Promise<StorageIndexStats> {
+    if (this.stores?.[store]?.operations) {
+      return this.stores[store].operations.describeIndex(indexName);
     }
     throw new MastraError({
       id: 'MASTRA_STORAGE_DESCRIBE_INDEX_NOT_SUPPORTED',

@@ -1,8 +1,9 @@
-import type { InValue } from '@libsql/client';
+import { createClient, type Client, type InValue } from '@libsql/client';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { safelyParseJSON, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { PaginationArgs, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import type { LibSQLConfig } from '../types';
 
 export function createExecuteWriteOperationWithRetry({
   logger,
@@ -269,4 +270,39 @@ export function transformFromSqlRow<T>({
   }
 
   return result as T;
+}
+
+export function getClient({ logger, config }: { logger: IMastraLogger, config: LibSQLConfig }) {
+  let shouldCacheInit = true
+  let client: Client;
+  if ('url' in config) {
+    // need to re-init every time for in memory dbs or the tables might not exist
+    if (config.url.endsWith(':memory:')) {
+      shouldCacheInit = false;
+    }
+
+    client = createClient({
+      url: config.url,
+      ...(config.authToken ? { authToken: config.authToken } : {}),
+    });
+
+    // Set PRAGMAs for better concurrency, especially for file-based databases
+    if (config.url.startsWith('file:') || config.url.includes(':memory:')) {
+      client
+        .execute('PRAGMA journal_mode=WAL;')
+        .then(() => logger.debug('LibSQLStore: PRAGMA journal_mode=WAL set.'))
+        .catch(err => logger.warn('LibSQLStore: Failed to set PRAGMA journal_mode=WAL.', err));
+      client
+        .execute('PRAGMA busy_timeout = 5000;') // 5 seconds
+        .then(() => logger.debug('LibSQLStore: PRAGMA busy_timeout=5000 set.'))
+        .catch(err => logger.warn('LibSQLStore: Failed to set PRAGMA busy_timeout.', err));
+    }
+  } else {
+    client = config.client;
+  }
+
+  return {
+    client,
+    shouldCacheInit,
+  };
 }

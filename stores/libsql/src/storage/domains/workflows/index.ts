@@ -3,7 +3,10 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
-import type { StoreOperationsLibSQL } from '../operations';
+import { StoreOperationsLibSQL } from '../operations';
+import type { LibSQLConfig } from '../../types';
+import type { IMastraLogger } from '@mastra/core/logger';
+import { getClient } from '../utils';
 
 function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
   let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
@@ -422,4 +425,27 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       );
     }
   }
+}
+
+export function createWorkflowStorageLibSQL({
+  logger,
+  config,
+}: {
+  logger: IMastraLogger;
+  config: LibSQLConfig;
+}) {
+  const { client } = getClient({ logger, config });
+
+  const operations = new StoreOperationsLibSQL({
+    client,
+    maxRetries: config.maxRetries,
+    initialBackoffMs: config.initialBackoffMs,
+  });
+
+  return new WorkflowsLibSQL({
+    operations,
+    client,
+    maxRetries: config.maxRetries,
+    initialBackoffMs: config.initialBackoffMs,
+  })
 }
