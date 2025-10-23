@@ -14,6 +14,14 @@ jobs:
     permissions:
       pull-requests: write
     steps:
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          # Use default GITHUB_TOKEN for initial checkout
+          # This is needed to access the .github/actions/app-auth action
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Dane App Auth
         id: app-auth
         uses: ./.github/actions/app-auth
@@ -21,17 +29,12 @@ jobs:
           app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
 
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Re-checkout with app token
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           token: ${{ steps.app-auth.outputs.token }}
-          persist-credentials: false
-
-      - name: Configure git
-        run: |
-          git config --global user.name '${{ steps.app-auth.outputs.app-slug }}[bot]'
-          git config --global user.email '${{ steps.app-auth.outputs.user-id }}+${{ steps.app-auth.outputs.app-slug }}[bot]@users.noreply.github.com'
+          persist-credentials: true
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

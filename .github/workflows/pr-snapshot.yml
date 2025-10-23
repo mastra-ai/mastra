@@ -36,7 +36,7 @@ jobs:
           exit 1
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
