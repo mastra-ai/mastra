@@ -15,6 +15,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          # Use default GITHUB_TOKEN for initial checkout
+          # This is needed to access the .github/actions/app-auth action
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Dane App Auth
         id: app-auth
         uses: ./.github/actions/app-auth

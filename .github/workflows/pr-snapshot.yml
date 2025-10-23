@@ -22,12 +22,29 @@ jobs:
       id-token: write
 
     steps:
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          # Use default GITHUB_TOKEN for initial checkout
+          # This is needed to access the .github/actions/app-auth action
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Dane App Auth
         id: app-auth
         uses: ./.github/actions/app-auth
         with:
           app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Re-checkout with app token
+        uses: actions/checkout@v5
+        with:
+          token: ${{ steps.app-auth.outputs.token }}
+          # Fetch entire git history so Changesets can generate changelogs
+          # with the correct commits
+          fetch-depth: 0
+          persist-credentials: true
 
       - name: Check if branch is main
         if: github.ref == 'refs/heads/main'
