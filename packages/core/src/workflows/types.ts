@@ -247,7 +247,6 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
   | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
   | { type: 'sleepUntil'; id: string; date?: Date; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
-  | { type: 'waitForEvent'; event: string; step: Step; timeout?: number }
   | {
       type: 'parallel';
       steps: StepFlowEntry[];
@@ -298,12 +297,6 @@ export type SerializedStepFlowEntry =
       id: string;
       date?: Date;
       fn?: string;
-    }
-  | {
-      type: 'waitForEvent';
-      event: string;
-      step: SerializedStep;
-      timeout?: number;
     }
   | {
       type: 'parallel';

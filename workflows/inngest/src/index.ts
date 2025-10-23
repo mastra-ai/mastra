@@ -1405,19 +1405,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     }
   }
 
-  async executeWaitForEvent({ event, timeout }: { event: string; timeout?: number }): Promise<any> {
-    const eventData = await this.inngestStep.waitForEvent(`user-event-${event}`, {
-      event: `user-event-${event}`,
-      timeout: timeout ?? 5e3,
-    });
-
-    if (eventData === null) {
-      throw 'Timeout waiting for event';
-    }
-
-    return eventData?.data;
-  }
-
   async executeStep({
     step,
     stepResults,
