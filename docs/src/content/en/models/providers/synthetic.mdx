@@ -311,7 +311,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.synthetic.new/v1",
-    modelId: "hf:Qwen/Qwen2.5-Coder-32B-Instruct",
+    id: "synthetic/hf:Qwen/Qwen2.5-Coder-32B-Instruct",
     apiKey: process.env.SYNTHETIC_API_KEY,
     headers: {
       "X-Custom-Header": "value"
