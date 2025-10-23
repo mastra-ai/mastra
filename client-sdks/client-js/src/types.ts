@@ -4,7 +4,6 @@ import type {
   AgentGenerateOptions,
   AgentStreamOptions,
   SerializableStructuredOutputOptions,
-  DeprecatedOutputOptions,
   ToolsInput,
   UIMessageWithMetadata,
   AgentInstructions,
@@ -133,8 +132,7 @@ export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
     AgentExecutionOptions<OUTPUT>,
     'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
   >
-> &
-  DeprecatedOutputOptions<OUTPUT>;
+>;
 
 export type UpdateModelParams = {
   modelId: string;
