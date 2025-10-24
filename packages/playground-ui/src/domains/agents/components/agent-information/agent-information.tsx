@@ -1,26 +1,28 @@
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  AgentSettings,
-  PlaygroundTabs,
-  Tab,
-  TabContent,
-  TabList,
-  AgentMetadata,
-  AgentEntityHeader,
-  useAgentSettings,
-  useAgent,
-  useModelProviders,
-  useReorderModelList,
-  useUpdateAgentModel,
-  useUpdateModelInModelList,
-  useMemory,
-} from '@mastra/playground-ui';
 
 import { AgentMemory } from './agent-memory';
 import { useState, useEffect } from 'react';
 import { AgentPromptEnhancer } from './agent-instructions-enhancer';
+import { AgentEntityHeader } from '../agent-entity-header';
+import { PlaygroundTabs, Tab, TabContent, TabList } from '@/components/ui/playground-tabs';
+import { AgentMetadata } from '../agent-metadata';
+import { useAgent } from '../../hooks/use-agent';
+import {
+  useModelProviders,
+  useReorderModelList,
+  useUpdateAgentModel,
+  useUpdateModelInModelList,
+} from '../../hooks/use-agents';
+import { useMemory } from '@/domains/memory/hooks';
+import { useAgentSettings } from '../../context/agent-context';
+import { AgentSettings } from '../agent-settings';
 
-export function AgentInformation({ agentId }: { agentId: string }) {
+export interface AgentInformationProps {
+  agentId: string;
+  threadId: string;
+}
+
+export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
   const { data: agent, isLoading } = useAgent(agentId);
   const { data: modelProviders } = useModelProviders();
   const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
@@ -98,7 +100,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             )}
           </TabContent>
           <TabContent value="memory">
-            {isLoading ? <Skeleton className="h-full" /> : <AgentMemory agentId={agentId} />}
+            {isLoading ? <Skeleton className="h-full" /> : <AgentMemory agentId={agentId} threadId={threadId} />}
           </TabContent>
         </PlaygroundTabs>
       </div>
