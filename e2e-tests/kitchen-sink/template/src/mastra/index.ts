@@ -4,6 +4,7 @@ import { LibSQLStore } from '@mastra/libsql';
 
 import { weatherAgent } from './agents';
 import { complexWorkflow, lessComplexWorkflow } from './workflows/complex-workflow';
+import { simpleMcpServer } from './mcps';
 
 export const mastra = new Mastra({
   workflows: { complexWorkflow, lessComplexWorkflow },
@@ -15,4 +16,7 @@ export const mastra = new Mastra({
   storage: new LibSQLStore({
     url: ':memory:',
   }),
+  mcpServers: {
+    simpleMcpServer,
+  },
 });
