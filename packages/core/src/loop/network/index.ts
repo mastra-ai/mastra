@@ -543,7 +543,7 @@ export async function createNetworkLoop({
         // resourceId: inputData.resourceId,
         // threadId: inputData.threadId,
         runtimeContext: runtimeContext,
-        runId: runId,
+        runId,
       });
 
       for await (const chunk of result.fullStream) {
