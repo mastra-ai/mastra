@@ -9,7 +9,7 @@ import type { IErrorDefinition } from '../error';
 import { safeParseErrorObject } from '../error/utils.js';
 import type { MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
-import type { ChunkType } from '../stream/types';
+import { ChunkFrom, type ChunkType } from '../stream/types';
 import { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
@@ -554,6 +554,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             callId: stepCallId,
             name: 'sleep',
             runId,
+            from: ChunkFrom.WORKFLOW,
           },
           writableStream,
         ),
@@ -661,6 +662,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             callId: stepCallId,
             name: 'sleepUntil',
             runId,
+            from: ChunkFrom.WORKFLOW,
           },
           writableStream,
         ),
@@ -967,6 +969,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               callId: stepCallId,
               name: step.id,
               runId,
+              from: ChunkFrom.WORKFLOW,
             },
             writableStream,
           ),
@@ -1383,6 +1386,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                       callId: randomUUID(),
                       name: 'conditional',
                       runId,
+                      from: ChunkFrom.WORKFLOW,
                     },
                     writableStream,
                   ),
@@ -1685,6 +1689,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 callId: randomUUID(),
                 name: 'loop',
                 runId,
+                from: ChunkFrom.WORKFLOW,
               },
               writableStream,
             ),

@@ -1,6 +1,6 @@
 import type { ChunkType } from '@mastra/core';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
-import type { PartialSchemaOutput, OutputSchema, DataChunkType } from '@mastra/core/stream';
+import type { PartialSchemaOutput, OutputSchema, DataChunkType, ChunkFrom } from '@mastra/core/stream';
 
 import type { InferUIMessageChunk, ObjectStreamPart, TextStreamPart, ToolSet, UIMessage } from 'ai';
 import { isDataChunkType } from './utils';
@@ -246,7 +246,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   responseMessageId,
 }: {
   // tool-output is a custom mastra chunk type used in ToolStream
-  part: TextStreamPart<ToolSet> | DataChunkType | { type: 'tool-output'; toolCallId: string; output: any };
+  part: TextStreamPart<ToolSet> | DataChunkType | { type: 'tool-output'; toolCallId: string; output: any; from: ChunkFrom };
   messageMetadataValue?: unknown;
   sendReasoning?: boolean;
   sendSources?: boolean;
@@ -384,19 +384,19 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'tool-output': {
-      if (part.output.from === 'AGENT') {
+      if (part.from === 'AGENT') {
         return {
           type: 'tool-agent',
           toolCallId: part.toolCallId,
           payload: part.output,
         };
-      } else if (part.output.from === 'WORKFLOW') {
+      } else if (part.from === 'WORKFLOW') {
         return {
           type: 'tool-workflow',
           toolCallId: part.toolCallId,
           payload: part.output,
         };
-      } else if (part.output.from === 'NETWORK') {
+      } else if (part.from === 'NETWORK') {
         return {
           type: 'tool-network',
           toolCallId: part.toolCallId,
