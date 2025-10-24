@@ -171,6 +171,24 @@ describe('Agent - network', () => {
     console.log('SUH', anStream);
   });
 
+  it.skip('LOOP - should track usage data from agent.network()', async () => {
+    const anStream = await network.network('Research dolphins', {
+      runtimeContext,
+    });
+
+    // Consume the stream to trigger usage collection
+    for await (const chunk of anStream) {
+      // Just consume the stream
+    }
+
+    // Check that usage data is available
+    const usage = await anStream.usage;
+    expect(usage).toBeDefined();
+    expect(usage.inputTokens).toBeGreaterThan(0);
+    expect(usage.outputTokens).toBeGreaterThan(0);
+    expect(usage.totalTokens).toBeGreaterThan(0);
+  });
+
   it('Should throw if memory is not configured', async () => {
     const calculatorAgent = new Agent({
       id: 'calculator-agent',
