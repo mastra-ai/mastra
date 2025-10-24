@@ -12,7 +12,7 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { memoryProcessorAgent, weatherAgent } from './mastra/agents/weather';
+import { memoryProcessorAgent } from './mastra/agents/weather';
 import { weatherTool, weatherToolCity } from './mastra/tools/weather';
 
 describe('Agent Memory Tests', () => {
