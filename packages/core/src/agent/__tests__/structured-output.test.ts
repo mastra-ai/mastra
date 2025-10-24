@@ -204,12 +204,14 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' }) {
         });
       } else {
         response = await agentOne.generate('Give me the winners of 2012 and 2016 US presidential elections', {
-          output: z.array(
-            z.object({
-              winner: z.string(),
-              year: z.string(),
-            }),
-          ),
+          structuredOutput: {
+            schema: z.array(
+              z.object({
+                winner: z.string(),
+                year: z.string(),
+              }),
+            ),
+          },
         });
       }
 
@@ -260,19 +262,21 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' }) {
         });
       } else {
         response = await agentOne.generate('Give me the winners of 2012 and 2016 US presidential elections', {
-          output: {
-            type: 'object',
-            properties: {
-              winners: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: { winner: { type: 'string' }, year: { type: 'string' } },
-                  required: ['winner', 'year'],
+          structuredOutput: {
+            schema: {
+              type: 'object',
+              properties: {
+                winners: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: { winner: { type: 'string' }, year: { type: 'string' } },
+                    required: ['winner', 'year'],
+                  },
                 },
               },
+              required: ['winners'],
             },
-            required: ['winners'],
           },
         });
       }
