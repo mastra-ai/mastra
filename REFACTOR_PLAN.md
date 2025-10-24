@@ -4,7 +4,7 @@
 
 We have **duplicate message history logic** running in parallel:
 
-1. **OLD PATH (currently active)**: 
+1. **OLD PATH (currently active)**:
    - `prepare-memory-step.ts` → `capabilities.getMemoryMessages()` → `memory.rememberMessages()` → fetches history
    - Includes semantic recall mixed in
    - Uses old `memory.processMessages()` with deprecated MemoryProcessors
@@ -38,7 +38,7 @@ constructor(config: { name: string } & SharedMemoryConfig) {
   if (config.processors) {
     throw new Error(
       `The 'processors' option in Memory is deprecated and has been removed.
-      
+
 Please use the new Input/Output processor system instead:
 
 OLD (deprecated):
@@ -121,9 +121,7 @@ runtimeContext.set('MastraMemory', {
 });
 
 // Build message list with ONLY new user messages
-messageList
-  .add(options.context || [], 'context')
-  .add(options.messages, 'user');
+messageList.add(options.context || [], 'context').add(options.messages, 'user');
 
 // Add user-provided system message if present
 addSystemMessage(messageList, options.system, 'user-provided');
@@ -149,6 +147,7 @@ const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcess
 #### Change 1: Remove `capabilities.getMemoryMessages()` call
 
 **REMOVE** lines 173-184:
+
 ```typescript
 let [memoryMessages, memorySystemMessage] = await Promise.all([
   existingThread || hasResourceScopeSemanticRecall
@@ -165,18 +164,20 @@ let [memoryMessages, memorySystemMessage] = await Promise.all([
 ```
 
 **REPLACE** with:
+
 ```typescript
 // Working memory system message (if configured)
-const memorySystemMessage = await memory.getSystemMessage({ 
-  threadId: threadObject.id, 
-  resourceId, 
-  memoryConfig 
+const memorySystemMessage = await memory.getSystemMessage({
+  threadId: threadObject.id,
+  resourceId,
+  memoryConfig,
 });
 ```
 
 #### Change 2: Remove manual message list building
 
 **REMOVE** lines 186-235 (all the manual message formatting and adding):
+
 ```typescript
 capabilities.logger.debug('Fetched messages from memory', {
   threadId: threadObject.id,
@@ -189,11 +190,15 @@ const resultsFromOtherThreads = memoryMessages.filter((m: any) => m.threadId !==
 // ... lots of formatting code ...
 
 messageList
-  .add(memoryMessages.filter((m: any) => m.threadId === threadObject.id), 'memory')
+  .add(
+    memoryMessages.filter((m: any) => m.threadId === threadObject.id),
+    'memory',
+  )
   .add(options.messages, 'user');
 ```
 
 **REPLACE** with:
+
 ```typescript
 // Add new user messages only - processors will handle history
 messageList.add(options.messages, 'user');
@@ -202,6 +207,7 @@ messageList.add(options.messages, 'user');
 #### Change 3: Remove `memory.processMessages()` call
 
 **REMOVE** lines 249-275:
+
 ```typescript
 const processedMemoryMessages = await memory.processMessages({
   messages: messageList.get.remembered.v1() as any,
@@ -232,6 +238,7 @@ processedList.add(processedMemoryMessages, 'memory').add(messageList.get.input.v
 ```
 
 **REPLACE** with:
+
 ```typescript
 // Processors have already modified messageList in-place
 // Just return it as-is
@@ -240,6 +247,7 @@ processedList.add(processedMemoryMessages, 'memory').add(messageList.get.input.v
 #### Change 4: Complete refactored flow
 
 **NEW FLOW** (lines 164-242):
+
 ```typescript
 // Set memory context in RuntimeContext for processors to access
 runtimeContext.set('MastraMemory', {
@@ -248,10 +256,10 @@ runtimeContext.set('MastraMemory', {
 });
 
 // Get working memory system message (if configured)
-const memorySystemMessage = await memory.getSystemMessage({ 
-  threadId: threadObject.id, 
-  resourceId, 
-  memoryConfig 
+const memorySystemMessage = await memory.getSystemMessage({
+  threadId: threadObject.id,
+  resourceId,
+  memoryConfig,
 });
 
 // Build message list with instructions and context
@@ -291,7 +299,7 @@ const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcess
 
 return {
   thread: threadObject,
-  messageList,  // Processors have modified this in-place
+  messageList, // Processors have modified this in-place
   ...(tripwireTriggered && {
     tripwire: true,
     tripwireReason,
@@ -305,6 +313,7 @@ return {
 **File**: `packages/core/src/agent/agent.ts`
 
 **REMOVE** method at lines 1653-1679:
+
 ```typescript
 private async getMemoryMessages({
   resourceId,
@@ -335,6 +344,7 @@ private async getMemoryMessages({
 ```
 
 **REMOVE** from capabilities (line 3513):
+
 ```typescript
 getMemoryMessages: this.getMemoryMessages.bind(this),
 ```
@@ -342,6 +352,7 @@ getMemoryMessages: this.getMemoryMessages.bind(this),
 **File**: `packages/core/src/agent/workflows/prepare-stream/schema.ts`
 
 **REMOVE** from `AgentCapabilities` interface:
+
 ```typescript
 getMemoryMessages: (args: {
   resourceId?: string;
@@ -384,7 +395,7 @@ async processMessages(args: {
     'Memory processing now happens automatically through Input/Output processors. ' +
     'This method will be removed in a future version.'
   );
-  
+
   // Keep existing implementation for backward compatibility
   // ... existing code ...
 }
@@ -415,10 +426,10 @@ getInputProcessors(): InputProcessor[] {
 
   // Add semantic recall if configured
   if (this.threadConfig.semanticRecall && this.vector && this.embedder) {
-    const semanticConfig = typeof this.threadConfig.semanticRecall === 'object' 
-      ? this.threadConfig.semanticRecall 
+    const semanticConfig = typeof this.threadConfig.semanticRecall === 'object'
+      ? this.threadConfig.semanticRecall
       : {};
-    
+
     processors.push(new SemanticRecall({
       storage: this.storage,
       vector: this.vector,
@@ -478,19 +489,23 @@ getOutputProcessors(): OutputProcessor[] {
 ### Integration Tests to Run
 
 **File**: `packages/memory/integration-tests/src/agent-memory.test.ts`
+
 - Test basic memory persistence
 - Test message retrieval
 - Test thread management
 
 **File**: `packages/memory/integration-tests/src/processors.test.ts`
+
 - Test old MemoryProcessor system (should still work via deprecated path)
 - Add tests for new processor system
 
 **File**: `packages/memory/integration-tests/src/working-memory.test.ts`
+
 - Test working memory injection
 - Test working memory updates
 
 **File**: `packages/memory/integration-tests/src/streaming-memory.test.ts`
+
 - Test memory with streaming responses
 
 ### New Integration Tests to Add
@@ -503,7 +518,7 @@ describe('Memory with New Processor System', () => {
     const memory = new Memory({
       lastMessages: 10,
       semanticRecall: true,
-      workingMemory: { template: '...' }
+      workingMemory: { template: '...' },
     });
 
     const inputProcessors = memory.getInputProcessors();
@@ -520,7 +535,7 @@ describe('Memory with New Processor System', () => {
     const memory = new Memory({ lastMessages: 5 });
     const agent = new Agent({
       inputProcessors: [memory],
-      outputProcessors: [memory]
+      outputProcessors: [memory],
     });
 
     // Should expand memory into its processors
@@ -530,14 +545,14 @@ describe('Memory with New Processor System', () => {
   test('processors config throws error', () => {
     expect(() => {
       new Memory({
-        processors: [new TokenLimiter(100000)]
+        processors: [new TokenLimiter(100000)],
       });
-    }).toThrow('processors\' option in Memory is deprecated');
+    }).toThrow("processors' option in Memory is deprecated");
   });
 
   test('memory fetching happens only once via processors', async () => {
     const storageSpy = jest.spyOn(storage, 'getMessages');
-    
+
     const memory = new Memory({ lastMessages: 10 });
     const agent = new Agent({ memory });
 
@@ -565,64 +580,63 @@ describe('Memory with New Processor System', () => {
 ## Migration Guide for Users
 
 ### Before (Old Way)
+
 ```typescript
 const memory = new Memory({
   lastMessages: 10,
-  processors: [
-    new TokenLimiter(100000),
-    new ToolCallFilter()
-  ]
+  processors: [new TokenLimiter(100000), new ToolCallFilter()],
 });
 
 const agent = new Agent({ memory });
 ```
 
 ### After (New Way - Option 1: Direct memory)
+
 ```typescript
 const memory = new Memory({
-  lastMessages: 10
+  lastMessages: 10,
 });
 
 const agent = new Agent({
   memory,
-  outputProcessors: [
-    new TokenLimiterProcessor(100000)
-  ]
+  outputProcessors: [new TokenLimiterProcessor(100000)],
 });
 ```
 
 ### After (New Way - Option 2: Processor arrays)
+
 ```typescript
 const memory = new Memory({
-  lastMessages: 10
+  lastMessages: 10,
 });
 
 const agent = new Agent({
-  inputProcessors: [memory],  // Expands to memory.getInputProcessors()
+  inputProcessors: [memory], // Expands to memory.getInputProcessors()
   outputProcessors: [
-    memory,  // Expands to memory.getOutputProcessors()
-    new TokenLimiterProcessor(100000)
-  ]
+    memory, // Expands to memory.getOutputProcessors()
+    new TokenLimiterProcessor(100000),
+  ],
 });
 ```
 
 ### After (New Way - Option 3: Manual processors)
+
 ```typescript
 const memory = new Memory({
   lastMessages: 10,
   semanticRecall: true,
-  workingMemory: { template: '...' }
+  workingMemory: { template: '...' },
 });
 
 const agent = new Agent({
   inputProcessors: [
-    ...memory.getInputProcessors(),  // MessageHistory, SemanticRecall, WorkingMemory
-    new CustomInputProcessor()
+    ...memory.getInputProcessors(), // MessageHistory, SemanticRecall, WorkingMemory
+    new CustomInputProcessor(),
   ],
   outputProcessors: [
     new CustomOutputProcessor(),
-    ...memory.getOutputProcessors()  // MessageHistory
-  ]
+    ...memory.getOutputProcessors(), // MessageHistory
+  ],
 });
 ```
 
