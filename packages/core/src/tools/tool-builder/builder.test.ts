@@ -1048,3 +1048,220 @@ describe('Tool Input Validation', () => {
     expect(result.message).toContain('"tags": []');
   });
 });
+
+describe('CoreToolBuilder - Execute Signature Tests (isVercelTool bug)', () => {
+  const runtimeContext = new RuntimeContext();
+
+  describe('Real model test - v5 tool with actual API call', () => {
+    it('should execute v5 tool with real model to verify actual behavior', async () => {
+      if (!process.env.OPENAI_API_KEY) {
+        console.log('Skipping real model test - OPENAI_API_KEY not set');
+        return;
+      }
+
+      let receivedFirstParam: any;
+
+      const v5Tool = {
+        description: 'V5 tool that returns what it receives',
+        inputSchema: z.object({ query: z.string() }),
+        execute: vi.fn(async (firstParam: any) => {
+          receivedFirstParam = firstParam;
+          // Real v5 tools expect args directly: firstParam.query
+          // If bug exists, firstParam is { context: { query: ... }, mastra, ... }
+          // So firstParam.query will be UNDEFINED!
+          return {
+            success: true,
+            receivedQuery: firstParam.query, // This will be undefined if bug exists
+            receivedStructure: Object.keys(firstParam),
+          };
+        }),
+      };
+
+      const agent = new Agent({
+        name: 'real-v5-test-agent',
+        instructions: 'You are a test agent. Call the v5TestTool with query="test search".',
+        model: openai('gpt-4o-mini'),
+        tools: { v5TestTool: v5Tool },
+      });
+
+      const response = await agent.generateLegacy('Call the v5TestTool with query="test search"', {
+        toolChoice: 'required',
+        maxSteps: 1,
+      });
+
+      // Verify tool was called
+      expect(v5Tool.execute).toHaveBeenCalledTimes(1);
+
+      // Check what the tool actually received
+      console.log('Real model test - receivedFirstParam:', receivedFirstParam);
+
+      // THIS IS THE KEY CHECK - does v5 tool get args directly or wrapped in context?
+      if (receivedFirstParam.context) {
+        console.log('BUG CONFIRMED: v5 tool received Mastra signature with context wrapper');
+        console.log('receivedFirstParam.query:', receivedFirstParam.query); // Will be undefined
+        console.log('receivedFirstParam.context.query:', receivedFirstParam.context.query); // Will have value
+      } else {
+        console.log('v5 tool received AI SDK signature correctly');
+        console.log('receivedFirstParam.query:', receivedFirstParam.query); // Will have value
+      }
+
+      // Check the tool result
+      const toolResult = response.toolResults?.[0];
+      console.log('Tool result:', toolResult?.result);
+
+      // If bug exists, receivedQuery will be undefined even though the model passed the query
+      if (toolResult?.result.receivedQuery === undefined && receivedFirstParam.context) {
+        console.log('FUNCTIONAL BUG CONFIRMED: Tool returned undefined query due to wrong signature');
+      }
+    }, 30000);
+  });
+
+  describe('v4 tool execution (with parameters)', () => {
+    it('should call v4 tool execute with (args, options) signature', async () => {
+      let receivedFirstParam: any;
+      let receivedSecondParam: any;
+
+      const v4Tool = {
+        description: 'V4 test tool',
+        parameters: z.object({ input: z.string() }),
+        execute: vi.fn(async (firstParam: any, secondParam: any) => {
+          receivedFirstParam = firstParam;
+          receivedSecondParam = secondParam;
+          return { result: firstParam.input };
+        }),
+      };
+
+      const builder = new CoreToolBuilder({
+        originalTool: v4Tool,
+        options: { name: 'v4-test-tool', runtimeContext },
+      });
+
+      const builtTool = builder.build();
+      const result = await builtTool.execute?.({ input: 'test-value' }, { toolCallId: 'test-123', messages: [] });
+
+      // Verify execute was called
+      expect(v4Tool.execute).toHaveBeenCalledTimes(1);
+
+      // V4 tool should receive (args, options) signature
+      expect(receivedFirstParam).toEqual({ input: 'test-value' });
+      expect(receivedSecondParam).toBeDefined();
+      expect(receivedSecondParam.abortSignal).toBeDefined();
+
+      // Verify result
+      expect(result).toEqual({ result: 'test-value' });
+    });
+  });
+
+  describe('v5 tool execution (with inputSchema) - CRITICAL BUG TEST', () => {
+    it('should call v5 tool execute with (args, options) signature - NOT Mastra signature', async () => {
+      let receivedFirstParam: any;
+      let receivedSecondParam: any;
+
+      const v5Tool = {
+        description: 'V5 test tool',
+        inputSchema: z.object({ query: z.string() }),
+        execute: vi.fn(async (firstParam: any, secondParam: any) => {
+          receivedFirstParam = firstParam;
+          receivedSecondParam = secondParam;
+          return { results: [firstParam.query] };
+        }),
+      };
+
+      const builder = new CoreToolBuilder({
+        originalTool: v5Tool,
+        options: { name: 'v5-test-tool', runtimeContext },
+      });
+
+      const builtTool = builder.build();
+      const result = await builtTool.execute?.({ query: 'test-query' }, { toolCallId: 'test-456', messages: [] });
+
+      // Verify execute was called
+      expect(v5Tool.execute).toHaveBeenCalledTimes(1);
+
+      expect(receivedFirstParam).toEqual({ query: 'test-query' });
+      expect(receivedFirstParam).not.toHaveProperty('context');
+      expect(receivedFirstParam).not.toHaveProperty('mastra');
+      expect(receivedFirstParam).not.toHaveProperty('threadId');
+      expect(receivedFirstParam).not.toHaveProperty('runtimeContext');
+
+      expect(receivedSecondParam).toBeDefined();
+      expect(receivedSecondParam.abortSignal).toBeDefined();
+
+      // Verify result
+      expect(result).toEqual({ results: ['test-query'] });
+    });
+
+    it('should call provider-defined v5 tool (google.tools.googleSearch) correctly', async () => {
+      let receivedArgs: any;
+
+      const googleSearchTool = {
+        type: 'provider-defined' as const,
+        id: 'google.googleSearch' as `${string}.${string}`,
+        description: 'Search Google',
+        inputSchema: z.object({
+          query: z.string(),
+          maxResults: z.number().optional(),
+        }),
+        execute: vi.fn(async (args: any) => {
+          receivedArgs = args;
+          return {
+            results: [
+              { title: 'Result 1', url: 'https://example.com/1' },
+              { title: 'Result 2', url: 'https://example.com/2' },
+            ],
+          };
+        }),
+      };
+
+      const builder = new CoreToolBuilder({
+        originalTool: googleSearchTool,
+        options: { name: 'google-search-tool', runtimeContext },
+      });
+
+      const builtTool = builder.build();
+      const result = await builtTool.execute?.(
+        { query: 'test', maxResults: 5 },
+        { toolCallId: 'test-789', messages: [] },
+      );
+
+      expect(receivedArgs).toEqual({ query: 'test', maxResults: 5 });
+      expect(receivedArgs).not.toHaveProperty('context');
+
+      expect(result).toBeDefined();
+      expect(result.results).toHaveLength(2);
+    });
+  });
+
+  describe('Mastra tool execution', () => {
+    it('should call Mastra tool execute with context object signature', async () => {
+      let receivedContext: any;
+
+      const mastraTool = createTool({
+        id: 'test.tool',
+        description: 'Mastra test tool',
+        inputSchema: z.object({ data: z.string() }),
+        execute: vi.fn(async (context: any) => {
+          receivedContext = context;
+          return { processed: context.context.data };
+        }),
+      });
+
+      const builder = new CoreToolBuilder({
+        originalTool: mastraTool,
+        options: { name: 'mastra-test-tool', runtimeContext },
+      });
+
+      const builtTool = builder.build();
+      const result = await builtTool.execute?.({ data: 'test-data' }, { toolCallId: 'test-999', messages: [] });
+
+      // Mastra tool should receive context object with args inside
+      expect(receivedContext).toBeDefined();
+      expect(receivedContext.context).toEqual({ data: 'test-data' });
+      expect(receivedContext.runtimeContext).toBeDefined();
+      // Should NOT receive args directly
+      expect(receivedContext.data).toBeUndefined();
+
+      expect(result).toEqual({ processed: 'test-data' });
+    });
+  });
+});

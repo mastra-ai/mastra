@@ -335,4 +335,106 @@ describe('Tools Handlers', () => {
       expect(result).toHaveProperty('description', mockTool.description);
     });
   });
+
+  describe('executeToolHandler - isVercelTool bug impact', () => {
+    it('should execute v4 tools with correct signature', async () => {
+      let receivedFirstParam: any;
+
+      const v4Tool = {
+        id: 'v4-test-tool',
+        description: 'V4 test tool',
+        parameters: {},
+        execute: vi.fn(async (firstParam: any) => {
+          receivedFirstParam = firstParam;
+          return { result: 'v4-success' };
+        }),
+      };
+
+      const tools = { 'v4-test-tool': v4Tool };
+      const data = { input: 'test-data' };
+      const executeTool = executeToolHandler(tools);
+
+      const result = await executeTool({
+        mastra: new Mastra({ logger: false }),
+        toolId: 'v4-test-tool',
+        data,
+        runtimeContext: new RuntimeContext(),
+      });
+
+      expect(v4Tool.execute).toHaveBeenCalledTimes(1);
+      // V4 tools should receive data directly (AI SDK signature)
+      expect(receivedFirstParam).toEqual(data);
+      expect(result).toEqual({ result: 'v4-success' });
+    });
+
+    it('should execute v5 tools with correct signature - BUG TEST', async () => {
+      let receivedFirstParam: any;
+
+      const v5Tool = {
+        id: 'v5-test-tool',
+        description: 'V5 test tool',
+        inputSchema: {},
+        execute: vi.fn(async (firstParam: any) => {
+          receivedFirstParam = firstParam;
+          return { result: 'v5-success' };
+        }),
+      };
+
+      const tools = { 'v5-test-tool': v5Tool };
+      const data = { query: 'test-query' };
+      const executeTool = executeToolHandler(tools);
+
+      const result = await executeTool({
+        mastra: new Mastra({ logger: false }),
+        toolId: 'v5-test-tool',
+        data,
+        runtimeContext: new RuntimeContext(),
+      });
+
+      expect(v5Tool.execute).toHaveBeenCalledTimes(1);
+
+      // THIS WILL FAIL - v5 tool receives Mastra signature instead of AI SDK signature
+      // Expected: execute(data) directly (AI SDK signature)
+      // Actual: execute({ context: data, runtimeContext, ... }) (Mastra signature)
+      expect(receivedFirstParam).toEqual(data);
+      expect(receivedFirstParam).not.toHaveProperty('context');
+      expect(receivedFirstParam).not.toHaveProperty('runtimeContext');
+
+      expect(result).toEqual({ result: 'v5-success' });
+    });
+
+    it('should execute Mastra tools with context signature', async () => {
+      let receivedContext: any;
+      const mockExecute = vi.fn(async (context: any) => {
+        receivedContext = context;
+        return { result: 'mastra-success' };
+      });
+
+      const mastraTool = createTool({
+        id: 'mastra.tool',
+        description: 'Mastra test tool',
+        execute: mockExecute,
+      });
+
+      const tools = { 'mastra.tool': mastraTool };
+      const data = { input: 'test-input' };
+      const executeTool = executeToolHandler(tools);
+
+      const result = await executeTool({
+        mastra: new Mastra({ logger: false }),
+        toolId: 'mastra.tool',
+        data,
+        runtimeContext: new RuntimeContext(),
+      });
+
+      expect(mockExecute).toHaveBeenCalledTimes(1);
+
+      // Mastra tools should receive context object
+      expect(receivedContext).toBeDefined();
+      expect(receivedContext.context).toEqual(data);
+      expect(receivedContext.runtimeContext).toBeDefined();
+
+      expect(result).toEqual({ result: 'mastra-success' });
+    });
+  });
 });

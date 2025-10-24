@@ -6,7 +6,7 @@ import { ConsoleLogger } from './logger';
 import { RuntimeContext } from './runtime-context';
 import type { InternalCoreTool } from './tools';
 import { createTool, isVercelTool } from './tools';
-import { makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
+import { ensureToolProperties, makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
 
 describe('maskStreamTags', () => {
   async function* makeStream(chunks: string[]) {
@@ -310,4 +310,89 @@ it('should log correctly for Vercel tool execution', async () => {
   expect(debugSpy).toHaveBeenCalledWith('[Agent:testAgent] - Executing tool testTool', expect.any(Object));
 
   debugSpy.mockRestore();
+});
+
+describe('ensureToolProperties', () => {
+  describe('v4 tool property setting', () => {
+    it('should set id and inputSchema for v4 tools with parameters', () => {
+      const v4Tool = {
+        description: 'Test tool',
+        parameters: z.object({ input: z.string() }),
+        execute: async (_args: any) => ({ result: 'test' }),
+      };
+
+      const tools = { testTool: v4Tool };
+      const result = ensureToolProperties(tools);
+
+      expect(result.testTool).toBeDefined();
+      const testTool = result.testTool;
+      let id = 'id' in testTool ? testTool.id : undefined;
+      expect(id).toBeDefined();
+      let inputSchema = 'inputSchema' in testTool ? testTool.inputSchema : undefined;
+      expect(inputSchema).toBeDefined();
+    });
+  });
+
+  describe('v5 tool property setting - BUG TESTS', () => {
+    it('should set id for v5 tools with inputSchema', () => {
+      const v5Tool = {
+        description: 'V5 test tool',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async (_args: any) => ({ results: [] }),
+      };
+
+      const tools = { testTool: v5Tool };
+      const result = ensureToolProperties(tools);
+
+      expect(result.testTool).toBeDefined();
+      const testTool = result.testTool;
+      let id = 'id' in testTool ? testTool.id : undefined;
+      expect(id).toBeDefined();
+      let inputSchema = 'inputSchema' in testTool ? testTool.inputSchema : undefined;
+      expect(inputSchema).toBeDefined();
+    });
+
+    it('should process v5 provider-defined tools correctly', () => {
+      const googleSearchTool = {
+        type: 'provider-defined' as const,
+        id: 'google.search' as `${string}.${string}`,
+        name: 'googleSearch',
+        args: {},
+        inputSchema: z.object({
+          query: z.string(),
+          maxResults: z.number().optional(),
+        }),
+        description: 'Google search tool',
+        execute: async (_args: any) => ({ results: [] }),
+      };
+
+      const tools = { googleSearchTool };
+      const result = ensureToolProperties(tools);
+
+      expect(result.googleSearchTool).toBeDefined();
+      const testTool = result.googleSearchTool;
+      let id = 'id' in testTool ? testTool.id : undefined;
+      expect(id).toBe('google.search');
+      let inputSchema = 'inputSchema' in testTool ? testTool.inputSchema : undefined;
+      expect(inputSchema).toBeDefined();
+    });
+  });
+
+  describe('Mastra tool handling', () => {
+    it('should pass Mastra tools through unchanged', () => {
+      const mastraTool = createTool({
+        id: 'test.tool',
+        description: 'A test tool',
+        inputSchema: z.object({ input: z.string() }),
+        execute: async ({ context }: any) => ({ result: context.input }),
+      });
+
+      const tools = { testTool: mastraTool };
+      const result = ensureToolProperties(tools);
+
+      // Mastra tools should pass through unchanged
+      expect(result.testTool).toBe(mastraTool);
+      expect(result.testTool instanceof Object).toBe(true);
+    });
+  });
 });
