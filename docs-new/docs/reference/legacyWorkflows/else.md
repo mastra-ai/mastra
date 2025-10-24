@@ -64,5 +64,5 @@ try {
 
 - [if Reference](./if)
 - [then Reference](./then)
-- [Control Flow Guide](/docs/workflows-legacy/control-flow)
+- [Control Flow Guide](/docs/examples/workflows_legacy/conditional-branching)
 - [Step Condition Reference](./step-condition)

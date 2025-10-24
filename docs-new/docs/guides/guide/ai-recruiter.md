@@ -197,7 +197,7 @@ export const mastra = new Mastra({
 
 ## Testing the Workflow
 
-You can test your workflow inside Mastra's [playground](/docs/server-db/local-dev-playground) by starting the development server:
+You can test your workflow inside Mastra's [playground](/docs/getting-started/local-dev-playground) by starting the development server:
 
 ```bash copy
 mastra dev

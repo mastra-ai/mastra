@@ -59,4 +59,4 @@ async function fetchWeather(location: string, temperatureUnit: WeatherRuntimeCon
 
 ## Related
 
-[Agent Runtime Context](../agents/runtime-context)
+[Agent Runtime Context](/docs/server-db/runtime-context)

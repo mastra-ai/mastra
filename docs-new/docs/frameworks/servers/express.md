@@ -190,7 +190,7 @@ The weather in London is currently sunny. If you need more details like humidity
 
 ## Running the Agent Server
 
-In production it's not necessary to run Mastra alongside your Express server. But for development Mastra offers a [Local Development Environment](/docs/server-db/local-dev-playground) which you can use to improve and debug your agent.
+In production it's not necessary to run Mastra alongside your Express server. But for development Mastra offers a [Local Development Environment](/docs/getting-started/local-dev-playground) which you can use to improve and debug your agent.
 
 Add a script to your `package.json`:
 

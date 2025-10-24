@@ -95,7 +95,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> See [Middleware](/docs/server-db/middleware.mdx) for how to use server middleware.
+> See [Middleware](/docs/server-db/middleware) for how to use server middleware.
 
 ## Accessing values with agents
 
@@ -130,7 +130,7 @@ export const weatherAgent = new Agent({
 
 You can also use `runtimeContext` with other options like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
 
-> See [Agent](/docs/reference/agents/agent.mdx) for a full list of configuration options.
+> See [Agent](/docs/reference/agents/agent) for a full list of configuration options.
 
 ## Accessing values from workflow steps
 
@@ -154,7 +154,7 @@ const stepOne = createStep({
 });
 ```
 
-> See [createStep()](/docs/reference/workflows/step.mdx) for a full list of configuration options.
+> See [createStep()](/docs/reference/workflows/step) for a full list of configuration options.
 
 ## Accessing values with tools
 
@@ -178,12 +178,11 @@ export const weatherTool = createTool({
 });
 ```
 
-> See [createTool()](/docs/reference/tools/create-tool.mdx) for a full list of configuration options.
+> See [createTool()](/docs/reference/tools/create-tool) for a full list of configuration options.
 
 ## Related
 
-- [Runtime Context Example](/docs/examples/agents/runtime-context.mdx)
-- [Agent Runtime Context](/docs/agents/overview.mdx#using-runtimecontext)
-- [Workflow Runtime Context](/docs/workflows/overview.mdx#using-runtimecontext)
-- [Tool Runtime Context](/docs/tools-mcp/overview.mdx#using-runtimecontext)
-- [Server Middleware Runtime Context](/docs/server-db/middleware.mdx)
+- [Agent Runtime Context](/docs/agents/agent-memory#memory-with-runtimecontext)
+- [Workflow Runtime Context](/docs/workflows/overview)
+- [Tool Runtime Context](/docs/tools-mcp/runtime-context)
+- [Server Middleware Runtime Context](/docs/server-db/middleware)

@@ -67,7 +67,7 @@ const response = await testAgent.generate("What's my favorite color?", {
 
 ## Memory with `RuntimeContext`
 
-You can configure memory dynamically using [RuntimeContext](./runtime-context), just like `instructions`, `models`, and `tools`. This gives you fine-grained control over memory behavior. For example, you can select different memory systems per user, enable features conditionally, or adapt configurations across environments.
+You can configure memory dynamically using [RuntimeContext](/docs/server-db/runtime-context), just like `instructions`, `models`, and `tools`. This gives you fine-grained control over memory behavior. For example, you can select different memory systems per user, enable features conditionally, or adapt configurations across environments.
 
 ### Agent configuration
 

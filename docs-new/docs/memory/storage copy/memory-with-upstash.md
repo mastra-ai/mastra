@@ -143,4 +143,4 @@ for await (const chunk of stream.textStream) {
 
 ## Related
 
-- [Calling Agents](../agents/calling-agents.mdx)
+- [Calling Agents](/docs/examples/agents/calling-agents)

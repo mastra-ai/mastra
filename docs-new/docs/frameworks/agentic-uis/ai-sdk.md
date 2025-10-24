@@ -291,7 +291,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> You can then access this data in your tools via the `runtimeContext` parameter. See the [Agent Runtime Context documentation](/docs/agents/runtime-context) for more details.
+> You can then access this data in your tools via the `runtimeContext` parameter. See the [Agent Runtime Context documentation](/docs/server-db/runtime-context) for more details.
 
 ## Streaming data
 

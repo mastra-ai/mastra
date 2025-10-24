@@ -75,7 +75,7 @@ There are two ways to run and test tools.
 
 With the Mastra Dev Server running you can test a tool from the Mastra Playground by visiting [http://localhost:4111/tools](http://localhost:4111/tools) in your browser.
 
-> For more information, see the [Local Dev Playground](/docs/server-db/local-dev-playground) documentation.
+> For more information, see the [Local Dev Playground](/docs/getting-started/local-dev-playground) documentation.
 
 ### Command line
 

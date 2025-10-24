@@ -36,7 +36,7 @@ This structure provides full type safety and runtime validation, ensuring data i
 
 ### Visual testing
 
-Use the [Playground](../server-db/local-dev-playground#workflows) to visualize workflow execution in real time. It shows which steps are running, completed, or suspended.
+Use the [Playground](/docs/getting-started/local-dev-playground#workflows) to visualize workflow execution in real time. It shows which steps are running, completed, or suspended.
 
 ## Getting started
 
@@ -177,7 +177,7 @@ There are two ways to run and test workflows.
 
 With the Mastra Dev Server running you can run the workflow from the Mastra Playground by visiting [http://localhost:4111/workflows](http://localhost:4111/workflows) in your browser.
 
-> For more information, see the [Local Dev Playground](../server-db/local-dev-playground) documentation.
+> For more information, see the [Local Dev Playground](/docs/getting-started/local-dev-playground) documentation.
 
 ### Command line
 
@@ -329,4 +329,4 @@ const result = await run.start({
 
 ## Workflows (Legacy)
 
-For legacy workflow documentation, see [Workflows (Legacy)](/docs/workflows-legacy/overview).
+For legacy workflow documentation, see [Creating a Workflow (Legacy)](/docs/examples/workflows_legacy/creating-a-workflow).
