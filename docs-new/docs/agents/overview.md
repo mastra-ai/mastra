@@ -1,6 +1,7 @@
 ---
-title: 'Agent Overview '
+title: 'Overview'
 description: Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
+sidebar_position: 1
 ---
 
 import Tabs from '@theme/Tabs';
@@ -324,7 +325,7 @@ There are two ways to run and test agents.
 
 With the Mastra Dev Server running you can test an agent from the Mastra Playground by visiting [http://localhost:4111/agents](http://localhost:4111/agents) in your browser.
 
-> For more information, see the [Local Dev Playground](/docs/server-db/local-dev-playground) documentation.
+> For more information, see the [Local Dev Playground](/docs/getting-started/local-dev-playground) documentation.
 
 ### Command line
 

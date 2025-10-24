@@ -32,4 +32,4 @@ description: "A record of all configured agents, where keys are agent names and 
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Runtime context](/docs/agents/runtime-context)
+- [Runtime context](/docs/server-db/runtime-context)

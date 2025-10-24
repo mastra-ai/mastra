@@ -1,6 +1,7 @@
 ---
-title: 'MastraAuthFirebase Class'
+title: Firebase
 description: 'Documentation for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication.'
+sidebar_position: 5
 ---
 
 import Tabs from '@theme/Tabs';

@@ -1,5 +1,5 @@
 ---
-title: Observability in Mastra Cloud
+title: Observability
 description: Monitoring and debugging tools for Mastra Cloud deployments
 ---
 

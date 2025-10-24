@@ -28,8 +28,8 @@ export type MessageDeleteInput = string[] | { id: string }[];
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
 
-const DEFAULT_MESSAGE_RANGE = { before: 2, after: 2 } as const;
-const DEFAULT_TOP_K = 2;
+const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
+const DEFAULT_TOP_K = 4;
 
 const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
 

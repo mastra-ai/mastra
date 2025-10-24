@@ -1,6 +1,7 @@
 ---
-title: Using with Assistant UI
+title: With Assistant UI
 description: 'Learn how to integrate Assistant UI with Mastra'
+sidebar_position: 3
 ---
 
 # Using with Assistant UI

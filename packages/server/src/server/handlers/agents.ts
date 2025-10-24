@@ -184,8 +184,8 @@ async function formatAgentList({
   const instructions = await agent.getInstructions({ runtimeContext });
   const tools = await agent.getTools({ runtimeContext });
   const llm = await agent.getLLM({ runtimeContext });
-  const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext });
-  const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext });
+  const defaultGenerateOptions = await agent.getDefaultGenerateOptionsLegacy({ runtimeContext });
+  const defaultStreamOptions = await agent.getDefaultStreamOptionsLegacy({ runtimeContext });
   const serializedAgentTools = await getSerializedAgentTools(tools);
 
   let serializedAgentWorkflows: Record<
@@ -386,8 +386,8 @@ async function formatAgent({
 
   const instructions = await agent.getInstructions({ runtimeContext: proxyRuntimeContext });
   const llm = await agent.getLLM({ runtimeContext });
-  const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext: proxyRuntimeContext });
-  const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext: proxyRuntimeContext });
+  const defaultGenerateOptions = await agent.getDefaultGenerateOptionsLegacy({ runtimeContext: proxyRuntimeContext });
+  const defaultStreamOptions = await agent.getDefaultStreamOptionsLegacy({ runtimeContext: proxyRuntimeContext });
 
   const model = llm?.getModel();
   const models = await agent.getModelList(runtimeContext);

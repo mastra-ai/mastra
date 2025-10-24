@@ -64,4 +64,4 @@ description: "Runtime context for dependency injection and contextual informatio
 ## Related
 
 - [Agent generation](/docs/agents/overview#generating-responses)
-- [Agent Runtime Context](/docs/agents/runtime-context)
+- [Agent Runtime Context](/docs/server-db/runtime-context)
