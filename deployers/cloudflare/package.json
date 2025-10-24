@@ -75,5 +75,12 @@
   "peerDependencies": {
     "@mastra/core": ">=0.20.1-0 <0.24.0-0",
     "zod": "^3.25.0 || ^4.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }
