@@ -321,7 +321,9 @@ describe('Stream ID Consistency', () => {
           },
         ],
         {
-          output: outputSchema,
+          structuredOutput: {
+            schema: outputSchema,
+          },
           onFinish: async result => {
             onFinishCalled = true;
             onFinishResult = result;

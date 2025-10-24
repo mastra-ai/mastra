@@ -295,9 +295,11 @@ describe('Agent Memory Tests', () => {
       await agent.generate([{ role: 'user', content: 'Give me JSON' }], {
         threadId,
         resourceId,
-        output: z.object({
-          result: z.string(),
-        }),
+        structuredOutput: {
+          schema: z.object({
+            result: z.string(),
+          }),
+        },
         modelSettings: {
           temperature: 0,
         },

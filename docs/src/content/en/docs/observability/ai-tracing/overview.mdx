@@ -89,13 +89,12 @@ Mastra provides two built-in exporters that work out of the box:
 
 In addition to the internal exporters, Mastra supports integration with popular observability platforms. These exporters allow you to leverage your existing monitoring infrastructure and take advantage of platform-specific features like alerting, dashboards, and correlation with other application metrics.
 
+- **[Arize](/docs/observability/ai-tracing/exporters/arize)** - Exports traces to Arize Phoenix or Arize AX using OpenInference semantic conventions
 - **[Braintrust](/docs/observability/ai-tracing/exporters/braintrust)** - Exports traces to Braintrust's eval and observability platform
 - **[Langfuse](/docs/observability/ai-tracing/exporters/langfuse)** - Sends traces to the Langfuse open-source LLM engineering platform
-- **[LangSmith](/docs/observability/ai-tracing/exporters/langsmith)** - Pushes traces into LangSmith’s observability and evaluation toolkit
+- **[LangSmith](/docs/observability/ai-tracing/exporters/langsmith)** - Pushes traces into LangSmith's observability and evaluation toolkit
 - **[OpenTelemetry](/docs/observability/ai-tracing/exporters/otel)** - Deliver traces to any OpenTelemetry-compatible observability system
   - Supports: Dash0, Laminar, New Relic, SigNoz, Traceloop, Zipkin, and others!
-
-- **Arize** - Coming soon!
 
 ## Sampling Strategies
 
@@ -311,7 +310,7 @@ When creating a custom config with external exporters, you might lose access to 
 
 ```ts filename="src/mastra/index.ts" showLineNumbers copy
 import { DefaultExporter, CloudExporter } from '@mastra/core/ai-tracing';
-import { LangfuseExporter } from '@mastra/langfuse';
+import { ArizeExporter } from '@mastra/arize';
 
 export const mastra = new Mastra({
   observability: {
@@ -320,7 +319,10 @@ export const mastra = new Mastra({
       production: {
         serviceName: 'my-service',
         exporters: [
-          new LangfuseExporter(), // External exporter
+          new ArizeExporter({    // External exporter
+            endpoint: process.env.PHOENIX_ENDPOINT,
+            apiKey: process.env.PHOENIX_API_KEY,
+          }),
           new DefaultExporter(),  // Keep Playground access
           new CloudExporter(),    // Keep Cloud access
         ],
@@ -331,7 +333,7 @@ export const mastra = new Mastra({
 ```
 
 This configuration sends traces to all three destinations simultaneously:
-- **Langfuse** for external observability
+- **Arize Phoenix/AX** for external observability
 - **DefaultExporter** for local Playground access
 - **CloudExporter** for Mastra Cloud dashboard
 
@@ -759,8 +761,9 @@ Traces are available in multiple locations:
 
 - **Mastra Playground** - Local development environment
 - **Mastra Cloud** - Production monitoring dashboard
-- **Langfuse Dashboard** - When using Langfuse exporter
+- **Arize Phoenix / Arize AX** - When using Arize exporter
 - **Braintrust Console** - When using Braintrust exporter
+- **Langfuse Dashboard** - When using Langfuse exporter
 
 ## See Also
 
@@ -777,8 +780,9 @@ Traces are available in multiple locations:
 - [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - Storage persistence
 - [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud integration
 - [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - Debug output
-- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
+- [Arize](/reference/observability/ai-tracing/exporters/arize) - Arize Phoenix and Arize AX integration
 - [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration
+- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
 - [OpenTelemetry](/reference/observability/ai-tracing/exporters/otel) - OTEL-compatible platforms
 
 ### Processors

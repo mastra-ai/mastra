@@ -1,6 +1,7 @@
 ---
-title: Voice in Mastra | Mastra Docs
+title: Overview
 description: Overview of voice capabilities in Mastra, including text-to-speech, speech-to-text, and real-time speech-to-speech interactions.
+sidebar_position: 1
 ---
 
 import Tabs from '@theme/Tabs';

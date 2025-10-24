@@ -127,6 +127,6 @@ await start({ triggerData: { requestId: 'auto-123' } });
 
 - [Event-Driven Workflows](./events)
 - [afterEvent()](./afterEvent)
-- [Suspend and Resume](/docs/workflows-legacy/suspend-and-resume)
+- [Suspend and Resume](/docs/workflows/suspend-and-resume)
 - [resume()](./resume)
 - [watch()](./watch)

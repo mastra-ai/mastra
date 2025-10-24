@@ -1,6 +1,7 @@
 ---
-title: 'Memory Threads and Resources '
+title: 'Threads and Resources'
 description: "Learn how Mastra's memory system works with working memory, conversation history, and semantic recall."
+sidebar_position: 2
 ---
 
 # Memory threads and resources

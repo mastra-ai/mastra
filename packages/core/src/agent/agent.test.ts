@@ -317,9 +317,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       } else {
         response = await agentOne.generate('Who won the 2012 US presidential election?', {
-          output: z.object({
-            winner: z.string(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              winner: z.string(),
+            }),
+          },
         });
       }
 
@@ -362,9 +364,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(previousPartialObject['winner']).toBe('Barack Obama');
       } else {
         response = await agentOne.stream('Who won the 2012 US presidential election?', {
-          output: z.object({
-            winner: z.string(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              winner: z.string(),
+            }),
+          },
         });
         const { objectStream } = response;
 
@@ -7490,9 +7494,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         onFinish: props => {
           expect(props.toolCalls.length).toBeGreaterThan(0);
         },
-        output: z.object({
-          color: z.string(),
-        }),
+        structuredOutput: {
+          schema: z.object({
+            color: z.string(),
+          }),
+        },
       });
 
       await result.consumeStream();
@@ -7537,9 +7543,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               }),
             },
           },
-          output: z.object({
-            color: z.string(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              color: z.string(),
+            }),
+          },
         });
 
         expect(result.toolCalls.length).toBeGreaterThan(0);
