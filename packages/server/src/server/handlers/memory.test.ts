@@ -781,7 +781,6 @@ describe('Memory Handlers', () => {
     });
 
     it('should return messages for valid thread', async () => {
-      const mockMessages: CoreMessage[] = [{ role: 'user', content: 'Test message' }];
       const mockMessagesV2: MastraDBMessage[] = [
         {
           id: 'msg-1',
@@ -802,31 +801,15 @@ describe('Memory Handlers', () => {
           'test-agent': mockAgent,
         },
       });
-      const expectedResult = { messages: mockMessages, uiMessages: [], messagesV2: mockMessagesV2, legacyMessages: [] };
+      const expectedResult = { messages: mockMessagesV2 };
       mockMemory.getThreadById.mockResolvedValue(createThread({}));
       mockMemory.query.mockResolvedValue(expectedResult);
 
       const result = await getMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'test-agent' });
-      expect(result.messages).toEqual(expectedResult.messages);
-      expect(result.uiMessages).toMatchObject([
-        {
-          //"id": "a5bfc144-244b-4970-9f39-ef8e4ce76af3",
-          metadata: {
-            //"createdAt": 2025-10-08T14:33:23.266Z,
-          },
-          parts: [
-            {
-              text: 'Test message',
-              type: 'text',
-            },
-          ],
-          role: 'user',
-        },
-      ]);
-      expect(result.legacyMessages).toEqual([]);
+      expect(result.messages).toEqual(mockMessagesV2);
     });
 
-    it('should preserve custom metadata in uiMessages when loading messages with metadata', async () => {
+    it('should preserve custom metadata in messages when loading messages with metadata', async () => {
       const mastra = new Mastra({
         logger: false,
         agents: {
@@ -862,9 +845,7 @@ describe('Memory Handlers', () => {
 
       // Mock the memory query to return our V2 messages
       const expectedResult = {
-        messages: [] as CoreMessage[], // V1 format (legacy)
-        uiMessages: [], // AIV4 UI format (legacy)
-        messagesV2, // V2 format with metadata
+        messages: messagesV2,
       };
 
       mockMemory.getThreadById.mockResolvedValue(createThread({}));
@@ -872,9 +853,9 @@ describe('Memory Handlers', () => {
 
       const result = await getMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'test-agent' });
 
-      // Verify that uiMessages contains the custom metadata
-      expect(result.uiMessages).toHaveLength(1);
-      expect(result.uiMessages[0]?.metadata).toMatchObject({
+      // Verify that messages contains the custom metadata
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0]?.content.metadata).toMatchObject({
         files: [
           {
             id: 'file-1',
@@ -886,9 +867,9 @@ describe('Memory Handlers', () => {
       });
 
       // Should also have system metadata
-      expect(result.uiMessages[0]?.metadata).toHaveProperty('createdAt');
-      expect(result.uiMessages[0]?.metadata).toHaveProperty('threadId', 'test-thread');
-      expect(result.uiMessages[0]?.metadata).toHaveProperty('resourceId', 'test-resource');
+      expect(result.messages[0]).toHaveProperty('createdAt');
+      expect(result.messages[0]).toHaveProperty('threadId', 'test-thread');
+      expect(result.messages[0]).toHaveProperty('resourceId', 'test-resource');
     });
 
     it('should handle messages with tool invocations correctly', async () => {
@@ -934,9 +915,7 @@ describe('Memory Handlers', () => {
       ];
 
       const expectedResult = {
-        messages: [] as CoreMessage[],
-        uiMessages: [],
-        messagesV2,
+        messages: messagesV2,
       };
 
       mockMemory.getThreadById.mockResolvedValue(createThread({}));
@@ -944,11 +923,12 @@ describe('Memory Handlers', () => {
 
       const result = await getMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'test-agent' });
 
-      expect(result.uiMessages).toHaveLength(1);
-      expect(result.uiMessages[0]?.role).toBe('assistant');
-      expect(result.uiMessages[0]?.parts).toHaveLength(1);
-      // AIV5 converts tool-invocation to tool-{toolName} format
-      expect(result.uiMessages[0]?.parts[0]?.type).toBe('tool-searchTool');
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0]?.role).toBe('assistant');
+      expect(result.messages[0]?.content.parts).toHaveLength(1);
+      expect(result.messages[0]?.content.parts[0]?.type).toBe('tool-invocation');
+      expect(result.messages[0]?.content.toolInvocations).toHaveLength(1);
+      expect(result.messages[0]?.content.toolInvocations?.[0]?.toolName).toBe('searchTool');
     });
 
     it('should handle multi-part messages (text + images) correctly', async () => {
@@ -981,9 +961,7 @@ describe('Memory Handlers', () => {
       ];
 
       const expectedResult = {
-        messages: [] as CoreMessage[],
-        uiMessages: [],
-        messagesV2,
+        messages: messagesV2,
       };
 
       mockMemory.getThreadById.mockResolvedValue(createThread({}));
@@ -991,12 +969,12 @@ describe('Memory Handlers', () => {
 
       const result = await getMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'test-agent' });
 
-      expect(result.uiMessages).toHaveLength(1);
-      expect(result.uiMessages[0]?.parts).toHaveLength(2);
-      expect(result.uiMessages[0]?.parts[0]?.type).toBe('text');
-      expect(result.uiMessages[0]?.parts[1]?.type).toBe('file');
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0]?.content.parts).toHaveLength(2);
+      expect(result.messages[0]?.content.parts[0]?.type).toBe('text');
+      expect(result.messages[0]?.content.parts[1]?.type).toBe('file');
       // Custom metadata should be preserved
-      expect(result.uiMessages[0]?.metadata).toHaveProperty('imageSource', 'upload');
+      expect(result.messages[0]?.content.metadata).toHaveProperty('imageSource', 'upload');
     });
 
     it('should handle conversation with multiple messages and mixed metadata', async () => {
@@ -1054,9 +1032,7 @@ describe('Memory Handlers', () => {
       ];
 
       const expectedResult = {
-        messages: [] as CoreMessage[],
-        uiMessages: [],
-        messagesV2,
+        messages: messagesV2,
       };
 
       mockMemory.getThreadById.mockResolvedValue(createThread({}));
@@ -1064,18 +1040,16 @@ describe('Memory Handlers', () => {
 
       const result = await getMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'test-agent' });
 
-      expect(result.uiMessages).toHaveLength(3);
+      expect(result.messages).toHaveLength(3);
 
       // First message should have custom metadata
-      expect(result.uiMessages[0]?.metadata).toHaveProperty('sessionId', 'session-1');
+      expect(result.messages[0]?.content.metadata).toHaveProperty('sessionId', 'session-1');
 
-      // Second message should NOT have custom metadata (only system metadata)
-      expect(result.uiMessages[1]?.metadata).not.toHaveProperty('sessionId');
-      expect(result.uiMessages[1]?.metadata).not.toHaveProperty('referenceId');
-      expect(result.uiMessages[1]?.metadata).toHaveProperty('threadId', 'test-thread');
+      // Second message should NOT have custom metadata
+      expect(result.messages[1]?.content.metadata).toBeUndefined();
 
       // Third message should have its own custom metadata
-      expect(result.uiMessages[2]?.metadata).toHaveProperty('referenceId', 'ref-123');
+      expect(result.messages[2]?.content.metadata).toHaveProperty('referenceId', 'ref-123');
     });
   });
 
