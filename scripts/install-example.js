@@ -1,5 +1,5 @@
 import { spawn as nodeSpawn } from 'child_process';
-import { readFileSync, readdirSync, existsSync } from 'fs';
+import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
