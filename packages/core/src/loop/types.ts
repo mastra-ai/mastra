@@ -13,7 +13,7 @@ import type {
 import z from 'zod';
 import type { MessageList } from '../agent/message-list';
 import type { StructuredOutputOptions } from '../agent/types';
-import type { AISpan, AISpanType, ModelSpanTracker } from '../ai-tracing';
+import type { ModelSpanTracker } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { OutputProcessor, ProcessorState } from '../processors';
@@ -90,7 +90,6 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   returnScorerData?: boolean;
   downloadRetries?: number;
   downloadConcurrency?: number;
-  llmAISpan?: AISpan<AISpanType.MODEL_GENERATION>;
   modelSpanTracker?: ModelSpanTracker;
   requireToolApproval?: boolean;
   agentId: string;
