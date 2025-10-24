@@ -9,8 +9,6 @@ import type {
   StorageColumn,
   StorageDomains,
   StorageGetMessagesArg,
-  StorageGetTracesArg,
-  StorageGetTracesPaginatedArg,
   StoragePagination,
   StorageResourceType,
   TABLE_NAMES,
@@ -23,7 +21,6 @@ import type {
   UpdateAISpanRecord,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { MongoDBConnector } from './connectors/MongoDBConnector';
 import { LegacyEvalsMongoDB } from './domains/legacy-evals';
@@ -31,7 +28,6 @@ import { MemoryStorageMongoDB } from './domains/memory';
 import { ObservabilityMongoDB } from './domains/observability';
 import { StoreOperationsMongoDB } from './domains/operations';
 import { ScoresStorageMongoDB } from './domains/scores';
-import { TracesStorageMongoDB } from './domains/traces';
 import { WorkflowsStorageMongoDB } from './domains/workflows';
 import type { MongoDBConfig } from './types';
 
@@ -109,10 +105,6 @@ export class MongoDBStore extends MastraStorage {
       operations,
     });
 
-    const traces = new TracesStorageMongoDB({
-      operations,
-    });
-
     const legacyEvals = new LegacyEvalsMongoDB({
       operations,
     });
@@ -132,7 +124,6 @@ export class MongoDBStore extends MastraStorage {
     this.stores = {
       operations,
       memory,
-      traces,
       legacyEvals,
       scores,
       workflows,
@@ -260,18 +251,6 @@ export class MongoDBStore extends MastraStorage {
       }[];
   }): Promise<MastraMessageV2[]> {
     return this.stores.memory.updateMessages(_args);
-  }
-
-  async getTraces(args: StorageGetTracesArg): Promise<Trace[]> {
-    return this.stores.traces.getTraces(args);
-  }
-
-  async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
-    return this.stores.traces.getTracesPaginated(args);
-  }
-
-  async batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {
-    return this.stores.traces.batchTraceInsert({ records });
   }
 
   async getWorkflowRuns(args?: {

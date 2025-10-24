@@ -8,8 +8,7 @@ import type {
   LanguageModelV2,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
-import type { Span } from '@opentelemetry/api';
-import type { FinishReason, LanguageModelRequestMetadata, TelemetrySettings } from 'ai';
+import type { FinishReason, LanguageModelRequestMetadata } from 'ai';
 import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
@@ -663,8 +662,6 @@ export type MastraOnFinishCallback = (event: MastraOnFinishCallbackArgs) => Prom
 
 export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   runId: string;
-  rootSpan?: Span;
-  telemetry_settings?: TelemetrySettings;
   toolCallStreaming?: boolean;
   onFinish?: MastraOnFinishCallback;
   onStepFinish?: MastraOnStepFinishCallback;

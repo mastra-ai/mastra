@@ -33,14 +33,10 @@ export class SpeechifyVoice extends MastraVoice {
   }
 
   async getSpeakers() {
-    return this.traced(
-      () =>
-        SPEECHIFY_VOICES.map(voice => ({
-          voiceId: voice,
-          name: voice,
-        })),
-      'voice.speechify.voices',
-    )();
+    return SPEECHIFY_VOICES.map(voice => ({
+      voiceId: voice,
+      name: voice,
+    }));
   }
 
   private async streamToString(stream: NodeJS.ReadableStream): Promise<string> {
@@ -63,38 +59,36 @@ export class SpeechifyVoice extends MastraVoice {
   ): Promise<NodeJS.ReadableStream> {
     const text = typeof input === 'string' ? input : await this.streamToString(input);
 
-    return this.traced(async () => {
-      const request: AudioStreamRequest = {
-        input: text,
-        model: (options?.model || this.speechModel?.name) as VoiceModelName,
-        voiceId: (options?.speaker || this.speaker) as SpeechifyVoiceId,
-        ...options,
-      };
+    const request: AudioStreamRequest = {
+      input: text,
+      model: (options?.model || this.speechModel?.name) as VoiceModelName,
+      voiceId: (options?.speaker || this.speaker) as SpeechifyVoiceId,
+      ...options,
+    };
 
-      const webStream = await this.client.audioStream(request);
-      const reader = webStream.getReader();
+    const webStream = await this.client.audioStream(request);
+    const reader = webStream.getReader();
 
-      const nodeStream = new Readable({
-        read: async function () {
-          try {
-            const { done, value } = await reader.read();
-            if (done) {
-              this.push(null);
-            } else {
-              this.push(value);
-            }
-          } catch (error) {
-            this.destroy(error as Error);
+    const nodeStream = new Readable({
+      read: async function () {
+        try {
+          const { done, value } = await reader.read();
+          if (done) {
+            this.push(null);
+          } else {
+            this.push(value);
           }
-        },
-      });
+        } catch (error) {
+          this.destroy(error as Error);
+        }
+      },
+    });
 
-      nodeStream.on('end', () => {
-        reader.releaseLock();
-      });
+    nodeStream.on('end', () => {
+      reader.releaseLock();
+    });
 
-      return nodeStream;
-    }, 'voice.speechify.speak')();
+    return nodeStream;
   }
 
   /**

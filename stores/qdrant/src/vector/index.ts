@@ -37,20 +37,12 @@ export class QdrantVector extends MastraVector {
    */
   constructor({ url, apiKey, https, ...rest }: QdrantClientParams) {
     super();
-    const baseClient = new QdrantClient({
+    this.client = new QdrantClient({
       url,
       apiKey,
       https,
       ...rest,
     });
-    const telemetry = this.__getTelemetry();
-    this.client =
-      telemetry?.traceClass(baseClient, {
-        spanNamePrefix: 'qdrant-vector',
-        attributes: {
-          'vector.type': 'qdrant',
-        },
-      }) ?? baseClient;
   }
 
   async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {

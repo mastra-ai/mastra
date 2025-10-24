@@ -474,20 +474,6 @@ export class PostgresPerformanceTest {
       ),
     );
 
-    // Test getTracesPaginated (if traces exist)
-    try {
-      results.push(
-        await this.measureOperation(
-          'getTracesPaginated',
-          () => this.store.getTracesPaginated({ page: 0, perPage: 20, name: 'test_trace' }),
-          scenario,
-        ),
-      );
-    } catch {
-      // Skip if traces table doesn't exist or no traces
-      console.info('Skipping getTracesPaginated test (table may not exist)');
-    }
-
     // Test getEvals (if evals exist)
     try {
       results.push(
@@ -548,10 +534,10 @@ export class PostgresPerformanceTest {
     try {
       // Analyze getThreadsByResourceId query
       const threadPlan = await db.manyOrNone(`
-        EXPLAIN (ANALYZE false, FORMAT TEXT) 
-        SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" 
-        FROM mastra_threads 
-        WHERE "resourceId" = 'resource_0' 
+        EXPLAIN (ANALYZE false, FORMAT TEXT)
+        SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt"
+        FROM mastra_threads
+        WHERE "resourceId" = 'resource_0'
         ORDER BY "createdAt" DESC
       `);
       console.info('getThreadsByResourceId plan:');
@@ -560,9 +546,9 @@ export class PostgresPerformanceTest {
       // Analyze getMessages query
       const messagePlan = await db.manyOrNone(`
         EXPLAIN (ANALYZE false, FORMAT TEXT)
-        SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId" 
-        FROM mastra_messages 
-        WHERE thread_id = 'thread_0' 
+        SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"
+        FROM mastra_messages
+        WHERE thread_id = 'thread_0'
         ORDER BY "createdAt" DESC
       `);
       console.info('\ngetMessages plan:');
@@ -616,8 +602,8 @@ export class PostgresPerformanceTest {
   async checkIndexes(): Promise<void> {
     const db = this.store.db;
     const indexes = await db.manyOrNone(`
-      SELECT schemaname, tablename, indexname, indexdef 
-      FROM pg_indexes 
+      SELECT schemaname, tablename, indexname, indexdef
+      FROM pg_indexes
       WHERE indexname LIKE '%mastra_%_idx'
       ORDER BY tablename, indexname
     `);

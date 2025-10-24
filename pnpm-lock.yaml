@@ -1304,7 +1304,7 @@ importers:
         version: link:../loggers
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+        version: 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.2.0(@opentelemetry/api@1.9.0)
@@ -1427,46 +1427,6 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.23)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
 
-  packages/cloud:
-    dependencies:
-      '@opentelemetry/core':
-        specifier: ^2.0.1
-        version: 2.2.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/otlp-exporter-base':
-        specifier: ^0.203.0
-        version: 0.203.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/otlp-transformer':
-        specifier: ^0.203.0
-        version: 0.203.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/sdk-trace-base':
-        specifier: ^2.0.1
-        version: 2.2.0(@opentelemetry/api@1.9.0)
-    devDependencies:
-      '@internal/lint':
-        specifier: workspace:*
-        version: link:../_config
-      '@internal/types-builder':
-        specifier: workspace:*
-        version: link:../_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../core
-      '@microsoft/api-extractor':
-        specifier: ^7.52.8
-        version: 7.53.1(@types/node@20.19.23)
-      '@types/node':
-        specifier: ^20.19.21
-        version: 20.19.23
-      eslint:
-        specifier: ^9.37.0
-        version: 9.38.0(jiti@2.6.1)
-      tsup:
-        specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@20.19.23))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
-
   packages/core:
     dependencies:
       '@a2a-js/sdk':
@@ -1519,7 +1479,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.1
-        version: 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+        version: 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.2.0(@opentelemetry/api@1.9.0)
@@ -19960,7 +19920,7 @@ snapshots:
       '@mastra/schema-compat': 0.11.4(ai@4.3.19(react@19.2.0)(zod@4.1.12))(zod@4.1.12)
       '@openrouter/ai-sdk-provider-v5': '@openrouter/ai-sdk-provider@1.2.0(ai@4.3.19(react@19.2.0)(zod@4.1.12))(zod@4.1.12)'
       '@opentelemetry/api': 1.9.0
-      '@opentelemetry/auto-instrumentations-node': 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+      '@opentelemetry/auto-instrumentations-node': 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))
       '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-grpc': 0.203.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-http': 0.203.0(@opentelemetry/api@1.9.0)
@@ -20380,7 +20340,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
+  '@opentelemetry/auto-instrumentations-node@0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.0)
@@ -20429,7 +20389,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.7.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.10(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -21583,7 +21543,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.0)

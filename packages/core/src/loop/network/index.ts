@@ -47,12 +47,12 @@ async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtim
     .join('\n');
 
   const instructions = `
-          You are a router in a network of specialized AI agents. 
+          You are a router in a network of specialized AI agents.
           Your job is to decide which agent should handle each step of a task.
           If asking for completion of a task, make sure to follow system instructions closely.
 
-          Every step will result in a prompt message. It will be a JSON object with a "selectionReason" and "finalResult" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task. 
-            
+          Every step will result in a prompt message. It will be a JSON object with a "selectionReason" and "finalResult" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task.
+
           ## System Instructions
           ${instructionsToUse}
           You can only pick agents and workflows that are available in the lists below. Never call any agents or workflows that are not available in the lists below.
@@ -231,7 +231,7 @@ export async function createNetworkLoop({
   runtimeContext: RuntimeContext;
   runId: string;
   agent: Agent;
-  routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'telemetry' | 'modelSettings'>;
+  routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings'>;
   generateId: () => string;
 }) {
   const routingStep = createStep({
@@ -289,14 +289,14 @@ export async function createNetworkLoop({
         const completionPrompt = `
                           The ${inputData.primitiveType} ${inputData.primitiveId} has contributed to the task.
                           This is the result from the agent: ${typeof inputData.result === 'object' ? JSON.stringify(inputData.result) : inputData.result}
-  
+
                           You need to evaluate that our task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. Only return true if the task is complete according to the system instructions. Pay close attention to the finalResult and completionReason.
                           Original task: ${inputData.task}.
 
                           When generating the final result, make sure to take into account previous decision making history and results of all the previous iterations from conversation history. These are messages whose text is a JSON structure with "isNetwork" true.
 
                           You must return this JSON shape.
-  
+
                           {
                               "isComplete": boolean,
                               "completionReason": string,
@@ -403,8 +403,8 @@ export async function createNetworkLoop({
           role: 'assistant',
           content: `
                     ${inputData.isOneOff ? 'You are executing just one primitive based on the user task. Make sure to pick the primitive that is the best suited to accomplish the whole task. Primitives that execute only part of the task should be avoided.' : 'You will be calling just *one* primitive at a time to accomplish the user task, every call to you is one decision in the process of accomplishing the user task. Make sure to pick primitives that are the best suited to accomplish the whole task. Completeness is the highest priority.'}
-  
-                    The user has given you the following task: 
+
+                    The user has given you the following task:
                     ${inputData.task}
                     ${completionResult ? `\n\n${completionResult?.object?.finalResult}` : ''}
 
@@ -419,16 +419,16 @@ export async function createNetworkLoop({
                     - Make sure to use inputs corresponding to the input schema when calling a workflow or tool.
 
                     DO NOT CALL THE PRIMITIVE YOURSELF. Make sure to not call the same primitive twice, unless you call it with different arguments and believe it adds something to the task completion criteria. Take into account previous decision making history and results in your decision making and final result. These are messages whose text is a JSON structure with "isNetwork" true.
-  
+
                     Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive. If no primitive is appropriate, return "none" for the primitiveId and "none" for the primitiveType.
-                    
+
                     {
                         "primitiveId": string,
                         "primitiveType": "agent" | "workflow" | "tool",
                         "prompt": string,
                         "selectionReason": string
                     }
-  
+
                     The 'selectionReason' property should explain why you picked the primitive${inputData.verboseIntrospection ? ', as well as why the other primitives were not picked.' : '.'}
                     `,
         },

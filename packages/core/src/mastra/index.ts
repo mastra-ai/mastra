@@ -19,8 +19,6 @@ import type { MastraScorer } from '../scores';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
-import { InstrumentClass, Telemetry } from '../telemetry';
-import type { OtelConfig } from '../telemetry';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator } from '../types';
 import type { MastraVector } from '../vector';
@@ -114,13 +112,6 @@ export interface Config<
   tts?: TTTS;
 
   /**
-   * OpenTelemetry configuration for distributed tracing and observability.
-   *
-   * @deprecated Use {@link observability} instead.
-   */
-  telemetry?: OtelConfig;
-
-  /**
    * AI-specific observability configuration for tracking model interactions.
    */
   observability?: ObservabilityRegistryConfig;
@@ -187,12 +178,8 @@ export interface Config<
   };
 }
 
-@InstrumentClass({
-  prefix: 'mastra',
-  excludeMethods: ['getLogger', 'getTelemetry'],
-})
 /**
- * The central orchestrator for Mastra applications, managing agents, workflows, storage, logging, telemetry, and more.
+ * The central orchestrator for Mastra applications, managing agents, workflows, storage, logging, observability, and more.
  *
  * The `Mastra` class serves as the main entry point and registry for all components in a Mastra application.
  * It coordinates the interaction between agents, workflows, storage systems, and other services.
@@ -249,10 +236,6 @@ export class Mastra<
     path: string;
   }> = [];
 
-  /**
-   * @deprecated Use {@link getAITracing()} instead.
-   */
-  #telemetry?: Telemetry;
   #storage?: MastraStorage;
   #memory?: MastraMemory;
   #scorers?: TScorers;
@@ -267,13 +250,6 @@ export class Mastra<
   #internalMastraWorkflows: Record<string, Workflow> = {};
   // This is only used internally for server handlers that require temporary persistence
   #serverCache: MastraServerCache;
-
-  /**
-   * @deprecated use {@link getAITracing()} instead
-   */
-  get telemetry() {
-    return this.#telemetry;
-  }
 
   /**
    * @deprecated use getStorage() instead
@@ -365,7 +341,7 @@ export class Mastra<
    * Creates a new Mastra instance with the provided configuration.
    *
    * The constructor initializes all the components specified in the config, sets up
-   * internal systems like logging and telemetry, and registers components with each other.
+   * internal systems like logging and observability, and registers components with each other.
    *
    * @example
    * ```typescript
@@ -380,7 +356,8 @@ export class Mastra<
    *   storage: new PostgresStore({
    *     connectionString: process.env.DATABASE_URL
    *   }),
-   *   logger: new PinoLogger({ name: 'MyApp' })
+   *   logger: new PinoLogger({ name: 'MyApp' }),
+   *   observability: { default: { enabled: true }},
    * });
    * ```
    */
@@ -459,32 +436,6 @@ export class Mastra<
     }
 
     /*
-    Telemetry
-    */
-
-    this.#telemetry = Telemetry.init(config?.telemetry);
-
-    // Warn if telemetry is enabled but the instrumentation global is not set
-    if (
-      config?.telemetry?.enabled !== false &&
-      typeof globalThis !== 'undefined' &&
-      (globalThis as any).___MASTRA_TELEMETRY___ !== true
-    ) {
-      this.#logger?.warn(
-        `Mastra telemetry is enabled, but the required instrumentation file was not loaded. ` +
-          `If you are using Mastra outside of the mastra server environment, see: https://mastra.ai/en/docs/observability/tracing#tracing-outside-mastra-server-environment`,
-        `If you are using a custom instrumentation file or want to disable this warning, set the globalThis.___MASTRA_TELEMETRY___ variable to true in your instrumentation file.`,
-      );
-    }
-
-    if (config?.telemetry?.enabled !== false) {
-      this.#logger?.warn(
-        `Mastra telemetry is deprecated and will be removed on the Nov 4th release. Instead use AI Tracing. ` +
-          `More info can be found here: https://github.com/mastra-ai/mastra/issues/8577 and here: https://mastra.ai/en/docs/observability/ai-tracing/overview`,
-      );
-    }
-
-    /*
     AI Tracing
     */
 
@@ -495,14 +446,7 @@ export class Mastra<
     /*
       Storage
     */
-    if (this.#telemetry && storage) {
-      this.#storage = this.#telemetry.traceClass(storage, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry', 'batchTraceInsert', 'getTraces', 'getEvalsByAgentName'],
-      });
-      this.#storage.__setTelemetry(this.#telemetry);
-    } else {
-      this.#storage = storage;
-    }
+    this.#storage = storage;
 
     /*
     Vectors
@@ -510,29 +454,17 @@ export class Mastra<
     if (config?.vectors) {
       let vectors: Record<string, MastraVector> = {};
       Object.entries(config.vectors).forEach(([key, vector]) => {
-        if (this.#telemetry) {
-          vectors[key] = this.#telemetry.traceClass(vector, {
-            excludeMethods: ['__setTelemetry', '__getTelemetry'],
-          });
-          vectors[key].__setTelemetry(this.#telemetry);
-        } else {
-          vectors[key] = vector;
-        }
+        vectors[key] = vector;
       });
-
       this.#vectors = vectors as TVectors;
     }
 
     if (config?.mcpServers) {
       this.#mcpServers = config.mcpServers;
 
-      // Set logger/telemetry/Mastra instance/id for MCP servers
+      // Set logger/Mastra instance/id for MCP servers
       Object.entries(this.#mcpServers).forEach(([key, server]) => {
         server.setId(key);
-        if (this.#telemetry) {
-          server.__setTelemetry(this.#telemetry);
-        }
-
         server.__registerMastra(this);
         server.__setLogger(this.getLogger());
       });
@@ -559,17 +491,6 @@ do:
 
     if (config?.tts) {
       this.#tts = config.tts;
-      Object.entries(this.#tts).forEach(([key, ttsCl]) => {
-        if (this.#tts?.[key]) {
-          if (this.#telemetry) {
-            // @ts-ignore
-            this.#tts[key] = this.#telemetry.traceClass(ttsCl, {
-              excludeMethods: ['__setTelemetry', '__getTelemetry'],
-            });
-            this.#tts[key].__setTelemetry(this.#telemetry);
-          }
-        }
-      });
     }
 
     /*
@@ -595,7 +516,6 @@ do:
 
         agent.__registerPrimitives({
           logger: this.getLogger(),
-          telemetry: this.#telemetry,
           storage: this.storage,
           memory: this.memory,
           agents: agents,
@@ -631,7 +551,6 @@ do:
         workflow.__registerMastra(this);
         workflow.__registerPrimitives({
           logger: this.getLogger(),
-          telemetry: this.#telemetry,
           storage: this.storage,
           memory: this.memory,
           agents: agents,
@@ -657,7 +576,6 @@ do:
         workflow.__registerMastra(this);
         workflow.__registerPrimitives({
           logger: this.getLogger(),
-          telemetry: this.#telemetry,
           storage: this.storage,
           memory: this.memory,
           agents: agents,
@@ -1416,65 +1334,6 @@ do:
     });
   }
 
-  public setTelemetry(telemetry: OtelConfig) {
-    this.#telemetry = Telemetry.init(telemetry);
-
-    if (this.#agents) {
-      Object.keys(this.#agents).forEach(key => {
-        if (this.#telemetry) {
-          this.#agents?.[key]?.__setTelemetry(this.#telemetry);
-        }
-      });
-    }
-
-    if (this.#memory) {
-      this.#memory = this.#telemetry.traceClass(this.#memory, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry'],
-      });
-      this.#memory.__setTelemetry(this.#telemetry);
-    }
-
-    if (this.#deployer) {
-      this.#deployer = this.#telemetry.traceClass(this.#deployer, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry'],
-      });
-      this.#deployer.__setTelemetry(this.#telemetry);
-    }
-
-    if (this.#tts) {
-      let tts = {} as Record<string, MastraTTS>;
-      Object.entries(this.#tts).forEach(([key, ttsCl]) => {
-        if (this.#telemetry) {
-          tts[key] = this.#telemetry.traceClass(ttsCl, {
-            excludeMethods: ['__setTelemetry', '__getTelemetry'],
-          });
-          tts[key].__setTelemetry(this.#telemetry);
-        }
-      });
-      this.#tts = tts as TTTS;
-    }
-
-    if (this.#storage) {
-      this.#storage = this.#telemetry.traceClass(this.#storage, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry'],
-      });
-      this.#storage.__setTelemetry(this.#telemetry);
-    }
-
-    if (this.#vectors) {
-      let vectors = {} as Record<string, MastraVector>;
-      Object.entries(this.#vectors).forEach(([key, vector]) => {
-        if (this.#telemetry) {
-          vectors[key] = this.#telemetry.traceClass(vector, {
-            excludeMethods: ['__setTelemetry', '__getTelemetry'],
-          });
-          vectors[key].__setTelemetry(this.#telemetry);
-        }
-      });
-      this.#vectors = vectors as TVectors;
-    }
-  }
-
   /**
    * Gets all registered text-to-speech (TTS) providers.
    *
@@ -1519,32 +1378,6 @@ do:
    */
   public getLogger() {
     return this.#logger;
-  }
-
-  /**
-   * Gets the currently configured telemetry instance.
-   *
-   * @example
-   * ```typescript
-   * const mastra = new Mastra({
-   *   telemetry: {
-   *     enabled: true,
-   *     serviceName: 'my-mastra-app'
-   *   }
-   * });
-   *
-   * const telemetry = mastra.getTelemetry();
-   * if (telemetry) {
-   *   const span = telemetry.startSpan('custom-operation');
-   *   span.setAttributes({ operation: 'data-processing' });
-   *   span.end();
-   * }
-   * ```
-   *
-   * @deprecated use {@link getAITracing()} instead
-   */
-  public getTelemetry() {
-    return this.#telemetry;
   }
 
   /**

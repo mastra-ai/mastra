@@ -18,14 +18,6 @@ export const mastra = new Mastra({
     name: 'Mastra',
     level: 'info',
   }),
-  telemetry: {
-    enabled: true,
-    serviceName: 'my-app',
-    export: {
-      type: 'otlp',
-      endpoint: 'http://localhost:4318', // SigNoz local endpoint
-    },
-  },
   server: {
     port: 3000,
     timeout: 5000,

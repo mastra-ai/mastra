@@ -9,7 +9,7 @@ import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
-  { models, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>,
+  { models, _internal, ...rest }: OuterLLMRun<Tools, OUTPUT>,
   llmExecutionStep: any,
 ) {
   return createStep({

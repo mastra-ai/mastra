@@ -12,7 +12,6 @@ import type {
   WorkflowRun,
   PaginationInfo,
   PaginationArgs,
-  StorageGetTracesArg,
   StoragePagination,
   StorageDomains,
 } from '@mastra/core/storage';
@@ -23,7 +22,6 @@ import { StoreLegacyEvalsUpstash } from './domains/legacy-evals';
 import { StoreMemoryUpstash } from './domains/memory';
 import { StoreOperationsUpstash } from './domains/operations';
 import { ScoresUpstash } from './domains/scores';
-import { TracesUpstash } from './domains/traces';
 import { WorkflowsUpstash } from './domains/workflows';
 
 export interface UpstashConfig {
@@ -43,7 +41,6 @@ export class UpstashStore extends MastraStorage {
     });
 
     const operations = new StoreOperationsUpstash({ client: this.redis });
-    const traces = new TracesUpstash({ client: this.redis, operations });
     const scores = new ScoresUpstash({ client: this.redis, operations });
     const workflows = new WorkflowsUpstash({ client: this.redis, operations });
     const memory = new StoreMemoryUpstash({ client: this.redis, operations });
@@ -51,7 +48,6 @@ export class UpstashStore extends MastraStorage {
 
     this.stores = {
       operations,
-      traces,
       scores,
       workflows,
       memory,
@@ -89,28 +85,6 @@ export class UpstashStore extends MastraStorage {
     } & PaginationArgs,
   ): Promise<PaginationInfo & { evals: EvalRow[] }> {
     return this.stores.legacyEvals.getEvals(options);
-  }
-
-  /**
-   * @deprecated use getTracesPaginated instead
-   */
-  public async getTraces(args: StorageGetTracesArg): Promise<any[]> {
-    return this.stores.traces.getTraces(args);
-  }
-
-  public async getTracesPaginated(
-    args: {
-      name?: string;
-      scope?: string;
-      attributes?: Record<string, string>;
-      filters?: Record<string, any>;
-    } & PaginationArgs,
-  ): Promise<PaginationInfo & { traces: any[] }> {
-    return this.stores.traces.getTracesPaginated(args);
-  }
-
-  async batchTraceInsert(args: { records: Record<string, any>[] }): Promise<void> {
-    return this.stores.traces.batchTraceInsert(args);
   }
 
   async createTable({

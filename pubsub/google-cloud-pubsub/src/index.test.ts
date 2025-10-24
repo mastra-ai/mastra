@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { createTool, Mastra, Telemetry } from '@mastra/core';
+import { createTool, Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/di';
 import { TABLE_WORKFLOW_SNAPSHOT, MockStore } from '@mastra/core/storage';
@@ -5714,42 +5714,6 @@ describe.sequential(
         expect(run3?.runId).toBe(run1.runId);
         expect(run3?.workflowName).toBe('test-workflow');
         expect(run3?.snapshot).toEqual(runs[0].snapshot);
-        await mastra.stopEventEngine();
-      });
-    });
-
-    describe.sequential('Accessing Mastra', () => {
-      it('should be able to access the deprecated mastra primitives', async () => {
-        let telemetry: Telemetry | undefined;
-        const step1 = createStep({
-          id: 'step1',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-          execute: async ({ mastra }) => {
-            telemetry = mastra?.getTelemetry();
-            return {};
-          },
-        });
-
-        const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
-        workflow.then(step1).commit();
-
-        const mastra = new Mastra({
-          logger: false,
-          storage: testStorage,
-          workflows: { 'test-workflow': workflow },
-          pubsub: new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        });
-        await mastra.startEventEngine();
-
-        // Access new instance properties directly - should work without warning
-        const run = await workflow.createRunAsync();
-        await run.start({ inputData: {} });
-
-        expect(telemetry).toBeDefined();
-        expect(telemetry).toBeInstanceOf(Telemetry);
         await mastra.stopEventEngine();
       });
     });

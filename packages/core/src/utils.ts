@@ -365,11 +365,6 @@ export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: 
         return Reflect.apply(target.getLogger, target, []);
       }
 
-      if (prop === 'telemetry') {
-        logger.warn(`Please use 'getTelemetry' instead, telemetry is deprecated`);
-        return Reflect.apply(target.getTelemetry, target, []);
-      }
-
       if (prop === 'storage') {
         logger.warn(`Please use 'getStorage' instead, storage is deprecated`);
         return Reflect.get(target, 'storage');

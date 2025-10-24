@@ -9,7 +9,6 @@ import { Mastra } from '../../mastra';
 import { RuntimeContext } from '../../runtime-context';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
 import { MockStore } from '../../storage/mock';
-import { Telemetry } from '../../telemetry';
 import { createTool } from '../../tools';
 
 import { LegacyStep as Step } from './step';
@@ -3165,69 +3164,6 @@ describe('LegacyWorkflow', async () => {
       expect(runs[0]?.workflowName).toBe('test-workflow');
       expect(runs[0]?.snapshot).toBeDefined();
       expect(runs[1]?.snapshot).toBeDefined();
-    });
-  });
-
-  describe('Accessing Mastra', () => {
-    it('should be able to access the deprecated mastra primitives', async () => {
-      let telemetry: Telemetry | undefined;
-      const step1 = new Step({
-        id: 'step1',
-        execute: async ({ mastra }) => {
-          telemetry = mastra?.telemetry;
-        },
-      });
-
-      const workflow = new LegacyWorkflow({ name: 'test-workflow' });
-      workflow.step(step1).commit();
-
-      const mastra = new Mastra({
-        logger,
-        legacy_workflows: { 'test-workflow': workflow },
-        storage,
-      });
-
-      const wf = mastra.legacy_getWorkflow('test-workflow');
-
-      expect(mastra?.getLogger()).toBe(logger);
-
-      // Access new instance properties directly - should work without warning
-      const run = wf.createRun();
-      await run.start();
-
-      expect(telemetry).toBeDefined();
-      expect(telemetry).toBeInstanceOf(Telemetry);
-    });
-
-    it('should be able to access the new Mastra primitives', async () => {
-      let telemetry: Telemetry | undefined;
-      const step1 = new Step({
-        id: 'step1',
-        execute: async ({ mastra }) => {
-          telemetry = mastra?.getTelemetry();
-        },
-      });
-
-      const workflow = new LegacyWorkflow({ name: 'test-workflow' });
-      workflow.step(step1).commit();
-
-      const mastra = new Mastra({
-        logger,
-        legacy_workflows: { 'test-workflow': workflow },
-        storage,
-      });
-
-      const wf = mastra.legacy_getWorkflow('test-workflow');
-
-      expect(mastra?.getLogger()).toBe(logger);
-
-      // Access new instance properties directly - should work without warning
-      const run = wf.createRun();
-      run.watch(() => {});
-      await run.start();
-
-      expect(telemetry).toBeDefined();
-      expect(telemetry).toBeInstanceOf(Telemetry);
     });
   });
 

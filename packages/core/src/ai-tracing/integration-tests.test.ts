@@ -674,17 +674,15 @@ const mockModelV2 = new MockLanguageModelV2({
  * Creates base Mastra configuration for tests with AI tracing enabled.
  *
  * @param testExporter - The TestExporter instance to capture tracing events
- * @returns Base configuration object with telemetry disabled and AI tracing configured
+ * @returns Base configuration object with AI tracing configured
  *
  * Features:
- * - Telemetry disabled for faster test execution
  * - Mock storage for isolation
  * - AI tracing with TestExporter for span validation
  * - Integration tests configuration
  */
 function getBaseMastraConfig(testExporter: TestExporter, options = {}) {
   return {
-    telemetry: { enabled: false },
     storage: new MockStore(),
     observability: {
       configs: {

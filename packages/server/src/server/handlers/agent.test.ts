@@ -76,7 +76,6 @@ const makeMastraMock = ({ agents }: { agents: Record<string, ReturnType<typeof m
     agents,
     storage: {
       init: vi.fn(),
-      __setTelemetry: vi.fn(),
       __setLogger: vi.fn(),
       getEvalsByAgentName: vi.fn(),
       getStorage: () => {

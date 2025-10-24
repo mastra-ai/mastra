@@ -56,8 +56,6 @@ import type { AISDKV5OutputStream } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
-import { InstrumentClass } from '../telemetry';
-import { Telemetry } from '../telemetry/telemetry';
 import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
@@ -143,35 +141,6 @@ function resolveThreadIdFromArgs(args: {
  * });
  * ```
  */
-@InstrumentClass({
-  prefix: 'agent',
-  excludeMethods: [
-    'hasOwnMemory',
-    'getMemory',
-    '__primitive',
-    '__registerMastra',
-    '__registerPrimitives',
-    '__runInputProcessors',
-    '__runOutputProcessors',
-    '_wrapToolsWithAITracing',
-    'getProcessorRunner',
-    '__setTools',
-    '__setLogger',
-    '__setTelemetry',
-    'log',
-    'listAgents',
-    'getModel',
-    'getInstructions',
-    'getTools',
-    'getLLM',
-    'getWorkflows',
-    'getDefaultGenerateOptions',
-    'getDefaultStreamOptions',
-    'getDescription',
-    'getScorers',
-    'getVoice',
-  ],
-})
 export class Agent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -286,7 +255,6 @@ export class Agent<
     if (config.mastra) {
       this.__registerMastra(config.mastra);
       this.__registerPrimitives({
-        telemetry: config.mastra.getTelemetry(),
         logger: config.mastra.getLogger(),
       });
     }
@@ -701,7 +669,7 @@ export class Agent<
 
   /**
    * Helper function to convert agent instructions to string for backward compatibility
-   * Used for legacy methods that expect string instructions (e.g., voice, telemetry)
+   * Used for legacy methods that expect string instructions (e.g., voice)
    * @internal
    */
   #convertInstructionsToString(instructions: AgentInstructions): string {
@@ -967,7 +935,7 @@ export class Agent<
 
   /**
    * Gets or creates an LLM instance based on the provided or configured model.
-   * The LLM wraps the language model with additional capabilities like telemetry and error handling.
+   * The LLM wraps the language model with additional capabilities like error handling.
    *
    * @example
    * ```typescript
@@ -1182,14 +1150,10 @@ export class Agent<
   #primitives?: MastraPrimitives;
 
   /**
-   * Registers telemetry and logger primitives with the agent.
+   * Registers  logger primitives with the agent.
    * @internal
    */
   __registerPrimitives(p: MastraPrimitives) {
-    if (p.telemetry) {
-      this.__setTelemetry(p.telemetry);
-    }
-
     if (p.logger) {
       this.__setLogger(p.logger);
     }
@@ -1532,30 +1496,8 @@ export class Agent<
         runtimeContext,
         inputProcessorOverrides,
       });
-      // Create traced version of runInputProcessors similar to workflow _runStep pattern
-      const tracedRunInputProcessors = (messageList: MessageList, tracingContext: TracingContext) => {
-        const telemetry = this.#mastra?.getTelemetry();
-        if (!telemetry) {
-          return runner.runInputProcessors(messageList, tracingContext, undefined);
-        }
-
-        return telemetry.traceMethod(
-          async (data: { messageList: MessageList }) => {
-            return runner.runInputProcessors(data.messageList, tracingContext, telemetry);
-          },
-          {
-            spanName: `agent.${this.name}.inputProcessors`,
-            attributes: {
-              'agent.name': this.name,
-              'inputProcessors.count': runner.inputProcessors.length.toString(),
-              'inputProcessors.names': runner.inputProcessors.map(p => p.name).join(','),
-            },
-          },
-        )({ messageList });
-      };
-
       try {
-        messageList = await tracedRunInputProcessors(messageList, tracingContext);
+        messageList = await runner.runInputProcessors(messageList, tracingContext);
       } catch (error) {
         if (error instanceof TripWire) {
           tripwireTriggered = true;
@@ -1609,30 +1551,8 @@ export class Agent<
         outputProcessorOverrides,
       });
 
-      // Create traced version of runOutputProcessors similar to workflow _runStep pattern
-      const tracedRunOutputProcessors = (messageList: MessageList, tracingContext: TracingContext) => {
-        const telemetry = this.#mastra?.getTelemetry();
-        if (!telemetry) {
-          return runner.runOutputProcessors(messageList, tracingContext, undefined);
-        }
-
-        return telemetry.traceMethod(
-          async (data: { messageList: MessageList }) => {
-            return runner.runOutputProcessors(data.messageList, tracingContext, telemetry);
-          },
-          {
-            spanName: `agent.${this.name}.outputProcessors`,
-            attributes: {
-              'agent.name': this.name,
-              'outputProcessors.count': runner.outputProcessors.length.toString(),
-              'outputProcessors.names': runner.outputProcessors.map(p => p.name).join(','),
-            },
-          },
-        )({ messageList });
-      };
-
       try {
-        messageList = await tracedRunOutputProcessors(messageList, tracingContext);
+        messageList = await runner.runOutputProcessors(messageList, tracingContext);
       } catch (e) {
         if (e instanceof TripWire) {
           tripwireTriggered = true;
@@ -3182,28 +3102,6 @@ export class Agent<
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
 
-    // Set thread ID and resource ID context for telemetry
-    const activeSpan = Telemetry.getActiveSpan();
-    const baggageEntries: Record<string, { value: string }> = {};
-
-    if (threadFromArgs?.id) {
-      if (activeSpan) {
-        activeSpan.setAttribute('threadId', threadFromArgs.id);
-      }
-      baggageEntries.threadId = { value: threadFromArgs.id };
-    }
-
-    if (resourceId) {
-      if (activeSpan) {
-        activeSpan.setAttribute('resourceId', resourceId);
-      }
-      baggageEntries.resourceId = { value: resourceId };
-    }
-
-    if (Object.keys(baggageEntries).length > 0) {
-      Telemetry.setBaggage(baggageEntries);
-    }
-
     const memory = await this.getMemory({ runtimeContext });
     const saveQueueManager = new SaveQueueManager({
       logger: this.logger,
@@ -3411,32 +3309,6 @@ export class Agent<
 
     return models;
   }
-  /**
-   * Merges telemetry wrapper with default onFinish callback when needed
-   * @internal
-   */
-  #mergeOnFinishWithTelemetry(streamOptions: any, defaultStreamOptions: any) {
-    let finalOnFinish = streamOptions?.onFinish || defaultStreamOptions.onFinish;
-
-    if (
-      streamOptions?.onFinish &&
-      streamOptions.onFinish.__hasOriginalOnFinish === false &&
-      defaultStreamOptions.onFinish
-    ) {
-      // Create composite callback: telemetry wrapper + default callback
-      const telemetryWrapper = streamOptions.onFinish;
-      const defaultCallback = defaultStreamOptions.onFinish;
-
-      finalOnFinish = async (data: any) => {
-        // Call telemetry wrapper first (for span attributes, etc.)
-        await telemetryWrapper(data);
-        // Then call the default callback
-        await defaultCallback(data);
-      };
-    }
-
-    return finalOnFinish;
-  }
 
   /**
    * Executes the agent with VNext execution model, handling tools, memory, and streaming.
@@ -3498,29 +3370,6 @@ export class Agent<
       runtimeContext,
     });
 
-    // Set Telemetry context
-    // Set thread ID and resource ID context for telemetry
-    const activeSpan = Telemetry.getActiveSpan();
-    const baggageEntries: Record<string, { value: string }> = {};
-
-    if (threadFromArgs?.id) {
-      if (activeSpan) {
-        activeSpan.setAttribute('threadId', threadFromArgs.id);
-      }
-      baggageEntries.threadId = { value: threadFromArgs.id };
-    }
-
-    if (resourceId) {
-      if (activeSpan) {
-        activeSpan.setAttribute('resourceId', resourceId);
-      }
-      baggageEntries.resourceId = { value: resourceId };
-    }
-
-    if (Object.keys(baggageEntries).length > 0) {
-      Telemetry.setBaggage(baggageEntries);
-    }
-
     const memory = await this.getMemory({ runtimeContext });
 
     const saveQueueManager = new SaveQueueManager({
@@ -3550,7 +3399,6 @@ export class Agent<
       executeOnFinish: this.#executeOnFinish.bind(this),
       outputProcessors: this.#outputProcessors,
       llm,
-      getTelemetry: this.#mastra?.getTelemetry?.bind(this.#mastra),
     };
 
     // Create the workflow with all necessary context
@@ -3801,7 +3649,6 @@ export class Agent<
       runId,
       routingAgent: this,
       routingAgentOptions: {
-        telemetry: options?.telemetry,
         modelSettings: options?.modelSettings,
         memory: options?.memory,
       },
@@ -3911,7 +3758,6 @@ export class Agent<
     const baseStreamOptions = {
       ...defaultStreamOptions,
       ...(streamOptions ?? {}),
-      onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
     // Deprecated `output` option now just maps to structuredOutput.schema
@@ -4014,7 +3860,6 @@ export class Agent<
     let mergedStreamOptions = {
       ...defaultStreamOptions,
       ...streamOptions,
-      onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
     const llm = await this.getLLM({
@@ -4501,7 +4346,6 @@ export class Agent<
     const mergedStreamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
       ...defaultStreamOptions,
       ...streamOptions,
-      onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
       experimental_generateMessageId:
         defaultStreamOptions.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
     };

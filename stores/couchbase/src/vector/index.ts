@@ -46,20 +46,11 @@ export class CouchbaseVector extends MastraVector {
     super();
 
     try {
-      const baseClusterPromise = connect(connectionString, {
+      this.clusterPromise = connect(connectionString, {
         username,
         password,
         configProfile: 'wanDevelopment',
       });
-
-      const telemetry = this.__getTelemetry();
-      this.clusterPromise =
-        telemetry?.traceClass(baseClusterPromise, {
-          spanNamePrefix: 'couchbase-vector',
-          attributes: {
-            'vector.type': 'couchbase',
-          },
-        }) ?? baseClusterPromise;
       this.cluster = null as unknown as Cluster;
       this.bucketName = bucketName;
       this.collectionName = collectionName;

@@ -4,7 +4,6 @@ import { MastraBase } from '../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../scores';
-import type { Trace } from '../telemetry';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 
 import {
@@ -23,7 +22,6 @@ import type {
   ScoresStorage,
   StoreOperations,
   WorkflowsStorage,
-  TracesStorage,
   MemoryStorage,
   LegacyEvalsStorage,
   ObservabilityStorage,
@@ -38,9 +36,7 @@ import type {
   ThreadSortOptions,
   WorkflowRun,
   WorkflowRuns,
-  StorageGetTracesArg,
   PaginationArgs,
-  StorageGetTracesPaginatedArg,
   AISpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,
@@ -56,7 +52,6 @@ export type StorageDomains = {
   operations: StoreOperations;
   workflows: WorkflowsStorage;
   scores: ScoresStorage;
-  traces: TracesStorage;
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
 };
@@ -214,13 +209,6 @@ export abstract class MastraStorage extends MastraBase {
     records: Record<string, any>[];
   }): Promise<void>;
 
-  batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {
-    if (this.stores?.traces) {
-      return this.stores.traces.batchTraceInsert({ records });
-    }
-    return this.batchInsert({ tableName: TABLE_TRACES, records });
-  }
-
   abstract load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<R | null>;
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
@@ -310,10 +298,6 @@ export abstract class MastraStorage extends MastraBase {
         `The deleteMessages method needs to be implemented in the storage adapter.`,
     );
   }
-
-  abstract getTraces(args: StorageGetTracesArg): Promise<Trace[]>;
-
-  abstract getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }>;
 
   async init(): Promise<void> {
     // to prevent race conditions, await any current init

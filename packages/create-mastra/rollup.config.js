@@ -38,17 +38,17 @@ export default defineConfig({
     commonjs(),
     {
       name: 'copy-starter-files',
-      buildEnd: async () => {  
-        
+      buildEnd: async () => {
+
         const mastraPath = path.dirname(fileURLToPath(import.meta.resolve('mastra/package.json')));
-        
+
         // Copy to dist directory instead of root
         await fsExtra.copy(
-          path.join(mastraPath, 'dist', 'starter-files'), 
+          path.join(mastraPath, 'dist', 'starter-files'),
           './dist/starter-files'
         );
         await fsExtra.copy(
-          path.join(mastraPath, 'dist', 'templates'), 
+          path.join(mastraPath, 'dist', 'templates'),
           './dist/templates'
         );
       },
@@ -62,7 +62,5 @@ export default defineConfig({
   },
   external: [
     ...external,
-    // External dependencies that don't need bundling
-    /^@opentelemetry\/.*$/,
   ],
 });

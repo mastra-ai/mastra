@@ -14,8 +14,6 @@ const meta = {
   getDeployer: ".getDeployer()",
   getStorage: ".getStorage()",
   getMCPServers: ".getMCPServers()",
-  getTelemetry: ".getTelemetry()",
-  setTelemetry: ".setTelemetry()",
   getLogs: ".getLogs()",
   getLogsByRunId: ".getLogsByRunId()",
   getLogger: ".getLogger()",
