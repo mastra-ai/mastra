@@ -333,7 +333,7 @@ const { messages, uiMessages, legacyMessages } = await client
 #### After (v1.0)
 
 ```typescript
-import { toAISdkMessages } from '@mastra/ai-sdk';
+import { toAISdkMessages } from '@mastra/ai-sdk/v5';
 
 // Get messages in Mastra format
 const { messages } = await client.memory.thread(threadId).getMessages();
@@ -393,7 +393,7 @@ const messages = resolveInitialMessages(await fetchMessages());
 #### After (v1.0)
 
 ```typescript
-import { toAISdkMessages } from '@mastra/ai-sdk';
+import { toAISdkMessages } from '@mastra/ai-sdk/v5';
 
 const { messages } = await client.memory.thread(threadId).getMessages();
 const uiMessages = toAISdkMessages(messages);
@@ -413,7 +413,7 @@ return { messages: result.messages };
 #### After (v1.0)
 
 ```typescript
-import { toAISdkMessages } from '@mastra/ai-sdk';
+import { toAISdkMessages } from '@mastra/ai-sdk/v5';
 
 const { messages } = await memory.query({ threadId });
 // Convert only if needed for client
@@ -434,7 +434,7 @@ Decide whether you want to upgrade or not. If you don't, just find/replace to `s
 ### If you're using memory queries
 
 1. Update all `memory.query()` calls to destructure `{ messages }` instead of accessing multiple format fields
-2. Add `import { toAISdkMessages } from '@mastra/ai-sdk'` where you need AI SDK format
+2. Add `import { toAISdkMessages } from '@mastra/ai-sdk/v5'` where you need AI SDK format
 3. Replace `result.uiMessages` with `toAISdkMessages(result.messages)`
 4. Remove any `format` parameters from `memory.query()` calls
 5. Update React SDK code to remove `resolveInitialMessages` usage
