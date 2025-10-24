@@ -177,7 +177,7 @@ describe('Agent - network', () => {
     });
 
     // Consume the stream to trigger usage collection
-    for await (const chunk of anStream) {
+    for await (const _chunk of anStream) {
       // Just consume the stream
     }
 
