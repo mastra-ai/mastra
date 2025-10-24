@@ -1,23 +1,31 @@
 import { describe, it, expect } from 'vitest';
-import { toUIMessage, mapWorkflowStreamChunkToWatchResult, ToUIMessageArgs } from './toUIMessage';
+import { toUIMessage, mapWorkflowStreamChunkToWatchResult } from './toUIMessage';
 import { MastraUIMessage, MastraUIMessageMetadata } from '../types';
-import { ChunkType } from '@mastra/core/stream';
-import { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
+import { ChunkType, ChunkFrom } from '@mastra/core/stream';
+import { WorkflowStreamResult } from '@mastra/core/workflows';
 
 describe('toUIMessage', () => {
   describe('mapWorkflowStreamChunkToWatchResult', () => {
     it('should handle workflow-start chunk', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         input: { test: 'data' },
-        status: 'idle',
-        steps: { step1: { status: 'success', output: 'result1' } },
+        status: 'pending',
+        steps: {
+          step1: {
+            status: 'success',
+            output: 'result1',
+            payload: {},
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
+        },
       };
 
       const chunk = {
         type: 'workflow-start',
         payload: {},
         runId: 'run-123',
-        from: 'WORKFLOW' as const,
+        from: ChunkFrom.WORKFLOW as const,
       };
 
       const result = mapWorkflowStreamChunkToWatchResult(prev, chunk);
@@ -25,7 +33,15 @@ describe('toUIMessage', () => {
       expect(result).toEqual({
         input: { test: 'data' },
         status: 'running',
-        steps: { step1: { status: 'success', output: 'result1' } },
+        steps: {
+          step1: {
+            status: 'success',
+            output: 'result1',
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+        },
       });
     });
 
@@ -35,7 +51,7 @@ describe('toUIMessage', () => {
         type: 'workflow-start',
         payload: {},
         runId: 'run-123',
-        from: 'WORKFLOW' as const,
+        from: ChunkFrom.WORKFLOW as const,
       };
 
       const result = mapWorkflowStreamChunkToWatchResult(prev, chunk);
@@ -50,6 +66,7 @@ describe('toUIMessage', () => {
     it('should handle workflow-canceled chunk', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {},
       };
 
@@ -57,13 +74,14 @@ describe('toUIMessage', () => {
         type: 'workflow-canceled',
         payload: {},
         runId: 'run-123',
-        from: 'WORKFLOW' as const,
+        from: ChunkFrom.WORKFLOW as const,
       };
 
       const result = mapWorkflowStreamChunkToWatchResult(prev, chunk);
 
       expect(result).toEqual({
         status: 'canceled',
+        input: {},
         steps: {},
       });
     });
@@ -71,9 +89,22 @@ describe('toUIMessage', () => {
     it('should handle workflow-finish with success status and successful last step', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {
-          step1: { status: 'success', output: 'result1' },
-          step2: { status: 'success', output: 'final-result' },
+          step1: {
+            status: 'success',
+            output: 'result1',
+            payload: {},
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
+          step2: {
+            status: 'success',
+            output: 'final-result',
+            payload: {},
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
         },
       };
 
@@ -81,16 +112,29 @@ describe('toUIMessage', () => {
         type: 'workflow-finish',
         payload: { workflowStatus: 'success' },
         runId: 'run-123',
-        from: 'WORKFLOW' as const,
+        from: ChunkFrom.WORKFLOW as const,
       };
 
       const result = mapWorkflowStreamChunkToWatchResult(prev, chunk);
 
       expect(result).toEqual({
         status: 'success',
+        input: {},
         steps: {
-          step1: { status: 'success', output: 'result1' },
-          step2: { status: 'success', output: 'final-result' },
+          step1: {
+            status: 'success',
+            output: 'result1',
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          step2: {
+            status: 'success',
+            output: 'final-result',
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
         },
         result: 'final-result',
       });
@@ -99,9 +143,22 @@ describe('toUIMessage', () => {
     it('should handle workflow-finish with failed status and failed last step', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {
-          step1: { status: 'success', output: 'result1' },
-          step2: { status: 'failed', error: 'error-message' },
+          step1: {
+            status: 'success',
+            output: 'result1',
+            payload: {},
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
+          step2: {
+            status: 'failed',
+            error: 'error-message',
+            payload: {},
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
         },
       };
 
@@ -109,16 +166,29 @@ describe('toUIMessage', () => {
         type: 'workflow-finish',
         payload: { workflowStatus: 'failed' },
         runId: 'run-123',
-        from: 'WORKFLOW' as const,
+        from: ChunkFrom.WORKFLOW as const,
       };
 
       const result = mapWorkflowStreamChunkToWatchResult(prev, chunk);
 
       expect(result).toEqual({
         status: 'failed',
+        input: {},
         steps: {
-          step1: { status: 'success', output: 'result1' },
-          step2: { status: 'failed', error: 'error-message' },
+          step1: {
+            status: 'success',
+            output: 'result1',
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          step2: {
+            status: 'failed',
+            error: 'error-message',
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
         },
         error: 'error-message',
       });
@@ -127,25 +197,30 @@ describe('toUIMessage', () => {
     it('should handle workflow-finish with no steps', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
+        steps: {},
       };
 
       const chunk = {
         type: 'workflow-finish',
         payload: { workflowStatus: 'success' },
         runId: 'run-123',
-        from: 'WORKFLOW' as const,
+        from: ChunkFrom.WORKFLOW as const,
       };
 
       const result = mapWorkflowStreamChunkToWatchResult(prev, chunk);
 
       expect(result).toEqual({
         status: 'success',
+        input: {},
+        steps: {},
       });
     });
 
     it('should handle workflow-step-start chunk', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {},
       };
 
@@ -155,20 +230,25 @@ describe('toUIMessage', () => {
           id: 'step1',
           status: 'running',
           input: { test: 'input' },
+          payload: {},
+          startedAt: Date.now(),
         },
         runId: 'run-123',
-        from: 'WORKFLOW' as const,
+        from: ChunkFrom.WORKFLOW as const,
       };
 
       const result = mapWorkflowStreamChunkToWatchResult(prev, chunk);
 
       expect(result).toEqual({
         status: 'running',
+        input: {},
         steps: {
           step1: {
             id: 'step1',
             status: 'running',
             input: { test: 'input' },
+            payload: {},
+            startedAt: expect.any(Number),
           },
         },
       });
@@ -177,8 +257,13 @@ describe('toUIMessage', () => {
     it('should handle workflow-step-suspended chunk', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {
-          step1: { status: 'running' },
+          step1: {
+            status: 'running',
+            payload: {},
+            startedAt: Date.now(),
+          },
         },
       };
 
@@ -188,20 +273,27 @@ describe('toUIMessage', () => {
           id: 'step1',
           status: 'suspended',
           suspendPayload: { reason: 'waiting-for-input' },
+          payload: {},
+          startedAt: Date.now(),
+          suspendedAt: Date.now(),
         },
         runId: 'run-123',
-        from: 'WORKFLOW' as const,
+        from: ChunkFrom.WORKFLOW as const,
       };
 
       const result = mapWorkflowStreamChunkToWatchResult(prev, chunk);
 
       expect(result).toEqual({
         status: 'suspended',
+        input: {},
         steps: {
           step1: {
             id: 'step1',
             status: 'suspended',
             suspendPayload: { reason: 'waiting-for-input' },
+            payload: {},
+            startedAt: expect.any(Number),
+            suspendedAt: expect.any(Number),
           },
         },
         suspendPayload: { reason: 'waiting-for-input' },
@@ -212,8 +304,13 @@ describe('toUIMessage', () => {
     it('should handle nested suspended steps', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {
-          step1: { status: 'running' },
+          step1: {
+            status: 'running',
+            payload: {},
+            startedAt: Date.now(),
+          },
         },
       };
 
@@ -225,9 +322,12 @@ describe('toUIMessage', () => {
           suspendPayload: {
             __workflow_meta: { path: ['nested1', 'nested2'] },
           },
+          payload: {},
+          startedAt: Date.now(),
+          suspendedAt: Date.now(),
         },
         runId: 'run-123',
-        from: 'WORKFLOW' as const,
+        from: ChunkFrom.WORKFLOW as const,
       };
 
       const result = mapWorkflowStreamChunkToWatchResult(prev, chunk);
@@ -238,6 +338,7 @@ describe('toUIMessage', () => {
     it('should handle workflow-step-waiting chunk', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {},
       };
 
@@ -246,19 +347,24 @@ describe('toUIMessage', () => {
         payload: {
           id: 'step1',
           status: 'waiting',
+          payload: {},
+          startedAt: Date.now(),
         },
         runId: 'run-123',
-        from: 'WORKFLOW' as const,
+        from: ChunkFrom.WORKFLOW as const,
       };
 
       const result = mapWorkflowStreamChunkToWatchResult(prev, chunk);
 
       expect(result).toEqual({
         status: 'waiting',
+        input: {},
         steps: {
           step1: {
             id: 'step1',
             status: 'waiting',
+            payload: {},
+            startedAt: expect.any(Number),
           },
         },
       });
@@ -267,6 +373,7 @@ describe('toUIMessage', () => {
     it('should handle workflow-step-result chunk', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {},
       };
 
@@ -276,20 +383,27 @@ describe('toUIMessage', () => {
           id: 'step1',
           status: 'success',
           output: 'step-output',
+          payload: {},
+          startedAt: Date.now(),
+          endedAt: Date.now(),
         },
         runId: 'run-123',
-        from: 'WORKFLOW' as const,
+        from: ChunkFrom.WORKFLOW as const,
       };
 
       const result = mapWorkflowStreamChunkToWatchResult(prev, chunk);
 
       expect(result).toEqual({
         status: 'running',
+        input: {},
         steps: {
           step1: {
             id: 'step1',
             status: 'success',
             output: 'step-output',
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
           },
         },
       });
@@ -298,6 +412,7 @@ describe('toUIMessage', () => {
     it('should handle unknown chunk type', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {},
       };
 
@@ -305,7 +420,7 @@ describe('toUIMessage', () => {
         type: 'unknown-type',
         payload: { data: 'test' },
         runId: 'run-123',
-        from: 'WORKFLOW' as const,
+        from: ChunkFrom.WORKFLOW as const,
       };
 
       const result = mapWorkflowStreamChunkToWatchResult(prev, chunk);
@@ -324,7 +439,7 @@ describe('toUIMessage', () => {
         type: 'tripwire',
         payload: { tripwireReason: 'Security warning detected' },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -358,7 +473,7 @@ describe('toUIMessage', () => {
         type: 'start',
         payload: {},
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -387,7 +502,7 @@ describe('toUIMessage', () => {
           providerMetadata: { model: 'gpt-4' },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -417,7 +532,7 @@ describe('toUIMessage', () => {
           id: 'text-1',
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -452,7 +567,7 @@ describe('toUIMessage', () => {
           providerMetadata: { model: 'gpt-4' },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -487,7 +602,7 @@ describe('toUIMessage', () => {
           providerMetadata: { model: 'gpt-4' },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -517,7 +632,7 @@ describe('toUIMessage', () => {
           text: 'Hello',
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -541,7 +656,7 @@ describe('toUIMessage', () => {
           text: 'Hello',
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -566,7 +681,7 @@ describe('toUIMessage', () => {
           providerMetadata: { model: 'o1' },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -601,7 +716,7 @@ describe('toUIMessage', () => {
           providerMetadata: { model: 'o1' },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -632,7 +747,7 @@ describe('toUIMessage', () => {
           providerMetadata: { model: 'o1' },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -670,7 +785,7 @@ describe('toUIMessage', () => {
           providerMetadata: { latency: 100 },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -703,7 +818,7 @@ describe('toUIMessage', () => {
           args: { a: 1, b: 2 },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -742,7 +857,7 @@ describe('toUIMessage', () => {
           isError: false,
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -789,7 +904,7 @@ describe('toUIMessage', () => {
           },
         },
         runId: 'run-123',
-        from: 'WORKFLOW',
+        from: ChunkFrom.WORKFLOW,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -829,7 +944,7 @@ describe('toUIMessage', () => {
           error: 'Connection timeout',
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -871,7 +986,7 @@ describe('toUIMessage', () => {
           isError: true,
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -912,7 +1027,7 @@ describe('toUIMessage', () => {
           result: 'result',
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -949,7 +1064,7 @@ describe('toUIMessage', () => {
           result: 'result',
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -974,11 +1089,11 @@ describe('toUIMessage', () => {
             type: 'workflow-start',
             payload: {},
             runId: 'wf-run-1',
-            from: 'WORKFLOW',
+            from: ChunkFrom.WORKFLOW,
           },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1021,11 +1136,11 @@ describe('toUIMessage', () => {
               output: 'step-result',
             },
             runId: 'wf-run-1',
-            from: 'WORKFLOW',
+            from: ChunkFrom.WORKFLOW,
           },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1069,13 +1184,13 @@ describe('toUIMessage', () => {
         payload: {
           toolCallId: 'call-1',
           output: {
-            from: 'AGENT',
+            from: ChunkFrom.AGENT,
             type: 'text-delta',
             payload: { text: 'Agent response' },
           },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1108,7 +1223,7 @@ describe('toUIMessage', () => {
           output: { data: 'new-output' },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1142,7 +1257,7 @@ describe('toUIMessage', () => {
           output: { data: 'first-output' },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1184,7 +1299,7 @@ describe('toUIMessage', () => {
           providerMetadata: { source: 'web' },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1219,7 +1334,7 @@ describe('toUIMessage', () => {
           providerMetadata: { source: 'upload' },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1253,7 +1368,7 @@ describe('toUIMessage', () => {
           filename: 'file.bin',
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1281,7 +1396,7 @@ describe('toUIMessage', () => {
           title: 'No URL',
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1310,7 +1425,7 @@ describe('toUIMessage', () => {
           url: 'https://example.com',
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1336,7 +1451,7 @@ describe('toUIMessage', () => {
           providerMetadata: { source: 'upload' },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1367,7 +1482,7 @@ describe('toUIMessage', () => {
           mimeType: 'text/plain',
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1394,7 +1509,7 @@ describe('toUIMessage', () => {
           mimeType: 'application/octet-stream',
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1422,7 +1537,7 @@ describe('toUIMessage', () => {
           mimeType: 'text/plain',
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1447,7 +1562,7 @@ describe('toUIMessage', () => {
           args: { action: 'delete', target: 'database' },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1481,7 +1596,7 @@ describe('toUIMessage', () => {
           args: { param: 'value' },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1518,7 +1633,7 @@ describe('toUIMessage', () => {
           args: {},
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1544,7 +1659,7 @@ describe('toUIMessage', () => {
           messages: { all: [], user: [], nonUser: [] },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1588,7 +1703,7 @@ describe('toUIMessage', () => {
           messages: { all: [], user: [], nonUser: [] },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1623,7 +1738,7 @@ describe('toUIMessage', () => {
           messages: { all: [], user: [], nonUser: [] },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1664,7 +1779,7 @@ describe('toUIMessage', () => {
           messages: { all: [], user: [], nonUser: [] },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1687,7 +1802,7 @@ describe('toUIMessage', () => {
           error: 'Something went wrong',
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1717,7 +1832,7 @@ describe('toUIMessage', () => {
           error: { message: 'API Error', code: 500 },
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -1740,7 +1855,7 @@ describe('toUIMessage', () => {
         type: 'unknown-type',
         payload: { data: 'test' },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1765,14 +1880,14 @@ describe('toUIMessage', () => {
   describe('toUIMessageFromAgent', () => {
     const baseMetadata: MastraUIMessageMetadata = {
       mode: 'network',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
     };
 
     it('should handle agent text-delta chunk', () => {
       const agentChunk: any = {
         type: 'text-delta',
         payload: { text: ' world' },
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1801,7 +1916,7 @@ describe('toUIMessage', () => {
           output: agentChunk,
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
@@ -1814,7 +1929,7 @@ describe('toUIMessage', () => {
       const agentChunk: any = {
         type: 'text-delta',
         payload: { text: 'New text' },
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1843,7 +1958,7 @@ describe('toUIMessage', () => {
           output: agentChunk,
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
@@ -1864,7 +1979,7 @@ describe('toUIMessage', () => {
           toolName: 'nested-tool',
           args: { param: 'value' },
         },
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1893,7 +2008,7 @@ describe('toUIMessage', () => {
           output: agentChunk,
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
@@ -1919,7 +2034,7 @@ describe('toUIMessage', () => {
             runId: 'wf-run-1',
           },
         },
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -1954,7 +2069,7 @@ describe('toUIMessage', () => {
           output: agentChunk,
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
@@ -1976,7 +2091,7 @@ describe('toUIMessage', () => {
           toolName: 'calculator',
           result: 42,
         },
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -2012,7 +2127,7 @@ describe('toUIMessage', () => {
           output: agentChunk,
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
@@ -2038,7 +2153,7 @@ describe('toUIMessage', () => {
             runId: 'wf-run-1',
           },
         },
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -2073,7 +2188,7 @@ describe('toUIMessage', () => {
           output: agentChunk,
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
@@ -2093,7 +2208,7 @@ describe('toUIMessage', () => {
       const agentChunk: any = {
         type: 'text-delta',
         payload: { text: 'text' },
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [
@@ -2111,7 +2226,7 @@ describe('toUIMessage', () => {
           output: agentChunk,
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
@@ -2123,7 +2238,7 @@ describe('toUIMessage', () => {
       const agentChunk: any = {
         type: 'text-delta',
         payload: { text: 'text' },
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -2135,7 +2250,7 @@ describe('toUIMessage', () => {
           output: agentChunk,
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
@@ -2154,7 +2269,7 @@ describe('toUIMessage', () => {
         type: 'unknown-type' as any,
         payload: {},
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -2169,7 +2284,7 @@ describe('toUIMessage', () => {
         type: 'start',
         payload: {},
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const conversation: MastraUIMessage[] = [];
@@ -2188,7 +2303,7 @@ describe('toUIMessage', () => {
           text: ' added',
         },
         runId: 'run-123',
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
       };
 
       const originalMessage: MastraUIMessage = {

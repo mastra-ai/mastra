@@ -1,4 +1,4 @@
-import type { MastraMessageV2, MessageList } from '../agent/message-list';
+import type { MastraDBMessage, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import { AISpanType } from '../ai-tracing';
 import type { AISpan, TracingContext } from '../ai-tracing';
@@ -87,9 +87,9 @@ export class ProcessorRunner {
   ): Promise<MessageList> {
     const responseMessages = messageList.clear.response.v2();
 
-    let processableMessages: MastraMessageV2[] = [...responseMessages];
+    let processableMessages: MastraDBMessage[] = [...responseMessages];
 
-    const ctx: { messages: MastraMessageV2[]; abort: () => never } = {
+    const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
       messages: processableMessages,
       abort: () => {
         throw new TripWire('Tripwire triggered');
@@ -316,9 +316,9 @@ export class ProcessorRunner {
   ): Promise<MessageList> {
     const userMessages = messageList.clear.input.v2();
 
-    let processableMessages: MastraMessageV2[] = [...userMessages];
+    let processableMessages: MastraDBMessage[] = [...userMessages];
 
-    const ctx: { messages: MastraMessageV2[]; abort: () => never } = {
+    const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
       messages: processableMessages,
       abort: () => {
         throw new TripWire('Tripwire triggered');

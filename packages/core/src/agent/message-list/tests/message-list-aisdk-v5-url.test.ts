@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { MastraMessageV2 } from '../../types';
+import type { MastraDBMessage } from '../../types';
 import { MessageList } from '../index';
 
 describe('MessageList AI SDK v5 URL handling', () => {
@@ -8,7 +8,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
       const messageList = new MessageList();
 
       // This is the exact message format from the bug report
-      const userMessage: MastraMessageV2 = {
+      const userMessage: MastraDBMessage = {
         id: 'msg-1',
         role: 'user',
         createdAt: new Date(),
@@ -53,7 +53,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
     it('should handle multiple image URLs in the same message', () => {
       const messageList = new MessageList();
 
-      const userMessage: MastraMessageV2 = {
+      const userMessage: MastraDBMessage = {
         id: 'msg-2',
         role: 'user',
         createdAt: new Date(),
@@ -108,7 +108,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
       const dataUri = `data:image/png;base64,${base64Data}`;
 
-      const userMessage: MastraMessageV2 = {
+      const userMessage: MastraDBMessage = {
         id: 'msg-3',
         role: 'user',
         createdAt: new Date(),
@@ -151,7 +151,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
       const base64Data =
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
-      const userMessage: MastraMessageV2 = {
+      const userMessage: MastraDBMessage = {
         id: 'msg-4',
         role: 'user',
         createdAt: new Date(),
@@ -194,7 +194,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
       const messageList = new MessageList();
 
       // Some systems might use protocol-relative URLs or other URL schemes
-      const userMessage: MastraMessageV2 = {
+      const userMessage: MastraDBMessage = {
         id: 'msg-edge-1',
         role: 'user',
         createdAt: new Date(),
@@ -233,7 +233,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
       const messageList = new MessageList();
 
       // A URL that might confuse the parser
-      const userMessage: MastraMessageV2 = {
+      const userMessage: MastraDBMessage = {
         id: 'msg-edge-2',
         role: 'user',
         createdAt: new Date(),

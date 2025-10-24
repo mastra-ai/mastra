@@ -3,7 +3,7 @@ import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
-import { toAISdkFormat } from './to-ai-sdk-format';
+import { toAISdkV5Stream } from './convert-streams';
 
 export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
   defaultOptions?: AgentExecutionOptions<OUTPUT, 'aisdk'>;
@@ -163,7 +163,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
       const uiMessageStream = createUIMessageStream({
         originalMessages: messages,
         execute: async ({ writer }) => {
-          for await (const part of toAISdkFormat(result, { from: 'agent' })!) {
+          for await (const part of toAISdkV5Stream(result, { from: 'agent' })!) {
             writer.write(part);
           }
         },

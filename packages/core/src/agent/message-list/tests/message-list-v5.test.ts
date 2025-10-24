@@ -2,7 +2,7 @@ import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from 
 import { isToolUIPart } from 'ai-v5';
 import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from 'ai-v5';
 import { describe, expect, it } from 'vitest';
-import type { MastraMessageV2 } from '../index';
+import type { MastraDBMessage } from '../index';
 import { MessageList } from '../index';
 import { hasAIV5CoreMessageCharacteristics } from '../utils/ai-v4-v5/core-model-message';
 import { hasAIV5UIMessageCharacteristics } from '../utils/ai-v4-v5/ui-message';
@@ -281,7 +281,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert tool invocations with pending state', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'assistant',
           createdAt: new Date(),
@@ -322,7 +322,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert tool invocations with result state', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'assistant',
           createdAt: new Date(),
@@ -365,7 +365,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert reasoning parts', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'assistant',
           createdAt: new Date(),
@@ -400,7 +400,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert file parts with URL handling', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'user',
           createdAt: new Date(),
@@ -752,7 +752,7 @@ describe('MessageList V5 Support', () => {
       const list = new MessageList({ threadId, resourceId });
 
       // Add a v5 message with reasoning through the conversion pipeline
-      const v2Message: MastraMessageV2 = {
+      const v2Message: MastraDBMessage = {
         id: 'msg-1',
         role: 'assistant',
         createdAt: new Date(),
@@ -941,7 +941,7 @@ describe('MessageList V5 Support', () => {
 
       // This mimics what happens when the user passes messages to stream
       // with format: 'aisdk' containing file parts with URLs
-      const v2Message: MastraMessageV2 = {
+      const v2Message: MastraDBMessage = {
         id: 'test-msg-1',
         role: 'user',
         content: {
@@ -1166,7 +1166,7 @@ describe('MessageList V5 Support', () => {
     it('should handle tool invocations with missing fields gracefully', () => {
       const list = new MessageList({ threadId, resourceId });
 
-      const incompleteToolMessage: MastraMessageV2 = {
+      const incompleteToolMessage: MastraDBMessage = {
         id: 'msg-1',
         role: 'assistant',
         createdAt: new Date(),
@@ -1206,7 +1206,7 @@ describe('MessageList V5 Support', () => {
     it('should filter out empty reasoning parts', () => {
       const list = new MessageList({ threadId, resourceId });
 
-      const messageWithEmptyReasoning: MastraMessageV2 = {
+      const messageWithEmptyReasoning: MastraDBMessage = {
         id: 'msg-1',
         role: 'assistant',
         createdAt: new Date(),

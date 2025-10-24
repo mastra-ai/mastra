@@ -456,7 +456,7 @@ createTestSuite(
 //       const messages = [
 //         createSampleMessageV2({ threadId: thread.id }),
 //         { ...createSampleMessageV2({ threadId: thread.id }), id: null }, // This will cause an error
-//       ] as any as MastraMessageV2[];
+//       ] as any as MastraDBMessage[];
 
 //       await expect(store.saveMessages({ messages, format: 'v2' })).rejects.toThrow();
 
@@ -542,7 +542,7 @@ createTestSuite(
 //     });
 
 //     // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
-//     //   const messages: MastraMessageV2[] = [
+//     //   const messages: MastraDBMessage[] = [
 //     //     createSampleMessage({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
 //     //     createSampleMessage({ threadId: 'thread-one', content: 'Second', resourceId: 'cross-thread-resource' }),
 //     //     createSampleMessage({ threadId: 'thread-one', content: 'Third', resourceId: 'cross-thread-resource' }),
@@ -1789,7 +1789,7 @@ createTestSuite(
 //       );
 
 //       // Ensure timestamps are distinct for reliable sorting by creating them with a slight delay for testing clarity
-//       const messagesToSave: MastraMessageV2[] = [];
+//       const messagesToSave: MastraDBMessage[] = [];
 //       messagesToSave.push({
 //         ...createSampleMessageV2({
 //           threadId: thread.id,
@@ -1891,7 +1891,7 @@ createTestSuite(
 //       const thread = await store.saveThread({ thread: threadData as StorageThreadType });
 //       const msg1 = createSampleMessageV2({ threadId: thread.id, createdAt: new Date(Date.now() - 1000) });
 //       const msg2 = createSampleMessageV2({ threadId: thread.id, createdAt: new Date() });
-//       await store.saveMessages({ messages: [msg1, msg2] as any as MastraMessageV2[], format: 'v2' });
+//       await store.saveMessages({ messages: [msg1, msg2] as any as MastraDBMessage[], format: 'v2' });
 
 //       const messages = await store.getMessages({ threadId: thread.id, format: 'v2' });
 //       expect(Array.isArray(messages)).toBe(true);

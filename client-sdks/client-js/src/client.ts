@@ -124,11 +124,12 @@ export class MastraClient extends BaseResource {
     threadId: string,
     opts: { agentId?: string; networkId?: string } = {},
   ): Promise<GetMemoryThreadMessagesResponse> {
+    const { agentId, networkId } = opts;
     let url = '';
-    if (opts.agentId) {
-      url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}`;
-    } else if (opts.networkId) {
-      url = `/api/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}`;
+    if (agentId) {
+      url = `/api/memory/threads/${threadId}/messages?agentId=${agentId}`;
+    } else if (networkId) {
+      url = `/api/memory/network/threads/${threadId}/messages?networkId=${networkId}`;
     }
     return this.request(url);
   }

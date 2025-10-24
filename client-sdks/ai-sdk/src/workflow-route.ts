@@ -2,7 +2,7 @@ import type { TracingOptions } from '@mastra/core/ai-tracing';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { registerApiRoute } from '@mastra/core/server';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
-import { toAISdkFormat } from './to-ai-sdk-format';
+import { toAISdkV5Stream } from './convert-streams';
 
 type WorkflowRouteBody = {
   inputData?: Record<string, any>;
@@ -94,7 +94,7 @@ export function workflowRoute({
 
       const uiMessageStream = createUIMessageStream({
         execute: async ({ writer }) => {
-          for await (const part of toAISdkFormat(stream, { from: 'workflow' })) {
+          for await (const part of toAISdkV5Stream(stream, { from: 'workflow' })) {
             writer.write(part);
           }
         },

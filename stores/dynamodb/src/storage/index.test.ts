@@ -453,7 +453,7 @@ describe('DynamoDBStore', () => {
 //         const start = Date.now();
 
 //         // Insert 10 messages with increasing timestamps
-//         const messages: MastraMessageV2[] = Array.from({ length: 10 }, (_, i) => ({
+//         const messages: MastraDBMessage[] = Array.from({ length: 10 }, (_, i) => ({
 //           id: `m-${i}`,
 //           threadId,
 //           resourceId: 'r',
@@ -686,7 +686,7 @@ describe('DynamoDBStore', () => {
 //       test('should handle batch message inserts efficiently (up to 25 items) [v2 storage]', async () => {
 //         const startTime = Date.now(); // Get a base time
 //         const threadId = 'batch-thread';
-//         const messages: MastraMessageV2[] = Array.from({ length: 25 }, (_, i) => ({
+//         const messages: MastraDBMessage[] = Array.from({ length: 25 }, (_, i) => ({
 //           id: `msg-${i}`,
 //           threadId,
 //           resourceId: 'test-resource',

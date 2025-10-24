@@ -1,5 +1,5 @@
 import { parentPort, workerData } from 'worker_threads';
-import type { MastraMessageV2, SharedMemoryConfig } from '@mastra/core/memory';
+import type { MastraDBMessage, SharedMemoryConfig } from '@mastra/core/memory';
 import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { PostgresStoreConfig } from '@mastra/pg';
@@ -24,7 +24,7 @@ interface WorkerTestConfig {
 }
 
 interface MessageToProcess {
-  originalMessage: MastraMessageV2;
+  originalMessage: MastraDBMessage;
 }
 
 interface WorkerData {

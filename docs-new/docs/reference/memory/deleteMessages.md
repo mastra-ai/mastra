@@ -42,14 +42,13 @@ description: "A promise that resolves when all messages are deleted",
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
 import { mastra } from './mastra';
-import { UIMessageWithMetadata } from '@mastra/core/agent';
 
 const agent = mastra.getAgent('agent');
 const memory = await agent.getMemory();
 
-const { uiMessages } = await memory!.query({ threadId: 'thread-123' });
+const { messages } = await memory!.query({ threadId: 'thread-123' });
 
-const messageIds = uiMessages.map((message: UIMessageWithMetadata) => message.id);
+const messageIds = messages.map((message) => message.id);
 await memory?.deleteMessages([...messageIds]);
 ```
 

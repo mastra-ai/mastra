@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
+import { toAISdkMessages } from '@mastra/ai-sdk/v5';
 
 import { DEFAULT_MODEL_NAME, models } from '@/ai/models';
 import { auth } from '@/app/(auth)/auth';
@@ -48,7 +49,7 @@ export default async function Page(props: { params: Promise<any> }) {
   return (
     <PreviewChat
       id={chat.id}
-      initialMessages={memoryMessages ? memoryMessages.uiMessages : []}
+      initialMessages={memoryMessages ? toAISdkMessages(memoryMessages.messages) : []}
       selectedModelId={selectedModelId}
     />
   );

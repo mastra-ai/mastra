@@ -1,5 +1,5 @@
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
 import type {
   MastraMessageV1,
@@ -13,7 +13,7 @@ import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { embedMany } from 'ai';
-import type { CoreMessage, TextPart } from 'ai';
+import type { TextPart } from 'ai';
 import { embedMany as embedManyV5 } from 'ai-v5';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
@@ -94,14 +94,12 @@ export class Memory extends MastraMemory {
     }
   }
 
-  async query({
-    threadId,
-    resourceId,
-    selectBy,
-    threadConfig,
-  }: StorageGetMessagesArg & {
-    threadConfig?: MemoryConfig;
-  }): Promise<{ messages: CoreMessage[]; uiMessages: UIMessageWithMetadata[]; messagesV2: MastraMessageV2[] }> {
+  async query(
+    args: StorageGetMessagesArg & {
+      threadConfig?: MemoryConfig;
+    },
+  ): Promise<{ messages: MastraDBMessage[] }> {
+    const { threadId, resourceId, selectBy, threadConfig } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
@@ -226,51 +224,26 @@ export class Memory extends MastraMemory {
     }
 
     const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
-    return {
-      get messages() {
-        // returning v1 messages for backwards compat! v1 messages were CoreMessages stored in the db.
-        // returning .v1() takes stored messages which may be in v2 or v1 format and converts them to v1 shape, which is a CoreMessage + id + threadId + resourceId, etc
-        // Perhaps this should be called coreRecord or something ? - for now keeping v1 since it reflects that this used to be our db storage record shape
-        const v1Messages = list.get.all.v1();
-        // the conversion from V2/UIMessage -> V1/CoreMessage can sometimes split the messages up into more messages than before
-        // so slice off the earlier messages if it'll exceed the lastMessages setting
-        if (selectBy?.last && v1Messages.length > selectBy.last) {
-          // ex: 23 (v1 messages) minus 20 (selectBy.last messages)
-          // means we will start from index 3 and keep all the later newer messages from index 3 til the end of the array
-          return v1Messages.slice(v1Messages.length - selectBy.last) as CoreMessage[];
-        }
-        // TODO: this is absolutely wrong but became apparent that this is what we were doing before adding MessageList. Our public types said CoreMessage but we were returning MessageType which is equivalent to MastraMessageV1
-        // In a breaking change we should make this the type it actually is.
-        return v1Messages as CoreMessage[];
-      },
-      get uiMessages() {
-        return list.get.all.ui();
-      },
-      get messagesV2() {
-        return list.get.all.v2();
-      },
-    };
+
+    // Always return mastra-db format (V2)
+    const messages = list.get.all.v2();
+
+    return { messages };
   }
 
-  async rememberMessages({
-    threadId,
-    resourceId,
-    vectorMessageSearch,
-    config,
-  }: {
+  async rememberMessages(args: {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }> {
+  }): Promise<MastraDBMessage[]> {
+    const { threadId, resourceId, vectorMessageSearch, config } = args;
+
     const threadConfig = this.getMergedThreadConfig(config || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, threadConfig);
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
-      return {
-        messages: [],
-        messagesV2: [],
-      };
+      return [];
     }
 
     const messagesResult = await this.query({
@@ -281,13 +254,13 @@ export class Memory extends MastraMemory {
         vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
       },
       threadConfig: config,
-      format: 'v2',
     });
-    // Using MessageList here just to convert mixed input messages to single type output messages
-    const list = new MessageList({ threadId, resourceId }).add(messagesResult.messagesV2, 'memory');
 
-    this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
-    return { messages: list.get.all.v1(), messagesV2: list.get.all.v2() };
+    // Always return mastra-db format (V2)
+    const messages = messagesResult.messages;
+
+    this.logger.debug(`Remembered message history includes ${messages.length} messages.`);
+    return messages;
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -512,7 +485,10 @@ export class Memory extends MastraMemory {
             reason = `appended newMemory to end of working memory`;
           }
 
-          workingMemory = existingWorkingMemory + `\n${workingMemory}`;
+          workingMemory =
+            existingWorkingMemory +
+            `
+${workingMemory}`;
         }
       } else if (workingMemory === template?.content) {
         return {
@@ -643,24 +619,24 @@ export class Memory extends MastraMemory {
   }
 
   async saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    messages: (MastraMessageV1 | MastraDBMessage)[] | MastraMessageV1[] | MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
     format?: 'v1';
   }): Promise<MastraMessageV1[]>;
   async saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    messages: (MastraMessageV1 | MastraDBMessage)[] | MastraMessageV1[] | MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
     format: 'v2';
-  }): Promise<MastraMessageV2[]>;
+  }): Promise<MastraDBMessage[]>;
   async saveMessages({
     messages,
     memoryConfig,
     format = `v1`,
   }: {
-    messages: (MastraMessageV1 | MastraMessageV2)[];
+    messages: (MastraMessageV1 | MastraDBMessage)[];
     memoryConfig?: MemoryConfig | undefined;
     format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+  }): Promise<MastraDBMessage[] | MastraMessageV1[]> {
     // Then strip working memory tags from all messages
     const updatedMessages = messages
       .map(m => {
@@ -671,7 +647,7 @@ export class Memory extends MastraMemory {
         if (!m.type) m.type = `v2`;
         return this.updateMessageToHideWorkingMemoryV2(m);
       })
-      .filter((m): m is MastraMessageV1 | MastraMessageV2 => Boolean(m));
+      .filter((m): m is MastraMessageV1 | MastraDBMessage => Boolean(m));
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
@@ -686,7 +662,7 @@ export class Memory extends MastraMemory {
         updatedMessages.map(async message => {
           let textForEmbedding: string | null = null;
 
-          if (MessageList.isMastraMessageV2(message)) {
+          if (MessageList.isMastraDBMessage(message)) {
             if (
               message.content.content &&
               typeof message.content.content === 'string' &&
@@ -776,7 +752,7 @@ export class Memory extends MastraMemory {
       return { ...message };
     }
   }
-  protected updateMessageToHideWorkingMemoryV2(message: MastraMessageV2): MastraMessageV2 | null {
+  protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
 
     const newMessage = { ...message, content: { ...message.content } }; // Deep copy message and content
@@ -1078,8 +1054,8 @@ ${
   public async updateMessages({
     messages,
   }: {
-    messages: Partial<MastraMessageV2> & { id: string }[];
-  }): Promise<MastraMessageV2[]> {
+    messages: Partial<MastraDBMessage> & { id: string }[];
+  }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) return [];
 
     // TODO: Possibly handle updating the vector db here when a message is updated.

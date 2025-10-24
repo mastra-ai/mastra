@@ -1,7 +1,7 @@
 import type * as AIV4 from 'ai';
 import type * as AIV5 from 'ai-v5';
 import { describe, it, expect } from 'vitest';
-import type { MastraMessageV2 } from '../index';
+import type { MastraDBMessage } from '../index';
 import { convertMessages } from './convert-messages';
 
 describe('convertMessages', () => {
@@ -75,7 +75,7 @@ describe('convertMessages', () => {
   });
 
   describe('Mastra V2 to other formats', () => {
-    const mastraV2Message: MastraMessageV2 = {
+    const mastraV2Message: MastraDBMessage = {
       id: 'test-3',
       role: 'user',
       createdAt: new Date(),

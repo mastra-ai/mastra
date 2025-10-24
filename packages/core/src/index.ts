@@ -12,6 +12,7 @@ export * from './telemetry';
 export * from './tools/index.warning';
 export * from './tools/types';
 export * from './tts/index.warning';
+export * from './types';
 export * from './utils';
 export * from './vector/index.warning';
 export * from './workflows/index.warning';

@@ -7,6 +7,7 @@ import { usePlaygroundStore } from '@/store/playground-store';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { MastraUIMessage } from '@mastra/react';
 import { useEffect } from 'react';
+import { toAISdkMessages } from '@mastra/ai-sdk';
 
 export const AgentChat = ({
   agentId,
@@ -53,8 +54,7 @@ export const AgentChat = ({
       agentName={agentName}
       modelVersion={modelVersion}
       threadId={threadId}
-      initialMessages={(messages?.uiMessages || []) as MastraUIMessage[]}
-      initialLegacyMessages={messages?.legacyMessages || []}
+      initialMessages={messages?.messages ? (toAISdkMessages(messages.messages) as MastraUIMessage[]) : []}
       memory={memory}
       refreshThreadList={refreshThreadList}
       settings={settings}

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { UnicodeNormalizer } from './unicode-normalizer';
 
-function createTestMessage(text: string, id = 'test-id'): MastraMessageV2 {
+function createTestMessage(text: string, id = 'test-id'): MastraDBMessage {
   return {
     id,
     role: 'user',
@@ -14,7 +14,7 @@ function createTestMessage(text: string, id = 'test-id'): MastraMessageV2 {
   };
 }
 
-function createTestMessageWithContent(text: string, content: string, id = 'test-id'): MastraMessageV2 {
+function createTestMessageWithContent(text: string, content: string, id = 'test-id'): MastraDBMessage {
   return {
     id,
     role: 'user',
@@ -278,7 +278,7 @@ describe('UnicodeNormalizer', () => {
         throw new Error('abort');
       };
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test-id',
         role: 'user',
         content: {

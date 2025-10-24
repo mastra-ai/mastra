@@ -1,4 +1,4 @@
-import { convertMessages } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
@@ -394,12 +394,11 @@ export async function getMessagesHandler({
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
-    const result = await memory.query({
+    const { messages } = await memory.query({
       threadId: threadId!,
       ...(limit && { selectBy: { last: limit } }),
     });
-    const uiMessages = convertMessages(result.messagesV2).to('AIV5.UI');
-    return { messages: result.messages, uiMessages, legacyMessages: result.uiMessages };
+    return { messages };
   } catch (error) {
     return handleError(error, 'Error getting messages');
   }
@@ -611,7 +610,7 @@ export async function searchMemoryHandler({
 
       for (const thread of threads) {
         // Use rememberMessages for semantic search
-        const result = await memory.rememberMessages({
+        const messagesV2 = await memory.rememberMessages({
           threadId: thread.id,
           resourceId,
           vectorMessageSearch: searchQuery,
@@ -619,21 +618,23 @@ export async function searchMemoryHandler({
         });
 
         // Get thread messages for context
-        const threadMessages = (await memory.query({ threadId: thread.id })).uiMessages;
+        const { messages: threadMessages } = await memory.query({ threadId: thread.id });
 
         // Process results
-        result.messagesV2.forEach(msg => {
+        messagesV2.forEach((msg: MastraDBMessage) => {
           if (messageMap.has(msg.id)) return;
           messageMap.set(msg.id, true);
 
           const content =
-            msg.content.content || msg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join(' ') || '';
+            msg.content.content ||
+            msg.content.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join(' ') ||
+            '';
 
           if (!hasSemanticRecall && !content.toLowerCase().includes(searchQuery.toLowerCase())) {
             return;
           }
 
-          const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
+          const messageIndex = threadMessages.findIndex((m: any) => m.id === msg.id);
 
           const searchResult: SearchResult = {
             id: msg.id,
@@ -646,13 +647,13 @@ export async function searchMemoryHandler({
 
           if (messageIndex !== -1) {
             searchResult.context = {
-              before: threadMessages.slice(Math.max(0, messageIndex - 2), messageIndex).map(m => ({
+              before: threadMessages.slice(Math.max(0, messageIndex - 2), messageIndex).map((m: any) => ({
                 id: m.id,
                 role: m.role,
                 content: m.content,
                 createdAt: m.createdAt || new Date(),
               })),
-              after: threadMessages.slice(messageIndex + 1, messageIndex + 3).map(m => ({
+              after: threadMessages.slice(messageIndex + 1, messageIndex + 3).map((m: any) => ({
                 id: m.id,
                 role: m.role,
                 content: m.content,
@@ -678,23 +679,23 @@ export async function searchMemoryHandler({
         };
       }
 
-      const result = await memory.rememberMessages({
+      const messagesV2 = await memory.rememberMessages({
         threadId,
         resourceId,
         vectorMessageSearch: searchQuery,
         config,
       });
 
-      const threadMessages = (await memory.query({ threadId })).uiMessages;
+      const { messages: threadMessages } = await memory.query({ threadId });
 
-      result.messagesV2.forEach(msg => {
+      messagesV2.forEach((msg: MastraDBMessage) => {
         // Skip duplicates
         if (messageMap.has(msg.id)) return;
         messageMap.set(msg.id, true);
 
         // Extract content
         const content =
-          msg.content.content || msg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join(' ') || '';
+          msg.content.content || msg.content.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join(' ') || '';
 
         // If not using semantic recall, filter by text search
         if (!hasSemanticRecall && !content.toLowerCase().includes(searchQuery.toLowerCase())) {
@@ -702,7 +703,7 @@ export async function searchMemoryHandler({
         }
 
         // Find message index for context
-        const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
+        const messageIndex = threadMessages.findIndex((m: any) => m.id === msg.id);
 
         const searchResult: SearchResult = {
           id: msg.id,
@@ -716,13 +717,13 @@ export async function searchMemoryHandler({
         // Add context if found
         if (messageIndex !== -1) {
           searchResult.context = {
-            before: threadMessages.slice(Math.max(0, messageIndex - 2), messageIndex).map(m => ({
+            before: threadMessages.slice(Math.max(0, messageIndex - 2), messageIndex).map((m: any) => ({
               id: m.id,
               role: m.role,
               content: m.content,
               createdAt: m.createdAt || new Date(),
             })),
-            after: threadMessages.slice(messageIndex + 1, messageIndex + 3).map(m => ({
+            after: threadMessages.slice(messageIndex + 1, messageIndex + 3).map((m: any) => ({
               id: m.id,
               role: m.role,
               content: m.content,

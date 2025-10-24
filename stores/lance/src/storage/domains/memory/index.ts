@@ -2,7 +2,7 @@ import type { Connection } from '@lancedb/lancedb';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
   MemoryStorage,
   resolveMessageLimit,
@@ -185,7 +185,7 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  private normalizeMessage(message: any): MastraMessageV1 | MastraMessageV2 {
+  private normalizeMessage(message: any): MastraMessageV1 | MastraDBMessage {
     const { thread_id, ...rest } = message;
     return {
       ...rest,
@@ -204,14 +204,14 @@ export class StoreMemoryLance extends MemoryStorage {
   }
 
   public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraDBMessage[]>;
   public async getMessages({
     threadId,
     resourceId,
     selectBy,
     format,
     threadConfig,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
@@ -294,14 +294,14 @@ export class StoreMemoryLance extends MemoryStorage {
   }: {
     messageIds: string[];
     format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
+  }): Promise<MastraDBMessage[]>;
   public async getMessagesById({
     messageIds,
     format,
   }: {
     messageIds: string[];
     format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
     if (messageIds.length === 0) return [];
     try {
       const table = await this.client.openTable(TABLE_MESSAGES);
@@ -333,10 +333,10 @@ export class StoreMemoryLance extends MemoryStorage {
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(args: { messages: MastraDBMessage[]; format: 'v2' }): Promise<MastraDBMessage[]>;
   async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraDBMessage[]; format: 'v2' },
+  ): Promise<MastraDBMessage[] | MastraMessageV1[]> {
     try {
       const { messages, format = 'v1' } = args;
       if (messages.length === 0) {
@@ -365,7 +365,7 @@ export class StoreMemoryLance extends MemoryStorage {
         }
       }
 
-      const transformedMessages = messages.map((message: MastraMessageV2 | MastraMessageV1) => {
+      const transformedMessages = messages.map((message: MastraDBMessage | MastraMessageV1) => {
         const { threadId, type, ...rest } = message;
         return {
           ...rest,
@@ -525,7 +525,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
   async getMessagesPaginated(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraDBMessage[] }> {
     const { threadId, resourceId, selectBy, format = 'v1' } = args;
     const page = selectBy?.pagination?.page ?? 0;
     const perPage = selectBy?.pagination?.perPage ?? 10;
@@ -691,9 +691,9 @@ export class StoreMemoryLance extends MemoryStorage {
   }
 
   /**
-   * Parse message data from LanceDB record format to MastraMessageV2 format
+   * Parse message data from LanceDB record format to MastraDBMessage format
    */
-  private parseMessageData(data: any): MastraMessageV2 {
+  private parseMessageData(data: any): MastraDBMessage {
     const { thread_id, ...rest } = data;
     return {
       ...rest,
@@ -710,16 +710,16 @@ export class StoreMemoryLance extends MemoryStorage {
           : data.content,
       createdAt: new Date(data.createdAt),
       updatedAt: new Date(data.updatedAt),
-    } as MastraMessageV2;
+    } as MastraDBMessage;
   }
 
   async updateMessages(args: {
-    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+    messages: Partial<Omit<MastraDBMessage, 'createdAt'>> &
       {
         id: string;
         content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
       }[];
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     const { messages } = args;
     this.logger.debug('Updating messages', { count: messages.length });
 
@@ -727,7 +727,7 @@ export class StoreMemoryLance extends MemoryStorage {
       return [];
     }
 
-    const updatedMessages: MastraMessageV2[] = [];
+    const updatedMessages: MastraDBMessage[] = [];
     const affectedThreadIds = new Set<string>();
 
     try {

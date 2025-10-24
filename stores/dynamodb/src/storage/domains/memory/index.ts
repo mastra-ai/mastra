@@ -1,7 +1,7 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
+import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
 import { MemoryStorage, resolveMessageLimit } from '@mastra/core/storage';
 import type {
   PaginationInfo,
@@ -19,7 +19,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }
 
   // Helper function to parse message data (handle JSON fields)
-  private parseMessageData(data: any): MastraMessageV2 | MastraMessageV1 {
+  private parseMessageData(data: any): MastraDBMessage | MastraMessageV1 {
     // Removed try/catch and JSON.parse logic - now handled by entity 'get' attributes
     // This function now primarily ensures correct typing and Date conversion.
     return {
@@ -264,19 +264,19 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }
 
   public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraDBMessage[]>;
   public async getMessages({
     threadId,
     resourceId,
     selectBy,
     format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
     this.logger.debug('Getting messages', { threadId, selectBy });
 
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
-      const messages: MastraMessageV2[] = [];
+      const messages: MastraDBMessage[] = [];
       const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
 
       // Handle included messages first (like libsql)
@@ -306,10 +306,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
         let allThreadMessages = results.data
           .map((data: any) => this.parseMessageData(data))
-          .filter((msg: any): msg is MastraMessageV2 => 'content' in msg);
+          .filter((msg: any): msg is MastraDBMessage => 'content' in msg);
 
         // Sort by createdAt ASC to get proper order
-        allThreadMessages.sort((a: MastraMessageV2, b: MastraMessageV2) => {
+        allThreadMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
           const timeA = a.createdAt.getTime();
           const timeB = b.createdAt.getTime();
           if (timeA === timeB) {
@@ -365,14 +365,14 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }: {
     messageIds: string[];
     format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
+  }): Promise<MastraDBMessage[]>;
   public async getMessagesById({
     messageIds,
     format,
   }: {
     messageIds: string[];
     format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  }): Promise<MastraMessageV1[] | MastraDBMessage[]> {
     this.logger.debug('Getting messages by ID', { messageIds });
     if (messageIds.length === 0) return [];
 
@@ -385,7 +385,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       let parsedMessages = data
         .map((data: any) => this.parseMessageData(data))
-        .filter((msg: any): msg is MastraMessageV2 => 'content' in msg);
+        .filter((msg: any): msg is MastraDBMessage => 'content' in msg);
 
       // Deduplicate messages by ID (like libsql)
       const uniqueMessages = parsedMessages.filter(
@@ -409,10 +409,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(args: { messages: MastraDBMessage[]; format: 'v2' }): Promise<MastraDBMessage[]>;
   async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraDBMessage[]; format: 'v2' },
+  ): Promise<MastraDBMessage[] | MastraMessageV1[]> {
     const { messages, format = 'v1' } = args;
     this.logger.debug('Saving messages', { count: messages.length });
 
@@ -559,7 +559,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
   async getMessagesPaginated(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraDBMessage[] }> {
     const { threadId, resourceId, selectBy, format = 'v1' } = args;
     const { page = 0, perPage = 40, dateRange } = selectBy?.pagination || {};
     const fromDate = dateRange?.start;
@@ -571,7 +571,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     try {
       if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
-      let messages: MastraMessageV2[] = [];
+      let messages: MastraDBMessage[] = [];
 
       // Handle include messages first
       if (selectBy?.include?.length) {
@@ -600,10 +600,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
         let allThreadMessages = results.data
           .map((data: any) => this.parseMessageData(data))
-          .filter((msg: any): msg is MastraMessageV2 => 'content' in msg);
+          .filter((msg: any): msg is MastraDBMessage => 'content' in msg);
 
         // Sort by createdAt ASC to get proper order
-        allThreadMessages.sort((a: MastraMessageV2, b: MastraMessageV2) => {
+        allThreadMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
           const timeA = a.createdAt.getTime();
           const timeB = b.createdAt.getTime();
           if (timeA === timeB) {
@@ -615,7 +615,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         // Exclude already included messages
         const excludeIds = messages.map(m => m.id);
         if (excludeIds.length > 0) {
-          allThreadMessages = allThreadMessages.filter((msg: MastraMessageV2) => !excludeIds.includes(msg.id));
+          allThreadMessages = allThreadMessages.filter((msg: MastraDBMessage) => !excludeIds.includes(msg.id));
         }
 
         messages.push(...allThreadMessages);
@@ -643,7 +643,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const paginatedMessages = messages.slice(start, end);
       const hasMore = end < total;
 
-      const list = new MessageList({ threadId, resourceId }).add(paginatedMessages as MastraMessageV2[], 'memory');
+      const list = new MessageList({ threadId, resourceId }).add(paginatedMessages as MastraDBMessage[], 'memory');
       const finalMessages = format === 'v2' ? list.get.all.v2() : list.get.all.v1();
 
       return {
@@ -670,14 +670,14 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }
 
   // Helper method to get included messages with context
-  private async _getIncludedMessages(threadId: string, selectBy: any): Promise<MastraMessageV2[]> {
+  private async _getIncludedMessages(threadId: string, selectBy: any): Promise<MastraDBMessage[]> {
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     if (!selectBy?.include?.length) {
       return [];
     }
 
-    const includeMessages: MastraMessageV2[] = [];
+    const includeMessages: MastraDBMessage[] = [];
 
     for (const includeItem of selectBy.include) {
       try {
@@ -697,16 +697,16 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         const results = await query.go();
         const allMessages = results.data
           .map((data: any) => this.parseMessageData(data))
-          .filter((msg: any): msg is MastraMessageV2 => 'content' in msg && typeof msg.content === 'object');
+          .filter((msg: any): msg is MastraDBMessage => 'content' in msg && typeof msg.content === 'object');
 
         this.logger.debug('Found messages in thread', {
           threadId: searchThreadId,
           messageCount: allMessages.length,
-          messageIds: allMessages.map((m: MastraMessageV2) => m.id),
+          messageIds: allMessages.map((m: MastraDBMessage) => m.id),
         });
 
         // Sort by createdAt ASC to get proper order, with ID tiebreaker for stable ordering
-        allMessages.sort((a: MastraMessageV2, b: MastraMessageV2) => {
+        allMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
           const timeA = a.createdAt.getTime();
           const timeB = b.createdAt.getTime();
           if (timeA === timeB) {
@@ -716,7 +716,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         });
 
         // Find the target message
-        const targetIndex = allMessages.findIndex((msg: MastraMessageV2) => msg.id === id);
+        const targetIndex = allMessages.findIndex((msg: MastraDBMessage) => msg.id === id);
         if (targetIndex === -1) {
           this.logger.warn('Target message not found', { id, threadId: searchThreadId });
           continue;
@@ -733,7 +733,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           startIndex,
           endIndex,
           contextCount: contextMessages.length,
-          contextIds: contextMessages.map((m: MastraMessageV2) => m.id),
+          contextIds: contextMessages.map((m: MastraDBMessage) => m.id),
         });
 
         includeMessages.push(...contextMessages);
@@ -744,19 +744,19 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     this.logger.debug('Total included messages', {
       count: includeMessages.length,
-      ids: includeMessages.map((m: MastraMessageV2) => m.id),
+      ids: includeMessages.map((m: MastraDBMessage) => m.id),
     });
 
     return includeMessages;
   }
 
   async updateMessages(args: {
-    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+    messages: Partial<Omit<MastraDBMessage, 'createdAt'>> &
       {
         id: string;
         content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
       }[];
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     const { messages } = args;
     this.logger.debug('Updating messages', { count: messages.length });
 
@@ -764,7 +764,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       return [];
     }
 
-    const updatedMessages: MastraMessageV2[] = [];
+    const updatedMessages: MastraDBMessage[] = [];
     const affectedThreadIds = new Set<string>();
 
     try {
@@ -778,7 +778,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           continue;
         }
 
-        const existingMsg = this.parseMessageData(existingMessage.data) as MastraMessageV2;
+        const existingMsg = this.parseMessageData(existingMessage.data) as MastraDBMessage;
         const originalThreadId = existingMsg.threadId;
         affectedThreadIds.add(originalThreadId!);
 
@@ -828,7 +828,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         // Get the updated message
         const updatedMessage = await this.service.entities.message.get({ entity: 'message', id }).go();
         if (updatedMessage.data) {
-          updatedMessages.push(this.parseMessageData(updatedMessage.data) as MastraMessageV2);
+          updatedMessages.push(this.parseMessageData(updatedMessage.data) as MastraDBMessage);
         }
       }
 

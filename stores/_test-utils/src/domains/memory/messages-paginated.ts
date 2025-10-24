@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSampleMessageV1, createSampleMessageV2 } from './data';
 import { resetRole, createSampleThread } from './data';
 import { MastraStorage } from '@mastra/core/storage';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { MessageList } from '@mastra/core/agent';
 
 export function createMessagesPaginatedTest({ storage }: { storage: MastraStorage }) {
@@ -170,7 +170,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       const thread3 = createSampleThread();
       await storage.saveThread({ thread: thread3 });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         createSampleMessageV2({
           threadId: thread.id,
           content: { content: 'First', parts: [{ type: 'text', text: 'First' }] },
@@ -246,7 +246,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       );
       expect(contentParts3).toEqual([['Seventh'], ['Eighth']]);
 
-      const crossThreadMessages: MastraMessageV2[] = await storage.getMessages({
+      const crossThreadMessages: MastraDBMessage[] = await storage.getMessages({
         threadId: thread.id,
         format: 'v2',
         selectBy: {
@@ -272,7 +272,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       expect(crossThreadMessages.filter(m => m.threadId === thread.id)).toHaveLength(3);
       expect(crossThreadMessages.filter(m => m.threadId === thread2.id)).toHaveLength(3);
 
-      const crossThreadMessages2: MastraMessageV2[] = await storage.getMessages({
+      const crossThreadMessages2: MastraDBMessage[] = await storage.getMessages({
         threadId: thread.id,
         format: 'v2',
         selectBy: {
@@ -292,7 +292,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       expect(crossThreadMessages2.filter(m => m.threadId === thread.id)).toHaveLength(0);
       expect(crossThreadMessages2.filter(m => m.threadId === thread2.id)).toHaveLength(3);
 
-      const crossThreadMessages3: MastraMessageV2[] = await storage.getMessages({
+      const crossThreadMessages3: MastraDBMessage[] = await storage.getMessages({
         threadId: thread2.id,
         format: 'v2',
         selectBy: {
@@ -514,9 +514,9 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
     const resourceId = 'test-resource-id';
     const resourceId2 = 'test-resource-id-2';
     let threads: StorageThreadType[] = [];
-    let thread1Messages: MastraMessageV2[] = [];
-    let thread2Messages: MastraMessageV2[] = [];
-    let resource2Messages: MastraMessageV2[] = [];
+    let thread1Messages: MastraDBMessage[] = [];
+    let thread2Messages: MastraDBMessage[] = [];
+    let resource2Messages: MastraDBMessage[] = [];
 
     beforeEach(async () => {
       // Create test threads with different dates
@@ -623,12 +623,12 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
     });
 
     it('should return V2 messages by default', async () => {
-      const messages: MastraMessageV2[] = await storage.getMessagesById({
+      const messages: MastraDBMessage[] = await storage.getMessagesById({
         messageIds: thread1Messages.map(msg => msg.id),
       });
 
       expect(messages.length).toBeGreaterThan(0);
-      expect(messages.every(MessageList.isMastraMessageV2)).toBe(true);
+      expect(messages.every(MessageList.isMastraDBMessage)).toBe(true);
     });
 
     it('should return messages in the specified format', async () => {
@@ -640,13 +640,13 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       expect(v1messages.length).toBeGreaterThan(0);
       expect(v1messages.every(MessageList.isMastraMessageV1)).toBe(true);
 
-      const v2messages: MastraMessageV2[] = await storage.getMessagesById({
+      const v2messages: MastraDBMessage[] = await storage.getMessagesById({
         messageIds: thread1Messages.map(msg => msg.id),
         format: 'v2',
       });
 
       expect(v2messages.length).toBeGreaterThan(0);
-      expect(v2messages.every(MessageList.isMastraMessageV2)).toBe(true);
+      expect(v2messages.every(MessageList.isMastraDBMessage)).toBe(true);
     });
 
     it('should return messages from multiple threads', async () => {

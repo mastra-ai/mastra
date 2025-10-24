@@ -61,7 +61,16 @@ interface ChildMessage {
 export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMessage[] => {
   return messages.map(message => {
     // Check if message contains network execution data
-    const networkPart = message.parts.find(part => part.type === 'text' && part.text.includes('"isNetwork":true'));
+    const networkPart = message.parts.find(
+      (part): part is { type: 'text'; text: string } =>
+        typeof part === 'object' &&
+        part !== null &&
+        'type' in part &&
+        part.type === 'text' &&
+        'text' in part &&
+        typeof part.text === 'string' &&
+        part.text.includes('"isNetwork":true'),
+    );
 
     if (networkPart && networkPart.type === 'text') {
       try {

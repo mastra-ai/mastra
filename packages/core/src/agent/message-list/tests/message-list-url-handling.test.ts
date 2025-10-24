@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { MastraMessageV2 } from '../../types';
+import type { MastraDBMessage } from '../../types';
 import { MessageList } from '../index';
 
 describe('MessageList - File URL Handling', () => {
@@ -8,7 +8,7 @@ describe('MessageList - File URL Handling', () => {
     const imageUrl = 'https://httpbin.org/image/png';
 
     // Create a V2 message with a file part containing a URL
-    const v2Message: MastraMessageV2 = {
+    const v2Message: MastraDBMessage = {
       id: 'test-msg-1',
       role: 'user',
       content: {
@@ -54,7 +54,7 @@ describe('MessageList - File URL Handling', () => {
     const imageUrl = 'https://httpbin.org/image/png';
 
     // Simulate what happens when stream receives messages with file parts
-    const inputMessage: MastraMessageV2 = {
+    const inputMessage: MastraDBMessage = {
       id: 'input-msg',
       role: 'user',
       content: {
@@ -96,7 +96,7 @@ describe('MessageList - File URL Handling', () => {
     const dataUri = `data:image/png;base64,${base64Data}`;
 
     // Test with different data formats
-    const messages: MastraMessageV2[] = [
+    const messages: MastraDBMessage[] = [
       {
         id: 'url-msg',
         role: 'user',

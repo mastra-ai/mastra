@@ -1,14 +1,14 @@
 import type { TextPart } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import type { PIIDetectionResult, PIIDetection } from './pii-detector';
 import { PIIDetector } from './pii-detector';
 
-function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraMessageV2 {
+function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraDBMessage {
   return {
     id,
     role,
@@ -549,7 +549,7 @@ describe('PIIDetector', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -579,7 +579,7 @@ describe('PIIDetector', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -603,7 +603,7 @@ describe('PIIDetector', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -1023,7 +1023,7 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult());
       const detector = new PIIDetector({ model });
 
-      const messages: MastraMessageV2[] = [];
+      const messages: MastraDBMessage[] = [];
       const result = await detector.processOutputResult({ messages, abort: vi.fn() as any });
       expect(result).toEqual(messages);
     });
@@ -1032,7 +1032,7 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult());
       const detector = new PIIDetector({ model });
 
-      const messages: MastraMessageV2[] = [createTestMessage('Some reasoning', 'assistant', 'test-id1')];
+      const messages: MastraDBMessage[] = [createTestMessage('Some reasoning', 'assistant', 'test-id1')];
 
       const result = await detector.processOutputResult({ messages, abort: vi.fn() as any });
       expect(result).toEqual(messages);
@@ -1051,7 +1051,7 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult(['email'], detections, 'My email is j***.d**@e******.com'));
       const detector = new PIIDetector({ model });
 
-      const messages: MastraMessageV2[] = [createTestMessage('My email is test@example.com', 'assistant', 'test-id1')];
+      const messages: MastraDBMessage[] = [createTestMessage('My email is test@example.com', 'assistant', 'test-id1')];
 
       const result = await detector.processOutputResult({ messages, abort: vi.fn() as any });
 
@@ -1063,7 +1063,7 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult(['email']));
       const detector = new PIIDetector({ model, strategy: 'block' });
 
-      const messages: MastraMessageV2[] = [createTestMessage('My email is test@example.com', 'assistant', 'test-id1')];
+      const messages: MastraDBMessage[] = [createTestMessage('My email is test@example.com', 'assistant', 'test-id1')];
 
       const mockAbort = vi.fn().mockImplementation(() => {
         throw new TripWire('PII detected');
@@ -1080,7 +1080,7 @@ describe('PIIDetector', () => {
       ]);
       const detector = new PIIDetector({ model, strategy: 'filter' });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         createTestMessage('My email is test@example.com', 'assistant', 'test-id1'),
         createTestMessage('This is safe content', 'assistant', 'test-id2'),
       ];
@@ -1097,7 +1097,7 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult(['email']));
       const detector = new PIIDetector({ model, strategy: 'warn' });
 
-      const messages: MastraMessageV2[] = [createTestMessage('My email is test@example.com', 'assistant')];
+      const messages: MastraDBMessage[] = [createTestMessage('My email is test@example.com', 'assistant')];
 
       const result = await detector.processOutputResult({ messages, abort: vi.fn() as any });
 
@@ -1116,7 +1116,7 @@ describe('PIIDetector', () => {
         },
       });
       const detector = new PIIDetector({ model });
-      const messages: MastraMessageV2[] = [createTestMessage('My email is test@example.com', 'assistant')];
+      const messages: MastraDBMessage[] = [createTestMessage('My email is test@example.com', 'assistant')];
 
       const result = await detector.processOutputResult({ messages, abort: vi.fn() as any });
       expect(result).toEqual(messages); // Should return original messages on failure

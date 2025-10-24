@@ -45,10 +45,15 @@ export type MastraMessageContentV2 = {
   metadata?: Record<string, unknown>;
 };
 
-// maps to AI SDK V4 UIMessage
-export type MastraMessageV2 = MastraMessageShared & {
+// Database storage format - maps to AI SDK V4 UIMessage structure
+export type MastraDBMessage = MastraMessageShared & {
   content: MastraMessageContentV2;
 };
+
+/**
+ * @deprecated Use MastraDBMessage instead. This alias will be removed in a future version.
+ */
+export type MastraMessageV2 = MastraDBMessage;
 
 export type MastraMessageContentV3 = {
   format: 3; // format 3 === UIMessage in AI SDK v5
@@ -88,7 +93,7 @@ export type MessageInput =
   | AIV4Type.CoreMessage // v4 CoreMessage support
   // db messages in various formats
   | MastraMessageV1
-  | MastraMessageV2 // <- this is how we currently store in the DB
+  | MastraDBMessage // <- this is how we currently store in the DB
   | MastraMessageV3; // <- this could be stored in the db but is not currently. we do accept this as an input though, and we use it to transform from aiv4->v5 types as an intermediary type
 
 export { convertMessages } from './utils/convert-messages';
@@ -108,7 +113,7 @@ type MemoryInfo = { threadId: string; resourceId?: string };
 export type MessageListInput = string | string[] | MessageInput | MessageInput[];
 
 export class MessageList {
-  private messages: MastraMessageV2[] = [];
+  private messages: MastraDBMessage[] = [];
 
   // passed in by dev in input or context
   private systemMessages: AIV4Type.CoreSystemMessage[] = [];
@@ -118,15 +123,15 @@ export class MessageList {
   private memoryInfo: null | MemoryInfo = null;
 
   // used to filter this.messages by how it was added: input/response/memory
-  private memoryMessages = new Set<MastraMessageV2>();
-  private newUserMessages = new Set<MastraMessageV2>();
-  private newResponseMessages = new Set<MastraMessageV2>();
-  private userContextMessages = new Set<MastraMessageV2>();
+  private memoryMessages = new Set<MastraDBMessage>();
+  private newUserMessages = new Set<MastraDBMessage>();
+  private newResponseMessages = new Set<MastraDBMessage>();
+  private userContextMessages = new Set<MastraDBMessage>();
 
-  private memoryMessagesPersisted = new Set<MastraMessageV2>();
-  private newUserMessagesPersisted = new Set<MastraMessageV2>();
-  private newResponseMessagesPersisted = new Set<MastraMessageV2>();
-  private userContextMessagesPersisted = new Set<MastraMessageV2>();
+  private memoryMessagesPersisted = new Set<MastraDBMessage>();
+  private newUserMessagesPersisted = new Set<MastraDBMessage>();
+  private newResponseMessagesPersisted = new Set<MastraDBMessage>();
+  private userContextMessagesPersisted = new Set<MastraDBMessage>();
 
   private generateMessageId?: AIV4Type.IdGenerator;
   private _agentNetworkAppend = false;
@@ -163,15 +168,15 @@ export class MessageList {
     return this;
   }
 
-  private serializeSet(set: Set<MastraMessageV2>) {
+  private serializeSet(set: Set<MastraDBMessage>) {
     return Array.from(set).map(value => value.id);
   }
 
   private deserializeSet(ids: string[]) {
-    return new Set(ids.map(id => this.messages.find(m => m.id === id)).filter(Boolean) as MastraMessageV2[]);
+    return new Set(ids.map(id => this.messages.find(m => m.id === id)).filter(Boolean) as MastraDBMessage[]);
   }
 
-  private serializeMessage(message: MastraMessageV2) {
+  private serializeMessage(message: MastraDBMessage) {
     return {
       ...message,
       createdAt: message.createdAt.toUTCString(),
@@ -182,7 +187,7 @@ export class MessageList {
     return {
       ...state,
       createdAt: new Date(state.createdAt),
-    } as MastraMessageV2;
+    } as MastraDBMessage;
   }
 
   public serialize() {
@@ -248,7 +253,7 @@ export class MessageList {
   public get clear() {
     return {
       input: {
-        v2: (): MastraMessageV2[] => {
+        v2: (): MastraDBMessage[] => {
           const userMessages = Array.from(this.newUserMessages);
           this.messages = this.messages.filter(m => !this.newUserMessages.has(m));
           this.newUserMessages.clear();
@@ -268,7 +273,7 @@ export class MessageList {
 
   private all = {
     v3: (): MastraMessageV3[] => this.cleanV3Metadata(this.messages.map(this.mastraMessageV2ToMastraMessageV3)),
-    v2: (): MastraMessageV2[] => this.messages,
+    v2: (): MastraDBMessage[] => this.messages,
     v1: (): MastraMessageV1[] => convertToV1Messages(this.all.v2()),
 
     aiV5: {
@@ -438,7 +443,7 @@ export class MessageList {
       this.cleanV3Metadata(
         this.messages.filter(m => this.newUserMessagesPersisted.has(m)).map(this.mastraMessageV2ToMastraMessageV3),
       ),
-    v2: (): MastraMessageV2[] => this.messages.filter(m => this.newUserMessagesPersisted.has(m)),
+    v2: (): MastraDBMessage[] => this.messages.filter(m => this.newUserMessagesPersisted.has(m)),
     v1: (): MastraMessageV1[] => convertToV1Messages(this.inputPersisted.v2()),
     ui: (): UIMessageWithMetadata[] => this.inputPersisted.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
     core: () => this.aiV4UIMessagesToAIV4CoreMessages(this.inputPersisted.ui()),
@@ -446,7 +451,7 @@ export class MessageList {
 
   private response = {
     v3: (): MastraMessageV3[] => this.response.v2().map(this.mastraMessageV2ToMastraMessageV3),
-    v2: (): MastraMessageV2[] => this.messages.filter(m => this.newResponseMessages.has(m)),
+    v2: (): MastraDBMessage[] => this.messages.filter(m => this.newResponseMessages.has(m)),
     v1: (): MastraMessageV1[] => convertToV1Messages(this.response.v3().map(MessageList.mastraMessageV3ToV2)),
 
     aiV5: {
@@ -649,11 +654,11 @@ export class MessageList {
       this.cleanV3Metadata(
         this.messages.filter(m => this.newResponseMessagesPersisted.has(m)).map(this.mastraMessageV2ToMastraMessageV3),
       ),
-    v2: (): MastraMessageV2[] => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
+    v2: (): MastraDBMessage[] => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
     ui: (): UIMessageWithMetadata[] => this.responsePersisted.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
   };
 
-  public drainUnsavedMessages(): MastraMessageV2[] {
+  public drainUnsavedMessages(): MastraDBMessage[] {
     const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
     this.newUserMessages.clear();
     this.newResponseMessages.clear();
@@ -680,8 +685,8 @@ export class MessageList {
       | AIV4Type.CoreMessage[]
       | AIV5Type.ModelMessage
       | AIV5Type.ModelMessage[]
-      | MastraMessageV2
-      | MastraMessageV2[]
+      | MastraDBMessage
+      | MastraDBMessage[]
       | string
       | string[]
       | null,
@@ -730,11 +735,11 @@ export class MessageList {
 
   /**
    * Converts various message formats to AIV4 CoreMessage format for system messages
-   * @param message - The message to convert (can be string, MastraMessageV2, or AI SDK message types)
+   * @param message - The message to convert (can be string, MastraDBMessage, or AI SDK message types)
    * @returns AIV4 CoreMessage in the proper format
    */
   private systemMessageToAICore(
-    message: AIV4Type.CoreMessage | AIV5Type.ModelMessage | MastraMessageV2 | string,
+    message: AIV4Type.CoreMessage | AIV5Type.ModelMessage | MastraDBMessage | string,
   ): AIV4Type.CoreMessage {
     if (typeof message === `string`) {
       return { role: 'system', content: message };
@@ -744,14 +749,14 @@ export class MessageList {
       return this.aiV5ModelMessagesToAIV4CoreMessages([message as AIV5Type.ModelMessage], `system`)[0]!;
     }
 
-    if (MessageList.isMastraMessageV2(message)) {
+    if (MessageList.isMastraDBMessage(message)) {
       return MessageList.mastraMessageV2SystemToV4Core(message);
     }
 
     return message;
   }
 
-  private addOneSystem(message: AIV4Type.CoreMessage | AIV5Type.ModelMessage | MastraMessageV2 | string, tag?: string) {
+  private addOneSystem(message: AIV4Type.CoreMessage | AIV5Type.ModelMessage | MastraDBMessage | string, tag?: string) {
     const coreMessage = this.systemMessageToAICore(message);
 
     if (coreMessage.role !== `system`) {
@@ -784,7 +789,7 @@ export class MessageList {
     );
   }
 
-  private static mastraMessageV2ToAIV4UIMessage(m: MastraMessageV2): UIMessageWithMetadata {
+  private static mastraMessageV2ToAIV4UIMessage(m: MastraDBMessage): UIMessageWithMetadata {
     const experimentalAttachments: UIMessageWithMetadata['experimental_attachments'] = m.content
       .experimental_attachments
       ? [...m.content.experimental_attachments]
@@ -910,12 +915,12 @@ export class MessageList {
   }
 
   /**
-   * Converts a MastraMessageV2 system message directly to AIV4 CoreMessage format
+   * Converts a MastraDBMessage system message directly to AIV4 CoreMessage format
    * This is more efficient than converting to UI message first and then to core
-   * @param message - The MastraMessageV2 message to convert
+   * @param message - The MastraDBMessage message to convert
    * @returns AIV4 CoreMessage with system role
    */
-  private static mastraMessageV2SystemToV4Core(message: MastraMessageV2): AIV4Type.CoreMessage {
+  private static mastraMessageV2SystemToV4Core(message: MastraDBMessage): AIV4Type.CoreMessage {
     if (message.role !== `system` || !message.content.content)
       throw new MastraError({
         id: 'INVALID_SYSTEM_MESSAGE_FORMAT',
@@ -934,7 +939,7 @@ export class MessageList {
     return this.messages.find(m => m.id === id);
   }
 
-  private shouldReplaceMessage(message: MastraMessageV2): { exists: boolean; shouldReplace?: boolean; id?: string } {
+  private shouldReplaceMessage(message: MastraDBMessage): { exists: boolean; shouldReplace?: boolean; id?: string } {
     if (!this.messages.length) return { exists: false };
 
     if (!(`id` in message) || !message?.id) {
@@ -981,7 +986,7 @@ export class MessageList {
       const isSupportedSystemFormat =
         MessageList.isAIV4CoreMessage(message) ||
         MessageList.isAIV5CoreMessage(message) ||
-        MessageList.isMastraMessageV2(message);
+        MessageList.isMastraDBMessage(message);
 
       if (isSupportedSystemFormat) {
         return this.addSystem(message);
@@ -1000,7 +1005,7 @@ export class MessageList {
       });
     }
 
-    const messageV2 = this.inputToMastraMessageV2(message, messageSource);
+    const messageV2 = this.inputToMastraDBMessage(message, messageSource);
 
     const { exists, shouldReplace, id } = this.shouldReplaceMessage(messageV2);
 
@@ -1124,7 +1129,7 @@ export class MessageList {
     return this;
   }
 
-  private pushMessageToSource(messageV2: MastraMessageV2, messageSource: MessageSource) {
+  private pushMessageToSource(messageV2: MastraDBMessage, messageSource: MessageSource) {
     if (messageSource === `memory`) {
       this.memoryMessages.add(messageV2);
       this.memoryMessagesPersisted.add(messageV2);
@@ -1155,8 +1160,8 @@ export class MessageList {
     part,
     insertAt, // optional
   }: {
-    latestMessage: MastraMessageV2;
-    newMessage: MastraMessageV2;
+    latestMessage: MastraDBMessage;
+    newMessage: MastraDBMessage;
     part: MastraMessageContentV2['parts'][number];
     insertAt?: number;
   }) {
@@ -1210,8 +1215,8 @@ export class MessageList {
     anchorMap,
     partsToAdd,
   }: {
-    latestMessage: MastraMessageV2;
-    messageV2: MastraMessageV2;
+    latestMessage: MastraDBMessage;
+    messageV2: MastraDBMessage;
     anchorMap: Map<number, number>;
     partsToAdd: Map<number, MastraMessageContentV2['parts'][number]>;
   }) {
@@ -1270,7 +1275,7 @@ export class MessageList {
     }
   }
 
-  private inputToMastraMessageV2(message: MessageInput, messageSource: MessageSource): MastraMessageV2 {
+  private inputToMastraDBMessage(message: MessageInput, messageSource: MessageSource): MastraDBMessage {
     if (
       // we can't throw if the threadId doesn't match and this message came from memory
       // this is because per-user semantic recall can retrieve messages from other threads
@@ -1297,16 +1302,16 @@ export class MessageList {
     }
 
     if (MessageList.isMastraMessageV1(message)) {
-      return this.mastraMessageV1ToMastraMessageV2(message, messageSource);
+      return this.mastraMessageV1ToMastraDBMessage(message, messageSource);
     }
-    if (MessageList.isMastraMessageV2(message)) {
-      return this.hydrateMastraMessageV2Fields(message);
+    if (MessageList.isMastraDBMessage(message)) {
+      return this.hydrateMastraDBMessageFields(message);
     }
     if (MessageList.isAIV4CoreMessage(message)) {
-      return this.aiV4CoreMessageToMastraMessageV2(message, messageSource);
+      return this.aiV4CoreMessageToMastraDBMessage(message, messageSource);
     }
     if (MessageList.isAIV4UIMessage(message)) {
-      return this.aiV4UIMessageToMastraMessageV2(message, messageSource);
+      return this.aiV4UIMessageToMastraDBMessage(message, messageSource);
     }
 
     if (MessageList.isAIV5CoreMessage(message)) {
@@ -1364,8 +1369,8 @@ export class MessageList {
     return randomUUID();
   }
 
-  private mastraMessageV1ToMastraMessageV2(message: MastraMessageV1, messageSource: MessageSource): MastraMessageV2 {
-    const coreV2 = this.aiV4CoreMessageToMastraMessageV2(
+  private mastraMessageV1ToMastraDBMessage(message: MastraMessageV1, messageSource: MessageSource): MastraDBMessage {
+    const coreV2 = this.aiV4CoreMessageToMastraDBMessage(
       {
         content: message.content,
         role: message.role,
@@ -1387,7 +1392,7 @@ export class MessageList {
     if (!(message.createdAt instanceof Date)) message.createdAt = new Date(message.createdAt);
     return message;
   }
-  private hydrateMastraMessageV2Fields(message: MastraMessageV2): MastraMessageV2 {
+  private hydrateMastraDBMessageFields(message: MastraDBMessage): MastraDBMessage {
     if (!(message.createdAt instanceof Date)) message.createdAt = new Date(message.createdAt);
 
     // Fix toolInvocations with empty args by looking in the parts array
@@ -1415,10 +1420,10 @@ export class MessageList {
     return message;
   }
 
-  private aiV4UIMessageToMastraMessageV2(
+  private aiV4UIMessageToMastraDBMessage(
     message: AIV4Type.UIMessage | UIMessageWithMetadata,
     messageSource: MessageSource,
-  ): MastraMessageV2 {
+  ): MastraDBMessage {
     const content: MastraMessageContentV2 = {
       format: 2,
       parts: message.parts,
@@ -1442,12 +1447,12 @@ export class MessageList {
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,
-    } satisfies MastraMessageV2;
+    } satisfies MastraDBMessage;
   }
-  private aiV4CoreMessageToMastraMessageV2(
+  private aiV4CoreMessageToMastraDBMessage(
     coreMessage: AIV4Type.CoreMessage,
     messageSource: MessageSource,
-  ): MastraMessageV2 {
+  ): MastraDBMessage {
     const id = `id` in coreMessage ? (coreMessage.id as string) : this.newMessageId();
     const parts: AIV4Type.UIMessage['parts'] = [];
     const experimentalAttachments: AIV4Type.UIMessage['experimental_attachments'] = [];
@@ -1625,7 +1630,7 @@ export class MessageList {
       }
     }
 
-    const content: MastraMessageV2['content'] = {
+    const content: MastraDBMessage['content'] = {
       format: 2,
       parts,
     };
@@ -1672,21 +1677,21 @@ export class MessageList {
     );
   }
 
-  static isMastraMessage(msg: MessageInput): msg is MastraMessageV2 | MastraMessageV1 | MastraMessageV3 {
+  static isMastraMessage(msg: MessageInput): msg is MastraDBMessage | MastraMessageV1 | MastraMessageV3 {
     return (
-      MessageList.isMastraMessageV3(msg) || MessageList.isMastraMessageV2(msg) || MessageList.isMastraMessageV1(msg)
+      MessageList.isMastraMessageV3(msg) || MessageList.isMastraDBMessage(msg) || MessageList.isMastraMessageV1(msg)
     );
   }
 
   static isMastraMessageV1(msg: MessageInput): msg is MastraMessageV1 {
     return (
-      !MessageList.isMastraMessageV2(msg) &&
+      !MessageList.isMastraDBMessage(msg) &&
       !MessageList.isMastraMessageV3(msg) &&
       (`threadId` in msg || `resourceId` in msg)
     );
   }
 
-  static isMastraMessageV2(msg: MessageInput): msg is MastraMessageV2 {
+  static isMastraDBMessage(msg: MessageInput): msg is MastraDBMessage {
     return Boolean(
       `content` in msg &&
         msg.content &&
@@ -1708,7 +1713,7 @@ export class MessageList {
     );
   }
 
-  private static getRole(message: MessageInput): MastraMessageV2['role'] {
+  private static getRole(message: MessageInput): MastraDBMessage['role'] {
     if (message.role === `assistant` || message.role === `tool`) return `assistant`;
     if (message.role === `user`) return `user`;
     if (message.role === `system`) return `system`;
@@ -1819,8 +1824,8 @@ export class MessageList {
       );
     }
 
-    const oneMM2 = MessageList.isMastraMessageV2(one) && one;
-    const twoMM2 = MessageList.isMastraMessageV2(two) && two;
+    const oneMM2 = MessageList.isMastraDBMessage(one) && one;
+    const twoMM2 = MessageList.isMastraDBMessage(two) && two;
     if (oneMM2 && !twoMM2) return false;
     if (oneMM2 && twoMM2) {
       return (
@@ -2133,14 +2138,14 @@ export class MessageList {
     );
   }
 
-  private static mastraMessageV3ToV2(v3Msg: MastraMessageV3): MastraMessageV2 {
+  private static mastraMessageV3ToV2(v3Msg: MastraMessageV3): MastraDBMessage {
     const toolInvocationParts = v3Msg.content.parts.filter(p => AIV5.isToolUIPart(p));
 
     // Check if the original V2 message had toolInvocations field
     const hadToolInvocations = (v3Msg.content.metadata as any)?.__hadToolInvocations === true;
 
     // Build tool invocations list
-    let toolInvocations: MastraMessageV2['content']['toolInvocations'] = undefined;
+    let toolInvocations: MastraDBMessage['content']['toolInvocations'] = undefined;
     if (toolInvocationParts.length > 0) {
       // Build the invocations array from tool parts
       const invocations = toolInvocationParts.map(p => {
@@ -2155,14 +2160,14 @@ export class MessageList {
             toolCallId: p.toolCallId,
             toolName,
             state: 'result',
-          } satisfies NonNullable<MastraMessageV2['content']['toolInvocations']>[0];
+          } satisfies NonNullable<MastraDBMessage['content']['toolInvocations']>[0];
         }
         return {
           args: p.input,
           state: 'call',
           toolName,
           toolCallId: p.toolCallId,
-        } satisfies NonNullable<MastraMessageV2['content']['toolInvocations']>[0];
+        } satisfies NonNullable<MastraDBMessage['content']['toolInvocations']>[0];
       });
       toolInvocations = invocations;
     } else if (hadToolInvocations && v3Msg.role === 'assistant') {
@@ -2174,7 +2179,7 @@ export class MessageList {
     // Get attachment URLs from metadata to filter out duplicate file parts
     const attachmentUrls = new Set<string>((v3Msg.content.metadata as any)?.__attachmentUrls || []);
 
-    const v2Msg: MastraMessageV2 = {
+    const v2Msg: MastraDBMessage = {
       id: v3Msg.id,
       resourceId: v3Msg.resourceId,
       threadId: v3Msg.threadId,
@@ -2364,7 +2369,7 @@ export class MessageList {
     return v2Msg;
   }
 
-  private mastraMessageV2ToMastraMessageV3(v2Msg: MastraMessageV2): MastraMessageV3 {
+  private mastraMessageV2ToMastraMessageV3(v2Msg: MastraDBMessage): MastraMessageV3 {
     const parts: MastraMessageContentV3['parts'] = [];
     const v3Msg: MastraMessageV3 = {
       id: v2Msg.id,
@@ -2642,7 +2647,7 @@ export class MessageList {
     // TODO: probably a good idea to make a direct v4->v5 converter
     return this.aiV5UIMessagesToAIV5ModelMessages(
       messages
-        .map(m => this.aiV4CoreMessageToMastraMessageV2(m, source))
+        .map(m => this.aiV4CoreMessageToMastraDBMessage(m, source))
         .map(m => this.mastraMessageV2ToMastraMessageV3(m))
         .map(m => MessageList.mastraMessageV3ToAIV5UIMessage(m)),
     );

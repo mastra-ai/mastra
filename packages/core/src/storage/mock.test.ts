@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { MessageList } from '../agent';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../memory/types';
+import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '../memory/types';
 import { deepMerge } from '../utils';
 import { InMemoryStore } from './mock';
 
@@ -345,10 +345,10 @@ describe('InMemoryStore - getMessagesById', () => {
   });
 
   it('should return V2 messages by default', async () => {
-    const messages: MastraMessageV2[] = await store.getMessagesById({ messageIds: thread1Messages.map(msg => msg.id) });
+    const messages: MastraDBMessage[] = await store.getMessagesById({ messageIds: thread1Messages.map(msg => msg.id) });
 
     expect(messages.length).toBeGreaterThan(0);
-    expect(messages.every(MessageList.isMastraMessageV2)).toBe(true);
+    expect(messages.every(MessageList.isMastraDBMessage)).toBe(true);
   });
 
   it('should return messages in the specified format', async () => {
@@ -360,13 +360,13 @@ describe('InMemoryStore - getMessagesById', () => {
     expect(v1messages.length).toBeGreaterThan(0);
     expect(v1messages.every(MessageList.isMastraMessageV1)).toBe(true);
 
-    const v2messages: MastraMessageV2[] = await store.getMessagesById({
+    const v2messages: MastraDBMessage[] = await store.getMessagesById({
       messageIds: thread1Messages.map(msg => msg.id),
       format: 'v2',
     });
 
     expect(v2messages.length).toBeGreaterThan(0);
-    expect(v2messages.every(MessageList.isMastraMessageV2)).toBe(true);
+    expect(v2messages.every(MessageList.isMastraDBMessage)).toBe(true);
   });
 
   it('should return messages from multiple threads', async () => {

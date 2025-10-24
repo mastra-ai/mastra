@@ -303,7 +303,7 @@ if (process.env.ENABLE_TESTS === 'true') {
 //       const thread3 = createSampleThread({ id: 'thread-three' });
 //       await store.saveThread({ thread: thread3 });
 
-//       const messages: MastraMessageV2[] = [
+//       const messages: MastraDBMessage[] = [
 //         createSampleMessageV2({
 //           threadId: 'thread-one',
 //           content: { content: 'First' },
@@ -1837,7 +1837,7 @@ if (process.env.ENABLE_TESTS === 'true') {
 //         const thread3 = createSampleThread({ id: 'thread-three' });
 //         await store.saveThread({ thread: thread3 });
 
-//         const messages: MastraMessageV2[] = [
+//         const messages: MastraDBMessage[] = [
 //           createSampleMessageV2({
 //             threadId: 'thread-one',
 //             content: { content: 'First' },
