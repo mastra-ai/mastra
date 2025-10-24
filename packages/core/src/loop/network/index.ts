@@ -536,7 +536,7 @@ export async function createNetworkLoop({
           runId,
         },
         from: ChunkFrom.NETWORK,
-        runId: runId,
+        runId,
       });
 
       const result = await agentForStep.stream(inputData.prompt, {
