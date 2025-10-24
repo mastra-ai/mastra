@@ -1,3 +1,4 @@
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { TransformStreamDefaultController } from 'stream/web';
 import { Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
@@ -33,6 +34,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: InferSchemaOutput<OUTPUT>;
   private isStructuringAgentStreamStarted = false;
+  private providerOptions?: SharedV2ProviderOptions;
   private jsonPromptInjection?: boolean;
 
   constructor(options: StructuredOutputOptions<OUTPUT>) {
@@ -56,6 +58,14 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     this.schema = options.schema;
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
+    this.providerOptions = options.providerOptions;
+
+    // Use provided model or fallback model
+    const modelToUse = options.model || fallbackModel;
+    if (!modelToUse) {
+      throw new Error('StructuredOutputProcessor requires a model to be provided either in options or as fallback');
+    }
+
     this.jsonPromptInjection = options.jsonPromptInjection;
     // Create internal structuring agent
     this.structuringAgent = new Agent({
@@ -105,6 +115,8 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
 
       // Use structuredOutput in 'direct' mode (no model) since this agent already has a model
       const structuringAgentStream = await this.structuringAgent.stream(prompt, {
+        output: this.schema,
+        providerOptions: this.providerOptions,
         structuredOutput: {
           schema: this.schema as OUTPUT extends OutputSchema ? OUTPUT : never,
           jsonPromptInjection: this.jsonPromptInjection,

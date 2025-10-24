@@ -1,3 +1,4 @@
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import * as crypto from 'crypto';
 import z from 'zod';
 import { Agent } from '../../agent';
@@ -126,6 +127,13 @@ export interface PIIDetectorOptions {
    * When true, maintains structure like ***-**-1234 for phone numbers
    */
   preserveFormat?: boolean;
+
+  /**
+   * Provider-specific options (e.g., OpenAI reasoningEffort)
+   * Passed to the internal detection agent's generate call
+   * Useful for controlling thinking models to reduce latency and token usage
+   */
+  providerOptions?: SharedV2ProviderOptions;
 }
 
 /**
@@ -145,6 +153,7 @@ export class PIIDetector implements Processor {
   private redactionMethod: 'mask' | 'hash' | 'remove' | 'placeholder';
   private includeDetections: boolean;
   private preserveFormat: boolean;
+  private providerOptions?: SharedV2ProviderOptions;
 
   // Default PII types based on common privacy regulations and comprehensive PII detection
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -170,6 +179,7 @@ export class PIIDetector implements Processor {
     this.redactionMethod = options.redactionMethod || 'mask';
     this.includeDetections = options.includeDetections ?? false;
     this.preserveFormat = options.preserveFormat ?? true;
+    this.providerOptions = options.providerOptions;
 
     // Create internal detection agent
     this.detectionAgent = new Agent({
@@ -276,6 +286,7 @@ export class PIIDetector implements Processor {
           modelSettings: {
             temperature: 0,
           },
+          providerOptions: this.providerOptions,
           tracingContext,
         });
       } else {
@@ -338,9 +349,8 @@ export class PIIDetector implements Processor {
       .filter(([_, detected]) => detected)
       .map(([type]) => type);
 
-    const alertMessage = `PII detected. Types: ${detectedTypes.join(', ')}${
-      this.includeDetections && result.detections ? `. Detections: ${result.detections.length} items` : ''
-    }`;
+    const alertMessage = `PII detected. Types: ${detectedTypes.join(', ')}${this.includeDetections && result.detections ? `. Detections: ${result.detections.length} items` : ''
+      }`;
 
     switch (strategy) {
       case 'block':

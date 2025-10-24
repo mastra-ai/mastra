@@ -39,6 +39,7 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 import type { SaveQueueManager } from './save-queue';
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from 'ai';
@@ -73,6 +74,11 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   instructions?: string;
 
   /**
+   * Provider-specific options (e.g., OpenAI reasoningEffort)
+   * Passed to the internal structuring agent's stream call
+   * Useful for controlling thinking models to reduce latency and token usage
+   */
+  providerOptions?: SharedV2ProviderOptions;
    * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
    */
   jsonPromptInjection?: boolean;
@@ -262,7 +268,7 @@ export type AgentGenerateOptions<
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
   providerOptions?: ProviderOptions;
 } & (
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -272,7 +278,7 @@ export type AgentGenerateOptions<
        */
       threadId?: undefined;
     }
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -282,7 +288,7 @@ export type AgentGenerateOptions<
        */
       threadId: string;
     }
-) &
+  ) &
   (OUTPUT extends undefined ? DefaultLLMTextOptions : DefaultLLMTextObjectOptions);
 
 /**
@@ -343,7 +349,7 @@ export type AgentStreamOptions<
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
   providerOptions?: ProviderOptions;
 } & (
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -353,7 +359,7 @@ export type AgentStreamOptions<
        */
       threadId?: undefined;
     }
-  | {
+    | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
        */
@@ -363,7 +369,7 @@ export type AgentStreamOptions<
        */
       threadId: string;
     }
-) &
+  ) &
   (OUTPUT extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);
 
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
