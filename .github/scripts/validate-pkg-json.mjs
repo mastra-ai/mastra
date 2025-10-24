@@ -143,7 +143,7 @@ async function main() {
         );
         hasError = true;
       } else if (
-        !pkg.publishConfig['publish-branch'].includes('main') &&
+        !pkg.publishConfig['publish-branch'].includes('main') ||
         !pkg.publishConfig['publish-branch'].includes('0.x')
       ) {
         console.log(
