@@ -74,6 +74,7 @@
     "list-prettier-files": "pnpm --silent list-changed-files | grep -E '\\.(js|mjs|ts|tsx|md|mdx|json|graphql|gql)$' || true",
     "prettier:changed": "pnpm --silent list-prettier-files | xargs prettier --write --log-level warn",
     "typecheck": "pnpm --filter \"!./explorations/**/*\" -r typecheck",
+    "typecheck:changed": "pnpm turbo typecheck --filter=\"...[HEAD]\"",
     "format": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!@internal/playground\" lint -- --fix",
     "dev:services:up": "docker compose -f .dev/docker-compose.yaml up -d",
     "dev:services:down": "docker compose -f .dev/docker-compose.yaml down",
