@@ -1,5 +1,13 @@
 # @mastra/arize
 
+## 0.1.0-alpha.0
+
+### Minor Changes
+
+- fix(@mastra/arize): Auto-detect arize endpoint when endpoint field is not provided ([#9250](https://github.com/mastra-ai/mastra/pull/9250))
+
+  When spaceId is provided to ArizeExporter constructor, and endpoint is not, pre-populate endpoint with default ArizeAX endpoint.
+
 ## 0.0.2
 
 ### Patch Changes
