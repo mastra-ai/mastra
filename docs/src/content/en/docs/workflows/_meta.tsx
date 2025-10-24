@@ -9,7 +9,9 @@ const meta = {
   "input-data-mapping": "Input Data Mapping",
   "human-in-the-loop": "Human-in-the-loop",
   snapshots: "Snapshots",
-  "inngest-workflow": <Tag text="experimental">Inngest Workflow</Tag>,
+  "inngest-workflow": (
+    <Tag text="experimental">Third-party Workflow Engines</Tag>
+  ),
 };
 
 export default meta;

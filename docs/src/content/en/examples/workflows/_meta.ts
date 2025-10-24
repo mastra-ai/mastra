@@ -1,5 +1,5 @@
 const meta = {
-  "inngest-workflow": "Inngest Workflow",
+  "inngest-workflow": "Third-party Workflow Engines",
 };
 
 export default meta;

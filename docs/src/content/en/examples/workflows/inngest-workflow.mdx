@@ -1,25 +1,33 @@
 ---
-title: "Inngest Workflow | Workflows | Mastra Docs"
-description: Example of building an inngest workflow with Mastra
+title: "Third-party Workflow Engines | Workflows | Mastra Docs"
+description: Example of integrating Mastra workflows with third-party engines like Inngest
 ---
 
-# Inngest Workflow
+# Third-party Workflow Engines
 
-This example demonstrates how to build an Inngest workflow with Mastra.
+This example demonstrates how to integrate Mastra workflows with third-party engines like Inngest.
 
-## Setup
+## Inngest Integration
+
+### Setup
+
+Install required packages:
 
 ```sh copy
-npm install @mastra/inngest inngest @mastra/core @mastra/deployer @hono/node-server @ai-sdk/openai
+npm install @mastra/inngest inngest
+```
 
+Start the Inngest dev server:
+
+```sh copy
 docker run --rm -p 8288:8288 \
   inngest/inngest \
-  inngest dev -u http://host.docker.internal:3000/inngest/api
+  inngest dev -u http://host.docker.internal:4111/api/inngest
 ```
 
 Alternatively, you can use the Inngest CLI for local development by following the official [Inngest Dev Server guide](https://www.inngest.com/docs/dev-server).
 
-## Define the Planning Agent
+### Define the Planning Agent
 
 Define a planning agent which leverages an LLM call to plan activities given a location and corresponding weather conditions.
 
@@ -77,11 +85,11 @@ const planningAgent = new Agent({
 export { planningAgent };
 ```
 
-## Define the Activity Planner Workflow
+### Define the Activity Planner Workflow
 
-Define the activity planner workflow with 3 steps: one to fetch the weather via a network call, one to plan activities, and another to plan only indoor activities.
+Update your weather workflow to use Inngest. Start with the CLI-generated `src/mastra/workflows/weather-workflow.ts`:
 
-```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
+```ts {1-5,11-15} filename="src/mastra/workflows/weather-workflow.ts" showLineNumbers copy
 import { init } from "@mastra/inngest";
 import { Inngest } from "inngest";
 import { z } from "zod";
@@ -89,9 +97,15 @@ import { z } from "zod";
 const { createWorkflow, createStep } = init(
   new Inngest({
     id: "mastra",
-    baseUrl: `http://localhost:8288`,
+    isDev: process.env.NODE_ENV === "development",
   }),
 );
+
+// Export the inngest client for server configuration
+export const inngest = new Inngest({
+  id: "mastra",
+  isDev: process.env.NODE_ENV === "development",
+});
 
 // Helper function to convert weather codes to human-readable descriptions
 function getWeatherCondition(code: number): string {
@@ -126,7 +140,7 @@ const forecastSchema = z.object({
 });
 ```
 
-#### Step 1: Fetch weather data for a given city
+The existing `fetchWeather` step works the same - only the imports change:
 
 ```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
 const fetchWeather = createStep({
@@ -186,7 +200,7 @@ const fetchWeather = createStep({
 });
 ```
 
-#### Step 2: Suggest activities (indoor or outdoor) based on weather
+The existing `planActivities` step also works the same:
 
 ```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
 const planActivities = createStep({
@@ -233,7 +247,7 @@ const planActivities = createStep({
 });
 ```
 
-#### Step 3: Suggest indoor activities only (for rainy weather)
+You can add additional steps like indoor activities:
 
 ```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
 const planIndoorActivities = createStep({
@@ -278,7 +292,7 @@ const planIndoorActivities = createStep({
 });
 ```
 
-## Define the activity planner workflow
+### Create the Complete Workflow
 
 ```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
 const activityPlanningWorkflow = createWorkflow({
@@ -313,53 +327,41 @@ activityPlanningWorkflow.commit();
 export { activityPlanningWorkflow };
 ```
 
-## Register Agent and Workflow instances with Mastra class
+### Configure Mastra with Inngest
 
-Register the agents and workflow with the mastra instance. This allows access to the agents within the workflow.
+Add the Inngest integration to your existing Mastra configuration:
 
-```ts showLineNumbers copy filename="index.ts"
+```ts {6-7,20-26} filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
-import { serve as inngestServe } from "@mastra/inngest";
 import { PinoLogger } from "@mastra/loggers";
-import { Inngest } from "inngest";
-import { activityPlanningWorkflow } from "./workflows/inngest-workflow";
-import { planningAgent } from "./agents/planning-agent";
-import { realtimeMiddleware } from "@inngest/realtime";
+import { LibSQLStore } from "@mastra/libsql";
+import { weatherWorkflow } from "./workflows/weather-workflow";
+import { weatherAgent } from "./agents/weather-agent";
+import { serve as inngestServe } from "@mastra/inngest";
+import { inngest } from "./workflows/weather-workflow";
 
-// Create an Inngest instance for workflow orchestration and event handling
-const inngest = new Inngest({
-  id: "mastra",
-  baseUrl: `http://localhost:8288`, // URL of your local Inngest server
-  isDev: true,
-  middleware: [realtimeMiddleware()], // Enable real-time updates in the Inngest dashboard
-});
-
-// Create and configure the main Mastra instance
 export const mastra = new Mastra({
-  workflows: {
-    activityPlanningWorkflow,
-  },
-  agents: {
-    planningAgent,
-  },
-  server: {
-    host: "0.0.0.0",
-    apiRoutes: [
-      {
-        path: "/api/inngest", // API endpoint for Inngest to send events to
-        method: "ALL",
-        createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
-      },
-    ],
-  },
+  workflows: { weatherWorkflow },
+  agents: { weatherAgent },
+  storage: new LibSQLStore({
+    url: ":memory:",
+  }),
   logger: new PinoLogger({
     name: "Mastra",
     level: "info",
   }),
+  server: {
+    host: "0.0.0.0",
+    apiRoutes: [{
+      path: "/api/inngest",
+      method: "ALL",
+      createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+    }],
+  },
 });
 ```
 
-## Execute the activity planner workflow
+### Execute the Workflow
 
 Here, we'll get the activity planner workflow from the mastra instance, then create a run and execute the created run with the required inputData.
 
@@ -396,7 +398,7 @@ srv.close();
 
 After running the workflow, you can view and monitor your workflow runs in real time using the Inngest dashboard at [http://localhost:8288](http://localhost:8288).
 
-## Inngest Flow Control Configuration
+### Inngest Flow Control Configuration
 
 Inngest workflows support advanced flow control features including concurrency limits, rate limiting, throttling, debouncing, and priority queuing. These features help manage workflow execution at scale and prevent resource overload.
 
@@ -528,7 +530,7 @@ All flow control features are optional. If not specified, workflows run with Inn
 
 For detailed information about flow control options and their behavior, see the [Inngest Flow Control documentation](https://www.inngest.com/docs/guides/flow-control).
 
-## Workflows (Legacy)
+### Workflows (Legacy)
 
 The following links provide example documentation for legacy workflows:
 
