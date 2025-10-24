@@ -1,5 +1,5 @@
 import { spawn as nodeSpawn } from 'child_process';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -98,40 +98,15 @@ const linkedDeps = Object.keys(findLinkedDependencies('.'));
 console.log('Found linked dependencies:', linkedDeps);
 
 const repoRoot = dirname(join(fileURLToPath(import.meta.url), '..'));
-await spawn(`pnpm`, ['install', '-w'], {
+console.log('Installing dependencies');
+
+await spawn(`pnpm`, ['install'], {
   cwd: repoRoot,
-  shell: true,
   stdio: 'inherit',
 });
 
-const resolveFrom = (await import('resolve-from')).default;
-
-const depsToInstall = new Set(linkedDeps);
-for (const dep of linkedDeps) {
-  const depDir = dirname(resolveFrom(process.cwd(), `${dep}/package.json`));
-  const depDeps = findLinkedDependencies(depDir, 'workspace:');
-  for (const depDep of Object.keys(depDeps)) {
-    depsToInstall.add(depDep);
-  }
-}
-
-if (depsToInstall.has('@mastra/core')) {
-  depsToInstall.add('@mastra/schema-compat');
-}
-
-if (depsToInstall.size > 0) {
-  console.log(
-    'Installing dependencies:',
-    [...depsToInstall],
-    ['pnpm', 'install', ...[...depsToInstall].map(dep => `--filter ${dep}`)].join(' '),
-  );
-
-  await spawn(`pnpm`, ['install', ...[...depsToInstall].map(dep => `--filter=${dep}`)], {
-    cwd: repoRoot,
-    stdio: 'inherit',
-  });
-}
 console.log(linkedDeps);
+
 if (linkedDeps.length > 0) {
   console.log(
     'Building dependencies:',
