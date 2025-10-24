@@ -40,9 +40,7 @@ export const libsqlAgent = new Agent({
       url: "file:libsql-agent.db"
     }),
     options: {
-      threads: {
-        generateTitle: true  // Explicitly enable automatic title generation
-      }
+      generateTitle: true  // Explicitly enable automatic title generation
     }
   })
 });
