@@ -22,7 +22,6 @@ describe('Memory with UpstashStore Integration', () => {
       messageRange: 2,
     },
     generateTitle: false,
-    },
   };
 
   const storageConfig = {

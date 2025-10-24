@@ -662,7 +662,6 @@ describe('Agent memory test gemini', () => {
     storage: new MockStore(),
     options: {
       generateTitle: false,
-      },
       lastMessages: 2,
     },
   });

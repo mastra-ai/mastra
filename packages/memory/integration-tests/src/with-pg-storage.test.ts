@@ -40,7 +40,6 @@ describe('Memory with PostgresStore Integration', () => {
         messageRange: 2,
       },
       generateTitle: false,
-      },
     },
   });
 

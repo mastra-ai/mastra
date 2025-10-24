@@ -58,7 +58,6 @@ const memoryWithProcessor = new Memory({
     },
     lastMessages: 20,
     generateTitle: true,
-    },
   },
   processors: [new ToolCallFilter()],
 });
