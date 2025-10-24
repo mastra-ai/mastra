@@ -1,3 +1,8 @@
+---
+title: 'Adding Voice'
+sidebar_position: 6
+---
+
 # Adding Voice to Agents
 
 Mastra agents can be enhanced with voice capabilities, allowing them to speak responses and listen to user input. You can configure an agent to use either a single voice provider or combine multiple providers for different operations.

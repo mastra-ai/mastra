@@ -559,7 +559,7 @@ const response = await agent.generate('Find documentation from the knowledge bas
 
 For more information on runtime context, please see:
 
-- [Agent Runtime Context](/docs/agents/runtime-context)
+- [Agent Runtime Context](/docs/server-db/runtime-context)
 - [Tool Runtime Context](/docs/tools-mcp/runtime-context)
 
 ## Usage Without a Mastra Server

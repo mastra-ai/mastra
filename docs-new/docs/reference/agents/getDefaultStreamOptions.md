@@ -64,4 +64,4 @@ description: "Runtime context for dependency injection and contextual informatio
 ## Related
 
 - [Streaming with agents](/docs/streaming/overview#streaming-with-agents)
-- [Agent Runtime Context](/docs/agents/runtime-context)
+- [Agent Runtime Context](/docs/server-db/runtime-context)

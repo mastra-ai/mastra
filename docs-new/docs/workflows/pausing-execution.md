@@ -1,6 +1,7 @@
 ---
-title: 'Pausing Execution '
+title: 'Human-in-the-loop'
 description: 'Pausing execution in Mastra workflows allows you to pause execution while waiting for external input or resources via .sleep(), .sleepUntil() and .waitForEvent().'
+sidebar_position: 7
 ---
 
 # Sleep & Events

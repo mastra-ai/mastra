@@ -1,5 +1,5 @@
 ---
-title: 'Cedar-OS Integration'
+title: 'With Cedar-OS'
 description: 'Build AI-native frontends for your Mastra agents with Cedar-OS'
 ---
 

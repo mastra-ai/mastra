@@ -1,6 +1,7 @@
 ---
-title: 'MastraAuthWorkos Class'
+title: WorkOS
 description: 'Documentation for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication.'
+sidebar_position: 6
 ---
 
 import Tabs from '@theme/Tabs';

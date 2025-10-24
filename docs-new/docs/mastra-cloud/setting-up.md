@@ -1,6 +1,7 @@
 ---
-title: Setting Up a Project
+title: Setup & Deploy
 description: Configuration steps for Mastra Cloud projects
+sidebar_position: 2
 ---
 
 # Setting Up and Deploying

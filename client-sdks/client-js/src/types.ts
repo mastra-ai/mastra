@@ -4,7 +4,6 @@ import type {
   AgentGenerateOptions,
   AgentStreamOptions,
   SerializableStructuredOutputOptions,
-  DeprecatedOutputOptions,
   ToolsInput,
   UIMessageWithMetadata,
   AgentInstructions,
@@ -129,12 +128,8 @@ export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
   runtimeContext?: RuntimeContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<
-    AgentExecutionOptions<OUTPUT>,
-    'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
-  >
-> &
-  DeprecatedOutputOptions<OUTPUT>;
+  Omit<AgentExecutionOptions<OUTPUT>, 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
+>;
 
 export type UpdateModelParams = {
   modelId: string;
