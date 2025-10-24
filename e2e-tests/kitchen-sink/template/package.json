@@ -21,6 +21,7 @@
     "@mastra/loggers": "kitchen-sink-e2e-test",
     "@mastra/memory": "kitchen-sink-e2e-test",
     "@mastra/libsql": "kitchen-sink-e2e-test",
+    "@mastra/mcp": "kitchen-sink-e2e-test",
     "zod": "^3.25.76"
   },
   "devDependencies": {

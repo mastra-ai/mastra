@@ -334,7 +334,8 @@ export async function writeToolSample(destPath: string) {
   await fileService.copyStarterFile('tools.ts', destPath);
 }
 
-export async function writeScorersSample(destPath: string) {
+export async function writeScorersSample(llmProvider: LLMProvider, destPath: string) {
+  const modelString = getModelIdentifier(llmProvider);
   const content = `import { z } from 'zod';
 import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
 import { createCompletenessScorer } from '@mastra/evals/scorers/code';
@@ -353,7 +354,7 @@ export const translationScorer = createScorer({
   description: 'Checks that non-English location names are translated and used correctly',
   type: 'agent',
   judge: {
-    model: 'openai/gpt-4o-mini',
+    model: ${modelString},
     instructions:
       'You are an expert evaluator of translation quality for geographic locations. ' +
       'Determine whether the user text mentions a non-English location and whether the assistant correctly uses an English translation of that location. ' +
@@ -441,7 +442,7 @@ export async function writeCodeSampleForComponents(
     case 'workflows':
       return writeWorkflowSample(destPath);
     case 'scorers':
-      return writeScorersSample(destPath);
+      return writeScorersSample(llmprovider, destPath);
     default:
       return '';
   }

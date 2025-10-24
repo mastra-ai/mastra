@@ -1,5 +1,4 @@
 export * from './components/agent-chat';
-export * from './components/agent-evals';
 export * from './context';
 export * from './components/agent-settings';
 export * from './components/agent-table/agent-table';
@@ -12,3 +11,4 @@ export * from './utils/extractPrompt';
 export * from './hooks/use-agents';
 export * from './hooks/use-agent';
 export * from './hooks/use-execute-agent-tool';
+export * from './components/AgentToolPanel';

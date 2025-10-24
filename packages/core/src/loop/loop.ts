@@ -24,7 +24,6 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   mode = 'stream',
   outputProcessors,
   returnScorerData,
-  llmAISpan,
   requireToolApproval,
   agentId,
   ...rest
@@ -120,7 +119,6 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     telemetry_settings,
     modelSettings,
     outputProcessors,
-    llmAISpan,
     messageId: messageId!,
     agentId,
     requireToolApproval,
@@ -169,7 +167,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       structuredOutput: rest.structuredOutput,
       outputProcessors,
       returnScorerData,
-      tracingContext: { currentSpan: llmAISpan },
+      tracingContext: rest.modelSpanTracker?.getTracingContext(),
     },
     initialState: initialStreamState,
   });
