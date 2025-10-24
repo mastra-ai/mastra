@@ -1,9 +1,8 @@
 ---
 title: Chunking and Embedding
 description: Guide on chunking and embedding documents in Mastra for efficient processing and retrieval.
+sidebar_position: 2
 ---
-
-## Chunking and Embedding Documents
 
 Before processing, create a MDocument instance from your content. You can initialize it from various formats:
 
