@@ -14,7 +14,7 @@ import { createBundler as createBundlerUtil, getInputOptions } from '../build/bu
 import { getBundlerOptions } from '../build/bundlerOptions';
 import { writeCustomInstrumentation } from '../build/customInstrumentation';
 import { writeTelemetryConfig } from '../build/telemetry';
-import { getPackageRootPath } from '../build/utils';
+import { getPackageRootPath, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import { getWorkspaceInformation } from './workspaceDependencies';
@@ -210,7 +210,7 @@ export abstract class Bundler extends MastraBundler {
 
   getAllToolPaths(mastraDir: string, toolsPaths: (string | string[])[] = []): (string | string[])[] {
     // Normalize Windows paths to forward slashes for consistent handling
-    const normalizedMastraDir = mastraDir.replaceAll('\\', '/');
+    const normalizedMastraDir = slash(mastraDir);
 
     // Prepare default tools paths with glob patterns
     const defaultToolsPath = posix.join(normalizedMastraDir, 'tools/**/*.{js,ts}');
