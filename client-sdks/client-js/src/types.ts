@@ -128,10 +128,7 @@ export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
   runtimeContext?: RuntimeContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<
-    AgentExecutionOptions<OUTPUT>,
-    'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
-  >
+  Omit<AgentExecutionOptions<OUTPUT>, 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
 >;
 
 export type UpdateModelParams = {
