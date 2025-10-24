@@ -293,9 +293,9 @@ export function createStep<
   return {
     id: params.id,
     description: params.description,
-    inputSchema: params.inputSchema,
+    inputSchema: params.inputSchema ?? (z.any() as unknown as TStepInput),
     stateSchema: params.stateSchema,
-    outputSchema: params.outputSchema,
+    outputSchema: params.outputSchema ?? (z.any() as unknown as TStepOutput),
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
     scorers: params.scorers,
@@ -311,8 +311,8 @@ export function cloneStep<TStepId extends string>(
   return {
     id: opts.id,
     description: step.description,
-    inputSchema: step.inputSchema,
-    outputSchema: step.outputSchema,
+    inputSchema: step.inputSchema ?? z.any(),
+    outputSchema: step.outputSchema ?? z.any(),
     execute: step.execute,
     retries: step.retries,
     component: step.component,
