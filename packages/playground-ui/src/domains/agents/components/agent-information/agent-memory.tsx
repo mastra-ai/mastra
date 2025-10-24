@@ -1,10 +1,11 @@
-import { MemorySearch, useThreadInput, useMemoryConfig, useMemorySearch } from '@mastra/playground-ui';
 import { AgentWorkingMemory } from './agent-working-memory';
 import { AgentMemoryConfig } from './agent-memory-config';
 import { useCallback, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ExternalLink } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
+import { useThreadInput } from '@/domains/conversation';
+import { useMemoryConfig, useMemorySearch } from '@/domains/memory/hooks';
 
 interface AgentMemoryProps {
   agentId: string;
