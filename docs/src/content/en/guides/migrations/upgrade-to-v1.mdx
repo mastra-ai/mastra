@@ -27,6 +27,107 @@ This version isn't released yet but we're adding changes as we make them.
 
 </Callout>
 
+### Changed: Thread Title Generation Location and Default
+
+**Breaking Changes:**
+1. `generateTitle` has been moved from `threads.generateTitle` to the top-level of memory options
+2. The default value has changed from `true` to `false`
+3. Using `threads.generateTitle` will now throw an error
+
+**Why these changes?**
+- Simplify the API by moving `generateTitle` to the top level where it logically belongs
+- Avoid unexpected LLM API calls and associated costs
+- Give developers explicit control over when title generation occurs
+- Improve predictability of memory behavior
+
+**Migration:**
+
+If your application uses `threads.generateTitle`, you must update it to use the top-level `generateTitle` option:
+
+```typescript
+// Before (v0.22 and earlier)
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      threads: {
+        generateTitle: true  // ❌ This will now throw an error
+      }
+    }
+  })
+});
+
+// After (v0.23+)
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      generateTitle: true  // ✅ Now at the top level
+    }
+  })
+});
+```
+
+If your application relied on the old default behavior (automatic title generation), explicitly enable it:
+
+```typescript
+// Before (implicit true in v0.22)
+const agent = new Agent({
+  memory: new Memory({
+    // generateTitle was true by default
+  })
+});
+
+// After (explicit true in v0.23+)
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      generateTitle: true  // Explicitly enable title generation
+    }
+  })
+});
+```
+
+You can also customize the model and instructions used for title generation:
+
+```typescript
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      generateTitle: {
+        model: openai("gpt-4o-mini"),
+        instructions: "Generate a concise title (max 5 words) that summarizes the conversation"
+      }
+    }
+  })
+});
+```
+
+### Changed: Memory Default Settings
+
+The default settings for semantic recall have been optimized based on RAG research:
+
+- **`topK`** increased from `2` to `4` - Retrieves 4 most relevant messages instead of 2
+- **`messageRange`** changed from `{before: 2, after: 2}` to `{before: 1, after: 1}` - Includes 1 message before and after each retrieved message instead of 2
+
+**Impact:**
+
+When semantic recall is enabled, you'll now retrieve up to 12 messages total (4 × 3) instead of 10 messages (2 × 5). This provides ~8% better accuracy while only increasing message count by 20%.
+
+**Action Required:**
+
+If you were relying on the previous defaults and want to maintain the old behavior, explicitly set these values:
+
+```typescript
+const agent = new Agent({
+  memory: {
+    semanticRecall: {
+      topK: 2,
+      messageRange: { before: 2, after: 2 }
+    }
+  }
+});
+```
+
+If you're not using semantic recall (it's disabled by default), no changes are needed.
 ### Removed: Deprecated APIs
 
 #### Agent Execution Methods

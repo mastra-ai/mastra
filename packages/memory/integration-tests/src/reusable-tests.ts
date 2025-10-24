@@ -909,7 +909,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
                 messages: chunk,
                 storageType: workerTestConfig.storageTypeForWorker,
                 storageConfig: workerTestConfig.storageConfigForWorker,
-                memoryOptions: workerTestConfig.memoryOptionsForWorker || { threads: { generateTitle: false } },
+                memoryOptions: workerTestConfig.memoryOptionsForWorker || { generateTitle: false },
                 vectorConfig: workerTestConfig.vectorConfigForWorker,
               },
             });

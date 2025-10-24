@@ -216,9 +216,7 @@ describe('Agent - network', () => {
     const memoryWithTitleGen = new MockMemory();
     memoryWithTitleGen.getMergedThreadConfig = () => {
       return {
-        threads: {
-          generateTitle: true,
-        },
+        generateTitle: true,
       };
     };
 
@@ -312,9 +310,7 @@ describe('Agent - network', () => {
         thread: 'test-network-with-title',
         resource: 'test-network-with-title',
         options: {
-          threads: {
-            generateTitle: true,
-          },
+          generateTitle: true,
         },
       },
     });
