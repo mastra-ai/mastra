@@ -7510,9 +7510,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         onFinish: props => {
           expect(props.toolCalls.length).toBeGreaterThan(0);
         },
-        output: z.object({
-          color: z.string(),
-        }),
+        structuredOutput: {
+          schema: z.object({
+            color: z.string(),
+          }),
+        },
       });
 
       await result.consumeStream();
@@ -7557,9 +7559,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               }),
             },
           },
-          output: z.object({
-            color: z.string(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              color: z.string(),
+            }),
+          },
         });
 
         expect(result.toolCalls.length).toBeGreaterThan(0);
