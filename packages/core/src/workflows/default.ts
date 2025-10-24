@@ -6,7 +6,7 @@ import { AISpanType, wrapMastra, selectFields } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { IErrorDefinition } from '../error';
-import { safeParseErrorObject } from '../error/utils.js';
+import { getErrorFromUnknown } from '../error/utils.js';
 import type { MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
 import type { ChunkType } from '../stream/types';
@@ -156,17 +156,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventTimestamp: Date.now(),
       });
 
-      if (error instanceof Error) {
-        base.error = error.message ? `Error: ${error.message}` : `Error: ${String(error)}`;
-      } else if (lastOutput.error) {
-        base.error = lastOutput.error;
-      } else if (typeof error === 'string') {
-        base.error = `Error: ${error}`;
-      } else {
-        const errorMessage = safeParseErrorObject(error);
-        const errorObj = new Error('Unknown error: ' + errorMessage);
-        base.error = errorObj?.message ? `Error: ${errorObj.message}` : `Error: ${String(errorObj)}`;
-      }
+      const errorSource = error || lastOutput.error;
+      const errorInstance = getErrorFromUnknown(errorSource, {
+        includeStack: false,
+        fallbackMessage: 'Unknown workflow error',
+      });
+      base.error = typeof errorSource === 'string' ? errorInstance.message : `Error: ${errorInstance.message}`;
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
@@ -1016,9 +1011,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
         });
 
+        const errorInstance = getErrorFromUnknown(error, {
+          includeStack: false,
+          fallbackMessage: 'Unknown step execution error',
+        });
         execResults = {
           status: 'failed',
-          error: error?.message ? `Error: ${error.message}` : `Error: ${String(error)}`,
+          error: `Error: ${errorInstance.message}`,
           endedAt: Date.now(),
         };
       }
