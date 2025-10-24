@@ -123,9 +123,9 @@ describe('InMemoryStore - Thread Sorting', () => {
     });
   });
 
-  describe('getThreadsByResourceIdPaginated', () => {
+  describe('getThreadsByResourceId', () => {
     it('should sort by createdAt DESC by default with pagination', async () => {
-      const result = await store.getThreadsByResourceIdPaginated({
+      const result = await store.getThreadsByResourceId({
         resourceId,
         page: 0,
         perPage: 2,
@@ -141,7 +141,7 @@ describe('InMemoryStore - Thread Sorting', () => {
     });
 
     it('should sort by updatedAt ASC with pagination', async () => {
-      const result = await store.getThreadsByResourceIdPaginated({
+      const result = await store.getThreadsByResourceId({
         resourceId,
         page: 0,
         perPage: 2,
@@ -158,7 +158,7 @@ describe('InMemoryStore - Thread Sorting', () => {
 
     it('should maintain sort order across pages', async () => {
       // First page
-      const page1 = await store.getThreadsByResourceIdPaginated({
+      const page1 = await store.getThreadsByResourceId({
         resourceId,
         page: 0,
         perPage: 2,
@@ -167,7 +167,7 @@ describe('InMemoryStore - Thread Sorting', () => {
       });
 
       // Second page
-      const page2 = await store.getThreadsByResourceIdPaginated({
+      const page2 = await store.getThreadsByResourceId({
         resourceId,
         page: 1,
         perPage: 2,
@@ -184,7 +184,7 @@ describe('InMemoryStore - Thread Sorting', () => {
     });
 
     it('should calculate pagination info correctly after sorting', async () => {
-      const result = await store.getThreadsByResourceIdPaginated({
+      const result = await store.getThreadsByResourceId({
         resourceId,
         page: 1,
         perPage: 2,
@@ -201,7 +201,7 @@ describe('InMemoryStore - Thread Sorting', () => {
     });
 
     it('should handle empty results with pagination', async () => {
-      const result = await store.getThreadsByResourceIdPaginated({
+      const result = await store.getThreadsByResourceId({
         resourceId: 'non-existent-resource',
         page: 0,
         perPage: 10,
@@ -225,16 +225,6 @@ describe('InMemoryStore - Message Fetching', () => {
     await expect(() => store.getMessages({ threadId: '' })).rejects.toThrowError('threadId must be a non-empty string');
 
     await expect(() => store.getMessages({ threadId: '   ' })).rejects.toThrowError(
-      'threadId must be a non-empty string',
-    );
-  });
-
-  it('getMessagesPaginated should throw when threadId is an empty string or whitespace only', async () => {
-    await expect(() => store.getMessagesPaginated({ threadId: '' })).rejects.toThrowError(
-      'threadId must be a non-empty string',
-    );
-
-    await expect(() => store.getMessagesPaginated({ threadId: '   ' })).rejects.toThrowError(
       'threadId must be a non-empty string',
     );
   });

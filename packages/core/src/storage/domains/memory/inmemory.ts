@@ -45,11 +45,14 @@ export class InMemoryMemory extends MemoryStorage {
     return thread ? { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata } : null;
   }
 
-  async getThreadsByResourceId({
-    resourceId,
-    orderBy,
-    sortDirection,
-  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
+  async getThreadsByResourceId(
+    args: {
+      resourceId: string;
+      page: number;
+      perPage: number;
+    } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    const { resourceId, page, perPage, orderBy, sortDirection } = args;
     this.logger.debug(`MockStore: getThreadsByResourceId called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
@@ -58,10 +61,17 @@ export class InMemoryMemory extends MemoryStorage {
       this.castThreadOrderBy(orderBy),
       this.castThreadSortDirection(sortDirection),
     );
-    return sortedThreads.map(thread => ({
+    const clonedThreads = sortedThreads.map(thread => ({
       ...thread,
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
     })) as StorageThreadType[];
+    return {
+      threads: clonedThreads.slice(page * perPage, (page + 1) * perPage),
+      total: clonedThreads.length,
+      page: page,
+      perPage: perPage,
+      hasMore: clonedThreads.length > (page + 1) * perPage,
+    };
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
@@ -104,130 +114,6 @@ export class InMemoryMemory extends MemoryStorage {
         this.collection.messages.delete(key);
       }
     });
-  }
-
-  async getMessages<T extends MastraMessageV2[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
-    this.logger.debug(`MockStore: getMessages called for thread ${threadId}`);
-
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-    // Handle include messages first
-    const messages: MastraMessageV2[] = [];
-
-    if (selectBy?.include && selectBy.include.length > 0) {
-      for (const includeItem of selectBy.include) {
-        const targetMessage = this.collection.messages.get(includeItem.id);
-        if (targetMessage) {
-          // Convert StorageMessageType to MastraMessageV2
-          const convertedMessage = {
-            id: targetMessage.id,
-            threadId: targetMessage.thread_id,
-            content:
-              typeof targetMessage.content === 'string' ? JSON.parse(targetMessage.content) : targetMessage.content,
-            role: targetMessage.role as 'user' | 'assistant' | 'system' | 'tool',
-            type: targetMessage.type,
-            createdAt: targetMessage.createdAt,
-            resourceId: targetMessage.resourceId,
-          } as MastraMessageV2;
-
-          messages.push(convertedMessage);
-
-          // Add previous messages if requested
-          if (includeItem.withPreviousMessages) {
-            const allThreadMessages = Array.from(this.collection.messages.values())
-              .filter((msg: any) => msg.thread_id === includeItem.threadId)
-              .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-            const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);
-            if (targetIndex !== -1) {
-              const startIndex = Math.max(0, targetIndex - (includeItem.withPreviousMessages || 0));
-              for (let i = startIndex; i < targetIndex; i++) {
-                const message = allThreadMessages[i];
-                if (message && !messages.some(m => m.id === message.id)) {
-                  const convertedPrevMessage = {
-                    id: message.id,
-                    threadId: message.thread_id,
-                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
-                    role: message.role as 'user' | 'assistant' | 'system' | 'tool',
-                    type: message.type,
-                    createdAt: message.createdAt,
-                    resourceId: message.resourceId,
-                  } as MastraMessageV2;
-                  messages.push(convertedPrevMessage);
-                }
-              }
-            }
-          }
-
-          // Add next messages if requested
-          if (includeItem.withNextMessages) {
-            const allThreadMessages = Array.from(this.collection.messages.values())
-              .filter((msg: any) => msg.thread_id === includeItem.threadId)
-              .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-            const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);
-            if (targetIndex !== -1) {
-              const endIndex = Math.min(
-                allThreadMessages.length,
-                targetIndex + (includeItem.withNextMessages || 0) + 1,
-              );
-              for (let i = targetIndex + 1; i < endIndex; i++) {
-                const message = allThreadMessages[i];
-                if (message && !messages.some(m => m.id === message.id)) {
-                  const convertedNextMessage = {
-                    id: message.id,
-                    threadId: message.thread_id,
-                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
-                    role: message.role as 'user' | 'assistant' | 'system' | 'tool',
-                    type: message.type,
-                    createdAt: message.createdAt,
-                    resourceId: message.resourceId,
-                  } as MastraMessageV2;
-                  messages.push(convertedNextMessage);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // Get regular messages from the thread only if no include items or if last is specified
-    if (!selectBy?.include || selectBy.include.length === 0 || selectBy?.last) {
-      let threadMessages = Array.from(this.collection.messages.values())
-        .filter((msg: any) => msg.thread_id === threadId)
-        .filter((msg: any) => !messages.some(m => m.id === msg.id)); // Exclude already included messages
-
-      // Apply selectBy logic
-      if (selectBy?.last) {
-        threadMessages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        const lastMessages = threadMessages.slice(-selectBy.last);
-        // Convert and add last messages
-        for (const msg of lastMessages) {
-          const convertedMessage = {
-            id: msg.id,
-            threadId: msg.thread_id,
-            content: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content,
-            role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
-            type: msg.type,
-            createdAt: msg.createdAt,
-            resourceId: msg.resourceId,
-          } as MastraMessageV2;
-          messages.push(convertedMessage);
-        }
-      } else if (!selectBy?.include || selectBy.include.length === 0) {
-        // Convert and add all thread messages only if no include items
-        for (const msg of threadMessages) {
-          const convertedMessage = this.parseStoredMessage(msg);
-          messages.push(convertedMessage);
-        }
-      }
-    }
-
-    // Sort by createdAt
-    messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-    return messages as T;
   }
 
   protected parseStoredMessage(message: StorageMessageType): MastraMessageV2 {
@@ -408,42 +294,19 @@ export class InMemoryMemory extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page, perPage, orderBy, sortDirection } = args;
-    this.logger.debug(`MockStore: getThreadsByResourceIdPaginated called for ${resourceId}`);
-    // Mock implementation - find threads by resourceId
-    const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
-    const sortedThreads = this.sortThreads(
-      threads,
-      this.castThreadOrderBy(orderBy),
-      this.castThreadSortDirection(sortDirection),
-    );
-    const clonedThreads = sortedThreads.map(thread => ({
-      ...thread,
-      metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
-    })) as StorageThreadType[];
-    return {
-      threads: clonedThreads.slice(page * perPage, (page + 1) * perPage),
-      total: clonedThreads.length,
-      page: page,
-      perPage: perPage,
-      hasMore: clonedThreads.length > (page + 1) * perPage,
-    };
-  }
-
-  async getMessagesPaginated({
+  async getMessages(
+    args: StorageGetMessagesArg & { format?: 'v1' },
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] }>;
+  async getMessages(
+    args: StorageGetMessagesArg & { format: 'v2' },
+  ): Promise<PaginationInfo & { messages: MastraMessageV2[] }>;
+  async getMessages({
     threadId,
     selectBy,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<
     PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }
   > {
-    this.logger.debug(`MockStore: getMessagesPaginated called for thread ${threadId}`);
+    this.logger.debug(`MockStore: getMessages called for thread ${threadId}`);
 
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 

@@ -90,10 +90,6 @@ class MockMemory extends MastraMemory {
     return { messages: [], messagesV2: [] };
   }
 
-  async getThreadsByResourceId() {
-    return [];
-  }
-
   async query({ threadId, resourceId }: StorageGetMessagesArg) {
     let results = Array.from(this.messages.values());
     if (threadId) results = results.filter(m => m.threadId === threadId);
@@ -118,7 +114,7 @@ class MockMemory extends MastraMemory {
     return null;
   }
 
-  async getThreadsByResourceIdPaginated(
+  async getThreadsByResourceId(
     args: { resourceId: string; page: number; perPage: number } & ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     return {

@@ -28,7 +28,7 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
-  StorageGetTracesPaginatedArg,
+  StorageGetTracesArg,
   StoragePagination,
   StorageResourceType,
   ThreadSortOptions,
@@ -208,14 +208,6 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.getThreadById({ threadId });
   }
 
-  async getThreadsByResourceId({
-    resourceId,
-    orderBy,
-    sortDirection,
-  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    return this.stores.memory.getThreadsByResourceId({ resourceId, orderBy, sortDirection });
-  }
-
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     return this.stores.memory.saveThread({ thread });
   }
@@ -256,19 +248,6 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
   }
 
-  async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessages({ threadId, resourceId, selectBy, format }) as unknown as Promise<
-      MastraMessageV1[] | MastraMessageV2[]
-    >;
-  }
-
   async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
   async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
   async getMessagesById({
@@ -297,49 +276,35 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.deleteMessages(messageIds);
   }
 
-  async getThreadsByResourceIdPaginated(
+  async getThreadsByResourceId(
     args: {
       resourceId: string;
       page: number;
       perPage: number;
     } & ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    return this.stores.memory.getThreadsByResourceIdPaginated(args);
+    return this.stores.memory.getThreadsByResourceId(args);
   }
 
-  async getMessagesPaginated({
+  async getMessages(
+    args: StorageGetMessagesArg & { format?: 'v1' },
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] }>;
+  async getMessages(
+    args: StorageGetMessagesArg & { format: 'v2' },
+  ): Promise<PaginationInfo & { messages: MastraMessageV2[] }>;
+  async getMessages({
     threadId,
+    resourceId,
     selectBy,
+    format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<
     PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }
   > {
-    return this.stores.memory.getMessagesPaginated({ threadId, selectBy });
+    return this.stores.memory.getMessages({ threadId, resourceId, selectBy, format });
   }
 
-  async getTraces({
-    name,
-    scope,
-    page,
-    perPage,
-    attributes,
-    filters,
-    fromDate,
-    toDate,
-  }: {
-    name?: string;
-    scope?: string;
-    page: number;
-    perPage: number;
-    attributes?: Record<string, string>;
-    filters?: Record<string, any>;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<any[]> {
-    return this.stores.traces.getTraces({ name, scope, page, perPage, attributes, filters, fromDate, toDate });
-  }
-
-  async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
-    return this.stores.traces.getTracesPaginated(args);
+  async getTraces(args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    return this.stores.traces.getTraces(args);
   }
 
   async batchTraceInsert(args: { records: Record<string, any>[] }): Promise<void> {

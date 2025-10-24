@@ -296,13 +296,7 @@ export abstract class MastraMemory extends MastraBase {
    * @returns Promise resolving to an array of matching threads; resolves to an empty array
    *          if the resource has no threads
    */
-  abstract getThreadsByResourceId({
-    resourceId,
-    orderBy,
-    sortDirection,
-  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]>;
-
-  abstract getThreadsByResourceIdPaginated(
+  abstract getThreadsByResourceId(
     args: {
       resourceId: string;
       page: number;
