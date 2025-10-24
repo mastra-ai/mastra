@@ -52,12 +52,6 @@ if (result.status === "suspended") {
       required: true,
     },
     {
-      name: "watch",
-      type: "(callback: WatchCallback, type?: WatchType) => UnwatchFunction",
-      description: "Monitors workflow execution with callback-based events",
-      required: true,
-    },
-    {
       name: "cancel",
       type: "() => Promise<void>",
       description: "Cancels the workflow execution",
