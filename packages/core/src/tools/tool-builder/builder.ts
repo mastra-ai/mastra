@@ -15,6 +15,7 @@ import { AISpanType, wrapMastra } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { RuntimeContext } from '../../runtime-context';
+import { ChunkFrom } from '../../stream/types';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { ToolStream } from '../stream';
@@ -222,6 +223,7 @@ export class CoreToolBuilder extends MastraBase {
                   callId: execOptions.toolCallId,
                   name: options.name,
                   runId: options.runId!,
+                  from: ChunkFrom.AGENT,
                 },
                 options.writableStream || execOptions.writableStream,
               ),

@@ -7,7 +7,7 @@ import type { TracingContext, AnyAISpan } from '@mastra/core/ai-tracing';
 import { RuntimeContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
-import { WorkflowRunOutput } from '@mastra/core/stream';
+import { ChunkFrom, WorkflowRunOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, ToolStream } from '@mastra/core/tools';
 import {
@@ -1274,6 +1274,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                   callId: stepCallId,
                   name: 'sleep',
                   runId,
+                  from: ChunkFrom.WORKFLOW,
                 },
                 writableStream,
               ),
@@ -1393,6 +1394,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                   callId: stepCallId,
                   name: 'sleep',
                   runId,
+                  from: ChunkFrom.WORKFLOW,
                 },
                 writableStream,
               ),
@@ -2165,6 +2167,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                         callId: randomUUID(),
                         name: 'conditional',
                         runId,
+                        from: ChunkFrom.WORKFLOW,
                       },
                       writableStream,
                     ),
