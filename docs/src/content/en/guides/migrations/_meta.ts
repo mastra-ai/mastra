@@ -1,8 +1,7 @@
 const meta = {
   "upgrade-to-v1": "v1.0",
-  "vnext-to-standard-apis": "v0.20.0+ @mastra/core (Streaming APIs)",
-  agentnetwork: "v0.20.0+ @mastra/core (Agent Network)",
-  "memory-scope-defaults": "v0.16.0+ @mastra/memory (Scopes)",
+  "vnext-to-standard-apis": "VNext to Standard APIs",
+  agentnetwork: "AgentNetwork to .network()",
 };
 
 export default meta;

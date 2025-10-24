@@ -29,6 +29,56 @@ This version isn't released yet but we're adding changes as we make them.
 
 ## Migrate to v0.22
 
+### Changed: Memory Scope Defaults
+
+`@mastra/memory` - `0.16.0`  
+`@mastra/core` - `0.22.0`
+
+The default memory scope for both **working memory** and **semantic recall** has changed from `'thread'` to `'resource'`.
+
+**Before:**
+- Working memory defaulted to `scope: 'thread'` (isolated per conversation)
+- Semantic recall defaulted to `scope: 'thread'` (search within current conversation only)
+
+**After:**
+- Working memory defaults to `scope: 'resource'` (persists across all user conversations)
+- Semantic recall defaults to `scope: 'resource'` (search across all user conversations)
+
+**Why this change?**
+
+1. **Better user experience**: Most applications want to remember user information across conversations, not just within a single thread
+2. **More intuitive default**: Users expect AI agents to "remember" them, which requires resource-scoped memory
+3. **Alignment with common use cases**: The majority of production applications use resource-scoped memory
+
+**Migration:**
+
+If you want to maintain the old behavior where memory is isolated per conversation thread, explicitly set `scope: 'thread'` in your memory configuration:
+
+```typescript showLineNumbers copy
+import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
+
+const memory = new Memory({
+  storage: new LibSQLStore({ url: 'file:local.db' }),
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: 'thread', // Explicitly set to thread-scoped
+      template: `# User Profile
+- **Name**: 
+- **Interests**: 
+`,
+    },
+    semanticRecall: {
+      topK: 3,
+      scope: 'thread', // Explicitly set to thread-scoped
+    },
+  },
+});
+```
+
+If you want to adopt the new default behavior, you can optionally remove explicit `scope: 'resource'` declarations as they're now redundant.
+
 ### Deprecated: `format: "aisdk"`
 
 The `format: "aisdk"` option in `stream()`/`generate()` methods is deprecated. Use the `@mastra/ai-sdk` package instead. Learn more in the [Using Vercel AI SDK documentation](../../docs/frameworks/agentic-uis/ai-sdk.mdx).
