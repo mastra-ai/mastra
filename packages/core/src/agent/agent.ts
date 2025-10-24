@@ -2729,7 +2729,7 @@ export class Agent<
                 shouldGenerate,
                 model: titleModel,
                 instructions: titleInstructions,
-              } = this.resolveTitleGenerationConfig(config?.threads?.generateTitle);
+              } = this.resolveTitleGenerationConfig(config?.generateTitle);
 
               if (shouldGenerate && userMessage) {
                 promises.push(
@@ -3649,7 +3649,7 @@ export class Agent<
             shouldGenerate,
             model: titleModel,
             instructions: titleInstructions,
-          } = this.resolveTitleGenerationConfig(config.threads?.generateTitle);
+          } = this.resolveTitleGenerationConfig(config.generateTitle);
 
           if (shouldGenerate && userMessage) {
             promises.push(

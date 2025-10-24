@@ -296,35 +296,47 @@ export type MemoryConfig = {
   workingMemory?: WorkingMemory;
 
   /**
+   * Automatically generate descriptive thread titles based on the first user message.
+   * Can be a boolean to enable with defaults, or an object to customize the model and instructions.
+   * Title generation runs asynchronously and doesn't affect response time.
+   *
+   * @default false
+   * @example
+   * ```typescript
+   * generateTitle: true // Use agent's model for title generation
+   * generateTitle: {
+   *   model: openai("gpt-4o-mini"),
+   *   instructions: "Generate a concise title (max 5 words)"
+   * }
+   * ```
+   */
+  generateTitle?:
+    | boolean
+    | {
+        /**
+         * Language model to use for title generation.
+         * Can be static or a function that receives runtime context for dynamic selection.
+         */
+        model: DynamicArgument<MastraLanguageModel>;
+        /**
+         * Custom instructions for title generation.
+         * Can be static or a function that receives runtime context for dynamic customization.
+         */
+        instructions?: DynamicArgument<string>;
+      };
+
+  /**
    * Thread management configuration.
+   * @deprecated The `threads` object is deprecated. Use top-level `generateTitle` instead of `threads.generateTitle`.
    */
   threads?: {
     /**
-     * Automatically generate descriptive thread titles based on the first user message.
-     * Can be a boolean to enable with defaults, or an object to customize the model and instructions.
-     * Title generation runs asynchronously and doesn't affect response time.
-     *
-     * @example
-     * ```typescript
-     * generateTitle: true // Use agent's model for title generation
-     * generateTitle: {
-     *   model: openai("gpt-4o-mini"),
-     *   instructions: "Generate a concise title (max 5 words)"
-     * }
-     * ```
+     * @deprecated Moved to top-level `generateTitle`. Using `threads.generateTitle` will throw an error.
      */
     generateTitle?:
       | boolean
       | {
-          /**
-           * Language model to use for title generation.
-           * Can be static or a function that receives runtime context for dynamic selection.
-           */
           model: DynamicArgument<MastraLanguageModel>;
-          /**
-           * Custom instructions for title generation.
-           * Can be static or a function that receives runtime context for dynamic customization.
-           */
           instructions?: DynamicArgument<string>;
         };
   };
