@@ -1201,6 +1201,11 @@ describe('AI Tracing Integration Tests', () => {
         }
         expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
 
+        // Verify that MODEL_GENERATION span ends before AGENT_RUN span (issue #8204)
+        expect(llmGenerationSpan?.endTime).toBeDefined();
+        expect(agentRunSpan?.endTime).toBeDefined();
+        expect(llmGenerationSpan?.endTime!.getTime()).toBeLessThanOrEqual(agentRunSpan?.endTime!.getTime());
+
         testExporter.finalExpectations();
       });
     },
@@ -1375,6 +1380,11 @@ describe('AI Tracing Integration Tests', () => {
         }
         expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
 
+        // Verify that MODEL_GENERATION span ends before AGENT_RUN span (issue #8204)
+        expect(llmGenerationSpan?.endTime).toBeDefined();
+        expect(agentRunSpan?.endTime).toBeDefined();
+        expect(llmGenerationSpan?.endTime!.getTime()).toBeLessThanOrEqual(agentRunSpan?.endTime!.getTime());
+
         testExporter.finalExpectations();
       });
     },
@@ -1477,6 +1487,16 @@ describe('AI Tracing Integration Tests', () => {
 
         expect(testAgentLlmSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
         expect(processorAgentLlmSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
+
+        // Verify that MODEL_GENERATION span ends before AGENT_RUN span for both agents (issue #8204)
+        expect(testAgentLlmSpan?.endTime).toBeDefined();
+        expect(testAgentSpan?.endTime).toBeDefined();
+        expect(testAgentLlmSpan?.endTime!.getTime()).toBeLessThanOrEqual(testAgentSpan?.endTime!.getTime());
+
+        expect(processorAgentLlmSpan?.endTime).toBeDefined();
+        expect(processorAgentSpan?.endTime).toBeDefined();
+        expect(processorAgentLlmSpan?.endTime!.getTime()).toBeLessThanOrEqual(processorAgentSpan?.endTime!.getTime());
+
         testExporter.finalExpectations();
       });
     },
