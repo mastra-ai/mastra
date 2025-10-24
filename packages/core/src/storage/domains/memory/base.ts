@@ -20,14 +20,6 @@ export abstract class MemoryStorage extends MastraBase {
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
-  abstract getThreadsByResourceId(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
-
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
   abstract updateThread({
@@ -71,6 +63,14 @@ export abstract class MemoryStorage extends MastraBase {
         `The deleteMessages method needs to be implemented in the storage adapter.`,
     );
   }
+
+  abstract getThreadsByResourceId(
+    args: {
+      resourceId: string;
+      page: number;
+      perPage: number;
+    } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
 
   abstract getMessages(
     args: StorageGetMessagesArg & { format?: 'v1' },

@@ -38,7 +38,6 @@ export class TracesInMemory extends TracesStorage {
         Object.entries(attributes).every(([key, value]) => t.attributes?.[key] === value),
       );
     }
-
     if (filters) {
       traces = traces.filter((t: any) => Object.entries(filters).every(([key, value]) => t[key] === value));
     }

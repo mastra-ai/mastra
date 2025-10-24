@@ -45,35 +45,6 @@ export class InMemoryMemory extends MemoryStorage {
     return thread ? { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata } : null;
   }
 
-  async getThreadsByResourceId(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page, perPage, orderBy, sortDirection } = args;
-    this.logger.debug(`MockStore: getThreadsByResourceId called for ${resourceId}`);
-    // Mock implementation - find threads by resourceId
-    const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
-    const sortedThreads = this.sortThreads(
-      threads,
-      this.castThreadOrderBy(orderBy),
-      this.castThreadSortDirection(sortDirection),
-    );
-    const clonedThreads = sortedThreads.map(thread => ({
-      ...thread,
-      metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
-    })) as StorageThreadType[];
-    return {
-      threads: clonedThreads.slice(page * perPage, (page + 1) * perPage),
-      total: clonedThreads.length,
-      page: page,
-      perPage: perPage,
-      hasMore: clonedThreads.length > (page + 1) * perPage,
-    };
-  }
-
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     this.logger.debug(`MockStore: saveThread called for ${thread.id}`);
     const key = thread.id;
@@ -292,6 +263,35 @@ export class InMemoryMemory extends MemoryStorage {
         thread.updatedAt = now;
       }
     }
+  }
+
+  async getThreadsByResourceId(
+    args: {
+      resourceId: string;
+      page: number;
+      perPage: number;
+    } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    const { resourceId, page, perPage, orderBy, sortDirection } = args;
+    this.logger.debug(`MockStore: getThreadsByResourceIdPaginated called for ${resourceId}`);
+    // Mock implementation - find threads by resourceId
+    const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
+    const sortedThreads = this.sortThreads(
+      threads,
+      this.castThreadOrderBy(orderBy),
+      this.castThreadSortDirection(sortDirection),
+    );
+    const clonedThreads = sortedThreads.map(thread => ({
+      ...thread,
+      metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
+    })) as StorageThreadType[];
+    return {
+      threads: clonedThreads.slice(page * perPage, (page + 1) * perPage),
+      total: clonedThreads.length,
+      page: page,
+      perPage: perPage,
+      hasMore: clonedThreads.length > (page + 1) * perPage,
+    };
   }
 
   async getMessages(
