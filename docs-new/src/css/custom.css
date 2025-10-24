@@ -541,15 +541,14 @@ span[class*='categoryLinkLabel'] {
     padding-bottom: 0.5rem;
     font-weight: 600;
   }
-  
 }
 
-h2:has(code){
+h2:has(code) {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
-h2 code{
+h2 code {
   font-size: calc(var(--ifm-h2-font-size) - 0.25rem);
   border-radius: 10px;
 }
