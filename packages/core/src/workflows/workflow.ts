@@ -43,6 +43,7 @@ import type {
   WorkflowRunStatus,
   WorkflowStreamEvent,
 } from './types';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 
 export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
   step,
@@ -566,6 +567,9 @@ export class Workflow<
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema>;
   }
 
+  /**
+   * @deprecated waitForEvent has been deprecated. Please use suspend/resume instead.
+   */
   waitForEvent<
     TStepState extends z.ZodObject<any>,
     TStepInputSchema extends TPrevSchema,
@@ -578,20 +582,12 @@ export class Workflow<
       timeout?: number;
     },
   ) {
-    this.stepFlow.push({ type: 'waitForEvent', event, step: step as any, timeout: opts?.timeout });
-    this.serializedStepFlow.push({
-      type: 'waitForEvent',
-      event,
-      step: {
-        id: step.id,
-        description: step.description,
-        component: (step as SerializedStep).component,
-        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
-      },
-      timeout: opts?.timeout,
+    throw new MastraError({
+      id: 'WORKFLOW_WAIT_FOR_EVENT_DEPRECATED',
+      domain: ErrorDomain.MASTRA_WORKFLOW,
+      category: ErrorCategory.USER,
+      text: 'waitForEvent has been deprecated. Please use suspend & resume flow instead. See https://mastra.ai/en/docs/workflows/suspend-and-resume for more details.',
     });
-    this.steps[step.id] = step;
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut>;
   }
 
   map(
