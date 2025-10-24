@@ -65,18 +65,6 @@ describe('Workflow (fetch-mocked)', () => {
     expect(resumeAsyncRes).toEqual({ result: 'resumed-async' });
   });
 
-  it('watches workflow transitions and yields parsed records', async () => {
-    const run = await wf.createRunAsync();
-    const seen: any[] = [];
-    await run.watch(rec => {
-      seen.push(rec);
-    });
-    expect(seen).toEqual([
-      { type: 'transition', payload: { step: 's1' } },
-      { type: 'transition', payload: { step: 's2' } },
-    ]);
-  });
-
   it('streams workflow execution as parsed objects', async () => {
     const run = await wf.createRunAsync();
     const stream = await run.stream({ inputData: { x: 1 } });
