@@ -9,7 +9,7 @@ import {
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
 } from '@mastra/schema-compat';
-import type { ToolExecutionOptions } from 'ai';
+import type { ToolExecutionOptions, Schema } from 'ai';
 import { z } from 'zod';
 import { AISpanType, wrapMastra } from '../../ai-tracing';
 import { MastraBase } from '../../base';
@@ -146,7 +146,12 @@ export class CoreToolBuilder extends MastraBase {
     };
   }
 
-  private createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset' | 'client-tool') {
+  private createExecute(
+    tool: ToolToConvert,
+    options: ToolOptions,
+    logType?: 'tool' | 'toolset' | 'client-tool',
+    processedSchema?: z.ZodTypeAny | Schema,
+  ) {
     // dont't add memory or mastra to logging
     const { logger, mastra: _mastra, memory: _memory, runtimeContext, model, ...rest } = options;
     const logModelObject = {
@@ -247,7 +252,8 @@ export class CoreToolBuilder extends MastraBase {
         logger.debug(start, { ...rest, model: logModelObject, args });
 
         // Validate input parameters if schema exists
-        const parameters = this.getParameters();
+        // Use the processed schema for validation if available, otherwise fall back to original
+        const parameters = processedSchema || this.getParameters();
         const { data, error } = validateToolInput(parameters, args, options.name);
         if (error) {
           logger.warn(`Tool input validation failed for '${options.name}'`, {
@@ -329,21 +335,6 @@ export class CoreToolBuilder extends MastraBase {
       return providerTool;
     }
 
-    const definition = {
-      type: 'function' as const,
-      description: this.originalTool.description,
-      parameters: this.getParameters(),
-      outputSchema: this.getOutputSchema(),
-      requireApproval: this.options.requireApproval,
-      execute: this.originalTool.execute
-        ? this.createExecute(
-            this.originalTool,
-            { ...this.options, description: this.originalTool.description },
-            this.logType,
-          )
-        : undefined,
-    };
-
     const model = this.options.model;
 
     const schemaCompatLayers = [];
@@ -368,11 +359,34 @@ export class CoreToolBuilder extends MastraBase {
       );
     }
 
-    const processedSchema = applyCompatLayer({
-      schema: this.getParameters(),
-      compatLayers: schemaCompatLayers,
-      mode: 'aiSdkSchema',
-    });
+    // Apply schema compatibility to get both the transformed Zod schema (for validation)
+    // and the AI SDK Schema (for the LLM)
+    let processedZodSchema: z.ZodTypeAny | undefined;
+    let processedSchema: Schema | z.ZodTypeAny;
+
+    const originalSchema = this.getParameters();
+
+    // Find the first applicable compatibility layer
+    const applicableLayer = schemaCompatLayers.find(layer => layer.shouldApply());
+
+    if (applicableLayer && originalSchema) {
+      // Get the transformed Zod schema (with constraints removed/modified)
+      processedZodSchema = applicableLayer.processZodType(originalSchema);
+      // Convert to AI SDK Schema for the LLM
+      processedSchema = applyCompatLayer({
+        schema: originalSchema,
+        compatLayers: schemaCompatLayers,
+        mode: 'aiSdkSchema',
+      });
+    } else {
+      // No compatibility layer applies, use original schema
+      processedZodSchema = originalSchema;
+      processedSchema = applyCompatLayer({
+        schema: originalSchema,
+        compatLayers: schemaCompatLayers,
+        mode: 'aiSdkSchema',
+      });
+    }
 
     let processedOutputSchema;
 
@@ -384,11 +398,25 @@ export class CoreToolBuilder extends MastraBase {
       });
     }
 
+    const definition = {
+      type: 'function' as const,
+      description: this.originalTool.description,
+      parameters: processedSchema,
+      outputSchema: processedOutputSchema,
+      requireApproval: this.options.requireApproval,
+      execute: this.originalTool.execute
+        ? this.createExecute(
+            this.originalTool,
+            { ...this.options, description: this.originalTool.description },
+            this.logType,
+            processedZodSchema, // Pass the transformed Zod schema for validation
+          )
+        : undefined,
+    };
+
     return {
       ...definition,
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
-      parameters: processedSchema,
-      outputSchema: processedOutputSchema,
     } as unknown as CoreTool;
   }
 }
