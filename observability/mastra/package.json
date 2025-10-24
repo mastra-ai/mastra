@@ -43,7 +43,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.24.0-0"
+    "@mastra/core": ">=0.18.1-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

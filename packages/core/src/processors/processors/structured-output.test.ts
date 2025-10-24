@@ -373,7 +373,7 @@ describe('StructuredOutputProcessor', () => {
       expect(typeof instructions).toBe('string');
     });
 
-    it('should use custom instructions if provided', () => {
+    it('should use custom instructions if provided', async () => {
       const customInstructions = 'Custom structuring instructions';
       const customProcessor = new StructuredOutputProcessor({
         schema: testSchema,
@@ -381,8 +381,9 @@ describe('StructuredOutputProcessor', () => {
         instructions: customInstructions,
       });
 
+      const agent = (customProcessor as unknown as { structuringAgent: Agent }).structuringAgent;
       // The custom instructions should be used instead of generated ones
-      expect((customProcessor as any).structuringAgent.instructions).toBe(customInstructions);
+      expect(await agent.getInstructions()).toBe(customInstructions);
     });
   });
 
