@@ -114,10 +114,12 @@ export async function generateSystemPromptHandler(c: Context) {
             ${evalSummary ? `\nEvaluation Results:\n${evalSummary}` : ''}
         `,
       {
-        output: z.object({
-          new_prompt: z.string(),
-          explanation: z.string(),
-        }),
+        structuredOutput: {
+          schema: z.object({
+            new_prompt: z.string(),
+            explanation: z.string(),
+          }),
+        },
       },
     );
 
