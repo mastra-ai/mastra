@@ -148,18 +148,20 @@ export class Memory extends MastraMemory {
             );
           }
 
+          // Build the filter combining scope-based filtering with user-provided filter
+          const scopeFilter = resourceScope ? { resource_id: resourceId } : { thread_id: threadId };
+
+          const userFilter = typeof config?.semanticRecall === 'object' ? config.semanticRecall.filter : undefined;
+
+          // Combine filters using $and to ensure both scope and user filters are applied
+          const combinedFilter = userFilter ? { $and: [scopeFilter, userFilter] } : scopeFilter;
+
           vectorResults.push(
             ...(await this.vector.query({
               indexName,
               queryVector: embedding,
               topK: vectorConfig.topK,
-              filter: resourceScope
-                ? {
-                    resource_id: resourceId,
-                  }
-                : {
-                    thread_id: threadId,
-                  },
+              filter: combinedFilter,
             })),
           );
         }),
