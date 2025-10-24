@@ -533,7 +533,7 @@ export async function createNetworkLoop({
         payload: {
           agentId: inputData.primitiveId,
           args: inputData,
-          runId: runId,
+          runId,
         },
         from: ChunkFrom.NETWORK,
         runId: runId,
