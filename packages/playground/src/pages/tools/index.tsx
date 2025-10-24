@@ -10,16 +10,16 @@ import {
   Button,
   ToolTable,
   useAgents,
+  useTools,
 } from '@mastra/playground-ui';
 
-import { useTools } from '@/hooks/use-all-tools';
 import { Link } from 'react-router';
 
 export default function Tools() {
   const { data: agentsRecord = {}, isLoading: isLoadingAgents } = useAgents();
-  const { tools, isLoading: isLoadingTools } = useTools();
+  const { data: tools = {}, isLoading: isLoadingTools } = useTools();
 
-  const isEmpty = !isLoadingTools && Object.keys(tools).length === 0;
+  const isEmpty = !isLoadingTools && Object.keys(agentsRecord).length === 0;
 
   return (
     <MainContentLayout>
