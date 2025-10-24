@@ -171,7 +171,7 @@ describe('Agent - network', () => {
     console.log('SUH', anStream);
   });
 
-  it.skip('LOOP - should track usage data from agent.network()', async () => {
+  it('LOOP - should track usage data from agent.network()', async () => {
     const anStream = await network.network('Research dolphins', {
       runtimeContext,
     });
