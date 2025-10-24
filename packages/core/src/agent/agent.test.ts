@@ -2884,11 +2884,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       capturedPrompt = '';
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel2,
-              instructions: () => '', // Function returning empty string
-            },
+          generateTitle: {
+            model: titleModel2,
+            instructions: () => '', // Function returning empty string
           },
         };
       };
