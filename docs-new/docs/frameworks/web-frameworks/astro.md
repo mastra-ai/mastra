@@ -1,5 +1,5 @@
 ---
-title: 'Getting Started with Mastra and Astro '
+title: 'With Astro'
 description: A step-by-step guide to integrating Mastra with Astro.
 ---
 
@@ -145,7 +145,7 @@ Start the Mastra Dev Server to expose your agents as REST endpoints:
   </TabItem>
 </Tabs>
 
-> Once running, your agents are available locally. See [Local Development Environment](/docs/server-db/local-dev-playground) for more information.
+> Once running, your agents are available locally. See [Local Development Environment](/docs/getting-started/local-dev-playground) for more information.
 
 ## Start Astro Dev Server
 
@@ -393,7 +393,7 @@ Start the Mastra Dev Server to expose your agents as REST endpoints:
   </TabItem>
 </Tabs>
 
-> Once running, your agents are available locally. See [Local Development Environment](/docs/server-db/local-dev-playground) for more information.
+> Once running, your agents are available locally. See [Local Development Environment](/docs/getting-started/local-dev-playground) for more information.
 
 ## Start Astro Dev Server
 

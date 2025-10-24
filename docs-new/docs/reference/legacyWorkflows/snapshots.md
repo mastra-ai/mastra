@@ -203,4 +203,4 @@ run.watch(async ({ activePaths }) => {
 - [Suspend Function Reference](./suspend)
 - [Resume Function Reference](./resume)
 - [Watch Function Reference](./watch)
-- [Suspend and Resume Guide](/docs/workflows-legacy/suspend-and-resume)
+- [Suspend and Resume Guide](/docs/workflows/suspend-and-resume)

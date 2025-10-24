@@ -149,7 +149,7 @@ try {
 
 ## Related
 
-- [Suspend and Resume](/docs/workflows-legacy/suspend-and-resume)
+- [Suspend and Resume](/docs/examples/workflows_legacy/suspend-and-resume)
 - [`suspend` Reference](./suspend)
 - [`watch` Reference](./watch)
 - [Workflow Class Reference](./workflow)

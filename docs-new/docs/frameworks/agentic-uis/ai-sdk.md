@@ -1,6 +1,7 @@
 ---
-title: 'Using with Vercel AI SDK'
+title: 'With Vercel AI SDK'
 description: 'Learn how Mastra leverages the Vercel AI SDK library and how you can leverage it further with Mastra'
+sidebar_position: 1
 ---
 
 import Tabs from '@theme/Tabs';
@@ -290,7 +291,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> You can then access this data in your tools via the `runtimeContext` parameter. See the [Agent Runtime Context documentation](/docs/agents/runtime-context) for more details.
+> You can then access this data in your tools via the `runtimeContext` parameter. See the [Agent Runtime Context documentation](/docs/server-db/runtime-context) for more details.
 
 ## Streaming data
 

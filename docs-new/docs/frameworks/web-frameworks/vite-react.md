@@ -1,6 +1,7 @@
 ---
-title: 'Getting Started with Mastra and Vite/React '
+title: 'With Vite/React '
 description: A step-by-step guide to integrating Mastra with Vite and React.
+sidebar_position: 1
 ---
 
 import Tabs from '@theme/Tabs';
@@ -148,7 +149,7 @@ Start the Mastra Dev Server to expose your agents as REST endpoints:
   </TabItem>
 </Tabs>
 
-> Once running, your agents are available locally. See [Local Development Environment](/docs/server-db/local-dev-playground) for more information.
+> Once running, your agents are available locally. See [Local Development Environment](/docs/getting-started/local-dev-playground) for more information.
 
 ## Start Vite Dev Server
 

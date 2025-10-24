@@ -1,6 +1,7 @@
 ---
-title: 'Input Data Mapping with Workflow '
+title: 'Input Data Mapping'
 description: 'Learn how to use workflow input mapping to create more dynamic data flows in your Mastra workflows.'
+sidebar_position: 6
 ---
 
 # Input Data Mapping

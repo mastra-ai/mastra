@@ -67,12 +67,7 @@ import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
-import type {
-  AgentExecutionOptions,
-  DeprecatedOutputOptions,
-  InnerAgentExecutionOptions,
-  MultiPrimitiveExecutionOptions,
-} from './agent.types';
+import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -89,7 +84,6 @@ import type {
   AgentExecuteOnFinishOptions,
   AgentInstructions,
   DynamicAgentInstructions,
-  StructuredOutputOptions,
 } from './types';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
@@ -165,7 +159,8 @@ function resolveThreadIdFromArgs(args: {
     'getTools',
     'getLLM',
     'getWorkflows',
-    'getDefaultGenerateOptions',
+    'getDefaultGenerateOptionsLegacy',
+    'getDefaultStreamOptionsLegacy',
     'getDefaultStreamOptions',
     'getDescription',
     'getScorers',
@@ -186,9 +181,9 @@ export class Agent<
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
   #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
-  #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
-  #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
-  #defaultVNextStreamOptions: DynamicArgument<AgentExecutionOptions & DeprecatedOutputOptions>;
+  #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
+  #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
+  #defaultStreamOptions: DynamicArgument<AgentExecutionOptions>;
   #tools: DynamicArgument<TTools>;
   evals: TMetrics;
   #scorers: DynamicArgument<MastraScorers>;
@@ -275,9 +270,9 @@ export class Agent<
       this.#workflows = config.workflows;
     }
 
-    this.#defaultGenerateOptions = config.defaultGenerateOptions || {};
-    this.#defaultStreamOptions = config.defaultStreamOptions || {};
-    this.#defaultVNextStreamOptions = config.defaultVNextStreamOptions || {};
+    this.#defaultGenerateOptionsLegacy = config.defaultGenerateOptions || {};
+    this.#defaultStreamOptionsLegacy = config.defaultStreamOptions || {};
+    this.#defaultStreamOptions = config.defaultVNextStreamOptions || {};
 
     this.#tools = config.tools || ({} as TTools);
 
@@ -741,23 +736,23 @@ export class Agent<
   }
 
   /**
-   * Gets the default generate options for this agent, resolving function-based options if necessary.
-   * These options are used as defaults when calling `generate()` without explicit options.
+   * Gets the default generate options for the legacy generate method.
+   * These options are used as defaults when calling `generateLegacy()` without explicit options.
    *
    * @example
    * ```typescript
-   * const options = await agent.getDefaultGenerateOptions();
+   * const options = await agent.getDefaultGenerateOptionsLegacy();
    * console.log(options.maxSteps); // 5
    * ```
    */
-  public getDefaultGenerateOptions({
+  public getDefaultGenerateOptionsLegacy({
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): AgentGenerateOptions | Promise<AgentGenerateOptions> {
-    if (typeof this.#defaultGenerateOptions !== 'function') {
-      return this.#defaultGenerateOptions;
+    if (typeof this.#defaultGenerateOptionsLegacy !== 'function') {
+      return this.#defaultGenerateOptionsLegacy;
     }
 
-    const result = this.#defaultGenerateOptions({ runtimeContext, mastra: this.#mastra });
+    const result = this.#defaultGenerateOptionsLegacy({ runtimeContext, mastra: this.#mastra });
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
@@ -779,23 +774,23 @@ export class Agent<
   }
 
   /**
-   * Gets the default stream options for this agent, resolving function-based options if necessary.
-   * These options are used as defaults when calling `stream()` without explicit options.
+   * Gets the default stream options for the legacy stream method.
+   * These options are used as defaults when calling `streamLegacy()` without explicit options.
    *
    * @example
    * ```typescript
-   * const options = await agent.getDefaultStreamOptions();
+   * const options = await agent.getDefaultStreamOptionsLegacy();
    * console.log(options.temperature); // 0.7
    * ```
    */
-  public getDefaultStreamOptions({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
-    | AgentStreamOptions
-    | Promise<AgentStreamOptions> {
-    if (typeof this.#defaultStreamOptions !== 'function') {
-      return this.#defaultStreamOptions;
+  public getDefaultStreamOptionsLegacy({
+    runtimeContext = new RuntimeContext(),
+  }: { runtimeContext?: RuntimeContext } = {}): AgentStreamOptions | Promise<AgentStreamOptions> {
+    if (typeof this.#defaultStreamOptionsLegacy !== 'function') {
+      return this.#defaultStreamOptionsLegacy;
     }
 
-    const result = this.#defaultStreamOptions({ runtimeContext, mastra: this.#mastra });
+    const result = this.#defaultStreamOptionsLegacy({ runtimeContext, mastra: this.#mastra });
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
@@ -817,38 +812,25 @@ export class Agent<
   }
 
   /**
-   * Gets the default VNext stream options for this agent, resolving function-based options if necessary.
-   * These options are used as defaults when calling `streamVNext()` or `generateVNext()` without explicit options.
+   * Gets the default stream options for this agent, resolving function-based options if necessary.
+   * These options are used as defaults when calling `stream()` or `generate()` without explicit options.
    *
    * @example
    * ```typescript
-   * const options = await agent.getDefaultVNextStreamOptions();
+   * const options = await agent.getDefaultStreamOptions();
    * console.log(options.maxSteps); // 5
    * ```
    */
-  public getDefaultVNextStreamOptions<OUTPUT extends OutputSchema = undefined>({
+  public getDefaultStreamOptions<OUTPUT extends OutputSchema = undefined>({
     runtimeContext = new RuntimeContext(),
   }: { runtimeContext?: RuntimeContext } = {}): AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>> {
-    if (typeof this.#defaultVNextStreamOptions !== 'function') {
-      if (this.#defaultVNextStreamOptions.output && this.#defaultVNextStreamOptions.structuredOutput) {
-        throw new MastraError({
-          id: 'AGENT_GET_DEFAULT_VNEXT_STREAM_OPTIONS_OUTPUT_AND_STRUCTURED_OUTPUT_PROVIDED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: 'output and structuredOutput cannot be provided at the same time',
-        });
-      }
-
-      const { output, ...defaultVNextStreamOptions } = this.#defaultVNextStreamOptions;
-      return {
-        ...(output ? { structuredOutput: { schema: output } } : {}),
-        ...defaultVNextStreamOptions,
-      } as AgentExecutionOptions<OUTPUT>;
+    if (typeof this.#defaultStreamOptions !== 'function') {
+      return this.#defaultStreamOptions as AgentExecutionOptions<OUTPUT>;
     }
 
-    const result = this.#defaultVNextStreamOptions({ runtimeContext, mastra: this.#mastra }) as
-      | (AgentExecutionOptions<OUTPUT> & DeprecatedOutputOptions<OUTPUT>)
-      | Promise<AgentExecutionOptions<OUTPUT> & DeprecatedOutputOptions<OUTPUT>>;
+    const result = this.#defaultStreamOptions({ runtimeContext, mastra: this.#mastra }) as
+      | AgentExecutionOptions<OUTPUT>
+      | Promise<AgentExecutionOptions<OUTPUT>>;
 
     return resolveMaybePromise(result, options => {
       if (!options) {
@@ -866,21 +848,7 @@ export class Agent<
         throw mastraError;
       }
 
-      if (options.output && options.structuredOutput) {
-        throw new MastraError({
-          id: 'AGENT_GET_DEFAULT_VNEXT_STREAM_OPTIONS_OUTPUT_AND_STRUCTURED_OUTPUT_PROVIDED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: 'output and structuredOutput cannot be provided at the same time',
-        });
-      }
-
-      const { output, ...restOptions } = options;
-
-      return {
-        ...(output ? { structuredOutput: { schema: output } } : {}),
-        ...restOptions,
-      } as AgentExecutionOptions<OUTPUT>;
+      return options;
     });
   }
 
@@ -3811,55 +3779,15 @@ export class Agent<
     });
   }
 
-  /**
-   * @deprecated `generateVNext()` has been renamed to `generate()`. Please use `generate()` instead.
-   */
-  async generateVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
-    _messages: MessageListInput,
-    _options?: AgentExecutionOptions<OUTPUT, FORMAT>,
-  ): Promise<
-    FORMAT extends 'aisdk'
-      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
-  > {
-    throw new MastraError({
-      id: 'AGENT_GENERATE_VNEXT_DEPRECATED',
-      domain: ErrorDomain.AGENT,
-      category: ErrorCategory.USER,
-      text: 'generateVNext has been renamed to generate. Please use generate instead.',
-    });
-  }
-
   async generate<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
     messages: MessageListInput,
-    options?: AgentExecutionOptions<OUTPUT, FORMAT> & DeprecatedOutputOptions<OUTPUT>,
+    options?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<
     FORMAT extends 'aisdk'
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
   > {
-    if (options?.structuredOutput?.schema && options?.output) {
-      throw new MastraError({
-        id: 'AGENT_GENERATE_STRUCTURED_OUTPUT_AND_OUTPUT_PROVIDED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'structuredOutput and output cannot be provided at the same time to agent.generate',
-      });
-    }
-    // Deprecated `output` option now just maps to structuredOutput.schema
-    // Create a new options object to avoid mutating the input parameter
-    const normalizedOptions = options?.output
-      ? {
-          structuredOutput: {
-            schema: options.output as OUTPUT extends OutputSchema ? OUTPUT : never,
-            ...options.structuredOutput,
-          },
-          ...options,
-          output: undefined,
-        }
-      : options;
-
-    const result = await this.stream(messages, normalizedOptions);
+    const result = await this.stream(messages, options);
     const fullOutput = await result.getFullOutput();
 
     const error = fullOutput.error;
@@ -3875,55 +3803,18 @@ export class Agent<
       : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   }
 
-  /**
-   * @deprecated `streamVNext()` has been renamed to `stream()`. Please use `stream()` instead.
-   */
-  async streamVNext<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
-    _messages: MessageListInput,
-    _streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
-  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    throw new MastraError({
-      id: 'AGENT_STREAM_VNEXT_DEPRECATED',
-      domain: ErrorDomain.AGENT,
-      category: ErrorCategory.USER,
-      text: 'streamVNext has been renamed to stream. Please use stream instead.',
-    });
-  }
-
   async stream<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> & DeprecatedOutputOptions<OUTPUT>,
+    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    const defaultStreamOptions = await this.getDefaultVNextStreamOptions<OUTPUT>({
+    const defaultStreamOptions = await this.getDefaultStreamOptions<OUTPUT>({
       runtimeContext: streamOptions?.runtimeContext,
     });
-    if (streamOptions?.structuredOutput?.schema && streamOptions?.output) {
-      throw new MastraError({
-        id: 'AGENT_STREAM_STRUCTURED_OUTPUT_AND_OUTPUT_PROVIDED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'structuredOutput and output cannot be provided at the same time to agent.stream',
-      });
-    }
-
-    const baseStreamOptions = {
+    const mergedStreamOptions = {
       ...defaultStreamOptions,
       ...(streamOptions ?? {}),
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
-
-    // Deprecated `output` option now just maps to structuredOutput.schema
-    // Create a new options object to avoid mutating
-    const mergedStreamOptions = baseStreamOptions.output
-      ? {
-          structuredOutput: {
-            schema: baseStreamOptions.output,
-            ...baseStreamOptions.structuredOutput,
-          } as StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>,
-          ...baseStreamOptions,
-          output: undefined,
-        }
-      : baseStreamOptions;
 
     const llm = await this.getLLM({
       runtimeContext: mergedStreamOptions.runtimeContext,
@@ -4005,7 +3896,7 @@ export class Agent<
     resumeData: any,
     streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT> & { toolCallId?: string },
   ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
-    const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
+    const defaultStreamOptions = await this.getDefaultStreamOptions({
       runtimeContext: streamOptions?.runtimeContext,
     });
 
@@ -4151,10 +4042,10 @@ export class Agent<
         id: 'AGENT_GENERATE_LEGACY_STRUCTURED_OUTPUT_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: 'This method does not support structured output. Please use generateVNext instead.',
+        text: 'This method does not support structured output. Please use generate() instead.',
       });
     }
-    const defaultGenerateOptions = await this.getDefaultGenerateOptions({
+    const defaultGenerateOptions = await this.getDefaultGenerateOptionsLegacy({
       runtimeContext: generateOptions.runtimeContext,
     });
     const mergedGenerateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
@@ -4494,7 +4385,9 @@ export class Agent<
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties)
   > {
-    const defaultStreamOptions = await this.getDefaultStreamOptions({ runtimeContext: streamOptions.runtimeContext });
+    const defaultStreamOptions = await this.getDefaultStreamOptionsLegacy({
+      runtimeContext: streamOptions.runtimeContext,
+    });
 
     const mergedStreamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
       ...defaultStreamOptions,

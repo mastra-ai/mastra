@@ -1,5 +1,5 @@
 ---
-title: 'Mastra Client SDK '
+title: 'Mastra Client'
 description: 'Learn how to set up and use the Mastra Client SDK'
 ---
 
@@ -27,22 +27,22 @@ The Mastra Client SDK is designed for browser environments and uses the native `
 To use the Mastra Client SDK, install the required dependencies:
 
 <Tabs>
-  <TabItem value="install" label="install">
+  <TabItem value="npm" label="npm">
     ```bash copy
     npm install @mastra/client-js@latest
     ```
   </TabItem>
-  <TabItem value="tab-2" label="Tab 2">
+  <TabItem value="yarn" label="yarn">
     ```bash copy
     yarn add @mastra/client-js@latest
     ```
   </TabItem>
-  <TabItem value="tab-3" label="Tab 3">
+  <TabItem value="pnpm" label="pnpm">
     ```bash copy
     pnpm add @mastra/client-js@latest
     ```
   </TabItem>
-    <TabItem value="tab-4" label="Tab 4">
+    <TabItem value="bun" label="bun">
     ```bash copy
     bun add @mastra/client-js@latest
     ```
