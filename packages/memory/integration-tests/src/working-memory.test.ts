@@ -460,7 +460,6 @@ describe('Working Memory Tests', () => {
           },
           lastMessages: 1,
           generateTitle: false,
-          },
         },
       });
       // Reset message counter
@@ -541,7 +540,6 @@ describe('Working Memory Tests', () => {
               messageRange: 2,
             },
             generateTitle: false,
-            },
           },
         });
         // Reset message counter
@@ -716,7 +714,6 @@ describe('Working Memory Tests', () => {
             messageRange: 2,
           },
           generateTitle: false,
-          },
         },
       });
 
