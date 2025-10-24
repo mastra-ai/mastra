@@ -121,8 +121,8 @@ export const networkAgent = new Agent({
   // workflows: {
   //   myWorkflow,
   // },
-  // tools: {
-  //   weatherInfo,
-  // },
+  tools: {
+    weatherInfo,
+  },
   memory,
 });
