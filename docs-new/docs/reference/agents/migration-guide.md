@@ -324,10 +324,7 @@ The client-js memory API has also been simplified.
 #### Before (v0.x)
 
 ```typescript
-const { messages, uiMessages, legacyMessages } = await client
-  .memory
-  .thread(threadId)
-  .getMessages();
+const { messages, uiMessages, legacyMessages } = await client.memory.thread(threadId).getMessages();
 ```
 
 #### After (v1.0)

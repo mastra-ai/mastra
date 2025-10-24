@@ -22,11 +22,10 @@ export const AgentBadgeWrapper = ({
     agentId,
     memory: true,
   });
-  const convertedMessages = memoryMessages?.messages 
+  const convertedMessages = memoryMessages?.messages
     ? (toAISdkMessages(memoryMessages.messages) as MastraUIMessage[])
     : [];
-  const childMessages =
-    result?.childMessages ?? resolveToChildMessages(convertedMessages);
+  const childMessages = result?.childMessages ?? resolveToChildMessages(convertedMessages);
 
   return (
     <AgentBadge

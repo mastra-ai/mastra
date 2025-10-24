@@ -49,7 +49,9 @@ export default async function Page(props: { params: Promise<any> }) {
   return (
     <PreviewChat
       id={chat.id}
-      initialMessages={memoryMessages ? toAISdkMessages(memoryMessages.messages) : []}
+      initialMessages={
+        memoryMessages ? toAISdkMessages(memoryMessages.messages) : []
+      }
       selectedModelId={selectedModelId}
     />
   );
