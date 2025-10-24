@@ -27,6 +27,34 @@ This version isn't released yet but we're adding changes as we make them.
 
 </Callout>
 
+### Changed: Memory Default Settings
+
+The default settings for semantic recall have been optimized based on RAG research:
+
+- **`topK`** increased from `2` to `4` - Retrieves 4 most relevant messages instead of 2
+- **`messageRange`** changed from `{before: 2, after: 2}` to `{before: 1, after: 1}` - Includes 1 message before and after each retrieved message instead of 2
+
+**Impact:**
+
+When semantic recall is enabled, you'll now retrieve up to 12 messages total (4 × 3) instead of 10 messages (2 × 5). This provides ~8% better accuracy while only increasing message count by 20%.
+
+**Action Required:**
+
+If you were relying on the previous defaults and want to maintain the old behavior, explicitly set these values:
+
+```typescript
+const agent = new Agent({
+  memory: {
+    semanticRecall: {
+      topK: 2,
+      messageRange: { before: 2, after: 2 }
+    }
+  }
+});
+```
+
+If you're not using semantic recall (it's disabled by default), no changes are needed.
+
 ### Removed: Deprecated APIs
 
 #### Agent Execution Methods
