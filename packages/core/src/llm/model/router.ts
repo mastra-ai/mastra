@@ -7,6 +7,7 @@ import { findGatewayForModel } from './gateways/index.js';
 
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
+import { OpenRouterGateway } from './gateways/openrouter.js';
 import type { ModelRouterModelId } from './provider-registry.js';
 import { PROVIDER_REGISTRY } from './provider-registry.js';
 import type { OpenAICompatibleConfig } from './shared.types';
@@ -15,7 +16,11 @@ function getStaticProvidersByGateway(name: string) {
   return Object.fromEntries(Object.entries(PROVIDER_REGISTRY).filter(([_provider, config]) => config.gateway === name));
 }
 
-export const gateways = [new NetlifyGateway(), new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`))];
+export const gateways = [
+  new NetlifyGateway(),
+  new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`)),
+  new OpenRouterGateway(),
+];
 
 export class ModelRouterLanguageModel implements LanguageModelV2 {
   readonly specificationVersion = 'v2' as const;

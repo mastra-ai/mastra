@@ -1514,6 +1514,9 @@ importers:
       '@openrouter/ai-sdk-provider-v5':
         specifier: npm:@openrouter/ai-sdk-provider@1.2.0
         version: '@openrouter/ai-sdk-provider@1.2.0(ai@4.3.19(react@19.2.0)(zod@3.25.76))(zod@3.25.76)'
+      '@openrouter/sdk':
+        specifier: 0.0.1-beta.8
+        version: 0.0.1-beta.8(@tanstack/react-query@5.90.5(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -7374,6 +7377,20 @@ packages:
     peerDependencies:
       ai: ^5.0.0
       zod: ^3.24.1 || ^v4
+
+  '@openrouter/sdk@0.0.1-beta.8':
+    resolution: {integrity: sha512-axNpdJAvLDyEjgs3KElj8uLtjrNWhvJOuYRAVPWlSku7CWqFKyzOsQIJFGBFgCFqNa2O23y9nhifxJpc+lD1Ig==}
+    peerDependencies:
+      '@tanstack/react-query': ^5
+      react: ^18 || ^19
+      react-dom: ^18 || ^19
+    peerDependenciesMeta:
+      '@tanstack/react-query':
+        optional: true
+      react:
+        optional: true
+      react-dom:
+        optional: true
 
   '@opensearch-project/opensearch@3.5.1':
     resolution: {integrity: sha512-6bf+HcuERzAtHZxrm6phjref54ABse39BpkDie/YO3AUFMCBrb3SK5okKSdT5n3+nDRuEEQLhQCl0RQV3s1qpA==}
@@ -20300,6 +20317,14 @@ snapshots:
     dependencies:
       ai: 4.3.19(react@19.2.0)(zod@4.1.12)
       zod: 4.1.12
+
+  '@openrouter/sdk@0.0.1-beta.8(@tanstack/react-query@5.90.5(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
+    dependencies:
+      zod: 3.25.76
+    optionalDependencies:
+      '@tanstack/react-query': 5.90.5(react@19.2.0)
+      react: 19.2.0
+      react-dom: 19.2.0(react@19.2.0)
 
   '@opensearch-project/opensearch@3.5.1':
     dependencies:

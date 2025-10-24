@@ -4,7 +4,6 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { createXai } from '@ai-sdk/xai-v5';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
@@ -193,8 +192,6 @@ export class ModelsDevGateway extends MastraModelGateway {
         }).chat(modelId);
       case 'anthropic':
         return createAnthropic({ apiKey })(modelId);
-      case 'openrouter':
-        return createOpenRouter({ apiKey })(modelId);
       case 'xai':
         return createXai({
           apiKey,
