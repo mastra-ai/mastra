@@ -11,7 +11,6 @@ import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
 import { Clock } from './workflow-clock';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
-import { WorkflowSendEventFormProps } from './workflow-run-event-form';
 
 export type NestedNode = Node<
   {
@@ -21,14 +20,12 @@ export type NestedNode = Node<
     withoutBottomHandle?: boolean;
     stepGraph: SerializedStepFlowEntry[];
     mapConfig?: string;
-    event?: string;
   },
   'nested-node'
 >;
 
 export interface WorkflowNestedNodeProps {
   onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
-  onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
   parentWorkflowName?: string;
 }
 
@@ -36,12 +33,11 @@ export function WorkflowNestedNode({
   data,
   parentWorkflowName,
   onShowTrace,
-  onSendEvent,
 }: NodeProps<NestedNode> & WorkflowNestedNodeProps) {
   const { steps, runId } = useCurrentRun();
   const { showNestedGraph } = useContext(WorkflowNestedGraphContext);
 
-  const { label, description, withoutTopHandle, withoutBottomHandle, stepGraph, mapConfig, event } = data;
+  const { label, description, withoutTopHandle, withoutBottomHandle, stepGraph, mapConfig } = data;
 
   const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
 
@@ -93,9 +89,6 @@ export function WorkflowNestedNode({
           mapConfig={mapConfig}
           onShowTrace={runId && onShowTrace ? () => onShowTrace?.({ runId, stepName: fullLabel }) : undefined}
           onShowNestedGraph={() => showNestedGraph({ label, fullStep: fullLabel, stepGraph })}
-          onSendEvent={onSendEvent}
-          event={step?.status === 'waiting' ? event : undefined}
-          runId={runId}
           status={step?.status}
         />
       </div>

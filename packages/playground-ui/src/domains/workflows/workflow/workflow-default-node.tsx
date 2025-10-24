@@ -8,7 +8,6 @@ import { Clock } from './workflow-clock';
 
 import { cn } from '@/lib/utils';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
-import { WorkflowSendEventFormProps } from './workflow-run-event-form';
 
 export type DefaultNode = Node<
   {
@@ -17,7 +16,6 @@ export type DefaultNode = Node<
     withoutTopHandle?: boolean;
     withoutBottomHandle?: boolean;
     mapConfig?: string;
-    event?: string;
     duration?: number;
     date?: Date;
   },
@@ -26,7 +24,6 @@ export type DefaultNode = Node<
 
 export interface WorkflowDefaultNodeProps {
   onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
-  onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
   parentWorkflowName?: string;
 }
 
@@ -34,10 +31,9 @@ export function WorkflowDefaultNode({
   data,
   onShowTrace,
   parentWorkflowName,
-  onSendEvent,
 }: NodeProps<DefaultNode> & WorkflowDefaultNodeProps) {
   const { steps, runId } = useCurrentRun();
-  const { label, description, withoutTopHandle, withoutBottomHandle, mapConfig, event, duration, date } = data;
+  const { label, description, withoutTopHandle, withoutBottomHandle, mapConfig, duration, date } = data;
 
   const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
 
@@ -80,12 +76,6 @@ export function WorkflowDefaultNode({
             {description}
           </Txt>
         )}
-
-        {event && (
-          <Txt variant="ui-sm" className="text-icon3 px-3 pb-2">
-            waits for event: <strong>{event}</strong>
-          </Txt>
-        )}
         {duration && (
           <Txt variant="ui-sm" className="text-icon3 px-3 pb-2">
             sleeps for <strong>{duration}ms</strong>
@@ -105,10 +95,7 @@ export function WorkflowDefaultNode({
           output={step?.output}
           error={step?.error}
           mapConfig={mapConfig}
-          event={step?.status === 'waiting' ? event : undefined}
           onShowTrace={runId && onShowTrace ? () => onShowTrace?.({ runId, stepName: fullLabel }) : undefined}
-          runId={runId}
-          onSendEvent={onSendEvent}
           status={step?.status}
         />
       </div>

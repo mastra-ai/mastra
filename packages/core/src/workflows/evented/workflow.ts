@@ -20,6 +20,7 @@ import type {
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
 import { WorkflowEventProcessor } from './workflow-event-processor';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 
 export type EventedEngineType = {};
 
@@ -648,18 +649,6 @@ export class EventedRun<
       data: {
         workflowId: this.workflowId,
         runId: this.runId,
-      },
-    });
-  }
-
-  async sendEvent(eventName: string, data: any) {
-    await this.mastra?.pubsub.publish('workflows', {
-      type: `workflow.user-event.${eventName}`,
-      runId: this.runId,
-      data: {
-        workflowId: this.workflowId,
-        runId: this.runId,
-        resumeData: data,
       },
     });
   }

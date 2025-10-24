@@ -140,8 +140,3 @@ export const cancelAgentBuilderActionRunHandler = createAgentBuilderWorkflowHand
   workflows.cancelWorkflowRunHandler,
   'Cancelling agent builder action run',
 );
-
-export const sendAgentBuilderActionRunEventHandler = createAgentBuilderWorkflowHandler(
-  workflows.sendWorkflowRunEventHandler,
-  'Sending agent builder action run event',
-);

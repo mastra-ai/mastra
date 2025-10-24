@@ -1498,10 +1498,6 @@ export class Run<
     this.abortController?.abort();
   }
 
-  async sendEvent(event: string, data: any) {
-    this.emitter.emit(`user-event-${event}`, data);
-  }
-
   protected async _validateInput(inputData: z.input<TInput>) {
     const firstEntry = this.executionGraph.steps[0];
     let inputDataToUse = inputData;
