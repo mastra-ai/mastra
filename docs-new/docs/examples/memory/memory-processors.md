@@ -49,9 +49,7 @@ export const memoryProcessorAgent = new Agent({
       workingMemory: {
         enabled: true,
       },
-      threads: {
-        generateTitle: true,
-      },
+      generateTitle: true, // Explicitly enable automatic title generation
     },
   }),
 });
