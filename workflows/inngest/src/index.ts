@@ -32,7 +32,6 @@ import type {
   SerializedStepFlowEntry,
   StepFailure,
   Emitter,
-  WatchEvent,
   StreamEvent,
   ChunkType,
   ExecutionEngineOptions,
@@ -342,17 +341,12 @@ export class InngestRun<
     return result;
   }
 
-  watch(cb: (event: WatchEvent) => void, type: 'watch'): () => void;
-  watch(cb: (event: WorkflowStreamEvent) => void, type: 'watch-v2'): () => void;
-  watch(
-    cb: ((event: WatchEvent) => void) | ((event: WorkflowStreamEvent) => void),
-    type: 'watch' | 'watch-v2' = 'watch',
-  ): () => void {
+  watch(cb: (event: WorkflowStreamEvent) => void): () => void {
     let active = true;
     const streamPromise = subscribe(
       {
         channel: `workflow:${this.workflowId}:${this.runId}`,
-        topics: [type],
+        topics: ['watch-v2'],
         app: this.inngest,
       },
       (message: any) => {
@@ -390,7 +384,7 @@ export class InngestRun<
         // watch-v2 events are data stream events, so we need to cast them to the correct type
         await writer.write(e as any);
       } catch {}
-    }, 'watch-v2');
+    });
 
     this.closeStreamAction = async () => {
       unwatch();
@@ -441,7 +435,7 @@ export class InngestRun<
               ...payload,
             },
           } as WorkflowStreamEvent);
-        }, 'watch-v2');
+        });
 
         self.closeStreamAction = async () => {
           unwatch();
@@ -1119,18 +1113,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       steps: stepResults,
     };
     if (lastOutput.status === 'success') {
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          workflowState: {
-            status: lastOutput.status,
-            steps: stepResults,
-            result: lastOutput.output,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
-
       base.result = lastOutput.output;
     } else if (lastOutput.status === 'failed') {
       base.error =
@@ -1139,33 +1121,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           : lastOutput?.error instanceof Error
             ? lastOutput.error.message
             : (lastOutput.error ?? error ?? 'Unknown error');
-
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          workflowState: {
-            status: lastOutput.status,
-            steps: stepResults,
-            result: null,
-            error: base.error,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
     } else if (lastOutput.status === 'suspended') {
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          workflowState: {
-            status: lastOutput.status,
-            steps: stepResults,
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
-
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
           const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
@@ -1495,28 +1451,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       `workflow.${executionContext.workflowId}.run.${executionContext.runId}.step.${step.id}.running_ev`,
       async () => {
         const startedAt = Date.now();
-        await emitter.emit('watch', {
-          type: 'watch',
-          payload: {
-            currentStep: {
-              id: step.id,
-              status: 'running',
-            },
-            workflowState: {
-              status: 'running',
-              steps: {
-                ...stepResults,
-                [step.id]: {
-                  status: 'running',
-                },
-              },
-              result: null,
-              error: null,
-            },
-          },
-          eventTimestamp: Date.now(),
-        });
-
         await emitter.emit('watch-v2', {
           type: 'workflow-step-start',
           payload: {
@@ -1605,24 +1539,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         `workflow.${executionContext.workflowId}.step.${step.id}.nestedwf-results`,
         async () => {
           if (result.status === 'failed') {
-            await emitter.emit('watch', {
-              type: 'watch',
-              payload: {
-                currentStep: {
-                  id: step.id,
-                  status: 'failed',
-                  error: result?.error,
-                },
-                workflowState: {
-                  status: 'running',
-                  steps: stepResults,
-                  result: null,
-                  error: null,
-                },
-              },
-              eventTimestamp: Date.now(),
-            });
-
             await emitter.emit('watch-v2', {
               type: 'workflow-step-result',
               payload: {
@@ -1645,28 +1561,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
               executionContext.suspendedPaths[step.id] = executionContext.executionPath;
 
-              await emitter.emit('watch', {
-                type: 'watch',
-                payload: {
-                  currentStep: {
-                    id: step.id,
-                    status: 'suspended',
-                    payload: stepResult.payload,
-                    suspendPayload: {
-                      ...(stepResult as any)?.suspendPayload,
-                      __workflow_meta: { runId: runId, path: suspendPath },
-                    },
-                  },
-                  workflowState: {
-                    status: 'running',
-                    steps: stepResults,
-                    result: null,
-                    error: null,
-                  },
-                },
-                eventTimestamp: Date.now(),
-              });
-
               await emitter.emit('watch-v2', {
                 type: 'workflow-step-suspended',
                 payload: {
@@ -1688,24 +1582,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               };
             }
 
-            await emitter.emit('watch', {
-              type: 'watch',
-              payload: {
-                currentStep: {
-                  id: step.id,
-                  status: 'suspended',
-                  payload: {},
-                },
-                workflowState: {
-                  status: 'running',
-                  steps: stepResults,
-                  result: null,
-                  error: null,
-                },
-              },
-              eventTimestamp: Date.now(),
-            });
-
             return {
               executionContext,
               result: {
@@ -1714,26 +1590,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               },
             };
           }
-
-          // is success
-
-          await emitter.emit('watch', {
-            type: 'watch',
-            payload: {
-              currentStep: {
-                id: step.id,
-                status: 'success',
-                output: result?.result,
-              },
-              workflowState: {
-                status: 'running',
-                steps: stepResults,
-                result: null,
-                error: null,
-              },
-            },
-            eventTimestamp: Date.now(),
-          });
 
           await emitter.emit('watch-v2', {
             type: 'workflow-step-result',
@@ -1907,23 +1763,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             startedAt,
           };
         }
-
-        await emitter.emit('watch', {
-          type: 'watch',
-          payload: {
-            currentStep: {
-              id: step.id,
-              ...execResults,
-            },
-            workflowState: {
-              status: 'running',
-              steps: { ...stepResults, [step.id]: execResults },
-              result: null,
-              error: null,
-            },
-          },
-          eventTimestamp: Date.now(),
-        });
 
         if (execResults.status === 'suspended') {
           await emitter.emit('watch-v2', {
