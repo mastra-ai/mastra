@@ -4119,14 +4119,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(instructions).toEqual([]);
     });
 
-    it('should throw error for function instructions in deprecated getter', async () => {
-      const agent = new Agent({
-        name: 'test-agent',
-        instructions: () => 'Dynamic instructions',
-        model: dummyModel,
-      });
-    });
-
     it('should allow override instructions in generate options', async () => {
       const agent = new Agent({
         name: 'override-agent',
