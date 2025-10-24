@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { spanTypePrefixes, getSpanTypeUi } from './shared';
-import { AISpanRecord } from '@mastra/core';
+import type { AISpanRecord } from '@mastra/core';
 
 type TraceTimelineLegendProps = {
   spans?: AISpanRecord[];

@@ -1,5 +1,5 @@
 import { client } from '@/lib/client';
-import { AITracesPaginatedArg } from '@mastra/core';
+import type { AITracesPaginatedArg } from '@mastra/core';
 import { useInView, useInfiniteQuery } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 

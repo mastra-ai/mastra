@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { ArrowRightIcon, ArrowRightToLineIcon, CoinsIcon } from 'lucide-react';
-import { AISpanRecord } from '@mastra/core';
+import type { AISpanRecord } from '@mastra/core';
 
 // V5 format (AI SDK v5)
 type V5TokenUsage = {

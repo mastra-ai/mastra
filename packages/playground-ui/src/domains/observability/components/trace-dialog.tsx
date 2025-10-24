@@ -22,7 +22,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { TraceTimeline } from './trace-timeline';
 import { TraceSpanUsage } from './trace-span-usage';
 import { useLinkComponent } from '@/lib/framework';
-import { AISpanRecord } from '@mastra/core';
+import type { AISpanRecord } from '@mastra/core';
 import { getSpanInfo, useTraceInfo } from './helpers';
 import { SpanDialog } from './span-dialog';
 import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
