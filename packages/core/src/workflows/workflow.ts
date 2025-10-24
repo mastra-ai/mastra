@@ -1794,6 +1794,11 @@ export class Run<
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       closeOnSuspend?: boolean;
+      initialState?: z.input<TState>;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
     } = {},
   ): ReturnType<typeof this.streamVNext> {
     return this.streamVNext(args);
@@ -1882,6 +1887,7 @@ export class Run<
     tracingOptions,
     closeOnSuspend = true,
     initialState,
+    outputOptions,
   }: {
     inputData?: z.input<TInput>;
     runtimeContext?: RuntimeContext;
@@ -1889,6 +1895,10 @@ export class Run<
     tracingOptions?: TracingOptions;
     closeOnSuspend?: boolean;
     initialState?: z.input<TState>;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
   } = {}): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     if (this.closeStreamAction && this.#streamOutput) {
       return this.#streamOutput;
@@ -1929,6 +1939,7 @@ export class Run<
           tracingContext,
           tracingOptions,
           initialState,
+          outputOptions,
           writableStream: new WritableStream<WorkflowStreamEvent>({
             write(chunk) {
               controller.enqueue(chunk);
@@ -1978,6 +1989,7 @@ export class Run<
     runtimeContext,
     tracingContext,
     tracingOptions,
+    outputOptions,
   }: {
     resumeData?: z.input<TInput>;
     step?:
@@ -1988,6 +2000,10 @@ export class Run<
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
   } = {}) {
     return this.resumeStreamVNext({
       resumeData,
@@ -1995,6 +2011,7 @@ export class Run<
       runtimeContext,
       tracingContext,
       tracingOptions,
+      outputOptions,
     });
   }
 
@@ -2010,6 +2027,7 @@ export class Run<
     tracingContext,
     tracingOptions,
     forEachIndex,
+    outputOptions,
   }: {
     resumeData?: z.input<TInput>;
     step?:
@@ -2021,6 +2039,10 @@ export class Run<
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     forEachIndex?: number;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
   } = {}) {
     this.closeStreamAction = async () => {};
 
@@ -2063,6 +2085,7 @@ export class Run<
           }),
           isVNext: true,
           forEachIndex,
+          outputOptions,
         });
 
         self.executionResults = executionResultsPromise;
