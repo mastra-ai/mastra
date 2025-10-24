@@ -35,11 +35,8 @@ export function AgentHeader({ agentName, agentId }: { agentName: string; agentId
 
         <DividerIcon />
 
-        <Button as={Link} to={`/agents/${agentId}/traces`}>
+        <Button as={Link} to={`/observability?entity=${agentName}`}>
           Traces
-        </Button>
-        <Button as={Link} to={`/agents/${agentId}/evals`}>
-          Evals
         </Button>
       </HeaderGroup>
 
