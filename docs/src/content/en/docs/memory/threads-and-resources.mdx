@@ -37,9 +37,7 @@ Mastra can automatically generate descriptive thread titles based on the user's 
 export const testAgent = new Agent({
   memory: new Memory({
     options: {
-      threads: {
-        generateTitle: true,  // Explicitly enable automatic title generation
-      }
+      generateTitle: true,  // Explicitly enable automatic title generation
     },
   })
 });
