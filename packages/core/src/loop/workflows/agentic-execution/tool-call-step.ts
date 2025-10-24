@@ -147,7 +147,7 @@ export function createToolCallStep<
           messages: messageList.get.input.aiV5.model(),
           writableStream: writer,
           // Pass current step span as parent for tool call spans
-          tracingContext: { currentSpan: modelSpanTracker?.getCurrentStepSpan() },
+          tracingContext: modelSpanTracker?.getTracingContext(),
           suspend: async (suspendPayload: any) => {
             controller.enqueue({
               type: 'tool-call-suspended',

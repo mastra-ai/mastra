@@ -23,6 +23,7 @@ export const useExecuteTool = () => {
 
       try {
         const tool = client.getTool(toolId);
+
         const response = await tool.execute({ data: input, runtimeContext });
 
         return response;
