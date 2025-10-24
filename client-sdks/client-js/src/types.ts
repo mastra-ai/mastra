@@ -33,7 +33,7 @@ import type {
 } from '@mastra/core/storage';
 import type { OutputSchema } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
-import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
+import type { Workflow, WorkflowResult, WorkflowState } from '@mastra/core/workflows';
 
 import type { UIMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
@@ -181,7 +181,7 @@ export type GetWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowRun;
 
-export type GetWorkflowRunExecutionResultResponse = WatchEvent['payload']['workflowState'];
+export type GetWorkflowRunExecutionResultResponse = WorkflowState;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -211,8 +211,6 @@ export interface GetWorkflowResponse {
   inputSchema: string;
   outputSchema: string;
 }
-
-export type WorkflowWatchResult = WatchEvent & { runId: string };
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
 export interface UpsertVectorParams {
