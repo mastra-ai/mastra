@@ -1,5 +1,5 @@
 ---
-'@mastra/memory': minor
+'@mastra/memory': major
 ---
 
 Optimize default memory settings for semantic recall based on longmemeval data
