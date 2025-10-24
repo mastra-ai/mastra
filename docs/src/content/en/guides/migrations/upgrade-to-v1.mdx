@@ -125,6 +125,11 @@ export const accountBalance = createTool({
 })
 ```
 
+#### Input processors
+
+- Removed the `@mastra/core/agent/input-processors` exports. They can found at `@mastra/core/processors` now.
+- `InputProcessor` type removed in favour of `Processor` which implements a `processInput` function.
+
 ## Migrate to v0.22
 
 ### Deprecated: `format: "aisdk"`
