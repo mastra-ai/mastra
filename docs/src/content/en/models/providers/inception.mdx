@@ -48,7 +48,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
-    "model": "inception/mercury-coder",
+    "model": "inception/mercury",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -60,7 +60,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "inception/mercury",
+    "model": "inception/mercury-coder",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -83,7 +83,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.inceptionlabs.ai/v1/",
-    modelId: "mercury",
+    id: "inception/mercury",
     apiKey: process.env.INCEPTION_API_KEY,
     headers: {
       "X-Custom-Header": "value"

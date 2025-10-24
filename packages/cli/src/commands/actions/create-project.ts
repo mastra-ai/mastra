@@ -2,13 +2,13 @@ import { analytics } from '../..';
 import type { CLI_ORIGIN } from '../../analytics';
 import { create } from '../create/create';
 import type { Editor } from '../init/mcp-docs-server-install';
-import type { Components, LLMProvider } from '../init/utils';
+import type { Component, LLMProvider } from '../init/utils';
 
 const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
 
 interface CreateProjectArgs {
   default?: boolean;
-  components?: Components[];
+  components?: Component[];
   llm?: LLMProvider;
   llmApiKey?: string;
   example?: boolean;

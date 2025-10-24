@@ -48,16 +48,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
-    "model": "venice/qwen3-4b",
+    "model": "venice/deepseek-coder-v2-lite",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 32768,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
     "maxOutput": 8192,
-    "inputCost": 0.15,
-    "outputCost": 0.6
+    "inputCost": 0.5,
+    "outputCost": 2
+  },
+  {
+    "model": "venice/deepseek-r1-671b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 3.5,
+    "outputCost": 14
   },
   {
     "model": "venice/dolphin-2.9.2-qwen2-72b",
@@ -72,13 +84,37 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.8
   },
   {
-    "model": "venice/qwen-2.5-vl",
-    "imageInput": true,
+    "model": "venice/llama-3.1-405b",
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 32768,
+    "contextWindow": 65536,
+    "maxOutput": 8192,
+    "inputCost": 1.5,
+    "outputCost": 6
+  },
+  {
+    "model": "venice/llama-3.2-3b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "venice/llama-3.3-70b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 65536,
     "maxOutput": 8192,
     "inputCost": 0.7,
     "outputCost": 2.8
@@ -108,30 +144,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "venice/llama-3.2-3b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.15,
-    "outputCost": 0.6
-  },
-  {
-    "model": "venice/llama-3.1-405b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 65536,
-    "maxOutput": 8192,
-    "inputCost": 1.5,
-    "outputCost": 6
-  },
-  {
     "model": "venice/qwen-2.5-qwq-32b",
     "imageInput": false,
     "audioInput": false,
@@ -144,40 +156,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "venice/venice-uncensored",
-    "imageInput": false,
+    "model": "venice/qwen-2.5-vl",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 8192,
-    "inputCost": 0.5,
-    "outputCost": 2
-  },
-  {
-    "model": "venice/llama-3.3-70b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 65536,
-    "maxOutput": 8192,
     "inputCost": 0.7,
     "outputCost": 2.8
-  },
-  {
-    "model": "venice/deepseek-r1-671b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 3.5,
-    "outputCost": 14
   },
   {
     "model": "venice/qwen3-235b",
@@ -192,13 +180,25 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 6
   },
   {
-    "model": "venice/deepseek-coder-v2-lite",
+    "model": "venice/qwen3-4b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 8192,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "venice/venice-uncensored",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 131072,
+    "contextWindow": 32768,
     "maxOutput": 8192,
     "inputCost": 0.5,
     "outputCost": 2
@@ -215,7 +215,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.venice.ai/api/v1",
-    modelId: "deepseek-coder-v2-lite",
+    id: "venice/deepseek-coder-v2-lite",
     apiKey: process.env.VENICE_API_KEY,
     headers: {
       "X-Custom-Header": "value"

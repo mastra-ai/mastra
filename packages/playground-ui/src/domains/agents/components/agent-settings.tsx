@@ -15,6 +15,7 @@ import { Txt } from '@/ds/components/Txt/Txt';
 import { AgentAdvancedSettings } from './agent-advanced-settings';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import clsx from 'clsx';
+import { Checkbox } from '@/components/ui/checkbox';
 
 export interface AgentSettingsProps {
   modelVersion: string;
@@ -128,6 +129,17 @@ export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = 
             )}
             {modelVersion === 'v2' && <NetworkCheckbox hasMemory={hasMemory} hasSubAgents={hasSubAgents} />}
           </RadioGroup>
+        </Entry>
+        <Entry label="Require Tool Approval">
+          <Checkbox
+            checked={settings?.modelSettings?.requireToolApproval}
+            onCheckedChange={value =>
+              setSettings({
+                ...settings,
+                modelSettings: { ...settings?.modelSettings, requireToolApproval: value as boolean },
+              })
+            }
+          />
         </Entry>
 
         <div className="grid grid-cols-2 gap-8">

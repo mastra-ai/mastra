@@ -1,0 +1,166 @@
+---
+title: 'Answer Relevancy '
+description: Example of using the Answer Relevancy metric to evaluate response relevancy to queries.
+---
+
+# Answer Relevancy Evaluation
+
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
+
+Use `AnswerRelevancyMetric` to evaluate how relevant the response is to the original query. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
+
+## Installation
+
+```bash copy
+npm install @mastra/evals
+```
+
+## High relevancy example
+
+In this example, the response accurately addresses the input query with specific and relevant information.
+
+```typescript filename="src/example-high-answer-relevancy.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { AnswerRelevancyMetric } from '@mastra/evals/llm';
+
+const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'));
+
+const query = 'What are the health benefits of regular exercise?';
+const response =
+  'Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.';
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### High relevancy output
+
+The output receives a high score because it accurately answers the query without including unrelated information.
+
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'The score is 1 because the output directly addresses the question by providing multiple explicit health benefits of regular exercise, including improvements in cardiovascular health, muscle strength, metabolism, and mental well-being. Each point is relevant and contributes to a comprehensive understanding of the health benefits.'
+  }
+}
+```
+
+## Partial relevancy example
+
+In this example, the response addresses the query in part but includes additional information that isn’t directly relevant.
+
+```typescript filename="src/example-partial-answer-relevancy.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { AnswerRelevancyMetric } from '@mastra/evals/llm';
+
+const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'));
+
+const query = 'What should a healthy breakfast include?';
+const response =
+  'A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.';
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Partial relevancy output
+
+The output receives a lower score because it partially answers the query. While some relevant information is included, unrelated details reduce the overall relevance.
+
+```typescript
+{
+  score: 0.25,
+  info: {
+    reason: 'The score is 0.25 because the output provides a direct answer by mentioning whole grains and protein as components of a healthy breakfast, which is relevant. However, the additional information about the timing of breakfast and its effects on metabolism and energy levels is not directly related to the question, leading to a lower overall relevance score.'
+  }
+}
+```
+
+## Low relevancy example
+
+In this example, the response does not address the query and contains information that is entirely unrelated.
+
+```typescript filename="src/example-low-answer-relevancy.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { AnswerRelevancyMetric } from '@mastra/evals/llm';
+
+const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'));
+
+const query = 'What are the benefits of meditation?';
+const response =
+  'The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.';
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Low relevancy output
+
+The output receives a score of 0 because it fails to answer the query or provide any relevant information.
+
+```typescript
+{
+  score: 0,
+  info: {
+    reason: 'The score is 0 because the output about the Great Wall of China is completely unrelated to the benefits of meditation, providing no relevant information or context that addresses the input question.'
+  }
+}
+```
+
+## Metric configuration
+
+You can customize how the `AnswerRelevancyMetric` calculates scores by adjusting optional parameters. For example, `uncertaintyWeight` controls how much weight to give to uncertain responses, and `scale` sets the maximum possible score.
+
+```typescript showLineNumbers copy
+const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'), {
+  uncertaintyWeight: 0.3,
+  scale: 1,
+});
+```
+
+> See [AnswerRelevancyMetric](/docs/reference/evals/answer-relevancy) for a full list of configuration options.
+
+## Understanding the results
+
+`AnswerRelevancyMetric` returns a result in the following shape:
+
+```typescript
+{
+  score: number,
+  info: {
+    reason: string
+  }
+}
+```
+
+### Relevancy score
+
+A relevancy score between 0 and 1:
+
+- **1.0**: The response fully answers the query with relevant and focused information.
+- **0.7–0.9**: The response mostly answers the query but may include minor unrelated content.
+- **0.4–0.6**: The response partially answers the query, mixing relevant and unrelated information.
+- **0.1–0.3**: The response includes minimal relevant content and largely misses the intent of the query.
+- **0.0**: The response is entirely unrelated and does not answer the query.
+
+### Relevancy info
+
+An explanation for the score, with details including:
+
+- Alignment between the query and response.
+- Focus and relevance of the content.
+- Suggestions for improving the response.
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/answer-relevancy"
+/>

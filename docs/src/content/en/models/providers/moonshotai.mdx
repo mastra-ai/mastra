@@ -48,16 +48,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
-    "model": "moonshotai/kimi-k2-turbo-preview",
+    "model": "moonshotai/kimi-k2-0711-preview",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 2.4,
-    "outputCost": 10
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 0.6,
+    "outputCost": 2.5
   },
   {
     "model": "moonshotai/kimi-k2-0905-preview",
@@ -72,16 +72,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.5
   },
   {
-    "model": "moonshotai/kimi-k2-0711-preview",
+    "model": "moonshotai/kimi-k2-turbo-preview",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 16384,
-    "inputCost": 0.6,
-    "outputCost": 2.5
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 2.4,
+    "outputCost": 10
   }
 ]}
 />
@@ -95,7 +95,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.moonshot.ai/v1",
-    modelId: "kimi-k2-0711-preview",
+    id: "moonshotai/kimi-k2-0711-preview",
     apiKey: process.env.MOONSHOT_API_KEY,
     headers: {
       "X-Custom-Header": "value"

@@ -1,4 +1,4 @@
-export const textStreamFixture = [
+const textDeltaStream = [
   { type: 'stream-start', warnings: [] },
   {
     type: 'response-metadata',
@@ -160,3 +160,7 @@ export const textStreamFixture = [
     },
   },
 ];
+
+const generateTitleStream = [...textDeltaStream];
+
+export const textStreamFixture = [textDeltaStream, generateTitleStream];

@@ -1,0 +1,59 @@
+---
+title: "Upgrade to Mastra v1 | Migration Guide"
+description: "Learn how to upgrade through breaking changes in pre-v1 versions of Mastra."
+---
+
+import { Callout } from "nextra/components";
+
+# Upgrade to Mastra v1
+
+In this guide you'll learn how to upgrade through breaking changes in pre-v1 versions of Mastra. It'll also help you upgrade to Mastra v1.
+
+Use your package manager to update your project's versions. Be sure to update **all** Mastra packages at the same time.
+
+<Callout type="info">
+
+Versions mentioned in the headings refer to the `@mastra/core` package. If necessary, versions of other Mastra packages are called out in the detailed description.
+
+All Mastra packages have a peer dependency on `@mastra/core` so your package manager can inform you about compatibility.
+
+</Callout>
+
+## Migrate to v0.23 (unreleased)
+
+<Callout>
+
+This version isn't released yet but we're adding changes as we make them.
+
+</Callout>
+
+## Migrate to v0.22
+
+### Deprecated: `format: "aisdk"`
+
+The `format: "aisdk"` option in `stream()`/`generate()` methods is deprecated. Use the `@mastra/ai-sdk` package instead. Learn more in the [Using Vercel AI SDK documentation](../../docs/frameworks/agentic-uis/ai-sdk.mdx).
+
+### Removed: MCP Classes
+
+`@mastra/mcp` - `0.14.0`
+
+- Removed `MastraMCPClient` class. Use [`MCPClient`](../../reference/tools/mcp-client.mdx) class instead.
+- Removed `MCPConfigurationOptions` type. Use [`MCPClientOptions`](../../reference/tools/mcp-client.mdx#mcpclientoptions) type instead. The API is identical.
+- Removed `MCPConfiguration` class. Use [`MCPClient`](../../reference/tools/mcp-client.mdx) class instead.
+
+### Removed: CLI flags & commands
+
+`mastra` - `0.17.0`
+
+- Removed the `mastra deploy` CLI command. Use the deploy instructions of your individual platform.
+- Removed `--env` flag from `mastra build` command. To start the build output with a custom env use `mastra start --env <env>` instead.
+- Remove `--port` flag from `mastra dev`. Use `server.port` on the `new Mastra()` class instead.
+
+## Migrate to v0.21
+
+No changes needed.
+
+## Migrate to v0.20
+
+- [VNext to Standard APIs](./vnext-to-standard-apis.mdx)
+- [AgentNetwork to .network()](./agentnetwork.mdx)

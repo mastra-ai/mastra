@@ -48,18 +48,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
-    "model": "scaleway/mistral-nemo-instruct-2407",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.2,
-    "outputCost": 0.2
-  },
-  {
     "model": "scaleway/deepseek-r1-distill-llama-70b",
     "imageInput": false,
     "audioInput": false,
@@ -70,6 +58,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 4096,
     "inputCost": 0.9,
     "outputCost": 0.9
+  },
+  {
+    "model": "scaleway/gemma-3-27b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 40000,
+    "maxOutput": 8192,
+    "inputCost": 0.25,
+    "outputCost": 0.5
+  },
+  {
+    "model": "scaleway/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "scaleway/llama-3.1-8b-instruct",
@@ -96,7 +108,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.9
   },
   {
-    "model": "scaleway/qwen3-coder-30b-a3b-instruct",
+    "model": "scaleway/mistral-nemo-instruct-2407",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -105,31 +117,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 128000,
     "maxOutput": 8192,
     "inputCost": 0.2,
-    "outputCost": 0.8
-  },
-  {
-    "model": "scaleway/voxtral-small-24b-2507",
-    "imageInput": false,
-    "audioInput": true,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 32000,
-    "maxOutput": 8192,
-    "inputCost": 0.15,
-    "outputCost": 0.35
-  },
-  {
-    "model": "scaleway/qwen3-235b-a22b-instruct-2507",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 40000,
-    "maxOutput": 4096,
-    "inputCost": 0.75,
-    "outputCost": 2.25
+    "outputCost": 0.2
   },
   {
     "model": "scaleway/mistral-small-3.2-24b-instruct-2506",
@@ -156,19 +144,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.2
   },
   {
-    "model": "scaleway/gemma-3-27b-it",
-    "imageInput": true,
+    "model": "scaleway/qwen3-235b-a22b-instruct-2507",
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 40000,
-    "maxOutput": 8192,
-    "inputCost": 0.25,
-    "outputCost": 0.5
+    "maxOutput": 4096,
+    "inputCost": 0.75,
+    "outputCost": 2.25
   },
   {
-    "model": "scaleway/gpt-oss-120b",
+    "model": "scaleway/qwen3-coder-30b-a3b-instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -176,8 +164,20 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 8192,
+    "inputCost": 0.2,
+    "outputCost": 0.8
+  },
+  {
+    "model": "scaleway/voxtral-small-24b-2507",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 8192,
     "inputCost": 0.15,
-    "outputCost": 0.6
+    "outputCost": 0.35
   }
 ]}
 />
@@ -191,7 +191,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.scaleway.ai/v1",
-    modelId: "deepseek-r1-distill-llama-70b",
+    id: "scaleway/deepseek-r1-distill-llama-70b",
     apiKey: process.env.SCALEWAY_API_KEY,
     headers: {
       "X-Custom-Header": "value"

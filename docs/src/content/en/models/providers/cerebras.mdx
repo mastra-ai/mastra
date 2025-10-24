@@ -48,6 +48,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
+    "model": "cerebras/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.25,
+    "outputCost": 0.69
+  },
+  {
     "model": "cerebras/qwen-3-235b-a22b-instruct-2507",
     "imageInput": false,
     "audioInput": false,
@@ -70,18 +82,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32000,
     "inputCost": 2,
     "outputCost": 2
-  },
-  {
-    "model": "cerebras/gpt-oss-120b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.25,
-    "outputCost": 0.69
   }
 ]}
 />
@@ -95,7 +95,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.cerebras.ai/v1",
-    modelId: "gpt-oss-120b",
+    id: "cerebras/gpt-oss-120b",
     apiKey: process.env.CEREBRAS_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -124,25 +124,8 @@ const agent = new Agent({
 
 This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/cerebras) for more details.
 
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
-  <Tab>
-    ```bash copy
-    npm install @ai-sdk/cerebras
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    yarn add @ai-sdk/cerebras
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    pnpm add @ai-sdk/cerebras
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    bun add @ai-sdk/cerebras
-    ```
-  </Tab>
-</Tabs>
+```bash npm2yarn copy
+npm install @ai-sdk/cerebras
+```
+
+For detailed provider-specific documentation, see the [AI SDK Cerebras provider docs](https://ai-sdk.dev/providers/ai-sdk-providers/cerebras).
