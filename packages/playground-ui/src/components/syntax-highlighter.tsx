@@ -14,7 +14,7 @@ export const useCodemirrorTheme = () => {
           fontSize: '0.8rem',
           lineHighlight: 'transparent',
           gutterBackground: 'transparent',
-          gutterForeground: IconColors.icon3,
+          gutterForeground: '#939393',
           background: 'transparent',
         },
         styles: [{ tag: [t.className, t.propertyName] }],
