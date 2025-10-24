@@ -1,4 +1,5 @@
 import { WritableStream } from 'stream/web';
+import type { ChunkFrom } from '../stream/types';
 
 export class ToolStream<T> extends WritableStream<T> {
   constructor(
@@ -7,11 +8,13 @@ export class ToolStream<T> extends WritableStream<T> {
       callId,
       name,
       runId,
+      from,
     }: {
       prefix: string;
       callId: string;
       name: string;
       runId: string;
+      from: ChunkFrom;
     },
     originalStream?: WritableStream,
   ) {
@@ -23,7 +26,7 @@ export class ToolStream<T> extends WritableStream<T> {
           await writer?.write({
             type: `${prefix}-output`,
             runId,
-            from: 'USER',
+            from,
             payload: {
               output: chunk,
               ...(prefix === 'workflow-step'
