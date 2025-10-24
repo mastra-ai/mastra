@@ -87,6 +87,9 @@ export async function downloadAssetsFromMessages({
   const downloadedFiles = await pMap(
     filesToDownload,
     async fileItem => {
+      if (!fileItem.isUrlSupportedByModel) {
+        return null;
+      }
       return downloadFromUrl({ url: fileItem.url, downloadRetries });
     },
     {
