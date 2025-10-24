@@ -13,5 +13,23 @@ packages:
   - explorations/longmemeval
   - explorations/agent-builder-gh-repro
 
+ignoredBuiltDependencies:
+  - '@clerk/shared'
+  - '@firebase/util'
+  - bufferutil
+  - core-js
+  - couchbase
+  - duckdb
+  - esbuild
+  - inngest-cli
+  - msw
+  - onnxruntime-node
+  - protobufjs
+  - sharp
+  - sqlite3
+  - unrs-resolver
+  - utf-8-validate
+  - workerd
+
 patchedDependencies:
   '@changesets/get-dependents-graph': patches/@changesets__get-dependents-graph.patch
