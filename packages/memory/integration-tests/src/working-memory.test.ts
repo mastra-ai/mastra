@@ -195,7 +195,6 @@ describe('Working Memory Tests', () => {
             messageRange: 2,
           },
           generateTitle: false,
-          },
         },
       });
 
