@@ -45,13 +45,14 @@ const agent = new Agent({
 
 ## Recall configuration
 
-The three main parameters that control semantic recall behavior are:
+The main parameters that control semantic recall behavior are:
 
 1. **topK**: How many semantically similar messages to retrieve
 2. **messageRange**: How much surrounding context to include with each match
 3. **scope**: Whether to search within the current thread or across all threads owned by a resource. Using `scope: 'resource'` allows the agent to recall information from any of the user's past conversations.
+4. **filter**: Optional metadata filtering to restrict search results to specific criteria (e.g., projectId, category, etc.)
 
-```typescript {5-7}
+```typescript {5-8}
 const agent = new Agent({
   memory: new Memory({
     options: {
@@ -59,6 +60,7 @@ const agent = new Agent({
         topK: 3, // Retrieve 3 most similar messages
         messageRange: 2, // Include 2 messages before and after each match
         scope: 'resource', // Search across all threads for this user
+        filter: { projectId: { $eq: 'project-a' } }, // Optional: filter by metadata
       },
     },
   }),
@@ -66,6 +68,55 @@ const agent = new Agent({
 ```
 
 Note: currently, `scope: 'resource'` for semantic recall is supported by the following storage adapters: LibSQL, Postgres, and Upstash.
+
+### Metadata Filtering
+
+The `filter` parameter allows you to restrict semantic recall results to specific metadata criteria, enabling ChatGPT-style "Projects" functionality. This is particularly useful when you want to organize conversations by project, category, or any other metadata field.
+
+```typescript {5-10}
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      semanticRecall: {
+        scope: 'resource',
+        filter: {
+          projectId: { $eq: 'project-a' },
+          category: { $in: ['work', 'personal'] }
+        }
+      },
+    },
+  }),
+});
+```
+
+**Supported filter operators:**
+- `$eq`: Equal to
+- `$ne`: Not equal to  
+- `$in`: In array
+- `$nin`: Not in array
+- `$gt`: Greater than
+- `$gte`: Greater than or equal
+- `$lt`: Less than
+- `$lte`: Less than or equal
+- `$and`: Logical AND
+- `$or`: Logical OR
+
+**Example use cases:**
+```typescript
+// Filter by project
+filter: { projectId: { $eq: 'my-project' } }
+
+// Filter by multiple categories
+filter: { category: { $in: ['work', 'research'] } }
+
+// Complex filtering
+filter: {
+  $and: [
+    { projectId: { $eq: 'project-a' } },
+    { priority: { $gte: 3 } }
+  ]
+}
+```
 
 ### Storage configuration
 
