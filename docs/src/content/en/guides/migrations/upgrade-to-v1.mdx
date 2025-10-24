@@ -27,6 +27,105 @@ This version isn't released yet but we're adding changes as we make them.
 
 </Callout>
 
+### Removed: Deprecated APIs
+
+#### Agent Execution Methods
+
+- Removed `generateVNext()` method. Use `generate()` instead.
+- Removed `streamVNext()` method. Use `stream()` instead.
+
+#### Agent Default Options Methods
+
+Methods have been renamed to clarify which are for legacy vs current APIs:
+
+- `getDefaultGenerateOptions()` → `getDefaultGenerateOptionsLegacy()`
+- `getDefaultStreamOptions()` → `getDefaultStreamOptionsLegacy()`
+- `getDefaultVNextStreamOptions()` → `getDefaultStreamOptions()`
+
+#### Output Options
+
+- Removed deprecated `output` field from `generate()`/`stream()` options. Use `structuredOutput.schema` instead:
+
+```typescript
+// Before
+const result = await agent.generate(messages, {
+  output: z.object({
+    answer: z.string()
+  })
+});
+
+// After
+const result = await agent.generate(messages, {
+  structuredOutput: {
+    schema: z.object({
+      answer: z.string()
+    })
+  }
+});
+```
+
+#### Abort Signal
+
+- Removed `modelSettings.abortSignal`. Use the top-level `abortSignal` option instead:
+
+```typescript
+// Before
+const result = await agent.stream(messages, {
+  modelSettings: {
+    abortSignal: controller.signal,
+    temperature: 0.7
+  }
+});
+
+// After
+const result = await agent.stream(messages, {
+  abortSignal: controller.signal,
+  modelSettings: {
+    temperature: 0.7
+  }
+});
+```
+
+#### MCP tools
+
+- Removed `elicitation` and `extra` from top level arguments. Use the `mcp` property instead.
+
+```
+export const accountBalance = createTool({
+  id: 'account-balance',
+  description: 'Fetches the current account balance for a given account',
+  inputSchema: z.object({
+    accountId: z.string(),
+  }),
+  outputSchema: z.object({
+    balance: z.number(),
+  }),
+  execute: async ({ context, mcp }) => {    
+    if (mcp) {
+      await checkAuth(mcp.extra.authInfo)
+      
+      const result = await mcp.elicitation.sendRequest({
+        message: `Is it ok to fetch the account balance for account ${context.accountId}?`,
+        requestedSchema: {
+          type: 'object',
+          properties: {
+            confirm: { type: 'boolean' },
+          },
+          required: ['confirm'],
+        }
+      });
+
+      if (result.action === 'accept') {
+        return {
+          balance: getAccountBalance(context.accountId),
+        };
+      }
+    }
+  }
+})
+
+```
+
 ## Migrate to v0.22
 
 ### Deprecated: `format: "aisdk"`
