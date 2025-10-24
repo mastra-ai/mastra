@@ -1,5 +1,23 @@
 # @mastra/deployer
 
+## 0.23.0-alpha.0
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (0.22.1) ([#8649](https://github.com/mastra-ai/mastra/pull/8649))
+
+- Update peer dependencies to match core package version bump (0.22.3) ([#9192](https://github.com/mastra-ai/mastra/pull/9192))
+
+### Patch Changes
+
+- Add tool call approval ([#8649](https://github.com/mastra-ai/mastra/pull/8649))
+
+- Fix error handling and serialization in agent streaming to ensure errors are consistently exposed and preserved. ([#9192](https://github.com/mastra-ai/mastra/pull/9192))
+
+- Updated dependencies [[`f743dbb`](https://github.com/mastra-ai/mastra/commit/f743dbb8b40d1627b5c10c0e6fc154f4ebb6e394), [`5df9cce`](https://github.com/mastra-ai/mastra/commit/5df9cce1a753438413f64c11eeef8f845745c2a8), [`5df9cce`](https://github.com/mastra-ai/mastra/commit/5df9cce1a753438413f64c11eeef8f845745c2a8), [`2060766`](https://github.com/mastra-ai/mastra/commit/20607667bf78ea104cca3e15dfb93ae0b62c9d18), [`2c4438b`](https://github.com/mastra-ai/mastra/commit/2c4438b87817ab7eed818c7990fef010475af1a3)]:
+  - @mastra/core@0.23.0-alpha.0
+  - @mastra/server@0.23.0-alpha.0
+
 ## 0.22.2
 
 ### Patch Changes

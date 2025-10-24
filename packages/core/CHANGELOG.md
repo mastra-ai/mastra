@@ -1,5 +1,35 @@
 # @mastra/core
 
+## 0.23.0-alpha.0
+
+### Minor Changes
+
+- Rename LLM span types and attributes to use Model prefix ([#9105](https://github.com/mastra-ai/mastra/pull/9105))
+
+  BREAKING CHANGE: This release renames AI tracing span types and attribute interfaces to use the "Model" prefix instead of "LLM":
+  - `AISpanType.LLM_GENERATION` → `AISpanType.MODEL_GENERATION`
+  - `AISpanType.LLM_STEP` → `AISpanType.MODEL_STEP`
+  - `AISpanType.LLM_CHUNK` → `AISpanType.MODEL_CHUNK`
+  - `LLMGenerationAttributes` → `ModelGenerationAttributes`
+  - `LLMStepAttributes` → `ModelStepAttributes`
+  - `LLMChunkAttributes` → `ModelChunkAttributes`
+  - `InternalSpans.LLM` → `InternalSpans.MODEL`
+
+  This change better reflects that these span types apply to all AI models, not just Large Language Models.
+
+  Migration guide:
+  - Update all imports: `import { ModelGenerationAttributes } from '@mastra/core/ai-tracing'`
+  - Update span type references: `AISpanType.MODEL_GENERATION`
+  - Update InternalSpans usage: `InternalSpans.MODEL`
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`f743dbb`](https://github.com/mastra-ai/mastra/commit/f743dbb8b40d1627b5c10c0e6fc154f4ebb6e394))
+
+- Add tool call approval ([#8649](https://github.com/mastra-ai/mastra/pull/8649))
+
+- Fix error handling and serialization in agent streaming to ensure errors are consistently exposed and preserved. ([#9192](https://github.com/mastra-ai/mastra/pull/9192))
+
 ## 0.22.2
 
 ### Patch Changes

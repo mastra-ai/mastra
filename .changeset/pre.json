@@ -81,5 +81,15 @@
     "@mastra/voice-speechify": "0.11.10",
     "@mastra/inngest": "0.17.0"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_lance-8693-dependencies",
+    "automated-provider-registry-20251022-181340",
+    "fair-donuts-occur",
+    "honest-pianos-roll",
+    "hungry-hands-win",
+    "proud-bananas-smoke",
+    "quiet-ducks-speak",
+    "strong-dogs-press",
+    "update-llm-span-types-to-model"
+  ]
 }
