@@ -16,7 +16,7 @@ It includes everything you need to go from early prototypes to production-ready 
 
 Purpose-built for TypeScript and designed around established AI patterns, Mastra gives you everything you need to build great AI applications out-of-the-box.
 
-Some highlights include:
+Some highlights:
 
 - [**Model routing**](https://mastra.ai/models) - Connect to 40+ providers through one standard interface. Use models from OpenAI, Anthropic, Gemini, and more.
 
