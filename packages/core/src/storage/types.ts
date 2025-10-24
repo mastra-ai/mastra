@@ -13,6 +13,7 @@ export interface StorageColumn {
   type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'float' | 'bigint' | 'boolean';
   primaryKey?: boolean;
   nullable?: boolean;
+  unique?: boolean;
   references?: {
     table: string;
     column: string;

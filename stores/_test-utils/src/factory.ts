@@ -17,6 +17,7 @@ import { createTraceTests } from './domains/traces';
 import { createEvalsTests } from './domains/evals';
 import { createOperationsTests } from './domains/operations';
 import { createObservabilityTests } from './domains/observability';
+import { createDatasetsTests } from './domains/datasets';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/evals/data';
@@ -62,6 +63,10 @@ export function createTestSuite(storage: MastraStorage) {
 
     if (storage.supports.aiTracing) {
       createObservabilityTests({ storage });
+    }
+
+    if (storage.supports.datasets) {
+      createDatasetsTests({ storage });
     }
   });
 }

@@ -7,8 +7,18 @@ import { Workflow } from '../../workflows';
 import type { WorkflowResult, StepResult } from '../../workflows';
 import type { MastraScorer } from '../base';
 import { ScoreAccumulator } from './scorerAccumulator';
+import type { Dataset } from '../../datasets/dataset';
+import type { DatasetRow, MastraStorage } from '../../storage';
+import crypto from 'crypto';
 
-type RunExperimentDataItem<TTarget = unknown> = {
+export { Dataset } from '../../datasets/dataset';
+
+export type ExperimentTrackingConfig = {
+  experimentId: string;
+  storage: MastraStorage;
+};
+
+export type RunExperimentDataItem<TTarget = unknown> = {
   input: TTarget extends Workflow<any, any>
     ? any
     : TTarget extends Agent
@@ -17,6 +27,7 @@ type RunExperimentDataItem<TTarget = unknown> = {
   groundTruth?: any;
   runtimeContext?: RuntimeContext;
   tracingContext?: TracingContext;
+  datasetRowId?: string; // ID of the dataset row (if from Dataset)
 };
 
 type WorkflowScorerConfig = {
@@ -31,10 +42,12 @@ type RunExperimentResult = {
   };
 };
 
+type RunExperimentDataSource<TTarget = unknown> = RunExperimentDataItem<TTarget>[] | Dataset;
+
 // Agent with scorers array
 export function runExperiment<TAgent extends Agent>(config: {
-  data: RunExperimentDataItem<TAgent>[];
-  scorers: MastraScorer<any, any, any, any>[];
+  data: RunExperimentDataSource<TAgent>;
+  scorers?: MastraScorer<any, any, any, any>[];
   target: TAgent;
   onItemComplete?: (params: {
     item: RunExperimentDataItem<TAgent>;
@@ -42,12 +55,13 @@ export function runExperiment<TAgent extends Agent>(config: {
     scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
   }) => void | Promise<void>;
   concurrency?: number;
+  experimentTracking?: ExperimentTrackingConfig;
 }): Promise<RunExperimentResult>;
 
 // Workflow with scorers array
 export function runExperiment<TWorkflow extends Workflow>(config: {
-  data: RunExperimentDataItem<TWorkflow>[];
-  scorers: MastraScorer<any, any, any, any>[];
+  data: RunExperimentDataSource<TWorkflow>;
+  scorers?: MastraScorer<any, any, any, any>[];
   target: TWorkflow;
   onItemComplete?: (params: {
     item: RunExperimentDataItem<TWorkflow>;
@@ -55,12 +69,13 @@ export function runExperiment<TWorkflow extends Workflow>(config: {
     scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
   }) => void | Promise<void>;
   concurrency?: number;
+  experimentTracking?: ExperimentTrackingConfig;
 }): Promise<RunExperimentResult>;
 
 // Workflow with workflow configuration
 export function runExperiment<TWorkflow extends Workflow>(config: {
-  data: RunExperimentDataItem<TWorkflow>[];
-  scorers: WorkflowScorerConfig;
+  data: RunExperimentDataSource<TWorkflow>;
+  scorers?: WorkflowScorerConfig;
   target: TWorkflow;
   onItemComplete?: (params: {
     item: RunExperimentDataItem<TWorkflow>;
@@ -71,10 +86,11 @@ export function runExperiment<TWorkflow extends Workflow>(config: {
     };
   }) => void | Promise<void>;
   concurrency?: number;
+  experimentTracking?: ExperimentTrackingConfig;
 }): Promise<RunExperimentResult>;
 export async function runExperiment(config: {
-  data: RunExperimentDataItem<any>[];
-  scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig;
+  data: RunExperimentDataSource<any>;
+  scorers?: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig;
   target: Agent | Workflow;
   onItemComplete?: (params: {
     item: RunExperimentDataItem<any>;
@@ -82,21 +98,87 @@ export async function runExperiment(config: {
     scorerResults: any;
   }) => void | Promise<void>;
   concurrency?: number;
+  experimentTracking?: ExperimentTrackingConfig;
 }): Promise<RunExperimentResult> {
-  const { data, scorers, target, onItemComplete, concurrency = 1 } = config;
+  const { data: dataSource, scorers, target, onItemComplete, concurrency = 1, experimentTracking } = config;
 
-  validateExperimentInputs(data, scorers, target);
+  // Convert data source to async iterable (works for both arrays and Dataset)
+  const dataIterable = createDataIterable(dataSource);
+
+  // Validate scorers (if provided)
+  if (scorers) {
+    validateScorers(scorers, target);
+  }
 
   let totalItems = 0;
   const scoreAccumulator = new ScoreAccumulator();
 
   const pMap = (await import('p-map')).default;
+
+  const storage = experimentTracking?.storage;
+  let datasetId: string | undefined;
+  let datasetVersionId: string | undefined;
+  let experimentId: string | undefined;
+  if (storage && experimentTracking?.experimentId) {
+    const experiment = await storage?.getExperiment({ id: experimentTracking?.experimentId });
+    if (experiment) {
+      datasetId = experiment.datasetId;
+      datasetVersionId = experiment.datasetVersionId;
+      experimentId = experiment.id;
+    }
+  }
+
+  // Get entity info for saving scores
+  const entityId = target.id;
+  const entityType = isWorkflow(target) ? 'WORKFLOW' : 'AGENT';
+
   await pMap(
-    data,
+    dataIterable,
     async (item: RunExperimentDataItem<any>) => {
-      const targetResult = await executeTarget(target, item);
-      const scorerResults = await runScorers(scorers, targetResult, item);
-      scoreAccumulator.addScores(scorerResults);
+      let targetResult: any;
+      let scorerResults: any = {};
+      let error: any;
+      let status: 'success' | 'error' = 'success';
+
+      // Generate a consistent runId for this experiment item
+      const runId = crypto.randomUUID();
+
+      try {
+        targetResult = await executeTarget(target, item, {
+          datasetId,
+          experimentId,
+          datasetRowId: item.datasetRowId,
+          datasetVersionId,
+        });
+
+        scorerResults = scorers
+          ? await runScorers(scorers, targetResult, item, {
+              runId,
+              storage,
+              experimentContext: {
+                experimentId,
+                entityId,
+                entityType,
+              },
+            })
+          : {};
+        console.log(`scorerResults`, JSON.stringify(scorerResults, null, 2));
+        scoreAccumulator.addScores(scorerResults);
+      } catch (err) {
+        error = err;
+        status = 'error';
+      }
+
+      // Save experiment row result if tracking is enabled
+      if (experimentTracking && item.datasetRowId) {
+        await saveExperimentRowResult({
+          experimentTracking,
+          item,
+          targetResult,
+          status,
+          error,
+        });
+      }
 
       if (onItemComplete) {
         await onItemComplete({
@@ -127,32 +209,97 @@ function isWorkflowScorerConfig(scorers: any): scorers is WorkflowScorerConfig {
   return typeof scorers === 'object' && !Array.isArray(scorers) && ('workflow' in scorers || 'steps' in scorers);
 }
 
-function validateExperimentInputs(
-  data: RunExperimentDataItem<any>[],
+function isDataset(data: any): data is Dataset {
+  return typeof data === 'object' && data !== null && 'rows' in data && typeof data.rows === 'function';
+}
+
+/**
+ * Creates an async iterable from either an array or Dataset
+ * This allows streaming processing without loading everything into memory
+ */
+async function* createDataIterable(
+  dataSource: RunExperimentDataSource<any>,
+): AsyncIterableIterator<RunExperimentDataItem<any>> {
+  if (Array.isArray(dataSource)) {
+    // For arrays, yield each item directly
+    for (const item of dataSource) {
+      yield item;
+    }
+  } else if (isDataset(dataSource)) {
+    // For Dataset, stream rows and transform them
+    for await (const row of dataSource.rows()) {
+      console.log('Row', row);
+      yield datasetRowToExperimentItem(row);
+    }
+  } else {
+    throw new MastraError({
+      domain: 'SCORER',
+      id: 'INVALID_DATA_SOURCE',
+      category: 'USER',
+      text: 'Data source must be either an array of items or a Dataset instance',
+    });
+  }
+}
+
+function datasetRowToExperimentItem(row: DatasetRow): RunExperimentDataItem<any> {
+  return {
+    input: row.input,
+    groundTruth: row.groundTruth,
+    runtimeContext: row.runtimeContext,
+    datasetRowId: row.rowId, // Map rowId to datasetRowId
+    // Note: tracingContext is not stored in DatasetRow, so it will be undefined
+  };
+}
+
+async function saveExperimentRowResult({
+  experimentTracking,
+  item,
+  targetResult,
+  status,
+  error,
+}: {
+  experimentTracking: ExperimentTrackingConfig;
+  item: RunExperimentDataItem<any>;
+  targetResult: any;
+  status: 'success' | 'error';
+  error?: any;
+}): Promise<void> {
+  const { experimentId, storage } = experimentTracking;
+
+  // Extract output from targetResult
+  const output = targetResult?.scoringData?.output;
+
+  // Prepare the experiment row result
+  const rowResult = {
+    experimentId,
+    datasetRowId: item.datasetRowId!,
+    input: item.input,
+    output,
+    groundTruth: item.groundTruth,
+    runtimeContext: item.runtimeContext,
+    status,
+    error: error
+      ? {
+          message: error.message || String(error),
+          stack: error.stack,
+          name: error.name,
+        }
+      : undefined,
+    // TODO: Add traceId and spanId when tracing is available
+  };
+
+  try {
+    await storage.addExperimentRowResults([rowResult]);
+  } catch (err) {
+    // Log error but don't fail the experiment
+    console.error('Failed to save experiment row result:', err);
+  }
+}
+
+function validateScorers(
   scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig,
   target: Agent | Workflow,
 ): void {
-  if (data.length === 0) {
-    throw new MastraError({
-      domain: 'SCORER',
-      id: 'RUN_EXPERIMENT_FAILED_NO_DATA_PROVIDED',
-      category: 'USER',
-      text: 'Failed to run experiment: Data array is empty',
-    });
-  }
-
-  for (let i = 0; i < data.length; i++) {
-    const item = data[i];
-    if (!item || typeof item !== 'object' || !('input' in item)) {
-      throw new MastraError({
-        domain: 'SCORER',
-        id: 'INVALID_DATA_ITEM',
-        category: 'USER',
-        text: `Invalid data item at index ${i}: must have 'input' properties`,
-      });
-    }
-  }
-
   // Validate scorers
   if (Array.isArray(scorers)) {
     if (scorers.length === 0) {
@@ -185,12 +332,21 @@ function validateExperimentInputs(
   }
 }
 
-async function executeTarget(target: Agent | Workflow, item: RunExperimentDataItem<any>) {
+async function executeTarget(
+  target: Agent | Workflow,
+  item: RunExperimentDataItem<any>,
+  {
+    datasetId,
+    experimentId,
+    datasetRowId,
+    datasetVersionId,
+  }: { datasetId?: string; experimentId?: string; datasetRowId?: string; datasetVersionId?: string },
+) {
   try {
     if (isWorkflow(target)) {
-      return await executeWorkflow(target, item);
+      return await executeWorkflow(target, item, { datasetId, experimentId, datasetRowId, datasetVersionId });
     } else {
-      return await executeAgent(target, item);
+      return await executeAgent(target, item, { datasetId, experimentId, datasetRowId, datasetVersionId });
     }
   } catch (error) {
     throw new MastraError(
@@ -208,11 +364,28 @@ async function executeTarget(target: Agent | Workflow, item: RunExperimentDataIt
   }
 }
 
-async function executeWorkflow(target: Workflow, item: RunExperimentDataItem<any>) {
+async function executeWorkflow(
+  target: Workflow,
+  item: RunExperimentDataItem<any>,
+  {
+    datasetId,
+    experimentId,
+    datasetRowId,
+    datasetVersionId,
+  }: { datasetId?: string; experimentId?: string; datasetRowId?: string; datasetVersionId?: string },
+) {
   const run = await target.createRunAsync({ disableScorers: true });
   const workflowResult = await run.start({
     inputData: item.input,
     runtimeContext: item.runtimeContext,
+    tracingOptions: {
+      metadata: {
+        datasetId,
+        experimentId,
+        datasetRowId,
+        datasetVersionId: datasetVersionId,
+      },
+    },
   });
 
   return {
@@ -224,20 +397,118 @@ async function executeWorkflow(target: Workflow, item: RunExperimentDataItem<any
   };
 }
 
-async function executeAgent(agent: Agent, item: RunExperimentDataItem<any>) {
+async function executeAgent(
+  agent: Agent,
+  item: RunExperimentDataItem<any>,
+  {
+    datasetId,
+    experimentId,
+    datasetRowId,
+    datasetVersionId,
+  }: { datasetId?: string; experimentId?: string; datasetRowId?: string; datasetVersionId?: string },
+) {
+  console.log('Execute agent', item);
   const model = await agent.getModel();
+  console.log(`model specification version`, model.specificationVersion);
   if (model.specificationVersion === 'v2') {
     return await agent.generate(item.input as any, {
       scorers: {},
       returnScorerData: true,
       runtimeContext: item.runtimeContext,
+      tracingOptions: {
+        metadata: {
+          datasetId,
+          experimentId,
+          datasetRowId,
+          datasetVersionId,
+        },
+      },
     });
   } else {
     return await agent.generateLegacy(item.input as any, {
       scorers: {},
       returnScorerData: true,
       runtimeContext: item.runtimeContext,
+      tracingOptions: {
+        metadata: {
+          datasetId,
+          experimentId,
+          datasetRowId,
+          datasetVersionId,
+        },
+      },
     });
+  }
+}
+
+async function saveScorerResult({
+  runId,
+  scorer,
+  score,
+  targetResult,
+  item,
+  storage,
+  experimentContext,
+  stepId,
+}: {
+  runId: string;
+  scorer: MastraScorer<any, any, any, any>;
+  score: any;
+  targetResult: any;
+  item: RunExperimentDataItem<any>;
+  storage: MastraStorage;
+  experimentContext: {
+    experimentId?: string;
+    entityId: string;
+    entityType: 'AGENT' | 'WORKFLOW';
+  };
+  stepId?: string;
+}): Promise<void> {
+  try {
+    const payload = {
+      runId,
+      scorerId: scorer.name,
+      entityId: experimentContext.entityId,
+      score: score.score,
+      input: targetResult.scoringData?.input,
+      output: targetResult.scoringData?.output,
+      source: 'TEST' as const, // Experiments are TEST runs
+      entityType: experimentContext.entityType,
+      scorer: {
+        name: scorer.name,
+        description: scorer.description || '',
+      },
+      // Optional tracing fields
+      traceId: item.tracingContext?.currentSpan?.traceId,
+      spanId: item.tracingContext?.currentSpan?.id,
+      // Scorer-specific results
+      reason: score.reason,
+      preprocessStepResult: score.preprocessStepResult,
+      extractStepResult: score.extractStepResult,
+      analyzeStepResult: score.analyzeStepResult,
+      preprocessPrompt: score.preprocessPrompt,
+      extractPrompt: score.extractPrompt,
+      generateScorePrompt: score.generateScorePrompt,
+      generateReasonPrompt: score.generateReasonPrompt,
+      analyzePrompt: score.analyzePrompt,
+      // Context
+      runtimeContext: item.runtimeContext,
+      additionalContext: {
+        experimentId: experimentContext.experimentId,
+        datasetRowId: item.datasetRowId,
+        groundTruth: item.groundTruth,
+        stepId, // For workflow step scorers
+      },
+      metadata: {
+        isExperiment: true,
+        experimentId: experimentContext.experimentId,
+      },
+    };
+
+    await storage.saveScore(payload);
+  } catch (error) {
+    // Log error but don't fail the experiment
+    console.error(`Failed to save score for scorer ${scorer.name}:`, error);
   }
 }
 
@@ -245,12 +516,22 @@ async function runScorers(
   scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig,
   targetResult: any,
   item: RunExperimentDataItem<any>,
+  options?: {
+    runId?: string;
+    storage?: MastraStorage;
+    experimentContext?: {
+      experimentId?: string;
+      entityId: string;
+      entityType: 'AGENT' | 'WORKFLOW';
+    };
+  },
 ): Promise<Record<string, any>> {
   const scorerResults: Record<string, any> = {};
 
   if (Array.isArray(scorers)) {
     for (const scorer of scorers) {
       try {
+        console.log(`running scorer`, scorer.name);
         const score = await scorer.run({
           input: targetResult.scoringData?.input,
           output: targetResult.scoringData?.output,
@@ -260,6 +541,18 @@ async function runScorers(
         });
 
         scorerResults[scorer.name] = score;
+        // Save score if storage is available
+        if (options?.storage && options?.experimentContext && options?.runId) {
+          await saveScorerResult({
+            runId: options.runId,
+            scorer,
+            score,
+            targetResult,
+            item,
+            storage: options.storage,
+            experimentContext: options.experimentContext,
+          });
+        }
       } catch (error) {
         throw new MastraError(
           {
@@ -289,6 +582,19 @@ async function runScorers(
           tracingContext: item.tracingContext,
         });
         workflowScorerResults[scorer.name] = score;
+
+        // Save score if storage is available
+        if (options?.storage && options?.experimentContext && options?.runId) {
+          await saveScorerResult({
+            runId: options.runId,
+            scorer,
+            score,
+            targetResult,
+            item,
+            storage: options.storage,
+            experimentContext: options.experimentContext,
+          });
+        }
       }
       if (Object.keys(workflowScorerResults).length > 0) {
         scorerResults.workflow = workflowScorerResults;
@@ -311,6 +617,25 @@ async function runScorers(
                 tracingContext: item.tracingContext,
               });
               stepResults[scorer.name] = score;
+
+              // Save step score if storage is available
+              if (options?.storage && options?.experimentContext && options?.runId) {
+                await saveScorerResult({
+                  runId: options.runId,
+                  scorer,
+                  score,
+                  targetResult: {
+                    scoringData: {
+                      input: stepResult.payload,
+                      output: stepResult.output,
+                    },
+                  },
+                  item,
+                  storage: options.storage,
+                  experimentContext: options.experimentContext,
+                  stepId,
+                });
+              }
             } catch (error) {
               throw new MastraError(
                 {

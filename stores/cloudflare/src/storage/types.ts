@@ -14,6 +14,16 @@ import type {
   TABLE_SCORERS,
   TABLE_AI_SPANS,
   AISpanRecord,
+  TABLE_DATASET_ROWS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_DATASETS,
+  DatasetVersion,
+  DatasetRow,
+  DatasetRecord,
+  TABLE_EXPERIMENT_ROW_RESULTS,
+  ExperimentRowResult,
+  TABLE_EXPERIMENTS,
+  ExperimentRecord,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
@@ -80,6 +90,11 @@ export type RecordTypes = {
   [TABLE_TRACES]: any;
   [TABLE_RESOURCES]: StorageResourceType;
   [TABLE_AI_SPANS]: AISpanRecord;
+  [TABLE_DATASETS]: DatasetRecord;
+  [TABLE_DATASET_VERSIONS]: DatasetVersion;
+  [TABLE_DATASET_ROWS]: DatasetRow;
+  [TABLE_EXPERIMENTS]: ExperimentRecord;
+  [TABLE_EXPERIMENT_ROW_RESULTS]: ExperimentRowResult;
 };
 
 export type ListOptions = {

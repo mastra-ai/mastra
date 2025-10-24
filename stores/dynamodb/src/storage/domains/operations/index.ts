@@ -4,7 +4,12 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   StoreOperations,
   TABLE_AI_SPANS,
+  TABLE_DATASET_ROWS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_DATASETS,
   TABLE_EVALS,
+  TABLE_EXPERIMENT_ROW_RESULTS,
+  TABLE_EXPERIMENTS,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_SCORERS,
@@ -51,6 +56,11 @@ export class StoreOperationsDynamoDB extends StoreOperations {
       [TABLE_TRACES]: 'trace',
       [TABLE_RESOURCES]: 'resource',
       [TABLE_AI_SPANS]: 'ai_span',
+      [TABLE_DATASETS]: 'dataset',
+      [TABLE_DATASET_VERSIONS]: 'dataset_version',
+      [TABLE_DATASET_ROWS]: 'dataset_row',
+      [TABLE_EXPERIMENTS]: 'experiment',
+      [TABLE_EXPERIMENT_ROW_RESULTS]: 'experiment_row_result',
     };
     return mapping[tableName] || null;
   }

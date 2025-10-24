@@ -1601,6 +1601,9 @@ importers:
       sift:
         specifier: ^17.1.3
         version: 17.1.3
+      ulid:
+        specifier: ^3.0.1
+        version: 3.0.1
       xstate:
         specifier: ^5.20.1
         version: 5.23.0
@@ -3018,6 +3021,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      ulid:
+        specifier: ^3.0.1
+        version: 3.0.1
 
   stores/astra:
     dependencies:
@@ -16047,6 +16053,10 @@ packages:
   uint8array-extras@1.5.0:
     resolution: {integrity: sha512-rvKSBiC5zqCCiDZ9kAOszZcDvdAHwwIKJG33Ykj43OKcWsnmcBRL09YTU4nOeHZ8Y2a7l1MgTd08SBe9A8Qj6A==}
     engines: {node: '>=18'}
+
+  ulid@3.0.1:
+    resolution: {integrity: sha512-dPJyqPzx8preQhqq24bBG1YNkvigm87K8kVEHCD+ruZg24t6IFEFv00xMWfxcC4djmFtiTLdFuADn4+DOz6R7Q==}
+    hasBin: true
 
   unbox-primitive@1.1.0:
     resolution: {integrity: sha512-nWJ91DjeOkej/TA8pXQ3myruKpKEYgqvpw9lz4OPHj/NWFNluYrjbz9j01CJ8yKQd2g4jFoOkINCTW2I5LEEyw==}
@@ -30734,6 +30744,8 @@ snapshots:
   ufo@1.6.1: {}
 
   uint8array-extras@1.5.0: {}
+
+  ulid@3.0.1: {}
 
   unbox-primitive@1.1.0:
     dependencies:
