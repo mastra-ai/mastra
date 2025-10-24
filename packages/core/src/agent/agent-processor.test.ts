@@ -1126,10 +1126,12 @@ describe('Input and Output Processors', () => {
 
       async function testWithFormat(format: 'aisdk' | 'mastra') {
         const response = await agent.stream('Who won the 2012 US presidential election?', {
-          output: z.object({
-            winner: z.string(),
-            year: z.string(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              winner: z.string(),
+              year: z.string(),
+            }),
+          },
           format,
         });
 
@@ -1454,7 +1456,7 @@ describe('Input and Output Processors', () => {
           console.log('Structured article analysis:', result.object);
         }, 40000);
 
-        it.only('should handle fallback strategy gracefully', async () => {
+        it('should handle fallback strategy gracefully', async () => {
           const strictSchema = z.object({
             impossible: z.literal('exact_match_required'),
             number: z.number().min(1000).max(1000), // Very restrictive
