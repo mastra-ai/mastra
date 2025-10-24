@@ -720,9 +720,7 @@ describe('Agent memory test gemini', () => {
   const memory = new Memory({
     storage: new MockStore(),
     options: {
-      threads: {
-        generateTitle: false,
-      },
+      generateTitle: false,
       lastMessages: 2,
     },
   });
