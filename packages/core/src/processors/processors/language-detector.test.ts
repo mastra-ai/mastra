@@ -23,17 +23,31 @@ function createMockLanguageResult(
   confidence: number,
   isTarget: boolean,
   translation?: TranslationResult,
+  includeTranslation?: boolean,
 ): LanguageDetectionResult {
-  // For target languages, return empty object (minimal tokens)
+  // For target languages, return nulls (minimal tokens)
   if (isTarget) {
-    return {};
+    const result: LanguageDetectionResult = {
+      iso_code: null,
+      confidence: null,
+    };
+    if (includeTranslation) {
+      result.translated_text = null;
+    }
+    return result;
   }
 
-  return {
+  const result: LanguageDetectionResult = {
     iso_code: isoCode,
     confidence,
-    ...(translation && { translated_text: translation.translated_text }),
   };
+
+  // If includeTranslation is explicitly set, add translated_text (for 'translate' strategy)
+  if (includeTranslation !== undefined) {
+    result.translated_text = translation?.translated_text ?? null;
+  }
+
+  return result;
 }
 
 function setupMockModel(result: LanguageDetectionResult | LanguageDetectionResult[]): MockLanguageModelV1 {
@@ -296,7 +310,7 @@ describe('LanguageDetector', () => {
         target_language: 'English',
         confidence: 0.93,
       };
-      const model = setupMockModel(createMockLanguageResult('French', 'fr', 0.91, false, translation));
+      const model = setupMockModel(createMockLanguageResult('French', 'fr', 0.91, false, translation, true));
       const detector = new LanguageDetector({
         model,
         strategy: 'translate',
@@ -328,7 +342,7 @@ describe('LanguageDetector', () => {
     });
 
     it('should keep original when translation is not available', async () => {
-      const model = setupMockModel(createMockLanguageResult('Russian', 'ru', 0.85, false)); // No translation
+      const model = setupMockModel(createMockLanguageResult('Russian', 'ru', 0.85, false, undefined, true)); // No translation
       const detector = new LanguageDetector({
         model,
         strategy: 'translate',
@@ -362,9 +376,9 @@ describe('LanguageDetector', () => {
         confidence: 0.95,
       };
       const model = setupMockModel([
-        createMockLanguageResult('English', 'en', 0.97, true),
-        createMockLanguageResult('Spanish', 'es', 0.93, false, translation),
-        createMockLanguageResult('Chinese', 'zh', 0.89, false), // No translation
+        createMockLanguageResult('English', 'en', 0.97, true, undefined, true),
+        createMockLanguageResult('Spanish', 'es', 0.93, false, translation, true),
+        createMockLanguageResult('Chinese', 'zh', 0.89, false, undefined, true), // No translation
       ]);
       const detector = new LanguageDetector({
         model,
@@ -596,7 +610,7 @@ describe('LanguageDetector', () => {
         target_language: 'English',
         confidence: 0.95,
       };
-      const model = setupMockModel(createMockLanguageResult('Spanish', 'es', 0.91, false, translation));
+      const model = setupMockModel(createMockLanguageResult('Spanish', 'es', 0.91, false, translation, true));
       const detector = new LanguageDetector({
         model,
         strategy: 'translate',
@@ -644,7 +658,7 @@ describe('LanguageDetector', () => {
 
   describe('translation quality settings', () => {
     it('should pass translation quality to agent prompt', async () => {
-      const model = setupMockModel(createMockLanguageResult('French', 'fr', 0.9, false));
+      const model = setupMockModel(createMockLanguageResult('French', 'fr', 0.9, false, undefined, true));
       const detector = new LanguageDetector({
         model,
         strategy: 'translate',
