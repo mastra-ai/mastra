@@ -183,13 +183,6 @@ export class InngestRun<
     return runs?.[0];
   }
 
-  async sendEvent(event: string, data: any) {
-    await this.inngest.send({
-      name: `user-event-${event}`,
-      data,
-    });
-  }
-
   async cancel() {
     await this.inngest.send({
       name: `cancel.workflow.${this.workflowId}`,
