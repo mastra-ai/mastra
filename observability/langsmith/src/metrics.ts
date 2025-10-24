@@ -1,4 +1,4 @@
-import type { LLMGenerationAttributes } from '@mastra/core/ai-tracing';
+import type { ModelGenerationAttributes } from '@mastra/core/ai-tracing';
 /**
  * LangSmithUsageMetrics
  *
@@ -18,42 +18,42 @@ export interface LangSmithUsageMetrics {
   [key: string]: number | { [key: string]: number } | undefined;
 }
 
-export function normalizeUsageMetrics(llmAttr: LLMGenerationAttributes): LangSmithUsageMetrics {
+export function normalizeUsageMetrics(modelAttr: ModelGenerationAttributes): LangSmithUsageMetrics {
   const metrics: LangSmithUsageMetrics = {};
 
-  if (llmAttr.usage?.inputTokens !== undefined) {
-    metrics.input_tokens = llmAttr.usage?.inputTokens;
-  } else if (llmAttr.usage?.promptTokens !== undefined) {
-    metrics.input_tokens = llmAttr.usage?.promptTokens;
+  if (modelAttr.usage?.inputTokens !== undefined) {
+    metrics.input_tokens = modelAttr.usage?.inputTokens;
+  } else if (modelAttr.usage?.promptTokens !== undefined) {
+    metrics.input_tokens = modelAttr.usage?.promptTokens;
   }
 
-  if (llmAttr.usage?.outputTokens !== undefined) {
-    metrics.output_tokens = llmAttr.usage?.outputTokens;
-  } else if (llmAttr.usage?.completionTokens !== undefined) {
-    metrics.output_tokens = llmAttr.usage?.completionTokens;
+  if (modelAttr.usage?.outputTokens !== undefined) {
+    metrics.output_tokens = modelAttr.usage?.outputTokens;
+  } else if (modelAttr.usage?.completionTokens !== undefined) {
+    metrics.output_tokens = modelAttr.usage?.completionTokens;
   }
 
-  if (llmAttr.usage?.totalTokens !== undefined) {
-    metrics.total_tokens = llmAttr.usage?.totalTokens;
-  } else if (typeof llmAttr.usage?.inputTokens === 'number' && typeof llmAttr.usage?.outputTokens === 'number') {
-    metrics.total_tokens = llmAttr.usage?.inputTokens + llmAttr.usage?.outputTokens;
+  if (modelAttr.usage?.totalTokens !== undefined) {
+    metrics.total_tokens = modelAttr.usage?.totalTokens;
+  } else if (typeof modelAttr.usage?.inputTokens === 'number' && typeof modelAttr.usage?.outputTokens === 'number') {
+    metrics.total_tokens = modelAttr.usage?.inputTokens + modelAttr.usage?.outputTokens;
   }
-  if (llmAttr.usage?.reasoningTokens !== undefined) {
+  if (modelAttr.usage?.reasoningTokens !== undefined) {
     metrics.output_token_details = {
       ...(metrics.output_token_details ?? {}),
-      reasoning_tokens: llmAttr.usage?.reasoningTokens,
+      reasoning_tokens: modelAttr.usage?.reasoningTokens,
     };
   }
-  if (llmAttr.usage?.promptCacheHitTokens !== undefined) {
+  if (modelAttr.usage?.promptCacheHitTokens !== undefined) {
     metrics.input_token_details = {
       ...(metrics.input_token_details ?? {}),
-      cache_read: llmAttr.usage?.promptCacheHitTokens,
+      cache_read: modelAttr.usage?.promptCacheHitTokens,
     };
   }
-  if (llmAttr.usage?.promptCacheMissTokens !== undefined) {
+  if (modelAttr.usage?.promptCacheMissTokens !== undefined) {
     metrics.input_token_details = {
       ...(metrics.input_token_details ?? {}),
-      cache_write: llmAttr.usage?.promptCacheMissTokens,
+      cache_write: modelAttr.usage?.promptCacheMissTokens,
     };
   }
 
