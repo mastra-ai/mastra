@@ -134,4 +134,4 @@ description: "Array of conditions where at least one must be true",
 
 - [Step Options Reference](./step-options)
 - [Step Function Reference](./step-function)
-- [Control Flow Guide](/docs/workflows-legacy/control-flow)
+- [Control Flow Guide](/docs/workflows/control-flow)

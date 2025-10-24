@@ -32,7 +32,7 @@ Some highlights include:
 
 - **Integrations** - Bundle agents and workflows into existing React, Next.js, or Node.js apps, or ship them as standalone endpoints. When building UIs, integrate with agentic libraries like Vercel's AI SDK UI and CopilotKit to bring your AI assistant to life on the web.
 
-- **Production essentials** - Shipping reliable agents takes ongoing insight, evaluation, and iteration. With built-in [evals](/docs/evals/overview) and [observability](/docs/observability/overview), Mastra gives you the tools to observe, measure, and refine continuously.
+- **Production essentials** - Shipping reliable agents takes ongoing insight, evaluation, and iteration. With built-in [evals](/docs/scorers/evals/overview) and [observability](/docs/observability/overview), Mastra gives you the tools to observe, measure, and refine continuously.
 
 ## What can you build?
 

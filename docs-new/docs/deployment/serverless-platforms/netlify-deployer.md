@@ -1,6 +1,7 @@
 ---
-title: 'Netlify Deployer'
+title: 'Netlify'
 description: 'Learn how to deploy a Mastra application to Netlify using the Mastra NetlifyDeployer'
+sidebar_position: 3
 ---
 
 # NetlifyDeployer

@@ -1,6 +1,7 @@
 ---
-title: 'Guardrails '
+title: 'Guardrails'
 description: 'Learn how to implement guardrails using input and output processors to secure and control AI interactions.'
+sidebar_position: 5
 ---
 
 # Guardrails

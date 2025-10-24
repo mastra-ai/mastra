@@ -1,5 +1,5 @@
 ---
-title: 'Vercel Deployer'
+title: 'Vercel'
 description: 'Learn how to deploy a Mastra application to Vercel using the Mastra VercelDeployer'
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Discord Community and Bot '
+title: 'Discord'
 description: Information about the Mastra Discord community and MCP bot.
 ---
 

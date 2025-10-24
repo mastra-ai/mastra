@@ -1,6 +1,7 @@
 ---
-title: 'Snapshots '
+title: 'Snapshots'
 description: 'Learn how to save and resume workflow execution state with snapshots in Mastra'
+sidebar_position: 8
 ---
 
 # Snapshots

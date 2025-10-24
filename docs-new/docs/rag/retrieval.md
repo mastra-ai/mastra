@@ -1,5 +1,5 @@
 ---
-title: 'Retrieval, Semantic Search, Reranking '
+title: Retrieval
 description: Guide on retrieval processes in Mastra's RAG systems, including semantic search, filtering, and re-ranking.
 ---
 

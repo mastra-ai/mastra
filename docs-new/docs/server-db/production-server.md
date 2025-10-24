@@ -1,6 +1,7 @@
 ---
-title: 'Create A Mastra Production Server'
+title: 'Production Server'
 description: 'Learn how to configure and deploy a production-ready Mastra server with custom settings for APIs, CORS, and more'
+sidebar_position: 1
 ---
 
 # Create a Mastra Production Server

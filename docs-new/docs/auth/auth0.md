@@ -1,5 +1,5 @@
 ---
-title: 'MastraAuthAuth0 Class'
+title: Auth0
 description: 'Documentation for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication.'
 ---
 

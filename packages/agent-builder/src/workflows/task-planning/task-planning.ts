@@ -113,7 +113,9 @@ const planningIterationStep = createStep({
           });
 
       const result = await planningAgent.generate(planningPrompt, {
-        output: PlanningAgentOutputSchema,
+        structuredOutput: {
+          schema: PlanningAgentOutputSchema,
+        },
         // maxSteps: 15,
       });
 
