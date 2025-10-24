@@ -52,7 +52,7 @@ export const CopyPageButton = () => {
         variant="ghost"
         onClick={handleCopyPage}
         className={cn(
-          'inline-flex h-[32px] border-r border-(--border) font-normal  rounded-[12px] rounded-tr-none rounded-br-none items-center w-full  gap-2 px-3 py-1.5 text-sm',
+          'inline-flex h-[32px] border-r border-(--border)/50 font-normal  rounded-[12px] rounded-tr-none rounded-br-none items-center w-full  gap-2 px-3 py-1.5 text-sm',
           'bg-(--mastra-surface-3) hover:bg-(--mastra-surface-2)',
         )}
       >
