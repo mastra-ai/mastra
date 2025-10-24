@@ -16,7 +16,7 @@ Each step connects to the next in the workflow through defined schemas that keep
 - Each step’s `outputSchema` must match the next step’s `inputSchema`.
   - If it doesn’t, use [Input data mapping](#input-data-mapping) to transform the data into the required shape.
 
-##  Chaining steps with `.then()`
+## Chaining steps with `.then()`
 
 Use `.then()` to run steps in order, allowing each step to access the result of the step before it.
 
@@ -248,7 +248,7 @@ export const testWorkflow = createWorkflow({
 
 ### Looping with `.foreach()`
 
-Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values.
+Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values, applying the step’s logic to each one.
 
 ![Repeating with .foreach()](/image/workflows/workflows-control-flow-foreach.jpg)
 
@@ -274,6 +274,18 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
+#### Concurrency limits
+
+Use `concurrency` to control the number of array items processed at the same time. The default is `1`, which runs steps sequentially. Increasing the value allows `.foreach()` to process multiple items simultaneously.
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...})
+
+export const testWorkflow = createWorkflow({...})
+  .foreach(step1, { concurrency: 4 })
+  .commit();
+```
+
 ## Loop management
 
 Loop conditions can be implemented in different ways depending on how you want the loop to end. Common patterns include checking values returned in `inputData`, setting a maximum number of iterations, or aborting execution when a limit is reached.
@@ -294,17 +306,4 @@ export const testWorkflow = createWorkflow({...})
   })
   .commit();
 ```
-
-### Concurrency limits
-
-Use `concurrency` to execute steps in parallel with a limit on the number of concurrent executions.
-
-```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-const step1 = createStep({...})
-
-export const testWorkflow = createWorkflow({...})
-  .foreach(step1, { concurrency: 2 })
-  .commit();
-```
-
 
