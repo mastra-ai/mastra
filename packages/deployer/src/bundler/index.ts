@@ -8,6 +8,7 @@ import virtual from '@rollup/plugin-virtual';
 import * as pkg from 'empathic/package';
 import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
 import type { InputOptions, OutputOptions } from 'rollup';
+import { posix } from 'path';
 import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
@@ -206,6 +207,29 @@ export abstract class Bundler extends MastraBundler {
     }
 
     return inputOptions;
+  }
+
+  getAllToolPaths(mastraDir: string, toolsPaths: (string | string[])[] = []): (string | string[])[] {
+    // Normalize Windows paths to forward slashes for consistent handling
+    const normalizedMastraDir = mastraDir.replaceAll('\\', '/');
+
+    // Prepare default tools paths with glob patterns
+    const defaultToolsPath = posix.join(normalizedMastraDir, 'tools/**/*.{js,ts}');
+    const defaultToolsIgnorePaths = [
+      `!${posix.join(normalizedMastraDir, 'tools/**/*.{test,spec}.{js,ts}')}`,
+      `!${posix.join(normalizedMastraDir, 'tools/**/__tests__/**')}`,
+    ];
+
+    // Combine default path with ignore patterns
+    const defaultPaths = [defaultToolsPath, ...defaultToolsIgnorePaths];
+
+    // If no tools paths provided, use only the default paths
+    if (toolsPaths.length === 0) {
+      return [defaultPaths];
+    }
+
+    // If tools paths are provided, add the default paths to ensure standard tools are always included
+    return [...toolsPaths, defaultPaths];
   }
 
   async getToolsInputOptions(toolsPaths: (string | string[])[]) {
@@ -455,7 +479,7 @@ export const tools = [${toolsExports.join(', ')}]`,
     }
   }
 
-  async lint(_entryFile: string, _outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
+  async lint(entryFile: string, _outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
     const toolsLength = Object.keys(toolsInputOptions).length;
     if (toolsLength > 0) {

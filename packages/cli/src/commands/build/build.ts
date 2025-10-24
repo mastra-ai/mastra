@@ -5,7 +5,6 @@ import { FileService } from '../../services/service.file';
 import { BuildBundler } from './BuildBundler';
 import { getDeployer } from '@mastra/deployer';
 import { createLogger } from '../../utils/logger';
-import { prepareToolsPaths } from '@mastra/deployer/utils';
 
 export async function build({
   dir,
@@ -23,10 +22,6 @@ export async function build({
   const outputDirectory = join(rootDir, '.mastra');
   const logger = createLogger(debug);
 
-  const defaultTools = prepareToolsPaths({ mastraDir });
-  // We pass an array to tinyglobby to allow for the aforementioned negations
-  const discoveredTools = [defaultTools, ...(tools ?? [])];
-
   try {
     const fs = new FileService();
     const mastraEntryFile = fs.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
@@ -36,6 +31,10 @@ export async function build({
     if (!platformDeployer) {
       const deployer = new BuildBundler();
       deployer.__setLogger(logger);
+
+      // Use the bundler's getToolsPathsWithDefaults method to prepare tools paths
+      const discoveredTools = deployer.getAllToolPaths(mastraDir, tools);
+
       await deployer.prepare(outputDirectory);
       await deployer.bundle(mastraEntryFile, outputDirectory, {
         toolsPaths: discoveredTools,
@@ -51,6 +50,12 @@ export async function build({
     logger.info('Deployer found, preparing deployer build...');
 
     platformDeployer.__setLogger(logger);
+
+    // Create a temporary bundler instance to get the tools paths with defaults
+    // Since platformDeployer might not have the getToolsPathsWithDefaults method
+    const tempBundler = new BuildBundler();
+    const discoveredTools = tempBundler.getAllToolPaths(mastraDir, tools);
+
     await platformDeployer.prepare(outputDirectory);
     await platformDeployer.bundle(mastraEntryFile, outputDirectory, {
       toolsPaths: discoveredTools,
