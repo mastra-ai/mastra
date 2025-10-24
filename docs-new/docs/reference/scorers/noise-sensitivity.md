@@ -312,7 +312,7 @@ Evaluate resistance in controlled environments:
 
 ## Related
 
-- [Running in CI](/docs/evals/running-in-ci) - Setting up scorers in CI/CD pipelines
+- [Running in CI](/docs/scorers/evals/running-in-ci) - Setting up scorers in CI/CD pipelines
 - [Noise Sensitivity Examples](/docs/examples/scorers/noise-sensitivity) - Practical usage examples
 - [Hallucination Scorer](/docs/reference/scorers/hallucination) - Evaluates fabricated content
 - [Answer Relevancy Scorer](/docs/reference/scorers/answer-relevancy) - Measures response focus

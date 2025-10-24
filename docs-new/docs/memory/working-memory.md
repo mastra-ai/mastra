@@ -1,6 +1,7 @@
 ---
-title: 'Working Memory '
+title: 'Working Memory'
 description: 'Learn how to configure working memory in Mastra to store persistent user data, preferences.'
+sidebar_position: 3
 ---
 
 import YouTube from '@site/src/components/YouTube';

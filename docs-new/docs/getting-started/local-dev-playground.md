@@ -1,6 +1,7 @@
 ---
-title: 'Inspecting agents and workflows with mastra dev '
+title: Playground
 description: Documentation for the Mastra local development environment for Mastra applications.
+sidebar_position: 2
 ---
 
 import YouTube from '@site/src/components/YouTube';

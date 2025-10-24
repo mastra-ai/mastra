@@ -1,6 +1,7 @@
 ---
 title: 'Overview'
 description: 'Understanding how to evaluate and measure AI agent quality using Mastra evals.'
+sidebar_position: 1
 ---
 
 # Testing your agents with evals
@@ -98,8 +99,8 @@ Once you're hitting your targets:
 3. Test edge cases - Add examples that cover unusual scenarios
 4. Fine-tune - Look for ways to improve efficiency
 
-See [Textual Evals](/docs/evals/textual-evals) for more info on what evals can do.
+See [Textual Evals](/docs/scorers/evals/textual-evals) for more info on what evals can do.
 
-For more info on how to create your own evals, see the [Custom Evals](/docs/evals/custom-eval) guide.
+For more info on how to create your own evals, see the [Custom Evals](/docs/scorers/evals/custom-eval) guide.
 
-For running evals in your CI pipeline, see the [Running in CI](/docs/evals/running-in-ci) guide.
+For running evals in your CI pipeline, see the [Running in CI](/docs/scorers/evals/running-in-ci) guide.

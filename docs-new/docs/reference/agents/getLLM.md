@@ -71,4 +71,4 @@ description: "Optional model override. If provided, this model will be used used
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Agent Runtime Context](/docs/agents/runtime-context)
+- [Agent Runtime Context](/docs/server-db/runtime-context)

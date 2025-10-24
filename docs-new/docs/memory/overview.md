@@ -1,6 +1,7 @@
 ---
-title: 'Memory Overview '
+title: 'Overview'
 description: "Learn how Mastra's memory system works with working memory, conversation history, and semantic recall."
+sidebar_position: 1
 ---
 
 # Memory overview

@@ -1,9 +1,9 @@
 ---
-title: 'Advanced Tool Usage '
+title: 'Advanced Usage '
 description: This page covers advanced features for Mastra tools, including abort signals and compatibility with the Vercel AI SDK tool format.
 ---
 
-# Advanced Tool Usage
+# Advanced Usage
 
 This page covers more advanced techniques and features related to using tools in Mastra.
 

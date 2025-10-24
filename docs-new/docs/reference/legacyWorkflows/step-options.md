@@ -62,8 +62,8 @@ isOptional: false,
 
 ## Related
 
-- [Path Comparison](/docs/workflows-legacy/control-flow)
+- [Path Comparison](/docs/workflows/control-flow)
 - [Step Function Reference](./step-function)
 - [Step Class Reference](./step-class)
 - [Workflow Class Reference](./workflow)
-- [Control Flow Guide](/docs/workflows-legacy/control-flow)
+- [Control Flow Guide](/docs/workflows/control-flow)

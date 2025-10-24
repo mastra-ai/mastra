@@ -506,7 +506,7 @@ jobs:
 
 ## Related examples
 
-- [Running in CI](/docs/evals/running-in-ci) - Setting up scorers in CI/CD pipelines
+- [Running in CI](/docs/scorers/evals/running-in-ci) - Setting up scorers in CI/CD pipelines
 - [Hallucination Scorer](/docs/examples/scorers/hallucination) - Detecting fabricated content
 - [Answer Relevancy Scorer](/docs/examples/scorers/answer-relevancy) - Measuring response focus
 - [Tool Call Accuracy](/docs/examples/scorers/tool-call-accuracy) - Evaluating tool selection

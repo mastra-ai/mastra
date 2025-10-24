@@ -17,7 +17,7 @@ export const FeedbackTrigger: React.FC = () => {
           variant="ghost"
           size="sm"
           onClick={handleOpen}
-          className="dark:bg-[#121212]  bg-(--mastra-surface-3) w-full rounded-[10px] hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]"
+          className="bg-(--mastra-surface-3) w-full rounded-[12px] hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-sm font-normal"
         >
           Question? Give us feedback
         </Button>

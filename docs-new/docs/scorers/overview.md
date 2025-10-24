@@ -1,6 +1,7 @@
 ---
 title: 'Overview'
 description: Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
+sidebar_position: 1
 ---
 
 # Scorers overview
@@ -158,11 +159,11 @@ Once registered, you can score traces interactively within the Mastra playground
 
 Mastra provides a CLI command `mastra dev` to test your scorers. The playground includes a scorers section where you can run individual scorers against test inputs and view detailed results.
 
-For more details, see the [Local Dev Playground](/docs/server-db/local-dev-playground) docs.
+For more details, see the [Local Dev Playground](/docs/getting-started/local-dev-playground) docs.
 
 ## Next steps
 
 - Learn how to create your own scorers in the [Creating Custom Scorers](/docs/scorers/custom-scorers) guide
 - Explore built-in scorers in the [Off-the-shelf Scorers](/docs/scorers/off-the-shelf-scorers) section
-- Test scorers with the [Local Dev Playground](/docs/server-db/local-dev-playground)
+- Test scorers with the [Local Dev Playground](/docs/getting-started/local-dev-playground)
 - See example scorers in the [Examples Overview](/docs/examples) section
