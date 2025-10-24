@@ -1,5 +1,5 @@
 ---
-'@mastra/core': patch
+'@mastra/core': major
 ---
 
 - Removes modelSettings.abortSignal in favour of top-level abortSignal only. Also removes the deprecated output field - use structuredOutput.schema instead.
