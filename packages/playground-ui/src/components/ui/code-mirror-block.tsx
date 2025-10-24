@@ -1,7 +1,7 @@
 import ReactCodeMirror, { ReactCodeMirrorProps } from '@uiw/react-codemirror';
 import { useCodemirrorTheme } from '@/components/syntax-highlighter';
 import { json } from '@codemirror/lang-json';
-import { CopyButton } from './copy-button';
+import { CopyButton } from '@/components/ui/copy-button';
 
 export const CodeMirrorBlock = (props: ReactCodeMirrorProps) => {
   const theme = useCodemirrorTheme();

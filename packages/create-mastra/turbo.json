@@ -3,7 +3,15 @@
   "extends": ["//"],
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
+      "dependsOn": [
+        "^build",
+        "@mastra/core#build",
+        "@mastra/libsql#build",
+        "@mastra/observability#build",
+        "@mastra/memory#build",
+        "@mastra/loggers#build",
+        "@mastra/evals#build"
+      ],
       "outputs": ["dist/**"]
     }
   }
