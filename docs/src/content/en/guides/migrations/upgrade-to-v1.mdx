@@ -90,7 +90,7 @@ const result = await agent.stream(messages, {
 
 - Removed `elicitation` and `extra` from top level arguments. Use the `mcp` property instead.
 
-```
+```typescript
 export const accountBalance = createTool({
   id: 'account-balance',
   description: 'Fetches the current account balance for a given account',
@@ -103,7 +103,7 @@ export const accountBalance = createTool({
   execute: async ({ context, mcp }) => {    
     if (mcp) {
       await checkAuth(mcp.extra.authInfo)
-      
+
       const result = await mcp.elicitation.sendRequest({
         message: `Is it ok to fetch the account balance for account ${context.accountId}?`,
         requestedSchema: {
@@ -123,7 +123,6 @@ export const accountBalance = createTool({
     }
   }
 })
-
 ```
 
 ## Migrate to v0.22
