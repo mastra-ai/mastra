@@ -1,5 +1,5 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { VersionHistory } from './components/version-history';
+import { VersionHistory } from './version-history';
 
 export interface VersionHistoryDialogProps {
   versions: any[];
@@ -30,6 +30,9 @@ export const VersionHistoryDialog = ({
           versions={versions}
           isUpdating={isUpdating}
           copiedVersions={{}}
+          onCopy={async (content: string, key: string | number) => {
+            await navigator.clipboard.writeText(content);
+          }}
           onSetActive={onSetActive}
           onDelete={onDelete}
         />

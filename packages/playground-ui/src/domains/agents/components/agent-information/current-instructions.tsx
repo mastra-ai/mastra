@@ -1,12 +1,13 @@
 import { Wand2, Loader, CheckIcon, X, FileClock } from 'lucide-react';
 
-import { Icon, extractPrompt } from '@mastra/playground-ui';
-import { CodeDisplay } from '@/components/ui/code-display';
+import { extractPrompt } from '../../utils/extractPrompt';
+import { CodeDisplay } from './code-display';
 
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import clsx from 'clsx';
 import { AgentInstructions } from '@mastra/core/agent';
+import { Icon } from '@/ds/icons/Icon';
 
 interface CurrentInstructionsProps {
   instructions?: AgentInstructions;

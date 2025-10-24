@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { useMemoryConfig } from '@mastra/playground-ui';
+import { useMemoryConfig } from '@/domains/memory/hooks';
 import { SemanticRecall } from '@mastra/core/memory';
 
 interface MemoryConfigSection {

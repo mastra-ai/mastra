@@ -1,7 +1,7 @@
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
-import { CodeDisplay } from '@/components/ui/code-display';
+import { CodeDisplay } from './code-display';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
@@ -12,7 +12,6 @@ interface VersionItemProps {
   version: any;
   index: number;
   isExpanded: boolean;
-  isAnalysisExpanded: number | null;
   isUpdating: boolean;
   copiedVersions: Record<string | number, boolean>;
   onToggleExpand: () => void;
@@ -26,7 +25,6 @@ export function VersionItem({
   version,
   index,
   isExpanded,
-  isAnalysisExpanded,
   isUpdating,
   onToggleExpand,
   onToggleAnalysis,
@@ -77,10 +75,8 @@ export function VersionItem({
           version={version}
           index={index}
           isUpdating={isUpdating}
-          isAnalysisExpanded={isAnalysisExpanded === index}
           onSetActive={onSetActive}
           onDelete={onDelete}
-          onToggleAnalysis={onToggleAnalysis}
         />
       </div>
       {isExpanded && (
@@ -145,7 +141,7 @@ export function VersionItem({
                 {showEvals && (
                   <div className="pl-4">
                     <div className="space-y-1 pr-4">
-                      {version.evals.map((metric, evalIndex) => (
+                      {version.evals.map((metric: any, evalIndex: number) => (
                         <div key={evalIndex} className="rounded-md border border-mastra-bg-3 p-1.5 text-[10px]">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-2">
