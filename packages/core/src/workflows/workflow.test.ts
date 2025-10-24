@@ -1599,6 +1599,77 @@ describe('Workflow', () => {
       });
     });
 
+    it('should generate a stream for a single step workflow successfully with state', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state }) => {
+          return { result: 'success', value: state.value };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+          // someOtherValue: z.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          value: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+          otherValue: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRunAsync();
+      const streamResult = run.streamVNext({
+        inputData: {},
+        initialState: { value: 'test-state', otherValue: 'test-other-state' },
+        outputOptions: { includeState: true },
+      });
+
+      const executionResult = await streamResult.result;
+
+      // Verify execution completed successfully
+      expect(executionResult.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(executionResult.state).toEqual({ value: 'test-state', otherValue: 'test-other-state' });
+
+      const run2 = await workflow.createRunAsync();
+      const streamResult2 = run2.stream({
+        inputData: {},
+        initialState: { value: 'test-state', otherValue: 'test-other-state' },
+        outputOptions: { includeState: true },
+      });
+
+      const executionResult2 = await streamResult2.result;
+
+      // Verify execution completed successfully
+      expect(executionResult2.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(executionResult2.state).toEqual({ value: 'test-state', otherValue: 'test-other-state' });
+    });
+
     it('should handle basic suspend and resume flow', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi
