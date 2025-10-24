@@ -52,12 +52,12 @@ import type {
   StepWithComponent,
   StreamEvent,
   SubsetOf,
-  WatchEvent,
   WorkflowConfig,
   WorkflowOptions,
   WorkflowResult,
   WorkflowRunState,
   WorkflowRunStatus,
+  WorkflowState,
   WorkflowStreamEvent,
 } from './types';
 
@@ -1185,10 +1185,7 @@ export class Workflow<
 
     const unwatchV2 = run.watch(event => {
       emitter.emit('nested-watch-v2', { event, workflowId: this.id });
-    }, 'watch-v2');
-    const unwatch = run.watch(event => {
-      emitter.emit('nested-watch', { event, workflowId: this.id, runId: run.runId, isResume: !!resume?.steps?.length });
-    }, 'watch');
+    });
 
     if (retryCount && retryCount > 0 && resume?.steps?.length && runtimeContext) {
       runtimeContext.set('__mastraWorflowInputData', inputData);
@@ -1211,7 +1208,6 @@ export class Workflow<
           initialState: state,
           outputOptions: { includeState: true, includeResumeLabels: true },
         });
-    unwatch();
     unwatchV2();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
       const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
@@ -1332,7 +1328,7 @@ export class Workflow<
   async getWorkflowRunExecutionResult(
     runId: string,
     withNestedWorkflows: boolean = true,
-  ): Promise<WatchEvent['payload']['workflowState'] | null> {
+  ): Promise<WorkflowState | null> {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot get workflow run execution result. Mastra storage is not initialized');
@@ -1761,7 +1757,7 @@ export class Run<
           await onChunk(e as any);
         }
       } catch {}
-    }, 'watch-v2');
+    });
 
     this.closeStreamAction = async () => {
       this.emitter.emit('watch-v2', {
@@ -1846,7 +1842,7 @@ export class Run<
         // watch-v2 events are data stream events, so we need to cast them to the correct type
         await writer.write(e as any);
       } catch {}
-    }, 'watch-v2');
+    });
 
     this.#observerHandlers.push(async () => {
       unwatch();
@@ -1944,7 +1940,7 @@ export class Run<
               ...payload,
             },
           } as WorkflowStreamEvent);
-        }, 'watch-v2');
+        });
 
         self.closeStreamAction = async () => {
           unwatch();
@@ -2084,7 +2080,7 @@ export class Run<
               ...payload,
             },
           } as WorkflowStreamEvent);
-        }, 'watch-v2');
+        });
 
         self.closeStreamAction = async () => {
           unwatch();
@@ -2131,46 +2127,10 @@ export class Run<
     return this.#streamOutput;
   }
 
-  watch(cb: (event: WatchEvent) => void, type: 'watch'): () => void;
-  watch(cb: (event: WorkflowStreamEvent) => void, type: 'watch-v2'): () => void;
-  watch(
-    cb: ((event: WatchEvent) => void) | ((event: WorkflowStreamEvent) => void),
-    type: 'watch' | 'watch-v2' = 'watch',
-  ): () => void {
-    const watchCb = (event: WatchEvent) => {
-      this.updateState(event.payload);
-      (cb as (event: WatchEvent) => void)({
-        type: event.type,
-        payload: this.getState() as any,
-        eventTimestamp: event.eventTimestamp,
-      });
-    };
-
-    const nestedWatchCb = ({ event, workflowId }: { event: WatchEvent; workflowId: string }) => {
-      try {
-        const { type, payload, eventTimestamp } = event;
-        const prefixedSteps = Object.fromEntries(
-          Object.entries(payload?.workflowState?.steps ?? {}).map(([stepId, step]) => [
-            `${workflowId}.${stepId}`,
-            step,
-          ]),
-        );
-        const newPayload: any = {
-          currentStep: {
-            ...payload?.currentStep,
-            id: `${workflowId}.${payload?.currentStep?.id}`,
-          },
-          workflowState: {
-            steps: prefixedSteps,
-          },
-        };
-        this.updateState(newPayload);
-        (cb as (event: WatchEvent) => void)({ type, payload: this.getState() as any, eventTimestamp: eventTimestamp });
-      } catch (e) {
-        console.error(e);
-      }
-    };
-
+  /**
+   * @internal
+   */
+  watch(cb: (event: WorkflowStreamEvent) => void): () => void {
     const nestedWatchV2Cb = ({
       event,
       workflowId,
@@ -2184,33 +2144,20 @@ export class Run<
       });
     };
 
-    if (type === 'watch') {
-      this.emitter.on('watch', watchCb);
-      this.emitter.on('nested-watch', nestedWatchCb);
-    } else if (type === 'watch-v2') {
-      this.emitter.on('watch-v2', cb);
-      this.emitter.on('nested-watch-v2', nestedWatchV2Cb);
-    }
+    this.emitter.on('watch-v2', cb);
+    this.emitter.on('nested-watch-v2', nestedWatchV2Cb);
 
     return () => {
-      if (type === 'watch-v2') {
-        this.emitter.off('watch-v2', cb);
-        this.emitter.off('nested-watch-v2', nestedWatchV2Cb);
-      } else {
-        this.emitter.off('watch', watchCb);
-        this.emitter.off('nested-watch', nestedWatchCb);
-      }
+      this.emitter.off('watch-v2', cb);
+      this.emitter.off('nested-watch-v2', nestedWatchV2Cb);
     };
   }
 
-  async watchAsync(cb: (event: WatchEvent) => void, type: 'watch'): Promise<() => void>;
-  async watchAsync(cb: (event: WorkflowStreamEvent) => void, type: 'watch-v2'): Promise<() => void>;
-  async watchAsync(
-    cb: ((event: WatchEvent) => void) | ((event: WorkflowStreamEvent) => void),
-    type: 'watch' | 'watch-v2' = 'watch',
-  ): Promise<() => void> {
-    // @ts-ignore
-    return this.watch(cb as (event: WatchEvent) => void, type);
+  /**
+   * @internal
+   */
+  async watchAsync(cb: (event: WorkflowStreamEvent) => void): Promise<() => void> {
+    return this.watch(cb);
   }
 
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
@@ -2434,62 +2381,10 @@ export class Run<
   }
 
   /**
-   * Returns the current state of the workflow run
-   * @returns The current state of the workflow run
-   */
-  getState(): Record<string, any> {
-    return this.state;
-  }
-
-  updateState(state: Record<string, any>) {
-    if (state.currentStep) {
-      this.state.currentStep = state.currentStep;
-    } else if (state.workflowState?.status !== 'running') {
-      delete this.state.currentStep;
-    }
-
-    if (state.workflowState) {
-      this.state.workflowState = deepMergeWorkflowState(this.state.workflowState ?? {}, state.workflowState ?? {});
-    }
-  }
-
-  /**
    * @access private
    * @returns The execution results of the workflow run
    */
   _getExecutionResults(): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> | undefined {
     return this.executionResults ?? this.#streamOutput?.result;
   }
-}
-
-function deepMergeWorkflowState(a: Record<string, any>, b: Record<string, any>): Record<string, any> {
-  if (!a || typeof a !== 'object') return b;
-  if (!b || typeof b !== 'object') return a;
-
-  const result = { ...a };
-
-  for (const key in b) {
-    if (b[key] === undefined) continue;
-
-    if (b[key] !== null && typeof b[key] === 'object') {
-      const aVal = result[key];
-      const bVal = b[key];
-
-      if (Array.isArray(bVal)) {
-        //we should just replace it instead of spreading as we do for others
-        //spreading aVal and then bVal will result in duplication of items
-        result[key] = bVal.filter(item => item !== undefined);
-      } else if (typeof aVal === 'object' && aVal !== null) {
-        // If both values are objects, merge them
-        result[key] = deepMergeWorkflowState(aVal, bVal);
-      } else {
-        // If the target isn't an object, use the source object
-        result[key] = bVal;
-      }
-    } else {
-      result[key] = b[key];
-    }
-  }
-
-  return result;
 }
