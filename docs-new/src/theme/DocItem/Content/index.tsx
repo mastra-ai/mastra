@@ -1,12 +1,12 @@
-import React, { type ReactNode } from 'react';
-import clsx from 'clsx';
 import BrowserOnly from '@docusaurus/BrowserOnly';
-import { ThemeClassNames } from '@docusaurus/theme-common';
 import { useDoc } from '@docusaurus/plugin-content-docs/client';
+import { ThemeClassNames } from '@docusaurus/theme-common';
+import { CopyPageButton } from '@site/src/components/copy-page-button';
+import type { Props } from '@theme/DocItem/Content';
 import Heading from '@theme/Heading';
 import MDXContent from '@theme/MDXContent';
-import type { Props } from '@theme/DocItem/Content';
-import { CopyPageButton } from '@site/src/components/copy-page-button';
+import { cn } from '@site/src/css/utils';
+import { type ReactNode } from 'react';
 
 /**
  Title can be declared inside md content or declared through
@@ -33,15 +33,14 @@ export default function DocItemContent({ children }: Props): ReactNode {
   const shouldShowCopyButton = !frontMatter.hide_table_of_contents;
 
   return (
-    <div className={clsx(ThemeClassNames.docs.docMarkdown, 'markdown')}>
+    <div className={cn(ThemeClassNames.docs.docMarkdown, 'markdown')}>
       {shouldShowCopyButton && (
         <div className="relative">
-          <div className="absolute right-0 top-0 z-10">
+          <div className="absolute top-0 right-0">
             <BrowserOnly fallback={<div />}>{() => <CopyPageButton />}</BrowserOnly>
           </div>
         </div>
       )}
-
       {syntheticTitle && (
         <header>
           <Heading as="h1">{syntheticTitle}</Heading>

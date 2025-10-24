@@ -1,6 +1,7 @@
 ---
-title: 'MastraAuthClerk Class'
+title: Clerk
 description: 'Documentation for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication.'
+sidebar_position: 3
 ---
 
 import Tabs from '@theme/Tabs';

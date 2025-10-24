@@ -325,7 +325,6 @@ export class Agent extends BaseResource {
     }
     const processedParams = {
       ...params,
-      output: params.output ? zodToJsonSchema(params.output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
@@ -1362,7 +1361,6 @@ export class Agent extends BaseResource {
     }
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
-      output: params.output ? zodToJsonSchema(params.output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
