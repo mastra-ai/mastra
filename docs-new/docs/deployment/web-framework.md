@@ -1,6 +1,7 @@
 ---
-title: 'Deploying Mastra with a Web Framework'
+title: With a Web Framework
 description: 'Learn how Mastra can be deployed when integrated with a Web Framework'
+sidebar_position: 4
 ---
 
 # Web Framework Integration

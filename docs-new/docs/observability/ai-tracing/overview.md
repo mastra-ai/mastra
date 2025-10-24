@@ -1,6 +1,7 @@
 ---
-title: 'AI Tracing '
+title: 'Overview'
 description: 'Set up AI tracing for Mastra applications'
+sidebar_position: 1
 ---
 
 # AI Tracing

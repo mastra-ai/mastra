@@ -1,9 +1,10 @@
 ---
-title: 'Tools Overview '
+title: 'Overview '
 description: Understand what tools are in Mastra, how to add them to agents, and best practices for designing effective tools.
+sidebar_position: 1
 ---
 
-# Tools Overview
+# Overview
 
 Tools are functions that agents can execute to perform specific tasks or access external information. They extend an agent's capabilities beyond simple text generation, allowing interaction with APIs, databases, or other systems.
 
@@ -74,7 +75,7 @@ There are two ways to run and test tools.
 
 With the Mastra Dev Server running you can test a tool from the Mastra Playground by visiting [http://localhost:4111/tools](http://localhost:4111/tools) in your browser.
 
-> For more information, see the [Local Dev Playground](/docs/server-db/local-dev-playground) documentation.
+> For more information, see the [Local Dev Playground](/docs/getting-started/local-dev-playground) documentation.
 
 ### Command line
 

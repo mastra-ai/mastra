@@ -161,5 +161,5 @@ const result = await run.start({
 ## Related
 
 - [.until()](./until) - Loop until a condition becomes true
-- [Control Flow Guide](/docs/workflows-legacy/control-flow)
+- [Control Flow Guide](/docs/examples/workflows_legacy/conditional-branching)
 - [Workflow Class Reference](./workflow)

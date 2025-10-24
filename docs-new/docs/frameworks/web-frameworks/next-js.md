@@ -1,6 +1,7 @@
 ---
-title: 'Getting Started with Mastra and Next.js '
+title: 'With Next.js '
 description: A step-by-step guide to integrating Mastra with Next.js.
+sidebar_position: 2
 ---
 
 import Tabs from '@theme/Tabs';

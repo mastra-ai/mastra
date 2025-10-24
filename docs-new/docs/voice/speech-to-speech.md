@@ -1,5 +1,5 @@
 ---
-title: Speech-to-Speech Capabilities in Mastra | Mastra Docs
+title: Speech-to-Speech
 description: Overview of speech-to-speech capabilities in Mastra, including real-time interactions and event-driven architecture.
 ---
 

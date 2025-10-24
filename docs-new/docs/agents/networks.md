@@ -1,6 +1,7 @@
 ---
-title: 'Handling Complex LLM Operations '
+title: 'Networks'
 description: 'Networks in Mastra help you execute individual or multiple Mastra primitives in a non-deterministic way using a single API.'
+sidebar_position: 4
 ---
 
 # Agent.network()

@@ -1,6 +1,7 @@
 ---
 title: 'Middleware'
 description: 'Apply custom middleware functions to intercept requests.'
+sidebar_position: 2
 ---
 
 # Middleware
