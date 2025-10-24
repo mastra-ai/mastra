@@ -28,11 +28,7 @@ import { GaugeIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 
-export interface ScorerProps {
-  computeTraceLink: (traceId: string) => string;
-}
-
-export default function Scorer({ computeTraceLink }: ScorerProps) {
+export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>();

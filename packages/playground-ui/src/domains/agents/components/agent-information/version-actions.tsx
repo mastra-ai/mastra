@@ -2,15 +2,15 @@ import { Play, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 
-import type { VersionActionsProps } from '../types';
+export interface VersionActionsProps {
+  version: any;
+  index: number;
+  isUpdating: boolean;
+  onSetActive: (version: any, index: number) => Promise<void>;
+  onDelete: (index: number) => void;
+}
 
-export function VersionActions({
-  version,
-  index,
-  isUpdating,
-  onSetActive,
-  onDelete,
-}: Omit<VersionActionsProps, 'onCopy' | 'copiedVersions'>) {
+export function VersionActions({ version, index, isUpdating, onSetActive, onDelete }: VersionActionsProps) {
   return (
     <div className="flex items-center space-x-1">
       {version.status !== 'active' && version.status !== 'draft' && (
