@@ -16,9 +16,8 @@ export async function validateStepInput({
 
   let validationError: Error | undefined;
 
-  if (validateInputs) {
-    const inputSchema = step.inputSchema;
-
+  const inputSchema = step.inputSchema;
+  if (validateInputs && inputSchema) {
     const validatedInput = await inputSchema.safeParseAsync(prevOutput);
 
     if (!validatedInput.success) {

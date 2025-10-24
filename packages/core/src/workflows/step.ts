@@ -77,8 +77,8 @@ export interface Step<
 > {
   id: TStepId;
   description?: string;
-  inputSchema: TSchemaIn;
-  outputSchema: TSchemaOut;
+  inputSchema?: TSchemaIn;
+  outputSchema?: TSchemaOut;
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
   stateSchema?: TState;

@@ -6802,6 +6802,36 @@ describe('Workflow', () => {
       }
     });
 
+    it('should not throw error if input and output schemas are not provided', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({
+        inputData: {
+          required: 'test',
+          nested: { value: 'not-a-number' },
+        },
+      });
+      expect(result.status).toBe('success');
+      expect(result.steps.step1).toEqual({
+        status: 'success',
+        payload: { required: 'test', nested: { value: 'not-a-number' } },
+        output: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
     it('should use default value from inputSchema', async () => {
       const triggerSchema = z.object({
         required: z.string(),

@@ -79,8 +79,8 @@ type StepParams<
 > = {
   id: TStepId;
   description?: string;
-  inputSchema: TStepInput;
-  outputSchema: TStepOutput;
+  inputSchema?: TStepInput;
+  outputSchema?: TStepOutput;
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
   stateSchema?: TState;
@@ -103,8 +103,8 @@ type ToolStep<
   TSchemaOut extends z.ZodType<any>,
   TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
 > = Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
-  inputSchema: TSchemaIn;
-  outputSchema: TSchemaOut;
+  inputSchema?: TSchemaIn;
+  outputSchema?: TSchemaOut;
   execute: (context: TContext) => Promise<any>;
 };
 
@@ -391,8 +391,8 @@ export class Workflow<
 {
   public id: TWorkflowId;
   public description?: string | undefined;
-  public inputSchema: TInput;
-  public outputSchema: TOutput;
+  public inputSchema?: TInput;
+  public outputSchema?: TOutput;
   public stateSchema?: TState;
   public steps: Record<string, StepWithComponent>;
   public stepDefs?: TSteps;

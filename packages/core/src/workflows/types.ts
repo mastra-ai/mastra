@@ -417,8 +417,8 @@ export type WorkflowConfig<
   mastra?: Mastra;
   id: TWorkflowId;
   description?: string | undefined;
-  inputSchema: TInput;
-  outputSchema: TOutput;
+  inputSchema?: TInput;
+  outputSchema?: TOutput;
   stateSchema?: TState;
   executionEngine?: ExecutionEngine;
   steps?: TSteps;
