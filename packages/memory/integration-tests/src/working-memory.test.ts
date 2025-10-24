@@ -85,8 +85,7 @@ describe('Working Memory Tests', () => {
             topK: 3,
             messageRange: 2,
           },
-          threads: {
-            generateTitle: false,
+          generateTitle: false,
           },
         },
         storage,
@@ -196,8 +195,7 @@ describe('Working Memory Tests', () => {
             topK: 3,
             messageRange: 2,
           },
-          threads: {
-            generateTitle: false,
+          generateTitle: false,
           },
         },
       });
@@ -463,8 +461,7 @@ describe('Working Memory Tests', () => {
             }),
           },
           lastMessages: 1,
-          threads: {
-            generateTitle: false,
+          generateTitle: false,
           },
         },
       });
@@ -545,8 +542,7 @@ describe('Working Memory Tests', () => {
               topK: 3,
               messageRange: 2,
             },
-            threads: {
-              generateTitle: false,
+            generateTitle: false,
             },
           },
         });
@@ -631,13 +627,11 @@ describe('Working Memory Tests', () => {
                 schema: z.object({
                   city: z.string(),
                   temperature: z.number().optional(),
-                }),
-              },
-              threads: {
-                generateTitle: false,
-              },
+              }),
             },
+            generateTitle: false,
           },
+        },
           temperature: 0,
         } satisfies AgentGenerateOptions<any, any>;
         await agent.generateLegacy('Now I am in Toronto and it is 80 degrees', generateOptions);
@@ -723,8 +717,7 @@ describe('Working Memory Tests', () => {
             topK: 3,
             messageRange: 2,
           },
-          threads: {
-            generateTitle: false,
+          generateTitle: false,
           },
         },
       });
@@ -915,8 +908,7 @@ describe('Working Memory Tests', () => {
             topK: 3,
             messageRange: 2,
           },
-          threads: {
-            generateTitle: false,
+          generateTitle: false,
           },
         },
         storage,
@@ -1279,8 +1271,7 @@ describe('Working Memory Tests', () => {
             topK: 3,
             messageRange: 2,
           },
-          threads: {
-            generateTitle: false,
+          generateTitle: false,
           },
         },
         storage,
