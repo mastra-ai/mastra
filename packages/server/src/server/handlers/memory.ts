@@ -436,7 +436,6 @@ export async function getWorkingMemoryHandler({
         : template;
     const workingMemory = await memory.getWorkingMemory({ threadId: threadId!, resourceId, memoryConfig });
     const config = memory.getMergedThreadConfig(memoryConfig || {});
-    // Default scope is now 'resource', so check if it's NOT explicitly set to 'thread'
     const source = config.workingMemory?.scope !== 'thread' && resourceId ? 'resource' : 'thread';
     return { workingMemory, source, workingMemoryTemplate, threadExists };
   } catch (error) {
@@ -563,9 +562,8 @@ export async function searchMemoryHandler({
     // Get memory configuration first to check scope
     const config = memory.getMergedThreadConfig(memoryConfig || {});
     const hasSemanticRecall = !!config?.semanticRecall;
-    // Default scope is now 'resource', so check if it's NOT explicitly set to 'thread'
     const resourceScope =
-      typeof config?.semanticRecall === 'object' ? config?.semanticRecall?.scope !== 'thread' : true; // If semanticRecall is just `true`, default to resource scope
+      typeof config?.semanticRecall === 'object' ? config?.semanticRecall?.scope !== 'thread' : true;
 
     // Only validate thread ownership if we're in thread scope
     if (threadId && !resourceScope) {

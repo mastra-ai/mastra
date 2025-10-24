@@ -55,8 +55,7 @@ export class Memory extends MastraMemory {
 
   protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string, config: MemoryConfig) {
     const resourceScope =
-      (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread') ||
-      // resource scope is now default
+      (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
       config.semanticRecall === true;
 
     const thread = await this.storage.getThreadById({ threadId });
@@ -140,7 +139,6 @@ export class Memory extends MastraMemory {
 
     const resourceScope =
       (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
-      // new default is resource scope
       config.semanticRecall === true;
 
     // Guard: If resource-scoped semantic recall is enabled but no resourceId is provided, throw an error
@@ -535,7 +533,8 @@ export class Memory extends MastraMemory {
             reason = `appended newMemory to end of working memory`;
           }
 
-          workingMemory = existingWorkingMemory + `\n${workingMemory}`;
+          workingMemory = existingWorkingMemory + `
+${workingMemory}`;
         }
       } else if (workingMemory === template?.content) {
         return {
