@@ -324,8 +324,7 @@ export class InngestRun<
           steps,
           stepResults: snapshot?.context as any,
           resumePayload: resumeDataToUse,
-          // @ts-ignore
-          resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
+          resumePath: steps?.[0]  ? snapshot?.suspendedPaths?.[steps?.[0]] as any : undefined,
         },
       },
     });
@@ -635,7 +634,6 @@ export class InngestWorkflow<
           resumeLabels: {},
           result: undefined,
           error: undefined,
-          // @ts-ignore
           timestamp: Date.now(),
         },
       });
@@ -651,8 +649,7 @@ export class InngestWorkflow<
     this.function = this.inngest.createFunction(
       {
         id: `workflow.${this.id}`,
-        // @ts-ignore
-        retries: this.retryConfig?.attempts ?? 0,
+        retries: Math.min(this.retryConfig?.attempts ?? 0, 20) as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20,
         cancelOn: [{ event: `cancel.workflow.${this.id}` }],
         // Spread flow control configuration
         ...this.flowControlConfig,
@@ -845,14 +842,12 @@ export function createStep<
     return {
       id: params.name,
       description: params.getDescription(),
-      // @ts-ignore
       inputSchema: z.object({
         prompt: z.string(),
-      }),
-      // @ts-ignore
+      }) as unknown as TStepInput,
       outputSchema: z.object({
         text: z.string(),
-      }),
+      }) as unknown as TStepOutput,
       execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort, tracingContext }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
@@ -947,8 +942,7 @@ export function createStep<
 
     return {
       // TODO: tool probably should have strong id type
-      // @ts-ignore
-      id: params.id,
+      id: params.id as unknown as TStepId,
       description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
@@ -1538,9 +1532,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
       try {
         if (isResume) {
-          // @ts-ignore
-          runId = stepResults[resume?.steps?.[0]]?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
-
+          runId = stepResults[resume?.steps?.[0] ?? '']?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
           const snapshot: any = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
             workflowName: step.id,
             runId: runId,
@@ -1557,8 +1549,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 steps: resume.steps.slice(1),
                 stepResults: snapshot?.context as any,
                 resumePayload: resume.resumePayload,
-                // @ts-ignore
-                resumePath: snapshot?.suspendedPaths?.[resume.steps?.[1]] as any,
+                resumePath: resume.steps?.[1] ? snapshot?.suspendedPaths?.[resume.steps?.[1]] as any : undefined,
               },
               outputOptions: { includeState: true },
             },
@@ -1641,7 +1632,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             });
 
             for (const [stepName, stepResult] of suspendedSteps) {
-              // @ts-ignore
               const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
               executionContext.suspendedPaths[step.id] = executionContext.executionPath;
 
@@ -1995,14 +1985,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       });
     }
 
-    // @ts-ignore
     Object.assign(executionContext.suspendedPaths, stepRes.executionContext.suspendedPaths);
-    // @ts-ignore
     Object.assign(stepResults, stepRes.stepResults);
     executionContext.state = stepRes.executionContext.state;
 
-    // @ts-ignore
-    return stepRes.result;
+    return stepRes.result as StepResult<any, any, any, any>;
   }
 
   async persistStepUpdate({
@@ -2052,7 +2039,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             status: workflowStatus,
             result,
             error,
-            // @ts-ignore
             timestamp: Date.now(),
           },
         });
@@ -2254,8 +2240,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         status: 'success',
         output: results.reduce((acc: Record<string, any>, result, index) => {
           if (result.result.status === 'success') {
-            // @ts-ignore
-            acc[stepsToRun[index]!.step.id] = result.output;
+            if ('step' in stepsToRun[index]!) {
+              acc[stepsToRun[index]!.step.id] = result.output;
+            }
           }
 
           return acc;
