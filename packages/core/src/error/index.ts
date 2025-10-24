@@ -1,4 +1,5 @@
 import { safeParseErrorObject } from './utils.js';
+export { getErrorFromUnknown } from './utils.js';
 
 export enum ErrorDomain {
   TOOL = 'TOOL',

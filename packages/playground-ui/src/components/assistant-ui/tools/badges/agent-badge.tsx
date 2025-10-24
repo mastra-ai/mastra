@@ -55,7 +55,13 @@ export const AgentBadge = ({ agentId, messages = [], metadata, toolCallId, toolA
           return <Markdown key={index}>{message.content}</Markdown>;
         }
 
-        const result = typeof message.toolOutput === 'string' ? JSON.parse(message.toolOutput) : message.toolOutput;
+        let result;
+
+        try {
+          result = typeof message.toolOutput === 'string' ? JSON.parse(message.toolOutput) : message.toolOutput;
+        } catch (error) {
+          result = message.toolOutput;
+        }
 
         return (
           <React.Fragment key={index}>

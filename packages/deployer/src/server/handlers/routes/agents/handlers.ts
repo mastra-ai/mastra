@@ -1,5 +1,5 @@
 import type { Mastra, ProviderConfig } from '@mastra/core';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import { getProviderConfig, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { ChunkType } from '@mastra/core/stream';
@@ -288,14 +288,7 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
           from: ChunkFrom.AGENT,
           runId: body.runId || 'unknown',
           payload: {
-            error:
-              err instanceof Error
-                ? {
-                    message: err.message,
-                    name: err.name,
-                    stack: err.stack,
-                  }
-                : String(err),
+            error: getErrorFromUnknown(err, { fallbackMessage: 'Unknown error in stream generate' }),
           },
         };
 
