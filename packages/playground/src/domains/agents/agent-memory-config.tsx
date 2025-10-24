@@ -55,7 +55,7 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
           { label: 'Enabled', value: enabled, badge: enabled ? 'success' : undefined },
           ...(enabled
             ? [
-                { label: 'Scope', value: semanticRecall.scope || 'thread' },
+                { label: 'Scope', value: semanticRecall.scope || 'resource' },
                 { label: 'Top K Results', value: semanticRecall.topK || 4 },
                 {
                   label: 'Message Range',
@@ -84,7 +84,7 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
           },
           ...(config.workingMemory.enabled
             ? [
-                { label: 'Scope', value: config.workingMemory.scope || 'thread' },
+                { label: 'Scope', value: config.workingMemory.scope || 'resource' },
                 { label: 'Template', value: config.workingMemory.template || 'default' },
               ]
             : []),

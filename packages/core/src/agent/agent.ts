@@ -1371,7 +1371,7 @@ export class Agent<
                   vectorMessageSearch: messageList.getLatestUserContent() || '',
                 })
                 .then((r: any) => r.messagesV2),
-              memory.getSystemMessage({ threadId, memoryConfig }),
+              memory.getSystemMessage({ threadId, resourceId, memoryConfig }),
             ])
           : [[], null];
 
@@ -2496,7 +2496,8 @@ export class Agent<
 
         const config = memory.getMergedThreadConfig(memoryConfig || {});
         const hasResourceScopeSemanticRecall =
-          typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === 'resource';
+          (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread') ||
+          config?.semanticRecall === true;
         let [memoryMessages, memorySystemMessage] = await Promise.all([
           existingThread || hasResourceScopeSemanticRecall
             ? this.getMemoryMessages({

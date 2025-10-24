@@ -49,6 +49,13 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
 
 type BaseWorkingMemory = {
   enabled: boolean;
+  /**
+   * Scope for working memory storage.
+   * - 'resource': Memory persists across all threads for the same resource/user (default)
+   * - 'thread': Memory is isolated per conversation thread
+   *
+   * @default 'resource'
+   */
   scope?: 'thread' | 'resource';
   /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
   use?: never;
@@ -194,13 +201,13 @@ export type SemanticRecall = {
 
   /**
    * Scope for semantic search queries.
-   * - 'thread': Search only within the current conversation thread (default)
-   * - 'resource': Search across all threads owned by the same resource/user
+   * - 'resource': Search across all threads owned by the same resource/user (default)
+   * - 'thread': Search only within the current conversation thread
    *
-   * @default 'thread'
+   * @default 'resource'
    * @example
    * ```typescript
-   * scope: 'resource' // Enable cross-thread memory recall
+   * scope: 'thread' // Limit recall to current thread only
    * ```
    */
   scope?: 'thread' | 'resource';

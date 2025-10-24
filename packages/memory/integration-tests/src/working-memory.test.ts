@@ -120,7 +120,7 @@ describe('Working Memory Tests', () => {
       });
 
       // Get working memory
-      const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+      const workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       expect(workingMemory).not.toBeNull();
       if (workingMemory) {
         // Check for specific Markdown format
@@ -131,7 +131,7 @@ describe('Working Memory Tests', () => {
     });
 
     it('should initialize with default working memory template', async () => {
-      const systemInstruction = await memory.getSystemMessage({ threadId: thread.id });
+      const systemInstruction = await memory.getSystemMessage({ threadId: thread.id, resourceId });
       expect(systemInstruction).not.toBeNull();
       if (systemInstruction) {
         // Should match our Markdown template
@@ -242,7 +242,7 @@ describe('Working Memory Tests', () => {
         resourceId,
       });
 
-      const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+      const workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       expect(workingMemory).not.toBeNull();
       if (workingMemory) {
         // Check for specific Markdown format
@@ -267,7 +267,7 @@ describe('Working Memory Tests', () => {
         resourceId,
       });
 
-      let workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+      let workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       expect(workingMemory).not.toBeNull();
       if (workingMemory) {
         expect(workingMemory).toContain('# User Information');
@@ -281,7 +281,7 @@ describe('Working Memory Tests', () => {
         resourceId,
       });
 
-      workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+      workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       expect(workingMemory).not.toBeNull();
       if (workingMemory) {
         expect(workingMemory).toContain('# User Information');
@@ -295,7 +295,7 @@ describe('Working Memory Tests', () => {
         resourceId,
       });
 
-      workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+      workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       expect(workingMemory).not.toBeNull();
       if (workingMemory) {
         expect(workingMemory).toContain('# User Information');
@@ -330,7 +330,7 @@ describe('Working Memory Tests', () => {
       expect(memoryArgs).not.toContain('Vancouver Island');
       expect(memoryArgs).toEqual([]);
 
-      workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
+      workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       expect(workingMemory).not.toBeNull();
       if (workingMemory) {
         // Format-specific assertion that checks for Markdown format
@@ -469,7 +469,7 @@ describe('Working Memory Tests', () => {
       thread = await memory.saveThread({
         thread: createTestThread('Working Memory Test Thread'),
       });
-      expect(await memory.getWorkingMemory({ threadId: thread.id })).toBeNull();
+      expect(await memory.getWorkingMemory({ threadId: thread.id, resourceId })).toBeNull();
       agent = new Agent({
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
@@ -490,7 +490,7 @@ describe('Working Memory Tests', () => {
       });
 
       // Verify it's in the working memory
-      const workingMemoryAfterFirstCall = await memory.getWorkingMemory({ threadId: thread.id });
+      const workingMemoryAfterFirstCall = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       expect(workingMemoryAfterFirstCall).not.toBeNull();
       if (workingMemoryAfterFirstCall) {
         expect(workingMemoryAfterFirstCall.toLowerCase()).toContain('wolf');
@@ -550,7 +550,7 @@ describe('Working Memory Tests', () => {
           thread: createTestThread('Working Memory Test Thread'),
         });
 
-        expect(await memory.getWorkingMemory({ threadId: thread.id })).toBeNull();
+        expect(await memory.getWorkingMemory({ threadId: thread.id, resourceId })).toBeNull();
 
         agent = new Agent({
           name: 'Memory Test Agent',
@@ -579,7 +579,7 @@ describe('Working Memory Tests', () => {
           temperature: 0.1,
         });
 
-        const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+        const wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
         const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
         const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
         expect(extractUserData(wmObj)).toMatchObject(validMemory);
@@ -598,7 +598,7 @@ describe('Working Memory Tests', () => {
           temperature: 0.1,
         });
 
-        const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+        const wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
         const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
         const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
         expect(extractUserData(wmObj)).toMatchObject(second);
@@ -634,7 +634,7 @@ describe('Working Memory Tests', () => {
 
         await agent.generateLegacy('how are you doing?', generateOptions);
 
-        const firstWorkingMemory = await memory.getWorkingMemory({ threadId: newThread.id });
+        const firstWorkingMemory = await memory.getWorkingMemory({ threadId: newThread.id, resourceId });
         const wm = typeof firstWorkingMemory === 'string' ? JSON.parse(firstWorkingMemory) : firstWorkingMemory;
         const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
 
@@ -662,7 +662,7 @@ describe('Working Memory Tests', () => {
         const result = await agent.generateLegacy('Can you tell me where I am?', generateOptions);
 
         expect(result.text).toContain('Waterloo');
-        const secondWorkingMemory = await memory.getWorkingMemory({ threadId: newThread.id });
+        const secondWorkingMemory = await memory.getWorkingMemory({ threadId: newThread.id, resourceId });
         expect(secondWorkingMemory).toMatchObject({ city: 'Waterloo', temperature: 78 });
       });
     });
@@ -726,7 +726,7 @@ describe('Working Memory Tests', () => {
       });
 
       // Verify initial working memory is empty
-      expect(await memory.getWorkingMemory({ threadId: thread.id })).toBeNull();
+      expect(await memory.getWorkingMemory({ threadId: thread.id, resourceId })).toBeNull();
 
       agent = new Agent({
         name: 'JSONSchema Memory Test Agent',
@@ -788,7 +788,7 @@ describe('Working Memory Tests', () => {
         },
       );
 
-      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
       const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
       const userData = extractUserData(wmObj);
@@ -805,7 +805,7 @@ describe('Working Memory Tests', () => {
         resourceId,
       });
 
-      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
       const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
       const userData = extractUserData(wmObj);
@@ -822,7 +822,7 @@ describe('Working Memory Tests', () => {
         resourceId,
       });
 
-      let wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       let wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
       let wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
       let userData = extractUserData(wmObj);
@@ -836,7 +836,7 @@ describe('Working Memory Tests', () => {
         resourceId,
       });
 
-      wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
       wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
       userData = extractUserData(wmObj);
@@ -854,7 +854,7 @@ describe('Working Memory Tests', () => {
       });
 
       // Verify working memory is set
-      let wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
       let wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
       let wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
       let userData = extractUserData(wmObj);
@@ -1248,12 +1248,12 @@ describe('Working Memory Tests', () => {
         connectionUrl: `file:${dbPath}`,
       });
 
-      // Create memory instance with thread-scoped working memory (default)
+      // Create memory instance with thread-scoped working memory (explicitly set)
       memory = new Memory({
         options: {
           workingMemory: {
             enabled: true,
-            // scope defaults to 'thread'
+            scope: 'thread', // Explicitly set to thread-scoped (default is now 'resource')
             template: `# User Information
 - **First Name**: 
 - **Last Name**: 
