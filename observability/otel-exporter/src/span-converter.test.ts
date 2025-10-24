@@ -5,7 +5,7 @@
 import { AISpanType } from '@mastra/core/ai-tracing';
 import type {
   ExportedAISpan,
-  LLMGenerationAttributes,
+  ModelGenerationAttributes,
   AgentRunAttributes,
   ToolCallAttributes,
   MCPToolCallAttributes,
@@ -24,11 +24,11 @@ describe('SpanConverter', () => {
 
   describe('Span Naming Conventions', () => {
     it('should format LLM generation span names correctly', () => {
-      const span: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'original-name',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -37,7 +37,7 @@ describe('SpanConverter', () => {
           model: 'gpt-4',
           provider: 'openai',
           resultType: 'response_generation',
-        } as LLMGenerationAttributes,
+        } as ModelGenerationAttributes,
       };
 
       const result = converter.convertSpan(span);
@@ -45,11 +45,11 @@ describe('SpanConverter', () => {
     });
 
     it('should use tool_selection for tool selection LLM calls', () => {
-      const span: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'original-name',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -58,7 +58,7 @@ describe('SpanConverter', () => {
           model: 'claude-3',
           provider: 'anthropic',
           resultType: 'tool_selection',
-        } as LLMGenerationAttributes,
+        } as ModelGenerationAttributes,
       };
 
       const result = converter.convertSpan(span);
@@ -162,16 +162,16 @@ describe('SpanConverter', () => {
     });
 
     it('should use CLIENT for LLM generation spans', () => {
-      const span: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
         isRootSpan: false,
-        attributes: { model: 'gpt-4' } as LLMGenerationAttributes,
+        attributes: { model: 'gpt-4' } as ModelGenerationAttributes,
       };
 
       const result = converter.convertSpan(span);
@@ -218,11 +218,11 @@ describe('SpanConverter', () => {
 
   describe('Token Usage Attribute Mapping', () => {
     it('should map v5 token format correctly', () => {
-      const span: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -236,7 +236,7 @@ describe('SpanConverter', () => {
             reasoningTokens: 20,
             cachedInputTokens: 30,
           },
-        } as LLMGenerationAttributes,
+        } as ModelGenerationAttributes,
       };
 
       const result = converter.convertSpan(span);
@@ -254,11 +254,11 @@ describe('SpanConverter', () => {
     });
 
     it('should map legacy token format correctly', () => {
-      const span: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -270,7 +270,7 @@ describe('SpanConverter', () => {
             completionTokens: 40,
             totalTokens: 120,
           },
-        } as LLMGenerationAttributes,
+        } as ModelGenerationAttributes,
       };
 
       const result = converter.convertSpan(span);
@@ -288,11 +288,11 @@ describe('SpanConverter', () => {
 
   describe('OTEL GenAI Attributes', () => {
     it('should include gen_ai.operation.name', () => {
-      const span: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -300,7 +300,7 @@ describe('SpanConverter', () => {
         attributes: {
           model: 'gpt-4',
           resultType: 'response_generation',
-        } as LLMGenerationAttributes,
+        } as ModelGenerationAttributes,
       };
 
       const result = converter.convertSpan(span);
@@ -308,11 +308,11 @@ describe('SpanConverter', () => {
     });
 
     it('should map LLM parameters to OTEL conventions', () => {
-      const span: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -330,7 +330,7 @@ describe('SpanConverter', () => {
             stopSequences: ['\\n', 'END'],
           },
           finishReason: 'stop',
-        } as LLMGenerationAttributes,
+        } as ModelGenerationAttributes,
       };
 
       const result = converter.convertSpan(span);
@@ -438,16 +438,16 @@ describe('SpanConverter', () => {
 
   describe('Input/Output Handling', () => {
     it('should use gen_ai.prompt/completion for LLM spans', () => {
-      const span: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
         isRootSpan: false,
-        attributes: { model: 'gpt-4' } as LLMGenerationAttributes,
+        attributes: { model: 'gpt-4' } as ModelGenerationAttributes,
         input: 'What is the capital of France?',
         output: 'The capital of France is Paris.',
       };
@@ -462,16 +462,16 @@ describe('SpanConverter', () => {
     });
 
     it('should serialize complex input/output', () => {
-      const span: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
         isRootSpan: false,
-        attributes: { model: 'gpt-4' } as LLMGenerationAttributes,
+        attributes: { model: 'gpt-4' } as ModelGenerationAttributes,
         input: {
           messages: [
             { role: 'user', content: 'Hello' },
@@ -502,16 +502,16 @@ describe('SpanConverter', () => {
 
   describe('Error Handling', () => {
     it('should add error attributes when error info is present', () => {
-      const span: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
         isRootSpan: false,
-        attributes: { model: 'gpt-4' } as LLMGenerationAttributes,
+        attributes: { model: 'gpt-4' } as ModelGenerationAttributes,
         errorInfo: {
           message: 'Rate limit exceeded',
           id: 'RATE_LIMIT_ERROR',
