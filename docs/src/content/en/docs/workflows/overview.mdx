@@ -143,7 +143,7 @@ export const testWorkflow = createWorkflow({
 
 ### Workflow state
 
-Workflow state lets you share values across steps without passing and defining them explicitly using `inputSchema` and `outputSchema`. Define all state values in the workflow’s `stateSchema`, but each step only needs to declare the values it uses. To set initial values, use `initialState` when running the workflow. See [Running workflows](#running-workflows) for details.
+Workflow state lets you share values across steps without passing them through every step’s `inputSchema` and `outputSchema`. All state values are defined in the workflow’s `stateSchema`, but each step only declares the values it needs. To set initial values, use `initialState` when running the workflow. See [Running workflows](#running-workflows) for details.
 
 ```typescript  filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
@@ -236,7 +236,7 @@ Workflows can be run in two modes: start waits for all steps to complete before 
 
 <Tabs items={["Start", "Stream"]}>
   <Tabs.Tab>
-Create a workflow run with `createRunAsync()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. To initialize workflow state, include `initialState` alongside `inputData`. The workflow runs all steps and returns the final result.
+Create a workflow run with `createRunAsync()`, then call `.start()` with `inputData` matching the workflow’s `inputSchema`. If you’re using workflow state, include `initialState` alongside `inputData`. The workflow runs all steps and returns the final result.
 
 To return state values in the result, set `includeState: true` in `outputOptions`.
 
@@ -265,7 +265,7 @@ console.log(result);
 
   </Tabs.Tab>
   <Tabs.Tab>
-Create a workflow run with `createRunAsync()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as steps run, allowing you to monitor progress in real time.
+Create a workflow run with `createRunAsync()`, then call `.stream()` with `inputData` matching the workflow’s `inputSchema`. The workflow emits events as steps run, allowing you to monitor progress as it happens.
 
 ```typescript showLineNumbers copy
 const run = await testWorkflow.createRunAsync();
