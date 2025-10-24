@@ -81,7 +81,7 @@ export function getRootSpan({
 }: {
   operationId: string;
   model: { modelId: string; provider: string };
-  modelSettings?: CallSettings;
+  modelSettings?: Omit<CallSettings, 'abortSignal'>;
   telemetry_settings?: TelemetrySettings;
   headers?: Record<string, string | undefined> | undefined;
 }) {

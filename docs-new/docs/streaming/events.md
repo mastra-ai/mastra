@@ -1,9 +1,9 @@
 ---
-title: 'Streaming Events '
+title: 'Events '
 description: 'Learn about the different types of streaming events in Mastra, including text deltas, tool calls, step events, and how to handle them in your applications.'
 ---
 
-# Streaming Events
+# Events
 
 Streaming from agents or workflows provides real-time visibility into either the LLM’s output or the status of a workflow run. This feedback can be passed directly to the user, or used within applications to handle workflow status more effectively, creating a smoother and more responsive experience.
 

@@ -1,6 +1,7 @@
 ---
-title: 'Suspend & Resume Workflows '
+title: 'Suspend & Resume'
 description: 'Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources.'
+sidebar_position: 4
 ---
 
 # Suspend & Resume

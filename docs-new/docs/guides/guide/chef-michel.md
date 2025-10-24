@@ -202,7 +202,7 @@ You can run your agent as a service using the `mastra dev` command:
 mastra dev
 ```
 
-This will start a server exposing endpoints to interact with your registered agents. Within the [playground](/docs/server-db/local-dev-playground) you can test your agent through a UI.
+This will start a server exposing endpoints to interact with your registered agents. Within the [playground](/docs/getting-started/local-dev-playground) you can test your agent through a UI.
 
 ### Accessing the Chef Assistant API
 

@@ -1,6 +1,7 @@
 ---
-title: 'Storing Embeddings in A Vector Database '
+title: Vector Databases
 description: Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
+sidebar_position: 3
 ---
 
 import Tabs from '@theme/Tabs';
@@ -38,7 +39,7 @@ After generating embeddings, you need to store them in a database that supports 
 
   </TabItem>
 
-  <TabItem value="using-postgresql-with-pgvector" label="Using PostgreSQL with pgvector">
+  <TabItem value="pgvector" label="Pg Vector">
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { PgVector } from '@mastra/pg';
 
@@ -268,7 +269,7 @@ metadata: chunks.map(chunk => ({ text: chunk.text })),
 ````
 
 </TabItem>
-<TabItem value="using-lancedb" label="Using LanceDB">
+<TabItem value="using-lancedb" label="LanceDB">
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { LanceVectorStore } from '@mastra/lance'
 

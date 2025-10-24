@@ -1,3 +1,8 @@
+---
+title: Creating Scorers
+sidebar_position: 3
+---
+
 ## Creating scorers
 
 Mastra provides a unified `createScorer` factory that allows you to build custom evaluation logic using either JavaScript functions or LLM-based prompt objects for each step. This flexibility lets you choose the best approach for each part of your evaluation pipeline.

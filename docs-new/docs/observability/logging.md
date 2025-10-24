@@ -1,6 +1,7 @@
 ---
 title: 'Logging '
 description: Learn how to use logging in Mastra to monitor execution, capture application behavior, and improve the accuracy of AI applications.
+sidebar_position: 3
 ---
 
 # Logging

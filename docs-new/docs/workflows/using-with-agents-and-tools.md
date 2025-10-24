@@ -1,6 +1,7 @@
 ---
-title: 'Using Workflows with Agents and Tools '
+title: 'Agents & Tools'
 description: 'Steps in Mastra workflows provide a structured way to manage operations by defining inputs, outputs, and execution logic.'
+sidebar_position: 3
 ---
 
 # Agents and Tools

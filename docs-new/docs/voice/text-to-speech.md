@@ -1,6 +1,7 @@
 ---
-title: Text-to-Speech (TTS) in Mastra | Mastra Docs
+title: Text-to-Speech
 description: Overview of Text-to-Speech capabilities in Mastra, including configuration, usage, and integration with voice providers.
+sidebar_position: 2
 ---
 
 # Text-to-Speech (TTS)
