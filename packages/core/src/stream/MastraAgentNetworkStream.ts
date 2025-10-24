@@ -73,14 +73,33 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
 
         const stream: ReadableStream<ChunkType> = await createStream(writer);
 
+        const getInnerChunk = (chunk: ChunkType) => {
+          if (chunk.type === 'workflow-step-output') {
+            return getInnerChunk(chunk.payload.output as any);
+          }
+          return chunk;
+        };
+
         for await (const chunk of stream) {
           if (chunk.type === 'workflow-step-output') {
-            const innerChunk = chunk.payload.output;
-            if (innerChunk && typeof innerChunk === 'object' && 'payload' in innerChunk) {
-              const nestedOutput = innerChunk.payload;
-              if (nestedOutput && typeof nestedOutput === 'object' && 'output' in nestedOutput && nestedOutput.output) {
-                controller.enqueue(nestedOutput.output as ChunkType);
+            const innerChunk = getInnerChunk(chunk);
+            if (
+              innerChunk.type === 'routing-agent-end' ||
+              innerChunk.type === 'agent-execution-end' ||
+              innerChunk.type === 'workflow-execution-end'
+            ) {
+              if (innerChunk.payload?.usage) {
+                updateUsageCount(innerChunk.payload.usage);
               }
+            }
+            if (innerChunk.type === 'network-execution-event-step-finish') {
+              const finishPayload = {
+                ...innerChunk.payload,
+                usage: this.#usageCount,
+              };
+              controller.enqueue({ ...innerChunk, payload: finishPayload });
+            } else {
+              controller.enqueue(innerChunk);
             }
           }
         }
