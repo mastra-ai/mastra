@@ -6,6 +6,7 @@ import { ExternalLink } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 import { useThreadInput } from '@/domains/conversation';
 import { useMemoryConfig, useMemorySearch } from '@/domains/memory/hooks';
+import { MemorySearch } from '@/components/assistant-ui/memory-search';
 
 interface AgentMemoryProps {
   agentId: string;
