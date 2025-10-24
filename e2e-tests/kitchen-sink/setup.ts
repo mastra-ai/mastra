@@ -28,7 +28,14 @@ export default async function setup() {
 
   console.log('[Setup] Publishing packages');
 
-  const packages = ['mastra', '@mastra/loggers', '@mastra/playground-ui', '@mastra/memory', '@mastra/libsql'];
+  const packages = [
+    'mastra',
+    '@mastra/loggers',
+    '@mastra/playground-ui',
+    '@mastra/memory',
+    '@mastra/libsql',
+    '@mastra/mcp',
+  ];
   const publishFilterArgs = packages.map(p => [`--filter="${p}^..."`, `--filter="${p}"`]).flat();
 
   publishPackages(publishFilterArgs, tag, rootDir, registry);
