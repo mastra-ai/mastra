@@ -6,7 +6,6 @@ const meta = {
   workflows: "ワークフロー API",
   vectors: "ベクター API",
   logs: "ログ API",
-  telemetry: "テレメトリ API",
   "error-handling": "エラーハンドリング",
   "workflows-legacy": "ワークフロー（レガシー）API",
 };
