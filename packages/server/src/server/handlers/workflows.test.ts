@@ -15,7 +15,6 @@ import {
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
   resumeStreamWorkflowHandler,
-  watchWorkflowHandler,
   observeStreamWorkflowHandler,
   cancelWorkflowRunHandler,
   sendWorkflowRunEventHandler,
@@ -653,41 +652,6 @@ describe('vNext Workflow Handlers', () => {
       });
 
       expect(result.total).toEqual(1);
-    });
-  });
-
-  describe('watchWorkflowHandler', () => {
-    it('should preserve resourceId when watching workflow run after server restart', async () => {
-      const resourceId = 'user-watch-test';
-
-      // Create run with resourceId
-      const run = await mockWorkflow.createRunAsync({
-        runId: 'test-run-watch-resource',
-        resourceId,
-      });
-      await run.start({ inputData: {} });
-
-      const runBefore = await mockWorkflow.getWorkflowRunById('test-run-watch-resource');
-      expect(runBefore?.resourceId).toBe(resourceId);
-
-      // Simulate server restart
-      const freshWorkflow = createMockWorkflow('test-workflow');
-      const freshMastra = new Mastra({
-        logger: false,
-        workflows: { 'test-workflow': freshWorkflow },
-        storage: mockMastra.getStorage(),
-      });
-
-      const stream = await watchWorkflowHandler({
-        mastra: freshMastra,
-        workflowId: 'test-workflow',
-        runId: 'test-run-watch-resource',
-      });
-      expect(stream).toBeDefined();
-
-      // Verify resourceId is preserved in storage
-      const runAfter = await freshWorkflow.getWorkflowRunById('test-run-watch-resource');
-      expect(runAfter?.resourceId).toBe(resourceId);
     });
   });
 

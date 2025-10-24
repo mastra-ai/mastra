@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { openai } from '@ai-sdk/openai';
 import { serve } from '@hono/node-server';
-import { realtimeMiddleware } from '@inngest/realtime';
+import { realtimeMiddleware } from '@inngest/realtime/middleware';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RuntimeContext } from '@mastra/core/runtime-context';

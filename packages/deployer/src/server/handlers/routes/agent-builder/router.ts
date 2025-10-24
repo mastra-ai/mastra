@@ -12,7 +12,6 @@ import {
   resumeAgentBuilderActionHandler,
   resumeAsyncAgentBuilderActionHandler,
   startAgentBuilderActionRunHandler,
-  watchAgentBuilderActionHandler,
   startAsyncAgentBuilderActionHandler,
   streamAgentBuilderActionHandler,
   streamVNextAgentBuilderActionHandler,
@@ -461,34 +460,6 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     startAgentBuilderActionRunHandler,
-  );
-
-  router.get(
-    '/:actionId/watch',
-    describeRoute({
-      description: 'Watch agent builder action transitions in real-time',
-      parameters: [
-        {
-          name: 'actionId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'query',
-          required: false,
-          schema: { type: 'string' },
-        },
-      ],
-      tags: ['agent-builder'],
-      responses: {
-        200: {
-          description: 'agent builder action transitions in real-time',
-        },
-      },
-    }),
-    watchAgentBuilderActionHandler,
   );
 
   router.post(

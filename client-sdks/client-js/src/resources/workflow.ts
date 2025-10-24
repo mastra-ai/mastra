@@ -805,32 +805,6 @@ export class Workflow extends BaseResource {
     // Pipe the response body through the transform stream
     return response.body.pipeThrough(transformStream);
   }
-  /**
-   * Watches workflow transitions in real-time
-   * @param runId - Optional run ID to filter the watch stream
-   * @returns AsyncGenerator that yields parsed records from the workflow watch stream
-   */
-  async watch({ runId }: { runId?: string }, onRecord: (record: WorkflowWatchResult) => void) {
-    const response: Response = await this.request(`/api/workflows/${this.workflowId}/watch?runId=${runId}`, {
-      stream: true,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to watch workflow: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    for await (const record of this.streamProcessor(response.body)) {
-      if (typeof record === 'string') {
-        onRecord(JSON.parse(record));
-      } else {
-        onRecord(record);
-      }
-    }
-  }
 
   /**
    * Creates a new ReadableStream from an iterable or async iterable of objects,

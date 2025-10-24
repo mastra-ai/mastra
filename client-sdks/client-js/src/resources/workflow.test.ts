@@ -17,13 +17,6 @@ describe('Workflow (fetch-mocked)', () => {
       if (url.includes('/start-async')) return Promise.resolve(createJsonResponse({ result: 'started-async' }));
       if (url.includes('/resume?runId=')) return Promise.resolve(createJsonResponse({ message: 'resumed' }));
       if (url.includes('/resume-async')) return Promise.resolve(createJsonResponse({ result: 'resumed-async' }));
-      if (url.includes('/watch?')) {
-        const body = Workflow.createRecordStream([
-          { type: 'transition', payload: { step: 's1' } },
-          { type: 'transition', payload: { step: 's2' } },
-        ]);
-        return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
-      }
       if (url.includes('/stream?')) {
         const body = Workflow.createRecordStream([
           { type: 'log', payload: { msg: 'hello' } },

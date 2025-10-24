@@ -338,7 +338,7 @@ import { PinoLogger } from "@mastra/loggers";
 import { Inngest } from "inngest";
 import { activityPlanningWorkflow } from "./workflows/inngest-workflow";
 import { planningAgent } from "./agents/planning-agent";
-import { realtimeMiddleware } from "@inngest/realtime";
+import { realtimeMiddleware } from "@inngest/realtime/middleware";
 
 // ワークフローのオーケストレーションとイベント処理のための Inngest インスタンスを作成
 const inngest = new Inngest({

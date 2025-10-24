@@ -35,7 +35,7 @@ Inngest の連携を初期化して、Mastra 互換のワークフロー用ヘ�
 
 ```ts showLineNumbers copy filename="src/mastra/inngest/index.ts"
 import { Inngest } from "inngest";
-import { realtimeMiddleware } from "@inngest/realtime";
+import { realtimeMiddleware } from "@inngest/realtime/middleware";
 
 export const inngest = new Inngest({
   id: "mastra",
@@ -49,7 +49,7 @@ export const inngest = new Inngest({
 
 ```ts showLineNumbers copy filename="src/mastra/inngest/index.ts"
 import { Inngest } from "inngest";
-import { realtimeMiddleware } from "@inngest/realtime";
+import { realtimeMiddleware } from "@inngest/realtime/middleware";
 
 export const inngest = new Inngest({
   id: "mastra",
