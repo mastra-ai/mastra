@@ -9,6 +9,7 @@ import type {
   ThreadSortDirection,
   ThreadSortOptions,
 } from '../../types';
+import { safelyParseJSON } from '../../utils';
 import type { StoreOperations } from '../operations';
 import { MemoryStorage } from './base';
 
@@ -93,7 +94,7 @@ export class InMemoryMemory extends MemoryStorage {
       ...rest,
       threadId: thread_id,
       ...(message.resourceId && { resourceId: message.resourceId }),
-      content: typeof content === 'string' ? content : JSON.parse(content),
+      content: typeof content === 'string' ? safelyParseJSON(content) : content,
       role: role as MastraMessageV2['role'],
     } satisfies MastraMessageV2;
   }
@@ -320,16 +321,7 @@ export class InMemoryMemory extends MemoryStorage {
         const targetMessage = this.collection.messages.get(includeItem.id);
         if (targetMessage) {
           // Convert StorageMessageType to MastraMessageV2
-          const convertedMessage = {
-            id: targetMessage.id,
-            threadId: targetMessage.thread_id,
-            content:
-              typeof targetMessage.content === 'string' ? JSON.parse(targetMessage.content) : targetMessage.content,
-            role: targetMessage.role as 'user' | 'assistant' | 'system' | 'tool',
-            type: targetMessage.type,
-            createdAt: targetMessage.createdAt,
-            resourceId: targetMessage.resourceId,
-          } as MastraMessageV2;
+          const convertedMessage = this.parseStoredMessage(targetMessage);
 
           messages.push(convertedMessage);
 
@@ -345,15 +337,7 @@ export class InMemoryMemory extends MemoryStorage {
               for (let i = startIndex; i < targetIndex; i++) {
                 const message = allThreadMessages[i];
                 if (message && !messages.some(m => m.id === message.id)) {
-                  const convertedPrevMessage = {
-                    id: message.id,
-                    threadId: message.thread_id,
-                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
-                    role: message.role as 'user' | 'assistant' | 'system' | 'tool',
-                    type: message.type,
-                    createdAt: message.createdAt,
-                    resourceId: message.resourceId,
-                  } as MastraMessageV2;
+                  const convertedPrevMessage = this.parseStoredMessage(message);
                   messages.push(convertedPrevMessage);
                 }
               }
@@ -375,15 +359,7 @@ export class InMemoryMemory extends MemoryStorage {
               for (let i = targetIndex + 1; i < endIndex; i++) {
                 const message = allThreadMessages[i];
                 if (message && !messages.some(m => m.id === message.id)) {
-                  const convertedNextMessage = {
-                    id: message.id,
-                    threadId: message.thread_id,
-                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
-                    role: message.role as 'user' | 'assistant' | 'system' | 'tool',
-                    type: message.type,
-                    createdAt: message.createdAt,
-                    resourceId: message.resourceId,
-                  } as MastraMessageV2;
+                  const convertedNextMessage = this.parseStoredMessage(message);
                   messages.push(convertedNextMessage);
                 }
               }
@@ -419,29 +395,13 @@ export class InMemoryMemory extends MemoryStorage {
         const lastMessages = threadMessages.slice(-selectBy.last);
         // Convert and add last messages
         for (const msg of lastMessages) {
-          const convertedMessage = {
-            id: msg.id,
-            threadId: msg.thread_id,
-            content: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content,
-            role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
-            type: msg.type,
-            createdAt: msg.createdAt,
-            resourceId: msg.resourceId,
-          } as MastraMessageV2;
+          const convertedMessage = this.parseStoredMessage(msg);
           messages.push(convertedMessage);
         }
       } else if (!selectBy?.include || selectBy.include.length === 0) {
         // Convert and add all thread messages only if no include items
         for (const msg of threadMessages) {
-          const convertedMessage = {
-            id: msg.id,
-            threadId: msg.thread_id,
-            content: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content,
-            role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
-            type: msg.type,
-            createdAt: msg.createdAt,
-            resourceId: msg.resourceId,
-          } as MastraMessageV2;
+          const convertedMessage = this.parseStoredMessage(msg);
           messages.push(convertedMessage);
         }
       }

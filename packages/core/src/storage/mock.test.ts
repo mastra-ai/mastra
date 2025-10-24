@@ -5,6 +5,14 @@ import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../mem
 import { deepMerge } from '../utils';
 import { InMemoryStore } from './mock';
 
+function verifyMessageContent(messages: MastraMessageV1[] | MastraMessageV2[]) {
+  for (const message of messages) {
+    expect(typeof message.content).toBe('object');
+    expect(message.content).not.toBe(null);
+    expect(typeof message.content).not.toBe('string');
+  }
+}
+
 describe('InMemoryStore - Thread Sorting', () => {
   let store: InMemoryStore;
   const resourceId = 'test-resource-id';
@@ -48,59 +56,67 @@ describe('InMemoryStore - Thread Sorting', () => {
 
   describe('getThreadsByResourceId', () => {
     it('should sort by createdAt DESC by default', async () => {
-      const threads = await store.getThreadsByResourceId({ resourceId });
+      const result = await store.getThreadsByResourceId({ resourceId, page: 0, perPage: 10 });
 
-      expect(threads).toHaveLength(3);
-      expect(threads[0].id).toBe('thread-3'); // 2024-01-03 (latest)
-      expect(threads[1].id).toBe('thread-2'); // 2024-01-02
-      expect(threads[2].id).toBe('thread-1'); // 2024-01-01 (earliest)
+      expect(result.threads).toHaveLength(3);
+      expect(result.threads[0].id).toBe('thread-3'); // 2024-01-03 (latest)
+      expect(result.threads[1].id).toBe('thread-2'); // 2024-01-02
+      expect(result.threads[2].id).toBe('thread-1'); // 2024-01-01 (earliest)
     });
 
     it('should sort by createdAt ASC when specified', async () => {
-      const threads = await store.getThreadsByResourceId({
+      const result = await store.getThreadsByResourceId({
         resourceId,
         orderBy: 'createdAt',
         sortDirection: 'ASC',
+        page: 0,
+        perPage: 10,
       });
 
-      expect(threads).toHaveLength(3);
-      expect(threads[0].id).toBe('thread-1'); // 2024-01-01 (earliest)
-      expect(threads[1].id).toBe('thread-2'); // 2024-01-02
-      expect(threads[2].id).toBe('thread-3'); // 2024-01-03 (latest)
+      expect(result.threads).toHaveLength(3);
+      expect(result.threads[0].id).toBe('thread-1'); // 2024-01-01 (earliest)
+      expect(result.threads[1].id).toBe('thread-2'); // 2024-01-02
+      expect(result.threads[2].id).toBe('thread-3'); // 2024-01-03 (latest)
     });
 
     it('should sort by updatedAt DESC when specified', async () => {
-      const threads = await store.getThreadsByResourceId({
+      const result = await store.getThreadsByResourceId({
         resourceId,
         orderBy: 'updatedAt',
         sortDirection: 'DESC',
+        page: 0,
+        perPage: 10,
       });
 
-      expect(threads).toHaveLength(3);
-      expect(threads[0].id).toBe('thread-1'); // 2024-01-03 (latest updatedAt)
-      expect(threads[1].id).toBe('thread-2'); // 2024-01-02
-      expect(threads[2].id).toBe('thread-3'); // 2024-01-01 (earliest updatedAt)
+      expect(result.threads).toHaveLength(3);
+      expect(result.threads[0].id).toBe('thread-1'); // 2024-01-03 (latest updatedAt)
+      expect(result.threads[1].id).toBe('thread-2'); // 2024-01-02
+      expect(result.threads[2].id).toBe('thread-3'); // 2024-01-01 (earliest updatedAt)
     });
 
     it('should sort by updatedAt ASC when specified', async () => {
-      const threads = await store.getThreadsByResourceId({
+      const result = await store.getThreadsByResourceId({
         resourceId,
         orderBy: 'updatedAt',
         sortDirection: 'ASC',
+        page: 0,
+        perPage: 10,
       });
 
-      expect(threads).toHaveLength(3);
-      expect(threads[0].id).toBe('thread-3'); // 2024-01-01 (earliest updatedAt)
-      expect(threads[1].id).toBe('thread-2'); // 2024-01-02
-      expect(threads[2].id).toBe('thread-1'); // 2024-01-03 (latest updatedAt)
+      expect(result.threads).toHaveLength(3);
+      expect(result.threads[0].id).toBe('thread-3'); // 2024-01-01 (earliest updatedAt)
+      expect(result.threads[1].id).toBe('thread-2'); // 2024-01-02
+      expect(result.threads[2].id).toBe('thread-1'); // 2024-01-03 (latest updatedAt)
     });
 
     it('should handle empty results', async () => {
-      const threads = await store.getThreadsByResourceId({
+      const result = await store.getThreadsByResourceId({
         resourceId: 'non-existent-resource',
+        page: 0,
+        perPage: 10,
       });
 
-      expect(threads).toHaveLength(0);
+      expect(result.threads).toHaveLength(0);
     });
 
     it('should filter by resourceId correctly', async () => {
@@ -116,10 +132,10 @@ describe('InMemoryStore - Thread Sorting', () => {
         },
       });
 
-      const threads = await store.getThreadsByResourceId({ resourceId });
+      const result = await store.getThreadsByResourceId({ resourceId, page: 0, perPage: 10 });
 
-      expect(threads).toHaveLength(3);
-      expect(threads.every(t => t.resourceId === resourceId)).toBe(true);
+      expect(result.threads).toHaveLength(3);
+      expect(result.threads.every(t => t.resourceId === resourceId)).toBe(true);
     });
   });
 
@@ -332,6 +348,7 @@ describe('InMemoryStore - getMessagesById', () => {
 
     expect(messages).toHaveLength(thread1Messages.length + thread2Messages.length + resource2Messages.length);
     expect(messages.every((msg, i, arr) => i === 0 || msg.createdAt >= arr[i - 1]!.createdAt)).toBe(true);
+    verifyMessageContent(messages);
   });
 
   it('should return V2 messages by default', async () => {
@@ -339,6 +356,7 @@ describe('InMemoryStore - getMessagesById', () => {
 
     expect(messages.length).toBeGreaterThan(0);
     expect(messages.every(MessageList.isMastraMessageV2)).toBe(true);
+    verifyMessageContent(messages);
   });
 
   it('should return messages in the specified format', async () => {
@@ -357,6 +375,7 @@ describe('InMemoryStore - getMessagesById', () => {
 
     expect(v2messages.length).toBeGreaterThan(0);
     expect(v2messages.every(MessageList.isMastraMessageV2)).toBe(true);
+    verifyMessageContent(v2messages);
   });
 
   it('should return messages from multiple threads', async () => {
@@ -367,6 +386,7 @@ describe('InMemoryStore - getMessagesById', () => {
     expect(messages.length).toBeGreaterThan(0);
     expect(messages.some(msg => msg.threadId === threads[0]?.id)).toBe(true);
     expect(messages.some(msg => msg.threadId === threads[1]?.id)).toBe(true);
+    verifyMessageContent(messages);
   });
 
   it('should return messages from multiple resources', async () => {
@@ -377,5 +397,6 @@ describe('InMemoryStore - getMessagesById', () => {
     expect(messages).toHaveLength(thread1Messages.length + resource2Messages.length);
     expect(messages.some(msg => msg.resourceId === threads[0]?.resourceId)).toBe(true);
     expect(messages.some(msg => msg.resourceId === threads[2]?.resourceId)).toBe(true);
+    verifyMessageContent(messages);
   });
 });
