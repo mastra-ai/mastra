@@ -1,16 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { toUIMessage, mapWorkflowStreamChunkToWatchResult, ToUIMessageArgs } from './toUIMessage';
+import { toUIMessage, mapWorkflowStreamChunkToWatchResult } from './toUIMessage';
 import { MastraUIMessage, MastraUIMessageMetadata } from '../types';
 import { ChunkType, ChunkFrom } from '@mastra/core/stream';
-import { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
+import { WorkflowStreamResult } from '@mastra/core/workflows';
 
 describe('toUIMessage', () => {
   describe('mapWorkflowStreamChunkToWatchResult', () => {
     it('should handle workflow-start chunk', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         input: { test: 'data' },
-        status: 'idle',
-        steps: { step1: { status: 'success', output: 'result1' } },
+        status: 'pending',
+        steps: {
+          step1: {
+            status: 'success',
+            output: 'result1',
+            payload: {},
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
+        },
       };
 
       const chunk = {
@@ -25,7 +33,15 @@ describe('toUIMessage', () => {
       expect(result).toEqual({
         input: { test: 'data' },
         status: 'running',
-        steps: { step1: { status: 'success', output: 'result1' } },
+        steps: {
+          step1: {
+            status: 'success',
+            output: 'result1',
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+        },
       });
     });
 
@@ -50,6 +66,7 @@ describe('toUIMessage', () => {
     it('should handle workflow-canceled chunk', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {},
       };
 
@@ -64,6 +81,7 @@ describe('toUIMessage', () => {
 
       expect(result).toEqual({
         status: 'canceled',
+        input: {},
         steps: {},
       });
     });
@@ -71,9 +89,22 @@ describe('toUIMessage', () => {
     it('should handle workflow-finish with success status and successful last step', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {
-          step1: { status: 'success', output: 'result1' },
-          step2: { status: 'success', output: 'final-result' },
+          step1: {
+            status: 'success',
+            output: 'result1',
+            payload: {},
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
+          step2: {
+            status: 'success',
+            output: 'final-result',
+            payload: {},
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
         },
       };
 
@@ -88,9 +119,22 @@ describe('toUIMessage', () => {
 
       expect(result).toEqual({
         status: 'success',
+        input: {},
         steps: {
-          step1: { status: 'success', output: 'result1' },
-          step2: { status: 'success', output: 'final-result' },
+          step1: {
+            status: 'success',
+            output: 'result1',
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          step2: {
+            status: 'success',
+            output: 'final-result',
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
         },
         result: 'final-result',
       });
@@ -99,9 +143,22 @@ describe('toUIMessage', () => {
     it('should handle workflow-finish with failed status and failed last step', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {
-          step1: { status: 'success', output: 'result1' },
-          step2: { status: 'failed', error: 'error-message' },
+          step1: {
+            status: 'success',
+            output: 'result1',
+            payload: {},
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
+          step2: {
+            status: 'failed',
+            error: 'error-message',
+            payload: {},
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
         },
       };
 
@@ -116,9 +173,22 @@ describe('toUIMessage', () => {
 
       expect(result).toEqual({
         status: 'failed',
+        input: {},
         steps: {
-          step1: { status: 'success', output: 'result1' },
-          step2: { status: 'failed', error: 'error-message' },
+          step1: {
+            status: 'success',
+            output: 'result1',
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          step2: {
+            status: 'failed',
+            error: 'error-message',
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
         },
         error: 'error-message',
       });
@@ -127,6 +197,8 @@ describe('toUIMessage', () => {
     it('should handle workflow-finish with no steps', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
+        steps: {},
       };
 
       const chunk = {
@@ -140,12 +212,15 @@ describe('toUIMessage', () => {
 
       expect(result).toEqual({
         status: 'success',
+        input: {},
+        steps: {},
       });
     });
 
     it('should handle workflow-step-start chunk', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {},
       };
 
@@ -155,6 +230,8 @@ describe('toUIMessage', () => {
           id: 'step1',
           status: 'running',
           input: { test: 'input' },
+          payload: {},
+          startedAt: Date.now(),
         },
         runId: 'run-123',
         from: ChunkFrom.WORKFLOW as const,
@@ -164,11 +241,14 @@ describe('toUIMessage', () => {
 
       expect(result).toEqual({
         status: 'running',
+        input: {},
         steps: {
           step1: {
             id: 'step1',
             status: 'running',
             input: { test: 'input' },
+            payload: {},
+            startedAt: expect.any(Number),
           },
         },
       });
@@ -177,8 +257,13 @@ describe('toUIMessage', () => {
     it('should handle workflow-step-suspended chunk', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {
-          step1: { status: 'running' },
+          step1: {
+            status: 'running',
+            payload: {},
+            startedAt: Date.now(),
+          },
         },
       };
 
@@ -188,6 +273,9 @@ describe('toUIMessage', () => {
           id: 'step1',
           status: 'suspended',
           suspendPayload: { reason: 'waiting-for-input' },
+          payload: {},
+          startedAt: Date.now(),
+          suspendedAt: Date.now(),
         },
         runId: 'run-123',
         from: ChunkFrom.WORKFLOW as const,
@@ -197,11 +285,15 @@ describe('toUIMessage', () => {
 
       expect(result).toEqual({
         status: 'suspended',
+        input: {},
         steps: {
           step1: {
             id: 'step1',
             status: 'suspended',
             suspendPayload: { reason: 'waiting-for-input' },
+            payload: {},
+            startedAt: expect.any(Number),
+            suspendedAt: expect.any(Number),
           },
         },
         suspendPayload: { reason: 'waiting-for-input' },
@@ -212,8 +304,13 @@ describe('toUIMessage', () => {
     it('should handle nested suspended steps', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {
-          step1: { status: 'running' },
+          step1: {
+            status: 'running',
+            payload: {},
+            startedAt: Date.now(),
+          },
         },
       };
 
@@ -225,6 +322,9 @@ describe('toUIMessage', () => {
           suspendPayload: {
             __workflow_meta: { path: ['nested1', 'nested2'] },
           },
+          payload: {},
+          startedAt: Date.now(),
+          suspendedAt: Date.now(),
         },
         runId: 'run-123',
         from: ChunkFrom.WORKFLOW as const,
@@ -238,6 +338,7 @@ describe('toUIMessage', () => {
     it('should handle workflow-step-waiting chunk', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {},
       };
 
@@ -246,6 +347,8 @@ describe('toUIMessage', () => {
         payload: {
           id: 'step1',
           status: 'waiting',
+          payload: {},
+          startedAt: Date.now(),
         },
         runId: 'run-123',
         from: ChunkFrom.WORKFLOW as const,
@@ -255,10 +358,13 @@ describe('toUIMessage', () => {
 
       expect(result).toEqual({
         status: 'waiting',
+        input: {},
         steps: {
           step1: {
             id: 'step1',
             status: 'waiting',
+            payload: {},
+            startedAt: expect.any(Number),
           },
         },
       });
@@ -267,6 +373,7 @@ describe('toUIMessage', () => {
     it('should handle workflow-step-result chunk', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {},
       };
 
@@ -276,6 +383,9 @@ describe('toUIMessage', () => {
           id: 'step1',
           status: 'success',
           output: 'step-output',
+          payload: {},
+          startedAt: Date.now(),
+          endedAt: Date.now(),
         },
         runId: 'run-123',
         from: ChunkFrom.WORKFLOW as const,
@@ -285,11 +395,15 @@ describe('toUIMessage', () => {
 
       expect(result).toEqual({
         status: 'running',
+        input: {},
         steps: {
           step1: {
             id: 'step1',
             status: 'success',
             output: 'step-output',
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
           },
         },
       });
@@ -298,6 +412,7 @@ describe('toUIMessage', () => {
     it('should handle unknown chunk type', () => {
       const prev: WorkflowStreamResult<any, any, any, any> = {
         status: 'running',
+        input: {},
         steps: {},
       };
 
