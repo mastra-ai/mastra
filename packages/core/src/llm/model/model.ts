@@ -548,8 +548,8 @@ export class MastraLLMV1 extends MastraBase {
         }
       },
       onFinish: async props => {
-        // End the LLM span BEFORE calling the user's onFinish callback
-        // This ensures child spans close before parent spans (agent_run) (issue #8204)
+        // End the model generation span BEFORE calling the user's onFinish callback
+        // This ensures the model span ends before the agent span
         llmSpan?.end({
           output: {
             text: props?.text,
@@ -702,8 +702,8 @@ export class MastraLLMV1 extends MastraBase {
         ...rest,
         model,
         onFinish: async (props: any) => {
-          // End the LLM span BEFORE calling the user's onFinish callback
-          // This ensures child spans close before parent spans (agent_run) (issue #8204)
+          // End the model generation span BEFORE calling the user's onFinish callback
+          // This ensures the model span ends before the agent span
           llmSpan?.end({
             output: {
               text: props?.text,

@@ -281,7 +281,7 @@ export class MastraLLMVNext extends MastraBase {
 
           onFinish: async props => {
             // End the model generation span BEFORE calling the user's onFinish callback
-            // This ensures child spans close before parent spans (agent_run)
+            // This ensures the model span ends before the agent span
             modelSpanTracker?.endGeneration({
               output: {
                 files: props?.files,
