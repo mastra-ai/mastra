@@ -8,6 +8,7 @@ import * as aiTest from 'ai/test';
 import { fixtures } from '../../../fixtures';
 import { Fixtures } from '../../../types';
 import { lessComplexWorkflow } from '../workflows/complex-workflow';
+import { simpleMcpTool } from '../tools';
 
 const memory = new Memory({
   // ...
@@ -60,7 +61,7 @@ export const weatherAgent = new Agent({
       },
     });
   },
-  tools: { weatherInfo },
+  tools: { weatherInfo, simpleMcpTool },
   agents: { subAgent },
   workflows: { lessComplexWorkflow },
   memory,

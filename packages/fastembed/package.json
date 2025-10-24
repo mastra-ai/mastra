@@ -47,5 +47,12 @@
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
   }
 }
