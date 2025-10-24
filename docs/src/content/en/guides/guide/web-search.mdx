@@ -64,7 +64,7 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     ```ts copy filename="src/mastra/agents/searchAgent.ts"
     import { Agent } from "@mastra/core/agent";
 
-        export const searchAgent = new Agent({
+    export const searchAgent = new Agent({
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -144,7 +144,7 @@ Inside Playground navigate to the **"Search Agent"** and ask it: "What happened 
 
 ## Using Search APIs
 
-For more control over search behavior, you can integrate external search APIs as custom tools. Exa is a search engine built specifically for AI applications, offering semantic search, configurable filters (category, domain, date range), and the ability to retrieve full page contents. The search API is wrapped in a Mastra tool that defines the input schema, output format, and execution logic.
+For more control over search behavior, you can integrate external search APIs as custom tools. [Exa](https://exa.ai/) is a search engine built specifically for AI applications, offering semantic search, configurable filters (category, domain, date range), and the ability to retrieve full page contents. The search API is wrapped in a Mastra tool that defines the input schema, output format, and execution logic.
 
 <Steps>
 
