@@ -1,33 +1,13 @@
 import { MockLanguageModelV2 } from 'ai-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { openai, openai as openai_v5 } from '@ai-sdk/openai-v5';
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
 import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
 import { logDataMiddleware } from '../../model-middleware';
 import { APICallError, wrapLanguageModel } from 'ai-v5';
 import { cookingTool } from '../tools';
-
-export const weatherInfo = createTool({
-  id: 'weather-info',
-  description: 'Fetches the current weather information for a given city',
-  inputSchema: z.object({
-    city: z.string(),
-  }),
-  execute: async ({ context }) => {
-    return {
-      city: context.city,
-      weather: 'sunny',
-      temperature_celsius: 19,
-      temperature_fahrenheit: 66,
-      humidity: 50,
-      wind: '10 mph',
-    };
-  },
-  // requireApproval: true,
-});
+import { weatherInfo } from '../tools/weather-tool';
 
 const memory = new Memory();
 

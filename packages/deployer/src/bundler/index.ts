@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { stat, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
@@ -14,7 +14,7 @@ import { createBundler as createBundlerUtil, getInputOptions } from '../build/bu
 import { getBundlerOptions } from '../build/bundlerOptions';
 import { writeCustomInstrumentation } from '../build/customInstrumentation';
 import { writeTelemetryConfig } from '../build/telemetry';
-import { getPackageRootPath } from '../build/utils';
+import { getPackageRootPath, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import { getWorkspaceInformation } from './workspaceDependencies';
@@ -208,6 +208,29 @@ export abstract class Bundler extends MastraBundler {
     return inputOptions;
   }
 
+  getAllToolPaths(mastraDir: string, toolsPaths: (string | string[])[] = []): (string | string[])[] {
+    // Normalize Windows paths to forward slashes for consistent handling
+    const normalizedMastraDir = slash(mastraDir);
+
+    // Prepare default tools paths with glob patterns
+    const defaultToolsPath = posix.join(normalizedMastraDir, 'tools/**/*.{js,ts}');
+    const defaultToolsIgnorePaths = [
+      `!${posix.join(normalizedMastraDir, 'tools/**/*.{test,spec}.{js,ts}')}`,
+      `!${posix.join(normalizedMastraDir, 'tools/**/__tests__/**')}`,
+    ];
+
+    // Combine default path with ignore patterns
+    const defaultPaths = [defaultToolsPath, ...defaultToolsIgnorePaths];
+
+    // If no tools paths provided, use only the default paths
+    if (toolsPaths.length === 0) {
+      return [defaultPaths];
+    }
+
+    // If tools paths are provided, add the default paths to ensure standard tools are always included
+    return [...toolsPaths, defaultPaths];
+  }
+
   async getToolsInputOptions(toolsPaths: (string | string[])[]) {
     const inputs: Record<string, string> = {};
 
@@ -269,6 +292,7 @@ export abstract class Bundler extends MastraBundler {
     let analyzedBundleInfo;
     try {
       const resolvedToolsPaths = await this.getToolsInputOptions(toolsPaths);
+
       analyzedBundleInfo = await analyzeBundle(
         [serverFile, ...Object.values(resolvedToolsPaths)],
         mastraEntryFile,
@@ -454,7 +478,7 @@ export const tools = [${toolsExports.join(', ')}]`,
     }
   }
 
-  async lint(_entryFile: string, _outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
+  async lint(entryFile: string, _outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
     const toolsLength = Object.keys(toolsInputOptions).length;
     if (toolsLength > 0) {
