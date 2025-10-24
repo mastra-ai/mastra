@@ -533,7 +533,9 @@ export class Memory extends MastraMemory {
             reason = `appended newMemory to end of working memory`;
           }
 
-          workingMemory = existingWorkingMemory + `
+          workingMemory =
+            existingWorkingMemory +
+            `
 ${workingMemory}`;
         }
       } else if (workingMemory === template?.content) {
