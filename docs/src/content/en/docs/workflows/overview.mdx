@@ -7,15 +7,13 @@ import { Steps, Callout, Tabs } from "nextra/components";
 
 # Workflows overview
 
-Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down, how data moves between them, and what gets executed when.
+Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down, how data moves between them, and what gets executed when. Workflow steps can be used to call tools, agents, execute code inline, or run other workflows.
 
 ![Workflows overview](/image/workflows/workflows-overview.jpg)
 
 ## When to use workflows
 
 Use workflows for tasks that are clearly defined upfront and involve multiple steps with a specific execution order. They give you fine-grained control over how data flows and transforms between steps, and which primitives are called at each stage.
-
-
 
 > **📹 Watch**:  → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
 
@@ -129,7 +127,61 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-### Registering a workflow
+### Using a nested workflow
+
+Use a nested workflow as a step by passing it to `.then()`. This allows the nested workflow to run each of its steps in sequence as part of the parent workflow, making it easy to compose larger flows from smaller, reusable workflows.
+
+The nested workflow's `inputSchema` must match the output of the previous step, and its `outputSchema` must match the input of the next step. If they don't match, use `.map()` to transform the data between them.
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+const childWorkflow = createWorkflow({
+  id: "child-workflow",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+
+export const testWorkflow = createWorkflow({
+  id: "nested-workflow",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
+  .then(childWorkflow)
+  .commit();
+```
+
+### Cloning a workflow
+
+Use `cloneWorkflow` to duplicate an existing workflow. This lets you reuse the original workflow’s structure while changing specific properties like `id`. Cloning is useful when you want to build variations of a workflow without redefining its steps.
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+
+const parentWorkflow = createWorkflow({...})
+const clonedWorkflow = cloneWorkflow(parentWorkflow, { id: "cloned-workflow" });
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .then(clonedWorkflow)
+  .commit();
+```
+
+
+## Registering a workflow
 
 Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
 

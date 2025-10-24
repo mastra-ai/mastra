@@ -9,14 +9,14 @@ Workflows run a sequence of predefined tasks, and you can control how that flow 
 
 Each step connects to the next in the workflow through defined schemas that keep data controlled and consistent.
 
-## Schema requirements
+## Core principles
 
 - The first step’s `inputSchema` must match the workflow’s `inputSchema`.
 - The final step’s `outputSchema` must match the workflow’s `outputSchema`.
 - Each step’s `outputSchema` must match the next step’s `inputSchema`.
   - If it doesn’t, use [Input data mapping](#input-data-mapping) to transform the data into the required shape.
 
-## Sequential steps with `.then()`
+##  Chaining steps with `.then()`
 
 Use `.then()` to run steps in order, allowing each step to access the result of the step before it.
 
@@ -118,7 +118,9 @@ Use `.branch()` to choose which step to run based on a condition. All steps in a
 
 ![Conditional branching with .branch()](/image/workflows/workflows-control-flow-branch.jpg)
 
-```typescript {30-33} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {33-36} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...})
+
 const stepA = createStep({
   // ...
   inputSchema: z.object({
@@ -148,6 +150,7 @@ export const testWorkflow = createWorkflow({
     result: z.string()
   })
 })
+  .then(step1)
   .branch([
     [async ({ inputData: { value } }) => value > 10, stepA],
     [async ({ inputData: { value } }) => value <= 10, stepB]
