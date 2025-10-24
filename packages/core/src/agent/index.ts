@@ -1,4 +1,3 @@
-export * from './input-processor';
 export { TripWire } from './trip-wire';
 export { MessageList, convertMessages } from './message-list';
 export type { OutputFormat } from './message-list';
