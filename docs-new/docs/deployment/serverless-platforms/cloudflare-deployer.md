@@ -1,6 +1,7 @@
 ---
-title: 'Cloudflare Deployer'
+title: 'Cloudflare'
 description: 'Learn how to deploy a Mastra application to Cloudflare using the Mastra CloudflareDeployer'
+sidebar_position: 2
 ---
 
 # CloudflareDeployer

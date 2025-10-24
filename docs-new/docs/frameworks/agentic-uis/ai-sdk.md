@@ -1,6 +1,7 @@
 ---
-title: 'Using with Vercel AI SDK'
+title: 'With Vercel AI SDK'
 description: 'Learn how Mastra leverages the Vercel AI SDK library and how you can leverage it further with Mastra'
+sidebar_position: 1
 ---
 
 import Tabs from '@theme/Tabs';

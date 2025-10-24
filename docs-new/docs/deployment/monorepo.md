@@ -1,6 +1,7 @@
 ---
-title: Monorepo Deployment
+title: With a monorepo
 description: Learn how to deploy Mastra applications that are part of a monorepo setup
+sidebar_position: 3
 ---
 
 # Monorepo Deployment

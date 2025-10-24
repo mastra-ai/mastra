@@ -1,6 +1,7 @@
 ---
-title: 'Cloud Providers'
+title: 'Overview'
 description: 'Deploy your Mastra applications to popular cloud providers.'
+sidebar_position: 1
 ---
 
 ## Cloud Providers

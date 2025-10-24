@@ -1,5 +1,5 @@
 ---
-title: 'Getting Started with Mastra and Astro '
+title: 'With Astro'
 description: A step-by-step guide to integrating Mastra with Astro.
 ---
 

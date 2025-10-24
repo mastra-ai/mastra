@@ -1,6 +1,7 @@
 ---
-title: 'Serverless Deployment'
+title: 'Overview'
 description: 'Build and deploy Mastra applications using platform-specific deployers or standard HTTP servers'
+sidebar_position: 1
 ---
 
 # Serverless Deployment

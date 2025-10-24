@@ -1,6 +1,7 @@
 ---
-title: 'Getting Started with Mastra and Vite/React '
+title: 'With Vite/React '
 description: A step-by-step guide to integrating Mastra with Vite and React.
+sidebar_position: 1
 ---
 
 import Tabs from '@theme/Tabs';

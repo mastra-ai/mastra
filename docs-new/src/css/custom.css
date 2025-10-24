@@ -397,7 +397,9 @@ span[class*='categoryLinkLabel'] {
   /* Custom Scrollbars*/
   .menu,
   pre,
-  [class*='tableOfContents'] {
+  [class*='tableOfContents'],
+  .tabs,
+  .toc-wrapper {
     padding-inline: 0 !important;
     scrollbar-width: thin;
     scrollbar-color: #dedede transparent;
@@ -425,6 +427,17 @@ span[class*='categoryLinkLabel'] {
     bottom: 0;
     width: 1.5px;
     background: var(--mastra-text-primary);
+  }
+
+  .theme-doc-sidebar-item-link-level-3,
+  .theme-doc-sidebar-item-link-level-4 {
+    .menu__link--active::before {
+      inset-inline-start: 0px;
+    }
+  }
+
+  .menu__list-item:not(:first-child) {
+    margin-top: 0.5rem;
   }
 
   .menu__list-item-collapsible:hover {
@@ -521,6 +534,24 @@ span[class*='categoryLinkLabel'] {
   h6 {
     letter-spacing: -0.028em;
   }
+
+  h2,
+  h3 {
+    border-bottom: 1px solid oklch(92.8% 0.006 264.531);
+    padding-bottom: 0.5rem;
+    font-weight: 600;
+  }
+  
+}
+
+h2:has(code){
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+h2 code{
+  font-size: calc(var(--ifm-h2-font-size) - 0.25rem);
+  border-radius: 10px;
 }
 
 iframe,
@@ -593,7 +624,6 @@ code {
   border: 1px solid color-mix(in oklab, #000 4%, transparent);
   background: color-mix(in oklab, #000 3%, transparent);
   padding: 0.12em 0.25em;
-
 }
 
 pre code {
@@ -868,6 +898,7 @@ table code {
   font-weight: 500;
   padding: 0.5rem;
   padding-inline: 0.75rem;
+  flex-shrink: 0;
 }
 
 .tabs__item:hover {
@@ -941,6 +972,9 @@ table code {
   padding-inline: 3rem;
 }
 
+header h1 {
+  text-wrap: balance;
+}
 kbd {
   all: unset;
   background: var(--ifm-background-color);

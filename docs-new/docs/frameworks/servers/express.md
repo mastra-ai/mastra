@@ -1,5 +1,5 @@
 ---
-title: 'Getting started with Mastra and Express '
+title: 'With Express'
 description: A step-by-step guide to integrating Mastra with an Express backend.
 ---
 

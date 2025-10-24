@@ -1,5 +1,5 @@
 ---
-title: 'Getting Started with Mastra and SvelteKit '
+title: 'With SvelteKit '
 description: A step-by-step guide to integrating Mastra with SvelteKit.
 ---
 
