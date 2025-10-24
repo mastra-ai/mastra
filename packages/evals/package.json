@@ -131,12 +131,5 @@
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*",
     "zod": "^3.25.76"
-  },
-  "publishConfig": {
-    "access": "public",
-    "publish-branch": [
-      "main",
-      "0.x"
-    ]
   }
 }
