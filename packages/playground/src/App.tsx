@@ -8,13 +8,10 @@ import Tools from '@/pages/tools';
 
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
-import AgentEvalsPage from './pages/agents/agent/evals';
-import AgentTracesPage from './pages/agents/agent/traces';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
 import Workflows from './pages/workflows';
 import { Workflow } from './pages/workflows/workflow';
-import WorkflowTracesPage from './pages/workflows/workflow/traces';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import RuntimeContext from './pages/runtime-context';
@@ -122,8 +119,6 @@ function App() {
                   >
                     <Route path="chat" element={<Agent />} />
                     <Route path="chat/:threadId" element={<Agent />} />
-                    <Route path="evals" element={<AgentEvalsPage />} />
-                    <Route path="traces" element={<AgentTracesPage />} />
                   </Route>
                   <Route path="/tools" element={<Tools />} />
 
@@ -144,7 +139,6 @@ function App() {
                       </WorkflowLayout>
                     }
                   >
-                    <Route path="traces" element={<WorkflowTracesPage />} />
                     <Route path="/workflows/:workflowId/graph" element={<Workflow />} />
                     <Route path="/workflows/:workflowId/graph/:runId" element={<Workflow />} />
                   </Route>
