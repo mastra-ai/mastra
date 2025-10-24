@@ -1,53 +1,29 @@
-import type { AISpan, AISpanType, TracingContext } from '../../../ai-tracing';
-import type { SystemMessage } from '../../../llm';
+import type { TracingContext } from '../../../ai-tracing';
 import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
-import type { MastraMemory } from '../../../memory/memory';
-import type { MemoryConfig } from '../../../memory/types';
 import { StructuredOutputProcessor } from '../../../processors';
-import type { RuntimeContext } from '../../../runtime-context';
 import type { OutputSchema } from '../../../stream/base/schema';
-import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
+import type { prepareStreamWorkflowInputSchema } from './index';
+import type { z } from 'zod';
 
-interface MapResultsStepOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface MapResultsStepOptions {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
-  resourceId?: string;
-  runId: string;
-  runtimeContext: RuntimeContext;
-  memory?: MastraMemory;
-  memoryConfig?: MemoryConfig;
   saveQueueManager: SaveQueueManager;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  instructions: SystemMessage;
   agentId: string;
 }
 
 export function createMapResultsStep<
   OUTPUT extends OutputSchema | undefined = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
-  capabilities,
-  options,
-  resourceId,
-  runId,
-  runtimeContext,
-  memory,
-  memoryConfig,
-  saveQueueManager,
-  agentAISpan,
-  instructions,
-  agentId,
-}: MapResultsStepOptions<OUTPUT, FORMAT>) {
+>({ capabilities, saveQueueManager, agentId }: MapResultsStepOptions) {
   return async ({
     inputData,
     bail,
     tracingContext,
+    runtimeContext,
+    getInitData,
   }: {
     inputData: {
       'prepare-tools-step': PrepareToolsStepOutput;
@@ -55,7 +31,25 @@ export function createMapResultsStep<
     };
     bail: <T>(value: T) => T;
     tracingContext: TracingContext;
+    runtimeContext: any; // RuntimeContext from workflow execution
+    getInitData: () => any;
   }) => {
+    // Get workflow input data
+    const workflowInput = getInitData() as z.infer<typeof prepareStreamWorkflowInputSchema>;
+    const {
+      options,
+      resourceId,
+      runId,
+      memory,
+      memoryConfig,
+      instructions,
+      returnScorerData,
+      requireToolApproval,
+      resumeContext,
+      toolCallId,
+      format,
+    } = workflowInput;
+    const agentAISpan = tracingContext.currentSpan;
     const toolsData = inputData['prepare-tools-step'];
     const memoryData = inputData['prepare-memory-step'];
 
@@ -140,7 +134,7 @@ export function createMapResultsStep<
 
     const messageList = memoryData.messageList!;
 
-    const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
+    const loopOptions = {
       agentId,
       runtimeContext: result.runtimeContext!,
       tracingContext: { currentSpan: agentAISpan },
@@ -152,6 +146,12 @@ export function createMapResultsStep<
       stopWhen: result.stopWhen,
       maxSteps: result.maxSteps,
       providerOptions: result.providerOptions,
+      returnScorerData,
+      resumeContext,
+      toolCallId,
+      // Extra fields needed by streamStep
+      format,
+      requireToolApproval,
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
         onFinish: async (payload: any) => {
@@ -179,7 +179,7 @@ export function createMapResultsStep<
               resourceId,
               memoryConfig,
               runtimeContext,
-              agentAISpan: agentAISpan,
+              agentAISpan: agentAISpan as any,
               runId,
               messageList,
               threadExists: memoryData.threadExists,

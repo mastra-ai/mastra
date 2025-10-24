@@ -6,36 +6,15 @@ import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { AgentCapabilities } from './schema';
 
-interface StreamStepOptions<FORMAT extends 'aisdk' | 'mastra' | undefined = undefined> {
+interface StreamStepOptions {
   capabilities: AgentCapabilities;
-  runId: string;
-  returnScorerData?: boolean;
-  /**
-   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
-   */
-  format?: FORMAT;
-  requireToolApproval?: boolean;
-  resumeContext?: {
-    resumeData: any;
-    snapshot: any;
-  };
   agentId: string;
-  toolCallId?: string;
 }
 
 export function createStreamStep<
   OUTPUT extends OutputSchema | undefined = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
-  capabilities,
-  runId,
-  returnScorerData,
-  format = 'mastra' as FORMAT,
-  requireToolApproval,
-  resumeContext,
-  agentId,
-  toolCallId,
-}: StreamStepOptions<FORMAT>) {
+>({ capabilities, agentId }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
     inputSchema: z.any(), // tried to type this in various ways but it's too complex
@@ -45,7 +24,23 @@ export function createStreamStep<
     ]),
     execute: async ({ inputData, tracingContext }) => {
       // Instead of validating inputData with zod, we just cast it to the type we know it should be
-      const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT>;
+      const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT> & {
+        runId: string;
+        returnScorerData?: boolean;
+        format?: FORMAT;
+        requireToolApproval?: boolean;
+        resumeContext?: { resumeData: any; snapshot: any };
+        toolCallId?: string;
+      };
+
+      const {
+        runId,
+        returnScorerData,
+        format = 'mastra' as FORMAT,
+        requireToolApproval,
+        resumeContext,
+        toolCallId,
+      } = validatedInputData;
 
       capabilities.logger.debug(`Starting agent ${capabilities.agentName} llm stream call`, {
         runId,

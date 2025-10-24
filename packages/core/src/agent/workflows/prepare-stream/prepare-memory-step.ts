@@ -1,17 +1,12 @@
 import deepEqual from 'fast-deep-equal';
-import { z } from 'zod';
-import type { AISpan, AISpanType } from '../../../ai-tracing';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
-import type { MastraMemory } from '../../../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
-import type { RuntimeContext } from '../../../runtime-context';
-import type { OutputSchema } from '../../../stream/base/schema';
+import type { StorageThreadType } from '../../../memory/types';
 import { createStep } from '../../../workflows';
-import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
 import type { AgentCapabilities } from './schema';
 import { prepareMemoryStepOutputSchema } from './schema';
+import { prepareStreamWorkflowInputSchema } from './index';
 
 /**
  * Helper function to add system message(s) to a MessageList
@@ -32,46 +27,17 @@ function addSystemMessage(messageList: MessageList, content: SystemMessage | und
   }
 }
 
-interface PrepareMemoryStepOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface PrepareMemoryStepOptions {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
-  threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
-  resourceId?: string;
-  runId: string;
-  runtimeContext: RuntimeContext;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
-  /**
-   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
-   */
-  format?: FORMAT;
-  instructions: SystemMessage;
-  memoryConfig?: MemoryConfig;
-  memory?: MastraMemory;
 }
 
-export function createPrepareMemoryStep<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
-  capabilities,
-  options,
-  threadFromArgs,
-  resourceId,
-  runId,
-  runtimeContext,
-  instructions,
-  memoryConfig,
-  memory,
-}: PrepareMemoryStepOptions<OUTPUT, FORMAT>) {
+export function createPrepareMemoryStep({ capabilities }: PrepareMemoryStepOptions) {
   return createStep({
     id: 'prepare-memory-step',
-    inputSchema: z.object({}),
+    inputSchema: prepareStreamWorkflowInputSchema,
     outputSchema: prepareMemoryStepOutputSchema,
-    execute: async ({ tracingContext }) => {
+    execute: async ({ inputData, tracingContext, runtimeContext }) => {
+      const { options, threadFromArgs, resourceId, runId, instructions, memoryConfig, memory } = inputData;
       const thread = threadFromArgs;
       const messageList = new MessageList({
         threadId: thread?.id,
@@ -135,7 +101,7 @@ export function createPrepareMemoryStep<
         },
       );
 
-      let threadObject: StorageThreadType | undefined = undefined;
+      let threadObject: StorageThreadType;
       const existingThread = await memory.getThreadById({ threadId: thread?.id });
 
       if (existingThread) {

@@ -1,48 +1,21 @@
-import { z } from 'zod';
-import type { AISpan, AISpanType } from '../../../ai-tracing';
-import type { MastraMemory } from '../../../memory/memory';
-import type { StorageThreadType } from '../../../memory/types';
-import type { RuntimeContext } from '../../../runtime-context';
-import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
-import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { AgentCapabilities } from './schema';
 import { prepareToolsStepOutputSchema } from './schema';
+import { prepareStreamWorkflowInputSchema } from './index';
 
-interface PrepareToolsStepOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface PrepareToolsStepOptions {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
-  threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
-  resourceId?: string;
-  runId: string;
-  runtimeContext: RuntimeContext;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
-  memory?: MastraMemory;
 }
 
-export function createPrepareToolsStep<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
-  capabilities,
-  options,
-  threadFromArgs,
-  resourceId,
-  runId,
-  runtimeContext,
-  agentAISpan,
-  methodType,
-  memory,
-}: PrepareToolsStepOptions<OUTPUT, FORMAT>) {
+export function createPrepareToolsStep({ capabilities }: PrepareToolsStepOptions) {
   return createStep({
     id: 'prepare-tools-step',
-    inputSchema: z.object({}),
+    inputSchema: prepareStreamWorkflowInputSchema,
     outputSchema: prepareToolsStepOutputSchema,
-    execute: async () => {
+    execute: async ({ inputData, tracingContext, runtimeContext }) => {
+      const { options, threadFromArgs, resourceId, runId, methodType, memory } = inputData;
+      const agentAISpan = tracingContext.currentSpan;
+
       const toolEnhancements = [
         options?.toolsets && Object.keys(options?.toolsets || {}).length > 0
           ? `toolsets present (${Object.keys(options?.toolsets || {}).length} tools)`

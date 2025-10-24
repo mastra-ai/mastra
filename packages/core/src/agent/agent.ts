@@ -3553,30 +3553,38 @@ export class Agent<
       getTelemetry: this.#mastra?.getTelemetry?.bind(this.#mastra),
     };
 
-    // Create the workflow with all necessary context
+    // Create the workflow with static (instance-level) context
     const executionWorkflow = createPrepareStreamWorkflow({
       capabilities,
-      options: { ...options, methodType },
-      threadFromArgs,
-      resourceId,
-      runId,
-      runtimeContext,
-      agentAISpan: agentAISpan!,
-      methodType,
-      format: format as FORMAT,
-      instructions,
-      memoryConfig,
-      memory,
       saveQueueManager,
-      returnScorerData: options.returnScorerData,
-      requireToolApproval: options.requireToolApproval,
-      resumeContext,
       agentId: this.id,
-      toolCallId: options.toolCallId,
     });
 
-    const run = await executionWorkflow.createRunAsync();
-    const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
+    // Pass dynamic (call-level) arguments as workflow input
+    const run = await executionWorkflow.createRunAsync({
+      runId,
+      resourceId,
+    });
+
+    const result = await run.start({
+      inputData: {
+        options: { ...options, methodType },
+        threadFromArgs,
+        resourceId,
+        runId,
+        methodType,
+        format: format as FORMAT,
+        instructions,
+        memoryConfig,
+        memory,
+        returnScorerData: options.returnScorerData,
+        requireToolApproval: options.requireToolApproval,
+        resumeContext,
+        toolCallId: options.toolCallId,
+      },
+      runtimeContext,
+      tracingContext: { currentSpan: agentAISpan },
+    });
 
     return result;
   }

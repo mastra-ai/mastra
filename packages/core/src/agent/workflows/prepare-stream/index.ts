@@ -16,114 +16,60 @@ import { createPrepareToolsStep } from './prepare-tools-step';
 import type { AgentCapabilities } from './schema';
 import { createStreamStep } from './stream-step';
 
-interface CreatePrepareStreamWorkflowOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+export const prepareStreamWorkflowInputSchema = z.object({
+  options: z.any(), // TODO
+  resourceId: z.string(),
+  runId: z.string(),
+  threadFromArgs: z.any().optional(), // storage reference
+  methodType: z.enum(['generate', 'stream', 'generateLegacy', 'streamLegacy']),
+  format: z.enum(['aisdk', 'mastra']).optional(),
+  instructions: z.any(), // system message
+  memoryConfig: z.any().optional(), // memory config
+  memory: z.any().optional(), // memory
+  returnScorerData: z.boolean().optional(),
+  requireToolApproval: z.boolean().optional(),
+  resumeContext: z
+    .object({
+      resumeData: z.any(),
+      snapshot: z.any(),
+    })
+    .optional(),
+  toolCallId: z.string().optional(),
+});
+
+interface CreatePrepareStreamWorkflowOptions {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
-  threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
-  resourceId?: string;
-  runId: string;
-  runtimeContext: RuntimeContext;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
-  /**
-   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
-   */
-  format?: FORMAT;
-  instructions: SystemMessage;
-  memoryConfig?: MemoryConfig;
-  memory?: MastraMemory;
   saveQueueManager: SaveQueueManager;
-  returnScorerData?: boolean;
-  requireToolApproval?: boolean;
-  resumeContext?: {
-    resumeData: any;
-    snapshot: any;
-  };
   agentId: string;
-  toolCallId?: string;
 }
 
-export function createPrepareStreamWorkflow<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefined = undefined>({
   capabilities,
-  options,
-  threadFromArgs,
-  resourceId,
-  runId,
-  runtimeContext,
-  agentAISpan,
-  methodType,
-  format,
-  instructions,
-  memoryConfig,
-  memory,
   saveQueueManager,
-  returnScorerData,
-  requireToolApproval,
-  resumeContext,
   agentId,
-  toolCallId,
-}: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
+}: CreatePrepareStreamWorkflowOptions) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
-    options,
-    threadFromArgs,
-    resourceId,
-    runId,
-    runtimeContext,
-    agentAISpan,
-    methodType,
-    memory,
   });
 
   const prepareMemoryStep = createPrepareMemoryStep({
     capabilities,
-    options,
-    threadFromArgs,
-    resourceId,
-    runId,
-    runtimeContext,
-    agentAISpan,
-    methodType,
-    format,
-    instructions,
-    memoryConfig,
-    memory,
   });
 
   const streamStep = createStreamStep({
     capabilities,
-    runId,
-    returnScorerData,
-    format,
-    requireToolApproval,
-    resumeContext,
     agentId,
-    toolCallId,
   });
 
   const mapResultsStep = createMapResultsStep({
     capabilities,
-    options,
-    resourceId,
-    runId,
-    runtimeContext,
-    memory,
-    memoryConfig,
     saveQueueManager,
-    agentAISpan,
-    instructions,
     agentId,
   });
 
   return createWorkflow({
     id: 'execution-workflow',
-    inputSchema: z.object({}),
+    inputSchema: prepareStreamWorkflowInputSchema,
     outputSchema: z.union([
       z.instanceof(MastraModelOutput<OUTPUT | undefined>),
       z.instanceof(AISDKV5OutputStream<OUTPUT | undefined>),
@@ -136,7 +82,7 @@ export function createPrepareStreamWorkflow<
     },
   })
     .parallel([prepareToolsStep, prepareMemoryStep])
-    .map(mapResultsStep)
+    .map(mapResultsStep as any)
     .then(streamStep)
     .commit();
 }
