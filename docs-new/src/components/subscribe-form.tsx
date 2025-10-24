@@ -23,7 +23,7 @@ const buttonCopy = ({
   isDark?: boolean;
 }) => ({
   idle: idleIcon ? idleIcon : 'Subscribe',
-  loading: <Spinner className="w-4 h-4 !duration-300 dark:text-white text-black" />,
+  loading: <Spinner className="w-4 h-4 duration-300! dark:text-white text-black" />,
   success: successIcon ? successIcon : 'Subscribed!',
 });
 
@@ -118,7 +118,7 @@ const SubscribeForm = ({
   return (
     <Form {...form}>
       <form
-        className={cn('mt-[2.38rem] items-end flex flex-col w-full gap-2 ', className)}
+        className={cn('items-end flex flex-col w-full gap-2 ', className)}
         onKeyDown={e => {
           if (e.key === 'Enter') {
             e.preventDefault();
@@ -166,7 +166,7 @@ const SubscribeForm = ({
                     <line x1="12" x2="12.01" y1="16" y2="16" />
                   </svg>
                 )}
-                <FormMessage className="text-red-500 !mb-0" />
+                <FormMessage className="text-red-500 mb-0!" />
               </span>
             </FormItem>
           )}
@@ -174,7 +174,7 @@ const SubscribeForm = ({
 
         <Button
           className={cn(
-            'bg-(--mastra-surface-3) w-full rounded-[10px] hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]',
+            'bg-(--mastra-surface-3) w-full rounded-[10px] hover:opacity-90 h-[32px] justify-center flex items-center px-4  dark:text-white text-[14px]',
             buttonClassName,
           )}
           onClick={e => {
