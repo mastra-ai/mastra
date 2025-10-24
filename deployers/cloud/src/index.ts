@@ -1,7 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'path';
 import { Deployer } from '@mastra/deployer';
-import { prepareToolsPaths } from '@mastra/deployer/utils';
 import { copy, readJSON } from 'fs-extra/esm';
 
 import { getAuthEntrypoint } from './utils/auth.js';
@@ -47,7 +46,8 @@ export class CloudDeployer extends Deployer {
 
     const mastraAppDir = join(mastraDir, MASTRA_DIRECTORY);
 
-    const defaultTools = prepareToolsPaths({ mastraDir: mastraAppDir });
+    // Use the getAllToolPaths method to prepare tools paths
+    const discoveredTools = this.getAllToolPaths(mastraAppDir);
 
     await this._bundle(
       this.getEntry(),
@@ -56,7 +56,7 @@ export class CloudDeployer extends Deployer {
         outputDirectory,
         projectRoot: mastraDir,
       },
-      [defaultTools],
+      discoveredTools,
     );
     process.chdir(currentCwd);
   }

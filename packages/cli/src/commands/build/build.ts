@@ -32,7 +32,7 @@ export async function build({
       const deployer = new BuildBundler();
       deployer.__setLogger(logger);
 
-      // Use the bundler's getToolsPathsWithDefaults method to prepare tools paths
+      // Use the bundler's getAllToolPaths method to prepare tools paths
       const discoveredTools = deployer.getAllToolPaths(mastraDir, tools);
 
       await deployer.prepare(outputDirectory);
@@ -52,7 +52,7 @@ export async function build({
     platformDeployer.__setLogger(logger);
 
     // Create a temporary bundler instance to get the tools paths with defaults
-    // Since platformDeployer might not have the getToolsPathsWithDefaults method
+    // Since platformDeployer might not have the getAllToolPaths method
     const tempBundler = new BuildBundler();
     const discoveredTools = tempBundler.getAllToolPaths(mastraDir, tools);
 
