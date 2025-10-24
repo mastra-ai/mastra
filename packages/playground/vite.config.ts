@@ -12,30 +12,9 @@ export default defineConfig(({ mode }) => {
     },
     optimizeDeps: {
       include: ['@tailwind-config'],
-      esbuildOptions: {
-        define: {
-          global: 'globalThis',
-        },
-      },
     },
     build: {
       cssCodeSplit: false,
-      rollupOptions: {
-        external: [
-          '@mastra/core',
-          'node:child_process',
-          'node:path',
-          'node:fs',
-          'crypto',
-          'events',
-          'stream/web',
-          'fs',
-          'module',
-          'os',
-          'path',
-          'fs/promises',
-        ],
-      },
     },
     server: {
       fs: {
@@ -43,7 +22,6 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
-      global: 'globalThis',
       process: {
         env: {},
       },

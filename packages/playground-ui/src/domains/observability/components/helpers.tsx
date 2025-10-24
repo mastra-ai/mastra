@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import type { AISpanRecord } from '@mastra/core';
+import { AISpanRecord } from '@mastra/core';
 import { useLinkComponent } from '@/lib/framework';
 
 export function useTraceInfo(trace: AISpanRecord | undefined) {
