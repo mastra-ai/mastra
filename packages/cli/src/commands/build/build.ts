@@ -51,7 +51,7 @@ export async function build({
 
     platformDeployer.__setLogger(logger);
 
-    const discoveredTools = platformDeployer.getAllToolPaths(mastraDir, tools);
+    const discoveredTools = platformDeployer.getAllToolPaths(mastraDir, tools ?? []);
 
     await platformDeployer.prepare(outputDirectory);
     await platformDeployer.bundle(mastraEntryFile, outputDirectory, {
