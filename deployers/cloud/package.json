@@ -63,5 +63,12 @@
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
-  "homepage": "https://mastra.ai"
+  "homepage": "https://mastra.ai",
+  "publishConfig": {
+    "access": "public",
+    "publish-branch": [
+      "main",
+      "0.x"
+    ]
+  }
 }

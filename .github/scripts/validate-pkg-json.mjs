@@ -130,6 +130,29 @@ async function main() {
       hasError = true;
     }
 
+    // if private false set publishconfig
+    if (!pkg.private) {
+      if (!pkg.publishConfig) {
+        console.log(
+          `❌ ${file}: missing publishConfig field with values ['access': 'public', 'publish-branch': ['main', '0.x']]`,
+        );
+        hasError = true;
+      } else if (pkg.publishConfig.access !== 'public') {
+        console.log(
+          `❌ ${file}: publishConfig.access should be "public", got ${JSON.stringify(pkg.publishConfig)} as publishConfig`,
+        );
+        hasError = true;
+      } else if (
+        !pkg.publishConfig['publish-branch'].includes('main') ||
+        !pkg.publishConfig['publish-branch'].includes('0.x')
+      ) {
+        console.log(
+          `❌ ${file}: publishConfig.publish-branch should be set to ['main', '0.x'], got ${JSON.stringify(pkg.publishConfig)} as publishConfig`,
+        );
+        hasError = true;
+      }
+    }
+
     checkedFiles.add(file);
   }
 
