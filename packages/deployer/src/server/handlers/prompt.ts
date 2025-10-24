@@ -21,7 +21,7 @@ export async function generateSystemPromptHandler(c: Context) {
     }
 
     const mastra: Mastra<any> = c.get('mastra');
-    const agent = mastra.getAgent(agentId);
+    const agent: Agent<any> = mastra.getAgent(agentId);
 
     if (!agent) {
       return c.json({ error: 'Agent not found' }, 404);
@@ -103,7 +103,7 @@ export async function generateSystemPromptHandler(c: Context) {
     const systemPromptAgent = new Agent({
       name: 'system-prompt-enhancer',
       instructions: ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS,
-      model: agent.llm?.getModel(),
+      model: await agent.getModel(),
     });
 
     const result = await systemPromptAgent.generate(
