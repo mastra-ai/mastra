@@ -1,5 +1,19 @@
 # @mastra/dane
 
+## 0.1.14
+
+### Patch Changes
+
+- Fix peerdependencies ([`eb7c1c8`](https://github.com/mastra-ai/mastra/commit/eb7c1c8c592d8fb16dfd250e337d9cdc73c8d5de))
+
+- Updated dependencies [[`eb7c1c8`](https://github.com/mastra-ai/mastra/commit/eb7c1c8c592d8fb16dfd250e337d9cdc73c8d5de)]:
+  - @mastra/memory@0.15.9
+  - @mastra/upstash@0.15.7
+  - @mastra/libsql@0.16.1
+  - @mastra/mcp@0.14.1
+  - @mastra/rag@1.3.3
+  - @mastra/core@0.23.1
+
 ## 0.1.13
 
 ### Patch Changes

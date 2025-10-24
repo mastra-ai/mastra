@@ -1,6 +1,6 @@
 {
   "name": "@mastra/clickhouse",
-  "version": "0.15.6",
+  "version": "0.15.7",
   "description": "Clickhouse provider for Mastra - includes db storage capabilities",
   "type": "module",
   "main": "dist/index.js",

@@ -1,5 +1,15 @@
 # @mastra/memory
 
+## 0.15.9
+
+### Patch Changes
+
+- Fix peerdependencies ([`eb7c1c8`](https://github.com/mastra-ai/mastra/commit/eb7c1c8c592d8fb16dfd250e337d9cdc73c8d5de))
+
+- Updated dependencies [[`eb7c1c8`](https://github.com/mastra-ai/mastra/commit/eb7c1c8c592d8fb16dfd250e337d9cdc73c8d5de)]:
+  - @mastra/schema-compat@0.11.5
+  - @mastra/core@0.23.1
+
 ## 0.15.8
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",

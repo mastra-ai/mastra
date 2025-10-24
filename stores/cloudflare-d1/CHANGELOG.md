@@ -1,5 +1,14 @@
 # @mastra/cloudflare-d1
 
+## 0.13.7
+
+### Patch Changes
+
+- Fix peerdependencies ([`eb7c1c8`](https://github.com/mastra-ai/mastra/commit/eb7c1c8c592d8fb16dfd250e337d9cdc73c8d5de))
+
+- Updated dependencies []:
+  - @mastra/core@0.23.1
+
 ## 0.13.6
 
 ### Patch Changes

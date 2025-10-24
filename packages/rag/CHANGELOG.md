@@ -1,5 +1,14 @@
 # @mastra/rag
 
+## 1.3.3
+
+### Patch Changes
+
+- Fix peerdependencies ([`eb7c1c8`](https://github.com/mastra-ai/mastra/commit/eb7c1c8c592d8fb16dfd250e337d9cdc73c8d5de))
+
+- Updated dependencies []:
+  - @mastra/core@0.23.1
+
 ## 1.3.2
 
 ### Patch Changes
