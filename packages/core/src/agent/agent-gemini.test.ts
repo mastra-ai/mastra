@@ -40,9 +40,11 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       const result = await agent.generate('List 3 benefits of exercise', {
-        output: z.object({
-          benefits: z.array(z.string()),
-        }),
+        structuredOutput: {
+          schema: z.object({
+            benefits: z.array(z.string()),
+          }),
+        },
       });
 
       expect(result.object).toBeDefined();
@@ -81,10 +83,12 @@ describe('Gemini Model Compatibility Tests', () => {
         ],
         {
           maxSteps: 1,
-          output: z.object({
-            selection: z.string(),
-            reason: z.string(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              selection: z.string(),
+              reason: z.string(),
+            }),
+          },
         },
       );
 
@@ -487,7 +491,9 @@ describe('Gemini Model Compatibility Tests', () => {
         outputSchema: z.object({ summary: z.string() }),
         execute: async ({ inputData }) => {
           const resp = await researchAgent.generate(`Research: ${inputData.topic}`, {
-            output: z.object({ summary: z.string() }),
+            structuredOutput: {
+              schema: z.object({ summary: z.string() }),
+            },
           });
           return { summary: resp.object.summary };
         },
