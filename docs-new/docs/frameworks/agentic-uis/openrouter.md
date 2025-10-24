@@ -1,5 +1,5 @@
 ---
-title: 'Using with OpenRouter'
+title: 'With OpenRouter'
 description: 'Learn how to integrate OpenRouter with Mastra'
 ---
 

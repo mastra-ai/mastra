@@ -75,5 +75,5 @@ workflow
 
 - [Event-Driven Workflows](./events)
 - [resumeWithEvent()](./resumeWithEvent)
-- [Suspend and Resume](/docs/workflows-legacy/suspend-and-resume)
+- [Suspend and Resume](/docs/examples/workflows_legacy/suspend-and-resume)
 - [Workflow Class](./workflow)

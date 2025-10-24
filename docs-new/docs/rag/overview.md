@@ -1,6 +1,7 @@
 ---
-title: RAG (Retrieval-Augmented Generation) in Mastra
+title: Overview
 description: Overview of Retrieval-Augmented Generation (RAG) in Mastra, detailing its capabilities for enhancing LLM outputs with relevant context.
+sidebar_position: 1
 ---
 
 # RAG (Retrieval-Augmented Generation) in Mastra

@@ -1,6 +1,7 @@
 ---
 title: 'Custom API Routes'
 description: 'Expose additional HTTP endpoints from your Mastra server.'
+sidebar_position: 4
 ---
 
 # Custom API Routes

@@ -1,6 +1,7 @@
 ---
-title: 'Tools and MCP '
+title: 'Using Tools'
 description: Learn how to create tools, add them to Mastra agents, and integrate tools from MCP servers.
+sidebar_position: 2
 ---
 
 # Tools and MCP

@@ -1,6 +1,7 @@
 ---
-title: Storage in Mastra | Mastra Docs
+title: Storage
 description: Overview of Mastra's storage system and data persistence capabilities.
+sidebar_position: 5
 ---
 
 import Tabs from '@theme/Tabs';
