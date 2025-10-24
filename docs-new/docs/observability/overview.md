@@ -1,6 +1,7 @@
 ---
 title: 'Overview '
 description: Monitor and debug applications with Mastra's Observability features.
+sidebar_position: 1
 ---
 
 # Observability Overview

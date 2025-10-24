@@ -1,9 +1,25 @@
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { cn } from '@site/src/css/utils';
 import { useCallback, useState } from 'react';
 import { useMarkdownContent } from '../hooks/useMarkdownContent';
 import { ChatGPTIcon, ChevronDownIcon, ClaudeIcon, CopyPageIcon, ExternalLinkIcon } from './copy-page-icons';
 import { Button } from './ui/button';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+
+function openInChatGpt(url: string, encodeURIComponent: typeof window.encodeURIComponent) {
+  const query = encodeURIComponent(`Read from the ${url} so I can ask questions about it.`);
+  const chatGptUrl = `https://chatgpt.com/?hints=search&q=${query}`;
+  return chatGptUrl;
+}
+
+function openInClaude(url: string, encodeURIComponent: typeof window.encodeURIComponent) {
+  const query = encodeURIComponent(`Read from the ${url} so I can ask questions about it.`);
+  const claudeUrl = `https://claude.ai/new?q=${query}`;
+  return claudeUrl;
+}
+
+function openWindow(url: string) {
+  window.open(url, '_blank');
+}
 
 export const CopyPageButton = () => {
   const [open, setOpen] = useState(false);
@@ -20,27 +36,24 @@ export const CopyPageButton = () => {
 
   const handleOpenInChatGPT = () => {
     const currentUrl = window.location.href;
-    const query = encodeURIComponent(`Read from ${currentUrl} so I can ask questions about it.`);
-    const chatGptUrl = `https://chatgpt.com/?hints=search&q=${query}`;
-    window.open(chatGptUrl, '_blank');
+    const chatGptUrl = openInChatGpt(currentUrl, encodeURIComponent);
+    openWindow(chatGptUrl);
   };
 
   const handleOpenInClaude = () => {
     const currentUrl = window.location.href;
-    const query = encodeURIComponent(`Read from ${currentUrl} so I can ask questions about it.`);
-    const claudeUrl = `https://claude.ai/new?q=${query}`;
-    window.open(claudeUrl, '_blank');
+    const claudeUrl = openInClaude(currentUrl, encodeURIComponent);
+    openWindow(claudeUrl);
   };
 
   return (
-    <div className="flex items-center" data-copy-page-button>
+    <div className="flex w-full items-center" data-copy-page-button>
       <Button
         variant="ghost"
         onClick={handleCopyPage}
         className={cn(
-          'inline-flex border border-r-0 items-center rounded-[12px] rounded-tr-none rounded-br-none gap-2 px-3 py-1.5 text-sm font-medium',
-          ' border-(--border) ',
-          'bg-[var(--ifm-background-color)] hover:bg-[var(--ifm-color-emphasis-100)]',
+          'inline-flex h-[32px] border-r border-(--border)/50 font-normal  rounded-[12px] rounded-tr-none rounded-br-none items-center w-full  gap-2 px-3 py-1.5 text-sm',
+          'bg-(--mastra-surface-3) hover:bg-(--mastra-surface-2)',
         )}
       >
         <CopyPageIcon className="w-4 h-4" />
@@ -52,9 +65,8 @@ export const CopyPageButton = () => {
           <Button
             variant="ghost"
             className={cn(
-              'inline-flex h-9  items-center rounded-[12px] rounded-tl-none rounded-bl-none justify-center p-1.5 px-2.5',
-              'border border-(--border)',
-              'bg-[var(--ifm-background-color)] hover:bg-[var(--ifm-color-emphasis-100)]',
+              'inline-flex h-[32px] items-center rounded-[12px] rounded-tl-none rounded-bl-none justify-center p-1.5 px-2.5',
+              'bg-(--mastra-surface-3) hover:bg-(--mastra-surface-2)',
             )}
           >
             <ChevronDownIcon
@@ -92,7 +104,6 @@ export const CopyPageButton = () => {
                 <div className="font-medium">Copy page</div>
                 <div className="text-xs text-[var(--ifm-color-emphasis-700)]">Copy page as Markdown for LLMs</div>
               </div>
-              {copied && <span className="text-xs text-green-600 dark:text-green-400">Copied!</span>}
             </DropdownMenu.Item>
 
             <DropdownMenu.Item

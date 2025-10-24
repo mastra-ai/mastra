@@ -1,6 +1,7 @@
 ---
-title: 'Branching, Merging, Conditions '
+title: 'Control Flow'
 description: 'Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements.'
+sidebar_position: 2
 ---
 
 # Control Flow

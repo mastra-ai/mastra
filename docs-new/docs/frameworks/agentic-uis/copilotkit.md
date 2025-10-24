@@ -1,6 +1,7 @@
 ---
-title: 'Using with CopilotKit'
+title: 'With CopilotKit'
 description: "Learn how Mastra leverages the CopilotKit's AGUI library and how you can leverage it to build user experiences"
+sidebar_position: 2
 ---
 
 import Tabs from '@theme/Tabs';

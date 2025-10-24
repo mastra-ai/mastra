@@ -40,4 +40,4 @@ description: "The agent instance with the specified name. Throws an error if the
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Runtime context](/docs/agents/runtime-context)
+- [Runtime context](/docs/server-db/runtime-context)
