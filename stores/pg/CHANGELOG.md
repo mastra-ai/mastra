@@ -1,5 +1,14 @@
 # @mastra/pg
 
+## 0.17.6
+
+### Patch Changes
+
+- Fixes "invalid input syntax for type json" error in AI tracing with PostgreSQL. ([#9181](https://github.com/mastra-ai/mastra/pull/9181))
+
+- Updated dependencies [[`f743dbb`](https://github.com/mastra-ai/mastra/commit/f743dbb8b40d1627b5c10c0e6fc154f4ebb6e394), [`5df9cce`](https://github.com/mastra-ai/mastra/commit/5df9cce1a753438413f64c11eeef8f845745c2a8), [`2060766`](https://github.com/mastra-ai/mastra/commit/20607667bf78ea104cca3e15dfb93ae0b62c9d18), [`2c4438b`](https://github.com/mastra-ai/mastra/commit/2c4438b87817ab7eed818c7990fef010475af1a3)]:
+  - @mastra/core@0.23.0
+
 ## 0.17.6-alpha.0
 
 ### Patch Changes

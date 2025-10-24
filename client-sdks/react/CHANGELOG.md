@@ -1,5 +1,14 @@
 # @mastra/react-hooks
 
+## 0.0.11
+
+### Patch Changes
+
+- Add tool call approval ([#8649](https://github.com/mastra-ai/mastra/pull/8649))
+
+- Updated dependencies [[`5df9cce`](https://github.com/mastra-ai/mastra/commit/5df9cce1a753438413f64c11eeef8f845745c2a8), [`2060766`](https://github.com/mastra-ai/mastra/commit/20607667bf78ea104cca3e15dfb93ae0b62c9d18)]:
+  - @mastra/client-js@0.16.5
+
 ## 0.0.11-alpha.0
 
 ### Patch Changes
