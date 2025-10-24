@@ -9,7 +9,7 @@ import {
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
 } from '@mastra/schema-compat';
-import type { ToolExecutionOptions, Schema } from 'ai';
+import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
 import { AISpanType, wrapMastra } from '../../ai-tracing';
 import { MastraBase } from '../../base';
@@ -150,7 +150,7 @@ export class CoreToolBuilder extends MastraBase {
     tool: ToolToConvert,
     options: ToolOptions,
     logType?: 'tool' | 'toolset' | 'client-tool',
-    processedSchema?: z.ZodTypeAny | Schema,
+    processedSchema?: z.ZodTypeAny,
   ) {
     // dont't add memory or mastra to logging
     const { logger, mastra: _mastra, memory: _memory, runtimeContext, model, ...rest } = options;
@@ -362,7 +362,7 @@ export class CoreToolBuilder extends MastraBase {
     // Apply schema compatibility to get both the transformed Zod schema (for validation)
     // and the AI SDK Schema (for the LLM)
     let processedZodSchema: z.ZodTypeAny | undefined;
-    let processedSchema: Schema | z.ZodTypeAny;
+    let processedSchema;
 
     const originalSchema = this.getParameters();
 
@@ -401,15 +401,15 @@ export class CoreToolBuilder extends MastraBase {
     const definition = {
       type: 'function' as const,
       description: this.originalTool.description,
-      parameters: processedSchema,
-      outputSchema: processedOutputSchema,
+      parameters: this.getParameters(),
+      outputSchema: this.getOutputSchema(),
       requireApproval: this.options.requireApproval,
       execute: this.originalTool.execute
         ? this.createExecute(
             this.originalTool,
             { ...this.options, description: this.originalTool.description },
             this.logType,
-            processedZodSchema, // Pass the transformed Zod schema for validation
+            processedZodSchema, // Pass the processed Zod schema for validation
           )
         : undefined,
     };
@@ -417,6 +417,8 @@ export class CoreToolBuilder extends MastraBase {
     return {
       ...definition,
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
+      parameters: processedSchema,
+      outputSchema: processedOutputSchema,
     } as unknown as CoreTool;
   }
 }

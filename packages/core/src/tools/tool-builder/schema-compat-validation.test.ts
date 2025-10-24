@@ -201,4 +201,74 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     // expect(executeResult).toHaveProperty('error');
     // expect(executeResult.error).toContain('String must contain at least 20 character(s)');
   });
+
+  it('should handle OpenAI o3 reasoning model converting optional to nullable (working memory bug)', async () => {
+    // This reproduces the exact bug reported by the user with updateWorkingMemory tool
+    // OpenAI o3 converts .optional() to .nullable(), then sends null, but validation
+    // was checking against the original schema which expects string | undefined
+    const inputSchema5 = z.object({
+      newMemory: z.string().describe('New memory to add'),
+      searchString: z.string().optional().describe('Optional search string'),
+      updateReason: z.string().describe('Reason for update'),
+    });
+
+    const updateWorkingMemoryTool: ToolAction<any, any> = {
+      id: 'updateWorkingMemory',
+      description: 'Update working memory',
+      inputSchema: inputSchema5,
+      execute: async ({ context }: { context: z.infer<typeof inputSchema5> }) => {
+        const { newMemory, searchString, updateReason } = context;
+        return { success: true, newMemory, searchString, updateReason };
+      },
+    };
+
+    const modelConfig = {
+      provider: 'openai',
+      modelId: 'o3-mini',
+      specificationVersion: 'v4' as const,
+      supportsStructuredOutputs: true,
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: updateWorkingMemoryTool,
+      options: {
+        name: 'updateWorkingMemory',
+        model: modelConfig as any,
+        runtimeContext: new RuntimeContext(),
+      },
+    });
+
+    const coreTool = builder.build();
+
+    // OpenAI o3 converts .optional() to .nullable() via OpenAIReasoningSchemaCompatLayer
+    // So the LLM sends null instead of undefined for optional fields
+    const newMemoryValue = '#User\n- First Name: Randy\n- Last Name: Lynn';
+    const executeResult = await coreTool.execute?.(
+      {
+        newMemory: newMemoryValue,
+        searchString: null, // LLM sends null because schema was converted to nullable
+        updateReason: 'append-new-memory',
+      },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'call_W84bP8Lo2qCwIYe03QDLCgTJ',
+        messages: [],
+      },
+    );
+
+    // EXPECTED BEHAVIOR (with the fix):
+    // Validation should accept null because the schema sent to the LLM was .nullable()
+    expect(executeResult).not.toHaveProperty('error');
+    expect(executeResult).toEqual({
+      success: true,
+      newMemory: newMemoryValue,
+      searchString: null,
+      updateReason: 'append-new-memory',
+    });
+
+    // BEFORE THE FIX:
+    // This would fail with "Expected string, received null" because validation
+    // was using the original schema with .optional() instead of the transformed
+    // schema with .nullable()
+  });
 });
