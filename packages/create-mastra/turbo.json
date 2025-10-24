@@ -1,8 +1,10 @@
 {
+  "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
     "build": {
-      "dependsOn": ["^build", "@mastra/libsql#build", "@mastra/core#build", "@mastra/memory#build"]
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
     }
   }
 }
