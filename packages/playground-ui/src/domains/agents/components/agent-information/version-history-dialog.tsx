@@ -20,7 +20,7 @@ export const VersionHistoryDialog = ({
 }: VersionHistoryDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="bg-surface4">
         <DialogHeader>
           <DialogTitle>Version History</DialogTitle>
           <DialogDescription>View the history of changes to the agent's instructions.</DialogDescription>
