@@ -1358,4 +1358,49 @@ export const redirectList = [
     destination: "/:locale/docs/getting-started/studio",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/deployment/server-deployment",
+    destination: "/:locale/docs/deployment/building-mastra",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/server-db/production-server",
+    destination: "/:locale/docs/server-db/mastra-server",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/deployment/serverless-platforms/cloudflare-deployer",
+    destination: "/:locale/docs/deployment/cloud-providers/cloudflare",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/deployment/serverless-platforms/netlify-deployer",
+    destination: "/:locale/docs/deployment/cloud-providers/netlify",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/deployment/serverless-platforms/vercel-deployer",
+    destination: "/:locale/docs/deployment/cloud-providers/vercel",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/mastra-cloud/overview",
+    destination: "/:locale/docs/deployment/mastra-cloud/overview",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/mastra-cloud/setting-up",
+    destination: "/:locale/docs/deployment/mastra-cloud/setting-up",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/mastra-cloud/dashboard",
+    destination: "/:locale/docs/deployment/mastra-cloud/dashboard",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/mastra-cloud/observability",
+    destination: "/:locale/docs/deployment/mastra-cloud/observability",
+    permanent: true,
+  },
 ];
