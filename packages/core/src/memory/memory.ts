@@ -42,9 +42,7 @@ export abstract class MemoryProcessor extends MastraBase {
 export const memoryDefaultOptions = {
   lastMessages: 10,
   semanticRecall: false,
-  threads: {
-    generateTitle: false,
-  },
+  generateTitle: false,
   workingMemory: {
     enabled: false,
     template: `
