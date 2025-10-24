@@ -1,6 +1,7 @@
 ---
-title: Auth Overview
+title: Overview
 description: Learn about different Auth options for your Mastra applications
+sidebar_position: 1
 ---
 
 # Auth Overview

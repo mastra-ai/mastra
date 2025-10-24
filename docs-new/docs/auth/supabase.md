@@ -1,6 +1,7 @@
 ---
-title: 'MastraAuthSupabase Class'
+title: Supabase
 description: 'Documentation for the MastraAuthSupabase class, which authenticates Mastra applications using Supabase Auth.'
+sidebar_position: 4
 ---
 
 import Tabs from '@theme/Tabs';

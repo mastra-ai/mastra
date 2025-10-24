@@ -1,11 +1,12 @@
 ---
-title: Monorepo Deployment
+title: With a monorepo
 description: Learn how to deploy Mastra applications that are part of a monorepo setup
+sidebar_position: 3
 ---
 
 # Monorepo Deployment
 
-Deploying Mastra in a monorepo follows the same approach as deploying a standalone application. While some [Cloud](./cloud-providers/) or [Serverless Platform](./serverless-platforms/) providers may introduce extra requirements, the core setup is the same.
+Deploying Mastra in a monorepo follows the same approach as deploying a standalone application. While some [Cloud](/docs/deployment/cloud-providers/overview) or [Serverless Platform](/docs/deployment/serverless-platforms/overview) providers may introduce extra requirements, the core setup is the same.
 
 ## Example monorepo
 

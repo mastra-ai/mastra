@@ -1,6 +1,7 @@
 ---
-title: Understanding the Mastra Cloud Dashboard
+title: Dashboard
 description: Details of each feature available in Mastra Cloud
+sidebar_position: 3
 ---
 
 # Navigating the Dashboard

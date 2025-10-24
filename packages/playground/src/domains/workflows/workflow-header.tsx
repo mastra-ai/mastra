@@ -47,7 +47,7 @@ export function WorkflowHeader({
           <Button as={Link} to={`/workflows/${workflowId}/graph`}>
             Graph
           </Button>
-          <Button as={Link} to={`/workflows/${workflowId}/traces`}>
+          <Button as={Link} to={`/observability?entity=${workflowName}`}>
             Traces
           </Button>
         </HeaderGroup>

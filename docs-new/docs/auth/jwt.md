@@ -1,6 +1,7 @@
 ---
-title: 'MastraJwtAuth Class'
+title: JSON Web Token
 description: 'Documentation for the MastraJwtAuth class, which authenticates Mastra applications using JSON Web Tokens.'
+sidebar_position: 2
 ---
 
 import Tabs from '@theme/Tabs';

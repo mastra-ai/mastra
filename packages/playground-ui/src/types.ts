@@ -118,5 +118,3 @@ export type StreamChunk = {
   runId: string;
   from: 'AGENT' | 'WORKFLOW';
 };
-
-export * from './domains/traces/types';

@@ -1,7 +1,6 @@
-import { DynamicForm, MainContentContent } from '@mastra/playground-ui';
+import { DynamicForm, MainContentContent, ToolInformation } from '@mastra/playground-ui';
 import { CopyButton } from '@/components/ui/copy-button';
 import { ZodType } from 'zod';
-import { ToolInformation } from '@/domains/tools/ToolInformation';
 import { jsonLanguage } from '@codemirror/lang-json';
 import { useCodemirrorTheme } from '@/components/syntax-highlighter';
 import CodeMirror from '@uiw/react-codemirror';

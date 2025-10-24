@@ -144,7 +144,7 @@ Browse the directory of available models using the navigation on the left, or ex
 
 You can also discover models directly in your editor. Mastra provides full autocomplete for the `model` field - just start typing, and your IDE will show available options.
 
-Alternatively, browse and test models in the [Playground](/docs/server-db/local-dev-playground) UI.
+Alternatively, browse and test models in the [Playground](/docs/getting-started/local-dev-playground) UI.
 
 :::note Development Behavior
 In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Playground stay up-to-date with the latest models. To disable, set `MASTRA_AUTO_REFRESH_PROVIDERS=false`. Auto-refresh is disabled by default in production.
@@ -174,7 +174,7 @@ const reasoningAgent = new Agent({
 
 ## Dynamic model selection
 
-Since models are just strings, you can select them dynamically based on [runtime context](/docs/agents/runtime-context), variables, or any other logic.
+Since models are just strings, you can select them dynamically based on [runtime context](/docs/server-db/runtime-context), variables, or any other logic.
 
 ```typescript showLineNumbers
 const agent = new Agent({

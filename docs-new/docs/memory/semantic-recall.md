@@ -1,6 +1,7 @@
 ---
 title: 'Semantic Recall '
 description: 'Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings.'
+sidebar_position: 5
 ---
 
 # Semantic Recall

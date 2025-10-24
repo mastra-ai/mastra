@@ -18,10 +18,15 @@ export class FaithfulnessJudge extends MastraAgentJudge {
   async evaluate(output: string, context: string[]): Promise<{ claim: string; verdict: string; reason: string }[]> {
     const claimsPrompt = generateClaimExtractionPrompt({ output });
     const claims = await this.agent.generate(claimsPrompt, {
-      output: z.object({
-        claims: z.array(z.string()),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          claims: z.array(z.string()),
+        }),
+      },
     });
+    if (!claims.object) {
+      throw new Error('Failed to generate claims');
+    }
 
     if (claims.object.claims.length === 0) {
       return [];
@@ -29,16 +34,21 @@ export class FaithfulnessJudge extends MastraAgentJudge {
 
     const evaluatePrompt = generateEvaluatePrompt({ claims: claims.object.claims, context });
     const result = await this.agent.generate(evaluatePrompt, {
-      output: z.object({
-        verdicts: z.array(
-          z.object({
-            claim: z.string(),
-            verdict: z.string(),
-            reason: z.string(),
-          }),
-        ),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          verdicts: z.array(
+            z.object({
+              claim: z.string(),
+              verdict: z.string(),
+              reason: z.string(),
+            }),
+          ),
+        }),
+      },
     });
+    if (!result.object) {
+      throw new Error('Failed to generate result');
+    }
 
     return result.object.verdicts;
   }
@@ -53,10 +63,15 @@ export class FaithfulnessJudge extends MastraAgentJudge {
   }): Promise<string> {
     const prompt = generateReasonPrompt(args);
     const result = await this.agent.generate(prompt, {
-      output: z.object({
-        reason: z.string(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          reason: z.string(),
+        }),
+      },
     });
+    if (!result.object) {
+      throw new Error('Failed to generate result');
+    }
     return result.object.reason;
   }
 }
