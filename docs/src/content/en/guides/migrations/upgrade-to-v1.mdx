@@ -27,17 +27,20 @@ This version isn't released yet but we're adding changes as we make them.
 
 </Callout>
 
-### Removed: Deprecated APIs
+### Updated APIs
 
-#### Agent Execution Methods
+#### Agent class
 
 - Removed `generateVNext()` method. Use `generate()` instead.
 - Removed `streamVNext()` method. Use `stream()` instead.
-
-#### Agent Default Options Methods
-
-Methods have been renamed to clarify which are for legacy vs current APIs:
-
+- `agent.llm` → `agent.getLLM()`
+- `agent.tools` → `agent.getTools()`
+- `agent.instructions` → `agent.getInstructions()`
+- `agent.speak()` → `agent.voice.speak()`
+- `agent.getSpeakers()` → `agent.voice.getSpeakers()`
+- `agent.listen` → `agent.voice.listen()`
+- `agent.fetchMemory` → `(await agent.getMemory()).query()`
+- `agent.toStep` → Add agent directly to the step, workflows handle the transformation
 - `getDefaultGenerateOptions()` → `getDefaultGenerateOptionsLegacy()`
 - `getDefaultStreamOptions()` → `getDefaultStreamOptionsLegacy()`
 - `getDefaultVNextStreamOptions()` → `getDefaultStreamOptions()`

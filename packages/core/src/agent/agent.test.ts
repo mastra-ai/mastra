@@ -3847,9 +3847,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toBe('You are a helpful assistant.');
-
-      // Deprecated getter should work for strings
-      expect(agent.instructions).toBe('You are a helpful assistant.');
     });
 
     it('should support CoreSystemMessage instructions', async () => {
@@ -3866,11 +3863,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toEqual(systemMessage);
-
-      // Deprecated getter should throw for non-string
-      expect(() => agent.instructions).toThrow(
-        'The instructions getter is deprecated and only supports string instructions',
-      );
     });
 
     it('should support SystemModelMessage instructions', async () => {
@@ -3887,11 +3879,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toEqual(systemMessage);
-
-      // Deprecated getter should throw for non-string
-      expect(() => agent.instructions).toThrow(
-        'The instructions getter is deprecated and only supports string instructions',
-      );
     });
 
     it('should support array of string instructions', async () => {
@@ -3905,11 +3892,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toEqual(instructionsArray);
-
-      // Deprecated getter should throw for arrays
-      expect(() => agent.instructions).toThrow(
-        'The instructions getter is deprecated and only supports string instructions',
-      );
     });
 
     it('should support array of CoreSystemMessage instructions', async () => {
@@ -3926,11 +3908,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toEqual(instructionsArray);
-
-      // Deprecated getter should throw
-      expect(() => agent.instructions).toThrow(
-        'The instructions getter is deprecated and only supports string instructions',
-      );
     });
 
     it('should support array of CoreSystemMessage with provider metadata', async () => {
@@ -3973,9 +3950,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions({ runtimeContext });
       expect(instructions).toBe('You are a helpful teacher.');
-
-      // Deprecated getter should throw for function
-      expect(() => agent.instructions).toThrow('Instructions are not compatible when instructions are a function');
     });
 
     it('should support dynamic instructions returning CoreSystemMessage', async () => {
@@ -4151,20 +4125,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         instructions: () => 'Dynamic instructions',
         model: dummyModel,
       });
-
-      expect(() => agent.instructions).toThrow('Instructions are not compatible when instructions are a function');
-    });
-
-    it('should throw error for non-string static instructions in deprecated getter', async () => {
-      const agent = new Agent({
-        name: 'test-agent',
-        instructions: { role: 'system', content: 'Instructions' },
-        model: dummyModel,
-      });
-
-      expect(() => agent.instructions).toThrow(
-        'The instructions getter is deprecated and only supports string instructions',
-      );
     });
 
     it('should allow override instructions in generate options', async () => {
