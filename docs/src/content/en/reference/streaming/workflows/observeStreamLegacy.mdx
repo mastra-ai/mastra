@@ -12,13 +12,13 @@ The `.observeStream()` method opens a new `ReadableStream` to a workflow run tha
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
 
-run.stream({
+run.streamLegacy({
   inputData: {
     value: "initial data",
   },
 });
 
-const stream = await run.observeStream();
+const { stream } = await run.observeStreamLegacy();
 
 for await (const chunk of stream) {
   console.log(chunk);
@@ -33,15 +33,17 @@ for await (const chunk of stream) {
 
 The stream emits various event types during workflow execution. Each event has a `type` field and a `payload` containing relevant data:
 
-- **`workflow-start`**: Workflow execution begins
-- **`workflow-step-start`**: A step begins execution
-- **`workflow-step-output`**: Custom output from a step
-- **`workflow-step-result`**: A step completes with results
-- **`workflow-finish`**: Workflow execution completes with usage statistics
+- **`start`**: Workflow execution begins
+- **`step-start`**: A step begins execution
+- **`tool-call`**: A tool call is initiated
+- **`tool-call-streaming-start`**: Tool call streaming begins
+- **`tool-call-delta`**: Incremental tool output updates
+- **`step-result`**: A step completes with results
+- **`step-finish`**: A step finishes execution
+- **`finish`**: Workflow execution completes
 
 ## Related
 
 - [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
 - [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run.mdx)
-- [Run.stream()](./stream.mdx)
-- [Run.resumeStream()](./resumeStream.mdx)
+- [Run.streamLegacy()](./streamLegacy.mdx)
