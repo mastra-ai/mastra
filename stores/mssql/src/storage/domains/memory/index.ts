@@ -978,9 +978,10 @@ export class MemoryMSSQL extends MemoryStorage {
       }
 
       return {
-        ...result,
-        workingMemory:
-          typeof result.workingMemory === 'object' ? JSON.stringify(result.workingMemory) : result.workingMemory,
+        id: result.id,
+        createdAt: result.createdAt,
+        updatedAt: result.updatedAt,
+        workingMemory: result.workingMemory,
         metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
       };
     } catch (error) {
@@ -1004,7 +1005,7 @@ export class MemoryMSSQL extends MemoryStorage {
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,
-        metadata: JSON.stringify(resource.metadata),
+        metadata: resource.metadata,
       },
     });
 
