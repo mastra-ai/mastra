@@ -89,7 +89,7 @@
     "@types/node": "^20.19.0",
     "@types/shell-quote": "^1.7.5",
     "@types/tcp-port-used": "^1.0.4",
-    "eslint": "^9.37.0",
+    "eslint": "^9.38.0",
     "memfs": "^4.17.2",
     "rollup": "^4.50.2",
     "tsup": "^8.5.0",
