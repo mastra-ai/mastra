@@ -40,7 +40,7 @@ export class NetlifyDeployer extends Deployer {
     const result = await this._bundle(
       this.getEntry(),
       entryFile,
-      { outputDirectory, projectRoot },
+      { outputDirectory, projectRoot, enableEsmShim: false },
       toolsPaths,
       join(outputDirectory, this.outputDir),
     );
