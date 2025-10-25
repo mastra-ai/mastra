@@ -120,17 +120,6 @@ export type EvalRow = {
 export type StorageGetTracesArg = {
   name?: string;
   scope?: string;
-  page: number;
-  perPage: number;
-  attributes?: Record<string, string>;
-  filters?: Record<string, any>;
-  fromDate?: Date;
-  toDate?: Date;
-};
-
-export type StorageGetTracesPaginatedArg = {
-  name?: string;
-  scope?: string;
   attributes?: Record<string, string>;
   filters?: Record<string, any>;
 } & PaginationArgs;
@@ -190,7 +179,7 @@ export interface AITraceRecord {
   spans: AISpanRecord[];
 }
 
-export interface AITracesPaginatedArg {
+export interface AITracesArg {
   filters?: {
     name?: string;
     spanType?: AISpanType;

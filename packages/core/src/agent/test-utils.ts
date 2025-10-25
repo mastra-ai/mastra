@@ -94,11 +94,7 @@ export class MockMemory extends MastraMemory {
     return { messages: list.get.remembered.v1(), messagesV2: list.get.remembered.v2() };
   }
 
-  async getThreadsByResourceId() {
-    return [];
-  }
-
-  async getThreadsByResourceIdPaginated(
+  async getThreadsByResourceId(
     args: {
       resourceId: string;
       page: number;

@@ -20,10 +20,6 @@ export abstract class MemoryStorage extends MastraBase {
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
-  abstract getThreadsByResourceId({
-    resourceId,
-  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]>;
-
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
   abstract updateThread({
@@ -38,14 +34,6 @@ export abstract class MemoryStorage extends MastraBase {
 
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
 
-  abstract getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  abstract getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  abstract getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]>;
   abstract getMessagesById({ messageIds }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
   abstract getMessagesById({ messageIds }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
   abstract getMessagesById({
@@ -76,7 +64,7 @@ export abstract class MemoryStorage extends MastraBase {
     );
   }
 
-  abstract getThreadsByResourceIdPaginated(
+  abstract getThreadsByResourceId(
     args: {
       resourceId: string;
       page: number;
@@ -84,7 +72,13 @@ export abstract class MemoryStorage extends MastraBase {
     } & ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
 
-  abstract getMessagesPaginated(
+  abstract getMessages(
+    args: StorageGetMessagesArg & { format?: 'v1' },
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] }>;
+  abstract getMessages(
+    args: StorageGetMessagesArg & { format: 'v2' },
+  ): Promise<PaginationInfo & { messages: MastraMessageV2[] }>;
+  abstract getMessages(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }>;
 

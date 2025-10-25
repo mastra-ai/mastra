@@ -4,7 +4,7 @@ import type { StoreOperations } from '../operations';
 import type { InMemoryTraces } from './inmemory';
 import { TracesInMemory } from './inmemory';
 
-describe('getTracesPaginated', () => {
+describe('getTraces', () => {
   let tracesStorage: TracesInMemory;
   let collection: InMemoryTraces;
   let operations: StoreOperations;
@@ -38,8 +38,8 @@ describe('getTracesPaginated', () => {
     collection.set(trace3.id, trace3);
     collection.set(trace2.id, trace2);
 
-    // Act: Get paginated traces
-    const result = await tracesStorage.getTracesPaginated({});
+    // Act: Get traces
+    const result = await tracesStorage.getTraces({});
 
     // Assert: Verify chronological order (newest first)
     expect(result.traces).toHaveLength(3);
@@ -59,7 +59,7 @@ describe('getTracesPaginated', () => {
     traces.forEach(trace => collection.set(trace.id, trace));
 
     // Act: Get first page with size of 10
-    const result = await tracesStorage.getTracesPaginated({
+    const result = await tracesStorage.getTraces({
       perPage: 10,
       page: 0,
     });
@@ -79,7 +79,7 @@ describe('getTracesPaginated', () => {
     traces.forEach(trace => collection.set(trace.id, trace));
 
     // Act: Get page with size matching total trace count
-    const result = await tracesStorage.getTracesPaginated({
+    const result = await tracesStorage.getTraces({
       perPage: 5,
       page: 0,
     });
@@ -100,7 +100,7 @@ describe('getTracesPaginated', () => {
     traces.forEach(trace => collection.set(trace.id, trace));
 
     // Act: Get specific page with defined size
-    const result = await tracesStorage.getTracesPaginated({
+    const result = await tracesStorage.getTraces({
       page: 1,
       perPage: 5,
     });
@@ -124,8 +124,8 @@ describe('getTracesPaginated', () => {
       collection.set(traceId, trace);
     });
 
-    // Act: Get paginated traces for page 1
-    const result = await tracesStorage.getTracesPaginated({
+    // Act: Get traces for page 1
+    const result = await tracesStorage.getTraces({
       page: 1,
       perPage: 10,
     });
@@ -165,8 +165,8 @@ describe('getTracesPaginated', () => {
       collection.set(traceId, trace);
     });
 
-    // Act: Get paginated traces for page 0
-    const result = await tracesStorage.getTracesPaginated({
+    // Act: Get traces for page 0
+    const result = await tracesStorage.getTraces({
       page: 0,
       perPage: 10,
     });
@@ -206,8 +206,8 @@ describe('getTracesPaginated', () => {
       collection.set(traceId, trace);
     });
 
-    // Act: Get paginated traces for page 2
-    const result = await tracesStorage.getTracesPaginated({
+    // Act: Get traces for page 2
+    const result = await tracesStorage.getTraces({
       page: 2,
       perPage: 10,
     });

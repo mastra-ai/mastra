@@ -3,7 +3,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type {
   AISpanRecord,
   AITraceRecord,
-  AITracesPaginatedArg,
+  AITracesArg,
   CreateAISpanRecord,
   PaginationInfo,
   UpdateAISpanRecord,
@@ -84,10 +84,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
-  async getAITracesPaginated({
+  async getAITraces({
     filters,
     pagination,
-  }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
+  }: AITracesArg): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
     const allRootSpans = this.filterForRootSpans(Array.from(this.collection.values()));
     const filteredRootSpans = this.filterSpansByFilter(allRootSpans, filters);
 
@@ -125,7 +125,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     });
   }
 
-  private filterSpansByFilter(spans: AISpanRecord[], filter: AITracesPaginatedArg['filters']): AISpanRecord[] {
+  private filterSpansByFilter(spans: AISpanRecord[], filter: AITracesArg['filters']): AISpanRecord[] {
     return spans.filter(span => {
       if (filter?.name && span.name !== filter.name) return false;
       if (filter?.spanType && span.spanType !== filter.spanType) return false;
@@ -138,10 +138,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     });
   }
 
-  private filterSpansByPagination(
-    spans: AISpanRecord[],
-    pagination: AITracesPaginatedArg['pagination'],
-  ): AISpanRecord[] {
+  private filterSpansByPagination(spans: AISpanRecord[], pagination: AITracesArg['pagination']): AISpanRecord[] {
     const page = pagination?.page ?? 0;
     const perPage = pagination?.perPage ?? 10;
     const start = page * perPage;

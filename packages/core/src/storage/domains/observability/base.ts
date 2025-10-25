@@ -4,7 +4,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type {
   AISpanRecord,
   AITraceRecord,
-  AITracesPaginatedArg,
+  AITracesArg,
   CreateAISpanRecord,
   PaginationInfo,
   UpdateAISpanRecord,
@@ -71,12 +71,12 @@ export class ObservabilityStorage extends MastraBase {
   /**
    * Retrieves a paginated list of AI traces with optional filtering.
    */
-  getAITracesPaginated(_args: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
+  getAITraces(_args: AITracesArg): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_GET_AI_TRACES_PAGINATED_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
-      text: 'This storage provider does not support getting AI traces paginated',
+      text: 'This storage provider does not support getting AI traces',
     });
   }
 

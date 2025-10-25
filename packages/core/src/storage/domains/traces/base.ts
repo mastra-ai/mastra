@@ -1,6 +1,6 @@
 import { MastraBase } from '../../../base';
 import type { Trace } from '../../../telemetry';
-import type { StorageGetTracesArg, PaginationInfo, StorageGetTracesPaginatedArg } from '../../types';
+import type { StorageGetTracesArg, PaginationInfo } from '../../types';
 
 export abstract class TracesStorage extends MastraBase {
   constructor() {
@@ -10,9 +10,7 @@ export abstract class TracesStorage extends MastraBase {
     });
   }
 
-  abstract getTraces(args: StorageGetTracesArg): Promise<Trace[]>;
-
-  abstract getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }>;
+  abstract getTraces(args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }>;
 
   abstract batchTraceInsert(args: { records: Record<string, any>[] }): Promise<void>;
 }
