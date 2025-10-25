@@ -121,7 +121,7 @@ type StringConstraints = {
   uuid?: boolean;
   cuid?: boolean;
   emoji?: boolean;
-  regex?: { pattern: string; flags?: string };
+  regex?: string;
 };
 
 type NumberConstraints = {
@@ -358,7 +358,11 @@ export class SchemaCompatLayer {
       | { defaultValue?: unknown },
   ): string | undefined {
     if (Object.keys(constraints).length > 0) {
-      return (description ? description + '\n' : '') + JSON.stringify(constraints);
+      return (
+        (description ? description + '\n' : '') +
+        `The following constraint hints should be followed, but these constraints are not a schema shape: ` +
+        JSON.stringify(constraints)
+      );
     } else {
       return description;
     }
@@ -468,10 +472,7 @@ export class SchemaCompatLayer {
         if (handleChecks.includes(check.kind as StringCheckType)) {
           switch (check.kind) {
             case 'regex': {
-              constraints.regex = {
-                pattern: check.regex.source,
-                flags: check.regex.flags,
-              };
+              constraints.regex = `output a single string that follows this pattern: ${check.regex.source}`;
               break;
             }
             case 'emoji': {
