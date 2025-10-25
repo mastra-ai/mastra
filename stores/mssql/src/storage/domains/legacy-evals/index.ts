@@ -13,7 +13,7 @@ function transformEvalRow(row: Record<string, any>): EvalRow {
       testInfoValue = typeof row.test_info === 'string' ? JSON.parse(row.test_info) : row.test_info;
     } catch {}
   }
-  if (row.test_info) {
+  if (row.result) {
     try {
       resultValue = typeof row.result === 'string' ? JSON.parse(row.result) : row.result;
     } catch {}

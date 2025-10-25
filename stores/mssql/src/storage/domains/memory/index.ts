@@ -978,9 +978,10 @@ export class MemoryMSSQL extends MemoryStorage {
       }
 
       return {
-        ...result,
-        workingMemory:
-          typeof result.workingMemory === 'object' ? JSON.stringify(result.workingMemory) : result.workingMemory,
+        id: result.id,
+        createdAt: result.createdAt,
+        updatedAt: result.updatedAt,
+        workingMemory: result.workingMemory,
         metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
       };
     } catch (error) {
@@ -1004,11 +1005,13 @@ export class MemoryMSSQL extends MemoryStorage {
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,
-        metadata: JSON.stringify(resource.metadata),
+        metadata: resource.metadata,
       },
     });
 
-    return resource;
+    // Re-fetch to ensure proper metadata parsing
+    const saved = await this.getResourceById({ resourceId: resource.id });
+    return saved!;
   }
 
   async updateResource({
@@ -1065,7 +1068,9 @@ export class MemoryMSSQL extends MemoryStorage {
 
       await req.query(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = @id`);
 
-      return updatedResource;
+      // Re-fetch the resource to ensure proper parsing of metadata
+      const refetchedResource = await this.getResourceById({ resourceId });
+      return refetchedResource!;
     } catch (error) {
       const mastraError = new MastraError(
         {

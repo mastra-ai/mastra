@@ -44,41 +44,174 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     this.schema = schema;
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // runtimeContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    runtimeContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    runtimeContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
+    const transaction = this.pool.transaction();
+
+    try {
+      await transaction.begin();
+
+      // Load existing snapshot within transaction with exclusive lock to prevent race conditions
+      const selectRequest = new sql.Request(transaction);
+      selectRequest.input('workflow_name', workflowName);
+      selectRequest.input('run_id', runId);
+
+      const existingSnapshotResult = await selectRequest.query(
+        `SELECT snapshot FROM ${table} WITH (UPDLOCK, HOLDLOCK) WHERE workflow_name = @workflow_name AND run_id = @run_id`,
+      );
+
+      let snapshot: WorkflowRunState;
+      if (!existingSnapshotResult.recordset || existingSnapshotResult.recordset.length === 0) {
+        // Create new snapshot if none exists
+        snapshot = {
+          context: {},
+          activePaths: [],
+          timestamp: Date.now(),
+          suspendedPaths: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          value: {},
+          waitingPaths: {},
+          status: 'pending',
+          runId: runId,
+          runtimeContext: {},
+        } as WorkflowRunState;
+      } else {
+        // Parse existing snapshot
+        const existingSnapshot = existingSnapshotResult.recordset[0].snapshot;
+        snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+      }
+
+      // Merge the new step result and runtime context
+      snapshot.context[stepId] = result;
+      snapshot.runtimeContext = { ...snapshot.runtimeContext, ...runtimeContext };
+
+      // Update the snapshot within the same transaction
+      const updateRequest = new sql.Request(transaction);
+      updateRequest.input('snapshot', JSON.stringify(snapshot));
+      updateRequest.input('workflow_name', workflowName);
+      updateRequest.input('run_id', runId);
+      updateRequest.input('updatedAt', sql.DateTime2, new Date());
+
+      await updateRequest.query(
+        `UPDATE ${table} SET snapshot = @snapshot, [updatedAt] = @updatedAt WHERE workflow_name = @workflow_name AND run_id = @run_id`,
+      );
+
+      await transaction.commit();
+      return snapshot.context;
+    } catch (error) {
+      try {
+        await transaction.rollback();
+      } catch {
+        // Ignore rollback errors
+      }
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_MSSQL_STORE_UPDATE_WORKFLOW_RESULTS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+            stepId,
+          },
+        },
+        error,
+      );
+    }
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: {
+      status: string;
+      result?: StepResult<any, any, any, any>;
+      error?: string;
+      suspendedPaths?: Record<string, number[]>;
+      waitingPaths?: Record<string, number[]>;
+    };
+  }): Promise<WorkflowRunState | undefined> {
+    const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
+    const transaction = this.pool.transaction();
+
+    try {
+      await transaction.begin();
+
+      // Load existing snapshot within transaction with exclusive lock to prevent race conditions
+      const selectRequest = new sql.Request(transaction);
+      selectRequest.input('workflow_name', workflowName);
+      selectRequest.input('run_id', runId);
+
+      const existingSnapshotResult = await selectRequest.query(
+        `SELECT snapshot FROM ${table} WITH (UPDLOCK, HOLDLOCK) WHERE workflow_name = @workflow_name AND run_id = @run_id`,
+      );
+
+      if (!existingSnapshotResult.recordset || existingSnapshotResult.recordset.length === 0) {
+        await transaction.rollback();
+        return undefined;
+      }
+
+      // Parse existing snapshot
+      const existingSnapshot = existingSnapshotResult.recordset[0].snapshot;
+      const snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+
+      if (!snapshot || !snapshot?.context) {
+        await transaction.rollback();
+        throw new Error(`Snapshot not found for runId ${runId}`);
+      }
+
+      // Merge the new options with the existing snapshot
+      const updatedSnapshot = { ...snapshot, ...opts };
+
+      // Update the snapshot within the same transaction
+      const updateRequest = new sql.Request(transaction);
+      updateRequest.input('snapshot', JSON.stringify(updatedSnapshot));
+      updateRequest.input('workflow_name', workflowName);
+      updateRequest.input('run_id', runId);
+      updateRequest.input('updatedAt', sql.DateTime2, new Date());
+
+      await updateRequest.query(
+        `UPDATE ${table} SET snapshot = @snapshot, [updatedAt] = @updatedAt WHERE workflow_name = @workflow_name AND run_id = @run_id`,
+      );
+
+      await transaction.commit();
+      return updatedSnapshot;
+    } catch (error) {
+      try {
+        await transaction.rollback();
+      } catch {
+        // Ignore rollback errors
+      }
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_MSSQL_STORE_UPDATE_WORKFLOW_STATE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
+    }
   }
 
   async persistWorkflowSnapshot({
