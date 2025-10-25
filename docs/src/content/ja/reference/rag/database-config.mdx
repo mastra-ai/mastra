@@ -1,18 +1,15 @@
 ---
-title: "リファレンス: DatabaseConfig | RAG | Mastra Docs"
-description: MastraのRAGシステムでベクトルクエリツールと共に使用されるデータベース固有の設定タイプのAPIリファレンス。
+title: "リファレンス: DatabaseConfig | RAG | Mastra ドキュメント"
+description: Mastra の RAG システムでベクトル検索ツールと使用する、データベース固有の設定タイプに関する API リファレンス。
 ---
 
 import { Callout } from "nextra/components";
 import { Tabs } from "nextra/components";
 
 
-
 # DatabaseConfig
 
-`DatabaseConfig`型を使用すると、ベクトルクエリツールを使用する際にデータベース固有の設定を指定できます。これらの設定により、異なるベクトルストアが提供する独自の機能と最適化を活用できます。
-
-
+`DatabaseConfig` 型は、ベクトルクエリツールを使用する際に、データベース固有の設定を指定するための型です。これらの設定により、各ベクトルストアが提供する独自の機能や最適化を活用できます。
 
 ## 型定義
 
@@ -21,30 +18,29 @@ export type DatabaseConfig = {
   pinecone?: PineconeConfig;
   pgvector?: PgVectorConfig;
   chroma?: ChromaConfig;
-  [key: string]: any; // Extensible for future databases
+  [key: string]: any; // 将来のデータベース拡張に対応
 };
 ```
 
 
-
-## データベース固有の型
+## データベース特有の型
 
 ### PineconeConfig
 
-Pineconベクトルストア固有の設定オプション。
+Pinecone ベクターストア向けの構成オプション。
 
 <PropertiesTable
   content={[
     {
       name: "namespace",
       type: "string",
-      description: "同一インデックス内でベクトルを整理・分離するためのPinecone名前空間。マルチテナンシーや環境分離に有用です。",
+      description: "同一インデックス内でベクターを整理・分離するための Pinecone の namespace。マルチテナンシーや環境の切り分けに有用です。",
       isOptional: true,
     },
     {
       name: "sparseVector",
       type: "{ indices: number[]; values: number[]; }",
-      description: "密ベクトルと疎ベクトルを組み合わせたハイブリッド検索用の疎ベクトル。キーワードベースのクエリでより良い検索品質を実現します。indicesとvalues配列は同じ長さである必要があります。",
+      description: "密と疎の埋め込みを組み合わせるハイブリッド検索用の疎ベクター。キーワードベースのクエリに対してより高品質な検索を可能にします。indices と values の配列は同じ長さである必要があります。",
       isOptional: true,
       properties: [
         {
@@ -52,13 +48,13 @@ Pineconベクトルストア固有の設定オプション。
           parameters: [
             {
               name: "indices",
-              description: "疎ベクトル成分のインデックス配列",
+              description: "疎ベクターの各成分に対応するインデックスの配列",
               isOptional: false,
               type: "number[]",
             },
             {
               name: "values",
-              description: "インデックスに対応する値の配列",
+              description: "各インデックスに対応する値の配列",
               isOptional: false,
               type: "number[]",
             },
@@ -69,97 +65,101 @@ Pineconベクトルストア固有の設定オプション。
   ]}
 />
 
-**使用例:**
-- マルチテナントアプリケーション（テナントごとに名前空間を分離）
-- 環境分離（dev/staging/prod名前空間）
-- セマンティック検索とキーワード検索を組み合わせたハイブリッド検索
+**ユースケース:**
+
+- マルチテナントアプリケーション（テナントごとに namespace を分離）
+- 環境の分離（dev/staging/prod ごとに namespace を分離）
+- セマンティック検索とキーワードマッチングを組み合わせたハイブリッド検索
 
 ### PgVectorConfig
 
-pgvector拡張を使用したPostgreSQL固有の設定オプション。
+pgvector 拡張機能を利用する PostgreSQL 向けの設定オプション。
 
 <PropertiesTable
   content={[
     {
       name: "minScore",
       type: "number",
-      description: "結果の最小類似度スコア閾値。この値を上回る類似度スコアを持つベクトルのみが返されます。",
+      description: "結果に対する最小類似度スコアのしきい値。この値を上回る類似度スコアのベクトルのみが返されます。",
       isOptional: true,
     },
     {
       name: "ef",
       type: "number",
-      description: "検索中の動的候補リストのサイズを制御するHNSW検索パラメータ。値が高いほど速度を犠牲にして精度が向上します。通常はtopKと200の間に設定されます。",
+      description: "検索時の動的候補リストのサイズを制御する HNSW の検索パラメータ。値を高くすると精度は向上しますが、速度は低下します。通常は topK〜200 の範囲で設定します。",
       isOptional: true,
     },
     {
       name: "probes",
       type: "number",
-      description: "検索中に訪問するインデックスセルの数を指定するIVFFlatプローブパラメータ。値が高いほど速度を犠牲にして再現率が向上します。",
+      description: "検索時に走査するインデックスセル数を指定する IVFFlat の probe パラメータ。値を高くすると再現率は向上しますが、速度は低下します。",
       isOptional: true,
     },
   ]}
 />
 
 **パフォーマンスガイドライン:**
-- **ef**: topK値の2-4倍から始めて、精度向上のために増加
-- **probes**: 1-10から始めて、再現率向上のために増加
-- **minScore**: 品質要件に応じて0.5-0.9の値を使用
 
-**使用例:**
-- 高負荷シナリオでのパフォーマンス最適化
-- 無関係な結果を除去するための品質フィルタリング
-- 検索精度と速度のトレードオフの微調整
+- **ef**: topK の 2〜4 倍から始め、より高精度が必要なら増やす
+- **probes**: 1〜10 から始め、より高再現率が必要なら増やす
+- **minScore**: 品質要件に応じて 0.5〜0.9 を設定
+
+**ユースケース:**
+
+- 高負荷環境でのパフォーマンス最適化
+- 無関係な結果を除外するための品質フィルタリング
+- 検索の精度と速度のトレードオフの調整
 
 ### ChromaConfig
 
-Chromaベクトルストア固有の設定オプション。
+Chroma ベクターストア固有の設定オプション。
 
 <PropertiesTable
   content={[
-    {
-      name: "where",
-      type: "Record<string, any>",
-      description: "MongoDB形式のクエリ構文を使用したメタデータフィルタリング条件。メタデータフィールドに基づいて結果をフィルタリングします。",
-      isOptional: true,
-    },
-    {
-      name: "whereDocument",
-      type: "Record<string, any>",
-      description: "ドキュメントコンテンツのフィルタリング条件。実際のドキュメントテキストコンテンツに基づいてフィルタリングを可能にします。",
-      isOptional: true,
-    },
-  ]}
+{
+  name: "where",
+  type: "Record<string, any>",
+  description: "MongoDB 風のクエリ構文を用いたメタデータのフィルタ条件。メタデータフィールドに基づいて結果を絞り込みます。",
+  isOptional: true,
+},
+{
+  name: "whereDocument",
+  type: "Record<string, any>",
+  description: "ドキュメント本文のフィルタ条件。実際のドキュメントテキストに基づいて絞り込みを行えます。",
+  isOptional: true,
+},
+]}
 />
 
-**フィルタ構文例:**
+**フィルター構文の例:**
+
 ```typescript
-// 単純な等価性
+// 単純な等価比較
 where: { "category": "technical" }
 
 // 演算子
 where: { "price": { "$gt": 100 } }
 
-// 複数条件
+// 複数の条件
 where: { 
   "category": "electronics",
   "inStock": true 
 }
 
-// ドキュメントコンテンツフィルタリング
+// ドキュメント内容によるフィルタリング
 whereDocument: { "$contains": "API documentation" }
 ```
 
-**使用例:**
-- 高度なメタデータフィルタリング
-- コンテンツベースのドキュメントフィルタリング
-- 複雑なクエリの組み合わせ
+**ユースケース:**
 
+* 高度なメタデータのフィルタリング
+* コンテンツに基づくドキュメントのフィルタリング
+* 複雑なクエリの組み合わせ
 
 
 ## 使用例
 
-<Tabs items={['基本的な使用方法', 'ランタイムオーバーライド', 'マルチデータベース', 'パフォーマンスチューニング']}>
+<Tabs items={['基本的な使い方', 'ランタイムでの上書き', 'マルチデータベース', 'パフォーマンスチューニング']}>
   <Tabs.Tab>
     ### 基本的なデータベース設定
 
@@ -180,7 +180,7 @@ whereDocument: { "$contains": "API documentation" }
   </Tabs.Tab>
 
   <Tabs.Tab>
-    ### ランタイム設定のオーバーライド
+    ### ランタイムでの設定上書き
 
     ```typescript
     import { RuntimeContext } from '@mastra/core/runtime-context';
@@ -197,7 +197,7 @@ whereDocument: { "$contains": "API documentation" }
       }
     });
     
-    // ランタイムでオーバーライド
+    // 実行時に上書き
     const runtimeContext = new RuntimeContext();
     runtimeContext.set('databaseConfig', {
       pinecone: {
@@ -218,7 +218,7 @@ whereDocument: { "$contains": "API documentation" }
 
     ```typescript
     const vectorTool = createVectorQueryTool({
-      vectorStoreName: 'dynamic', // ランタイムで決定される
+      vectorStoreName: 'dynamic', // 実行時に決定
       indexName: 'documents',
       model: embedModel,
       databaseConfig: {
@@ -237,7 +237,7 @@ whereDocument: { "$contains": "API documentation" }
     ```
 
     <Callout>
-      **マルチデータベースサポート**: 複数のデータベースを設定した場合、実際に使用されるベクターストアに一致する設定のみが適用されます。
+      **マルチデータベース対応**: 複数のデータベースを設定している場合、実際に使用されるベクターストアに一致する設定のみが適用されます。
     </Callout>
   </Tabs.Tab>
 
@@ -245,7 +245,7 @@ whereDocument: { "$contains": "API documentation" }
     ### パフォーマンスチューニング
 
     ```typescript
-    // 高精度設定
+    // 高精度の構成
     const highAccuracyTool = createVectorQueryTool({
       vectorStoreName: 'postgres',
       indexName: 'embeddings',
@@ -254,21 +254,21 @@ whereDocument: { "$contains": "API documentation" }
         pgvector: {
           ef: 400,        // 高精度
           probes: 20,     // 高再現率
-          minScore: 0.85  // 高品質閾値
+          minScore: 0.85  // 高品質のしきい値
         }
       }
     });
     
-    // 高速設定  
+    // 高速構成  
     const highSpeedTool = createVectorQueryTool({
       vectorStoreName: 'postgres',
       indexName: 'embeddings',
       model: embedModel,
       databaseConfig: {
         pgvector: {
-          ef: 50,         // 低精度、高速
-          probes: 3,      // 低再現率、高速
-          minScore: 0.6   // 低品質閾値
+          ef: 50,         // 精度は下がるが高速
+          probes: 3,      // 再現率は下がるが高速
+          minScore: 0.6   // 品質のしきい値を低めに設定
         }
       }
     });
@@ -276,20 +276,18 @@ whereDocument: { "$contains": "API documentation" }
   </Tabs.Tab>
 </Tabs>
 
-
-
 ## 拡張性
 
-`DatabaseConfig`型は拡張可能になるよう設計されています。新しいベクターデータベースのサポートを追加するには：
+`DatabaseConfig` 型は拡張しやすいように設計されています。新しいベクターデータベースへの対応を追加するには、次のとおりです。
 
 ```typescript
-// 1. Define the configuration interface
+// 1. 設定用インターフェースを定義する
 export interface NewDatabaseConfig {
   customParam1?: string;
   customParam2?: number;
 }
 
-// 2. Extend DatabaseConfig type
+// 2. DatabaseConfig 型を拡張する
 export type DatabaseConfig = {
   pinecone?: PineconeConfig;
   pgvector?: PgVectorConfig;
@@ -298,7 +296,7 @@ export type DatabaseConfig = {
   [key: string]: any;
 };
 
-// 3. Use in vector query tool
+// 3. ベクタークエリツールで使用する
 const vectorTool = createVectorQueryTool({
   vectorStoreName: 'newdatabase',
   indexName: 'documents',
@@ -313,20 +311,17 @@ const vectorTool = createVectorQueryTool({
 ```
 
 
-
 ## ベストプラクティス
 
-1. **環境設定**: 異なる環境に対して異なるネームスペースまたは設定を使用する
-2. **パフォーマンスチューニング**: デフォルト値から始めて、特定のニーズに基づいて調整する
-3. **品質フィルタリング**: minScoreを使用して低品質な結果を除外する
-4. **ランタイムの柔軟性**: 動的なシナリオに対してランタイムで設定を上書きする
-5. **ドキュメント化**: チームメンバーのために特定の設定選択をドキュメント化する
+1. **環境構成**: 環境ごとに別の名前空間や設定を使用する
+2. **パフォーマンス調整**: 既定値から始め、要件に応じて最適化する
+3. **品質フィルタリング**: 低品質な結果を除外するために minScore を利用する
+4. **ランタイムの柔軟性**: 動的な状況に対応できるよう、実行時に設定を上書きする
+5. **ドキュメンテーション**: チーム向けに、採用した設定の理由と内容を明記する
 
+## 移行ガイド
 
-
-## マイグレーションガイド
-
-既存のベクトルクエリツールは変更なしで引き続き動作します。データベース設定を追加するには：
+既存のベクター検索ツールは変更なしでそのまま動作します。データベースの設定を追加するには：
 
 ```diff
 const vectorTool = createVectorQueryTool({
@@ -342,9 +337,8 @@ const vectorTool = createVectorQueryTool({
 ```
 
 
-
-## 関連
+## 関連項目
 
 - [createVectorQueryTool()](/reference/tools/vector-query-tool)
-- [Hybrid Vector Search](/examples/rag/query/hybrid-vector-search.mdx)
-- [Metadata Filters](/reference/rag/metadata-filters) 
+- [ハイブリッド ベクター検索](/examples/rag/query/hybrid-vector-search.mdx)
+- [メタデータフィルタ](/reference/rag/metadata-filters) 

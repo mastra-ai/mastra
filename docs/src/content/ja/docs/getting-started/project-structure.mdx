@@ -1,76 +1,76 @@
 ---
-title: "ローカルプロジェクト構造 | はじめに | Mastra ドキュメント"
-description: Mastraでのフォルダとファイルの整理に関するガイド。ベストプラクティスと推奨される構造を含みます。
+title: "ローカルプロジェクトの構成 | はじめに | Mastra ドキュメント"
+description: Mastra でのフォルダやファイルの整理方法、ベストプラクティス、推奨構成について解説します。
 ---
 
-import { FileTree } from "nextra/components";
+import { FileTree, Callout } from "nextra/components";
 
 
+# プロジェクト構成
 
-# プロジェクト構造
+`create mastra` コマンドで作成された新しい Mastra プロジェクトには、すぐに始められるよう、あらかじめ用意されたファイルとフォルダのセットが含まれています。
 
-このページではMastraでのフォルダとファイルの整理方法についてのガイドを提供します。Mastraはモジュラーフレームワークであり、各モジュールを個別に、または組み合わせて使用することができます。
+Mastra はフレームワークですが、ファイルの整理や配置については**干渉しません**。CLI は多くのプロジェクトでうまく機能する妥当なデフォルト構成を提供しますが、ワークフローやチームの慣習に合わせて自由に調整できます。極端な話、望めばプロジェクト全体を1つのファイルで構築することも可能です。どのような構成を選ぶにせよ、一貫性を保つことで、コードの保守性と見通しのよさを確保しましょう。
 
-すべてを1つのファイルに書くこともできますし、各エージェント、ツール、ワークフローを独自のファイルに分けることもできます。
+## デフォルトのプロジェクト構成
 
-特定のフォルダ構造を強制することはありませんが、いくつかのベストプラクティスを推奨しており、CLIは適切な構造でプロジェクトをスキャフォールドします。
-
-
-
-## プロジェクト構造の例
-
-CLIで作成されたデフォルトプロジェクトは次のような構造になります：
+`create mastra` コマンドで作成されたプロジェクトは、次のような構成になります:
 
 <FileTree>
   <FileTree.Folder name="src" defaultOpen>
     <FileTree.Folder name="mastra" defaultOpen>
       <FileTree.Folder name="agents" defaultOpen>
-        <FileTree.File name="agent-name.ts" />
+        <FileTree.File name="weather-agent.ts" />
       </FileTree.Folder>
       <FileTree.Folder name="tools" defaultOpen>
-        <FileTree.File name="tool-name.ts" />
+        <FileTree.File name="weather-tool.ts" />
       </FileTree.Folder>
       <FileTree.Folder name="workflows" defaultOpen>
-        <FileTree.File name="workflow-name.ts" />
+        <FileTree.File name="weather-workflow.ts" />
+      </FileTree.Folder>
+      <FileTree.Folder name="scorers" defaultOpen>
+        <FileTree.File name="weather-scorer.ts" />
       </FileTree.Folder>
       <FileTree.File name="index.ts" />
     </FileTree.Folder>
   </FileTree.Folder>
-  <FileTree.File name=".env" />
+  <FileTree.File name=".env.example" />
   <FileTree.File name="package.json" />
   <FileTree.File name="tsconfig.json" />
 </FileTree>
-{/*
-```
-root/
-├── src/
-│   └── mastra/
-│       ├── agents/
-│       │   └── index.ts
-│       ├── tools/
-│       │   └── index.ts
-│       ├── workflows/
-│       │   └── index.ts
-│       ├── index.ts
-├── .env
-├── package.json
-├── tssconfig.json
-``` */}
 
-### トップレベルフォルダ
+<Callout type="info">
+ヒント — 用意済みのファイルをテンプレートとして活用しましょう。複製して調整すれば、独自の agents、tools、workflows などを素早く作成できます。
+</Callout>
 
-| フォルダ               | 説明                                 |
-| ---------------------- | ------------------------------------ |
-| `src/mastra`           | コアアプリケーションフォルダ         |
-| `src/mastra/agents`    | エージェントの設定と定義             |
-| `src/mastra/tools`     | カスタムツールの定義                 |
-| `src/mastra/workflows` | ワークフローの定義                   |
+### フォルダ
 
-### トップレベルファイル
+フォルダは、エージェント、ツール、ワークフローなど、エージェントのリソースを整理します。
 
-| ファイル              | 説明                                                |
-| --------------------- | --------------------------------------------------- |
-| `src/mastra/index.ts` | Mastraのメイン設定ファイル                          |
-| `.env`                | 環境変数                                            |
-| `package.json`        | Node.jsプロジェクトのメタデータ、スクリプト、依存関係 |
-| `tsconfig.json`       | TypeScriptコンパイラの設定                          |
+| フォルダ                 | 説明 |
+| ---------------------- | ------------ |
+| `src/mastra`           | Mastra 関連のコードと設定のすべてのエントリーポイント。|
+| `src/mastra/agents`    | エージェントの挙動、目標、ツールを定義・設定します。 |
+| `src/mastra/workflows` | エージェントとツールを連携させてオーケストレーションする複数ステップのワークフローを定義します。 |
+| `src/mastra/tools`     | エージェントが呼び出せる再利用可能なツールを作成します。 |
+| `src/mastra/mcp`       | （任意）外部のエージェントとツールを共有するためのカスタム MCP サーバーを実装します。 |
+| `src/mastra/scorers`   | （任意）経時的にエージェントのパフォーマンスを評価するためのスコアラーを定義します。 |
+| `src/mastra/public`    | （任意）内容はビルド時に `.build/output` ディレクトリへコピーされ、実行時に配信可能になります。 |
+
+### トップレベルのファイル
+
+トップレベルのファイルは、Mastra プロジェクトの設定、ビルド、そして実行環境との連携方法を定義します。
+
+| File                  | Description |
+| --------------------- | ------------ |
+| `src/mastra/index.ts` | Mastra を設定・初期化する中核となるエントリーポイント。 |
+| `.env.example`        | 環境変数のテンプレート — `.env` にコピーしてリネームし、[モデルプロバイダー](/models) のシークレットキーを追加します。 |
+| `package.json`        | プロジェクトのメタデータ、依存関係、利用可能な npm スクリプトを定義します。 |
+| `tsconfig.json`       | パスエイリアス、コンパイラ設定、ビルド出力などの TypeScript オプションを設定します。 |
+
+## 次のステップ
+
+- [Mastra の機能](/docs#why-mastra)についてさらに詳しく読む
+- お使いのフロントエンドフレームワークと Mastra を統合する: [Next.js](/docs/frameworks/web-frameworks/next-js)、[React](/docs/frameworks/web-frameworks/vite-react)、または [Astro](/docs/frameworks/web-frameworks/astro)
+- [ガイド](/guides)のいずれかに従って、エージェントを一から構築する
+- [YouTube チャンネル](https://www.youtube.com/@mastra-ai)で概念ガイドを視聴し、[チャンネル登録](https://www.youtube.com/@mastra-ai?sub_confirmation=1)する

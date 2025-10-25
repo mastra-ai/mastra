@@ -1,20 +1,17 @@
 ---
-title: "例: キーワード網羅率 | Evals | Mastra Docs"
-description: 入力テキストの重要なキーワードが応答でどの程度カバーされているかを評価するために、Keyword Coverage 指標を用いる例。
+title: "例：キーワードカバレッジ | Evals | Mastra Docs"
+description: 入力テキストの重要なキーワードがどの程度カバーされているかを評価するために、キーワードカバレッジ指標を用いる例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 import { ScorerCallout } from '@/components/scorer-callout'
 
 
-
-# キーワード網羅性の評価
+# キーワード網羅度の評価
 
 <ScorerCallout />
 
-`KeywordCoverageMetric` を使って、コンテキストで要求されるキーワードやフレーズが応答にどれだけ正確に含まれているかを評価します。このメトリクスは `query` と `response` を受け取り、スコアと、キーワード一致の統計を含む `info` オブジェクトを返します。
-
-
+`KeywordCoverageMetric` を使用して、コンテキストの必須キーワードやフレーズが回答にどれだけ正確に含まれているかを評価します。このメトリックは `query` と `response` を受け取り、スコアと、キーワード一致の統計を含む `info` オブジェクトを返します。
 
 ## インストール
 
@@ -23,28 +20,27 @@ npm install @mastra/evals
 ```
 
 
+## 完全網羅の例
 
-## 完全カバレッジの例
-
-この例では、応答が入力の主要な用語を余すところなく反映しています。必要なキーワードがすべて含まれており、欠落のない完全なカバレッジになっています。
-
+この例では、応答が入力の重要な用語を余すところなく反映しています。必要なキーワードがすべて含まれており、欠落のない完全な網羅性が得られます。
 
 ```typescript filename="src/example-full-keyword-coverage.ts" showLineNumbers copy
 import { KeywordCoverageMetric } from "@mastra/evals/nlp";
 
 const metric = new KeywordCoverageMetric();
 
-const query = "JavaScript frameworks like React and Vue.";
-const response = "Popular JavaScript frameworks include React and Vue for web development";
+const query = "React や Vue などの JavaScript フレームワーク。"
+const response = "一般的な JavaScript フレームワークとして、Web 開発向けの React や Vue が挙げられます"
 
 const result = await metric.measure(query, response);
 
 console.log(result);
 ```
 
-### 完全カバレッジの出力
 
-スコアが1であることは、想定されるすべてのキーワードが応答内で見つかったことを示します。`info` フィールドは、マッチしたキーワード数が入力から抽出されたキーワードの総数と一致していることを示しています。
+### フルカバレッジの出力
+
+スコアが1の場合、想定されたすべてのキーワードが応答内で見つかったことを示します。`info` フィールドは、一致したキーワード数が入力から抽出された総数と同じであることを示します。
 
 ```typescript
 {
@@ -57,27 +53,27 @@ console.log(result);
 ```
 
 
+## 部分的なカバー範囲の例
 
-## 部分的なカバレッジの例
-
-この例では、応答には入力の重要なキーワードの一部は含まれていますが、すべては含まれていません。スコアは部分的なカバレッジを反映しており、主要な用語が欠落しているか、または一部しか一致していないことを示します。
+この例では、応答に入力の重要なキーワードの一部は含まれているものの、すべては含まれていません。スコアは部分的なカバー範囲を反映しており、主要な用語が欠落しているか、または一部しか一致していないことを示します。
 
 ```typescript filename="src/example-partial-keyword-coverage.ts" showLineNumbers copy
 import { KeywordCoverageMetric } from "@mastra/evals/nlp";
 
 const metric = new KeywordCoverageMetric();
 
-const query = "TypeScript offers interfaces, generics, and type inference.";
-const response = "TypeScript provides type inference and some advanced features";
+const query = "TypeScript にはインターフェース、ジェネリクス、型推論があります。";
+const response = "TypeScript には型推論といくつかの高度な機能があります";
 
 const result = await metric.measure(query, response);
 
 console.log(result);
 ```
 
+
 ### 部分的なカバレッジの出力
 
-スコアが 0.5 の場合、期待されるキーワードの半分しか応答内で見つからなかったことを示します。`info` フィールドには、入力で特定された総数に対して、いくつの用語が一致したかが表示されます。
+スコアが 0.5 の場合、期待されるキーワードのうち半分しかレスポンス内で見つからなかったことを示します。`info` フィールドには、入力で特定された総数に対して、いくつの用語が一致したかが示されます。
 
 ```typescript
 {
@@ -90,27 +86,27 @@ console.log(result);
 ```
 
 
+## 網羅性が最小の例
 
-## 最小限のカバレッジ例
-
-この例では、応答には入力の重要なキーワードがほとんど含まれていません。スコアはカバレッジが最小限であることを反映しており、主要な用語の多くが欠落しているか考慮されていません。
+この例では、応答には入力の重要なキーワードがほとんど含まれていません。スコアは網羅性の低さを反映しており、主要な用語の多くが欠落しているか考慮されていません。
 
 ```typescript filename="src/example-minimal-keyword-coverage.ts" showLineNumbers copy
 import { KeywordCoverageMetric } from "@mastra/evals/nlp";
 
 const metric = new KeywordCoverageMetric();
 
-const query = "Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning";
-const response = "Data preparation is important for models";
+const query = "機械学習モデルにはデータ前処理、特徴量エンジニアリング、ハイパーパラメータ調整が必要です";
+const response = "データ準備はモデルにとって重要です";
 
 const result = await metric.measure(query, response);
 
 console.log(result);
 ```
 
-### 最小限のカバレッジ出力
 
-低いスコアは、期待されるキーワードのうちごく一部しか応答に含まれていないことを示します。`info` フィールドは、合計キーワード数と一致したキーワード数の差を示し、カバレッジ不足を示唆します。
+### カバレッジが最小の出力
+
+スコアが低い場合、期待されるキーワードのうちごく一部しか応答に含まれていないことを示します。`info` フィールドは、総キーワード数と一致したキーワード数の差を示し、カバレッジ不足を明確にします。
 
 ```typescript
 {
@@ -123,54 +119,49 @@ console.log(result);
 ```
 
 
+## メトリクスの設定
 
-## メトリックの設定
-
-`KeywordCoverageMetric` は既定の設定で作成できます。追加の設定は不要です。
+`KeywordCoverageMetric` インスタンスは既定の設定で作成できます。追加の設定は不要です。
 
 ```typescript
 const metric = new KeywordCoverageMetric();
 ```
 
-> 設定オプションの一覧については [KeywordCoverageMetric](/reference/evals/keyword-coverage.mdx) をご覧ください。
-
+> 設定オプションの全一覧は、[KeywordCoverageMetric](/reference/evals/keyword-coverage.mdx)を参照してください。
 
 
 ## 結果の理解
 
-`KeywordCoverageMetric` は次の形式で結果を返します：
+`KeywordCoverageMetric` は次の形の結果を返します：
 
 ```typescript
 {
-  score: number,
+  score: 数値,
   info: {
-    totalKeywords: number,
-    matchedKeywords: number
+    totalKeywords: 数値,
+    matchedKeywords: 数値
   }
 }
 ```
 
 
+## キーワードカバレッジスコア
 
-## キーワード網羅スコア
+0～1 の範囲のカバレッジスコア:
 
-0〜1 の範囲の網羅スコア:
+- **1.0**: カバー率100% – すべてのキーワードを含む。
+- **0.7–0.9**: 高いカバー率 – ほとんどのキーワードを含む。
+- **0.4–0.6**: 部分的なカバー – いくつかのキーワードを含む。
+- **0.1–0.3**: 低いカバー – 一致するキーワードが少ない。
+- **0.0**: カバーなし – キーワードが見つからない。
 
-- **1.0**: 完全に網羅 — すべてのキーワードを含む。
-- **0.7–0.9**: 高水準の網羅 — ほとんどのキーワードを含む。
-- **0.4–0.6**: 部分的な網羅 — 一部のキーワードを含む。
-- **0.1–0.3**: 低水準の網羅 — 該当するキーワードが少ない。
-- **0.0**: 網羅なし — キーワードが見つからない。
+## キーワードカバレッジ情報
 
+次の詳細な統計を含みます：
 
-
-## キーワード網羅情報
-
-以下の詳細統計を含みます:
-
-- 入力中のキーワード総数
-- 一致したキーワード数
-- 網羅率の算出
+- 入力に含まれるキーワードの総数
+- 一致したキーワードの数
+- カバレッジ率の算出
 - 専門用語の扱い
 
 <GithubLink

@@ -1,0 +1,25 @@
+---
+title: "カスタム評価を作成する"
+description: "Mastra では独自の評価を作成できます。手順は以下のとおりです。"
+---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
+# カスタム評価を作成する
+
+<ScorerCallout />
+
+`Metric` クラスを拡張し、`measure` メソッドを実装してカスタム評価を作成します。これにより、スコアの算出方法や返却する情報を完全に制御できます。LLM ベースの評価では、`MastraAgentJudge` クラスを拡張して、モデルの推論方法と出力の採点基準を定義します。
+
+## ネイティブ JavaScript による評価
+
+プレーンな JavaScript/TypeScript を用いて、軽量なカスタムメトリクスを作成できます。これは、単純な文字列比較、パターンチェック、その他のルールベースのロジックに最適です。
+
+出力内で見つかった参照語の数に基づいて応答をスコアリングする[Word Inclusion の例](/examples/evals/custom-native-javascript-eval.mdx)をご覧ください。
+
+## 判定者としての LLM 評価
+
+より複雑な評価には、LLM を用いた判定者を構築できます。これにより、事実性、トーン、推論といった、より微妙な基準も評価できます。
+
+実世界の事実性を評価するカスタム判定者とメトリクスの作成手順については、[Real World Countries の例](/examples/evals/custom-llm-judge-eval.mdx)を参照してください。

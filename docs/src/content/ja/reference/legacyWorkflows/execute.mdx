@@ -1,17 +1,13 @@
 ---
-title: "リファレンス: Workflow.execute() | ワークフロー（レガシー） | Mastra ドキュメント"
-description: "Mastra ワークフローにおける `.execute()` メソッドのドキュメント。このメソッドはワークフローステップを実行し、結果を返します。"
+title: "リファレンス: Workflow.execute() | Workflows（レガシー） | Mastra ドキュメント"
+description: "Mastra のワークフローにおける `.execute()` メソッドのリファレンス。ワークフローの各ステップを実行し、結果を返します。"
 ---
-
-
 
 # Workflow.execute()
 
-指定されたトリガーデータでワークフローを実行し、結果を返します。ワークフローは実行前にコミットされている必要があります。
+指定されたトリガー データを使用してワークフローを実行し、結果を返します。実行前にワークフローをコミットしておく必要があります。
 
-
-
-## 使用例
+## 使い方の例
 
 ```typescript
 const workflow = new LegacyWorkflow({
@@ -29,27 +25,26 @@ const result = await workflow.execute({
 ```
 
 
-
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
     {
       name: "options",
       type: "ExecuteOptions",
-      description: "ワークフロー実行のためのオプション",
+      description: "ワークフロー実行のオプション",
       isOptional: true,
       properties: [
         {
           name: "triggerData",
           type: "TriggerSchema",
-          description: "ワークフローのトリガースキーマに一致する入力データ",
+          description: "ワークフローのトリガースキーマに適合する入力データ",
           isOptional: false,
         },
         {
           name: "runId",
           type: "string",
-          description: "この実行ランを追跡するための任意のID",
+          description: "この実行を追跡するための任意の ID",
           isOptional: true,
         },
       ],
@@ -57,9 +52,7 @@ const result = await workflow.execute({
   ]}
 />
 
-
-
-## 戻り値
+## 返り値
 
 <PropertiesTable
   content={[
@@ -71,7 +64,7 @@ const result = await workflow.execute({
         {
           name: "runId",
           type: "string",
-          description: "この実行ランの一意の識別子",
+          description: "この実行の一意の識別子",
         },
         {
           name: "results",
@@ -81,27 +74,25 @@ const result = await workflow.execute({
         {
           name: "status",
           type: "WorkflowStatus",
-          description: "ワークフロー実行の最終ステータス",
+          description: "ワークフロー実行の最終的なステータス",
         },
       ],
     },
   ]}
 />
 
-
-
 ## 追加の例
 
-run ID を指定して実行:
+実行するラン ID:
 
 ```typescript
 const result = await workflow.execute({
-  runId: "custom-run-id",
+  runId: "カスタム run ID",
   triggerData: { inputValue: 42 },
 });
 ```
 
-実行結果を処理する:
+実行結果の処理:
 
 ```typescript
 const { runId, results, status } = await workflow.execute({
@@ -109,11 +100,12 @@ const { runId, results, status } = await workflow.execute({
 });
 
 if (status === "COMPLETED") {
-  console.log("Step results:", results);
+  console.log("ステップ結果:", results);
 }
 ```
 
-### 関連
+
+### 関連項目
 
 - [Workflow.createRun()](./createRun.mdx)
 - [Workflow.commit()](./commit.mdx)

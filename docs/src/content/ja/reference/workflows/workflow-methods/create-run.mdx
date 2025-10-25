@@ -1,6 +1,6 @@
 ---
-title: "リファレンス: Workflow.createRunAsync() | Workflows | Mastra Docs"
-description: ワークフローで新しい実行インスタンスを作成する `Workflow.createRunAsync()` メソッドのドキュメント。
+title: "リファレンス: Workflow.createRunAsync() | Workflows | Mastra ドキュメント"
+description: ワークフローで使用する `Workflow.createRunAsync()` メソッドのドキュメント。新しいワークフロー実行を作成します。
 ---
 
 import { Callout } from "nextra/components";
@@ -8,10 +8,10 @@ import { Callout } from "nextra/components";
 
 # Workflow.createRunAsync()
 
-`.createRunAsync()` メソッドは、新しいワークフロー実行インスタンスを作成し、特定の入力データでワークフローを実行できるようにします。これは `Run` インスタンスを返す現行の API です。
+`.createRunAsync()` メソッドは新しいワークフロー実行インスタンスを作成し、特定の入力データでワークフローを実行できるようにします。これは `Run` インスタンスを返す現行の API です。
 
 <Callout>
-メソッドを備えたオブジェクトを返す従来の `createRun()` メソッドについては、[Legacy Workflows](../../legacyWorkflows/createRun.mdx) セクションを参照してください。
+メソッドを持つオブジェクトを返すレガシーな `createRun()` メソッドについては、[Legacy Workflows](../../legacyWorkflows/createRun.mdx) セクションを参照してください。
 </Callout>
 
 ## 使い方の例
@@ -20,14 +20,15 @@ import { Callout } from "nextra/components";
 await workflow.createRunAsync();
 ```
 
-## パラメーター
+
+## パラメータ
 
 <PropertiesTable
   content={[
     {
       name: "runId",
       type: "string",
-      description: "ワークフロー実行用の任意のカスタム識別子",
+      description: "ワークフロー実行のための任意のカスタム識別子",
       isOptional: true,
     },
   ]}
@@ -41,12 +42,12 @@ await workflow.createRunAsync();
       name: "run",
       type: "Run",
       description:
-        "ワークフローの実行に使用できる、新しいワークフロー実行インスタンス。",
+        "ワークフローを実行するために使用できる、ワークフロー実行の新しいインスタンス。",
     },
   ]}
 />
 
-## 拡張例
+## 拡張的な使用例
 
 ```typescript showLineNumbers copy
 const workflow = mastra.getWorkflow("workflow");
@@ -59,6 +60,7 @@ const result = await run.start({
   },
 });
 ```
+
 
 ## 関連項目
 

@@ -1,18 +1,19 @@
 ---
-title: "例：マークダウンのセマンティックチャンキング | RAG | Mastra ドキュメント"
-description: 検索や取得目的でマークダウン文書をチャンク化するためのMastraの使用例。
+title: "例: Markdown のセマンティック分割 | RAG | Mastra Docs"
+description: 検索や検索・取得の目的で、Mastra を使って Markdown ドキュメントを分割する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# チャンクマークダウン
 
-Markdownは生のHTMLよりも情報密度が高く、RAGパイプラインでの作業が容易です。Markdownを扱う際には、ヘッダーやフォーマットを保持しながら小さな部分に分割する必要があります。`chunk`メソッドは、ヘッダー、リスト、コードブロックのようなMarkdown特有の要素を賢く処理します。この例は、検索や取得の目的でMarkdownドキュメントをチャンクする方法を示しています。
+# Markdown のチャンク化
+
+Markdown は生の HTML より情報が凝縮されており、RAG パイプラインで扱いやすい形式です。Markdown を扱う際は、見出しや書式を保ったまま小さな単位に分割する必要があります。`chunk` メソッドは、見出し、リスト、コードブロックなどの Markdown 特有の要素を賢く処理します。以下の例では、検索や検索結果の取得を目的として Markdown ドキュメントをチャンク化する方法を示します。
 
 ```tsx copy
 import { MDocument } from "@mastra/rag";
 
-const doc = MDocument.fromMarkdown("# Your markdown content...");
+const doc = MDocument.fromMarkdown("# Markdown コンテンツ…");
 
 const chunks = await doc.chunk();
 ```
@@ -29,6 +30,6 @@ const chunks = await doc.chunk();
 
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-markdown"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-markdown"
+}
 />

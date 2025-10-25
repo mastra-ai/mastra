@@ -1,22 +1,21 @@
 ---
-title: "例: Cohere を使ったテキスト埋め込み | RAG | Mastra ドキュメント"
-description: Mastra を使って Cohere の埋め込みモデルで埋め込みを生成する例。
+title: "例: Cohere でのテキスト埋め込み | RAG | Mastra ドキュメント"
+description: Mastra を使用して Cohere の埋め込みモデルでベクトル埋め込みを生成する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
+# Cohere でテキストを埋め込む
 
-# Cohereでテキストを埋め込む
-
-他の埋め込みプロバイダーを利用する場合、選択したモデルの仕様に合ったベクトルを生成する方法が必要です。`embed`メソッドは複数のプロバイダーをサポートしており、さまざまな埋め込みサービスを切り替えて利用できます。この例では、Cohereの埋め込みモデルを使って埋め込みを生成する方法を示します。
+別の埋め込みプロバイダーを利用する場合、選択したモデルの仕様に適合するベクトルを生成する手段が必要です。`embed` メソッドは複数のプロバイダーに対応しており、異なる埋め込みサービス間で切り替えが可能です。この例では、Cohere の埋め込みモデルを用いて埋め込みを生成する方法を示します。
 
 ```tsx copy
 import { cohere } from "@ai-sdk/cohere";
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
 
-const doc = MDocument.fromText("Your text content...");
+const doc = MDocument.fromText("テキストの内容…");
 
 const chunks = await doc.chunk();
 
@@ -27,12 +26,17 @@ const { embeddings } = await embedMany({
 ```
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-text-with-cohere"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-text-with-cohere"
+}
 />

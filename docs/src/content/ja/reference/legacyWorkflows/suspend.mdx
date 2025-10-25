@@ -1,46 +1,39 @@
 ---
 title: "リファレンス: suspend() | 制御フロー | Mastra ドキュメント"
-description: "Mastra ワークフローにおける suspend 関数のドキュメント。実行を一時停止し、再開されるまで待機します。"
+description: "Mastra のワークフローにおける suspend 関数のドキュメント。実行は再開されるまで一時停止します。"
 ---
-
-
 
 # suspend()
 
-ワークフローの実行を現在のステップで一時停止し、明示的に再開されるまで停止します。ワークフローの状態は保存され、後で続行できます。
+現在のステップでワークフローの実行を一時停止し、明示的に再開されるまで待機します。ワークフローの状態は保存され、後で再開できます。
 
-
-
-## 使用例
+## 使い方の例
 
 ```typescript
 const approvalStep = new LegacyStep({
-  id: "needsApproval",
+  id: "承認が必要",
   execute: async ({ context, suspend }) => {
     if (context.steps.amount > 1000) {
       await suspend();
     }
-    return { approved: true };
+    return { 承認済: true };
   },
 });
 ```
 
 
-
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
     {
       name: "metadata",
       type: "Record<string, any>",
-      description: "サスペンド状態と一緒に保存するための任意のデータ",
+      description: "サスペンド状態とともに保存できる任意のデータ",
       isOptional: true,
     },
   ]}
 />
-
-
 
 ## 戻り値
 
@@ -49,12 +42,10 @@ const approvalStep = new LegacyStep({
     {
       name: "Promise<void>",
       type: "Promise",
-      description: "ワークフローが正常に一時停止されたときに解決されます",
+      description: "ワークフローが正常に一時停止されると解決されます",
     },
   ]}
 />
-
-
 
 ## 追加の例
 
@@ -65,7 +56,7 @@ const reviewStep = new LegacyStep({
   id: "review",
   execute: async ({ context, suspend }) => {
     await suspend({
-      reason: "Needs manager approval",
+      reason: "マネージャーの承認が必要です",
       requestedBy: context.user,
     });
     return { reviewed: true };
@@ -73,8 +64,9 @@ const reviewStep = new LegacyStep({
 });
 ```
 
-### 関連
 
-- [サスペンドと再開ワークフロー](../../docs/workflows-legacy/suspend-and-resume.mdx)
+### 関連項目
+
+- [ワークフローの一時停止と再開](../../docs/workflows-legacy/suspend-and-resume.mdx)
 - [.resume()](./resume.mdx)
 - [.watch()](./watch.mdx)

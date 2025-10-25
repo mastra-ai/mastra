@@ -1,38 +1,35 @@
 ---
-title: "Mastra と Next.js の始め方 | Mastra ガイド"
+title: "Mastra と Next.js のはじめ方 | Mastra ガイド"
 description: Mastra を Next.js に統合するための手順ガイド。
 ---
 
 import { Callout, Steps, Tabs } from "nextra/components";
 
 
-
 # Next.js プロジェクトに Mastra を統合する
 
-Mastra は Next.js と統合されており、次のことが簡単に行えます：
+Mastra は Next.js と連携しており、次のことが簡単に行えます:
 
 - AI 機能を提供する柔軟な API の構築
-- フロントエンドとバックエンドを単一のコードベースで扱い、デプロイを簡素化
-- 効率的なサーバー／クライアントのワークフローのために、Next.js の組み込みの Server Actions（App Router）や API Routes（Pages Router）を活用
+- フロントエンドとバックエンドを単一のコードベースにまとめてデプロイを簡素化
+- 効率的なサーバー・クライアント間のワークフローのために、Next.js の組み込みの Server Actions（App Router）または API Routes（Pages Router）を活用
 
-このガイドを参考に、Next.js プロジェクトで Mastra のセットアップ（スキャフォルド）と統合を行いましょう。
-
-
+このガイドに従って、Next.js プロジェクトに Mastra をセットアップし、統合しましょう。
 
 <Tabs items={["App Router", "Pages Router"]}>
   <Tabs.Tab>
     <Callout type="warning">
-      このガイドは、プロジェクトのルートで Next.js の App Router を使用していることを前提としています（例: `src/app` ではなく `app`）。
+      このガイドは、プロジェクトのルートで Next.js の App Router を使用していることを前提としています（例：`src/app` ではなく `app`）。
     </Callout>
 
     <Steps>
-      ## Mastra を統合する
+      ## Mastra を組み込む
 
-      プロジェクトに Mastra を組み込むには、次のいずれかの方法を使用します。
+      プロジェクトに Mastra を導入するには、次の2つの方法があります。
 
       ### 1. ワンライナーを使う
 
-      以下のコマンドを実行して、妥当な初期設定で Weather エージェントをすばやく雛形生成します。
+      次のコマンドを実行して、適切な初期設定でデフォルトの Weather エージェントを素早くスキャフォールドします。
 
       ```bash copy
       npx mastra@latest init --dir . --components agents,tools --example --llm openai
@@ -42,14 +39,14 @@ Mastra は Next.js と統合されており、次のことが簡単に行えま�
 
       ### 2. 対話型 CLI を使う
 
-      セットアップをカスタマイズしたい場合は、`init` コマンドを実行し、プロンプトに従ってオプションを選択してください。
+      セットアップをカスタマイズしたい場合は、`init` コマンドを実行し、プロンプトで表示されるオプションから選択してください。
 
       ```bash copy
       npx mastra@latest init
       ```
 
       <Callout type="warning">
-        デフォルトでは、`mastra init` はインストール先として `src` を提案します。プロジェクトのルートで App Router（例: `app`、`src/app` ではない）を使用している場合は、プロンプトで `.` と入力してください。
+        既定では、`mastra init` はインストール先として `src` を提案します。プロジェクトのルートで App Router（例：`app`、`src/app` ではない）を使用している場合は、プロンプトで `.` を入力してください。
       </Callout>
 
       ## API キーを設定する
@@ -58,11 +55,11 @@ Mastra は Next.js と統合されており、次のことが簡単に行えま�
       OPENAI_API_KEY=<your-api-key>
       ```
 
-      > LLM プロバイダーごとに使用する環境変数名は異なります。詳細は [Model Capabilities](/docs/getting-started/model-capability) を参照してください。
+      > LLM プロバイダーごとに使用する環境変数が異なります。詳細は [Model Capabilities](/docs/getting-started/model-capability) を参照してください。
 
       ## Next.js を設定する
 
-      `next.config.ts` に以下を追加します:
+      `next.config.ts` に以下を追加します。
 
       ```typescript filename="next.config.ts" showLineNumbers copy
       import type { NextConfig } from "next";
@@ -76,11 +73,11 @@ Mastra は Next.js と統合されており、次のことが簡単に行えま�
 
       ## Next.js の開発サーバーを起動する
 
-      通常どおり Next.js アプリを起動できます。
+      いつも通りに Next.js アプリを起動できます。
 
       ## テスト用ディレクトリを作成する
 
-      テスト用に Page、Action、Form を含む新しいディレクトリを作成します。
+      テスト用の Page、Action、Form を含む新しいディレクトリを作成します。
 
       ```bash copy
       mkdir app/test
@@ -88,7 +85,7 @@ Mastra は Next.js と統合されており、次のことが簡単に行えま�
 
       ### テスト用 Action を作成する
 
-      新しい Action を作成し、次のサンプルコードを追加します。
+      新しい Action を作成し、サンプルコードを追加します。
 
       ```bash copy
       touch app/test/action.ts
@@ -111,7 +108,7 @@ Mastra は Next.js と統合されており、次のことが簡単に行えま�
 
       ### テスト用 Form を作成する
 
-      新しい Form コンポーネントを作成し、次のサンプルコードを追加します。
+      新しい Form コンポーネントを作成し、サンプルコードを追加します。
 
       ```bash copy
       touch app/test/form.tsx
@@ -145,7 +142,7 @@ Mastra は Next.js と統合されており、次のことが簡単に行えま�
 
       ### テスト用 Page を作成する
 
-      新しい Page を作成し、次のサンプルコードを追加します。
+      新しい Page を作成し、サンプルコードを追加します。
 
       ```bash copy
       touch app/test/page.tsx
@@ -164,9 +161,9 @@ Mastra は Next.js と統合されており、次のことが簡単に行えま�
       }
       ```
 
-      > ブラウザで `/test` にアクセスして動作を確認できます。
+      > これでブラウザで `/test` にアクセスして試せます。
 
-      都市名に「**London**」を入力すると、次のような結果が返ってきます。
+      都市名として「**London**」を送信すると、次のような結果が返ってきます。
 
       ```plaintext
       Agent response: The current weather in London is as follows:
@@ -184,17 +181,17 @@ Mastra は Next.js と統合されており、次のことが簡単に行えま�
 
   <Tabs.Tab>
     <Callout type="warning">
-      このガイドは、プロジェクトのルートで Next.js の Pages Router を使用していることを前提としています。例: `src/pages` ではなく `pages` を使用。
+      このガイドは、プロジェクトのルートで Next.js の Pages Router を使用していることを前提としています（例: `src/pages` ではなく `pages`）。
     </Callout>
 
     <Steps>
-      ## Mastra を導入する
+      ## Mastra を統合する
 
-      プロジェクトに Mastra を組み込むには、次の2通りの方法があります。
+      プロジェクトに Mastra を統合するには、次の 2 つの方法があります。
 
       ### 1. ワンライナーを使う
 
-      以下のコマンドを実行して、妥当な既定値付きのデフォルトの Weather エージェントを素早くスキャフォールドします。
+      次のコマンドを実行して、適切な初期設定済みのデフォルト Weather エージェントを素早くスキャフォルドします。
 
       ```bash copy
       npx mastra@latest init --dir . --components agents,tools --example --llm openai
@@ -211,7 +208,7 @@ Mastra は Next.js と統合されており、次のことが簡単に行えま�
       ```
 
       <Callout type="warning">
-        デフォルトでは、`mastra init` はインストール先として `src` を提案します。プロジェクトのルートで Pages Router（例: `pages`、`src/pages` ではない）を使用している場合は、プロンプトで `.` を入力してください。
+        既定では、`mastra init` はインストール先として `src` を提案します。プロジェクトのルートで Pages Router（例: `src/pages` ではなく `pages`）を使用している場合は、プロンプトで `.` と入力してください。
       </Callout>
 
       ## API キーを設定する
@@ -220,11 +217,11 @@ Mastra は Next.js と統合されており、次のことが簡単に行えま�
       OPENAI_API_KEY=<your-api-key>
       ```
 
-      > 各 LLM プロバイダーは異なる環境変数を使用します。詳細は [Model Capabilities](/docs/getting-started/model-capability) を参照してください。
+      > LLM プロバイダーごとに使用する環境変数名が異なります。詳しくは [Model Capabilities](/docs/getting-started/model-capability) を参照してください。
 
       ## Next.js を設定する
 
-      `next.config.ts` に以下を追加します:
+      `next.config.ts` に次を追加します。
 
       ```typescript filename="next.config.ts" showLineNumbers copy
       import type { NextConfig } from "next";
@@ -238,9 +235,9 @@ Mastra は Next.js と統合されており、次のことが簡単に行えま�
 
       ## Next.js の開発サーバーを起動する
 
-      通常どおりに Next.js アプリを起動できます。
+      通常どおり Next.js アプリを起動できます。
 
-      ## テスト用 API Route を作成する
+      ## テスト用の API Route を作成する
 
       新しい API Route を作成し、サンプルコードを追加します。
 
@@ -268,7 +265,7 @@ Mastra は Next.js と統合されており、次のことが簡単に行えま�
 
       ## テストページを作成する
 
-      新しいページを作成し、サンプルコードを追加します。
+      新しい Page を作成し、サンプルコードを追加します。
 
       ```bash copy
       touch pages/test.tsx
@@ -309,9 +306,9 @@ Mastra は Next.js と統合されており、次のことが簡単に行えま�
       }
       ```
 
-      > これで、ブラウザで `/test` にアクセスして試せます。
+      > これでブラウザで `/test` にアクセスして試せます。
 
-      都市名として **London** を送信すると、次のような結果が返ります。
+      都市に「**London**」を送信すると、次のような結果が返ってきます。
 
       ```plaintext
       Agent response: The current weather in London is as follows:
@@ -327,10 +324,6 @@ Mastra は Next.js と統合されており、次のことが簡単に行えま�
     </Steps>
   </Tabs.Tab>
 </Tabs>
-
-
-
-
 
 ## 次のステップ
 

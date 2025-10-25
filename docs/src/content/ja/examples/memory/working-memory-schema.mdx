@@ -1,47 +1,42 @@
 ---
-title: "例: スキーマを用いた作業メモリ | メモリ | Mastra ドキュメント"
-description: Zod スキーマを使って作業メモリのデータを構造化・検証する方法を示す例。
+title: "例: スキーマを用いたワーキングメモリ | Memory | Mastra Docs"
+description: Zod スキーマを使ってワーキングメモリのデータを構造化・検証する方法を示す例。
 ---
-
-
 
 # スキーマを用いたワーキングメモリ
 
-Zod スキーマを使って、ワーキングメモリに保存する情報の構造を定義します。スキーマは、エージェントが会話をまたいで抽出・保持するデータに対し、型安全性とバリデーションを提供します。
+ワーキングメモリに保存する情報の構造を定義するために Zod スキーマを使用します。スキーマは、エージェントが会話をまたいで抽出・保持するデータに対して型安全性とバリデーションを提供します。
 
-これは、`.stream()` を使ったストリーミング応答と、`.generate()` を使った生成応答の両方で機能し、セッション間でデータを保持するために PostgreSQL、LibSQL、Redis などのストレージプロバイダが必要です。
+これは `.stream()` によるストリーミング応答と `.generate()` による生成応答の両方で動作し、セッション間でデータを保持するには PostgreSQL、LibSQL、Redis などのストレージプロバイダが必要です。
 
 この例では、ワーキングメモリ用スキーマを使って ToDo リストを管理する方法を示します。
 
-
-
 ## 前提条件
 
-この例では `openai` モデルを使用します。`OPENAI_API_KEY` を `.env` ファイルに追加してください。
+この例では `openai` モデルを使用します。`.env` ファイルに `OPENAI_API_KEY` を追加してください。
 
 ```bash filename=".env" copy
-OPENAI_API_KEY=<your-api-key>
+OPENAI_API_KEY=<あなたのAPIキー>
 ```
 
-次のパッケージをインストールしてください:
+次のパッケージをインストールします：
 
 ```bash copy
 npm install @mastra/libsql
 ```
 
 
-
 ## エージェントにメモリを追加する
 
-エージェントに LibSQL のメモリを追加するには、`Memory` クラスを使用し、`LibSQLStore` を用いて `storage` インスタンスを渡します。`url` はリモートの場所またはローカルファイルを指せます。
+エージェントに LibSQL のメモリを追加するには、`Memory` クラスを使用し、`LibSQLStore` を用いて `storage` インスタンスを渡します。`url` はリモートの場所またはローカルファイルを指すことができます。
 
 ### `schema` を用いたワーキングメモリ
 
-`workingMemory.enabled` を `true` に設定してワーキングメモリを有効にします。これにより、エージェントは対話間で構造化された情報を記憶できます。
+`workingMemory.enabled` を `true` に設定してワーキングメモリを有効にします。これにより、エージェントはやり取りの間で構造化された情報を記憶できるようになります。
 
 `schema` を指定すると、エージェントが情報を記憶する際の形式を定義できます。この例では、タスクをアクティブと完了のリストに分けています。
 
-スレッドは関連するメッセージを会話ごとにまとめます。`generateTitle` を有効にすると、各スレッドには内容に基づいたわかりやすい名前が自動的に付与されます。
+スレッドは関連するメッセージを会話としてまとめます。`generateTitle` を有効にすると、各スレッドには内容に基づいた説明的な名前が自動的に付けられます。
 
 ```typescript filename="src/mastra/agents/example-working-memory-schema-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
@@ -53,12 +48,12 @@ import { z } from "zod";
 export const workingMemorySchemaAgent = new Agent({
   name: "working-memory-schema-agent",
   instructions: `
-    You are a todo list AI agent.
-    Always show the current list when starting a conversation.
-    For each task, include: title with index number, due date, description, status, and estimated time.
-    Use emojis for each field.
-    Support subtasks with bullet points.
-    Ask for time estimates to help with timeboxing.
+    あなたはToDoリストAIエージェントです。
+    会話開始時には、必ず現在のリストを表示してください。
+    各タスクには、インデックス番号付きのタイトル、期限、説明、ステータス、推定時間を含めてください。
+    各フィールドには絵文字を使用してください。
+    サブタスクは箇条書きで対応してください。
+    タイムボクシングに役立てるため、時間の見積もりを尋ねてください。
   `,
   model: openai("gpt-4o"),
   memory: new Memory({
@@ -89,14 +84,13 @@ export const workingMemorySchemaAgent = new Agent({
 ```
 
 
-
 ## 使用例
 
-この例では、構造化情報を管理するためにワーキングメモリスキーマを用いるエージェントとのやり取り方法を示します。エージェントは同一スレッド内の複数回の対話にわたり、ToDoリストを更新して保存します。
+この例では、構造化情報を管理するためにワーキングメモリのスキーマを用いるエージェントとのやり取り方法を示します。エージェントは、同一スレッド内での複数回の対話にわたり、ToDo リストを更新し、永続化します。
 
-### `.stream()` を使ったストリーミング応答
+### `.stream()` を使ったレスポンスのストリーミング
 
-この例では、新しいタスクを含むメッセージをエージェントに送信します。応答はストリーミングされ、更新後の ToDo リストが含まれます。
+この例では、新しいタスクを含むメッセージをエージェントに送信します。レスポンスはストリーミングされ、更新された ToDo リストが含まれます。
 
 ```typescript filename="src/test-working-memory-schema-agent.ts" showLineNumbers copy
 import "dotenv/config";
@@ -108,7 +102,7 @@ const resourceId = "user-456";
 
 const agent = mastra.getAgent("workingMemorySchemaAgent");
 
-const stream = await agent.stream("Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.", {
+const stream = await agent.stream("タスクを追加: 当社のアプリに新機能を構築してください。所要時間は約2時間で、締切は次の金曜日までです。", {
   memory: {
     thread: threadId,
     resource: resourceId
@@ -120,9 +114,10 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-### `.generate()` を使った応答生成
 
-この例では、新しいタスクを含むメッセージをエージェントに送信します。応答は単一のメッセージとして返され、更新後の ToDo リストが含まれます。
+### `.generate()` を使って応答を生成する
+
+この例では、新しいタスクを指示するメッセージをエージェントに送信します。応答は単一のメッセージとして返され、更新後のToDoリストが含まれます。
 
 ```typescript filename="src/test-working-memory-schema-agent.ts" showLineNumbers copy
 import "dotenv/config";
@@ -134,7 +129,7 @@ const resourceId = "user-456";
 
 const agent = mastra.getAgent("workingMemorySchemaAgent");
 
-const response = await agent.generate("Add a task: Build a new feature for our app. It should take about 2 hours and needs to be done by next Friday.", {
+const response = await agent.generate("タスクを追加：当社のアプリに新機能を実装してください。作業時間は約2時間で、締め切りは来週の金曜日です。", {
   memory: {
     thread: threadId,
     resource: resourceId
@@ -145,29 +140,27 @@ console.log(response.text);
 ```
 
 
-
 ## 出力例
 
-この出力は、zod スキーマで定義された構造に従って、エージェントが更新された ToDo リストをどのように整形して返すかを示しています。
+この出力は、zod スキーマで定義された構造に従って、エージェントが更新済みの todo リストをどのように整形して返すかを示しています。
 
 ```text
-# Todo List
-## Active Items
-1. 🛠️ **Task:** Build a new feature for our app
-   - 📅 **Due:** Next Friday
-   - 📝 **Description:** Develop and integrate a new feature into the existing application.
-   - ⏳ **Status:** Not Started
-   - ⏲️ **Estimated Time:** 2 hours
+# タスクリスト
+## 進行中の項目
+1. 🛠️ **タスク:** アプリの新機能を実装する
+   - 📅 **期限:** 来週の金曜日
+   - 📝 **説明:** 既存のアプリケーションに新機能を開発して統合する。
+   - ⏳ **ステータス:** 未着手
+   - ⏲️ **見積時間:** 2時間
 
-## Completed Items
-- None yet
+## 完了済みの項目
+- まだありません
 ```
-
 
 
 ## ストレージオブジェクトの例
 
-Working memory はデータを `.json` 形式で保存し、以下のようになります:
+Working memory はデータを `.json` 形式で保存します。見た目は次のようになります。
 
 ```json
 {
@@ -182,8 +175,8 @@ Working memory はデータを `.json` 形式で保存し、以下のように�
               "title": "アプリの新機能を開発する",
               "due": "来週の金曜日",
               "description": "",
-              "status": "active",
-              "estimatedTime": "2 hours"
+              "status": "進行中",
+              "estimatedTime": "2時間"
             }
           ]
         }
@@ -194,9 +187,8 @@ Working memory はデータを `.json` 形式で保存し、以下のように�
 ```
 
 
-
-## 関連
+## 関連項目
 
 - [エージェントの呼び出し](../agents/calling-agents.mdx#from-the-command-line)
 - [エージェントのメモリ](../../docs/agents/agent-memory.mdx)
-- [サーバーレス展開](../../docs/deployment/server-deployment.mdx#libsqlstore)
+- [サーバーレスデプロイ](../../docs/deployment/server-deployment.mdx#libsqlstore)

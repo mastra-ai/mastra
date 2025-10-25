@@ -1,19 +1,16 @@
 ---
-title: "リファレンス: Contextual Recall | メトリクス | Evals | Mastra Docs"
-description: 関連するコンテキストを組み込んだLLMレスポンスの完全性を評価するContextual Recallメトリクスのドキュメント。
+title: "リファレンス: Contextual Recall | 指標 | 評価 | Mastra ドキュメント"
+description: 関連する文脈の取り込みに関する LLM 応答の網羅性を評価する Contextual Recall 指標のドキュメント。
 ---
 
 import { ScorerCallout } from '@/components/scorer-callout'
-
 
 
 # ContextualRecallMetric
 
 <ScorerCallout />
 
-`ContextualRecallMetric`クラスは、LLMの応答が提供されたコンテキストからすべての関連情報をどれだけ効果的に組み込んでいるかを評価します。これは、参照文書からの重要な情報が応答に正常に含まれているかどうかを測定し、精度よりも完全性に焦点を当てています。
-
-
+`ContextualRecallMetric` クラスは、提供されたコンテキストから関連情報をLLMの応答にどれだけ効果的に取り込めているかを評価します。参照ドキュメントに含まれる重要な情報が応答に適切に反映されているかを測定し、精度ではなく網羅性に重点を置きます。
 
 ## 基本的な使い方
 
@@ -21,29 +18,28 @@ import { ScorerCallout } from '@/components/scorer-callout'
 import { openai } from "@ai-sdk/openai";
 import { ContextualRecallMetric } from "@mastra/evals/llm";
 
-// Configure the model for evaluation
+// 評価用にモデルを構成する
 const model = openai("gpt-4o-mini");
 
 const metric = new ContextualRecallMetric(model, {
   context: [
-    "Product features: cloud synchronization capability",
-    "Offline mode available for all users",
-    "Supports multiple devices simultaneously",
-    "End-to-end encryption for all data",
+    "製品の特長: クラウド同期機能",
+    "全ユーザーが利用できるオフラインモード",
+    "複数デバイスの同時利用に対応",
+    "全データのエンドツーエンド暗号化",
   ],
 });
 
 const result = await metric.measure(
-  "What are the key features of the product?",
-  "The product includes cloud sync, offline mode, and multi-device support.",
+  "製品の主な機能は何ですか？",
+  "この製品にはクラウド同期、オフラインモード、マルチデバイス対応が含まれます。",
 );
 
-console.log(result.score); // Score from 0-1
+console.log(result.score); // スコア（0〜1）
 ```
 
 
-
-## コンストラクタのパラメータ
+## コンストラクターのパラメーター
 
 <PropertiesTable
   content={[
@@ -51,13 +47,13 @@ console.log(result.score); // Score from 0-1
       name: "model",
       type: "LanguageModel",
       description:
-        "コンテキストリコールを評価するために使用されるモデルの設定",
+        "コンテキスト想起率を評価するために使用するモデルの構成",
       isOptional: false,
     },
     {
       name: "options",
       type: "ContextualRecallMetricOptions",
-      description: "メトリックの設定オプション",
+      description: "この指標の構成オプション",
       isOptional: false,
     },
   ]}
@@ -84,9 +80,7 @@ console.log(result.score); // Score from 0-1
   ]}
 />
 
-
-
-## measure() のパラメーター
+## measure() のパラメータ
 
 <PropertiesTable
   content={[
@@ -99,13 +93,11 @@ console.log(result.score); // Score from 0-1
     {
       name: "output",
       type: "string",
-      description: "評価対象となるLLMの応答",
+      description: "評価対象のLLMの出力",
       isOptional: false,
     },
   ]}
 />
-
-
 
 ## 戻り値
 
@@ -114,12 +106,12 @@ console.log(result.score); // Score from 0-1
     {
       name: "score",
       type: "number",
-      description: "リコールスコア（0からスケール、デフォルトは0-1）",
+      description: "リコールスコア（0〜スケール上限、既定は0〜1）",
     },
     {
       name: "info",
       type: "object",
-      description: "スコアの理由を含むオブジェクト",
+      description: "スコアの根拠を含むオブジェクト",
       properties: [
         {
           type: "string",
@@ -127,7 +119,7 @@ console.log(result.score); // Score from 0-1
             {
               name: "reason",
               type: "string",
-              description: "スコアの詳細な説明",
+              description: "スコアに関する詳細な説明",
             },
           ],
         },
@@ -136,38 +128,34 @@ console.log(result.score); // Score from 0-1
   ]}
 />
 
-
-
 ## スコアリングの詳細
 
-このメトリックは、応答内容と関連するコンテキスト項目を比較することでリコールを評価します。
+この指標は、関連するコンテキスト項目と応答内容を比較し、再現率（リコール）を評価します。
 
 ### スコアリングプロセス
 
-1. 情報のリコールを評価します：
+1. 想起情報の評価:
 
-   - コンテキスト内の関連項目を特定
-   - 正しくリコールされた情報を追跡
-   - リコールの完全性を測定
+   - 文脈内の関連項目を特定
+   - 正しく想起された情報を記録
+   - 想起の網羅性を測定
 
-2. リコールスコアを計算：
-   - 正しくリコールされた項目をカウント
+2. 想起スコアの算出:
+   - 正しく想起された項目数をカウント
    - 総関連項目数と比較
-   - カバレッジ比率を算出
+   - カバレッジ率を計算
 
-最終スコア：`(correctly_recalled_items / total_relevant_items) * scale`
+最終スコア: `(correctly_recalled_items / total_relevant_items) * scale`
 
 ### スコアの解釈
 
-（0 から scale、デフォルトは 0-1）
+（スケールは0から、デフォルトは0〜1）
 
-- 1.0: 完全なリコール - すべての関連情報が含まれている
-- 0.7-0.9: 高いリコール - ほとんどの関連情報が含まれている
-- 0.4-0.6: 中程度のリコール - 一部の関連情報が抜けている
-- 0.1-0.3: 低いリコール - 重要な情報が多く抜けている
-- 0.0: リコールなし - 関連情報がまったく含まれていない
-
-
+- 1.0: 完全な再現率 - すべての関連情報を含む
+- 0.7〜0.9: 高い再現率 - ほとんどの関連情報を含む
+- 0.4〜0.6: 中程度の再現率 - 一部の関連情報を見落としている
+- 0.1〜0.3: 低い再現率 - 重要な情報の見落としが多い
+- 0.0: 再現率なし - 関連情報を一切含まない
 
 ## カスタム設定の例
 
@@ -175,38 +163,37 @@ console.log(result.score); // Score from 0-1
 import { openai } from "@ai-sdk/openai";
 import { ContextualRecallMetric } from "@mastra/evals/llm";
 
-// Configure the model for evaluation
+// 評価用にモデルを設定する
 const model = openai("gpt-4o-mini");
 
 const metric = new ContextualRecallMetric(model, {
-  scale: 100, // Use 0-100 scale instead of 0-1
+  scale: 100, // 0〜1 ではなく 0〜100 のスケールを使用
   context: [
-    "All data is encrypted at rest and in transit",
-    "Two-factor authentication (2FA) is mandatory",
-    "Regular security audits are performed",
-    "Incident response team available 24/7",
+    "すべてのデータは保存時および転送中に暗号化されています",
+    "二要素認証（2FA）は必須です",
+    "定期的なセキュリティ監査が実施されています",
+    "インシデント対応チームが年中無休で待機しています",
   ],
 });
 
 const result = await metric.measure(
-  "Summarize the company's security measures",
-  "The company implements encryption for data protection and requires 2FA for all users.",
+  "当社のセキュリティ対策を要約してください",
+  "同社はデータ保護のため暗号化を実施し、すべてのユーザーに 2FA を求めています。",
 );
 
-// Example output:
+// 出力例:
 // {
-//   score: 50, // Only half of the security measures were mentioned
+//   score: 50, // セキュリティ対策の半分しか言及されていない
 //   info: {
-//     reason: "The score is 50 because only half of the security measures were mentioned
-//           in the response. The response missed the regular security audits and incident
-//           response team information."
+//     reason: "スコアが50なのは、応答でセキュリティ対策の半分しか
+//           言及されていないためです。応答では定期的なセキュリティ監査と
+//           インシデント対応チームに関する情報が抜けていました。"
 //   }
 // }
 ```
 
 
-
-## 関連
+## 関連項目
 
 - [コンテキスト関連性メトリクス](./context-relevancy)
 - [完全性メトリクス](./completeness)

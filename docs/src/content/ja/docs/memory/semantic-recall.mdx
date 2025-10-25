@@ -1,35 +1,35 @@
 ---
-title: "セマンティックリコール | メモリー | Mastra ドキュメント"
-description: "Mastra でベクトル検索と埋め込みを用いて、過去の会話から関連するメッセージを取得するためのセマンティックリコールの使い方を学びましょう。"
+title: "Semantic Recall | メモリ | Mastra ドキュメント"
+description: "Mastraでベクター検索と埋め込みを用い、過去の会話から関連メッセージを取得するためのセマンティックリコールの使い方を学びます。"
 ---
 
 # セマンティックリコール
 
-友人に「先週末は何してたの？」と尋ねると、相手は「先週末」に結びついた出来事を記憶から探し出し、何をしていたかを教えてくれるでしょう。Mastra のセマンティックリコールは、それに少し似ています。
+友人に先週末に何をしたか尋ねると、「先週末」に結びついた出来事を記憶からたどり、何をしたか教えてくれるはずです。Mastra のセマンティックリコールも、概ねそれと同じ仕組みで動作します。
 
-> **📹 視聴**: セマンティックリコールの概要、仕組み、Mastra での設定方法 → [YouTube（5分）](https://youtu.be/UVZtK8cK8xQ)
+> **📹 視聴**: セマンティックリコールとは何か、その仕組み、Mastra での設定方法 → [YouTube（5分）](https://youtu.be/UVZtK8cK8xQ)
 
 ## セマンティックリコールの仕組み
 
-セマンティックリコールは RAG ベースの検索で、[recent conversation history](./overview.mdx#conversation-history) に含まれなくなっても、長い対話にわたってエージェントが文脈を維持できるようにします。
+セマンティックリコールは、メッセージが [recent conversation history](./overview.mdx#conversation-history) から外れても、エージェントが長い対話にわたってコンテキストを維持できるようにする、RAG ベースの検索機能です。
 
-メッセージのベクトル埋め込みによる類似検索を行い、各種ベクトルストアと統合し、取得したメッセージの前後に可変のコンテキストウィンドウを設定できます。
+メッセージのベクトル埋め込みによる類似検索を行い、各種ベクトルストアと連携し、取得したメッセージの前後に設定可能なコンテキストウィンドウを用意できます。
 
 <br />
 
 <img
   src="/image/semantic-recall.png"
-  alt="Mastra Memory のセマンティックリコールを示す図"
+  alt="Diagram showing Mastra Memory semantic recall"
   width={800}
 />
 
-有効化すると、新しいメッセージを使って、意味的に類似するメッセージを見つけるためにベクトル DB にクエリします。
+有効化すると、新しいメッセージを使ってベクトル DB にクエリを投げ、意味的に類似したメッセージを検索します。
 
-LLM の応答を受け取った後は、すべての新しいメッセージ（user、assistant、tool の呼び出し／結果）をベクトル DB に格納し、後続の対話で参照できるようにします。
+LLM の応答取得後は、すべての新しいメッセージ（user、assistant、tool の呼び出し／結果）がベクトル DB に格納され、今後の対話で再利用（リコール）されます。
 
 ## クイックスタート
 
-セマンティックリコールはデフォルトで有効になっているため、エージェントにメモリを持たせると自動的に利用されます：
+Semantic recall はデフォルトで有効になっているため、エージェントにメモリを持たせれば自動的に適用されます。
 
 ```typescript {9}
 import { Agent } from "@mastra/core/agent";
@@ -38,39 +38,39 @@ import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   name: "SupportAgent",
-  instructions: "You are a helpful support agent.",
+  instructions: "あなたは親切なサポート担当者です。",
   model: openai("gpt-4o"),
   memory: new Memory(),
 });
 ```
 
-## リコールの設定
 
-セマンティックリコールの挙動を制御する主なパラメータは次の3つです。
+## リコール設定
 
-1. **topK**: 取得する意味的に類似したメッセージの数
-2. **messageRange**: 各一致に含める周辺コンテキストの範囲
-3. **scope**: 現在のスレッド内を検索するか、リソースに属するすべてのスレッドを横断して検索するか。`scope: 'resource'` を指定すると、エージェントはユーザーの過去の会話全体から情報を想起できます。
+セマンティック・リコールの動作を制御する主なパラメータは次の3つです：
+
+1. **topK**: セマンティックに類似するメッセージをいくつ取得するか
+2. **messageRange**: 各一致にどれだけ周辺コンテキストを含めるか
+3. **scope**: 現在のスレッド内のみで検索するか、リソースが所有するすべてのスレッドを対象に検索するか（デフォルトはリソーススコープ）
 
 ```typescript {5-7}
 const agent = new Agent({
   memory: new Memory({
     options: {
       semanticRecall: {
-        topK: 3, // 最も類似したメッセージを3件取得
-        messageRange: 2, // 各一致の前後2件のメッセージを含める
-        scope: 'resource', // このユーザーの全スレッドを横断して検索
+        topK: 3, // 類似度の高いメッセージを3件取得
+        messageRange: 2, // 各マッチの前後2件のメッセージを含める
+        scope: 'resource', // このユーザーの全スレッドを検索(省略時のデフォルト設定)
       },
     },
   }),
 });
 ```
 
-注意: 現在、セマンティックリコールにおける `scope: 'resource'` は、以下のストレージアダプターでサポートされています: LibSQL、Postgres、Upstash。
 
 ### ストレージ設定
 
-Semantic recall は、メッセージとその埋め込みを保存するために [ストレージおよびベクターデータベース](/reference/memory/Memory#parameters)に依存します。
+Semantic recall は、メッセージとその埋め込みを保存するために、[ストレージとベクターデータベース](/reference/memory/Memory#parameters) に依存します。
 
 ```ts {8-17}
 import { Memory } from "@mastra/memory";
@@ -79,11 +79,11 @@ import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 const agent = new Agent({
   memory: new Memory({
-    // 省略した場合のデフォルトのストレージDB
+    // 省略した場合のデフォルトストレージDB
     storage: new LibSQLStore({
       url: "file:./local.db",
     }),
-    // 省略した場合のデフォルトのベクターデータベース
+    // 省略した場合のデフォルトベクトルDB
     vector: new LibSQLVector({
       connectionUrl: "file:./local.db",
     }),
@@ -93,36 +93,43 @@ const agent = new Agent({
 
 **ストレージ／ベクターのコード例**:
 
-- [LibSQL](/examples/memory/memory-with-libsql)
-- [Postgres](/examples/memory/memory-with-pg)
-- [Upstash](/examples/memory/memory-with-upstash)
+* [LibSQL](/docs/memory/storage/memory-with-libsql)
+* [MongoDB](/docs/memory/storage/memory-with-mongodb)
+* [Postgres](/docs/memory/storage/memory-with-pg)
+* [Upstash](/docs/memory/storage/memory-with-upstash)
+
 
 ### Embedder の設定
 
-セマンティックリコールは、メッセージを埋め込みベクトルに変換するために [embedding model](/reference/memory/Memory#embedder) に依存します。AI SDK と互換性のある任意の [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) を指定できます。
+Semantic recall は、メッセージを埋め込みベクトルに変換するために [埋め込みモデル](/reference/memory/Memory#embedder) を利用します。Mastra は `provider/model` という文字列指定での model router を通じて埋め込みモデルをサポートしており、AI SDK と互換性のある任意の [埋め込みモデル](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) も利用できます。
 
-ローカルの埋め込みモデルである FastEmbed を使用するには、`@mastra/fastembed` をインストールします:
+#### モデルルーターの使用（推奨）
 
-```bash npm2yarn copy
-npm install @mastra/fastembed
-```
+最も簡単なのは、オートコンプリート対応の `provider/model` 文字列を使う方法です。
 
-次に、メモリで設定します:
-
-```ts {3,8}
+```ts {7}
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { fastembed } from "@mastra/fastembed";
 
 const agent = new Agent({
   memory: new Memory({
-    // ... other memory options
-    embedder: fastembed,
+    // ... その他のメモリオプション
+    embedder: "openai/text-embedding-3-small", // TypeScript自動補完に対応
   }),
 });
 ```
 
-または、OpenAI のような別のプロバイダーを使用することもできます:
+対応可能な埋め込みモデル:
+
+* **OpenAI**: `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`
+* **Google**: `gemini-embedding-001`, `text-embedding-004`
+
+モデルルーターは、環境変数（`OPENAI_API_KEY`、`GOOGLE_GENERATIVE_AI_API_KEY`）からAPIキーを自動的に検出します。
+
+
+#### AI SDK パッケージの利用
+
+AI SDK のエンベディングモデルは、直接利用することもできます。
 
 ```ts {3,8}
 import { Memory } from "@mastra/memory";
@@ -131,17 +138,79 @@ import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   memory: new Memory({
-    // ... other memory options
+    // ... その他のメモリオプション
     embedder: openai.embedding("text-embedding-3-small"),
   }),
 });
 ```
 
+
+#### FastEmbed の使用（ローカル）
+
+ローカルの埋め込みモデルである FastEmbed を使用するには、`@mastra/fastembed` をインストールします：
+
+```bash npm2yarn copy
+npm install @mastra/fastembed
+```
+
+次に、メモリ上で設定します：
+
+```ts {3,8}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { fastembed } from "@mastra/fastembed";
+
+const agent = new Agent({
+  memory: new Memory({
+    // ... その他のメモリオプション
+    embedder: fastembed,
+  }),
+});
+```
+
+
+### PostgreSQL のインデックス最適化
+
+PostgreSQL をベクターストアとして使用する場合、ベクターインデックスを適切に設定することで、セマンティック検索の再現率（リコール）を最適化できます。これは、数千件のメッセージを扱う大規模な運用環境で特に重要です。
+
+PostgreSQL は IVFFlat と HNSW の両方のインデックスをサポートしています。デフォルトでは Mastra は IVFFlat インデックスを作成しますが、特に内積距離を用いる OpenAI の埋め込みでは、一般的に HNSW インデックスの方が高いパフォーマンスを発揮します。
+
+```typescript {9-18}
+import { Memory } from "@mastra/memory";
+import { PgStore, PgVector } from "@mastra/pg";
+
+const agent = new Agent({
+  memory: new Memory({
+    storage: new PgStore({
+      connectionString: process.env.DATABASE_URL,
+    }),
+    vector: new PgVector({
+      connectionString: process.env.DATABASE_URL,
+    }),
+    options: {
+      semanticRecall: {
+        topK: 5,
+        messageRange: 2,
+        indexConfig: {
+          type: 'hnsw',           // パフォーマンス向上のためHNSWを使用
+          metric: 'dotproduct',   // OpenAI埋め込みに最適
+          m: 16,                  // 双方向リンク数(デフォルト: 16)
+          efConstruction: 64,    // 構築時の候補リストサイズ(デフォルト: 64)
+        },
+      },
+    },
+  }),
+});
+```
+
+インデックスの設定オプションやパフォーマンスチューニングの詳細については、[PgVector 設定ガイド](/reference/vectors/pg#index-configuration-guide)を参照してください。
+
+
 ### 無効化
 
-Semantic Recall を使用するとパフォーマンスに影響があります。新しいメッセージは埋め込みベクトルに変換され、LLM に送信する前にベクターデータベースへのクエリに利用されます。
+Semantic recall を使用するとパフォーマンスに影響があります。新規メッセージは埋め込みベクトルに変換され、LLM に送信する前にベクターデータベースのクエリに利用されます。
 
-Semantic Recall はデフォルトで有効ですが、不要な場合は無効化できます:
+Semantic recall はデフォルトで有効ですが、不要な場合は無効化できます。
 
 ```typescript {4}
 const agent = new Agent({
@@ -153,13 +222,14 @@ const agent = new Agent({
 });
 ```
 
-次のような場面では Semantic Recall を無効にするとよいでしょう:
+次のようなシナリオでは、semantic recall を無効にしたほうがよい場合があります。
 
-- 会話履歴だけで現在のやり取りに十分なコンテキストがある場合
-- 埋め込み生成やベクタークエリによる追加レイテンシが無視できない、リアルタイムの双方向音声などパフォーマンス重視のアプリケーションの場合
+* 会話履歴だけで現在のやり取りに必要な文脈が十分にまかなえる場合
+* リアルタイムの双方向音声など、埋め込みの作成やベクトル検索の実行による追加の待ち時間が目立つ、パフォーマンス重視のアプリケーションの場合
+
 
 ## リコールされたメッセージの表示
 
-トレースが有効な場合、セマンティックリコールによって取得されたメッセージは、（設定されていれば）直近の会話履歴と並んでエージェントのトレース出力に表示されます。
+トレースが有効な場合、セマンティックリコールで取得されたメッセージは、（設定されていれば）直近の会話履歴と並んでエージェントのトレース出力に表示されます。
 
-メッセージトレースの表示について詳しくは、[Viewing Retrieved Messages](./overview.mdx#viewing-retrieved-messages) を参照してください。
+メッセージトレースの閲覧について詳しくは、[Viewing Retrieved Messages](./overview.mdx#viewing-retrieved-messages) を参照してください。

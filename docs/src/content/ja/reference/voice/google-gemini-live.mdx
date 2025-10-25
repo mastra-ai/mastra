@@ -1,17 +1,13 @@
 ---
 title: "リファレンス: Google Gemini Live Voice | 音声プロバイダー | Mastra ドキュメント"
-description: "GeminiLiveVoice クラスのドキュメント。Google の Gemini Live API を用い、Gemini API と Vertex AI の双方に対応したリアルタイムのマルチモーダル音声対話を提供します。"
+description: "GeminiLiveVoice クラスのドキュメント。Google の Gemini Live API を利用し、Gemini API と Vertex AI の両方に対応したリアルタイムのマルチモーダル音声対話を提供します。"
 ---
-
-
 
 # Google Gemini Live Voice
 
-GeminiLiveVoice クラスは、Google の Gemini Live API を用いてリアルタイムの音声インタラクション機能を提供します。双方向の音声ストリーミング、ツール呼び出し、セッション管理に対応し、標準の Google API 認証および Vertex AI 認証の両方をサポートします。
+GeminiLiveVoice クラスは、Google の Gemini Live API を用いてリアルタイムの音声対話を実現します。双方向の音声ストリーミング、ツールの呼び出し、セッション管理に対応し、標準的な Google API と Vertex AI のいずれの認証方式も利用できます。
 
-
-
-## 使用例
+## 使い方の例
 
 ```typescript
 import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
@@ -21,7 +17,7 @@ import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 const voice = new GeminiLiveVoice({
   apiKey: process.env.GOOGLE_API_KEY, // Gemini API に必須
   model: "gemini-2.0-flash-exp",
-  speaker: "Puck", // 既定の声
+  speaker: "Puck", // デフォルトのボイス
   debug: true,
 });
 
@@ -54,7 +50,7 @@ const voiceWithConfig = new GeminiLiveVoice({
   },
 });
 
-// 接続を確立（他のメソッドを使う前に必須）
+// 接続を確立（他のメソッドを使用する前に必須）
 await voice.connect();
 
 // イベントリスナーを設定
@@ -64,18 +60,18 @@ voice.on("speaker", (audioStream) => {
 });
 
 voice.on("writing", ({ text, role }) => {
-  // 音声認識結果を処理
+  // 書き起こしテキストを処理
   console.log(`${role}: ${text}`);
 });
 
 voice.on("turnComplete", ({ timestamp }) => {
   // ターン完了を処理
-  console.log("Turn completed at:", timestamp);
+  console.log("ターン完了時刻:", timestamp);
 });
 
 // テキスト読み上げ
-await voice.speak("Hello, how can I help you today?", {
-  speaker: "Charon", // 既定の声を上書き
+await voice.speak("こんにちは。本日どのようにお手伝いできますか？", {
+  speaker: "Charon", // 既定のボイスを上書き
   responseModalities: ["AUDIO", "TEXT"],
 });
 
@@ -86,20 +82,19 @@ await voice.send(microphoneStream);
 // セッション設定を更新
 await voice.updateSessionConfig({
   speaker: "Kore",
-  instructions: "回答はより簡潔にしてください。",
+  instructions: "回答はより簡潔にしてください",
 });
 
-// 終了時に切断
+// 終了時は切断
 await voice.disconnect();
 // または同期ラッパーを使用
 voice.close();
 ```
 
 
-
 ## 設定
 
-### コンストラクターのオプション
+### コンストラクターオプション
 
 <PropertiesTable
   content={[
@@ -107,7 +102,7 @@ voice.close();
       name: "apiKey",
       type: "string",
       description:
-        "Gemini API 認証用の Google API キー。Vertex AI を使用しない場合は必須。",
+        "Gemini API 認証に使用する Google の API キー。Vertex AI を使用しない場合は必須。",
       isOptional: true,
     },
     {
@@ -120,7 +115,7 @@ voice.close();
     {
       name: "speaker",
       type: "GeminiVoiceName",
-      description: "音声合成のデフォルトのボイス ID。",
+      description: "音声合成のデフォルト音声 ID。",
       isOptional: true,
       defaultValue: "'Puck'",
     },
@@ -134,13 +129,13 @@ voice.close();
     {
       name: "project",
       type: "string",
-      description: "Google Cloud のプロジェクト ID（Vertex AI では必須）。",
+      description: "Google Cloud のプロジェクト ID（Vertex AI で必須）。",
       isOptional: true,
     },
     {
       name: "location",
       type: "string",
-      description: "Vertex AI の対象となる Google Cloud リージョン。",
+      description: "Vertex AI 用の Google Cloud リージョン。",
       isOptional: true,
       defaultValue: "'us-central1'",
     },
@@ -148,14 +143,14 @@ voice.close();
       name: "serviceAccountKeyFile",
       type: "string",
       description:
-        "Vertex AI の認証に使用するサービス アカウントの JSON キーファイルへのパス。",
+        "Vertex AI 認証用のサービス アカウント JSON キー ファイルへのパス。",
       isOptional: true,
     },
     {
       name: "serviceAccountEmail",
       type: "string",
       description:
-        "サービス アカウントのメールアドレス（インパーソネーション用。キーファイルの代替）。",
+        "なりすまし用のサービス アカウントのメールアドレス（キー ファイルの代替）。",
       isOptional: true,
     },
     {
@@ -167,20 +162,20 @@ voice.close();
     {
       name: "sessionConfig",
       type: "GeminiSessionConfig",
-      description: "割り込みやコンテキスト設定を含むセッション構成。",
+      description: "割り込みやコンテキスト設定を含むセッション設定。",
       isOptional: true,
     },
     {
       name: "debug",
       type: "boolean",
-      description: "トラブルシューティング用にデバッグ ログを有効化。",
+      description: "トラブルシューティング用にデバッグ ログ出力を有効化します。",
       isOptional: true,
       defaultValue: "false",
     },
   ]}
 />
 
-### セッション構成
+### セッション設定
 
 <PropertiesTable
   content={[
@@ -193,61 +188,59 @@ voice.close();
     {
       name: "interrupts.enabled",
       type: "boolean",
-      description: "割り込み処理を有効化。",
+      description: "割り込み処理を有効にするかどうか。",
       isOptional: true,
       defaultValue: "true",
     },
     {
       name: "interrupts.allowUserInterruption",
       type: "boolean",
-      description: "ユーザーによるモデル応答の割り込みを許可します。",
+      description: "ユーザーがモデルの応答を中断できるようにするかどうか。",
       isOptional: true,
       defaultValue: "true",
     },
     {
       name: "contextCompression",
       type: "boolean",
-      description: "コンテキストの自動圧縮を有効化。",
+      description: "自動コンテキスト圧縮を有効にするかどうか。",
       isOptional: true,
       defaultValue: "false",
     },
   ]}
 />
 
-
-
 ## メソッド
 
 ### connect()
 
-Gemini Live API への接続を確立します。speak、listen、send メソッドを使用する前に呼び出す必要があります。
+Gemini Live API への接続を確立します。speak、listen、または send メソッドを使用する前に呼び出す必要があります。
 
 <PropertiesTable
   content={[
     {
       name: "runtimeContext",
       type: "object",
-      description: "接続用の任意のランタイムコンテキスト。",
+      description: "接続時の任意の実行時コンテキスト。",
       isOptional: true,
     },
     {
       name: "returns",
       type: "Promise<void>",
-      description: "接続が確立された時点で解決される Promise。",
+      description: "接続が確立されると解決される Promise。",
     },
   ]}
 />
 
 ### speak()
 
-テキストを音声に変換してモデルへ送信します。入力は文字列または読み取り可能なストリームを受け付けます。
+テキストを音声に変換してモデルに送信します。入力は文字列または読み取り可能なストリームを受け付けます。
 
 <PropertiesTable
   content={[
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "音声化するテキストまたはテキストストリーム。",
+      description: "音声に変換するテキストまたはテキストのストリーム。",
       isOptional: false,
     },
     {
@@ -259,9 +252,9 @@ Gemini Live API への接続を確立します。speak、listen、send メソッ
     {
       name: "options.speaker",
       type: "GeminiVoiceName",
-      description: "この音声リクエストで使用する Voice ID。",
+      description: "この音声リクエストに使用する音声 ID。",
       isOptional: true,
-      defaultValue: "コンストラクタで指定した speaker の値",
+      defaultValue: "コンストラクタで指定された speaker の値",
     },
     {
       name: "options.languageCode",
@@ -279,34 +272,34 @@ Gemini Live API への接続を確立します。speak、listen、send メソッ
   ]}
 />
 
-戻り値: `Promise<void>`（レスポンスは `speaker` および `writing` イベントで送出されます）
+戻り値: `Promise<void>`（レスポンスは `speaker` および `writing` イベントで発行されます）
 
 ### listen()
 
-音声認識のために音声入力を処理します。音声データの読み取り可能なストリームを受け取り、文字起こし結果を返します。
+音声認識のための音声入力を処理します。読み取り可能な音声データのストリームを受け取り、文字起こしされたテキストを返します。
 
 <PropertiesTable
   content={[
     {
       name: "audioStream",
       type: "NodeJS.ReadableStream",
-      description: "文字起こしする音声ストリーム。",
+      description: "文字起こし対象の音声ストリーム。",
       isOptional: false,
     },
     {
       name: "options",
       type: "GeminiLiveVoiceOptions",
-      description: "任意のリスニング設定。",
+      description: "オプションのリスニング設定。",
       isOptional: true,
     },
   ]}
 />
 
-戻り値: `Promise<string>` - 文字起こしテキスト
+戻り値: `Promise<string>` - 文字起こしされたテキスト
 
 ### send()
 
-ライブマイク入力などの連続音声ストリーミングのシナリオにおいて、音声データをリアルタイムで Gemini サービスにストリーミングします。
+ライブのマイク入力など、連続的な音声ストリーミングのシナリオで、音声データをリアルタイムに Gemini サービスへストリーミングします。
 
 <PropertiesTable
   content={[
@@ -319,11 +312,11 @@ Gemini Live API への接続を確立します。speak、listen、send メソッ
   ]}
 />
 
-戻り値: `Promise<void>`
+Returns: `Promise<void>`
 
 ### updateSessionConfig()
 
-セッション設定を動的に更新します。これにより、音声設定、スピーカーの選択、その他のランタイム設定を変更できます。
+セッション設定を動的に更新します。音声設定やスピーカー選択、その他のランタイム設定の変更に使用できます。
 
 <PropertiesTable
   content={[
@@ -340,24 +333,24 @@ Gemini Live API への接続を確立します。speak、listen、send メソッ
 
 ### addTools()
 
-音声インスタンスにツール群を追加します。ツールにより、モデルは会話中に追加のアクションを実行できます。GeminiLiveVoice を Agent に追加すると、Agent に設定されたツールは自動的に音声インターフェースで利用可能になります。
+音声インスタンスにツールのセットを追加します。ツールを使うと、モデルは会話中に追加のアクションを実行できます。GeminiLiveVoice を Agent に追加すると、Agent に設定されたツールは自動的に音声インターフェースでも利用可能になります。
 
 <PropertiesTable
   content={[
     {
       name: "tools",
       type: "ToolsInput",
-      description: "付与するツールの設定。",
+      description: "適用するツールの設定。",
       isOptional: false,
     },
   ]}
 />
 
-戻り値: `void`
+Returns: `void`
 
 ### addInstructions()
 
-モデルのシステム指示を追加または更新します。
+モデルに対するシステム指示を追加または更新します。
 
 <PropertiesTable
   content={[
@@ -374,14 +367,14 @@ Gemini Live API への接続を確立します。speak、listen、send メソッ
 
 ### answer()
 
-モデルからの応答をトリガーします。このメソッドは主に、Agent と統合した際に内部的に使用されます。
+モデルからの応答を起動します。このメソッドは、エージェントと統合された場合に主に内部で使用されます。
 
 <PropertiesTable
   content={[
     {
       name: "options",
       type: "Record<string, unknown>",
-      description: "answer リクエストの任意のパラメータ。",
+      description: "answer リクエスト用のオプションパラメータ。",
       isOptional: true,
     },
   ]}
@@ -391,40 +384,38 @@ Gemini Live API への接続を確立します。speak、listen、send メソッ
 
 ### getSpeakers()
 
-Gemini Live API で利用可能な音声スピーカーの一覧を返します。
+Gemini Live API で利用可能な音声ボイスの一覧を返します。
 
-戻り値: `Promise<Array<{ voiceId: string; description?: string }>>`
+Returns: `Promise<Array<{ voiceId: string; description?: string }>>`
 
 ### disconnect()
 
-Gemini Live のセッションから切断し、リソースをクリーンアップします。クリーンアップを適切に処理する非同期メソッドです。
+Gemini Live セッションから切断し、リソースを解放します。クリーンアップを適切に行う非同期メソッドです。
 
 戻り値: `Promise<void>`
 
 ### close()
 
-disconnect() の同期ラッパー。内部で disconnect() を呼び出しますが、await はしません。
+disconnect() の同期ラッパー。内部で await せずに disconnect() を呼び出します。
 
 戻り値: `void`
 
 ### on()
 
-音声イベントのイベントリスナーを登録します。
-
-
+音声イベントのリスナーを登録します。
 
 <PropertiesTable
   content={[
     {
       name: "event",
       type: "string",
-      description: "監視するイベント名。",
+      description: "リッスンするイベント名。",
       isOptional: false,
     },
     {
       name: "callback",
       type: "Function",
-      description: "イベント発生時に呼び出す関数。",
+      description: "イベント発生時に呼び出される関数。",
       isOptional: false,
     },
   ]}
@@ -441,13 +432,13 @@ disconnect() の同期ラッパー。内部で disconnect() を呼び出しま�
     {
       name: "event",
       type: "string",
-      description: "監視を停止するイベント名。",
+      description: "リッスンを停止するイベント名。",
       isOptional: false,
     },
     {
       name: "callback",
       type: "Function",
-      description: "削除する対象のコールバック関数。",
+      description: "削除するコールバック関数。",
       isOptional: false,
     },
   ]}
@@ -455,11 +446,9 @@ disconnect() の同期ラッパー。内部で disconnect() を呼び出しま�
 
 戻り値: `void`
 
+## Events
 
-
-## イベント
-
-GeminiLiveVoice クラスは次のイベントを発行します:
+GeminiLiveVoice クラスは次のイベントを送出します:
 
 <PropertiesTable
   content={[
@@ -467,49 +456,49 @@ GeminiLiveVoice クラスは次のイベントを発行します:
       name: "speaker",
       type: "event",
       description:
-        "モデルから音声データを受信したときに発行されます。コールバックは NodeJS.ReadableStream を受け取ります。",
+        "モデルから音声データを受信したときに送出されます。コールバックは NodeJS.ReadableStream を受け取ります。",
     },
     {
       name: "speaking",
       type: "event",
       description:
-        "音声メタデータとともに発行されます。コールバックは { audioData?: Int16Array, sampleRate?: number } を受け取ります。",
+        "音声メタデータとともに送出されます。コールバックは { audioData?: Int16Array, sampleRate?: number } を受け取ります。",
     },
     {
       name: "writing",
       type: "event",
       description:
-        "書き起こしテキストが利用可能になったときに発行されます。コールバックは { text: string, role: 'assistant' | 'user' } を受け取ります。",
+        "文字起こしテキストが利用可能になったときに送出されます。コールバックは { text: string, role: 'assistant' | 'user' } を受け取ります。",
     },
     {
       name: "session",
       type: "event",
       description:
-        "セッションの状態が変化したときに発行されます。コールバックは { state: 'connecting' | 'connected' | 'disconnected' | 'disconnecting' | 'updated', config?: object } を受け取ります。",
+        "セッション状態が変化したときに送出されます。コールバックは { state: 'connecting' | 'connected' | 'disconnected' | 'disconnecting' | 'updated', config?: object } を受け取ります。",
     },
     {
       name: "turnComplete",
       type: "event",
       description:
-        "会話のターンが完了したときに発行されます。コールバックは { timestamp: number } を受け取ります。",
+        "会話のターンが完了したときに送出されます。コールバックは { timestamp: number } を受け取ります。",
     },
     {
       name: "toolCall",
       type: "event",
       description:
-        "モデルがツールの呼び出しを要求したときに発行されます。コールバックは { name: string, args: object, id: string } を受け取ります。",
+        "モデルがツール呼び出しを要求したときに送出されます。コールバックは { name: string, args: object, id: string } を受け取ります。",
     },
     {
       name: "usage",
       type: "event",
       description:
-        "トークン使用状況とともに発行されます。コールバックは { inputTokens: number, outputTokens: number, totalTokens: number, modality: string } を受け取ります。",
+        "トークン使用情報とともに送出されます。コールバックは { inputTokens: number, outputTokens: number, totalTokens: number, modality: string } を受け取ります。",
     },
     {
       name: "error",
       type: "event",
       description:
-        "エラー発生時に発行されます。コールバックは { message: string, code?: string, details?: unknown } を受け取ります。",
+        "エラー発生時に送出されます。コールバックは { message: string, code?: string, details?: unknown } を受け取ります。",
     },
 
     {
@@ -521,11 +510,9 @@ GeminiLiveVoice クラスは次のイベントを発行します:
   ]}
 />
 
-
-
 ## 利用可能なモデル
 
-次の Gemini Live モデルを利用できます：
+利用可能な Gemini Live モデルは次のとおりです:
 
 - `gemini-2.0-flash-exp`（デフォルト）
 - `gemini-2.0-flash-exp-image-generation`
@@ -535,38 +522,35 @@ GeminiLiveVoice クラスは次のイベントを発行します:
 - `gemini-live-2.5-flash-preview`
 - `gemini-2.6.flash-preview-tts`
 
-
-
 ## 利用可能な音声
 
-次の音声オプションを利用できます。
+利用できる音声オプションは次のとおりです:
 
-- `Puck`（デフォルト）: 会話的で親しみやすい
+- `Puck`（デフォルト）: 会話調で親しみやすい
 - `Charon`: 低く、威厳がある
 - `Kore`: 中立的でプロフェッショナル
 - `Fenrir`: 温かみがあり、親しみやすい
 
-
-
-## 認証方法
+## 認証方式
 
 ### Gemini API（開発）
 
-[Google AI Studio](https://makersuite.google.com/app/apikey) の API キーを使う最も簡単な方法:
+[Google AI Studio](https://makersuite.google.com/app/apikey) の API キーを使う最も簡単な方法：
 
 ```typescript
 const voice = new GeminiLiveVoice({
-  apiKey: "your-api-key", // Gemini API には必須
+  apiKey: "あなたのAPIキー", // Gemini API に必要
   model: "gemini-2.0-flash-exp",
 });
 ```
 
-### Vertex AI（本番）
 
-OAuth 認証と Google Cloud Platform を用いた本番環境向けの利用:
+### Vertex AI（本番環境）
+
+OAuth 認証と Google Cloud Platform を使用する本番環境向け:
 
 ```typescript
-// サービス アカウント鍵ファイルを使用
+// サービス アカウント キー ファイルを使用
 const voice = new GeminiLiveVoice({
   vertexAI: true,
   project: "your-gcp-project",
@@ -574,14 +558,14 @@ const voice = new GeminiLiveVoice({
   serviceAccountKeyFile: "/path/to/service-account.json",
 });
 
-// アプリケーション デフォルト認証情報を使用
+// アプリケーション デフォルト認証情報（ADC）を使用
 const voice = new GeminiLiveVoice({
   vertexAI: true,
   project: "your-gcp-project",
   location: "us-central1",
 });
 
-// サービス アカウントの代理（インパーソネーション）を使用
+// サービス アカウントの偽装（インパーソネーション）を使用
 const voice = new GeminiLiveVoice({
   vertexAI: true,
   project: "your-gcp-project",
@@ -591,16 +575,15 @@ const voice = new GeminiLiveVoice({
 ```
 
 
-
 ## 高度な機能
 
 ### セッション管理
 
-Gemini Live API は、ネットワーク中断に備えてセッションの再開をサポートしています：
+Gemini Live API は、ネットワーク障害時のセッション再開に対応しています:
 
 ```typescript
 voice.on("sessionHandle", ({ handle, expiresAt }) => {
-  // セッション再開のためにハンドルを保存
+  // セッション再開用にハンドルを保存する
   saveSessionHandle(handle, expiresAt);
 });
 
@@ -613,16 +596,17 @@ const voice = new GeminiLiveVoice({
 });
 ```
 
+
 ### ツール呼び出し
 
-会話中にモデルが関数を呼び出せるようにします：
+会話中にモデルが関数を呼び出せるようにする:
 
 ```typescript
 import { z } from 'zod';
 
 voice.addTools({
   weather: {
-    description: "天気情報を取得します",
+    description: "天気情報を取得",
     parameters: z.object({
       location: z.string(),
     }),
@@ -634,18 +618,17 @@ voice.addTools({
 });
 
 voice.on("toolCall", ({ name, args, id }) => {
-  console.log(`ツールが呼び出されました: ${name} 引数:`, args);
+  console.log(`ツール呼び出し: ${name}、引数:`, args);
 });
 ```
-
 
 
 ## 注意事項
 
 - Gemini Live API はリアルタイム通信に WebSocket を使用します
-- 音声は入力が 16kHz の PCM16、出力が 24kHz の PCM16 として処理されます
-- 他のメソッドを使用する前に、voice インスタンスは `connect()` で接続しておく必要があります
-- リソースを適切に解放するため、処理完了時には必ず `close()` を呼び出してください
-- Vertex AI の認証には適切な IAM 権限（`aiplatform.user` ロール）が必要です
-- セッションの再開機能により、ネットワーク中断から復旧できます
-- 本 API はテキストおよび音声でのリアルタイムな対話をサポートします
+- 音声は入力が 16 kHz の PCM16、出力が 24 kHz の PCM16 として処理されます
+- 他のメソッドを使用する前に、音声インスタンスは `connect()` で接続しておく必要があります
+- 処理が完了したら、リソースを正しく解放するために必ず `close()` を呼び出してください
+- Vertex AI の認証には、適切な IAM 権限（`aiplatform.user` ロール）が必要です
+- セッション再開機能により、ネットワーク中断から復旧できます
+- この API はテキストおよび音声のリアルタイム対話をサポートします

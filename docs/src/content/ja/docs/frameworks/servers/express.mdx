@@ -1,50 +1,45 @@
 ---
 title: "Mastra と Express のはじめ方 | Mastra ガイド"
-description: Mastra を Express のバックエンドに統合するための段階的なガイド。
+description: Express バックエンドに Mastra を統合するための手順ガイド。
 ---
 
 import { Callout } from "nextra/components";
 
 
-
 # Express プロジェクトに Mastra を統合する
 
-Mastra は Express と統合されており、次のことが簡単に行えます:
+Mastra は Express と統合でき、次のことを簡単に実現できます:
 
-- AI 搭載機能を提供する柔軟な API の構築
-- サーバーロジックとルーティングの完全な制御
-- フロントエンドとは独立したバックエンドのスケール
+- AI を活用した機能を提供する柔軟な API の構築
+- サーバーのロジックとルーティングを完全に制御
+- フロントエンドとは独立してバックエンドをスケール
 
-Express から Mastra を直接呼び出せるため、Express サーバーとは別に Mastra サーバーを稼働させる必要はありません。
+Express から直接 Mastra を呼び出せるため、Express サーバーとは別に Mastra サーバーを起動する必要はありません。
 
-このガイドでは、必要な Mastra の依存関係をインストールし、サンプルエージェントを作成し、Express の API ルートから Mastra を呼び出す方法を学びます。
-
-
+このガイドでは、必要な Mastra の依存関係をインストールし、サンプルのエージェントを作成し、Express の API ルートから Mastra を呼び出す方法を説明します。
 
 ## 前提条件
 
 - TypeScript で構築された既存の Express アプリ
 - Node.js `v20.0` 以上
-- 対応する [モデルプロバイダー](/docs/getting-started/model-providers) の API キー
+- サポートされている[モデルプロバイダー](/models)の API キー
 
+## Mastra を追加する
 
-
-## Mastra の追加
-
-まず、Agent を実行するために必要な Mastra の依存関係をインストールします。このガイドではモデルに OpenAI を使用しますが、サポートされている任意の[モデルプロバイダー](/docs/getting-started/model-providers)を利用できます。
+まず、エージェントを実行するために必要な Mastra の依存関係をインストールします。このガイドではモデルとして OpenAI を使用しますが、サポートされている任意の[モデルプロバイダー](/models)を使用できます。
 
 ```bash copy
 npm install mastra@latest @mastra/core@latest @mastra/libsql@latest zod@^3.0.0 @ai-sdk/openai@^1.0.0
 ```
 
-まだ `.env` がない場合は作成し、OpenAI の API キーを追加します:
+まだ存在していない場合は、`.env` ファイルを作成し、OpenAI の API キーを追加してください:
 
 ```bash filename=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 
 <Callout>
-LLM プロバイダーごとに使用する環境変数名は異なります。詳しくは [Model Capabilities](/docs/getting-started/model-capability) を参照してください。
+  各LLMプロバイダーは異なる環境変数を使用します。詳しくは [Model Capabilities](/docs/getting-started/model-capability) を参照してください。
 </Callout>
 
 `src/mastra/index.ts` に Mastra の設定ファイルを作成します:
@@ -55,7 +50,7 @@ import { Mastra } from '@mastra/core/mastra';
 export const mastra = new Mastra({});
 ```
 
-`src/mastra/tools/weather-tool.ts` に、`weatherAgent` が使用する `weatherTool` を作成します。`execute()` 関数内ではプレースホルダー値を返します（実際の API 呼び出しはここに実装します）。
+`weatherAgent` が `src/mastra/tools/weather-tool.ts` で使用する `weatherTool` を作成します。`execute()` 関数内でプレースホルダーの値を返します（本来はここに API 呼び出しを実装します）。
 
 ```ts filename="src/mastra/tools/weather-tool.ts" copy
 import { createTool } from "@mastra/core/tools";
@@ -63,22 +58,22 @@ import { z } from "zod";
  
 export const weatherTool = createTool({
   id: "get-weather",
-  description: "Get current weather for a location",
+  description: "指定された場所の現在の天気を取得",
   inputSchema: z.object({
-    location: z.string().describe("City name")
+    location: z.string().describe("都市名")
   }),
   outputSchema: z.object({
     output: z.string()
   }),
   execute: async () => {
     return {
-      output: "The weather is sunny"
+      output: "晴れです"
     };
   }
 });
 ```
 
-`src/mastra/agents/weather-agent.ts` に `weatherAgent` を追加します:
+`src/mastra/agents/weather-agent.ts` に `weatherAgent` を追加してください:
 
 ```ts filename="src/mastra/agents/weather-agent.ts" copy
 import { openai } from "@ai-sdk/openai";
@@ -86,25 +81,25 @@ import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
  
 export const weatherAgent = new Agent({
-  name: 'Weather Agent',
+  name: '天気エージェント',
   instructions: `
-      You are a helpful weather assistant that provides accurate weather information.
+      あなたは正確な天気情報を提供する親切な天気アシスタントです。
  
-      Your primary function is to help users get weather details for specific locations. When responding:
-      - Always ask for a location if none is provided
-      - If the location name isn’t in English, please translate it
-      - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
-      - Include relevant details like humidity, wind conditions, and precipitation
-      - Keep responses concise but informative
+      あなたの主な役割は、ユーザーが特定の場所の天気情報を取得できるよう支援することです。応答する際は以下に従ってください:
+      - 場所が指定されていない場合は、必ず場所を尋ねてください
+      - 場所名が英語でない場合は、英語に翻訳してください
+      - 複数の部分で構成される場所(例:「New York, NY」)を指定する場合は、最も関連性の高い部分(例:「New York」)を使用してください
+      - 湿度、風の状態、降水量などの関連情報を含めてください
+      - 応答は簡潔かつ有益なものにしてください
  
-      Use the weatherTool to fetch current weather data.
+      weatherToolを使用して現在の天気データを取得してください。
 `,
   model: openai('gpt-4o-mini'),
   tools: { weatherTool }
 });
 ```
 
-最後に、`weatherAgent` を `src/mastra/index.ts` に追加します:
+最後に、`weatherAgent` を `src/mastra/index.ts` に追加します：
 
 ```ts filename="src/mastra/index.ts" copy {2, 5}
 import { Mastra } from '@mastra/core/mastra';
@@ -116,15 +111,14 @@ export const mastra = new Mastra({
 
 ```
 
-これで Mastra のボイラープレートコードのセットアップは完了し、Express ルートへの統合を行う準備が整いました。
-
+これで Mastra のボイラープレートコードのセットアップが完了し、Express のルーティングへ統合する準備が整いました。
 
 
 ## Express で Mastra を使う
 
 `city` クエリパラメータを受け取る `/api/weather` エンドポイントを作成します。`city` パラメータは、プロンプト経由で `weatherAgent` に渡されます。
 
-既存のプロジェクトには次のようなファイルがあるかもしれません:
+既存のプロジェクトには、次のようなファイルがあるかもしれません。
 
 ```ts filename="src/server.ts" copy
 import express, { Request, Response } from 'express';
@@ -133,15 +127,15 @@ const app = express();
 const port = 3456;
 
 app.get('/', (req: Request, res: Response) => {
-  res.send('Hello, world!');
+  res.send('こんにちは、世界！');
 });
 
 app.listen(port, () => {
-  console.log(`Server is running at http://localhost:${port}`);
+  console.log(`サーバーが http://localhost:${port} で稼働しています`);
 });
 ```
 
-`/api/weather` エンドポイントを追加すると、次のようになります:
+「/api/weather」エンドポイントを追加すると、次のようになります。
 
 ```ts filename="src/server.ts" copy {2, 11-27}
 import express, { Request, Response } from 'express';
@@ -151,55 +145,54 @@ const app = express();
 const port = 3456;
 
 app.get('/', (req: Request, res: Response) => {
-  res.send('Hello, world!');
+  res.send('こんにちは、世界！');
 });
 
 app.get("/api/weather", async (req: Request, res: Response) => {
   const { city } = req.query as { city?: string };
  
   if (!city) {
-    return res.status(400).send("Missing 'city' query parameter");
+    return res.status(400).send("「city」クエリパラメータが指定されていません");
   }
  
   const agent = mastra.getAgent("weatherAgent");
  
   try {
-    const result = await agent.generate(`What's the weather like in ${city}?`);
+    const result = await agent.generate(`${city}の天気はどうですか？`);
     res.send(result.text);
   } catch (error) {
     console.error("Agent error:", error);
-    res.status(500).send("An error occurred while processing your request");
+    res.status(500).send("リクエストの処理中にエラーが発生しました");
   }
 });
 
 app.listen(port, () => {
-  console.log(`Server is running at http://localhost:${port}`);
+  console.log(`サーバーが http://localhost:${port} で稼働中です`);
 });
 ```
 
-`src/mastra/index.ts` をインポートすると、[`.getAgent()`](/reference/agents/getAgent) などのメソッドでプログラムからアクセスできます。[`.generate()`](/reference/agents/generate) を使えば、該当のエージェントと対話できます。
+`src/mastra/index.ts` ファイルをインポートすると、[`.getAgent()`](/reference/agents/getAgent) のようなメソッドを使ってプログラム的にアクセスできます。続いて [`.generate()`](/reference/agents/generate) を使えば、対応するエージェントと対話できます。
 
 <Callout>
-詳しくは [Agent リファレンス](/reference/agents/agent) をご覧ください。
+  くわしくは [Agent reference docs](/reference/agents/agent) をご覧ください。
 </Callout>
 
-Express サーバーを起動し、`/api/weather` エンドポイントにアクセスします。例:
+Express サーバーを起動し、`/api/weather` エンドポイントにアクセスしてください。例：
 
 ```
 http://localhost:3456/api/weather?city=London
 ```
 
-次のようなレスポンスが返ってくるはずです:
+次のような応答が返ってくるはずです：
 
 ```
-The weather in London is currently sunny. If you need more details like humidity, wind conditions, or precipitation, just let me know!
+ロンドンの現在の天気は晴れです。湿度や風の状況、降水量などの詳しい情報が必要でしたら、お知らせください！
 ```
 
 
+## Agent Server を実行する
 
-## エージェントサーバーの起動
-
-本番環境では、Express サーバーと同時に Mastra を実行する必要はありません。一方、開発時には、Mastra が提供する [ローカル開発環境](/docs/server-db/local-dev-playground) を使ってエージェントの改善やデバッグが行えます。
+本番環境では、Express サーバーと同時に Mastra を起動する必要はありません。開発時には、Mastra が提供する [ローカル開発環境](/docs/server-db/local-dev-playground) を利用して、エージェントの改善やデバッグを行えます。
 
 `package.json` にスクリプトを追加します:
 
@@ -211,7 +204,7 @@ The weather in London is currently sunny. If you need more details like humidity
 }
 ```
 
-Mastra のプレイグラウンドを起動します:
+Mastra Playground を起動する:
 
 ```bash copy
 npm run mastra:dev

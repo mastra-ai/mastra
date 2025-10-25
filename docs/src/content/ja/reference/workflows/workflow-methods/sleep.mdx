@@ -1,11 +1,11 @@
 ---
-title: "リファレンス: Workflow.sleep() | Workflows | Mastra Docs"
-description: ワークフローで使用する `Workflow.sleep()` メソッドのドキュメント。指定したミリ秒間、実行を一時停止します。
+title: "リファレンス: Workflow.sleep() | Workflows | Mastra ドキュメント"
+description: ワークフローにおける `Workflow.sleep()` メソッドのリファレンス。指定したミリ秒間、実行を一時停止します。
 ---
 
 # Workflow.sleep()
 
-`.sleep()` メソッドは、指定されたミリ秒間、実行を一時停止します。
+`.sleep()` メソッドは、指定したミリ秒間、実行を一時停止します。固定の数値、または遅延を動的に決定するためのコールバック関数を受け取ります。
 
 ## 使い方の例
 
@@ -13,14 +13,15 @@ description: ワークフローで使用する `Workflow.sleep()` メソッド�
 workflow.sleep(5000);
 ```
 
+
 ## パラメータ
 
 <PropertiesTable
   content={[
     {
       name: "milliseconds",
-      type: "number",
-      description: "実行を一時停止する時間（ミリ秒）",
+      type: "number | ((context: { inputData: any }) => number | Promise<number>)",
+      description: "実行を一時停止するミリ秒数、または遅延時間を返すコールバック関数",
       isOptional: false,
     },
   ]}
@@ -33,11 +34,30 @@ workflow.sleep(5000);
     {
       name: "workflow",
       type: "Workflow",
-      description: "メソッドチェーン用のワークフローインスタンス",
+      description: "メソッドチェーンに使用する Workflow インスタンス",
     },
   ]}
 />
 
-## 関連
+## 拡張された使用例
 
-- [Sleep と Events](../../../docs/workflows/pausing-execution.mdx)
+```typescript showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .sleep(async ({ inputData }) => {
+    const { delayInMs } = inputData;
+    return delayInMs;
+  })
+  .then(step2)
+  .commit();
+```
+
+
+## 関連情報
+
+- [一時停止と再開](../../../docs/workflows/suspend-and-resume.mdx#sleep--events)

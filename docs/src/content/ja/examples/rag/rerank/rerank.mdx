@@ -1,29 +1,24 @@
 ---
-title: "例: 結果の再ランキング | 検索 | RAG | Mastra ドキュメント"
-description: OpenAI の埋め込みと PGVector を使ったベクトルストレージによる、Mastra でのセマンティック再ランキング実装例。
+title: "例: 再ランキングの結果 | Retrieval | RAG | Mastra ドキュメント"
+description: Mastraで、OpenAIの埋め込みとPGVectorによるベクトルストレージを用いたセマンティック再ランキングの実装例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
-
 # 再ランキング結果
 
-この例では、Mastra、OpenAIの埋め込み、そしてベクトルストレージとしてPGVectorを使用し、再ランキングを取り入れたRetrieval-Augmented Generation（RAG）システムの実装方法を示します。
-
-
+この例では、Mastra、OpenAI の埋め込み、PGVector（ベクトルストア）を用いて、再ランキング付きの Retrieval-Augmented Generation（RAG）システムを実装する方法を示します。
 
 ## 概要
 
-このシステムは、Mastra と OpenAI を用いた再ランキング付き RAG を実装しています。主な処理内容は以下の通りです。
+このシステムは、Mastra と OpenAI を用いた再ランキング付きの RAG を実装しています。主な処理は次のとおりです:
 
-1. テキストドキュメントを小さなセグメントに分割し、それらから埋め込みを作成します
-2. ベクトルを PostgreSQL データベースに保存します
-3. 初期のベクトル類似度検索を実行します
-4. Mastra の rerank 関数を使い、ベクトル類似度・セマンティック関連性・位置スコアを組み合わせて結果を再ランキングします
-5. 初期結果と再ランキング後の結果を比較し、改善点を表示します
-
-
+1. テキストドキュメントを小さなセグメントに分割し、各セグメントの埋め込みを作成する
+2. ベクトルを PostgreSQL データベースに保存する
+3. ベクトルの類似度に基づく初期検索を実行する
+4. ベクトル類似度、意味的関連性、位置スコアを組み合わせ、Mastra の rerank 関数で結果を再ランキングする
+5. 初期結果と再ランキング後の結果を比較し、改善点を示す
 
 ## セットアップ
 
@@ -32,13 +27,14 @@ import { GithubLink } from "@/components/github-link";
 環境変数を設定してください：
 
 ```bash filename=".env"
-OPENAI_API_KEY=your_openai_api_key_here
-POSTGRES_CONNECTION_STRING=your_connection_string_here
+OPENAI_API_KEY=あなたの_openai_api_key_をここに入力
+POSTGRES_CONNECTION_STRING=あなたの接続文字列をここに入力
 ```
+
 
 ### 依存関係
 
-次に、必要な依存関係をインポートします：
+次に、必要な依存関係をインポートします。
 
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { openai } from "@ai-sdk/openai";
@@ -52,18 +48,17 @@ import { embedMany, embed } from "ai";
 ```
 
 
-
 ## ドキュメント処理
 
-ドキュメントを作成し、チャンクに分割します：
+ドキュメントを作成し、チャンクに分割して処理します：
 
 ```typescript copy showLineNumbers{7} filename="src/index.ts"
 const doc1 = MDocument.fromText(`
-market data shows price resistance levels.
-technical charts display moving averages.
-support levels guide trading decisions.
-breakout patterns signal entry points.
-price action determines trade timing.
+市場データは価格のレジスタンス（抵抗帯）を示す。
+テクニカルチャートは移動平均線を表示する。
+サポート（支持帯）は売買判断の指針となる。
+ブレイクアウトのパターンはエントリーポイントを示唆する。
+プライスアクションがトレードのタイミングを決定する。
 `);
 
 const chunks = await doc1.chunk({
@@ -75,10 +70,9 @@ const chunks = await doc1.chunk({
 ```
 
 
+## 埋め込みの作成と保存
 
-## エンベディングの作成と保存
-
-チャンクのエンベディングを生成し、ベクターデータベースに保存します：
+チャンクごとに埋め込みを生成し、ベクターデータベースに保存します。
 
 ```typescript copy showLineNumbers{36} filename="src/index.ts"
 const { embeddings } = await embedMany({
@@ -103,15 +97,14 @@ await pgVector.upsert({
 ```
 
 
+## ベクター検索と再ランキング
 
-## ベクトル検索と再ランキング
-
-ベクトル検索を実行し、結果を再ランキングします：
+ベクター検索を行い、結果を再ランキングします：
 
 ```typescript copy showLineNumbers{51} filename="src/index.ts"
-const query = "explain technical trading analysis";
+const query = "テクニカル取引分析を説明して";
 
-// Get query embedding
+// クエリの埋め込みを取得
 const { embedding: queryEmbedding } = await embed({
   value: query,
   model: openai.embedding("text-embedding-3-small"),
@@ -124,46 +117,45 @@ const initialResults = await pgVector.query({
   topK: 3,
 });
 
-// Re-rank results
+// 結果を再ランク
 const rerankedResults = await rerank({
   results: initialResults,
   query,
   scorer: new MastraAgentRelevanceScorer('relevance-scorer', openai("gpt-4o-mini")),
   options: {
     weights: {
-      semantic: 0.5, // How well the content matches the query semantically
-      vector: 0.3, // Original vector similarity score
-      position: 0.2, // Preserves original result ordering
+      semantic: 0.5, // クエリとの意味的な一致度
+      vector: 0.3, // 元のベクトル類似度スコア
+      position: 0.2, // 元の結果の順序を維持
     },
     topK: 3,
   },
 });
 ```
 
-重みは、最終的なランキングに異なる要因がどのように影響するかを制御します：
+重みは、さまざまな要素が最終的なランキングに与える影響を制御します。
 
-- `semantic`: 高い値は、クエリに対するセマンティックな理解と関連性を優先します
-- `vector`: 高い値は、元のベクトル類似度スコアを重視します
-- `position`: 高い値は、結果の元の順序を維持するのに役立ちます
-
+* `semantic`: 値が高いほど、クエリに対する意味的理解と関連性を優先します
+* `vector`: 値が高いほど、元のベクトル類似度スコアを重視します
+* `position`: 値が高いほど、結果の元の並び順を維持しやすくなります
 
 
 ## 結果の比較
 
-初期結果と再ランク付け後の結果の両方を表示して、改善点を確認しましょう。
+初期結果と再ランキング後の結果を両方表示して、改善を確認しましょう：
 
 ```typescript copy showLineNumbers{72} filename="src/index.ts"
-console.log("Initial Results:");
+console.log("初期結果:");
 initialResults.forEach((result, index) => {
-  console.log(`Result ${index + 1}:`, {
+  console.log(`結果 ${index + 1}:`, {
     text: result.metadata.text,
     score: result.score,
   });
 });
 
-console.log("Re-ranked Results:");
+console.log("再ランク付け後の結果:");
 rerankedResults.forEach(({ result, score, details }, index) => {
-  console.log(`Result ${index + 1}:`, {
+  console.log(`結果 ${index + 1}:`, {
     text: result.metadata.text,
     score: score,
     semantic: details.semantic,
@@ -173,20 +165,25 @@ rerankedResults.forEach(({ result, score, details }, index) => {
 });
 ```
 
-再ランク付け後の結果は、ベクトル類似度とセマンティックな理解を組み合わせることで、検索品質がどのように向上するかを示しています。各結果には以下が含まれます：
+再ランク付けされた結果は、ベクトル類似度と意味理解を組み合わせることで、検索品質を向上できることを示しています。各結果には次が含まれます:
 
-- すべての要素を組み合わせた総合スコア
-- 言語モデルによるセマンティック関連度スコア
-- 埋め込み比較によるベクトル類似度スコア
-- 必要に応じて元の順序を維持するための位置ベースのスコア
+* すべての要素を統合した総合スコア
+* 言語モデルによる意味的関連度スコア
+* 埋め込みの比較に基づくベクトル類似度スコア
+* 適切な場合に元の順序を保つための位置ベースのスコア
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank"
+}
 />

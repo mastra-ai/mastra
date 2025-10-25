@@ -1,0 +1,129 @@
+---
+title: "MastraAuthWorkos クラス"
+description: "WorkOS を用いて Mastra アプリケーションを認証する MastraAuthWorkos クラスの API リファレンス。"
+---
+
+# MastraAuthWorkos クラス
+
+`MastraAuthWorkos` クラスは、WorkOS を用いて Mastra の認証を提供します。WorkOS のアクセストークンで受信リクエストを検証し、`experimental_auth` オプションを介して Mastra サーバーと統合します。
+
+## 使い方の例
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthWorkos } from '@mastra/auth-workos';
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthWorkos({
+      apiKey: process.env.WORKOS_API_KEY,
+      clientId: process.env.WORKOS_CLIENT_ID
+    }),
+  },
+});
+```
+
+> **注意:** 適切な名前の環境変数（`WORKOS_API_KEY` と `WORKOS_CLIENT_ID`）が設定されていれば、コンストラクターのパラメータは省略できます。その場合は、引数なしで `new MastraAuthWorkos()` を使用してください。
+
+
+## コンストラクターのパラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "WorkOS の API キー。ユーザーの検証および組織管理のために WorkOS API で認証する際に使用されます。",
+      isOptional: true,
+      defaultValue: "process.env.WORKOS_API_KEY"
+    },
+    {
+      name: "clientId",
+      type: "string",
+      description: "WorkOS のクライアント ID。認可コードをアクセストークンに交換する際に、アプリケーションを識別します。",
+      isOptional: true,
+      defaultValue: "process.env.WORKOS_CLIENT_ID"
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "認証プロバイダーインスタンスのカスタム名。",
+      isOptional: true,
+      defaultValue: '"workos"'
+    },
+    {
+      name: "authorizeUser",
+      type: "(user: WorkosUser) => Promise<boolean> | boolean",
+      description: "ユーザーにアクセスを許可すべきかを判定するカスタム認可関数。トークン検証後に呼び出されます。既定では、ユーザーがいずれかの組織メンバーシップで「admin」ロールを持っているかを確認します。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 環境変数
+
+コンストラクターのオプションが指定されていない場合、次の環境変数が自動的に使用されます:
+
+<PropertiesTable
+  content={[
+    {
+      name: "WORKOS_API_KEY",
+      type: "string",
+      description: "WorkOS の API キー。WorkOS ダッシュボードの「API Keys」で確認できます。",
+      isOptional: true,
+    },
+    {
+      name: "WORKOS_CLIENT_ID",
+      type: "string",
+      description: "WorkOS のクライアント ID。WorkOS ダッシュボードの「Applications」で確認できます。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## デフォルトの認可動作
+
+デフォルトでは、`MastraAuthWorkos` は管理者アクセスを判定するロールベースの認可を実装します。
+
+1. トークンの検証: アクセストークンが有効で期限切れでないことを確認するため、WorkOS で検証します
+2. ユーザー情報の取得: 検証済みトークンからユーザー情報を抽出します
+3. 組織メンバーシップの確認: ユーザー ID に紐づくすべての組織メンバーシップを WorkOS に問い合わせます
+4. ロールの抽出: 組織メンバーシップからすべてのロールを収集します
+5. 管理者チェック: いずれかのロールにスラッグ「admin」が含まれるかを確認します
+6. 認可の判定: 少なくとも1つの組織でユーザーが管理者ロールを持っている場合にのみアクセスを許可します
+
+つまり、デフォルトでは少なくとも1つの組織で管理者権限を持つユーザーのみが、Mastra のエンドポイントへアクセスできます。
+
+カスタムの認可ロジック（例: 認証済みユーザー全員を許可、特定のロールの確認、独自のビジネスロジックの実装）を用いるには、`authorizeUser` 関数をカスタマイズして提供してください。
+
+## WorkOS ユーザータイプ
+
+`authorizeUser` 関数で使用される `WorkosUser` 型は、WorkOS が返す JWT トークンのペイロードに対応します。WorkOS では管理者がカスタムの JWT テンプレートを設定できるため、具体的な構造は設定によって異なる場合があります。ユーザーオブジェクトの例は次のとおりです：
+
+```javascript
+{
+  'urn:myapp:full_name': 'John Doe',
+  'urn:myapp:email': 'john.doe@example.com',
+  'urn:myapp:organization_tier': 'bronze',
+  'urn:myapp:user_language': 'ja',
+  'urn:myapp:organization_domain': 'example.com',
+  iss: 'https://api.workos.com/user_management/client_01ABC123DEF456GHI789JKL012',
+  sub: 'user_01XYZ789ABC123DEF456GHI012',
+  sid: 'session_01PQR456STU789VWX012YZA345',
+  jti: '01MNO678PQR901STU234VWX567',
+  org_id: 'org_01DEF234GHI567JKL890MNO123',
+  role: 'member',
+  roles: [ 'member' ],
+  permissions: [],
+  exp: 1758290589,
+  iat: 1758290289
+}
+```
+
+`urn:myapp:` プレフィックスの付いたプロパティは、WorkOS の JWT テンプレートで構成されたカスタムクレームです。標準の JWT クレームには `sub`（ユーザー ID）、`iss`（発行者）、`exp`（有効期限）があり、WorkOS 固有のクレームとして `org_id`、`role`、`roles` などがあります。
+
+
+## 関連項目
+
+[MastraAuthWorkos クラス](/docs/auth/workos)

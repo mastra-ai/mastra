@@ -1,0 +1,197 @@
+---
+title: "OTEL トレーシング | Mastra Observability ドキュメント"
+description: "Mastra アプリでの OpenTelemetry トレーシング設定"
+---
+
+import Image from "next/image";
+
+
+# OTEL トレーシング
+
+Mastra はアプリケーションのトレーシングと監視のために OpenTelemetry Protocol (OTLP) をサポートしています。テレメトリを有効化すると、Mastra はエージェントの操作、LLM との対話、ツールの実行、連携（インテグレーション）の呼び出し、ワークフローの実行、データベース操作など、すべてのコア・プリミティブを自動的にトレースします。テレメトリ データは任意の OTEL コレクターへエクスポートできます。
+
+### 基本設定
+
+テレメトリーを有効にする簡単な例を次に示します:
+
+```ts filename="mastra.config.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  // ... その他の設定
+  telemetry: {
+    serviceName: "my-app",
+    enabled: true,
+    sampling: {
+      type: "always_on",
+    },
+    export: {
+      type: "otlp",
+      endpoint: "http://localhost:4318", // SigNoz ローカルエンドポイント
+    },
+  },
+});
+```
+
+
+### 設定オプション
+
+telemetry の設定では、次のプロパティを指定できます:
+
+```ts
+type OtelConfig = {
+  // トレースでサービスを識別する名前（オプション）
+  serviceName?: string;
+
+  // テレメトリの有効/無効を切り替え（デフォルトはtrue）
+  enabled?: boolean;
+
+  // サンプリングするトレースの数を制御
+  sampling?: {
+    type: "ratio" | "always_on" | "always_off" | "parent_based";
+    probability?: number; // 比率サンプリング用
+    root?: {
+      probability: number; // parent_basedサンプリング用
+    };
+  };
+
+  // テレメトリデータの送信先
+  export?: {
+    type: "otlp" | "console";
+    endpoint?: string;
+    headers?: Record<string, string>;
+  };
+};
+```
+
+詳細は [OtelConfig のリファレンス ドキュメント](../../reference/observability/otel-config.mdx)をご覧ください。
+
+
+### 環境変数
+
+OTLP のエンドポイントとヘッダーは、環境変数で設定できます。
+
+```env filename=".env" copy
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+OTEL_EXPORTER_OTLP_HEADERS=x-api-key=your-api-key
+```
+
+次に、設定で：
+
+```ts filename="mastra.config.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  // ... その他の設定
+  telemetry: {
+    serviceName: "my-app",
+    enabled: true,
+    export: {
+      type: "otlp",
+      // エンドポイントとヘッダーは環境変数から取得されます
+    },
+  },
+});
+```
+
+
+### 例: SigNoz への統合
+
+トレースされたエージェントのやり取りは、[SigNoz](https://signoz.io) で次のように表示されます。
+
+<img
+  src="/image/signoz-telemetry-demo.png"
+  alt="スパン、LLM 呼び出し、ツール実行を示すエージェントのやり取りのトレース"
+  style={{ maxWidth: "800px", width: "100%", margin: "8px 0" }}
+  className="nextra-image rounded-md"
+  data-zoom
+  width={800}
+  height={400}
+/>
+
+### その他の対応プロバイダー
+
+対応しているオブザーバビリティプロバイダーの一覧と設定の詳細は、[Observability Providers リファレンス](../../reference/observability/providers/)をご覧ください。
+
+### カスタムインストルメンテーションファイル
+
+Mastra プロジェクトでは、`/mastra` フォルダに配置することでカスタムのインストルメンテーションファイルを定義できます。Mastra はデフォルトのインストルメンテーションではなく、これらのファイルを自動的に検出してバンドルします。
+
+#### サポートされるファイルタイプ
+
+Mastra は次の拡張子のインストルメンテーションファイルを探します:
+
+- `instrumentation.js`
+- `instrumentation.ts` 
+- `instrumentation.mjs`
+
+#### 例
+
+```ts filename="/mastra/instrumentation.ts" showLineNumbers copy
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter({
+    url: 'http://localhost:4318/v1/traces',
+  }),
+  instrumentations: [getNodeAutoInstrumentations()],
+});
+
+sdk.start();
+```
+
+Mastra がカスタムのインストルメンテーションファイルを見つけると、デフォルトのインストルメンテーションを自動的に置き換え、ビルド時にバンドルします。
+
+
+### Mastra サーバー環境外でのトレーシング
+
+`mastra start` または `mastra dev` コマンドを使用すると、Mastra はトレーシングに必要な計装ファイルを自動的に用意して読み込みます。ですが、Mastra サーバー環境外で自分のアプリケーションの依存として Mastra を使用する場合は、計装ファイルを手動で用意する必要があります。
+
+この場合にトレーシングを有効化するには:
+
+1. 設定で Mastra のテレメトリーを有効にします:
+
+```typescript
+export const mastra = new Mastra({
+  telemetry: {
+    enabled: true,
+  },
+});
+```
+
+2. プロジェクト内に計測用ファイル（例：`instrumentation.mjs`）を作成します。
+
+```typescript
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter(),
+  instrumentations: [getNodeAutoInstrumentations()],
+});
+
+sdk.start();
+```
+
+3. OpenTelemetry の環境変数を追加する:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.braintrust.dev/otel
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <あなたのAPIキー>, x-bt-parent=project_name:<あなたのプロジェクト名>"
+```
+
+4. アプリケーションを起動する前に OpenTelemetry SDK を実行します:
+
+```bash
+node --import=./instrumentation.mjs --import=@opentelemetry/instrumentation/hook.mjs src/index.js
+```
+
+
+### Next.js 特有のトレーシング手順
+
+Next.js を使用している場合は、次の 3 つの追加設定が必要です:
+
+1. `next.config.ts` で instrumentation フックを有効にする
+2. Mastra のテレメトリー設定を行う
+3. OpenTelemetry エクスポーターを設定する
+
+実装の詳細は、[Next.js のトレーシング](./nextjs-tracing) ガイドを参照してください。

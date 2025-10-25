@@ -1,0 +1,646 @@
+---
+title: "リファレンス: PG Vector Store | ベクターデータベース | Mastra ドキュメント"
+description: Mastra の PgVector クラスに関するドキュメント。pgvector 拡張を用いた PostgreSQL でのベクトル検索を提供します。
+---
+
+# PG Vector Store
+
+PgVector クラスは、[PostgreSQL](https://www.postgresql.org/) と [pgvector](https://github.com/pgvector/pgvector) 拡張機能を使用してベクトル検索を実現します。
+既存の PostgreSQL データベース内で強力なベクトル類似検索機能を提供します。
+
+## コンストラクターのオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "connectionString",
+      type: "string",
+      description: "PostgreSQL 接続URL",
+      isOptional: true,
+    },
+    {
+      name: "host",
+      type: "string",
+      description: "PostgreSQL サーバーホスト",
+      isOptional: true,
+    },
+    {
+      name: "port",
+      type: "number",
+      description: "PostgreSQL サーバーポート",
+      isOptional: true,
+    },
+    {
+      name: "database",
+      type: "string",
+      description: "PostgreSQL データベース名",
+      isOptional: true,
+    },
+    {
+      name: "user",
+      type: "string",
+      description: "PostgreSQL ユーザー",
+      isOptional: true,
+    },
+    {
+      name: "password",
+      type: "string",
+      description: "PostgreSQL パスワード",
+      isOptional: true,
+    },
+    {
+      name: "ssl",
+      type: "boolean | ConnectionOptions",
+      description: "SSL を有効化する、またはカスタムの SSL 設定を指定する",
+      isOptional: true,
+    },
+    {
+      name: "schemaName",
+      type: "string",
+      description:
+        "ベクターストアに使用させたいスキーマ名。未指定の場合はデフォルトのスキーマが使用されます。",
+      isOptional: true,
+    },
+    {
+      name: "max",
+      type: "number",
+      description: "プール接続の最大数（既定値: 20）",
+      isOptional: true,
+    },
+    {
+      name: "idleTimeoutMillis",
+      type: "number",
+      description: "アイドル接続のタイムアウト（ミリ秒）（既定値: 30000）",
+      isOptional: true,
+    },
+    {
+      name: "pgPoolOptions",
+      type: "PoolConfig",
+      description: "pg プールの追加設定オプション",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## コンストラクタの例
+
+### 接続文字列
+
+```ts
+import { PgVector } from "@mastra/pg";
+
+const vectorStore = new PgVector({
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
+});
+```
+
+
+### ホスト／ポート／データベースの設定
+
+```ts
+const vectorStore = new PgVector({
+  host: "localhost",
+  port: 5432,
+  database: "mydb",
+  user: "postgres",
+  password: "password",
+});
+```
+
+
+### 上級設定
+
+```ts
+const vectorStore = new PgVector({
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
+  schemaName: "custom_schema",
+  max: 30,
+  idleTimeoutMillis: 60000,
+  pgPoolOptions: {
+    connectionTimeoutMillis: 5000,
+    allowExitOnIdle: true,
+  },
+});
+```
+
+
+## メソッド
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するインデックス名",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "ベクトル次元数（使用する埋め込みモデルと一致させる必要があります）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "類似検索に用いる距離指標",
+    },
+    {
+      name: "indexConfig",
+      type: "IndexConfig",
+      isOptional: true,
+      defaultValue: "{ type: 'ivfflat' }",
+      description: "インデックスの設定",
+    },
+    {
+      name: "buildIndex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "インデックスを構築するかどうか",
+    },
+  ]}
+/>
+
+#### IndexConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: "'flat' | 'hnsw' | 'ivfflat'",
+      description: "インデックスの種類",
+      defaultValue: "ivfflat",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "flat",
+              type: "flat",
+              description:
+                "シーケンシャルスキャン（インデックスなし）による全件検索を行います。",
+            },
+            {
+              name: "ivfflat",
+              type: "ivfflat",
+              description:
+                "近似検索のためにベクトルを複数のリストにクラスタリングします。",
+            },
+            {
+              name: "hnsw",
+              type: "hnsw",
+              description:
+                "高速な検索と高い再現率を実現するグラフベースのインデックス。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "ivf",
+      type: "IVFConfig",
+      isOptional: true,
+      description: "IVF の設定",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "lists",
+              type: "number",
+              description:
+                "リスト数。未指定の場合はデータセットサイズに基づいて自動計算されます（最小 100、最大 4000）。",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "hnsw",
+      type: "HNSWConfig",
+      isOptional: true,
+      description: "HNSW の設定",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "m",
+              type: "number",
+              description:
+                "ノードあたりの最大接続数（デフォルト: 8）",
+              isOptional: true,
+            },
+            {
+              name: "efConstruction",
+              type: "number",
+              description: "構築時の探索幅（デフォルト: 32）",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+#### メモリ要件
+
+HNSW インデックスは構築時に大量の共有メモリを消費します。100K ベクトルの場合:
+
+- 小さい次元（64d）: デフォルト設定で約 60MB
+- 中程度の次元（256d）: デフォルト設定で約 180MB
+- 大きい次元（384d 以上）: デフォルト設定で約 250MB 以上
+
+M や efConstruction の値を高くすると、必要メモリは大幅に増加します。必要に応じてシステムの共有メモリ上限を調整してください。
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "アップサート先のインデックス名",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "埋め込みベクトルの配列",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "各ベクトルのメタデータ",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "任意のベクトルID（未指定時は自動生成）",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "クエリ対象のインデックス名",
+    },
+    {
+      name: "vector",
+      type: "number[]",
+      description: "クエリベクトル",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "返す結果数",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "メタデータフィルタ",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にベクトルを含めるかどうか",
+    },
+    {
+      name: "minScore",
+      type: "number",
+      isOptional: true,
+      defaultValue: "0",
+      description: "最小類似度スコアのしきい値",
+    },
+    {
+      name: "options",
+      type: "{ ef?: number; probes?: number }",
+      isOptional: true,
+      description: "HNSW および IVF インデックス向けの追加オプション",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "ef",
+              type: "number",
+              description: "HNSW の検索パラメータ",
+              isOptional: true,
+            },
+            {
+              name: "probes",
+              type: "number",
+              description: "IVF の検索パラメータ",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### listIndexes()
+
+インデックス名の文字列を配列で返します。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+{
+  name: "indexName",
+  type: "string",
+  description: "説明するインデックス名",
+},
+]}
+/>
+
+戻り値:
+
+```typescript copy
+interface PGIndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+  type: "flat" | "hnsw" | "ivfflat";
+  config: {
+    m?: number;
+    efConstruction?: number;
+    lists?: number;
+    probes?: number;
+  };
+}
+```
+
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除するインデックス名",
+    },
+  ]}
+/>
+
+### updateVector()
+
+<PropertiesTable
+  content={[
+{
+  name: "indexName",
+  type: "string",
+  description: "ベクターを含むインデックス名",
+},
+{
+  name: "id",
+  type: "string",
+  description: "更新対象のベクターID",
+},
+{
+  name: "update",
+  type: "object",
+  description: "更新パラメーター",
+  properties: [
+    {
+      type: "object",
+      parameters: [
+        {
+          name: "vector",
+          type: "number[]",
+          description: "新しいベクター値",
+          isOptional: true,
+        },
+        {
+          name: "metadata",
+          type: "Record<string, any>",
+          description: "新しいメタデータ値",
+          isOptional: true,
+        },
+      ],
+    },
+  ],
+},
+]}
+/>
+
+IDで既存のベクターを更新します。vector または metadata の少なくとも一方を指定する必要があります。
+
+```typescript copy
+// ベクトルのみを更新
+await pgVector.updateVector({
+  indexName: "my_vectors",
+  id: "vector123",
+  update: {
+    vector: [0.1, 0.2, 0.3],
+  },
+});
+
+// メタデータのみを更新
+await pgVector.updateVector({
+  indexName: "my_vectors",
+  id: "vector123",
+  update: {
+    metadata: { label: "updated" },
+  },
+});
+
+// ベクトルとメタデータの両方を更新
+await pgVector.updateVector({
+  indexName: "my_vectors",
+  id: "vector123",
+  update: {
+    vector: [0.1, 0.2, 0.3],
+    metadata: { label: "updated" },
+  },
+});
+```
+
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+{
+  name: "indexName",
+  type: "string",
+  description: "ベクトルを含むインデックスの名前",
+},
+{
+  name: "id",
+  type: "string",
+  description: "削除するベクトルのID",
+},
+]}
+/>
+
+指定したインデックスから、IDを指定して単一のベクトルを削除します。
+
+```typescript copy
+await pgVector.deleteVector({ indexName: "my_vectors", id: "vector123" });
+```
+
+
+### disconnect()
+
+データベースの接続プールを閉じます。ストアの利用が終わったら呼び出してください。
+
+### buildIndex()
+
+<PropertiesTable
+  content={[
+{
+  name: "indexName",
+  type: "string",
+  description: "定義するインデックス名",
+},
+{
+  name: "metric",
+  type: "'cosine' | 'euclidean' | 'dotproduct'",
+  isOptional: true,
+  defaultValue: "cosine",
+  description: "類似検索に用いる距離指標",
+},
+{
+  name: "indexConfig",
+  type: "IndexConfig",
+  description: "インデックスの種類とパラメータの設定",
+},
+]}
+/>
+
+指定した指標と設定でインデックスを構築または再構築します。新しいインデックスを作成する前に、既存のインデックスは削除されます。
+
+```typescript copy
+// HNSWインデックスを定義
+await pgVector.buildIndex("my_vectors", "cosine", {
+  type: "hnsw",
+  hnsw: {
+    m: 8,
+    efConstruction: 32,
+  },
+});
+
+// IVFインデックスを定義
+await pgVector.buildIndex("my_vectors", "cosine", {
+  type: "ivfflat",
+  ivf: {
+    lists: 100,
+  },
+});
+
+// フラットインデックスを定義
+await pgVector.buildIndex("my_vectors", "cosine", {
+  type: "flat",
+});
+```
+
+
+## レスポンスの種類
+
+クエリ結果は次の形式で返されます。
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // includeVectorがtrueの場合のみ含まれる
+}
+```
+
+
+## エラー処理
+
+ストアは型付きエラーをスローし、捕捉できます。
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | など
+    console.log(error.details); // エラーの詳細情報
+  }
+}
+```
+
+
+## インデックス構成ガイド
+
+### パフォーマンスの最適化
+
+#### IVFFlat のチューニング
+
+- **lists パラメータ**: ベクトル数 n に対して `sqrt(n) * 2` に設定する
+- lists を多くすると精度は向上するが、構築時間は長くなる
+- lists を少なくすると構築は速いが、精度が低下する可能性がある
+
+#### HNSW のチューニング
+
+- **m パラメータ**:
+  - 8-16: 精度は中程度、メモリ使用量は少ない
+  - 16-32: 高精度、メモリ使用量は中程度
+  - 32-64: 非常に高精度、メモリ使用量は多い
+- **efConstruction**:
+  - 32-64: 構築が速く、品質は良好
+  - 64-128: 構築はやや遅く、品質はより良い
+  - 128-256: 構築が最も遅く、品質は最良
+
+### インデックス再作成の挙動
+
+システムは設定の変更を自動検知し、必要な場合にのみインデックスを再構築します：
+
+- 設定が同一：インデックスは保持（再作成なし）
+- 設定が変更：インデックスを削除して再構築
+- これにより、不要なインデックス再作成によるパフォーマンス低下を防ぎます
+
+## ベストプラクティス
+
+- 最適なパフォーマンスを確保するため、インデックス設定を定期的に見直す。
+- データセットの規模やクエリ要件に応じて、`lists` や `m` などのパラメータを調整する。
+- `describeIndex()` を使用して利用状況を把握し、**インデックスのパフォーマンスを監視**する。
+- とくに大きなデータ更新後は、効率を維持するために定期的にインデックスを再構築する。
+
+## 直接プールへのアクセス
+
+`PgVector` クラスは、基盤となる PostgreSQL の接続プールをパブリックフィールドとして公開しています：
+
+```typescript
+pgVector.pool // pg.Poolのインスタンス
+```
+
+これは、直接SQLクエリの実行、トランザクションの管理、プール状態の監視といった高度な使い方を可能にします。プールを直接使用する場合:
+
+* 使用後はクライアント（`client.release()`）を解放する責任があります。
+* `disconnect()` を呼び出した後もプールには引き続きアクセスできますが、新規クエリは失敗します。
+* 直接アクセスすると、PgVector のメソッドが提供する検証やトランザクションロジックは適用されません。
+
+この設計は高度な利用を可能にしますが、ユーザーによる慎重なリソース管理が求められます。
+
+
+## 関連項目
+
+- [メタデータフィルター](../rag/metadata-filters)

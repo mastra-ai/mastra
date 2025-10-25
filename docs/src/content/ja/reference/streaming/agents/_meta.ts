@@ -1,6 +1,6 @@
 const meta = {
   stream: ".stream()",
-  streamLegacy: ".streamLegacy() (Legacy)",
+  streamLegacy: ".streamLegacy()（レガシー）",
   MastraModelOutput: "MastraModelOutput",
 };
 export default meta;

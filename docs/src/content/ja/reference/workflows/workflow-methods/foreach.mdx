@@ -1,11 +1,11 @@
 ---
 title: "リファレンス: Workflow.foreach() | Workflows | Mastra ドキュメント"
-description: ワークフローにおける `Workflow.foreach()` メソッドのドキュメント。配列の各要素に対してステップを実行するループを作成します。
+description: ワークフローで使用する `Workflow.foreach()` メソッドのドキュメント。配列の各要素に対してステップを実行するループを作成します。
 ---
 
 # Workflow.foreach()
 
-`.foreach()` メソッドは、配列の各要素に対してステップを実行するループを作成します。
+`.foreach()` メソッドは、配列内の各要素ごとにステップを実行するループを作成します。
 
 ## 使い方の例
 
@@ -13,7 +13,8 @@ description: ワークフローにおける `Workflow.foreach()` メソッドの
 workflow.foreach(step1, { concurrency: 2 });
 ```
 
-## パラメータ
+
+## パラメーター
 
 <PropertiesTable
   content={[
@@ -28,14 +29,14 @@ workflow.foreach(step1, { concurrency: 2 });
       name: "opts",
       type: "object",
       description:
-        "ループのオプション設定。concurrency オプションは並列実行できる反復回数を制御します（既定値: 1）。",
+        "ループ用の任意設定。concurrency オプションは並列実行できる反復数を制御します（既定値: 1）。",
       isOptional: true,
       properties: [
         {
           name: "concurrency",
           type: "number",
           description:
-            "許可される同時実行の反復回数（既定値: 1）",
+            "許可される同時実行の反復数（既定値: 1）",
           isOptional: true,
         },
       ],
@@ -50,11 +51,11 @@ workflow.foreach(step1, { concurrency: 2 });
     {
       name: "workflow",
       type: "Workflow",
-      description: "メソッドチェーン用の Workflow インスタンス",
+      description: "メソッドチェーン用の Workflow インスタンス。",
     },
   ]}
 />
 
 ## 関連
 
-- [foreach を使った繰り返し](../../../docs/workflows/control-flow.mdx#repeating-with-foreach)
+- [foreach を使った反復処理](../../../docs/workflows/control-flow.mdx#repeating-with-foreach)

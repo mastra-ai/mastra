@@ -1,45 +1,41 @@
 ---
-title: "例: ベクタークエリツールの使用方法 | RAG | Mastra ドキュメント"
-description: OpenAI の埋め込みと PGVector を使って、Mastra で基本的な RAG システムを実装する例です。
+title: "例: Vector Query Tool の使用 | RAG | Mastra Docs"
+description: OpenAI の埋め込みと PGVector によるベクトル格納を用いて、Mastra で基本的な RAG システムを実装する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
+# Vector Query Tool の使用
 
-# ベクタークエリツールの使い方
-
-この例では、RAGシステムにおけるセマンティック検索のための `createVectorQueryTool` の実装と使用方法を示します。ツールの設定方法、ベクターストレージの管理、関連するコンテキストの効果的な取得方法について説明します。
-
-
+この例では、RAG システムにおけるセマンティック検索のために `createVectorQueryTool` を実装して利用する方法を示します。ツールの設定、ベクター格納の管理、関連するコンテキストの効果的な取得方法を解説します。
 
 ## 概要
 
-このシステムは、Mastra と OpenAI を使って RAG を実装しています。主な機能は以下の通りです。
+このシステムは Mastra と OpenAI を用いて RAG を実装しています。主な処理は次のとおりです:
 
-1. 応答生成のために gpt-4o-mini を使用した Mastra エージェントをセットアップします
-2. ベクトルストアとのやり取りを管理するベクトルクエリツールを作成します
-3. 既存の埋め込みを使って関連するコンテキストを取得します
-4. Mastra エージェントを使ってコンテキストに応じた応答を生成します
+1. 応答生成のために gpt-4o-mini を用いる Mastra エージェントを構成する
+2. ベクターストアとのやり取りを管理するためのベクタークエリツールを作成する
+3. 既存の埋め込みを用いて関連コンテキストを取得する
+4. Mastra エージェントでコンテキストに即した応答を生成する
 
-> **注意**: 埋め込みの作成と保存方法については、[Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) ガイドをご覧ください。
-
-
+> 注意: 埋め込みの作成と保存方法については、[Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) ガイドをご覧ください。
 
 ## セットアップ
 
-### 環境設定
+### 環境のセットアップ
 
-環境変数を設定してください：
+環境変数を設定していることを確認してください:
 
 ```bash filename=".env"
-OPENAI_API_KEY=your_openai_api_key_here
-POSTGRES_CONNECTION_STRING=your_connection_string_here
+OPENAI_API_KEY=ここにあなたのOpenAIのAPIキーを入力
+POSTGRES_CONNECTION_STRING=ここに接続文字列を入力
 ```
+
 
 ### 依存関係
 
-必要な依存関係をインポートします：
+必要な依存モジュールをインポートします：
 
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { openai } from "@ai-sdk/openai";
@@ -50,10 +46,9 @@ import { PgVector } from "@mastra/pg";
 ```
 
 
-
 ## ベクタークエリツールの作成
 
-ベクターデータベースをクエリできるツールを作成します：
+ベクターデータベースに対してクエリを実行できるツールを作成します。
 
 ```typescript copy showLineNumbers{7} filename="src/index.ts"
 const vectorQueryTool = createVectorQueryTool({
@@ -64,16 +59,15 @@ const vectorQueryTool = createVectorQueryTool({
 ```
 
 
+## エージェントの構成
 
-## エージェントの設定
-
-応答を処理するMastraエージェントをセットアップします：
+レスポンスを処理する Mastra エージェントを設定します。
 
 ```typescript copy showLineNumbers{13} filename="src/index.ts"
 export const ragAgent = new Agent({
-  name: "RAG Agent",
+  name: "RAG エージェント",
   instructions:
-    "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",
+    "あなたは、提供されたコンテキストに基づいて質問に回答する有用なアシスタントです。回答は簡潔で、要点に即したものにしてください。",
   model: openai("gpt-4o-mini"),
   tools: {
     vectorQueryTool,
@@ -82,10 +76,9 @@ export const ragAgent = new Agent({
 ```
 
 
+## PgVector と Mastra の初期化
 
-## PgVector と Mastra のインスタンス化
-
-すべてのコンポーネントを使って PgVector と Mastra をインスタンス化します：
+すべてのコンポーネントを指定して PgVector と Mastra を初期化します:
 
 ```typescript copy showLineNumbers{23} filename="src/index.ts"
 const pgVector = new PgVector({
@@ -101,14 +94,13 @@ const agent = mastra.getAgent("ragAgent");
 ```
 
 
-
 ## 使用例
 
 ```typescript copy showLineNumbers{32} filename="src/index.ts"
 const prompt = `
-[Insert query based on document here]
-Please base your answer only on the context provided in the tool. 
-If the context doesn't contain enough information to fully answer the question, please state that explicitly.
+[ここに文書に基づくクエリを挿入]
+回答は、ツールで提供されたコンテキストのみに基づいて行ってください。
+コンテキストに、質問に完全に答えるのに十分な情報がない場合は、その旨を明確に記載してください。
 `;
 
 const completion = await agent.generate(prompt);
@@ -116,12 +108,17 @@ console.log(completion.text);
 ```
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/basic-rag"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/basic-rag"
+}
 />

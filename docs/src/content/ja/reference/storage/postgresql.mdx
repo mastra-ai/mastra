@@ -5,13 +5,14 @@ description: Mastra における PostgreSQL ストレージ実装のドキュメ
 
 # PostgreSQL ストレージ
 
-PostgreSQL のストレージ実装は、PostgreSQL データベースを用いた本番運用に対応したストレージソリューションを提供します。
+PostgreSQL のストレージ実装は、PostgreSQL データベースを用いた本番運用向けのストレージソリューションを提供します。
 
 ## インストール
 
 ```bash copy
 npm install @mastra/pg@latest
 ```
+
 
 ## 使い方
 
@@ -22,6 +23,7 @@ const storage = new PostgresStore({
   connectionString: process.env.DATABASE_URL,
 });
 ```
+
 
 ## パラメータ
 
@@ -38,7 +40,7 @@ const storage = new PostgresStore({
       name: "schemaName",
       type: "string",
       description:
-        "ストレージで使用するスキーマ名。指定がない場合はデフォルトのスキーマを使用します。",
+        "ストレージで使用するスキーマ名。指定しない場合は既定のスキーマが使用されます。",
       isOptional: true,
     },
   ]}
@@ -46,7 +48,7 @@ const storage = new PostgresStore({
 
 ## コンストラクターの例
 
-`PostgresStore` は次の方法でインスタンス化できます：
+`PostgresStore` は次の方法でインスタンス化できます。
 
 ```ts
 import { PostgresStore } from "@mastra/pg";
@@ -56,10 +58,10 @@ const store1 = new PostgresStore({
   connectionString: "postgresql://user:password@localhost:5432/mydb",
 });
 
-// 接続文字列にカスタムのスキーマ名を指定
+// カスタムスキーマ名を指定した接続文字列を使用
 const store2 = new PostgresStore({
   connectionString: "postgresql://user:password@localhost:5432/mydb",
-  schemaName: "custom_schema", // 任意
+  schemaName: "custom_schema", // 省略可
 });
 
 // 個別の接続パラメーターを使用
@@ -71,51 +73,53 @@ const store4 = new PostgresStore({
   password: "password",
 });
 
-// 個別パラメーター＋schemaName
+// schemaName を指定した個別パラメーター
 const store5 = new PostgresStore({
   host: "localhost",
   port: 5432,
   database: "mydb",
   user: "user",
   password: "password",
-  schemaName: "custom_schema", // 任意
+  schemaName: "custom_schema", // 省略可
 });
 ```
 
-## 追記事項
+
+## 追記
 
 ### スキーマ管理
 
-ストレージ実装はスキーマの作成と更新を自動的に行います。次のテーブルを作成します：
+ストレージの実装は、スキーマの作成と更新を自動的に行います。次のテーブルを作成します:
 
 - `mastra_workflow_snapshot`: ワークフローの状態と実行データを保存
 - `mastra_evals`: 評価結果とメタデータを保存  
 - `mastra_threads`: 会話スレッドを保存
 - `mastra_messages`: 個々のメッセージを保存
-- `mastra_traces`: テレメトリおよびトレーシングデータを保存
+- `mastra_traces`: テレメトリおよびトレースデータを保存
 - `mastra_scorers`: スコアリングおよび評価データを保存
 - `mastra_resources`: リソースのワーキングメモリデータを保存
 
 ### データベースおよびプールへの直接アクセス
 
-`PostgresStore` は、基盤となるデータベースオブジェクトと pg-promise インスタンスの両方をパブリックフィールドとして公開しています:
+`PostgresStore` は、基盤となるデータベースオブジェクトと pg-promise インスタンスの両方をパブリックフィールドとして公開します。
 
 ```typescript
-store.db  // pg-promise の database インスタンス
-store.pgp // pg-promise の main インスタンス
+store.db  // pg-promise のデータベース インスタンス
+store.pgp // pg-promise のメイン インスタンス
 ```
 
-これにより、直接のクエリ実行やカスタムなトランザクション管理が可能になります。これらのフィールドを使用する場合:
+これにより、直接クエリの実行とカスタムなトランザクション管理が可能になります。これらのフィールドを使用する場合は次の点に注意してください:
 
-- 接続およびトランザクションの適切な扱いは利用者の責任です。
-- ストアを閉じる（`store.close()`）と、関連するコネクションプールが破棄されます。
-- 直接アクセスは、PostgresStore のメソッドが提供する追加のロジックや検証をバイパスします。
+* 接続およびトランザクションの適切な取り扱いは利用者の責任です。
+* ストアを閉じる（`store.close()`）と、対応する接続プールが破棄されます。
+* 直接アクセスすると、PostgresStore のメソッドが提供する追加のロジックや検証を迂回します。
 
-このアプローチは、低レベルのアクセスが必要となる上級者向けのシナリオを想定しています。
+この方法は、低レベルなアクセスが必要となる上級者向けのシナリオを想定しています。
+
 
 ## インデックス管理
 
-PostgreSQL のストレージは、クエリ性能を最適化するための包括的なインデックス管理機能を備えています。
+PostgreSQL のストレージは、クエリ性能を最適化するための充実したインデックス管理機能を提供します。
 
 ### 自動パフォーマンスインデックス
 
@@ -126,28 +130,28 @@ PostgreSQL ストレージは、一般的なクエリパターンに合わせて
 - `mastra_traces_name_starttime_idx`: (name, startTime DESC)
 - `mastra_evals_agent_name_created_at_idx`: (agent_name, created_at DESC)
 
-これらのインデックスにより、ソートを伴うフィルター付きクエリの性能が大幅に向上します。
+これらのインデックスは、ソートを伴うフィルタ済みクエリの性能を大幅に向上させます。
 
 ### カスタムインデックスの作成
 
-特定のクエリパターンを最適化するために、追加のインデックスを作成します:
+特定のクエリパターンを最適化するために、追加のインデックスを作成します。
 
 ```typescript copy
-// よく使われるクエリ向けの基本的なインデックス
+// 一般的なクエリ向けの基本インデックス
 await storage.createIndex({
   name: 'idx_threads_resource',
   table: 'mastra_threads',
   columns: ['resourceId']
 });
 
-// フィルタリングとソートのための、並び順を指定した複合インデックス
+// フィルタと並び替えのためのソート順付き複合インデックス
 await storage.createIndex({
   name: 'idx_messages_composite',
   table: 'mastra_messages',
   columns: ['thread_id', 'createdAt DESC']
 });
 
-// JSONB カラム向けの GIN インデックス（高速な JSON クエリ用）
+// JSONB 列向けの GIN インデックス（JSON クエリを高速化）
 await storage.createIndex({
   name: 'idx_traces_attributes',
   table: 'mastra_traces',
@@ -156,13 +160,14 @@ await storage.createIndex({
 });
 ```
 
-より高度なユースケースでは、次のオプションも利用できます:
+より高度なユースケースでは、次のように指定できます:
 
-- `unique: true` は一意制約
-- `where: 'condition'` は部分インデックス
-- `method: 'brin'` は時系列データ向け
-- `storage: { fillfactor: 90 }` は更新が多いテーブル向け
-- `concurrent: true` はブロッキングしない作成（デフォルト）
+* `unique: true` 一意制約の指定
+* `where: 'condition'` 部分インデックスの指定
+* `method: 'brin'` 時系列データ向けの指定
+* `storage: { fillfactor: 90 }` 更新が多いテーブル向けの指定
+* `concurrent: true` ブロックしない作成（デフォルト）
+
 
 ### インデックスのオプション
 
@@ -171,7 +176,7 @@ await storage.createIndex({
     {
       name: "name",
       type: "string",
-      description: "インデックスの一意な名前",
+      description: "インデックスの一意名",
       isOptional: false,
     },
     {
@@ -183,19 +188,19 @@ await storage.createIndex({
     {
       name: "columns",
       type: "string[]",
-      description: "（任意の並び順指定を含む）列名の配列（例: ['id', 'createdAt DESC']）",
+      description: "（任意のソート順付きの）列名の配列（例: ['id', 'createdAt DESC']）",
       isOptional: false,
     },
     {
       name: "unique",
       type: "boolean",
-      description: "一意制約インデックスを作成する",
+      description: "一意制約付きインデックスを作成",
       isOptional: true,
     },
     {
       name: "concurrent",
       type: "boolean",
-      description: "テーブルをロックせずにインデックスを作成（既定: true）",
+      description: "テーブルをロックせずにインデックスを作成（デフォルト: true）",
       isOptional: true,
     },
     {
@@ -207,13 +212,13 @@ await storage.createIndex({
     {
       name: "method",
       type: "'btree' | 'hash' | 'gin' | 'gist' | 'spgist' | 'brin'",
-      description: "インデックス方式（既定: 'btree'）",
+      description: "インデックス方式（デフォルト: 'btree'）",
       isOptional: true,
     },
     {
       name: "opclass",
       type: "string",
-      description: "GIN/GIST インデックスのオペレータークラス",
+      description: "GIN/GIST インデックスの演算子クラス",
       isOptional: true,
     },
     {
@@ -225,7 +230,7 @@ await storage.createIndex({
     {
       name: "tablespace",
       type: "string",
-      description: "インデックスを配置するテーブルスペース名",
+      description: "インデックス配置先のテーブルスペース名",
       isOptional: true,
     }
   ]}
@@ -233,10 +238,10 @@ await storage.createIndex({
 
 ### インデックスの管理
 
-既存のインデックスを一覧表示してモニタリングする:
+既存のインデックスを一覧表示して監視する:
 
 ```typescript copy
-// すべてのインデックスを一覧表示
+// すべてのインデックスを一覧
 const allIndexes = await storage.listIndexes();
 console.log(allIndexes);
 // [
@@ -251,7 +256,7 @@ console.log(allIndexes);
 //   ...
 // ]
 
-// 特定のテーブルのインデックスを一覧表示
+// 特定のテーブルのインデックスを一覧
 const threadIndexes = await storage.listIndexes('mastra_threads');
 
 // インデックスの詳細統計を取得
@@ -266,17 +271,18 @@ console.log(stats);
 //   definition: 'CREATE INDEX idx_threads_resource...',
 //   method: 'btree',
 //   scans: 1542,           // インデックススキャン回数
-//   tuples_read: 45230,    // インデックス経由で読み取ったタプル数
-//   tuples_fetched: 12050  // インデックス経由で取得したタプル数
+//   tuples_read: 45230,    // インデックス経由で読み込まれたタプル数
+//   tuples_fetched: 12050  // インデックス経由で取得されたタプル数
 // }
 
-// インデックスを削除
+// インデックスをドロップ
 await storage.dropIndex('idx_threads_status');
 ```
 
-### スキーマ固有のインデックス
 
-カスタムスキーマを使用する場合、インデックスはスキーマのプレフィックス付きで作成されます：
+### スキーマ特有のインデックス
+
+カスタムスキーマを使用する場合、インデックスはスキーマのプレフィックス付きで作成されます。
 
 ```typescript copy
 const storage = new PostgresStore({
@@ -284,7 +290,7 @@ const storage = new PostgresStore({
   schemaName: 'custom_schema'
 });
 
-// 次のようなインデックスが作成されます: custom_schema_idx_threads_status
+// インデックスは次のように作成されます: custom_schema_idx_threads_status
 await storage.createIndex({
   name: 'idx_threads_status',
   table: 'mastra_threads',
@@ -292,15 +298,16 @@ await storage.createIndex({
 });
 ```
 
+
 ### インデックスの種類とユースケース
 
 PostgreSQL には、特定の用途に最適化されたさまざまなインデックス型があります:
 
-| インデックス種別 | 最適な用途 | ストレージ | 速度 |
+| インデックス種別 | 適した用途 | ストレージ | 速度 |
 |------------|----------|---------|-------|
-| **btree**（デフォルト） | 範囲クエリ、ソート、汎用 | 中程度 | 高速 |
+| **btree** (デフォルト) | 範囲検索、並べ替え、汎用 | 中程度 | 高速 |
 | **hash** | 等価比較のみ | 小 | `=` に対して非常に高速 |
-| **gin** | JSONB、配列、全文検索 | 大 | 包含判定が高速 |
-| **gist** | 幾何データ、全文検索 | 中程度 | 近傍探索が高速 |
-| **spgist** | 不均衡データ、テキストパターン | 小 | 特定パターンに高速 |
-| **brin** | 自然な順序を持つ大規模テーブル | ごく小 | 範囲に高速 |
+| **gin** | JSONB、配列、全文検索 | 大 | 包含クエリに高速 |
+| **gist** | 幾何データ、全文検索 | 中程度 | 最近傍検索に高速 |
+| **spgist** | 不均衡データ、テキストパターン | 小 | 特定のパターンに高速 |
+| **brin** | 自然な順序を持つ大規模テーブル | 非常に小 | 範囲クエリに高速 |

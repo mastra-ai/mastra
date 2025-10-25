@@ -1,17 +1,13 @@
 ---
-title: "リファレンス: Run クラス | Workflows | Mastra ドキュメント"
-description: Mastra における Run クラスのドキュメント。ワークフローの実行インスタンスを表します。
+title: "リファレンス: Run クラス | ワークフロー | Mastra ドキュメント"
+description: Mastra の Run クラスに関するドキュメント。Run クラスはワークフローの実行インスタンスを表します。
 ---
-
-
 
 # Run クラス
 
-`Run` クラスはワークフローの実行インスタンスを表し、実行の開始、再開、ストリーミング、および監視のためのメソッドを提供します。
+`Run` クラスはワークフローの実行インスタンスを表し、開始、再開、ストリーミング、監視を行うためのメソッドを提供します。
 
-
-
-## 使用例
+## 使い方の例
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
@@ -20,13 +16,12 @@ const result = await run.start({
   inputData: { value: "初期データ" }
 });
 
-if (result.status === "suspended") {
+if (result.status === "保留") {
   const resumedResult = await run.resume({
     resumeData: { value: "再開データ" }
   });
 }
 ```
-
 
 
 ## 実行メソッド
@@ -54,7 +49,7 @@ if (result.status === "suspended") {
     {
       name: "streamVNext",
       type: "(options?: StreamOptions) => MastraWorkflowStream",
-      description: "拡張機能によりリアルタイムストリーミングを有効化します",
+      description: "拡張機能によりリアルタイム配信を有効にします",
       required: true,
     },
     {
@@ -72,11 +67,9 @@ if (result.status === "suspended") {
   ]}
 />
 
-
-
 ## 実行ステータス
 
-ワークフロー実行の`status`は、現在の実行状態を示します。取りうる値は次のとおりです：
+ワークフロー実行の`status`は、現在の実行状態を示します。取りうる値は次のとおりです。
 
 <PropertiesTable
   content={[
@@ -84,26 +77,24 @@ if (result.status === "suspended") {
       name: "success",
       type: "string",
       description:
-        "すべてのステップが正常に完了し、有効な結果が出力されました",
+        "すべてのステップが正常に完了し、有効な結果が出力された状態",
     },
     {
       name: "failed",
       type: "string",
       description:
-        "実行中にエラーが発生し、エラーの詳細を参照できます",
+        "実行中にエラーが発生し、エラーの詳細を参照できる状態",
     },
     {
       name: "suspended",
       type: "string",
       description:
-        "再開待ちのため実行が一時停止されており、一時停止中のステップ情報があります",
+        "再開待ちで実行が一時停止しており、中断されたステップの情報がある状態",
     },
   ]}
 />
 
-
-
-## 関連項目
+## 関連情報
 
 - [ワークフローの実行](../../examples/workflows/running-workflows.mdx)
 - [Run.start()](./run-methods/start.mdx)

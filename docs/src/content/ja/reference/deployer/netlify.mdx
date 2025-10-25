@@ -1,24 +1,20 @@
 ---
 title: "Netlify Deployer"
-description: "NetlifyDeployerクラスのドキュメント。MastraアプリケーションをNetlify Functionsにデプロイします。"
+description: "Mastra アプリケーションを Netlify Functions にデプロイする NetlifyDeployer クラスのドキュメント。"
 ---
-
-
 
 # NetlifyDeployer
 
-`NetlifyDeployer`クラスは、スタンドアロンのMastraアプリケーションのNetlifyへのデプロイメントを処理します。設定とデプロイメントを管理し、Netlify固有の機能でベースの[Deployer](/reference/deployer/deployer)クラスを拡張します。
+`NetlifyDeployer` クラスは、スタンドアロンの Mastra アプリケーションを Netlify にデプロイします。設定やデプロイの管理を行い、Netlify 固有の機能を追加してベースの [Deployer](/reference/deployer/deployer) クラスを拡張します。
 
-
-
-## 使用例
+## 使い方の例
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 export const mastra = new Mastra({
-  // ...
+  // 省略
   deployer: new NetlifyDeployer()
 });
 ```

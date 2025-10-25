@@ -1,0 +1,117 @@
+---
+title: "MastraAuthAuth0 クラス"
+description: "Auth0 を用いて Mastra アプリケーションを認証する MastraAuthAuth0 クラスの API リファレンス。"
+---
+
+# MastraAuthAuth0 クラス
+
+`MastraAuthAuth0` クラスは、Auth0 を用いて Mastra の認証を提供します。Auth0 が発行する JWT トークンで受信リクエストを検証し、`experimental_auth` オプションを通じて Mastra サーバーと統合します。
+
+## 使い方の例
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthAuth0({
+      domain: process.env.AUTH0_DOMAIN,
+      audience: process.env.AUTH0_AUDIENCE
+    }),
+  },
+});
+```
+
+> **注意:** `AUTH0_DOMAIN` と `AUTH0_AUDIENCE` という名前の環境変数が設定されていれば、コンストラクターのパラメーターは省略できます。その場合は、引数なしで `new MastraAuthAuth0()` を使用してください。
+
+
+## コンストラクターのパラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "domain",
+      type: "string",
+      description: "Auth0 ドメイン（例: your-tenant.auth0.com）。Auth0 テナントが発行した JWT トークンの検証に使用されます。",
+      isOptional: true,
+      defaultValue: "process.env.AUTH0_DOMAIN"
+    },
+    {
+      name: "audience",
+      type: "string",
+      description: "Auth0 の API 識別子／audience。トークンが対象の API 向けであることを保証します。",
+      isOptional: true,
+      defaultValue: "process.env.AUTH0_AUDIENCE"
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "認証プロバイダーインスタンスのカスタム名。",
+      isOptional: true,
+      defaultValue: '"auth0"'
+    },
+    {
+      name: "authorizeUser",
+      type: "(user: Auth0User) => Promise<boolean> | boolean",
+      description: "ユーザーにアクセス権を付与すべきか判定するカスタム認可関数。トークン検証後に呼び出されます。既定では、有効なトークンを持つ認証済みユーザーをすべて許可します。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 環境変数
+
+コンストラクターのオプションが指定されていない場合、次の環境変数が自動的に使用されます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "AUTH0_DOMAIN",
+      type: "string",
+      description: "Auth0 のドメイン。Auth0 Dashboard の Applications > Settings で確認できます。",
+      isOptional: true,
+    },
+    {
+      name: "AUTH0_AUDIENCE",
+      type: "string",
+      description: "Auth0 API の識別子。Auth0 Dashboard で API を作成する際に設定した識別子です。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## デフォルトの認可動作
+
+デフォルトでは、`MastraAuthAuth0` は Auth0 の JWT トークンを検証し、認証済みのユーザー全員にアクセスを許可します:
+
+1. **トークンの検証**: JWT トークンを Auth0 の公開鍵（JWKS）で検証します
+2. **署名の検証**: トークンが自分の Auth0 テナントによって署名されていることを確認します
+3. **有効期限の確認**: トークンが期限切れでないことを確認します
+4. **オーディエンスの検証**: トークンが対象の API（audience）向けに発行されていることを確認します
+5. **発行者の検証**: トークンが自分の Auth0 ドメインによって発行されていることを確認します
+
+すべての検証を通過した場合、ユーザーは認可済みと見なされます。カスタムの認可ロジック（例: ロールベースアクセス制御）を実装するには、カスタムの `authorizeUser` 関数を提供してください。
+
+## Auth0 のユーザー型
+
+`authorizeUser` 関数で使用される `Auth0User` 型は、デコードされた JWT のペイロードに対応し、通常は次を含みます:
+
+- `sub`: ユーザーの一意の識別子（subject）
+- `email`: ユーザーのメールアドレス（トークンに含まれている場合）
+- `email_verified`: メールアドレスが認証済みかどうか
+- `name`: ユーザーの表示名（存在する場合）
+- `picture`: ユーザーのプロフィール画像の URL（存在する場合）
+- `iss`: トークン発行者（あなたの Auth0 ドメイン）
+- `aud`: トークンのオーディエンス（あなたの API 識別子）
+- `iat`: トークンの発行時刻（UNIX タイムスタンプ）
+- `exp`: トークンの有効期限（UNIX タイムスタンプ）
+- `scope`: トークンに付与されたスコープ
+- Auth0 テナントで設定したカスタムクレームやアプリメタデータ
+
+利用可能なプロパティの内容は、Auth0 の設定、要求するスコープ、および設定したカスタムクレームによって異なります。
+
+## 関連項目
+
+[MastraAuthAuth0 クラス](/docs/auth/auth0.mdx)

@@ -1,0 +1,161 @@
+---
+title: "Playground"
+description: さまざまな LLM プロバイダーで動作させるために必要な前提条件の設定と、Mastra のインストール方法を解説するガイド。
+---
+
+import YouTube from "@/components/youtube";
+import { Tabs, Tab } from "@/components/tabs";
+import { VideoPlayer } from "@/components/video-player"
+import { Callout } from "nextra/components";
+
+
+# Playground
+
+Playground は、エージェントの構築とテストのためのインタラクティブな UI と、Mastra アプリケーションをローカルサービスとして公開する REST API を提供します。これにより、統合をすぐに気にすることなく開発を開始できます。
+
+プロジェクトの進行に伴い、Playground の開発環境はエージェントの反復開発を素早く進めるのに役立ちます。一方で、Observability と Scorer の機能によって、各段階でのパフォーマンスを可視化できます。
+
+始めるには、以下の手順に従ってローカルで Playground を実行するか、チームでの共同作業のために[Mastra Cloud にデプロイ](https://mastra.ai/docs/mastra-cloud/setting-up)してください。
+
+<YouTube id="spGlcTEjuXY" startTime={126}/>
+
+## プレイグラウンドを開始
+
+アプリケーションを `create mastra` で作成した場合は、`dev` スクリプトでローカル開発サーバーを起動します。`mastra dev` を直接実行しても構いません。
+
+<Tabs items={["npm", "pnpm", "yarn", "bun", "mastra"]}>
+  <Tab>
+    ```bash copy
+    npm run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    mastra dev
+    ```
+  </Tab>
+</Tabs>
+
+サーバーが起動したら、以下が可能です:
+
+- http://localhost:4111/ で Playground UI を開き、エージェントを対話的にテストします。
+- http://localhost:4111/swagger-ui を開いて、基盤となる REST API を探索・操作します。
+
+## Playground UI
+
+Playground UI は、エージェント、ワークフロー、ツールのテスト、各インタラクションでの内部動作の可視化、そしてその場での微調整を行える、対話型の開発環境を提供します。 
+
+### エージェント
+
+エージェントと直接チャットし、[models](/models) を動的に切り替えたり、temperature や top-p などの設定を調整して出力への影響を確かめたりできます。
+
+<VideoPlayer
+  src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4"
+/>
+
+エージェントと対話すると、推論の各ステップを追跡し、ツール呼び出しの出力を確認し、トレースやログを[観察](#observability)してレスポンスがどのように生成されるかを把握できます。また、[scorers](#scorers) を追加して、時間の経過に伴うレスポンス品質を測定・比較できます。
+
+### ワークフロー
+
+ワークフローをグラフで可視化し、任意の入力でステップごとに実行できます。実行中はインターフェースがリアルタイムで更新され、アクティブなステップと通過した経路が表示されます。
+
+<VideoPlayer
+  src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406027/local-dev-workflows-playground_100_rbc466.mp4"
+/>
+
+ワークフローの実行時には、ツール呼び出し、生の JSON 出力、そして処理中に発生し得るエラーを示す詳細なトレースも確認できます。
+
+### ツール
+
+ツールは単体で実行して挙動を確認しましょう。エージェントに割り当てる前にテストするか、問題が起きた場合は切り離してデバッグしてください。
+
+<VideoPlayer
+  src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406316/local-dev-agents-tools_100_fe1jdt.mp4"
+/>
+
+### MCP
+
+Mastra インスタンスに接続されている MCP サーバーを一覧表示し、利用可能なツールを確認・試用できます。
+
+![MCP サーバー Playground](/image/local-dev/local-dev-mcp-server-playground.jpg)
+
+### オブザーバビリティ
+
+エージェントやワークフローを実行すると、Observability タブにモデル呼び出し、ツール実行、ワークフローの各ステップなど、主要な AI の処理を可視化したトレースが表示されます。これらのトレースをたどることで、データの流れや時間のかかっている箇所、内部で何が起きているかを確認できます。 
+
+![](https://mastra.ai/_next/image?url=%2Ftracingafter.png&w=1920&q=75)
+
+AI Tracing は低レベルなフレームワークの詳細を除外し、トレースの焦点を絞って読みやすさを保ちます。
+
+### スコアラー
+
+Scorers タブでは、エージェントのスコアラーが実行した結果が表示されます。メッセージがエージェントを通過すると、定義済みのスコアラーが各出力を非同期で評価し、その結果がここに表示されます。これにより、スコアラーがさまざまなやり取りにどのように反応するかを把握し、テストケース間での性能を比較し、改善点を特定できます。
+
+## REST API
+
+ローカル開発サーバーは REST API の全ルートを公開しており、開発中にエージェント、ワークフロー、ツールとプログラムでやり取りできます。これは、Mastra サーバーをデプロイする予定がある場合に特に有用です。ローカル開発サーバーは [本番サーバー](/docs/server-db/production-server) とまったく同じ API ルートを使用しているため、完全な互換性を保ったまま開発・テストできます。
+
+利用可能なすべてのエンドポイントは、http://localhost:4111/openapi.json の OpenAPI 仕様で確認できます。各エンドポイントのリクエストおよびレスポンスのスキーマが詳細に記載されています。
+
+API を対話的に探索するには、http://localhost:4111/swagger-ui の Swagger UI にアクセスしてください。ここでエンドポイントを確認し、ブラウザから直接テストできます。
+
+<Callout type="info">
+OpenAPI と Swagger のエンドポイントは本番環境ではデフォルトで無効です。有効化するには、それぞれ `server.build.openAPIDocs` と `server.build.swaggerUI` を `true` に設定してください。
+</Callout>
+
+## 設定
+
+### ポート
+
+デフォルトでは、開発サーバーは http://localhost:4111 で起動します。Mastra サーバーの設定で `host` と `port` を変更できます。
+
+```typescript
+import { Mastra } from "@mastra/core/mastra";
+
+export const mastra = new Mastra({
+  server: {
+    port: 8080,
+    host: "0.0.0.0",
+  },
+});
+```
+
+
+### ローカル HTTPS
+
+Mastra は、[`--https`](/reference/cli/mastra#--https) フラグによるローカル HTTPS 開発をサポートしており、プロジェクト用の証明書を自動で作成・管理します。`mastra dev --https` を実行すると、localhost（または設定したホスト）向けの秘密鍵と証明書が生成されます。独自に証明書を管理する場合は、サーバー設定で任意の鍵ファイルと証明書ファイルを指定できます。
+
+```typescript
+import { Mastra } from "@mastra/core/mastra";
+import fs from 'node:fs';
+
+export const mastra = new Mastra({
+  server: {
+    https: {
+      key: fs.readFileSync('path/to/key.pem'),
+      cert: fs.readFileSync('path/to/cert.pem')
+    }
+  },
+});
+```
+
+
+## 次のステップ
+
+- Mastra が推奨する[プロジェクト構成](/docs/getting-started/project-structure)について学びましょう。
+- お好みのフロントエンドフレームワークと Mastra を連携しましょう—[Next.js](/docs/frameworks/web-frameworks/next-js)、[React](/docs/frameworks/web-frameworks/vite-react)、または [Astro](/docs/frameworks/web-frameworks/astro)。

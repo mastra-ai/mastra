@@ -1,6 +1,6 @@
 ---
 title: "リファレンス: Run.resumeStreamVNext() | Workflows | Mastra ドキュメント"
-description: ワークフローにおける `Run.resumeStreamVNext()` メソッドのドキュメント。中断されたワークフロー実行をリアルタイムに再開し、ストリーミングを有効にします。
+description: ワークフローにおける `Run.resumeStreamVNext()` メソッドのドキュメント。中断されたワークフロー実行をリアルタイムで再開し、ストリーミングします。
 ---
 
 import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
@@ -10,24 +10,26 @@ import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
 
 <StreamVNextCallout />
 
-`.resumeStreamVNext()` メソッドは、一時停止中のワークフロー実行を新しいデータで再開し、特定のステップから処理を続行するとともに、イベントストリームを観察できるようにします。
+`.resumeStreamVNext()` メソッドは、一時停止中のワークフロー実行を新しいデータで再開し、特定のステップから処理を続行しながら、イベントのストリームを観察できるようにします。
 
 ## 使い方の例
 
-```typescript 行番号を表示 コピー
+```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
 
 const stream = run.streamVNext({
   inputData: {
-    value: "初期データ",
-  },
+    value: "初期データ"
+  }
 });
 
-
 const result = await stream.result;
-if (result.status === "保留") {
+
+if (result!.status === "suspended") {
   const resumedStream = await run.resumeStreamVNext({
-    resumeData: { value: "再開データ" }
+    resumeData: {
+      value: "再開データ"
+    }
   });
 }
 ```
@@ -55,6 +57,22 @@ if (result.status === "保留") {
       description: "実行を再開する起点となるステップ",
       isOptional: true,
     },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "AI トレーシング設定のオプション。",
+      properties: [
+        {
+          parameters: [{
+            name: "metadata",
+            type: "Record<string, any>",
+            isOptional: true,
+            description: "ルートのトレーススパンに追加するメタデータ。ユーザー ID、セッション ID、フィーチャーフラグなどのカスタム属性の付与に便利です。"
+          }]
+        }
+      ]
+    },
   ]}
 />
 
@@ -65,38 +83,38 @@ if (result.status === "保留") {
     {
       name: "stream",
       type: "MastraWorkflowStream<ChunkType>",
-      description: "ReadableStream<ChunkType> を拡張し、ワークフロー特有のプロパティを追加したカスタムストリーム",
+      description: "ReadableStream<ChunkType> を拡張し、ワークフロー固有のプロパティを追加したカスタムストリーム",
     },
     {
       name: "stream.status",
       type: "Promise<RunStatus>",
-      description: "現在のワークフロー実行ステータスを返す Promise",
+      description: "現在のワークフロー実行ステータスを解決する Promise",
     },
     {
       name: "stream.result",
       type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
-      description: "最終的なワークフロー結果を返す Promise",
+      description: "最終的なワークフロー結果を解決する Promise",
     },
     {
       name: "stream.usage",
       type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cacheInputTokens?: number }>",
-      description: "トークン使用状況の統計情報を返す Promise",
+      description: "トークン使用状況の統計情報を解決する Promise",
     },
   ]}
 />
 
 ## ストリームイベント
 
-ストリームはワークフロー実行中にさまざまな種類のイベントを発行します。各イベントには `type` フィールドと、関連データを含む `payload` が含まれます:
+ストリームはワークフローの実行中にさまざまなイベントを送出します。各イベントには `type` フィールドと、関連するデータを含む `payload` が含まれます:
 
 - **`workflow-start`**: ワークフローの実行が開始される
 - **`workflow-step-start`**: ステップの実行が開始される
 - **`workflow-step-output`**: ステップからのカスタム出力
 - **`workflow-step-result`**: ステップが結果とともに完了する
-- **`workflow-finish`**: ワークフローの実行が使用状況の統計情報とともに完了する
+- **`workflow-finish`**: 使用状況の統計とともにワークフローの実行が完了する
 
-## 関連
+## 関連情報
 
 - [Workflows の概要](../../../docs/workflows/overview.mdx#run-workflow)
-- [Workflow.createRunAsync()](../create-run.mdx)
+- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run.mdx)
 - [Run.streamVNext()](./streamVNext.mdx)

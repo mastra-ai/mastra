@@ -1,0 +1,119 @@
+---
+title: "BraintrustExporter | エクスポーター | AI トレース | リファレンス"
+description: AI トレース向けの Braintrust エクスポーター
+---
+
+import { PropertiesTable } from "@/components/properties-table";
+
+
+# BraintrustExporter
+
+評価や可観測性のために、AI のトレースデータを Braintrust に送信します。
+
+## コンストラクタ
+
+```typescript
+new BraintrustExporter(config: BraintrustExporterConfig)
+```
+
+
+## BraintrustExporterConfig
+
+```typescript
+interface BraintrustExporterConfig {
+  apiKey?: string;
+  endpoint?: string;
+  projectName?: string;
+  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  tuningParameters?: Record<string, any>;
+}
+```
+
+<PropertiesTable
+  props={[
+{
+  name: "apiKey",
+  type: "string",
+  description: "Braintrust の API キー",
+  required: false,
+},
+{
+  name: "endpoint",
+  type: "string",
+  description: "Braintrust のカスタムエンドポイント",
+  required: false,
+},
+{
+  name: "projectName",
+  type: "string",
+  description: "プロジェクト名（既定: 'mastra-tracing'）",
+  required: false,
+},
+{
+  name: "logLevel",
+  type: "'debug' | 'info' | 'warn' | 'error'",
+  description: "ログレベル（既定: 'warn'）",
+  required: false,
+},
+{
+  name: "tuningParameters",
+  type: "Record<string, any>",
+  description: "Braintrust のチューニング用パラメータ",
+  required: false,
+},
+]}
+/>
+
+
+## メソッド
+
+### exportEvent
+
+```typescript
+async exportEvent(event: AITracingEvent): Promise<void>
+```
+
+トレースイベントをBraintrustにエクスポートします。
+
+
+### エクスポート
+
+```typescript
+async export(spans: ReadOnlyAISpan[]): Promise<void>
+```
+
+スパンをバッチ形式でBraintrustにエクスポートします。
+
+
+### シャットダウン
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+保留中のデータをフラッシュしてから、クライアントをシャットダウンします。
+
+
+## 使い方
+
+```typescript
+import { BraintrustExporter } from '@mastra/braintrust';
+
+const exporter = new BraintrustExporter({
+  apiKey: process.env.BRAINTRUST_API_KEY,
+  projectName: 'my-ai-project',
+});
+```
+
+
+## スパンタイプの対応表
+
+| AI スパンタイプ | Braintrust のタイプ |
+|--------------|-----------------|
+| `MODEL_GENERATION` | `llm` |
+| `MODEL_CHUNK` | `llm` |
+| `TOOL_CALL` | `tool` |
+| `MCP_TOOL_CALL` | `tool` |
+| `WORKFLOW_CONDITIONAL_EVAL` | `function` |
+| `WORKFLOW_WAIT_EVENT` | `function` |
+| その他 | `task` |

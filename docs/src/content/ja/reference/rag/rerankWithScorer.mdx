@@ -1,13 +1,11 @@
 ---
-title: "リファレンス: Rerank | ドキュメント検索 | RAG | Mastra Docs"
-description: Mastraのrerank関数のドキュメント。ベクトル検索結果の高度な再ランキング機能を提供します。
+title: "リファレンス: Rerank | ドキュメント検索 | RAG | Mastra ドキュメント"
+description: Mastra の rerank 関数に関するドキュメント。ベクター検索結果に対して高度な再ランキング機能を提供します。
 ---
-
-
 
 # rerankWithScorer()
 
-`rerankWithScorer()`関数は、セマンティック関連性、ベクトル類似性、位置ベースのスコアリングを組み合わせることで、ベクトル検索結果に対する高度な再ランキング機能を提供します。
+`rerankWithScorer()` 関数は、セマンティック関連性、ベクトル類似度、位置情報に基づくスコアリングを組み合わせることで、ベクトル検索結果を高度に再ランキングします。
 
 ```typescript
 function rerankWithScorer({
@@ -19,8 +17,7 @@ function rerankWithScorer({
 ```
 
 
-
-## 使用例
+## 使い方の例
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -30,7 +27,7 @@ const scorer = new CohereRelevanceScorer('rerank-v3.5');
 
 const rerankedResults = await rerank({
   results: vectorSearchResults,
-  query: "How do I deploy to production?",
+  query: "本番環境へはどうやってデプロイすればいいですか？",
   scorer,
   options: {
     weights: {
@@ -44,7 +41,6 @@ const rerankedResults = await rerank({
 ```
 
 
-
 ## パラメータ
 
 <PropertiesTable
@@ -52,19 +48,19 @@ const rerankedResults = await rerank({
     {
       name: "results",
       type: "QueryResult[]",
-      description: "再ランク付けするベクトル検索結果",
+      description: "再ランク付け対象のベクトル検索結果",
       isOptional: false,
     },
     {
       name: "query",
       type: "string",
-      description: "関連性を評価するために使用される検索クエリテキスト",
+      description: "関連性の評価に用いる検索クエリ文字列",
       isOptional: false,
     },
     {
       name: "scorer",
       type: "RelevanceScoreProvider",
-      description: "再ランク付けに使用する関連性スコアラー",
+      description: "再ランク付けに用いる関連性スコアラー",
       isOptional: false,
     },
     {
@@ -76,9 +72,9 @@ const rerankedResults = await rerank({
   ]}
 />
 
-`rerankWithScorer`関数は@mastra/ragの任意の`RelevanceScoreProvider`を受け入れます。
+`rerankWithScorer` 関数は @mastra/rag の任意の `RelevanceScoreProvider` を受け取ります。
 
-> **注意:** 再ランク付け中にセマンティックスコアリングが適切に機能するためには、各結果の`metadata.text`フィールドにテキストコンテンツが含まれている必要があります。
+> 注: 再ランク付け時にセマンティック・スコアリングを正しく機能させるには、各結果の `metadata.text` フィールドにテキスト本文が含まれている必要があります。
 
 ### RerankerFunctionOptions
 
@@ -88,7 +84,7 @@ const rerankedResults = await rerank({
       name: "weights",
       type: "WeightConfig",
       description:
-        "異なるスコアリングコンポーネントの重み（合計が1になる必要があります）",
+        "各スコアリング要素の重み（合計が1になる必要があります）",
       isOptional: true,
       properties: [
         {
@@ -96,7 +92,7 @@ const rerankedResults = await rerank({
           parameters: [
             {
               name: "semantic",
-              description: "セマンティック関連性の重み",
+              description: "セマンティック関連度の重み",
               isOptional: true,
               type: "number (default: 0.4)",
             },
@@ -118,7 +114,7 @@ const rerankedResults = await rerank({
           parameters: [
             {
               name: "position",
-              description: "位置ベーススコアリングの重み",
+              description: "位置ベースのスコアリングの重み",
               isOptional: true,
               type: "number (default: 0.2)",
             },
@@ -129,24 +125,22 @@ const rerankedResults = await rerank({
     {
       name: "queryEmbedding",
       type: "number[]",
-      description: "クエリの埋め込み",
+      description: "クエリの埋め込みベクトル",
       isOptional: true,
     },
     {
       name: "topK",
       type: "number",
-      description: "返すトップ結果の数",
+      description: "返す上位結果数",
       isOptional: true,
       defaultValue: "3",
     },
   ]}
 />
 
-
-
 ## 戻り値
 
-この関数は `RerankResult` オブジェクトの配列を返します：
+この関数は `RerankResult` オブジェクトの配列を返します。
 
 <PropertiesTable
   content={[
@@ -158,12 +152,12 @@ const rerankedResults = await rerank({
     {
       name: "score",
       type: "number",
-      description: "統合された再ランキングスコア (0-1)",
+      description: "再ランキングの合算スコア（0～1）",
     },
     {
       name: "details",
       type: "ScoringDetails",
-      description: "詳細なスコアリング情報",
+      description: "スコアリングの詳細情報",
     },
   ]}
 />
@@ -175,17 +169,17 @@ const rerankedResults = await rerank({
     {
       name: "semantic",
       type: "number",
-      description: "セマンティック関連性スコア (0-1)",
+      description: "セマンティック関連度スコア (0～1)",
     },
     {
       name: "vector",
       type: "number",
-      description: "ベクトル類似度スコア (0-1)",
+      description: "ベクトル類似度スコア (0～1)",
     },
     {
       name: "position",
       type: "number",
-      description: "位置ベースのスコア (0-1)",
+      description: "位置に基づくスコア (0～1)",
     },
     {
       name: "queryAnalysis",
@@ -198,7 +192,7 @@ const rerankedResults = await rerank({
           parameters: [
             {
               name: "magnitude",
-              description: "クエリの大きさ",
+              description: "クエリのマグニチュード",
             },
           ],
         },
@@ -207,7 +201,7 @@ const rerankedResults = await rerank({
           parameters: [
             {
               name: "dominantFeatures",
-              description: "クエリの主要な特徴",
+              description: "クエリの支配的な特徴",
             },
           ],
         },
@@ -216,8 +210,6 @@ const rerankedResults = await rerank({
   ]}
 />
 
-
-
-## 関連
+## 関連項目
 
 - [createVectorQueryTool](../tools/vector-query-tool)

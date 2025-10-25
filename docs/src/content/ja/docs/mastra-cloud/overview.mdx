@@ -1,48 +1,41 @@
 ---
 title: Mastra Cloud
-description: Mastraアプリケーションのデプロイメントと監視サービス
+description: Mastra アプリケーション向けのデプロイおよび監視サービス
 ---
 
 import { MastraCloudCallout } from '@/components/mastra-cloud-callout'
 import { FileTree } from "nextra/components";
 
 
-
 # Mastra Cloud
 
-[Mastra Cloud](https://mastra.ai/cloud)は、Mastraアプリケーションのデプロイ、管理、監視、デバッグを行うためのプラットフォームです。アプリケーションを[デプロイ](/docs/mastra-cloud/setting-up)すると、Mastra Cloudはあなたのエージェント、ツール、ワークフローをREST APIエンドポイントとして公開します。
+[Mastra Cloud](https://mastra.ai/cloud) は、Mastra アプリケーションのデプロイ、管理、監視、デバッグを行うためのプラットフォームです。アプリケーションを[デプロイ](/docs/mastra-cloud/setting-up)すると、Mastra Cloud はエージェント、ツール、ワークフローを REST API のエンドポイントとして公開します。
 
 <MastraCloudCallout />
 
+## プラットフォームの機能
 
-
-## プラットフォーム機能
-
-自動ビルド、整理されたプロジェクト、追加設定不要でアプリケーションをデプロイ・管理できます。
+自動ビルド、整理されたプロジェクト、追加の設定不要で、アプリケーションのデプロイと管理が行えます。
 
 ![Platform features](/image/mastra-cloud/mastra-cloud-platform-features.jpg)
 
-主な機能：
+主な機能:
 
-Mastra Cloudは、ゼロ設定デプロイメント、GitHubとの継続的インテグレーション、エージェント、ツール、ワークフローをまとめてパッケージ化するアトミックデプロイメントをサポートしています。
+Mastra Cloud は、ゼロコンフィグのデプロイ、GitHub と連携した継続的インテグレーション、エージェント・ツール・ワークフローを一体としてパッケージ化するアトミックデプロイをサポートします。
 
+## Project Dashboard
 
-
-## プロジェクトダッシュボード
-
-詳細な出力ログ、デプロイメント状態、インタラクティブツールを使用してアプリケーションを監視およびデバッグします。
+詳細な出力ログ、デプロイ状況、インタラクティブなツールを活用して、アプリケーションを監視・デバッグできます。
 
 ![Project dashboard](/image/mastra-cloud/mastra-cloud-project-dashboard.jpg)
 
-主な機能：
+主な機能:
 
-プロジェクトダッシュボードは、アプリケーションのステータスとデプロイメントの概要を提供し、ログへのアクセスとエージェントやワークフローをテストするための組み込みプレイグラウンドを備えています。
+Project Dashboard は、アプリケーションのステータスやデプロイの状況を俯瞰でき、ログへのアクセスやエージェント／ワークフローをテストするための組み込みプレイグラウンドも提供します。
 
+## プロジェクト構成
 
-
-## プロジェクト構造
-
-適切な検出とデプロイメントのために、標準的なMastraプロジェクト構造を使用してください。
+適切に検出・デプロイできるよう、標準的な Mastra のプロジェクト構成を使用してください。
 
 <FileTree>
   <FileTree.Folder name="src" defaultOpen>
@@ -62,22 +55,18 @@ Mastra Cloudは、ゼロ設定デプロイメント、GitHubとの継続的イ�
   <FileTree.File name="package.json" />
 </FileTree>
 
-Mastra Cloudは以下についてリポジトリをスキャンします：
+Mastra Cloud はリポジトリをスキャンして、次を検出します。
 
-- **エージェント**: `new Agent({...})`を使用して定義
-- **ツール**: `createTool({...})`を使用して定義
-- **ワークフロー**: `createWorkflow({...})`を使用して定義
-- **ステップ**: `createStep({...})`を使用して定義
-- **環境変数**: APIキーと設定変数
+- **Agents**: `new Agent({...})` で定義
+- **Tools**: `createTool({...})` で定義
+- **Workflows**: `createWorkflow({...})` で定義
+- **Steps**: `createStep({...})` で定義
+- **Environment Variables**: API キーや設定変数
 
+## 技術実装
 
+Mastra Cloud は、Mastra のエージェント、ツール、ワークフロー向けに特化して設計されています。長時間実行のリクエストを処理し、各実行の詳細なトレースを記録し、評価（eval）を標準でサポートします。
 
-## 技術的実装
-
-Mastra Cloudは、Mastraエージェント、ツール、ワークフロー専用に構築されています。長時間実行されるリクエストを処理し、すべての実行について詳細なトレースを記録し、評価のための組み込みサポートを含んでいます。
-
-
-
-## 次のステップ
+## 次の手順
 
 - [セットアップとデプロイ](/docs/mastra-cloud/setting-up)

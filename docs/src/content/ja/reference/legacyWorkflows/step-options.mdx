@@ -1,17 +1,13 @@
 ---
-title: "リファレンス: StepOptions | ワークフローの構築（レガシー） | Mastra ドキュメント"
-description: ワークフロー内のステップオプションに関するドキュメント。これらは変数のマッピング、実行条件、その他のランタイム動作を制御します。
+title: "リファレンス: StepOptions | ワークフロー構築（レガシー） | Mastra ドキュメント"
+description: ワークフローのステップオプションに関するドキュメント。変数のマッピング、実行条件、その他の実行時の動作を制御します。
 ---
-
-
 
 # StepOptions
 
-ワークフローステップの変数マッピング、実行条件、その他のランタイム動作を制御するための設定オプションです。
+変数マッピング、実行条件、その他のランタイム動作を制御するワークフローの各ステップ用の設定オプション。
 
-
-
-## 使用方法
+## 使い方
 
 ```typescript
 workflow.step(processOrder, {
@@ -21,11 +17,10 @@ workflow.step(processOrder, {
   },
   when: {
     ref: { step: "auth", path: "status" },
-    query: { $eq: "authenticated" },
+    query: { $eq: "認証済" },
   },
 });
 ```
-
 
 
 ## プロパティ
@@ -35,7 +30,7 @@ workflow.step(processOrder, {
     {
       name: "variables",
       type: "Record<string, VariableRef>",
-      description: "ステップ入力変数を他のステップからの値にマッピングします",
+      description: "ステップの入力変数を他のステップの値にマッピングします",
       isOptional: true,
     },
     {
@@ -54,24 +49,22 @@ workflow.step(processOrder, {
     {
       name: "step",
       type: "string | Step | { id: string }",
-      description: "変数値の元となるステップ",
+      description: "変数値の取得元となるステップ",
       isOptional: false,
     },
     {
       name: "path",
       type: "string",
-      description: "ステップの出力内の値へのパス",
+      description: "そのステップの出力内で値に至るパス",
       isOptional: false,
     },
   ]}
 />
 
-
-
-## 関連
+## 関連項目
 
 - [パス比較](../../docs/workflows-legacy/control-flow.mdx)
-- [ステップ関数リファレンス](./step-function.mdx)
-- [ステップクラスリファレンス](./step-class.mdx)
-- [ワークフロークラスリファレンス](./workflow.mdx)
+- [Step Function リファレンス](./step-function.mdx)
+- [Step クラス リファレンス](./step-class.mdx)
+- [Workflow クラス リファレンス](./workflow.mdx)
 - [制御フローガイド](../../docs/workflows-legacy/control-flow.mdx)

@@ -1,20 +1,17 @@
 ---
-title: "例: ハルシネーション | Evals | Mastra Docs"
-description: 応答中の事実の矛盾を評価するためにハルシネーション指標を用いる例。
+title: "例: Hallucination（幻覚） | Evals | Mastra Docs"
+description: 応答中の事実矛盾を評価するために Hallucination 指標を用いる例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 import { ScorerCallout } from '@/components/scorer-callout'
 
 
-
 ## ハルシネーション評価
 
 <ScorerCallout />
 
-`HallucinationMetric` を使用して、応答が提供されたコンテキストのいずれかの部分と矛盾していないかを評価します。このメトリックは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
-
-
+提供されたコンテキストのいずれかの部分と矛盾していないかを評価するには、`HallucinationMetric` を使用します。このメトリックは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
 
 ## インストール
 
@@ -23,10 +20,9 @@ npm install @mastra/evals
 ```
 
 
+## 幻覚なしの例
 
-## ハルシネーションなしの例
-
-この例では、返答は提供されたコンテキストと完全に整合しています。すべての主張は事実に基づいており、出典によって直接裏付けられているため、ハルシネーションスコアは低くなります。
+この例では、応答は提供された文脈と完全に一致しています。すべての主張は事実に即して正しく、出典によって直接裏づけられているため、幻覚スコアは低くなります。
 
 ```typescript filename="src/example-no-hallucination.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -34,38 +30,38 @@ import { HallucinationMetric } from "@mastra/evals/llm";
 
 const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
   context: [
-    "The iPhone was first released in 2007.",
-    "Steve Jobs unveiled it at Macworld.",
-    "The original model had a 3.5-inch screen."
+    "iPhoneは2007年に初代モデルが発売されました。",
+    "Steve JobsがMacworldで発表しました。",
+    "初代モデルは3.5インチのディスプレイを搭載していました。"
   ]
 });
 
-const query = "When was the first iPhone released?";
-const response = "The iPhone was first released in 2007, when Steve Jobs unveiled it at Macworld. The original iPhone featured a 3.5-inch screen.";
+const query = "初代iPhoneはいつ発売されましたか？";
+const response = "iPhoneは2007年に初代モデルが発売され、Steve JobsがMacworldで発表しました。初代iPhoneは3.5インチのディスプレイを搭載していました。"
 
 const result = await metric.measure(query, response);
 
 console.log(result);
 ```
 
-### ハルシネーションなしの出力
 
-矛盾がないため、スコアは0になります。すべての記述がコンテキストと一致しており、新たな情報や捏造は含まれていません。
+### 幻覚のない出力
+
+矛盾がないため、応答のスコアは0になります。すべての記述は文脈と整合しており、新たな情報や捏造された情報は含まれていません。
 
 ```typescript
 {
   score: 0,
   info: {
-    reason: 'The score is 0 because none of the statements from the context were contradicted by the output.'
+    reason: 'スコアが0なのは、コンテキスト内のいずれの記述も出力によって矛盾しなかったためです。'
   }
 }
 ```
 
 
+## 混合型ハルシネーションの例
 
-## 混合ハルシネーションの例
-
-この例では、レスポンスに正確な主張と不正確な主張の両方が含まれています。いくつかの詳細はコンテキストと一致しますが、誇張された数値や誤った場所など、他の点はそれと明確に矛盾しています。これらの矛盾により、ハルシネーションスコアが上昇します。
+この例では、応答には正確な主張と不正確な主張の両方が含まれます。いくつかの詳細は文脈と一致していますが、誇張された数値や誤った場所など、他の点はそれと真っ向から矛盾しています。これらの矛盾によって、ハルシネーションスコアが上昇します。
 
 ```typescript filename="src/example-mixed-hallucination.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -73,39 +69,39 @@ import { HallucinationMetric } from "@mastra/evals/llm";
 
 const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
   context: [
-    "The first Star Wars movie was released in 1977.",
-    "It was directed by George Lucas.",
-    "The film earned $775 million worldwide.",
-    "The movie was filmed in Tunisia and England."
+    "最初の『スター・ウォーズ』は1977年に公開されました。",
+    "監督はジョージ・ルーカスでした。",
+    "本作は世界興行収入で7億7,500万ドルを記録しました。",
+    "撮影はチュニジアとイングランドで行われました。"
   ]
 });
 
-const query = "Tell me about the first Star Wars movie.";
-const response = "The first Star Wars movie came out in 1977 and was directed by George Lucas. It made over $1 billion at the box office and was filmed entirely in California.";
+const query = "最初の『スター・ウォーズ』について教えて。";
+const response = "最初の『スター・ウォーズ』は1977年に公開され、監督はジョージ・ルーカスでした。興行収入は10億ドルを超え、撮影は全編カリフォルニアで行われました。";
 
 const result = await metric.measure(query, response);
 
 console.log(result);
 ```
 
-### 混合ハルシネーションの出力
 
-レスポンスの一部がコンテキストと矛盾しているため、この指標は中程度のスコアを割り当てます。正しい事実もある一方で、不正確または作為的な内容も含まれており、全体的な信頼性が低下します。
+### 混在したハルシネーション出力
+
+この評価指標は、応答の一部が文脈と矛盾しているため、中程度のスコアを付与します。いくつかの事実は正しい一方で、他は不正確または捏造であり、全体としての信頼性を損ないます。
 
 ```typescript
 {
   score: 0.5,
   info: {
-    reason: 'スコアが0.5であるのは、出力の4つの記述のうち2つがコンテキスト内の主張と矛盾しており、正確な情報と不正確な情報のバランスが取れていることを示しているためです。'
+    reason: 'スコアが0.5なのは、出力中の4件の記述のうち2件がコンテキスト内の主張と矛盾しており、正確な情報と不正確な情報が拮抗していることを示しているためです。'
   }
 }
 ```
 
 
-
 ## 完全なハルシネーションの例
 
-この例では、応答がコンテキスト内のすべての重要な事実と矛盾しています。いずれの主張も裏取りできず、示された詳細はすべて事実と異なります。
+この例では、回答がコンテキスト内のあらゆる重要な事実と矛盾しています。いずれの主張も検証できず、提示された詳細はすべて事実と異なります。
 
 ```typescript filename="src/example-complete-hallucination.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -113,14 +109,14 @@ import { HallucinationMetric } from "@mastra/evals/llm";
 
 const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
   context: [
-    "The Wright brothers made their first flight in 1903.",
-    "The flight lasted 12 seconds.",
-    "It covered a distance of 120 feet."
+    "ライト兄弟が初飛行を行ったのは1903年です。",
+    "その飛行は12秒続きました。",
+    "飛行距離は120フィートでした。"
   ]
 });
 
-const query = "When did the Wright brothers first fly?";
-const response = "The Wright brothers achieved their historic first flight in 1908. The flight lasted about 2 minutes and covered nearly a mile.";
+const query = "ライト兄弟が初めて飛行したのはいつですか？";
+const response = "ライト兄弟が歴史的な初飛行を達成したのは1908年です。飛行は約2分続き、ほぼ1マイルを飛行しました。";
 
 const result = await metric.measure(query, response);
 
@@ -128,24 +124,24 @@ console.log(result);
 
 ```
 
-### 完全なハルシネーションの出力
 
-このメトリクスは、応答内のすべての記述がコンテキストと食い違っているため、スコアを1と割り当てます。詳細は全体的に捏造または不正確です。
+### 完全な幻覚出力
+
+この指標はスコアを1とします。レスポンス内のすべての記述がコンテキストと矛盾しているためです。詳細は全般的に捏造されているか、不正確です。
 
 ```typescript
 {
   score: 1,
   info: {
-    reason: 'スコアが1.0なのは、出力の3つの記述すべてがコンテキストと直接矛盾しているためです。初飛行は1908年ではなく1903年、飛行時間は約2分ではなく12秒、距離はほぼ1マイルではなく120フィートです。'
+    reason: 'スコアが1.0なのは、出力中の3つの記述がいずれも文脈と真っ向から矛盾しているためです。最初の飛行は1908年ではなく1903年、所要時間は約2分ではなく12秒、移動距離は1マイル近くではなく120フィートでした。'
   }
 }
 ```
 
 
+## メトリクスの構成
 
-## メトリックの設定
-
-事実に基づくソース資料を表す `context` 配列を指定すると、`HallucinationMetric` のインスタンスを作成できます。最大スコアを制御するための `scale` など、オプションのパラメータを設定することも可能です。
+事実に基づくソース資料を表す `context` 配列を指定して、`HallucinationMetric` インスタンスを作成できます。最大スコアを制御するために、`scale` などのオプションパラメータを設定することもできます。
 
 ```typescript
 const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
@@ -154,40 +150,40 @@ const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
 });
 ```
 
-> すべての設定オプションについては、[HallucinationMetric](/reference/evals/hallucination.mdx) を参照してください。
-
+> 設定オプションの一覧は [HallucinationMetric](/reference/evals/hallucination.mdx) を参照してください。
 
 
 ## 結果の理解
 
-`HallucinationMetric` は次の形の結果を返します:
+`HallucinationMetric` は以下の形式で結果を返します：
 
 ```typescript
 {
   score: number,
   info: {
-    reason: string
+    reason: 文字列
   }
 }
 ```
 
-### ハルシネーションスコア
 
-0〜1 の範囲のスコアです:
+### 幻覚スコア
 
-- **0.0**: ハルシネーションなし — すべての主張が文脈と一致。
-- **0.3–0.4**: 低レベルのハルシネーション — いくつかの矛盾。
-- **0.5–0.6**: 中程度／混在 — 複数の矛盾。
-- **0.7–0.8**: 高レベルのハルシネーション — 多くの矛盾。
-- **0.9–1.0**: ほぼ全面的なハルシネーション — ほとんどまたはすべての主張が文脈と矛盾。
+0〜1の範囲の幻覚スコア:
 
-### ハルシネーションの詳細
+- **0.0**: 幻覚なし — すべての主張が文脈と一致。
+- **0.3–0.4**: 低度の幻覚 — いくつか矛盾がある。
+- **0.5–0.6**: 中程度の幻覚 — 複数の矛盾がある。
+- **0.7–0.8**: 高度の幻覚 — 多くの矛盾がある。
+- **0.9–1.0**: 完全な幻覚 — ほとんど、またはすべての主張が文脈と矛盾する。
 
-スコアの理由付け。以下を含みます:
+### 幻覚（ハルシネーション）情報
 
-- どの記述が文脈と整合／不整合か
-- 矛盾の深刻度と頻度
-- 事実からの逸脱度合い
+スコアの説明。以下の内容を含みます：
+
+- どの記述が文脈と整合しているか／矛盾しているか
+- 矛盾の深刻度と発生頻度
+- 事実からの乖離の度合い
 - 応答全体の正確性と信頼性
 
 <GithubLink

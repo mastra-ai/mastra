@@ -1,0 +1,43 @@
+---
+title: "リファレンス: Laminar 連携 | Mastra Observability ドキュメント"
+description: LLM アプリ向けのオブザーバビリティ特化型プラットフォームである Mastra と Laminar を連携するためのドキュメント。
+---
+
+# Laminar
+
+Laminar は、LLM アプリケーション向けの専用のオブザーバビリティ プラットフォームです。
+
+## 設定
+
+Mastra で Laminar を使用するには、以下の環境変数を設定します。
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.lmnr.ai:8443
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer your_api_key, x-laminar-team-id=your_team_id"
+```
+
+
+## 実装
+
+Mastra を Laminar で利用するように設定する方法は次のとおりです：
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // ... その他の設定
+  telemetry: {
+    serviceName: "your-service-name",
+    enabled: true,
+    export: {
+      type: "otlp",
+      protocol: "grpc",
+    },
+  },
+});
+```
+
+
+## ダッシュボード
+
+Laminar のダッシュボードには [https://lmnr.ai/](https://lmnr.ai/) からアクセスできます

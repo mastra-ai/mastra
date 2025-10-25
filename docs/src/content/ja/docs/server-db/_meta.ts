@@ -1,10 +1,9 @@
 const meta = {
-  "local-dev-playground": "ローカル開発プレイグラウンド",
-  "production-server": "本番サーバー",
+  "production-server": "本番環境サーバー",
   middleware: "ミドルウェア",
+  "runtime-context": "ランタイムコンテキスト",
   "custom-api-routes": "カスタム API ルート",
   storage: "ストレージ",
-  snapshots: "スナップショット",
   "mastra-client": "Mastra クライアント",
 };
 export default meta;

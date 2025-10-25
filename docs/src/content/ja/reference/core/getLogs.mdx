@@ -1,17 +1,18 @@
 ---
 title: "リファレンス: Mastra.getLogs() | Core | Mastra ドキュメント"
-description: "Mastra の `Mastra.getLogs()` メソッドに関するドキュメント。特定のトランスポート ID に対するすべてのログを取得します。"
+description: "Mastra の `Mastra.getLogs()` メソッドのドキュメント。特定のトランスポート ID に対するすべてのログを取得します。"
 ---
 
 # Mastra.getLogs()
 
-`.getLogs()` メソッドは、特定の transport ID に対するすべてのログを取得するために使用します。このメソッドを使用するには、`getLogs` 操作をサポートするように設定された logger が必要です。
+`.getLogs()` メソッドは、特定の transport ID に紐づくすべてのログを取得するために使用します。このメソッドを使用するには、`getLogs` 操作をサポートするように構成されたロガーが必要です。
 
-## 使用例
+## 使い方の例
 
 ```typescript copy
 mastra.getLogs("456");
 ```
+
 
 ## パラメータ
 
@@ -20,12 +21,12 @@ mastra.getLogs("456");
     {
       name: "transportId",
       type: "string",
-      description: "ログの取得元となるトランスポート ID。",
+      description: "ログの取得元となる transport ID。",
     },
     {
       name: "options",
       type: "object",
-      description: "フィルタリングやページネーション用のオプションパラメータ。詳細は以下の「Options」セクションを参照してください。",
+      description: "フィルタリングとページネーション用のオプションパラメータ。詳細は下記の Options セクションを参照してください。",
       optional: true,
     },
   ]}
@@ -68,7 +69,7 @@ mastra.getLogs("456");
     {
       name: "perPage",
       type: "number",
-      description: "ページネーションでの1ページあたりのログ数（任意）。",
+      description: "ページネーション用の1ページあたりのログ件数（任意）。",
       optional: true,
     },
   ]}
@@ -81,12 +82,12 @@ mastra.getLogs("456");
     {
       name: "logs",
       type: "Promise<any>",
-      description: "指定された transport ID のログに解決される Promise。",
+      description: "指定された transport ID のログで解決される Promise。",
     },
   ]}
 />
 
-## 関連項目
+## 関連情報
 
-- [ロギングの概要](../../docs/observability/logging.mdx)
-- [ロガー リファレンス](../../reference/observability/logger.mdx)
+- [ログ記録の概要](../../docs/observability/logging.mdx)
+- [ロガーリファレンス](../../reference/observability/logger.mdx)

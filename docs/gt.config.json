@@ -2,16 +2,25 @@
   "defaultLocale": "en",
   "files": {
     "mdx": {
-      "include": ["src/content/[locale]/**/*.mdx"]
+      "include": [
+        "src/content/[locale]/**/*.mdx"
+      ]
     },
     "ts": {
-      "include": ["src/content/[locale]/**/_meta.ts"]
+      "include": [
+        "src/content/[locale]/**/_meta.ts"
+      ]
     },
     "gt": {
       "output": "public/locales/[locale].json"
     }
   },
-  "locales": ["ja"],
+  "locales": [
+    "ja"
+  ],
+  "options": {
+    "experimentalClearLocaleDirs": true
+  },
   "projectId": "48751091-773e-4a3e-8c83-5c3906117b30",
-  "_versionId": "371f5f879726a6c6776922866652d36615e3fa18982cd0b7b61181cc29643cbe"
+  "_versionId": "8ce61df4adbe2f71e5ff3b98a1e5993f9aa570106648f4523218ec7ea8682d7f"
 }

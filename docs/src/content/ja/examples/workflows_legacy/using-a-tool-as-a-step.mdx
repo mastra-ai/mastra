@@ -1,15 +1,14 @@
 ---
-title: "例：ツールをステップとして使用する | ワークフロー（レガシー） | Mastra ドキュメント"
-description: レガシーワークフローでカスタムツールをステップとして統合するためにMastraを使用する例。
+title: "例: ツールをステップとして使う | Workflows（レガシー） | Mastra Docs"
+description: レガシーなワークフローでカスタムツールをステップとして組み込むために Mastra を使う例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
+# ワークフローのステップとしてのツール（レガシー）
 
-# ワークフローステップとしてのツール（レガシー）
-
-この例では、カスタムツールをワークフローステップとして作成・統合する方法を示し、入力/出力スキーマの定義とツールの実行ロジックの実装方法を説明します。
+この例では、カスタムツールをワークフローのステップとして作成して統合する方法を示し、入力・出力スキーマの定義方法と、ツールの実行ロジックの実装方法を解説します。
 
 ```ts showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
@@ -18,7 +17,7 @@ import { z } from "zod";
 
 const crawlWebpage = createTool({
   id: "Crawl Webpage",
-  description: "Crawls a webpage and extracts the text content",
+  description: "ウェブページをクロールしてテキスト内容を抽出します",
   inputSchema: z.object({
     url: z.string().url(),
   }),
@@ -28,7 +27,7 @@ const crawlWebpage = createTool({
   execute: async ({ context }) => {
     const response = await fetch(context.triggerData.url);
     const text = await response.text();
-    return { rawText: "This is the text content of the webpage: " + text };
+    return { rawText: "このウェブページのテキスト内容です: " + text };
   },
 });
 
@@ -44,29 +43,33 @@ console.log(res.results);
 ```
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/tool-as-workflow-step"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/tool-as-workflow-step"
+}
 />
 
 
+## ワークフロー（レガシー）
 
-## Workflows (Legacy)
+以下のリンクは、レガシー・ワークフローのサンプルドキュメントです。
 
-以下のリンクは、レガシーワークフローのサンプルドキュメントを提供します：
-
-- [シンプルなワークフローの作成 (Legacy)](/examples/workflows_legacy/creating-a-workflow)
-- [順次ステップを持つワークフロー (Legacy)](/examples/workflows_legacy/sequential-steps)
-- [ステップでの並列実行](/examples/workflows_legacy/parallel-steps)
+- [シンプルなワークフローの作成（レガシー）](/examples/workflows_legacy/creating-a-workflow)
+- [順次ステップのワークフロー（レガシー）](/examples/workflows_legacy/sequential-steps)
+- [ステップの並列実行](/examples/workflows_legacy/parallel-steps)
 - [分岐パス](/examples/workflows_legacy/branching-paths)
-- [条件分岐を持つワークフロー (Legacy) (実験的)](/examples/workflows_legacy/conditional-branching)
-- [ワークフロー (Legacy) からエージェントを呼び出す](/examples/workflows_legacy/calling-agent)
-- [循環依存を持つワークフロー (Legacy)](/examples/workflows_legacy/cyclical-dependencies)
-- [ワークフロー変数を使用したデータマッピング (Legacy)](/examples/workflows_legacy/workflow-variables)
-- [Human in the Loop ワークフロー (Legacy)](/examples/workflows_legacy/human-in-the-loop)
-- [一時停止と再開を持つワークフロー (Legacy)](/examples/workflows_legacy/suspend-and-resume)
+- [条件分岐付きワークフロー（レガシー・試験的）](/examples/workflows_legacy/conditional-branching)
+- [ワークフロー（レガシー）からのエージェント呼び出し](/examples/workflows_legacy/calling-agent)
+- [循環依存を持つワークフロー（レガシー）](/examples/workflows_legacy/cyclical-dependencies)
+- [ワークフロー変数によるデータマッピング（レガシー）](/examples/workflows_legacy/workflow-variables)
+- [Human-in-the-Loop ワークフロー（レガシー）](/examples/workflows_legacy/human-in-the-loop)
+- [一時停止と再開が可能なワークフロー（レガシー）](/examples/workflows_legacy/suspend-and-resume)

@@ -1,25 +1,26 @@
 ---
 title: "リファレンス: Run.stream() | Workflows | Mastra ドキュメント"
-description: ワークフローでの `Run.stream()` メソッドに関するドキュメント。ワークフロー実行をストリーミングで監視できます。
+description: ワークフローでの `Run.stream()` メソッドのドキュメント。ワークフローの実行をストリームとしてリアルタイムに監視できます。
 ---
 
 # Run.stream()
 
-`.stream()` メソッドを使うと、ワークフローの実行をモニタリングし、各ステップの進行状況をリアルタイムで受け取れます。
+`.stream()` メソッドを使うと、ワークフロー実行を監視し、各ステップのステータスをリアルタイムで受け取れます。
 
-## 使用例
+## 使い方の例
 
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
 
-const stream = await run.stream({
+const { stream } = await run.stream({
   inputData: {
-    value: "initial data",
+    value: "初期データ",
   },
 });
 ```
 
-## パラメータ
+
+## パラメーター
 
 <PropertiesTable
   content={[
@@ -32,8 +33,40 @@ const stream = await run.stream({
     {
       name: "runtimeContext",
       type: "RuntimeContext",
-      description: "ワークフロー実行時に使用するランタイムのコンテキストデータ",
+      description: "ワークフロー実行時に使用するランタイムコンテキストデータ",
       isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description: "子スパンの作成やメタデータの追加に用いる AI トレーシング用コンテキスト。Mastra のトレーシング機能を使用している場合は自動的に注入されます。",
+      properties: [
+        {
+          parameters: [{
+            name: "currentSpan",
+            type: "AISpan",
+            isOptional: true,
+            description: "子スパンの作成やメタデータの追加に用いる現在の AI スパン。これを使ってカスタムの子スパンを作成したり、実行中にスパン属性を更新できます。"
+          }]
+        }
+      ]
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "AI トレーシングの設定オプション。",
+      properties: [
+        {
+          parameters: [{
+            name: "metadata",
+            type: "Record<string, any>",
+            isOptional: true,
+            description: "ルートトレーススパンに付与するメタデータ。ユーザー ID、セッション ID、フィーチャーフラグなどのカスタム属性の追加に便利です。"
+          }]
+        }
+      ]
     },
   ]}
 />
@@ -50,37 +83,44 @@ const stream = await run.stream({
     {
       name: "getWorkflowState",
       type: "() => Promise<WorkflowResult<TState, TOutput, TSteps>>",
-      description: "最終的なワークフロー結果へ解決される Promise を返す関数",
+      description: "最終的なワークフロー結果に解決される Promise を返す関数",
+    },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description: "AI トレース機能が有効な場合に、この実行に関連付けられるトレース ID。これを使用してログの相関付けや実行フローのデバッグを行います。",
     },
   ]}
 />
 
-## 発展的な使用例
+## 拡張された使用例
 
 ```typescript showLineNumbers copy
 const { getWorkflowState } = await run.stream({
   inputData: {
-    value: "initial data"
+    value: "初期データ"
   }
 });
 
 const result = await getWorkflowState();
 ```
 
+
 ## ストリームイベント
 
-ストリームはワークフローの実行中にさまざまなイベントタイプを送出します。各イベントには `type` フィールドと、関連データを含む `payload` が含まれます:
+ストリームはワークフローの実行中にさまざまな種類のイベントを発行します。各イベントには `type` フィールドと、関連データを含む `payload` が含まれます。
 
 - **`start`**: ワークフローの実行を開始
 - **`step-start`**: ステップの実行を開始
 - **`tool-call`**: ツール呼び出しを開始
 - **`tool-call-streaming-start`**: ツール呼び出しのストリーミングを開始
-- **`tool-call-delta`**: ツール出力の増分更新
+- **`tool-call-delta`**: ツール出力の差分更新
 - **`step-result`**: ステップが結果とともに完了
 - **`step-finish`**: ステップの実行が終了
 - **`finish`**: ワークフローの実行が完了
 
-## 関連項目
+## 関連
 
-- [Workflows の概要](../../../docs/workflows/overview.mdx#run-workflow)
-- [Workflow.createRunAsync()](../create-run.mdx)
+- [Workflows 概要](../../../docs/workflows/overview.mdx#run-workflow)
+- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run.mdx)

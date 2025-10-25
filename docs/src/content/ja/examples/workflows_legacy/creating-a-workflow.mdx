@@ -1,15 +1,14 @@
 ---
 title: "例: ワークフローの作成 | ワークフロー（レガシー） | Mastra ドキュメント"
-description: Mastra を使って、1つのステップからなるシンプルなワークフローを定義し実行する例。
+description: 単一のステップから成るシンプルなワークフローを、Mastraで定義して実行する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
-
 # シンプルなワークフローの作成（レガシー）
 
-ワークフローを使用すると、構造化されたパスで一連の操作を定義し実行することができます。この例では、単一のステップを持つレガシーワークフローを示しています。
+ワークフローは、構造化された手順に沿って一連の処理を定義し、実行するための仕組みです。この例では、1つのステップだけを含むレガシーなワークフローを示します。
 
 ```ts showLineNumbers copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
@@ -48,29 +47,33 @@ console.log(res.results);
 ```
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/create-workflow"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/create-workflow"
+}
 />
 
 
+## ワークフロー（レガシー）
 
-## Workflows (Legacy)
+以下のリンクは、レガシー版ワークフローの例を示すドキュメントです。
 
-以下のリンクは、レガシーワークフローのサンプルドキュメントを提供します：
-
-- [順次ステップを持つWorkflow (Legacy)](/examples/workflows_legacy/sequential-steps)
-- [ステップでの並列実行](/examples/workflows_legacy/parallel-steps)
+- [ワークフロー（レガシー）：順次ステップ](/examples/workflows_legacy/sequential-steps)
+- [ステップの並列実行](/examples/workflows_legacy/parallel-steps)
 - [分岐パス](/examples/workflows_legacy/branching-paths)
-- [条件分岐を持つWorkflow (Legacy)（実験的）](/examples/workflows_legacy/conditional-branching)
-- [Workflow (Legacy)からAgentを呼び出す](/examples/workflows_legacy/calling-agent)
-- [Workflowステップとしてのツール (Legacy)](/examples/workflows_legacy/using-a-tool-as-a-step)
-- [循環依存関係を持つWorkflow (Legacy)](/examples/workflows_legacy/cyclical-dependencies)
-- [Workflow変数を使用したデータマッピング (Legacy)](/examples/workflows_legacy/workflow-variables)
-- [Human in the Loop Workflow (Legacy)](/examples/workflows_legacy/human-in-the-loop)
-- [一時停止と再開を持つWorkflow (Legacy)](/examples/workflows_legacy/suspend-and-resume)
+- [ワークフロー（レガシー）：条件分岐（試験的）](/examples/workflows_legacy/conditional-branching)
+- [ワークフロー（レガシー）からのエージェント呼び出し](/examples/workflows_legacy/calling-agent)
+- [ツールをワークフローのステップとして使用（レガシー）](/examples/workflows_legacy/using-a-tool-as-a-step)
+- [ワークフロー（レガシー）：循環依存関係](/examples/workflows_legacy/cyclical-dependencies)
+- [ワークフロー変数によるデータマッピング（レガシー）](/examples/workflows_legacy/workflow-variables)
+- [Human-in-the-Loop（人間参加型）ワークフロー（レガシー）](/examples/workflows_legacy/human-in-the-loop)
+- [ワークフロー（レガシー）：一時停止と再開](/examples/workflows_legacy/suspend-and-resume)

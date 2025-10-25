@@ -1,37 +1,33 @@
 ---
-title: "リファレンス: カスタムスコアラーの作成 | スコアラー | Mastra ドキュメント"
-description: Mastra でカスタムスコアラーを作成するためのドキュメント。ユーザーは JavaScript 関数または LLM ベースのプロンプトを用いて、独自の評価ロジックを定義できます。
+title: "リファレンス: カスタムスコアラーの作成 | Scorers | Mastra ドキュメント"
+description: Mastra でカスタムスコアラーを作成するためのドキュメント。JavaScript 関数または LLM ベースのプロンプトを用いて、独自の評価ロジックを定義できます。
 ---
-
-
 
 # createScorer
 
-Mastra は、入出力ペアを評価するためのカスタムスコアラーを定義できる、統一的な `createScorer` ファクトリを提供します。各評価ステップでは、ネイティブの JavaScript 関数または LLM ベースのプロンプトオブジェクトを使用できます。カスタムスコアラーは、Agents や Workflow のステップに追加できます。
-
-
+Mastra には、入出力ペアの評価に使うカスタムスコアラーを定義できる統一的な `createScorer` ファクトリがあります。各評価ステップでは、ネイティブな JavaScript 関数または LLM ベースのプロンプトオブジェクトのどちらも使用できます。カスタムスコアラーは、Agent や Workflow のステップに追加できます。
 
 ## カスタムスコアラーの作成方法
 
-`createScorer` ファクトリを使って、名前、説明、任意の judge 設定を指定し、スコアラーを定義します。続いてステップメソッドをチェーンして評価パイプラインを構築します。最低でも `generateScore` ステップは必須です。
+`createScorer` ファクトリを使って、名称、説明、必要に応じた judge の設定を指定し、スコアラーを定義します。続いて、ステップメソッドをチェーンして評価パイプラインを構築します。少なくとも `generateScore` ステップは必須です。
 
 ```typescript
 const scorer = createScorer({
-  name: "My Custom Scorer",
-  description: "Evaluates responses based on custom criteria",
+  name: "マイカスタムスコアラー",
+  description: "カスタム基準に基づいて応答を評価します",
+  type: "agent", // オプション: 自動型付けによるエージェント評価用
   judge: {
     model: myModel,
-    instructions: "You are an expert evaluator..."
+    instructions: "あなたは専門の評価者です..."
   }
 })
-.preprocess({ /* step config */ })
-.analyze({ /* step config */ })
+.preprocess({ /* ステップ設定 */ })
+.analyze({ /* ステップ設定 */ })
 .generateScore(({ run, results }) => {
   // 数値を返す
 })
-.generateReason({ /* step config */ });
+.generateReason({ /* ステップ設定 */ });
 ```
-
 
 
 ## createScorer のオプション
@@ -54,14 +50,18 @@ const scorer = createScorer({
       name: "judge",
       type: "object",
       required: false,
-      description: "LLM を用いるステップ向けの任意のジャッジ設定。下記の Judge Object セクションを参照。",
+      description: "LLM ベースのステップ向けの任意の judge 設定。下記の Judge Object セクションを参照。",
+    },
+    {
+      name: "type",
+      type: "string",
+      required: false,
+      description: "入出力の型指定。自動エージェント型には 'agent' を使用します。カスタム型の場合は汎用アプローチを使用してください。",
     },
   ]}
 />
 
-この関数は、ステップメソッドをチェーンできるスコアラービルダーを返します。`.run()` メソッドとその入出力の詳細は、[MastraScorer リファレンス](./mastra-scorer)を参照してください。
-
-
+この関数は、ステップメソッドをチェーンできるスコアラー・ビルダーを返します。`.run()` メソッドとその入出力の詳細は、[MastraScorer リファレンス](./mastra-scorer)を参照してください。
 
 ## Judge オブジェクト
 
@@ -82,59 +82,101 @@ const scorer = createScorer({
   ]}
 />
 
-
-
 ## 型安全性
 
-より良い型推論と IntelliSense のサポートのために、scorer を作成する際に入出力の型を指定できます:
+スコアラーを作成する際に入出力の型を指定すると、型推論や IntelliSense のサポートが向上します：
+
+### エージェントタイプのショートカット
+
+エージェントを評価する際は、`type: 'agent'` を指定すると、エージェントの入出力に適切な型が自動的に設定されます。
 
 ```typescript
-import { createScorer, ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scorers';
+import { createScorer } from '@mastra/core/scorers';
 
-// エージェント評価における完全な型安全性のために
-const agentScorer = createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
-  name: 'Agent Response Quality',
-  description: 'Evaluates agent responses'
+// 自動型付けによるエージェントスコアラー
+const agentScorer = createScorer({
+  name: 'エージェント応答品質',
+  description: 'エージェントの応答を評価します',
+  type: 'agent' // ScorerRunInputForAgent/ScorerRunOutputForAgentを自動提供
 })
 .preprocess(({ run }) => {
-  // run.input は ScorerRunInputForAgent として型付けされています
+  // run.inputはScorerRunInputForAgentとして自動型付けされます
   const userMessage = run.input.inputMessages[0]?.content;
   return { userMessage };
 })
 .generateScore(({ run, results }) => {
-  // run.output は ScorerRunOutputForAgent として型付けされています
+  // run.outputはScorerRunOutputForAgentとして自動型付けされます
   const response = run.output[0]?.content;
   return response.length > 10 ? 1.0 : 0.5;
 });
+```
 
-// カスタムの入出力型を使う場合
+
+### ジェネリクスを使ったカスタム型
+
+カスタムの入出力型には、ジェネリクス方式を使用します。
+
+```typescript
+import { createScorer } from '@mastra/core/scorers';
+
 type CustomInput = { query: string; context: string[] };
 type CustomOutput = { answer: string; confidence: number };
 
 const customScorer = createScorer<CustomInput, CustomOutput>({
-  name: 'Custom Scorer',
-  description: 'Evaluates custom data'
+  name: 'カスタムスコアラー',
+  description: 'カスタムデータを評価します'
 })
-.generateScore(({ run }) => run.output.confidence);
+.generateScore(({ run }) => {
+  // run.inputはCustomInput型です
+  // run.outputはCustomOutput型です
+  return run.output.confidence;
+});
 ```
 
-### 組み込みのエージェント型
 
-- **`ScorerRunInputForAgent`** - エージェント評価用の `inputMessages`、`rememberedMessages`、`systemMessages`、`taggedSystemMessages` を含みます
+### ビルトインのエージェント型
+
+- **`ScorerRunInputForAgent`** - エージェント評価用の `inputMessages`、`rememberedMessages`、`systemMessages`、`taggedSystemMessages` を含む
 - **`ScorerRunOutputForAgent`** - エージェントの応答メッセージの配列
 
-これらの型を使用することで、オートコンプリート、コンパイル時検証、スコアリングロジックのドキュメント性が向上します。
+これらの型を使うと、オートコンプリート、コンパイル時検証、およびスコアリングロジックのドキュメント化が向上します。
+
+## エージェントタイプでのトレーススコアリング
+
+`type: 'agent'` を使用すると、スコアラーはエージェントへの直接追加と、エージェントのやり取りから得たトレースのスコアリングの両方に対応します。スコアラーはトレースデータを、適切なエージェントの入出力形式に自動変換します。
+
+```typescript
+const agentTraceScorer = createScorer({
+  name: 'エージェントトレース長',
+  description: 'エージェントレスポンスの長さを評価',
+  type: 'agent'
+})
+.generateScore(({ run }) => {
+  // トレースデータは自動的にエージェント形式に変換される
+  const userMessages = run.input.inputMessages;
+  const agentResponse = run.output[0]?.content;
+  
+  // レスポンス長に基づいてスコアを算出
+  return agentResponse?.length > 50 ? 0 : 1;
+});
+
+// トレーススコアリング用にMastraに登録
+const mastra = new Mastra({
+  scorers: {
+    agentTraceScorer
+  }
+});
+```
 
 
-
-## ステップメソッドのシグネチャ
+## ステップ メソッドのシグネチャ
 
 ### preprocess
 
-分析の前にデータを抽出または変換できる任意の前処理ステップ。
+分析前にデータを抽出または変換できる任意の前処理ステップ。
 
 **関数モード:**
-関数: `({ run, results }) => any`
+Function: `({ run, results }) => any`
 
 <PropertiesTable
   content={[
@@ -142,13 +184,13 @@ const customScorer = createScorer<CustomInput, CustomOutput>({
       name: "run.input",
       type: "any",
       required: true,
-      description: "スコアラーに渡される入力レコード。スコアラーがエージェントに追加されている場合はユーザーメッセージの配列（例: `[{ role: 'user', content: 'hello world' }]`）。スコアラーがワークフローで使用される場合はワークフローの入力。",
+      description: "スコアラーに渡される入力レコード。スコアラーがエージェントに追加されている場合はユーザーのメッセージ配列（例: `[{ role: 'user', content: 'hello world' }]`）。スコアラーがワークフローで使用される場合はワークフローの入力になります。",
     },
     {
       name: "run.output",
       type: "any",
       required: true,
-      description: "スコアラーに渡される出力レコード。エージェントの場合は通常エージェントの応答。ワークフローの場合はワークフローの出力。",
+      description: "スコアラーに渡される出力レコード。エージェントの場合は通常エージェントの応答、ワークフローの場合はワークフローの出力です。",
     },
     {
       name: "run.runId",
@@ -160,53 +202,54 @@ const customScorer = createScorer<CustomInput, CustomOutput>({
       name: "run.runtimeContext",
       type: "object",
       required: false,
-      description: "評価対象のエージェントまたはワークフローステップのランタイムコンテキスト（任意）。",
+      description: "評価対象のエージェントまたはワークフローのステップからのランタイムコンテキスト（任意）。",
     },
     {
       name: "results",
       type: "object",
       required: true,
-      description: "空のオブジェクト（前段のステップなし）。",
+      description: "空オブジェクト（前段のステップなし）。",
     },
   ]}
 />
 
-戻り値: `any`  
-このメソッドは任意の値を返せます。返り値は後続のステップで `preprocessStepResult` として利用できます。
+Returns: `any`  
+このメソッドは任意の値を返せます。返された値は後続ステップで `preprocessStepResult` として利用可能になります。
 
 **プロンプトオブジェクトモード:**
+
 <PropertiesTable
   content={[
     {
       name: "description",
       type: "string",
       required: true,
-      description: "この前処理ステップの内容（何を行うか）の説明。",
+      description: "この前処理ステップの内容の説明。",
     },
     {
       name: "outputSchema",
       type: "ZodSchema",
       required: true,
-      description: "preprocess ステップの期待される出力に対する Zod スキーマ。",
+      description: "preprocess ステップの想定出力に対する Zod スキーマ。",
     },
     {
       name: "createPrompt",
       type: "function",
       required: true,
-      description: "関数: ({ run, results }) => string。LLM に渡すプロンプトを返します。",
+      description: "Function: ({ run, results }) => string. LLM へのプロンプトを返します。",
     },
     {
       name: "judge",
       type: "object",
       required: false,
-      description: "（任意）このステップ専用の LLM ジャッジ（メインのジャッジを上書き可能）。Judge Object セクションを参照。",
+      description: "（任意）このステップ用の LLM ジャッジ（メインのジャッジを上書き可能）。Judge Object セクションを参照。",
     },
   ]}
 />
 
 ### analyze
 
-入力・出力および前処理されたデータを処理する任意の分析ステップ。
+入力/出力および任意の前処理済みデータを扱うオプションの分析ステップ。
 
 **関数モード:**
 関数: `({ run, results }) => any`
@@ -217,13 +260,89 @@ const customScorer = createScorer<CustomInput, CustomOutput>({
       name: "run.input",
       type: "any",
       required: true,
-      description: "スコアラーに渡される入力レコード。スコアラーがエージェントに追加されている場合はユーザーメッセージの配列（例: `[{ role: 'user', content: 'hello world' }]`）。スコアラーがワークフローで使用される場合はワークフローの入力。",
+      description: "スコアラーに渡される入力レコード。スコアラーがエージェントに追加されている場合はユーザーメッセージの配列（例: `[{ role: 'user', content: 'hello world' }]`）。スコアラーがワークフローで使用される場合はワークフローの入力になります。",
     },
     {
       name: "run.output",
       type: "any",
       required: true,
-      description: "スコアラーに渡される出力レコード。エージェントの場合は通常エージェントの応答。ワークフローの場合はワークフローの出力。",
+      description: "スコアラーに渡される出力レコード。エージェントの場合は通常エージェントの応答、ワークフローの場合はワークフローの出力です。",
+    },
+    {
+      name: "run.runId",
+      type: "string",
+      required: true,
+      description: "このスコアリング実行の一意の識別子。",
+    },
+    {
+      name: "run.runtimeContext",
+      type: "object",
+      required: false,
+      description: "評価対象のエージェントまたはワークフローステップから提供されるランタイムコンテキスト（任意）。",
+    },
+    {
+      name: "results.preprocessStepResult",
+      type: "any",
+      required: false,
+      description: "前処理ステップが定義されている場合のその結果（任意）。",
+    },
+  ]}
+/>
+
+戻り値: `any`  
+このメソッドは任意の値を返せます。返された値は後続のステップで `analyzeStepResult` として利用可能になります。
+
+**プロンプトオブジェクトモード:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "description",
+      type: "string",
+      required: true,
+      description: "この分析ステップの内容の説明。",
+    },
+    {
+      name: "outputSchema",
+      type: "ZodSchema",
+      required: true,
+      description: "analyze ステップの想定出力を表す Zod スキーマ。",
+    },
+    {
+      name: "createPrompt",
+      type: "function",
+      required: true,
+      description: "関数: ({ run, results }) => string。LLM 用のプロンプトを返します。",
+    },
+    {
+      name: "judge",
+      type: "object",
+      required: false,
+      description: "（任意）このステップ用の LLM ジャッジ（メインのジャッジを上書き可能）。Judge Object セクションを参照。",
+    },
+  ]}
+/>
+
+### generateScore
+
+最終的な数値スコアを算出する必須ステップ。
+
+**Function モード:**
+Function: `({ run, results }) => number`
+
+<PropertiesTable
+  content={[
+    {
+      name: "run.input",
+      type: "any",
+      required: true,
+      description: "スコアラーに渡される入力レコード。スコアラーがエージェントに追加されている場合はユーザーのメッセージ配列（例: `[{ role: 'user', content: 'hello world' }]`）。ワークフローで使用される場合は、そのワークフローの入力になります。",
+    },
+    {
+      name: "run.output",
+      type: "any",
+      required: true,
+      description: "スコアラーに渡される出力レコード。エージェントの場合は通常エージェントの応答、ワークフローの場合はワークフローの出力です。",
     },
     {
       name: "run.runId",
@@ -243,126 +362,50 @@ const customScorer = createScorer<CustomInput, CustomOutput>({
       required: false,
       description: "preprocess ステップの結果（定義されている場合、任意）。",
     },
-  ]}
-/>
-
-戻り値: `any`  
-このメソッドは任意の値を返せます。返り値は後続のステップで `analyzeStepResult` として利用できます。
-
-**プロンプトオブジェクトモード:**
-<PropertiesTable
-  content={[
-    {
-      name: "description",
-      type: "string",
-      required: true,
-      description: "この分析ステップの内容（何を行うか）の説明。",
-    },
-    {
-      name: "outputSchema",
-      type: "ZodSchema",
-      required: true,
-      description: "analyze ステップの期待される出力に対する Zod スキーマ。",
-    },
-    {
-      name: "createPrompt",
-      type: "function",
-      required: true,
-      description: "関数: ({ run, results }) => string。LLM に渡すプロンプトを返します。",
-    },
-    {
-      name: "judge",
-      type: "object",
-      required: false,
-      description: "（任意）このステップ専用の LLM ジャッジ（メインのジャッジを上書き可能）。Judge Object セクションを参照。",
-    },
-  ]}
-/>
-
-
-
-### generateScore
-
-最終的な数値スコアを算出するための必須ステップです。
-
-**関数モード:**
-関数: `({ run, results }) => number`
-
-<PropertiesTable
-  content={[
-    {
-      name: "run.input",
-      type: "any",
-      required: true,
-      description: "スコアラーに渡される入力レコード。スコアラーがエージェントに追加されている場合はユーザーメッセージの配列（例: `[{ role: 'user', content: 'hello world' }]`）。スコアラーをワークフローで使用する場合は、そのワークフローの入力。",
-    },
-    {
-      name: "run.output",
-      type: "any",
-      required: true,
-      description: "スコアラーに渡される出力レコード。エージェントの場合は通常エージェントの応答。ワークフローの場合はワークフローの出力。",
-    },
-    {
-      name: "run.runId",
-      type: "string",
-      required: true,
-      description: "このスコアリング実行の一意の識別子。",
-    },
-    {
-      name: "run.runtimeContext",
-      type: "object",
-      required: false,
-      description: "評価対象のエージェントまたはワークフローステップのランタイムコンテキスト（任意）。",
-    },
-    {
-      name: "results.preprocessStepResult",
-      type: "any",
-      required: false,
-      description: "preprocess ステップの結果（定義されていれば、任意）。",
-    },
     {
       name: "results.analyzeStepResult",
       type: "any",
       required: false,
-      description: "analyze ステップの結果（定義されていれば、任意）。",
+      description: "analyze ステップの結果（定義されている場合、任意）。",
     },
   ]}
 />
 
-戻り値: `number`  
+Returns: `number`  
 このメソッドは数値スコアを返す必要があります。
 
-**プロンプトオブジェクトモード:**
+**Prompt Object モード:**
+
 <PropertiesTable
   content={[
     {
       name: "description",
       type: "string",
       required: true,
-      description: "このスコアリングステップの内容の説明。",
+      description: "このスコアリングステップの説明。",
     },
     {
       name: "outputSchema",
       type: "ZodSchema",
       required: true,
-      description: "generateScore ステップの想定出力に対する Zod スキーマ。",
+      description: "generateScore ステップの期待される出力に対する Zod スキーマ。",
     },
     {
       name: "createPrompt",
       type: "function",
       required: true,
-      description: "関数: ({ run, results }) => string。LLM に渡すプロンプトを返します。",
+      description: "Function: ({ run, results }) => string。LLM に渡すプロンプトを返します。",
     },
     {
       name: "judge",
       type: "object",
       required: false,
-      description: "（任意）このステップ用の LLM ジャッジ（メインのジャッジを上書き可能）。詳細は Judge Object セクションを参照。",
+      description: "（任意）このステップ用の LLM ジャッジ（メインのジャッジを上書き可能）。Judge Object セクションを参照してください。",
     },
   ]}
 />
 
-プロンプトオブジェクトモードを使用する場合は、LLM の出力を数値スコアに変換する `calculateScore` 関数も提供する必要があります:
+Prompt Object モードを使用する場合は、LLM の出力を数値スコアに変換する `calculateScore` 関数も提供する必要があります:
 
 <PropertiesTable
   content={[
@@ -370,17 +413,17 @@ const customScorer = createScorer<CustomInput, CustomOutput>({
       name: "calculateScore",
       type: "function",
       required: true,
-      description: "関数: ({ run, results, analyzeStepResult }) => number。LLM の構造化出力を数値スコアに変換します。",
+      description: "Function: ({ run, results, analyzeStepResult }) => number。LLM の構造化出力を数値スコアに変換します。",
     },
   ]}
 />
 
 ### generateReason
 
-スコアの根拠を説明する任意ステップです。
+スコアの根拠を説明する任意のステップ。
 
 **関数モード:**
-関数: `({ run, results, score }) => string`
+Function: `({ run, results, score }) => string`
 
 <PropertiesTable
   content={[
@@ -388,13 +431,13 @@ const customScorer = createScorer<CustomInput, CustomOutput>({
       name: "run.input",
       type: "any",
       required: true,
-      description: "スコアラーに渡される入力レコード。スコアラーがエージェントに追加されている場合はユーザーメッセージの配列（例: `[{ role: 'user', content: 'hello world' }]`）。スコアラーをワークフローで使用する場合は、そのワークフローの入力。",
+      description: "スコアラーに渡された入力レコード。スコアラーがエージェントに追加されている場合は、ユーザーメッセージの配列（例: `[{ role: 'user', content: 'hello world' }]`）。ワークフローで使用されている場合は、そのワークフローの入力になります。",
     },
     {
       name: "run.output",
       type: "any",
       required: true,
-      description: "スコアラーに渡される出力レコード。エージェントの場合は通常エージェントの応答。ワークフローの場合はワークフローの出力。",
+      description: "スコアラーに渡された出力レコード。エージェントの場合は通常、エージェントの応答。ワークフローの場合は、ワークフローの出力。",
     },
     {
       name: "run.runId",
@@ -406,19 +449,19 @@ const customScorer = createScorer<CustomInput, CustomOutput>({
       name: "run.runtimeContext",
       type: "object",
       required: false,
-      description: "評価対象のエージェントまたはワークフローステップのランタイムコンテキスト（任意）。",
+      description: "評価対象のエージェントまたはワークフローステップ由来のランタイムコンテキスト（任意）。",
     },
     {
       name: "results.preprocessStepResult",
       type: "any",
       required: false,
-      description: "preprocess ステップの結果（定義されていれば、任意）。",
+      description: "preprocess ステップの結果（定義されている場合、任意）。",
     },
     {
       name: "results.analyzeStepResult",
       type: "any",
       required: false,
-      description: "analyze ステップの結果（定義されていれば、任意）。",
+      description: "analyze ステップの結果（定義されている場合、任意）。",
     },
     {
       name: "score",
@@ -430,10 +473,9 @@ const customScorer = createScorer<CustomInput, CustomOutput>({
 />
 
 戻り値: `string`  
-このメソッドはスコアの説明を表す文字列を返す必要があります。
+このメソッドは、スコアの根拠を説明する文字列を返す必要があります。
 
 **プロンプトオブジェクトモード:**
-
 
 <PropertiesTable
   content={[
@@ -441,21 +483,21 @@ const customScorer = createScorer<CustomInput, CustomOutput>({
       name: "description",
       type: "string",
       required: true,
-      description: "この推論ステップの内容についての説明。",
+      description: "この推論ステップが行う処理の説明。",
     },
     {
       name: "createPrompt",
       type: "function",
       required: true,
-      description: "関数: ({ run, results, score }) => string。LLM に渡すプロンプトを返します。",
+      description: "Function: ({ run, results, score }) => string。LLM に渡すプロンプトを返します。",
     },
     {
       name: "judge",
       type: "object",
       required: false,
-      description: "（任意）このステップ用の LLM 判定器（メインの判定器を上書き可能）。Judge Object セクションを参照。",
+      description: "（任意）このステップ用の LLM ジャッジ（メインのジャッジを上書き可能）。Judge Object のセクションを参照。",
     },
   ]}
 />
 
-すべてのステップ関数は非同期関数にできます。
+すべてのステップ関数は非同期にできます。
