@@ -1,26 +1,22 @@
 ---
-title: "WebフレームワークでのMastraのデプロイ"
-description: "WebフレームワークとMastraを統合した際のデプロイ方法を学ぶ"
+title: "Webフレームワークと共に行うMastraのデプロイ"
+description: "MastraをWebフレームワークに統合してデプロイする方法を学ぶ"
 ---
 
+# Web Framework Integration
 
+このガイドでは、Mastra を統合したアプリケーションのデプロイ方法を説明します。Mastra はさまざまな Web フレームワークと連携でき、詳細は次のいずれかのガイドをご覧ください。
 
-# Webフレームワーク統合
+- [Next.js との連携](/docs/frameworks/web-frameworks/next-js)
+- [Astro との連携](/docs/frameworks/web-frameworks/astro)
 
-このガイドでは、統合されたMastraアプリケーションのデプロイについて説明します。Mastraは様々なWebフレームワークと統合できます。詳細なガイドについては、以下のいずれかをご覧ください。
+フレームワークと連携している場合、Mastra は通常、デプロイに追加の設定は不要です。
 
-- [Next.jsとの統合](/docs/frameworks/web-frameworks/next-js)
-- [Astroとの統合](/docs/frameworks/web-frameworks/astro)
+## Vercel 上の Next.js で
 
-フレームワークと統合された場合、Mastraは通常、デプロイのための追加設定を必要としません。
+Mastra を Next.js と統合している場合は、[こちらのガイド](/docs/frameworks/web-frameworks/next-js)に従っていれば、Vercel へのデプロイに追加のセットアップは不要です。
 
-
-
-## Next.js on Vercel での使用
-
-[ガイドに従って](/docs/frameworks/web-frameworks/next-js) Mastra を Next.js と統合し、Vercel にデプロイする予定の場合、追加のセットアップは必要ありません。
-
-確認すべき唯一の点は、`next.config.ts` に以下を追加し、サーバーレス環境ではサポートされていない [LibSQLStore](/docs/deployment/deployment#libsqlstore) の使用を削除していることです：
+確認すべきなのは、`next.config.ts` に以下を追加し、サーバーレス環境ではサポートされない [LibSQLStore](/docs/deployment/deployment#libsqlstore) の使用を削除していることだけです。
 
 ```typescript {4} filename="next.config.ts" showLineNumbers copy
 import type { NextConfig } from "next";
@@ -33,38 +29,36 @@ export default nextConfig;
 ```
 
 
+## Vercel 上での Astro
 
-## Vercel上でのAstro
+ガイドに沿って Mastra を Astro と[統合し](/docs/frameworks/web-frameworks/astro)、Vercel へデプロイする予定であれば、追加の設定は不要です。
 
-[私たちのガイドに従って](/docs/frameworks/web-frameworks/astro)MastraをAstroと統合し、Vercelにデプロイする予定の場合、追加のセットアップは必要ありません。
-
-確認する必要があるのは、`astro.config.mjs`に以下を追加し、サーバーレス環境ではサポートされていない[LibSQLStore](/docs/deployment/deployment#libsqlstore)の使用を削除していることだけです：
+確認すべき点はただ一つ、`astro.config.mjs` に以下を追加し、サーバーレス環境ではサポートされない [LibSQLStore](/docs/deployment/deployment#libsqlstore) の使用を削除していることです。
 
 ```javascript {2,6,7} filename="astro.config.mjs" showLineNumbers copy
 import { defineConfig } from 'astro/config';
 import vercel from '@astrojs/vercel';
 
 export default defineConfig({
-  // ...
+  // 省略
   adapter: vercel(),
   output: "server"
 });
 ```
 
 
+## Netlify での Astro
 
-## Netlify上でのAstro
+Mastra を Astro と[ガイドに従って](/docs/frameworks/web-frameworks/astro)統合し、Vercel にデプロイする予定であれば、追加の設定は不要です。
 
-[私たちのガイドに従って](/docs/frameworks/web-frameworks/astro)MastraをAstroと統合し、Vercelにデプロイする予定の場合、追加のセットアップは必要ありません。
-
-確認する必要があるのは、`astro.config.mjs`に以下を追加し、サーバーレス環境ではサポートされていない[LibSQLStore](/docs/deployment/deployment#libsqlstore)の使用を削除していることだけです：
+確認すべき点はただひとつ、`astro.config.mjs` に以下を追加し、サーバーレス環境ではサポートされない [LibSQLStore](/docs/deployment/deployment#libsqlstore) の使用を削除していることです。
 
 ```javascript {2,6,7} filename="astro.config.mjs" showLineNumbers copy
 import { defineConfig } from 'astro/config';
 import vercel from '@astrojs/netlify';
 
 export default defineConfig({
-  // ...
+  // 省略
   adapter: netlify(),
   output: "server"
 });

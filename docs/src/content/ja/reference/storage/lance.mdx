@@ -1,15 +1,11 @@
 ---
-title: "LanceDB Storage"
-description: MastraにおけるLanceDBストレージ実装のドキュメント。
+title: "LanceDB ストレージ"
+description: Mastra の LanceDB ストレージ実装に関するドキュメント。
 ---
-
-
 
 # LanceDB Storage
 
-LanceDB ストレージ実装は、従来のデータストレージとベクトル操作の両方を得意とする LanceDB データベースシステムを使用した高性能ストレージソリューションを提供します。
-
-
+LanceDB のストレージ実装は、LanceDB データベースシステムを用いて、高性能なストレージソリューションを提供します。このシステムは、従来型のデータストレージとベクトル処理の双方に優れています。
 
 ## インストール
 
@@ -18,29 +14,27 @@ npm install @mastra/lance
 ```
 
 
+## 使い方
 
-## 使用方法
-
-### 基本的なストレージの使用方法
+### ストレージの基本的な使い方
 
 ```typescript copy showLineNumbers
 import { LanceStorage } from "@mastra/lance";
 
-// Connect to a local database
+// ローカルのデータベースに接続
 const storage = await LanceStorage.create("my-storage", "/path/to/db");
 
-// Connect to a LanceDB cloud database
+// LanceDB のクラウドデータベースに接続
 const storage = await LanceStorage.create("my-storage", "db://host:port");
 
-// Connect to a cloud database with custom options
+// 追加のオプションを指定してクラウドデータベースに接続
 const storage = await LanceStorage.create("my-storage", "s3://bucket/db", {
   storageOptions: { timeout: "60s" },
 });
 ```
 
 
-
-## パラメータ
+## パラメーター
 
 ### LanceStorage.create()
 
@@ -56,56 +50,54 @@ const storage = await LanceStorage.create("my-storage", "s3://bucket/db", {
       name: "uri",
       type: "string",
       description:
-        "LanceDBデータベースに接続するためのURI。ローカルパス、クラウドDB URL、またはS3バケットURLを指定できます",
+        "LanceDB データベースに接続するための URI。ローカルパス、クラウド DB の URL、または S3 バケットの URL を指定できます",
       isOptional: false,
     },
     {
       name: "options",
       type: "ConnectionOptions",
       description:
-        "タイムアウト設定、認証などのLanceDBの接続オプション",
+        "タイムアウト設定や認証など、LanceDB の接続オプション",
       isOptional: true,
     },
   ]}
 />
 
-
-
-## 追加の注意事項
+## 追記
 
 ### スキーマ管理
 
-LanceStorage実装は、スキーマの作成と更新を自動的に処理します。MastraのスキーマタイプをApache Arrowデータタイプにマッピングし、これらはLanceDBで内部的に使用されます：
+LanceStorage の実装は、スキーマの作成と更新を自動的に行います。Mastra のスキーマ型を Apache Arrow のデータ型にマッピングし、LanceDB の内部で使用します:
 
 - `text`, `uuid` → Utf8
 - `int`, `integer` → Int32
 - `float` → Float32
-- `jsonb`, `json` → Utf8 (シリアル化)
+- `jsonb`, `json` → Utf8（シリアライズされた文字列）
 - `binary` → Binary
 
-### デプロイメントオプション
+### デプロイ方法
 
-LanceDBストレージは、異なるデプロイメントシナリオに対して設定できます：
+LanceDB のストレージは、さまざまなデプロイシナリオに合わせて設定できます:
 
-- **ローカル開発**: 開発とテスト用にローカルファイルパスを使用
+- **ローカル開発**: 開発・テストにはローカルのファイルパスを使用
   ```
   /path/to/db
   ```
-- **クラウドデプロイメント**: ホストされたLanceDBインスタンスに接続
+- **クラウドデプロイ**: ホスト型の LanceDB インスタンスに接続
   ```
   db://host:port
   ```
-- **S3ストレージ**: スケーラブルなクラウドストレージ用にAmazon S3を使用
+- **S3 ストレージ**: スケーラブルなクラウドストレージとして Amazon S3 を使用
   ```
   s3://bucket/db
   ```
 
 ### テーブル管理
 
-LanceStorageは、テーブル管理のためのメソッドを提供します：
+LanceStorage はテーブル管理のためのメソッドを提供します:
 
 - カスタムスキーマでテーブルを作成
 - テーブルを削除
-- テーブルをクリア（すべてのレコードを削除）
-- キーによるレコードの読み込み
-- 単一およびバッチレコードの挿入
+- テーブルをクリア（全レコードを削除）
+- キーでレコードを読み込む
+- 単一レコードおよびバッチレコードを挿入

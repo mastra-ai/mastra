@@ -1,5 +1,5 @@
 ---
-title: "テンプレートリファレンス"
+title: "テンプレート リファレンス"
 description: "Mastra テンプレートの作成・利用・貢献のための完全ガイド"
 ---
 
@@ -8,32 +8,33 @@ import { FileTree, Tabs, Callout } from 'nextra/components'
 
 ## 概要
 
-このリファレンスでは、既存のMastraテンプレートの使い方、自作方法、コミュニティエコシステムへの貢献方法など、Mastraテンプレートに関する包括的な情報を提供します。
+このリファレンスでは、Mastra のテンプレートについて、既存テンプレートの使い方、自作方法、コミュニティへの貢献方法まで包括的に解説します。
 
-Mastraテンプレートは、特定のユースケースやパターンを示す、あらかじめ用意されたプロジェクトの雛形です。次の内容を提供します:
+Mastra のテンプレートは、特定のユースケースやパターンを示す、あらかじめ用意されたプロジェクト構成です。次のような利点があります:
 
-- **実用例** - 完全に動作するMastraアプリケーション
+- **動作サンプル** - 完全に動く Mastra アプリケーション
 - **ベストプラクティス** - 適切なプロジェクト構成とコーディング規約
-- **学習リソース** - 実装例を通じてMastraのパターンを学べる教材
-- **クイックスタート** - ゼロから作るよりも素早くプロジェクトを起動
+- **学習リソース** - 実例を通じて Mastra のパターンを学べる
+- **クイックスタート** - ゼロから作るより素早くプロジェクトを立ち上げられる
 
-## テンプレートの利用
+## テンプレートを使う
 
 ### インストール
 
 `create-mastra` コマンドでテンプレートをインストールします:
 
 ```bash copy
-npx create-mastra@latest --template template-name
+npx create-mastra@latest --template <テンプレート名>
 ```
 
-これで、必要なコードと設定をすべて含む完全なプロジェクトが作成されます。
+これにより、必要なコードと設定がすべて含まれた完全なプロジェクトが作成されます。
+
 
 ### セットアップ手順
 
-インストール後：
+インストール後:
 
-1. **プロジェクトディレクトリに移動**:
+1. **プロジェクトディレクトリへ移動**:
 
    ```bash copy
    cd your-project-name
@@ -45,7 +46,7 @@ npx create-mastra@latest --template template-name
    cp .env.example .env
    ```
 
-   テンプレートのREADMEに従い、必要なAPIキーを `.env` に記入・編集してください。
+   テンプレートの README に従い、必要な API キーで `.env` を編集してください。
 
 3. **依存関係をインストール**（自動で行われなかった場合）:
 
@@ -53,15 +54,15 @@ npx create-mastra@latest --template template-name
    npm install
    ```
 
-4. **開発サーバーを起動**:
+4. **開発用サーバーを起動**:
 
    ```bash copy
    npm run dev
    ```
 
-### テンプレートの構成
+### テンプレート構成
 
-すべてのテンプレートは次の標準構成に従います:
+すべてのテンプレートは、次の標準化された構成に従います。
 
 <FileTree>
   <FileTree.Folder name="template-name" defaultOpen>
@@ -90,20 +91,20 @@ npx create-mastra@latest --template template-name
 
 ### 要件
 
-テンプレートは次の技術要件を満たす必要があります。
+テンプレートは次の技術要件を満たす必要があります：
 
 #### プロジェクト構成
 
-- **Mastra のコード配置場所**: すべての Mastra コードは `src/mastra/` ディレクトリ内に配置します
+- **Mastra のコード配置**: すべての Mastra のコードは `src/mastra/` ディレクトリ内に配置してください
 - **コンポーネントの構成**:
-  - エージェント: `src/mastra/agents/`
-  - ツール: `src/mastra/tools/`
-  - ワークフロー: `src/mastra/workflows/`
+  - Agents: `src/mastra/agents/`
+  - Tools: `src/mastra/tools/`
+  - Workflows: `src/mastra/workflows/`
   - メイン設定: `src/mastra/index.ts`
 
 #### TypeScript の設定
 
-Mastra 標準の TypeScript 設定を使用します：
+Mastra 標準の TypeScript 設定を使用してください:
 
 ```json filename="tsconfig.json"
 {
@@ -122,108 +123,112 @@ Mastra 標準の TypeScript 設定を使用します：
 }
 ```
 
+
 #### 環境設定
 
-必要な環境変数をすべて含む `.env.example` ファイルを用意してください:
+必須の環境変数をすべて含む `.env.example` ファイルを用意してください：
 
 ```bash filename=".env.example"
-# LLM プロバイダーの API キー（いずれか一つ以上を使用）
+# LLM プロバイダーの API キー（いずれかを選択、複数可）
 OPENAI_API_KEY=your_openai_api_key_here
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
 GOOGLE_GENERATIVE_AI_API_KEY=your_google_api_key_here
 
-# 必要に応じて他サービスの API キー
+# 必要に応じてその他サービスの API キー
 OTHER_SERVICE_API_KEY=your_api_key_here
 ```
+
 
 ### コーディング規約
 
 #### LLM プロバイダー
 
-テンプレートには OpenAI、Anthropic、または Google のモデルプロバイダーの利用を推奨します。ユースケースに最も適したプロバイダーを選択してください。
+テンプレートには OpenAI、Anthropic、または Google のモデルプロバイダーの利用を推奨します。用途に最も適したプロバイダーを選択してください。
 
 ```typescript filename="src/mastra/agents/example-agent.ts"
 import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
-// または: import { anthropic } from '@ai-sdk/anthropic';
-// または: import { google } from '@ai-sdk/google';
+// または次を使用: import { anthropic } from '@ai-sdk/anthropic';
+// または次を使用: import { google } from '@ai-sdk/google';
 
 const agent = new Agent({
   name: 'example-agent',
-  model: openai('gpt-4'), // もしくは anthropic('') または google('')
-  instructions: 'Your agent instructions here',
+  model: openai('gpt-4'), // or anthropic('') or google('')
+  instructions: 'ここにエージェントへの指示を入力',
   // ... その他の設定
 });
 ```
 
+
 #### 互換性要件
 
-テンプレートは次を満たす必要があります：
+テンプレートは次の条件を満たす必要があります:
 
-- **単一プロジェクト** - 複数アプリを含むモノレポではないこと
-- **フレームワーク非依存** - Next.js、Express、その他のWebフレームワークのボイラープレートは不要
-- **Mastraに特化** - 余計なレイヤーを設けずにMastraの機能を示すこと
-- **マージ可能** - 既存プロジェクトへ容易に統合できるようコードを構成すること
-- **Node.js対応** - Node.js 18以上をサポート
-- **ESMモジュール** - ESモジュールを使用（package.jsonで `"type": "module"` を指定）
+- **単体プロジェクト** - 複数アプリを含むモノレポではないこと
+- **フレームワーク非依存** - Next.js、Express などの Web フレームワークのボイラープレートは不要
+- **Mastra 重視** - 余計なレイヤーを加えずに Mastra の機能を示すこと
+- **マージ可能** - 既存プロジェクトに容易に統合できるようコードを構成すること
+- **Node.js 互換** - Node.js 18 以上をサポート
+- **ESM モジュール** - ES モジュールを使用（package.json の `"type": "module"`）
 
-### 必要書類
+### ドキュメントの要件
 
-#### README の構成
+#### READMEの構成
 
-すべてのテンプレートには、充実した README を必ず含めてください:
+すべてのテンプレートには、充実したREADMEを必ず含めてください。
 
 ```markdown filename="README.md"
-# Template Name
+# テンプレート名
 
-テンプレートが示す内容の簡潔な説明。
+このテンプレートが示す内容の簡潔な説明。
 
-## Overview
+## 概要
 
-テンプレートの機能と想定される利用シーンの詳細な説明。
+テンプレートの機能と想定される用途の詳細な説明。
 
-## Setup
+## セットアップ
 
-1. `.env.example` を `.env` にコピーし、API キーを設定する
+1. `.env.example` を `.env` にコピーし、API キーを入力する
 2. 依存関係をインストール: `npm install`
 3. プロジェクトを起動: `npm run dev`
 
-## Environment Variables
+## 環境変数
 
 - `OPENAI_API_KEY`: OpenAI の API キー。[OpenAI Platform](https://platform.openai.com/api-keys) で取得
 - `ANTHROPIC_API_KEY`: Anthropic の API キー。[Anthropic Console](https://console.anthropic.com/settings/keys) で取得
 - `GOOGLE_GENERATIVE_AI_API_KEY`: Google AI の API キー。[Google AI Studio](https://makersuite.google.com/app/apikey) で取得
 - `OTHER_API_KEY`: このキーの用途の説明
 
-## Usage
+## 使い方
 
-テンプレートの使い方と、想定される挙動の例。
+テンプレートの使い方と想定される動作例。
 
-## Customization
+## カスタマイズ
 
-異なるユースケース向けにテンプレートを調整するためのガイドライン。
+さまざまなユースケース向けにテンプレートを調整する際のガイドライン。
 ```
+
 
 #### コードコメント
 
-次の内容を明確に説明するコメントを記載してください：
+次の点を分かりやすく説明するコメントを含めてください:
 
 - 複雑なロジックやアルゴリズム
-- API 連携とその目的
-- 設定オプションとその影響
-- 使い方のパターン例
+- API 連携の内容と目的
+- 設定オプションとその効果
+- 具体的な使用パターンの例
 
 ### 品質基準
 
 テンプレートは以下を満たす必要があります:
 
-- **コード品質** - クリーンで、十分にコメントされ、保守しやすいコード
-- **エラーハンドリング** - 外部 API やユーザー入力に対する適切な処理
-- **型安全性** - Zod による検証を含む完全な TypeScript の型付け
-- **テスト** - 新規インストール環境で機能が検証されていること
+- **コード品質** - クリーンで、適切にコメントされ、保守しやすいコード
+- **エラー処理** - 外部 API やユーザー入力に対する適切なハンドリング
+- **型安全性** - Zod による検証を含む完全な TypeScript 型付け
+- **テスト** - クリーンインストールで機能が検証されていること
 
-Mastra エコシステムに独自のテンプレートを提供する方法については、コミュニティセクションの [Contributing Templates](/docs/community/contributing-templates) ガイドをご覧ください。
+Mastra エコシステムに独自のテンプレートを投稿する方法は、コミュニティセクションの [Contributing Templates](/docs/community/contributing-templates) ガイドをご覧ください。
 
 <Callout type="info">
-  テンプレートは、Mastra のパターンを学び、開発を加速するための優れた手段です。テンプレートへの貢献は、コミュニティ全体によるより優れた AI アプリケーションの構築に役立ちます。
+  テンプレートは、Mastra のパターンを学び、開発を加速するための優れた手段です。テンプレートへの貢献は、コミュニティ全体によるより良い AI アプリケーションの構築に役立ちます。
 </Callout>

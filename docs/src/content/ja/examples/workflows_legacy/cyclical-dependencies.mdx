@@ -1,15 +1,14 @@
 ---
-title: "例: 循環依存関係 | ワークフロー（レガシー） | Mastra ドキュメント"
-description: Mastra を使用して、循環依存関係や条件付きループを含むレガシーワークフローを作成する例。
+title: "例: 循環依存 | Workflows（レガシー） | Mastra ドキュメント"
+description: Mastra を使って、循環依存や条件付きループを伴うレガシーなワークフローを作成する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
+# ワークフロー（レガシー）の循環依存
 
-# Workflow (Legacy) with Cyclical dependencies
-
-ワークフローは、ステップが条件に基づいてループバックできる循環依存関係をサポートしています。以下の例では、条件ロジックを使用してループを作成し、繰り返し実行を処理する方法を示しています。
+ワークフローは、条件に応じてステップを戻してループさせる循環依存をサポートします。以下の例では、条件分岐を使ってループを作成し、繰り返しの実行を処理する方法を示します。
 
 ```ts showLineNumbers copy
 import { LegacyWorkflow, LegacyStep } from "@mastra/core/workflows/legacy";
@@ -18,7 +17,7 @@ import { z } from "zod";
 async function main() {
   const doubleValue = new LegacyStep({
     id: "doubleValue",
-    description: "Doubles the input value",
+    description: "入力値を2倍にします",
     inputSchema: z.object({
       inputValue: z.number(),
     }),
@@ -33,7 +32,7 @@ async function main() {
 
   const incrementByOne = new LegacyStep({
     id: "incrementByOne",
-    description: "Adds 1 to the input value",
+    description: "入力値に1を足します",
     outputSchema: z.object({
       incrementedValue: z.number(),
     }),
@@ -41,7 +40,7 @@ async function main() {
       const valueToIncrement = context?.getStepResult<{ firstValue: number }>(
         "trigger",
       )?.firstValue;
-      if (!valueToIncrement) throw new Error("No value to increment provided");
+      if (!valueToIncrement) throw new Error("加算する値が指定されていません"),
       const incrementedValue = valueToIncrement + 1;
       return { incrementedValue };
     },
@@ -77,7 +76,7 @@ async function main() {
 
   const { runId, start } = cyclicalWorkflow.createRun();
 
-  console.log("Run", runId);
+  console.log("実行ID", runId);
 
   const res = await start({ triggerData: { firstValue: 6 } });
 
@@ -88,29 +87,33 @@ main();
 ```
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/workflow-with-cyclical-deps"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/workflow-with-cyclical-deps"
+}
 />
 
 
+## ワークフロー（レガシー）
 
-## Workflows (Legacy)
+以下のリンクは、レガシー版ワークフローのサンプルドキュメントです：
 
-以下のリンクは、レガシーワークフローのサンプルドキュメントを提供します：
-
-- [シンプルなワークフロー（Legacy）の作成](/examples/workflows_legacy/creating-a-workflow)
-- [順次ステップを持つワークフロー（Legacy）](/examples/workflows_legacy/sequential-steps)
-- [ステップでの並列実行](/examples/workflows_legacy/parallel-steps)
+- [シンプルなワークフローの作成（レガシー）](/examples/workflows_legacy/creating-a-workflow)
+- [順次ステップのワークフロー（レガシー）](/examples/workflows_legacy/sequential-steps)
+- [ステップの並列実行](/examples/workflows_legacy/parallel-steps)
 - [分岐パス](/examples/workflows_legacy/branching-paths)
-- [条件分岐を持つワークフロー（Legacy）（実験的）](/examples/workflows_legacy/conditional-branching)
-- [ワークフロー（Legacy）からエージェントを呼び出す](/examples/workflows_legacy/calling-agent)
-- [ワークフローステップとしてのツール（Legacy）](/examples/workflows_legacy/using-a-tool-as-a-step)
-- [ワークフロー変数を使用したデータマッピング（Legacy）](/examples/workflows_legacy/workflow-variables)
-- [Human in the Loopワークフロー（Legacy）](/examples/workflows_legacy/human-in-the-loop)
-- [一時停止と再開を持つワークフロー（Legacy）](/examples/workflows_legacy/suspend-and-resume)
+- [条件分岐付きワークフロー（レガシー）（実験的）](/examples/workflows_legacy/conditional-branching)
+- [ワークフロー（レガシー）からエージェントを呼び出す](/examples/workflows_legacy/calling-agent)
+- [ツールをワークフローのステップとして使用（レガシー）](/examples/workflows_legacy/using-a-tool-as-a-step)
+- [ワークフロー変数によるデータマッピング（レガシー）](/examples/workflows_legacy/workflow-variables)
+- [人間参加型（Human-in-the-Loop）ワークフロー（レガシー）](/examples/workflows_legacy/human-in-the-loop)
+- [一時停止と再開が可能なワークフロー（レガシー）](/examples/workflows_legacy/suspend-and-resume)

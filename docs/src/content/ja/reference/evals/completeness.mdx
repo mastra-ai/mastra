@@ -1,19 +1,16 @@
 ---
-title: "リファレンス: Completeness | Metrics | Evals | Mastra Docs"
-description: Mastraの完全性メトリックのドキュメント。入力に含まれる重要な要素をLLM出力がどの程度網羅的にカバーしているかを評価します。
+title: "リファレンス: Completeness | メトリクス | 評価 | Mastra ドキュメント"
+description: Mastra の Completeness メトリクスに関するドキュメント。入力に含まれる重要な要素を、LLM の出力がどの程度網羅しているかを評価します。
 ---
 
 import { ScorerCallout } from '@/components/scorer-callout'
-
 
 
 # CompletenessMetric
 
 <ScorerCallout />
 
-`CompletenessMetric`クラスは、LLMの出力が入力に含まれる主要な要素をどの程度網羅的にカバーしているかを評価します。名詞、動詞、トピック、用語を分析してカバレッジを判定し、詳細な完全性スコアを提供します。
-
-
+`CompletenessMetric` クラスは、入力に含まれる主要要素に対して、LLM の出力がどれだけ過不足なくカバーできているかを評価します。名詞、動詞、トピック、用語を分析してカバレッジを判定し、詳細な網羅性スコアを提供します。
 
 ## 基本的な使い方
 
@@ -23,38 +20,35 @@ import { CompletenessMetric } from "@mastra/evals/nlp";
 const metric = new CompletenessMetric();
 
 const result = await metric.measure(
-  "Explain how photosynthesis works in plants using sunlight, water, and carbon dioxide.",
-  "Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis.",
+  "太陽光、水、二酸化炭素を使って、植物の光合成がどのように働くかを説明してください。",
+  "植物は光合成によって、太陽光を利用し、水と二酸化炭素からグルコースを生成します。",
 );
 
-console.log(result.score); // Coverage score from 0-1
-console.log(result.info); // Object containing detailed metrics about element coverage
+console.log(result.score); // 0〜1の範囲のカバレッジスコア
+console.log(result.info); // 要素のカバレッジに関する詳細な指標を含むオブジェクト
 ```
 
 
-
-## measure() のパラメーター
+## measure() のパラメータ
 
 <PropertiesTable
   content={[
     {
       name: "input",
       type: "string",
-      description: "カバーすべき主要な要素を含む元のテキスト",
+      description: "網羅すべき主要要素を含む元テキスト",
       isOptional: false,
     },
     {
       name: "output",
       type: "string",
-      description: "完全性を評価するためのLLMの応答",
+      description: "完全性を評価する対象となる LLM の応答",
       isOptional: false,
     },
   ]}
 />
 
-
-
-## 戻り値
+## 返却値
 
 <PropertiesTable
   content={[
@@ -62,7 +56,7 @@ console.log(result.info); // Object containing detailed metrics about element co
       name: "score",
       type: "number",
       description:
-        "出力でカバーされている入力要素の割合を表す完全性スコア（0-1）",
+        "出力でカバーされた入力要素の比率を示す完全性スコア（0〜1）",
     },
     {
       name: "info",
@@ -85,7 +79,7 @@ console.log(result.info); // Object containing detailed metrics about element co
             {
               name: "outputElements",
               type: "string[]",
-              description: "出力で見つかった主要要素の配列",
+              description: "出力で確認された主要要素の配列",
             },
           ],
         },
@@ -105,7 +99,7 @@ console.log(result.info); // Object containing detailed metrics about element co
             {
               name: "elementCounts",
               type: "object",
-              description: "入力および出力内の要素数",
+              description: "入力および出力における要素数",
             },
           ],
         },
@@ -114,59 +108,53 @@ console.log(result.info); // Object containing detailed metrics about element co
   ]}
 />
 
-
-
 ## 要素抽出の詳細
 
-このメトリックは、いくつかの種類の要素を抽出し分析します：
+このメトリックは複数の種類の要素を抽出・分析します:
 
-- 名詞：主要なオブジェクト、概念、エンティティ
-- 動詞：動作や状態（不定詞形に変換）
-- トピック：主な主題やテーマ
-- 用語：個々の重要な単語
+- 名詞: 主要なオブジェクト、概念、エンティティ
+- 動詞: 動作および状態（不定形に変換）
+- トピック: 主題およびテーマ
+- 用語: 重要な単語
 
-抽出プロセスには以下が含まれます：
+抽出プロセスには以下が含まれます:
 
 - テキストの正規化（ダイアクリティクスの除去、小文字化）
-- camelCase単語の分割
+- camelCase の分割
 - 単語境界の処理
-- 短い単語（3文字以下）の特別な処理
+- 短い単語（3文字以下）の特別な取り扱い
 - 要素の重複排除
-
-
 
 ## スコアリングの詳細
 
-このメトリックは、言語要素のカバレッジ分析を通じて完全性を評価します。
+この指標は、言語要素の網羅状況の分析により、完全性を評価します。
 
 ### スコアリングプロセス
 
-1. 主要な要素を抽出します：
+1. 主要要素を抽出:
 
-   - 名詞および固有表現
+   - 名詞および固有名詞
    - 動作動詞
    - トピック固有の用語
    - 正規化された語形
 
-2. 入力要素のカバレッジを計算します：
-   - 短い用語（3文字以下）は完全一致
-   - 長い用語は大部分の重複（60%以上）
+2. 入力要素の網羅率を算出:
+   - 短い用語（≤3文字）は完全一致
+   - 長い用語は高い重複度（>60%）
 
-最終スコア：`(covered_elements / total_input_elements) * scale`
+最終スコア: `(covered_elements / total_input_elements) * scale`
 
 ### スコアの解釈
 
-（0からscale、デフォルトは0-1）
+（0からのスケール、既定は0～1）
 
-- 1.0：完全なカバレッジ - すべての入力要素を含む
-- 0.7-0.9：高いカバレッジ - 主要な要素のほとんどを含む
-- 0.4-0.6：部分的なカバレッジ - 一部の主要な要素を含む
-- 0.1-0.3：低いカバレッジ - ほとんどの主要な要素が欠落
-- 0.0：カバレッジなし - 出力に入力要素が全く含まれていない
+- 1.0: 完全に網羅 - すべての入力要素を含む
+- 0.7～0.9: 高い網羅 - 主要な要素のほとんどを含む
+- 0.4～0.6: 部分的に網羅 - 主要な要素の一部を含む
+- 0.1～0.3: 低い網羅 - 主要な要素の大半が欠けている
+- 0.0: 網羅なし - 出力に入力要素がまったく含まれていない
 
-
-
-## 分析付きの例
+## 例と分析
 
 ```typescript
 import { CompletenessMetric } from "@mastra/evals/nlp";
@@ -174,11 +162,11 @@ import { CompletenessMetric } from "@mastra/evals/nlp";
 const metric = new CompletenessMetric();
 
 const result = await metric.measure(
-  "The quick brown fox jumps over the lazy dog",
-  "A brown fox jumped over a dog",
+  "素早い茶色のキツネがのんびりした犬を飛び越える",
+  "茶色のキツネが犬を飛び越えた",
 );
 
-// Example output:
+// 出力例:
 // {
 //   score: 0.75,
 //   info: {
@@ -191,10 +179,9 @@ const result = await metric.measure(
 ```
 
 
+## 関連項目
 
-## 関連
-
-- [Answer Relevancy Metric](./answer-relevancy)
-- [Content Similarity Metric](./content-similarity)
-- [Textual Difference Metric](./textual-difference)
-- [Keyword Coverage Metric](./keyword-coverage)
+- [回答関連性メトリクス](./answer-relevancy)
+- [コンテンツ類似度メトリクス](./content-similarity)
+- [テキスト差分メトリクス](./textual-difference)
+- [キーワード網羅率メトリクス](./keyword-coverage)

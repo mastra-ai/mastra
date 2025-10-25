@@ -1,0 +1,187 @@
+---
+title: "SensitiveDataFilter | プロセッサ | AI トレーシング | リファレンス"
+description: SensitiveDataFilter プロセッサの API リファレンス
+---
+
+import { PropertiesTable } from "@/components/properties-table";
+
+
+# SensitiveDataFilter
+
+スパンのフィールドから機密情報を編集（マスキング）する AISpanProcessor。
+
+## コンストラクタ
+
+```typescript
+new SensitiveDataFilter(options?: SensitiveDataFilterOptions)
+```
+
+
+## SensitiveDataFilterOptions
+
+```typescript
+interface SensitiveDataFilterOptions {
+  /** 
+   * マスク対象の機密フィールド名のリスト。
+   * マッチングは大文字小文字を区別せず、区切り文字を正規化します
+   * (api-key, api_key, Api Key → apikey)。
+   * デフォルトには以下が含まれます: password, token, secret, key, apikey, auth, 
+   * authorization, bearer, bearertoken, jwt, credential, 
+   * clientsecret, privatekey, refresh, ssn。
+   */
+  sensitiveFields?: string[];
+  
+  /** 
+   * 完全マスクに使用されるトークン。
+   * デフォルト: "[REDACTED]"
+   */
+  redactionToken?: string;
+  
+  /** 
+   * 使用するマスクスタイル:
+   * - "full": 常にredactionTokenで置き換える
+   * - "partial": 開始と終了から3文字を表示し、中間をマスクする
+   * デフォルト: "full"
+   */
+  redactionStyle?: RedactionStyle;
+}
+```
+
+<PropertiesTable
+  props={[
+{
+  name: "sensitiveFields",
+  type: "string[]",
+  description: "マスク対象のフィールド名（大文字小文字を区別せず、区切り文字に依存しない）",
+  required: false,
+},
+{
+  name: "redactionToken",
+  type: "string",
+  description: "全体マスク時の置換トークン",
+  required: false,
+},
+{
+  name: "redactionStyle",
+  type: "'full' | 'partial'",
+  description: "マスク方式",
+  required: false,
+},
+]}
+/>
+
+
+## レダクションスタイル
+
+```typescript
+type RedactionStyle = 'full' | 'partial';
+```
+
+
+## メソッド
+
+### プロセス
+
+```typescript
+process(span: AnyAISpan): AnyAISpan
+```
+
+span を、attributes、metadata、input、output、errorInfo といった主要フィールド全体にわたって機密データをフィルタリングすることで処理します。
+
+<PropertiesTable
+  props={[
+{
+  name: "span",
+  type: "AnyAISpan",
+  description: "フィルタリング対象の入力 span",
+  required: true,
+},
+]}
+/>
+
+**戻り値:** 機密情報がマスクされた新しい span。
+
+
+### シャットダウン
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+このプロセッサにはクリーンアップは不要です。
+
+
+## プロパティ
+
+```typescript
+readonly name = 'sensitive-data-filter';
+```
+
+
+## 既定の機密フィールド
+
+カスタムフィールドが指定されていない場合：
+
+```typescript
+[
+  'password',
+  'token',
+  'secret',
+  'key',
+  'apikey',
+  'auth',
+  'authorization',
+  'bearer',
+  'bearertoken',
+  'jwt',
+  'credential',
+  'clientsecret',
+  'privatekey',
+  'refresh',
+  'ssn'
+]
+```
+
+
+## 処理の挙動
+
+### フィールドの一致
+
+- **大文字・小文字を区別しない**: `APIKey`、`apikey`、`ApiKey` はすべて一致する
+- **区切り文字に依存しない**: `api-key`、`api_key`、`apiKey` は同一として扱われる  
+- **厳密一致**: 正規化後、フィールドは完全一致である必要がある
+  - `token` は `token`、`Token`、`TOKEN` と一致する
+  - `token` は `promptTokens` や `tokenCount` とは一致しない
+
+### マスキングスタイル
+
+#### 全面マスキング（デフォルト）
+
+一致したすべての値は redactionToken に置き換えられます。
+
+#### 部分マスキング
+
+- 先頭3文字と末尾3文字を表示
+- 値が6文字以下の場合は全てマスキング
+- 文字列以外の値は、部分マスキングの前に文字列に変換
+
+### エラー処理
+
+フィールドのフィルタリングに失敗した場合、フィールドは次の値に置き換えられます：
+
+```typescript
+{ error: { processor: "sensitive-data-filter" } }
+```
+
+
+### 処理対象フィールド
+
+このフィルターは再帰的に処理します:
+
+- `span.attributes` - スパンのメタデータとプロパティ
+- `span.metadata` - カスタムメタデータ
+- `span.input` - 入力データ
+- `span.output` - 出力データ  
+- `span.errorInfo` - エラー情報
+
+入れ子になったオブジェクトや配列、循環参照も安全に処理します。

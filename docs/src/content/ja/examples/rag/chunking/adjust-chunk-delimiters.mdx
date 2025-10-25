@@ -1,18 +1,19 @@
 ---
-title: "例：チャンクデリミタの調整 | RAG | Mastra ドキュメント"
-description: Mastraでチャンクデリミタを調整して、コンテンツ構造により適合させる方法。
+title: "例: チャンクの区切りを調整する | RAG | Mastra Docs"
+description: Mastraでチャンクの区切りを調整し、コンテンツ構造により適合させます。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# チャンク区切りを調整する
 
-大きなドキュメントを処理する際、テキストを小さなチャンクに分割する方法を制御したい場合があります。デフォルトでは、ドキュメントは改行で分割されますが、この動作をカスタマイズしてコンテンツ構造により適合させることができます。この例では、ドキュメントをチャンク化するためのカスタム区切り文字を指定する方法を示します。
+# チャンクの区切り文字を調整する
+
+大規模なドキュメントを処理する際、テキストを小さなチャンクに分割する方法を制御したい場合があります。既定ではドキュメントは改行で分割されますが、この挙動はコンテンツの構造に合わせてカスタマイズできます。以下の例では、ドキュメントをチャンク化する際にカスタムの区切り文字を指定する方法を示します。
 
 ```tsx copy
 import { MDocument } from "@mastra/rag";
 
-const doc = MDocument.fromText("Your plain text content...");
+const doc = MDocument.fromText("プレーンなテキストコンテンツ...");
 
 const chunks = await doc.chunk({
   separator: "\n",
@@ -31,6 +32,6 @@ const chunks = await doc.chunk({
 
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/adjust-chunk-delimiters"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/adjust-chunk-delimiters"
+}
 />

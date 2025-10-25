@@ -1,15 +1,14 @@
 ---
-title: "例: ワークフローからエージェントを呼び出す（レガシー） | Mastra Docs"
-description: レガシーワークフローステップ内でMastraを使ってAIエージェントを呼び出す例。
+title: "例: ワークフローからエージェントを呼び出す（レガシー） | Mastra ドキュメント"
+description: レガシーなワークフローのステップ内から AI エージェントを呼び出すために Mastra を使用する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
-
 # ワークフローからエージェントを呼び出す（レガシー）
 
-この例では、AIエージェントを呼び出してメッセージを処理し、レスポンスを生成するレガシーワークフローを作成し、レガシーワークフローステップ内で実行する方法を示します。
+この例では、メッセージを処理して応答を生成するAIエージェントを呼び出すレガシーワークフローを作成し、レガシーのワークフローステップ内で実行する方法を示します。
 
 ```ts showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -20,12 +19,12 @@ import { z } from "zod";
 
 const penguin = new Agent({
   name: "agent skipper",
-  instructions: `You are skipper from penguin of madagascar, reply as that`,
+  instructions: `あなたは『マダガスカルのペンギン』のスキッパーです。スキッパーとして返答してください`,
   model: openai("gpt-4o-mini"),
 });
 
 const newWorkflow = new LegacyWorkflow({
-  name: "pass message to the workflow",
+  name: "メッセージをワークフローに渡す",
   triggerSchema: z.object({
     message: z.string(),
   }),
@@ -57,36 +56,40 @@ const { runId, start } = await mastra
   .createRun();
 
 const runResult = await start({
-  triggerData: { message: "Give me a run down of the mission to save private" },
+  triggerData: { message: "プライベート救出作戦の概要を教えて" },
 });
 
 console.log(runResult.results);
 ```
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/calling-agent-from-workflow"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/calling-agent-from-workflow"
+}
 />
 
 
+## ワークフロー（レガシー）
 
-## Workflows (Legacy)
+以下のリンクは、レガシー版ワークフローのサンプルドキュメントです。
 
-以下のリンクは、レガシーワークフローのサンプルドキュメントを提供します：
-
-- [シンプルなワークフローの作成 (Legacy)](/examples/workflows_legacy/creating-a-workflow)
-- [順次ステップを持つワークフロー (Legacy)](/examples/workflows_legacy/sequential-steps)
-- [ステップでの並列実行](/examples/workflows_legacy/parallel-steps)
-- [分岐パス](/examples/workflows_legacy/branching-paths)
-- [条件分岐を持つワークフロー (Legacy) (実験的)](/examples/workflows_legacy/conditional-branching)
-- [ワークフローステップとしてのツール (Legacy)](/examples/workflows_legacy/using-a-tool-as-a-step)
-- [循環依存を持つワークフロー (Legacy)](/examples/workflows_legacy/cyclical-dependencies)
-- [ワークフロー変数を使用したデータマッピング (Legacy)](/examples/workflows_legacy/workflow-variables)
-- [Human in the Loopワークフロー (Legacy)](/examples/workflows_legacy/human-in-the-loop)
-- [一時停止と再開を持つワークフロー (Legacy)](/examples/workflows_legacy/suspend-and-resume)
+- [シンプルなワークフローの作成（レガシー）](/examples/workflows_legacy/creating-a-workflow)
+- [順次ステップのワークフロー（レガシー）](/examples/workflows_legacy/sequential-steps)
+- [ステップによる並列実行（レガシー）](/examples/workflows_legacy/parallel-steps)
+- [分岐パス（レガシー）](/examples/workflows_legacy/branching-paths)
+- [条件分岐のあるワークフロー（レガシー・実験的）](/examples/workflows_legacy/conditional-branching)
+- [ツールをワークフローのステップとして使用（レガシー）](/examples/workflows_legacy/using-a-tool-as-a-step)
+- [循環依存を持つワークフロー（レガシー）](/examples/workflows_legacy/cyclical-dependencies)
+- [ワークフロー変数によるデータマッピング（レガシー）](/examples/workflows_legacy/workflow-variables)
+- [Human-in-the-Loop ワークフロー（レガシー）](/examples/workflows_legacy/human-in-the-loop)
+- [一時停止と再開が可能なワークフロー（レガシー）](/examples/workflows_legacy/suspend-and-resume)

@@ -1,22 +1,17 @@
 ---
-title: "リファレンス: Agent.getTools() | エージェント | Mastra ドキュメント"
-description: "Mastraエージェントの`Agent.getTools()`メソッドに関するドキュメントです。エージェントが利用可能なツールを取得するメソッドについて説明します。"
+title: "リファレンス: Agent.getTools() | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.getTools()` メソッドのリファレンス。エージェントが利用可能なツールを取得します。"
 ---
-
-
 
 # Agent.getTools()
 
-`.getTools()`メソッドは、エージェントに設定されたツールを取得し、それらが関数である場合は解決します。これらのツールはエージェントの機能を拡張し、特定のアクションの実行や外部システムへのアクセスを可能にします。
+`.getTools()` メソッドは、エージェントに設定されたツールを取得し、それらが関数である場合は解決（評価）します。これらのツールによってエージェントの機能が拡張され、特定のアクションの実行や外部システムへのアクセスが可能になります。
 
-
-
-## 使用例
+## 使い方の例
 
 ```typescript copy
 await agent.getTools();
 ```
-
 
 
 ## パラメータ
@@ -33,8 +28,6 @@ await agent.getTools();
   ]}
 />
 
-
-
 ## 戻り値
 
 <PropertiesTable
@@ -42,14 +35,12 @@ await agent.getTools();
     {
       name: "tools",
       type: "TTools | Promise<TTools>",
-      description: "エージェントに設定されたツール。直接のオブジェクト、またはツールに解決されるPromiseのいずれか。",
+      description: "エージェントに構成されたツール。ツールを表すオブジェクト、またはツールに解決される Promise のいずれかです。",
     },
   ]}
 />
 
-
-
-## 詳細な使用例
+## 拡張的な使用例
 
 ```typescript copy
 await agent.getTools({
@@ -57,7 +48,8 @@ await agent.getTools({
 });
 ```
 
-### オプションパラメータ
+
+### オプション引数
 
 <PropertiesTable
   content={[
@@ -66,14 +58,12 @@ await agent.getTools({
       type: "RuntimeContext",
       isOptional: true,
       defaultValue: "new RuntimeContext()",
-      description: "依存性注入およびコンテキスト情報のためのランタイムコンテキスト。",
+      description: "依存性の注入や各種コンテキスト情報を扱うための実行時コンテキスト。",
     },
   ]}
 />
 
-
-
-## 関連項目
+## 関連情報
 
 - [エージェントでのツール使用](../../docs/agents/using-tools-and-mcp.mdx)
 - [ツールの作成](../../docs/tools-mcp/overview.mdx)

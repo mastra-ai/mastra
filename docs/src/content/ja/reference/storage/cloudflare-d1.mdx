@@ -3,13 +3,9 @@ title: "Cloudflare D1 ストレージ | ストレージシステム | Mastra Cor
 description: Mastra における Cloudflare D1 SQL ストレージ実装のドキュメントです。
 ---
 
+# Cloudflare D1 ストレージ
 
-
-# Cloudflare D1 Storage
-
-Cloudflare D1ストレージの実装は、Cloudflare D1を利用したサーバーレスのSQLデータベースソリューションを提供し、リレーショナル操作とトランザクションの一貫性をサポートします。
-
-
+Cloudflare D1 ストレージの実装は、Cloudflare D1 を用いたサーバーレスの SQL データベースソリューションを提供し、リレーショナルな操作とトランザクション整合性をサポートします。
 
 ## インストール
 
@@ -18,33 +14,32 @@ npm install @mastra/cloudflare-d1@latest
 ```
 
 
-
-## 使用方法
+## 使い方
 
 ```typescript copy showLineNumbers
 import { D1Store } from "@mastra/cloudflare-d1";
 
 type Env = {
-  // Add your bindings here, e.g. Workers KV, D1, Workers AI, etc.
+  // ここにバインディングを追加します。例: Workers KV、D1、Workers AI など
   D1Database: D1Database;
 };
 
 // --- Example 1: Using Workers Binding ---
 const storageWorkers = new D1Store({
-  binding: D1Database, // D1Database binding provided by the Workers runtime
-  tablePrefix: "dev_", // Optional: isolate tables per environment
+  binding: D1Database, // Workers ランタイムで提供される D1Database バインディング
+  tablePrefix: "dev_", // 任意: 環境ごとにテーブルを分離
 });
 
-// --- Example 2: Using REST API ---
+// --- 例 2: REST API を使用 ---
 const storageRest = new D1Store({
-  accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
-  databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!, // D1 Database ID
-  apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
-  tablePrefix: "dev_", // Optional: isolate tables per environment
+  accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare アカウント ID
+  databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!, // D1 データベース ID
+  apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API トークン
+  tablePrefix: "dev_", // 任意: 環境ごとにテーブルを分離
 });
 ```
 
-そして、以下の内容を `wrangler.toml` または `wrangler.jsonc` ファイルに追加してください。
+次の内容を `wrangler.toml` または `wrangler.jsonc` ファイルに追加してください:
 
 ```
 [[d1_databases]]
@@ -54,15 +49,14 @@ database_id = "db-id"
 ```
 
 
-
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
     {
       name: "binding",
       type: "D1Database",
-      description: "Cloudflare D1 Workers バインディング（Workers ランタイム用）",
+      description: "Cloudflare D1 の Workers バインディング（Workers ランタイム用）",
       isOptional: true,
     },
     {
@@ -87,28 +81,26 @@ database_id = "db-id"
       name: "tablePrefix",
       type: "string",
       description:
-        "すべてのテーブル名に付与する任意のプレフィックス（環境ごとの分離に便利）",
+        "すべてのテーブル名に付与する任意の接頭辞（環境分離に便利）",
       isOptional: true,
     },
   ]}
 />
 
-
-
-## 追加の注意事項
+## 追記
 
 ### スキーマ管理
 
-このストレージ実装は、スキーマの作成と更新を自動的に処理します。以下のテーブルが作成されます：
+ストレージ実装はスキーマの作成と更新を自動的に行います。以下のテーブルを作成します:
 
-- `threads`: 会話スレッドを保存します
-- `messages`: 個々のメッセージを保存します
-- `metadata`: スレッドやメッセージの追加メタデータを保存します
+- `threads`: 会話スレッドを保存
+- `messages`: 個々のメッセージを保存
+- `metadata`: スレッドとメッセージに関する追加のメタデータを保存
 
 ### トランザクションと一貫性
 
-Cloudflare D1 は、単一行の操作に対してトランザクション保証を提供します。これにより、複数の操作をすべて成功するかすべて失敗するかの単位でまとめて実行できます。
+Cloudflare D1 は、単一行の操作に対してトランザクションの保証を提供します。これは、複数の操作を「すべて成功するか、すべて失敗するか」という不可分の作業単位として実行できることを意味します。
 
 ### テーブル作成とマイグレーション
 
-テーブルはストレージの初期化時に自動的に作成されます（`tablePrefix` オプションを使って環境ごとに分離することも可能です）が、カラムの追加やデータ型の変更、インデックスの修正などの高度なスキーマ変更には、手動でのマイグレーションとデータ損失を避けるための慎重な計画が必要です。
+テーブルはストレージの初期化時に自動的に作成されます（`tablePrefix` オプションを使えば、環境ごとに分離できます）。ただし、列の追加、データ型の変更、インデックスの変更といった高度なスキーマ変更には、データ損失を避けるための慎重な計画と手動でのマイグレーションが必要です。

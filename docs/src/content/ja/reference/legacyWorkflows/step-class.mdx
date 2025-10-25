@@ -1,15 +1,11 @@
 ---
-title: "リファレンス: Step | ワークフローの構築（レガシー） | Mastra ドキュメント"
-description: ワークフロー内の個々の作業単位を定義する Step クラスのドキュメント。
+title: "リファレンス: Step | ワークフロー構築（レガシー） | Mastra Docs"
+description: ワークフロー内の個々の処理単位を定義する Step クラスのドキュメント。
 ---
-
-
 
 # Step
 
-Stepクラスは、ワークフロー内の個々の作業単位を定義し、実行ロジック、データ検証、および入力／出力の処理をカプセル化します。
-
-
+Step クラスは、ワークフロー内の個々の作業単位を定義し、実行ロジック、データ検証、入出力処理をまとめて扱います。
 
 ## 使い方
 
@@ -26,7 +22,7 @@ const processOrder = new LegacyStep({
   }),
   execute: async ({ context, runId }) => {
     return {
-      status: "processed",
+      status: "処理完了",
       orderId: context.orderId,
     };
   },
@@ -34,15 +30,14 @@ const processOrder = new LegacyStep({
 ```
 
 
-
-## コンストラクタのパラメータ
+## コンストラクターのパラメータ
 
 <PropertiesTable
   content={[
     {
       name: "id",
       type: "string",
-      description: "ステップの一意な識別子",
+      description: "ステップの一意の識別子",
       required: true,
     },
     {
@@ -60,7 +55,7 @@ const processOrder = new LegacyStep({
     {
       name: "payload",
       type: "Record<string, any>",
-      description: "変数とマージされる静的データ",
+      description: "変数にマージされる静的データ",
       required: false,
     },
     {
@@ -79,12 +74,12 @@ const processOrder = new LegacyStep({
     {
       name: "context",
       type: "StepContext",
-      description: "ワークフローのコンテキストとステップ結果へのアクセス",
+      description: "ワークフローのコンテキストとステップ結果にアクセスします",
     },
     {
       name: "runId",
       type: "string",
-      description: "現在のワークフロー実行の一意な識別子",
+      description: "現在のワークフロー実行の一意の識別子",
     },
     {
       name: "suspend",
@@ -94,14 +89,12 @@ const processOrder = new LegacyStep({
     {
       name: "mastra",
       type: "Mastra",
-      description: "Mastraインスタンスへのアクセス",
+      description: "Mastra インスタンスにアクセスします",
     },
   ]}
 />
 
-
-
-## 関連
+## 関連項目
 
 - [ワークフローリファレンス](./workflow.mdx)
 - [ステップ設定ガイド](../../docs/workflows-legacy/steps.mdx)

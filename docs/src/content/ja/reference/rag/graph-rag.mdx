@@ -1,15 +1,11 @@
 ---
 title: "リファレンス: GraphRAG | グラフベースRAG | RAG | Mastra ドキュメント"
-description: MastraのGraphRAGクラスのドキュメント。グラフベースの検索拡張生成手法を実装しています。
+description: Mastra の GraphRAG クラスに関するドキュメント。Retrieval-Augmented Generation（RAG）に対するグラフベースの手法を実装しています。
 ---
-
-
 
 # GraphRAG
 
-`GraphRAG` クラスは、グラフベースのリトリーバル拡張生成手法を実装しています。ドキュメントのチャンクからナレッジグラフを作成し、ノードはドキュメントを、エッジはセマンティックな関係を表します。これにより、直接的な類似性マッチングだけでなく、グラフの探索を通じて関連コンテンツを発見することも可能になります。
-
-
+`GraphRAG` クラスは、グラフベースの手法によるRAG（Retrieval-Augmented Generation）を実装します。ドキュメントのチャンクから、ノードをドキュメント、エッジを意味関係として表すナレッジグラフを構築し、直接的な類似度マッチングに加え、グラフ探索による関連コンテンツの発見を可能にします。
 
 ## 基本的な使い方
 
@@ -21,10 +17,10 @@ const graphRag = new GraphRAG({
   threshold: 0.7,
 });
 
-// Create the graph from chunks and embeddings
+// チャンクと埋め込みからグラフを作成する
 graphRag.createGraph(documentChunks, embeddings);
 
-// Query the graph with embedding
+// 埋め込みを使ってグラフをクエリする
 const results = await graphRag.query({
   query: queryEmbedding,
   topK: 10,
@@ -34,7 +30,6 @@ const results = await graphRag.query({
 ```
 
 
-
 ## コンストラクタのパラメータ
 
 <PropertiesTable
@@ -42,7 +37,7 @@ const results = await graphRag.query({
     {
       name: "dimension",
       type: "number",
-      description: "埋め込みベクトルの次元数",
+      description: "埋め込みベクトルの次元",
       isOptional: true,
       defaultValue: "1536",
     },
@@ -50,39 +45,38 @@ const results = await graphRag.query({
       name: "threshold",
       type: "number",
       description:
-        "ノード間のエッジを作成するための類似度しきい値（0-1）",
+        "ノード間にエッジを作成するための類似度のしきい値（0〜1）",
       isOptional: true,
       defaultValue: "0.7",
     },
   ]}
 />
 
-
-
 ## メソッド
 
 ### createGraph
 
-ドキュメントチャンクとその埋め込みからナレッジグラフを作成します。
+ドキュメントのチャンクとその埋め込みから、ナレッジグラフを生成します。
 
 ```typescript
 createGraph(chunks: GraphChunk[], embeddings: GraphEmbedding[]): void
 ```
 
-#### パラメータ
+
+#### パラメーター
 
 <PropertiesTable
   content={[
     {
       name: "chunks",
       type: "GraphChunk[]",
-      description: "テキストとメタデータを含むドキュメントチャンクの配列",
+      description: "テキストとメタデータを含むドキュメントのチャンク配列",
       isOptional: false,
     },
     {
       name: "embeddings",
       type: "GraphEmbedding[]",
-      description: "チャンクに対応する埋め込みの配列",
+      description: "各チャンクに対応する埋め込みベクトルの配列",
       isOptional: false,
     },
   ]}
@@ -90,7 +84,7 @@ createGraph(chunks: GraphChunk[], embeddings: GraphEmbedding[]): void
 
 ### query
 
-ベクトル類似度とグラフ探索を組み合わせたグラフベースの検索を実行します。
+ベクトル類似度とグラフトラバーサルを組み合わせたグラフベース検索を実行します。
 
 ```typescript
 query({
@@ -106,6 +100,7 @@ query({
 }): RankedNode[]
 ```
 
+
 #### パラメータ
 
 <PropertiesTable
@@ -119,7 +114,7 @@ query({
     {
       name: "topK",
       type: "number",
-      description: "返す結果の数",
+      description: "返却する結果数",
       isOptional: true,
       defaultValue: "10",
     },
@@ -133,7 +128,7 @@ query({
     {
       name: "restartProb",
       type: "number",
-      description: "クエリノードからウォークを再開する確率",
+      description: "クエリノードから再始動する確率",
       isOptional: true,
       defaultValue: "0.15",
     },
@@ -142,7 +137,7 @@ query({
 
 #### 戻り値
 
-`RankedNode` オブジェクトの配列を返します。各ノードには以下が含まれます：
+各ノードに以下が含まれる、`RankedNode` オブジェクトの配列を返します:
 
 <PropertiesTable
   content={[
@@ -159,30 +154,28 @@ query({
     {
       name: "metadata",
       type: "Record<string, any>",
-      description: "チャンクに関連付けられた追加メタデータ",
+      description: "チャンクに関連付けられた追加のメタデータ",
     },
     {
       name: "score",
       type: "number",
-      description: "グラフ探索による総合関連スコア",
+      description: "グラフ走査による総合的な関連度スコア",
     },
   ]}
 />
 
-
-
-## 高度な例
+## 上級の例
 
 ```typescript
 const graphRag = new GraphRAG({
   dimension: 1536,
-  threshold: 0.8, // Stricter similarity threshold
+  threshold: 0.8, // より厳密な類似度のしきい値
 });
 
-// Create graph from chunks and embeddings
+// チャンクと埋め込みからグラフを作成する
 graphRag.createGraph(documentChunks, embeddings);
 
-// Query with custom parameters
+// カスタムパラメータでクエリする
 const results = await graphRag.query({
   query: queryEmbedding,
   topK: 5,
@@ -192,7 +185,6 @@ const results = await graphRag.query({
 ```
 
 
-
-## 関連
+## 関連項目
 
 - [createGraphRAGTool](../tools/graph-rag-tool)

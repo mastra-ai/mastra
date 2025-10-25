@@ -20,5 +20,8 @@ const meta = {
   getLogsByRunId: ".getLogsByRunId()",
   getLogger: ".getLogger()",
   setLogger: ".setLogger()",
+  getScorers: ".getScorers()",
+  getScorer: ".getScorer()",
+  getScorerByName: ".getScorerByName()",
 };
 export default meta;

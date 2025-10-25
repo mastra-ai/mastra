@@ -1,0 +1,332 @@
+---
+title: "例: Response Validator | Processors | Mastra Docs"
+description: ユーザーに返す前に、AI の応答が必須キーワードを含むかを検証するカスタム出力プロセッサの作成例。
+---
+
+# レスポンスバリデーター
+
+この例では、AI のレスポンスがユーザーに返される前、生成後に検証するカスタム出力プロセッサの作成方法を示します。このプロセッサは、レスポンスに必須キーワードが含まれているかを確認し、検証基準を満たさないレスポンスを却下して、品質とコンプライアンスを確保します。
+
+## カスタム出力プロセッサを作成する
+
+Mastra のカスタム出力プロセッサは、最終結果を検証するための `processOutputResult` メソッドを備えた `Processor` インターフェースを実装します。このプロセッサはレスポンス全体をチェックし、指定されたキーワードをすべて含んでいるかを検証します。
+
+```typescript filename="src/mastra/processors/response-validator.ts" showLineNumbers copy
+import type { Processor, MastraMessageV2 } from "@mastra/core/processors";
+
+export class ResponseValidator implements Processor {
+  readonly name = 'response-validator';
+  
+  constructor(private requiredKeywords: string[] = []) {}
+
+  processOutputResult({ messages, abort }: { 
+    messages: MastraMessageV2[]; 
+    abort: (reason?: string) => never 
+  }): MastraMessageV2[] {
+    const responseText = messages
+      .map(msg => msg.content.parts
+        .filter(part => part.type === 'text')
+        .map(part => (part as any).text)
+        .join('')
+      )
+      .join('');
+    
+    // 必須キーワードの確認
+    for (const keyword of this.requiredKeywords) {
+      if (!responseText.toLowerCase().includes(keyword.toLowerCase())) {
+        abort(`必須キーワードが見つかりません: ${keyword}`);
+      }
+    }
+    
+    return messages;
+  }
+}
+```
+
+
+### 主要コンポーネント
+
+- **コンストラクタ**: 検証用の必須キーワード配列を受け取る
+- **テキスト抽出**: すべてのメッセージのテキストを結合して1つの文字列にまとめる
+- **大文字・小文字を区別しないマッチング**: 小文字化して比較し、堅牢にキーワードを検出する
+- **検証ロジック**: 応答に必須キーワードが1つでも欠けていれば処理を中断する
+
+### プロセッサの使い方
+
+```typescript filename="src/mastra/agents/example-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { ResponseValidator } from "../processors/response-validator";
+
+export const validatedAgent = new Agent({
+  name: 'validated-agent',
+  instructions: 'あなたは親切なアシスタントです。回答には必ず重要な概念に言及してください。',
+  model: openai("gpt-4o"),
+  outputProcessors: [
+    new ResponseValidator(['artificial intelligence', 'machine learning']), // 両方のキーワードが必要です
+  ],
+});
+```
+
+
+## 高水準の例（すべてのキーワードが含まれる）
+
+この例は、すべての必須キーワードを含み、検証に問題なく合格するレスポンスを示しています。
+
+```typescript filename="src/example-high-response-validation.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { ResponseValidator } from "./mastra/processors/response-validator";
+
+// AI関連のキーワードを必須とするエージェントを作成
+export const agent = new Agent({
+  name: 'validated-agent',
+  instructions: 'あなたはAIの専門家です。AIトピックについて議論する際は、必ず人工知能と機械学習に言及してください。',
+  model: openai("gpt-4o"),
+  outputProcessors: [
+    new ResponseValidator(['artificial intelligence', 'machine learning']),
+  ],
+});
+
+const result = await agent.generate("AIシステムがデータから学習する仕組みを説明してください。");
+console.log("✅ レスポンスが検証に合格しました:");
+console.log(result.text);
+```
+
+
+### 良い出力例
+
+この応答は、必要なキーワードが両方含まれているため、検証を通過します。
+
+```typescript
+✅ レスポンスは検証に合格しました:
+"人工知能システムは、機械学習アルゴリズムを通じてデータから学習します。これらのシステムは、ニューラルネットワークなどの様々な技術を使用して、データセット内のパターンを識別します。機械学習により、人工知能は各シナリオごとに明示的なプログラミングを行うことなく、特定のタスクにおける性能を向上させることができます。"
+```
+
+
+## 一部の例（キーワード不足）
+
+この例は、レスポンスから必須キーワードが1つ以上欠けている場合に何が起きるかを示しています。
+
+```typescript filename="src/example-partial-response-validation.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { ResponseValidator } from "./mastra/processors/response-validator";
+
+// 同じエージェントを再利用しますが、セキュリティ関連のキーワードを必須とします
+export const agent = new Agent({
+  name: 'validated-agent',
+  instructions: 'あなたは役立つアシスタントです。',
+  model: openai("gpt-4o"),
+  outputProcessors: [
+    new ResponseValidator(['security', 'privacy', 'encryption']), // 3つすべて必須
+  ],
+});
+
+const result = await agent.generate("オンラインでデータを保護するにはどうすればよいですか?");
+
+if (result.tripwire) {
+  console.log("❌ レスポンスの検証に失敗しました:");
+  console.log(result.tripwireReason);
+} else {
+  console.log("✅ レスポンスの検証に合格しました:");
+  console.log(result.text);
+}
+```
+
+
+### 部分的な出力例
+
+この応答は、必須のキーワードがすべて含まれていないため、検証に失敗します。
+
+```typescript
+❌ レスポンスの検証に失敗しました:
+レスポンスに必須キーワードがありません: encryption
+
+// レスポンスには「security」と「privacy」が含まれていた可能性がありますが、「encryption」が欠けていました
+```
+
+
+## 低レベルの例（キーワードなし）
+
+この例は、必要なキーワードがレスポンスに1つも含まれていない場合に、検証が失敗することを示します。
+
+```typescript filename="src/example-low-response-validation.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { ResponseValidator } from "./mastra/processors/response-validator";
+
+// 同じエージェントを再利用するが、金融キーワードを必須とする
+export const agent = new Agent({
+  name: 'validated-agent',
+  instructions: 'あなたは汎用アシスタントです。',
+  model: openai("gpt-4o"),
+  outputProcessors: [
+    new ResponseValidator(['blockchain', 'cryptocurrency', 'bitcoin']),
+  ],
+});
+
+const result = await agent.generate("今日の天気はどうですか?");
+
+if (result.tripwire) {
+  console.log("❌ レスポンスの検証に失敗しました:");
+  console.log(result.tripwireReason);
+} else {
+  console.log("✅ レスポンスの検証に成功しました:");
+  console.log(result.text);
+}
+```
+
+
+### 低品質な出力例
+
+この応答は、必要な金融関連キーワードがまったく含まれていないため、検証に失敗します：
+
+```typescript
+❌ レスポンスの検証に失敗しました:
+レスポンスに必須キーワードが含まれていません: blockchain
+
+// 天気のレスポンスは金融概念とは何の関連性もありません
+```
+
+
+## 高度な設定
+
+カスタムロジックを用いて、より高度なバリデーターを作成できます。
+
+```typescript filename="src/example-advanced-response-validation.ts" showLineNumbers copy
+import type { Processor, MastraMessageV2 } from "@mastra/core/processors";
+
+export class AdvancedResponseValidator implements Processor {
+  readonly name = 'advanced-response-validator';
+  
+  constructor(
+    private config: {
+      requiredKeywords?: string[];
+      forbiddenWords?: string[];
+      minLength?: number;
+      maxLength?: number;
+      requireAllKeywords?: boolean;
+    } = {}
+  ) {}
+
+  processOutputResult({ messages, abort }: { 
+    messages: MastraMessageV2[]; 
+    abort: (reason?: string) => never 
+  }): MastraMessageV2[] {
+    const responseText = messages
+      .map(msg => msg.content.parts
+        .filter(part => part.type === 'text')
+        .map(part => (part as any).text)
+        .join('')
+      )
+      .join('');
+    
+    const lowerText = responseText.toLowerCase();
+    
+    // 長さの検証
+    if (this.config.minLength && responseText.length < this.config.minLength) {
+      abort(`レスポンスが短すぎます: ${responseText.length}文字(最小: ${this.config.minLength})`);
+    }
+    
+    if (this.config.maxLength && responseText.length > this.config.maxLength) {
+      abort(`レスポンスが長すぎます: ${responseText.length}文字(最大: ${this.config.maxLength})`);
+    }
+    
+    // 禁止ワードのチェック
+    if (this.config.forbiddenWords) {
+      for (const word of this.config.forbiddenWords) {
+        if (lowerText.includes(word.toLowerCase())) {
+          abort(`レスポンスに禁止ワードが含まれています: ${word}`);
+        }
+      }
+    }
+    
+    // 必須キーワードのチェック
+    if (this.config.requiredKeywords) {
+      if (this.config.requireAllKeywords !== false) {
+        // すべてのキーワードが必須(デフォルトの動作)
+        for (const keyword of this.config.requiredKeywords) {
+          if (!lowerText.includes(keyword.toLowerCase())) {
+            abort(`レスポンスに必須キーワードが不足しています: ${keyword}`);
+          }
+        }
+      } else {
+        // 少なくとも1つのキーワードが必須
+        const hasAnyKeyword = this.config.requiredKeywords.some(keyword =>
+          lowerText.includes(keyword.toLowerCase())
+        );
+        if (!hasAnyKeyword) {
+          abort(`レスポンスに必須キーワードのいずれも含まれていません: ${this.config.requiredKeywords.join(', ')}`);
+        }
+      }
+    }
+    
+    return messages;
+  }
+}
+
+// 使用例
+export const advancedAgent = new Agent({
+  name: 'advanced-validated-agent',
+  instructions: 'あなたはテクニカルライターです。',
+  model: openai("gpt-4o"),
+  outputProcessors: [
+    new AdvancedResponseValidator({
+      requiredKeywords: ['technical', 'implementation'],
+      forbiddenWords: ['maybe', 'probably', 'might'],
+      minLength: 100,
+      maxLength: 1000,
+      requireAllKeywords: true,
+    }),
+  ],
+});
+```
+
+
+## 結果を理解する
+
+`ResponseValidator` を使用すると、プロセッサは次のことを行います。
+
+### 検証が成功した場合
+
+- **すべてのキーワードを含む**: 必須キーワードをすべて含む応答は、そのまま通過します
+- **大文字・小文字を区別しない**: 大文字・小文字に関係なくマッチします
+- **全文検索**: 応答内のすべてのテキストを対象に検索します
+
+### 検証の失敗
+
+- **キーワードの不足**: 必須キーワードが不足している場合は `result.tripwire = true` が設定されます
+- **詳細なエラー**: どのキーワードが不足しているかは `result.tripwireReason` に示されます
+- **即時ブロック**: レスポンスはユーザーに返される前にブロックされます
+- **例外なし**: try/catch ブロックではなく `result.tripwire` を確認してください
+
+### 検証の挙動
+
+- **完全なレスポンス**: ストリーミング中の部分ではなく、生成されたレスポンス全体を対象に実行します
+- **テキストのみ**: 他のメッセージ要素は無視し、テキスト内容のみを検証します
+- **順次チェック**: キーワードを順に確認し、最初に欠落したキーワードで失敗とします
+
+### 設定オプション
+
+- **requiredKeywords**: すべてが含まれている必要があるキーワードの配列
+- **Case sensitivity**: 検証は既定で大文字小文字を区別しません
+- **Custom logic**: より複雑な検証ルールに対応するため、クラスを拡張します
+
+### ベストプラクティス
+
+- **明確な指示**: 必要なキーワードが含まれるようにエージェントの指示を更新する
+- **適切なキーワード**: 応答の領域に自然に馴染むキーワードを選定する
+- **フォールバック対応**: 検証失敗時の再試行ロジックを実装する
+- **ユーザーへのフィードバック**: 検証に失敗した場合は明確なエラーメッセージを提示する
+- **テスト**: さまざまな応答スタイルでテストし、誤検知を避ける
+
+### ユースケース
+
+- **コンプライアンス**: 応答が規制やポリシー要件を満たしていることを確実にする
+- **品質管理**: 応答が特定のトピックを適切に扱っているか検証する
+- **ブランドガイドライン**: 応答に必要な用語や概念が盛り込まれていることを確実にする
+- **教育コンテンツ**: 学習教材が必須の概念を網羅しているか検証する
+- **技術文書**: 応答に必要な技術用語が含まれていることを確実にする
+
+このプロセッサは、コンプライアンス、品質保証、教育など、応答内容が特定の基準を満たしていることを担保する必要があるアプリケーションに特に有用です。

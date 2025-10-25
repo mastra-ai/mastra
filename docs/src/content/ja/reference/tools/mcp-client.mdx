@@ -1,21 +1,17 @@
 ---
 title: "リファレンス: MCPClient | ツール管理 | Mastra ドキュメント"
-description: MCPClientのAPIリファレンス - 複数のModel Context Protocolサーバーとそのツールを管理するためのクラス。
+description: MCPClient の API リファレンス — 複数の Model Context Protocol サーバーとそのツールを管理するクラス。
 ---
-
-
 
 # MCPClient
 
-`MCPClient`クラスは、Mastraアプリケーションで複数のMCPサーバー接続とそのツールを管理する方法を提供します。接続のライフサイクル、ツールの名前空間管理を処理し、設定されたすべてのサーバーにわたるツールへのアクセスを提供します。
+`MCPClient` クラスは、Mastra アプリケーションで複数の MCP サーバー接続とそれらのツールを一元的に管理するためのクラスです。接続のライフサイクル管理やツールの名前空間化を行い、設定済みのすべてのサーバーにまたがるツールへのアクセスを提供します。
 
-このクラスは非推奨の[`MastraMCPClient`](/reference/tools/client)に代わるものです。
+このクラスは、非推奨となった [`MastraMCPClient`](/reference/tools/client) の後継です。
 
+## コンストラクター
 
-
-## コンストラクタ
-
-MCPClientクラスの新しいインスタンスを作成します。
+MCPClient クラスの新しいインスタンスを生成します。
 
 ```typescript
 constructor({
@@ -25,9 +21,11 @@ constructor({
 }: MCPClientOptions)
 ```
 
+
 ### MCPClientOptions
 
 <br />
+
 <PropertiesTable
   content={[
     {
@@ -35,13 +33,13 @@ constructor({
       type: "string",
       isOptional: true,
       description:
-        "設定インスタンスのオプションの一意識別子。同一の設定で複数のインスタンスを作成する際にメモリリークを防ぐために使用します。",
+        "構成インスタンスの任意の一意の識別子。同一構成で複数のインスタンスを作成する際のメモリリークを防ぐために使用します。",
     },
     {
       name: "servers",
       type: "Record<string, MastraMCPServerDefinition>",
       description:
-        "サーバー設定のマップ。各キーは一意のサーバー識別子であり、値はサーバー設定です。",
+        "サーバー構成のマップ。各キーは一意のサーバー識別子で、値はそのサーバーの構成です。",
     },
     {
       name: "timeout",
@@ -49,71 +47,72 @@ constructor({
       isOptional: true,
       defaultValue: "60000",
       description:
-        "個々のサーバー設定で上書きされない限り、すべてのサーバーに適用されるグローバルタイムアウト値（ミリ秒単位）。",
+        "個別のサーバー構成で上書きされない限り、すべてのサーバーに適用される（ミリ秒単位の）グローバルタイムアウト値。",
     },
   ]}
 />
 
 ### MastraMCPServerDefinition
 
-`servers`マップ内の各サーバーは`MastraMCPServerDefinition`タイプを使用して設定されます。トランスポートタイプは提供されたパラメータに基づいて検出されます：
+`servers` マップ内の各サーバーは `MastraMCPServerDefinition` 型で構成します。トランスポート種別は、指定されたパラメータに基づいて自動判別されます。
 
-- `command`が提供されている場合、Stdioトランスポートを使用します。
-- `url`が提供されている場合、最初にStreamable HTTPトランスポートを試み、初期接続が失敗した場合はレガシーSSEトランスポートにフォールバックします。
+- `command` が指定されている場合は Stdio トランスポートを使用します。
+- `url` が指定されている場合は、まず Streamable HTTP トランスポートを試し、初回の接続に失敗した場合はレガシーな SSE トランスポートにフォールバックします。
 
 <br />
+
 <PropertiesTable
   content={[
     {
       name: "command",
       type: "string",
       isOptional: true,
-      description: "Stdioサーバーの場合：実行するコマンド。",
+      description: "Stdio サーバー向け: 実行するコマンド。",
     },
     {
       name: "args",
       type: "string[]",
       isOptional: true,
-      description: "Stdioサーバーの場合：コマンドに渡す引数。",
+      description: "Stdio サーバー向け: コマンドに渡す引数。",
     },
     {
       name: "env",
       type: "Record<string, string>",
       isOptional: true,
       description:
-        "Stdioサーバーの場合：コマンドに設定する環境変数。",
+        "Stdio サーバー向け: コマンドに設定する環境変数。",
     },
     {
       name: "url",
       type: "URL",
       isOptional: true,
       description:
-        "HTTPサーバー（Streamable HTTPまたはSSE）の場合：サーバーのURL。",
+        "HTTP サーバー（Streamable HTTP または SSE）向け: サーバーの URL。",
     },
     {
       name: "requestInit",
       type: "RequestInit",
       isOptional: true,
-      description: "HTTPサーバーの場合：fetch APIのリクエスト設定。",
+      description: "HTTP サーバー向け: fetch API のリクエスト設定。",
     },
     {
       name: "eventSourceInit",
       type: "EventSourceInit",
       isOptional: true,
       description:
-        "SSEフォールバックの場合：SSE接続用のカスタムフェッチ設定。SSEでカスタムヘッダーを使用する場合に必要です。",
+        "SSE フォールバック向け: SSE 接続用のカスタム fetch 設定。SSE でカスタムヘッダーを使用する場合は必須。",
     },
     {
       name: "logger",
       type: "LogHandler",
       isOptional: true,
-      description: "ロギング用のオプションの追加ハンドラー。",
+      description: "追加のロギング用ハンドラー（任意）。",
     },
     {
       name: "timeout",
       type: "number",
       isOptional: true,
-      description: "サーバー固有のタイムアウト（ミリ秒単位）。",
+      description: "サーバー固有のタイムアウト（ミリ秒）。",
     },
     {
       name: "capabilities",
@@ -126,28 +125,27 @@ constructor({
       type: "boolean",
       isOptional: true,
       defaultValue: "true",
-      description: "このサーバーのロギングを有効にするかどうか。",
+      description: "このサーバーのログを有効にするかどうか。",
     },
   ]}
 />
 
-
-
-## メソッド
+## 手法
 
 ### getTools()
 
-設定されたすべてのサーバーからすべてのツールを取得し、ツール名をサーバー名で名前空間化（`serverName_toolName`の形式）して競合を防ぎます。
-Agent定義に渡すことを想定しています。
+構成済みのすべてのサーバーからツールを取得します。ツール名は競合を防ぐため、サーバー名で名前空間化されます（形式は `serverName_toolName`）。\
+Agent の定義に渡すことを想定しています。
 
 ```ts
 new Agent({ tools: await mcp.getTools() });
 ```
 
+
 ### getToolsets()
 
-名前空間化されたツール名（`serverName.toolName`の形式）をそのツール実装にマッピングするオブジェクトを返します。
-generateまたはstreamメソッドに動的に渡すことを想定しています。
+名前空間付きのツール名（`serverName.toolName` の形式）を、それぞれのツール実装に対応付けたオブジェクトを返します。
+generate または stream メソッドに動的に渡すことを想定しています。
 
 ```typescript
 const res = await agent.stream(prompt, {
@@ -155,32 +153,35 @@ const res = await agent.stream(prompt, {
 });
 ```
 
+
 ### disconnect()
 
-すべてのMCPサーバーから切断し、リソースをクリーンアップします。
+すべての MCP サーバーから切断し、リソースを解放します。
 
 ```typescript
 async disconnect(): Promise<void>
 ```
 
+
 ### `resources` プロパティ
 
-`MCPClient`インスタンスには、リソース関連の操作へのアクセスを提供する`resources`プロパティがあります。
+`MCPClient` インスタンスには、リソース関連の操作にアクセスするための `resources` プロパティがあります。
 
 ```typescript
 const mcpClient = new MCPClient({
-  /* ...servers configuration... */
+  /* …サーバー構成… */
 });
 
-// mcpClient.resources経由でリソースメソッドにアクセス
+// mcpClient.resources 経由でリソース関連のメソッドにアクセスします
 const allResourcesByServer = await mcpClient.resources.list();
 const templatesByServer = await mcpClient.resources.templates();
-// ... その他のリソースメソッドについても同様
+// …他のリソース関連のメソッドも同様です
 ```
+
 
 #### `resources.list()`
 
-接続されたすべてのMCPサーバーから利用可能なすべてのリソースを取得し、サーバー名でグループ化します。
+接続されているすべての MCP サーバーから、利用可能なリソースをサーバー名ごとにグループ化して取得します。
 
 ```typescript
 async list(): Promise<Record<string, Resource[]>>
@@ -191,13 +192,14 @@ async list(): Promise<Record<string, Resource[]>>
 ```typescript
 const resourcesByServer = await mcpClient.resources.list();
 for (const serverName in resourcesByServer) {
-  console.log(`Resources from ${serverName}:`, resourcesByServer[serverName]);
+  console.log(`${serverName} からのリソース:`, resourcesByServer[serverName]);
 }
 ```
 
+
 #### `resources.templates()`
 
-接続されたすべてのMCPサーバーから利用可能なすべてのリソーステンプレートを取得し、サーバー名でグループ化します。
+接続中のすべての MCP サーバーから利用可能なリソーステンプレートを取得し、サーバー名ごとにグループ化します。
 
 ```typescript
 async templates(): Promise<Record<string, ResourceTemplate[]>>
@@ -208,34 +210,36 @@ async templates(): Promise<Record<string, ResourceTemplate[]>>
 ```typescript
 const templatesByServer = await mcpClient.resources.templates();
 for (const serverName in templatesByServer) {
-  console.log(`Templates from ${serverName}:`, templatesByServer[serverName]);
+  console.log(`${serverName} のテンプレート:`, templatesByServer[serverName]);
 }
 ```
 
+
 #### `resources.read(serverName: string, uri: string)`
 
-指定されたサーバーから特定のリソースの内容を読み取ります。
+指定したサーバーから、特定のリソースの内容を読み込みます。
 
 ```typescript
 async read(serverName: string, uri: string): Promise<ReadResourceResult>
 ```
 
-- `serverName`: サーバーの識別子（`servers`コンストラクタオプションで使用されるキー）。
-- `uri`: 読み取るリソースのURI。
+* `serverName`: サーバーの識別子（`servers` のコンストラクターオプションで使用するキー）。
+* `uri`: 読み取り対象のリソースの URI。
 
-例：
+例:
 
 ```typescript
 const content = await mcpClient.resources.read(
   "myWeatherServer",
   "weather://current",
 );
-console.log("Current weather:", content.contents[0].text);
+console.log("現在の天気：", content.contents[0].text);
 ```
+
 
 #### `resources.subscribe(serverName: string, uri: string)`
 
-指定されたサーバー上の特定のリソースの更新を購読します。
+指定された名前のサーバー上にある特定のリソースの更新を購読します。
 
 ```typescript
 async subscribe(serverName: string, uri: string): Promise<object>
@@ -247,9 +251,10 @@ async subscribe(serverName: string, uri: string): Promise<object>
 await mcpClient.resources.subscribe("myWeatherServer", "weather://current");
 ```
 
+
 #### `resources.unsubscribe(serverName: string, uri: string)`
 
-指定されたサーバー上の特定のリソースの更新購読を解除します。
+指定したサーバー上の特定のリソースに対する更新の購読を解除します。
 
 ```typescript
 async unsubscribe(serverName: string, uri: string): Promise<object>
@@ -261,9 +266,10 @@ async unsubscribe(serverName: string, uri: string): Promise<object>
 await mcpClient.resources.unsubscribe("myWeatherServer", "weather://current");
 ```
 
+
 #### `resources.onUpdated(serverName: string, handler: (params: { uri: string }) => void)`
 
-特定のサーバー上で購読されたリソースが更新されたときに呼び出される通知ハンドラーを設定します。
+特定のサーバーで購読中のリソースが更新された際に呼び出される通知ハンドラーを設定します。
 
 ```typescript
 async onUpdated(serverName: string, handler: (params: { uri: string }) => void): Promise<void>
@@ -273,15 +279,16 @@ async onUpdated(serverName: string, handler: (params: { uri: string }) => void):
 
 ```typescript
 mcpClient.resources.onUpdated("myWeatherServer", (params) => {
-  console.log(`Resource updated on myWeatherServer: ${params.uri}`);
-  // ここでリソースの内容を再取得したい場合があります
+  console.log(`myWeatherServer のリソースが更新されました: ${params.uri}`);
+  // ここでリソースの内容を再取得することもできます
   // await mcpClient.resources.read("myWeatherServer", params.uri);
 });
 ```
 
+
 #### `resources.onListChanged(serverName: string, handler: () => void)`
 
-特定のサーバー上で利用可能なリソースの全体的なリストが変更されたときに呼び出される通知ハンドラーを設定します。
+特定のサーバー上で利用可能なリソースの一覧に変更があった際に呼び出される通知ハンドラを設定します。
 
 ```typescript
 async onListChanged(serverName: string, handler: () => void): Promise<void>
@@ -291,24 +298,23 @@ async onListChanged(serverName: string, handler: () => void): Promise<void>
 
 ```typescript
 mcpClient.resources.onListChanged("myWeatherServer", () => {
-  console.log("Resource list changed on myWeatherServer.");
-  // リソースのリストを再取得する必要があります
+  console.log("myWeatherServer のリソース一覧が更新されました。");
+  // リソース一覧を再取得してください
   // await mcpClient.resources.list();
 });
 ```
 
+
 ### `prompts` プロパティ
 
-`MCPClient`インスタンスには、プロンプト関連の操作へのアクセスを提供する`prompts`プロパティがあります。
-
-
+`MCPClient` インスタンスには、プロンプト関連の操作にアクセスできる `prompts` プロパティがあります。
 
 ```typescript
 const mcpClient = new MCPClient({
   /* ...servers configuration... */
 });
 
-// Access prompt methods via mcpClient.prompts
+// mcpClient.prompts からプロンプト関連のメソッドにアクセスする
 const allPromptsByServer = await mcpClient.prompts.list();
 const { prompt, messages } = await mcpClient.prompts.get({
   serverName: "myWeatherServer",
@@ -316,22 +322,23 @@ const { prompt, messages } = await mcpClient.prompts.get({
 });
 ```
 
+
 ### `elicitation` プロパティ
 
-`MCPClient` インスタンスには、elicitation関連の操作へのアクセスを提供する `elicitation` プロパティがあります。Elicitationにより、MCPサーバーはユーザーから構造化された情報を要求することができます。
+`MCPClient` インスタンスには、エリシテーション関連の操作にアクセスできる `elicitation` プロパティがあります。エリシテーションにより、MCP サーバーはユーザーに対して構造化された情報の提供を求めることができます。
 
 ```typescript
 const mcpClient = new MCPClient({
   /* ...servers configuration... */
 });
 
-// Set up elicitation handler
+// エリシテーションハンドラーを設定
 mcpClient.elicitation.onRequest('serverName', async (request) => {
-  // Handle elicitation request from server
-  console.log('Server requests:', request.message);
-  console.log('Schema:', request.requestedSchema);
+  // サーバーからのエリシテーションリクエストを処理
+  console.log('サーバーからのリクエスト:', request.message);
+  console.log('スキーマ:', request.requestedSchema);
   
-  // Return user response
+  // ユーザーからの応答を返す
   return {
     action: 'accept',
     content: { name: 'John Doe', email: 'john@example.com' }
@@ -339,29 +346,32 @@ mcpClient.elicitation.onRequest('serverName', async (request) => {
 });
 ```
 
+
 #### `elicitation.onRequest(serverName: string, handler: ElicitationHandler)`
 
-接続されたMCPサーバーがelicitationリクエストを送信した際に呼び出されるハンドラー関数を設定します。ハンドラーはリクエストを受け取り、レスポンスを返す必要があります。
+接続中の任意の MCP サーバーからエリシテーションリクエストが送信された際に呼び出されるハンドラー関数を登録します。ハンドラーはリクエストを受け取り、レスポンスを返す必要があります。
 
-**ElicitationHandler関数:**
+**ElicitationHandler 関数:**
 
-ハンドラー関数は以下を含むリクエストオブジェクトを受け取ります：
-- `message`: 必要な情報を説明する人間が読める形式のメッセージ
-- `requestedSchema`: 期待されるレスポンスの構造を定義するJSONスキーマ
+ハンドラー関数は次のプロパティを持つリクエストオブジェクトを受け取ります:
 
-ハンドラーは以下を含む `ElicitResult` を返す必要があります：
-- `action`: `'accept'`、`'decline'`、または `'cancel'` のいずれか
-- `content`: ユーザーのデータ（actionが `'accept'` の場合のみ）
+* `message`: 必要な情報の内容を説明する、人間が読めるメッセージ
+* `requestedSchema`: 期待されるレスポンスの構造を定義する JSON スキーマ
+
+ハンドラーは次の内容を持つ `ElicitResult` を返す必要があります:
+
+* `action`: `'accept'`、`'decline'`、または `'cancel'` のいずれか
+* `content`: ユーザーのデータ（`'accept'` の場合のみ）
 
 **例:**
 
 ```typescript
 mcpClient.elicitation.onRequest('serverName', async (request) => {
-  console.log(`Server requests: ${request.message}`);
+  console.log(`サーバーからの要求: ${request.message}`);
   
-  // Example: Simple user input collection
+  // 例: ユーザー入力の簡易収集
   if (request.requestedSchema.properties.name) {
-    // Simulate user accepting and providing data
+    // ユーザーが承諾してデータを提供することをシミュレート
     return {
       action: 'accept',
       content: {
@@ -371,14 +381,12 @@ mcpClient.elicitation.onRequest('serverName', async (request) => {
     };
   }
   
-  // Simulate user declining the request
+  // ユーザーが要求を拒否することをシミュレート
   return { action: 'decline' };
 });
 ```
 
 **完全なインタラクティブな例:**
-
-
 
 ```typescript
 import { MCPClient } from '@mastra/mcp';
@@ -405,34 +413,34 @@ const mcpClient = new MCPClient({
 
 // Set up interactive elicitation handler
 await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
-  console.log(`\n📋 Server Request: ${request.message}`);
-  console.log('Required information:');
+  console.log(`\n📋 サーバーからの要求: ${request.message}`);
+  console.log('必要な情報:');
   
   const schema = request.requestedSchema;
   const properties = schema.properties || {};
   const required = schema.required || [];
   const content: Record<string, any> = {};
   
-  // Collect input for each field
+  // 各フィールドの入力を取得
   for (const [fieldName, fieldSchema] of Object.entries(properties)) {
     const field = fieldSchema as any;
     const isRequired = required.includes(fieldName);
     
     let prompt = `${field.title || fieldName}`;
-    if (field.description) prompt += ` (${field.description})`;
-    if (isRequired) prompt += ' *required*';
+    if (field.description) prompt += `（${field.description}）`;
+    if (isRequired) prompt += '（必須）';
     prompt += ': ';
     
     const answer = await askQuestion(prompt);
     
-    // Handle cancellation
+    // キャンセル処理
     if (answer.toLowerCase() === 'cancel') {
       return { action: 'cancel' };
     }
     
-    // Validate required fields
+    // 必須項目の検証
     if (answer === '' && isRequired) {
-      console.log(`❌ ${fieldName} is required`);
+      console.log(`❌ 「${fieldName}」は必須です`);
       return { action: 'decline' };
     }
     
@@ -441,11 +449,11 @@ await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
     }
   }
   
-  // Confirm submission
-  console.log('\n📝 You provided:');
+  // 送信の確認
+  console.log('\n📝 入力内容:');
   console.log(JSON.stringify(content, null, 2));
   
-  const confirm = await askQuestion('\nSubmit this information? (yes/no/cancel): ');
+  const confirm = await askQuestion('\nこの情報を送信しますか？（yes/no/cancel）： ');
   
   if (confirm.toLowerCase() === 'yes' || confirm.toLowerCase() === 'y') {
     return { action: 'accept', content };
@@ -457,9 +465,10 @@ await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
 });
 ```
 
+
 #### `prompts.list()`
 
-接続されているすべてのMCPサーバーから利用可能なすべてのプロンプトを取得し、サーバー名でグループ化します。
+接続中のすべての MCP サーバーから利用可能なプロンプトを取得し、サーバー名ごとにグループ化します。
 
 ```typescript
 async list(): Promise<Record<string, Prompt[]>>
@@ -470,9 +479,10 @@ async list(): Promise<Record<string, Prompt[]>>
 ```typescript
 const promptsByServer = await mcpClient.prompts.list();
 for (const serverName in promptsByServer) {
-  console.log(`Prompts from ${serverName}:`, promptsByServer[serverName]);
+  console.log(`${serverName} のプロンプト:`, promptsByServer[serverName]);
 }
 ```
+
 
 #### `prompts.get({ serverName, name, args?, version? })`
 
@@ -498,15 +508,16 @@ async get({
 const { prompt, messages } = await mcpClient.prompts.get({
   serverName: "myWeatherServer",
   name: "current",
-  args: { location: "London" },
+  args: { location: "ロンドン" },
 });
 console.log(prompt);
 console.log(messages);
 ```
 
+
 #### `prompts.onListChanged(serverName: string, handler: () => void)`
 
-特定のサーバーで利用可能なプロンプトのリストが変更されたときに呼び出される通知ハンドラーを設定します。
+指定したサーバーで利用可能なプロンプトの一覧が変更された際に呼び出される通知ハンドラーを設定します。
 
 ```typescript
 async onListChanged(serverName: string, handler: () => void): Promise<void>
@@ -516,29 +527,28 @@ async onListChanged(serverName: string, handler: () => void): Promise<void>
 
 ```typescript
 mcpClient.prompts.onListChanged("myWeatherServer", () => {
-  console.log("Prompt list changed on myWeatherServer.");
-  // プロンプトのリストを再取得する必要があります
+  console.log("myWeatherServer でプロンプト一覧が変更されました。");
+  // プロンプト一覧を再取得してください
   // await mcpClient.prompts.list();
 });
 ```
 
 
+## Elicitation（情報引き出し）
 
-## Elicitation
+Elicitation は、MCP サーバーがユーザーに対して構造化された情報の提供を求められる機能です。サーバーが追加のデータを必要とする場合、クライアントがユーザーに質問（プロンプト）して処理する elicitation リクエストを送信できます。代表的な例として、ツールの呼び出し時があります。
 
-Elicitationは、MCPサーバーがユーザーから構造化された情報を要求できる機能です。サーバーが追加のデータを必要とする場合、クライアントがユーザーにプロンプトを表示して処理するelicitationリクエストを送信できます。一般的な例はツール呼び出し中です。
+### Elicitation の仕組み
 
-### Elicitationの仕組み
+1. **サーバーリクエスト**: MCP サーバーツールがメッセージとスキーマを指定して `server.elicitation.sendRequest()` を呼び出します
+2. **クライアントハンドラー**: あなたの elicitation ハンドラー関数がそのリクエストで呼び出されます
+3. **ユーザー操作**: ハンドラーがユーザー入力（UI や CLI など経由）を収集します
+4. **レスポンス**: ハンドラーがユーザーの応答（accept/decline/cancel）を返します
+5. **ツールの継続**: サーバーツールは応答を受け取り、処理を続行します
 
-1. **サーバーリクエスト**: MCPサーバーツールが`server.elicitation.sendRequest()`をメッセージとスキーマで呼び出す
-2. **クライアントハンドラー**: あなたのelicitationハンドラー関数がリクエストと共に呼び出される
-3. **ユーザーインタラクション**: あなたのハンドラーがユーザー入力を収集する（UI、CLI等を通じて）
-4. **レスポンス**: あなたのハンドラーがユーザーのレスポンス（accept/decline/cancel）を返す
-5. **ツール継続**: サーバーツールがレスポンスを受け取り、実行を継続する
+### エリシテーションの設定
 
-### Elicitationの設定
-
-elicitationを使用するツールが呼び出される前に、elicitationハンドラーを設定する必要があります：
+エリシテーションを用いるツールを呼び出す前に、エリシテーションハンドラーを設定しておく必要があります。
 
 ```typescript
 import { MCPClient } from '@mastra/mcp';
@@ -551,12 +561,12 @@ const mcpClient = new MCPClient({
   },
 });
 
-// elicitationハンドラーを設定
+// 引き出し（elicitation）ハンドラーを設定する
 mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
-  // ユーザー入力に対するサーバーのリクエストを処理
-  console.log(`Server needs: ${request.message}`);
+  // サーバーからのユーザー入力リクエストを処理する
+  console.log(`サーバーが必要としている内容: ${request.message}`);
   
-  // ユーザー入力を収集するあなたのロジック
+  // ユーザー入力を収集するためのロジック
   const userData = await collectUserInput(request.requestedSchema);
   
   return {
@@ -566,9 +576,10 @@ mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
 });
 ```
 
+
 ### レスポンスタイプ
 
-あなたのelicitationハンドラーは、3つのレスポンスタイプのいずれかを返す必要があります：
+elicitation ハンドラーは、次の3つのレスポンスタイプのいずれかを返す必要があります:
 
 - **Accept**: ユーザーがデータを提供し、送信を確認した
   ```typescript
@@ -578,19 +589,19 @@ mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
   };
   ```
 
-- **Decline**: ユーザーが明示的に情報の提供を拒否した
+- **Decline**: ユーザーが明確に情報の提供を拒否した
   ```typescript
   return { action: 'decline' };
   ```
 
-- **Cancel**: ユーザーがリクエストを却下またはキャンセルした
+- **Cancel**: ユーザーがリクエストを閉じる、またはキャンセルした
   ```typescript
   return { action: 'cancel' };
   ```
 
 ### スキーマベースの入力収集
 
-`requestedSchema`は、サーバーが必要とするデータの構造を提供します：
+`requestedSchema` は、サーバーに必要なデータの構造を定義します。
 
 ```typescript
 await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
@@ -601,7 +612,7 @@ await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
     const field = fieldSchema as any;
     const isRequired = required.includes(fieldName);
     
-    // フィールドタイプと要件に基づいて入力を収集
+    // フィールドの型と必須条件に基づいて入力を収集する
     const value = await promptUser({
       name: fieldName,
       title: field.title,
@@ -621,21 +632,20 @@ await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
 });
 ```
 
+
 ### ベストプラクティス
 
-- **常にelicitationを処理する**: elicitationを使用する可能性のあるツールを呼び出す前にハンドラーを設定する
-- **入力を検証する**: 必須フィールドが提供されていることを確認する
-- **ユーザーの選択を尊重する**: declineとcancelレスポンスを適切に処理する
-- **明確なUI**: どのような情報が要求されているか、なぜ必要なのかを明確にする
-- **セキュリティ**: 機密情報のリクエストを自動承認しない
-
-
+- **常にエリシテーションに対応する**: エリシテーションを利用する可能性のあるツールを呼び出す前にハンドラーを用意する
+- **入力を検証する**: 必須項目が入力されているか確認する
+- **ユーザーの選択を尊重する**: 辞退やキャンセルの応答を丁寧に扱う
+- **わかりやすいUI**: 何の情報を、なぜ求めているのかを明確に示す
+- **セキュリティ**: 機密情報の要求を自動承認しない
 
 ## 例
 
-### 静的ツール設定
+### 静的ツール構成
 
-アプリ全体でMCPサーバーへの単一接続を持つツールの場合、`getTools()`を使用してツールをエージェントに渡します：
+アプリ全体で MCP サーバーへの接続が単一のツールでは、`getTools()` を使用し、取得したツールをエージェントに渡します。
 
 ```typescript
 import { MCPClient } from "@mastra/mcp";
@@ -648,7 +658,7 @@ const mcp = new MCPClient({
       command: "npx",
       args: ["tsx", "stock-price.ts"],
       env: {
-        API_KEY: "your-api-key",
+        API_KEY: "APIキー",
       },
       log: (logMessage) => {
         console.log(`[${logMessage.level}] ${logMessage.message}`);
@@ -658,18 +668,18 @@ const mcp = new MCPClient({
       url: new URL("http://localhost:8080/sse"),
     },
   },
-  timeout: 30000, // Global 30s timeout
+  timeout: 30000, // グローバルな30秒のタイムアウト
 });
 
-// Create an agent with access to all tools
+// すべてのツールにアクセスできるエージェントを作成
 const agent = new Agent({
-  name: "Multi-tool Agent",
-  instructions: "You have access to multiple tool servers.",
+  name: "マルチツールエージェント",
+  instructions: "複数のツールサーバーにアクセスできます。",
   model: openai("gpt-4"),
   tools: await mcp.getTools(),
 });
 
-// Example of using resource methods
+// リソースメソッドの使用例
 async function checkWeatherResource() {
   try {
     const weatherResources = await mcp.resources.list();
@@ -679,15 +689,15 @@ async function checkWeatherResource() {
         "weather",
         currentWeatherURI,
       );
-      console.log("Weather data:", weatherData.contents[0].text);
+      console.log("天気データ:", weatherData.contents[0].text);
     }
   } catch (error) {
-    console.error("Error fetching weather resource:", error);
+    console.error("天気リソースの取得中にエラーが発生しました:", error);
   }
 }
 checkWeatherResource();
 
-// Example of using prompt methods
+// プロンプトメソッドの使用例
 async function checkWeatherPrompt() {
   try {
     const weatherPrompts = await mcp.prompts.list();
@@ -696,35 +706,36 @@ async function checkWeatherPrompt() {
         (p) => p.name === "current"
       );
       if (currentWeatherPrompt) {
-        console.log("Weather prompt:", currentWeatherPrompt);
+        console.log("天気プロンプト:", currentWeatherPrompt);
       } else {
-        console.log("Current weather prompt not found");
+        console.log("現在の天気プロンプトが見つかりませんでした");
       }
     }
   } catch (error) {
-    console.error("Error fetching weather prompt:", error);
+    console.error("天気プロンプトの取得中にエラーが発生しました:", error);
   }
 }
 checkWeatherPrompt();
 ```
 
+
 ### 動的ツールセット
 
-各ユーザーに対して新しいMCP接続が必要な場合、`getToolsets()`を使用してstreamまたはgenerateを呼び出す際にツールを追加します：
+ユーザーごとに新しい MCP 接続が必要な場合は、`getToolsets()` を使用し、stream または generate を呼び出すときにツールを追加します。
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { MCPClient } from "@mastra/mcp";
 import { openai } from "@ai-sdk/openai";
 
-// Create the agent first, without any tools
+// まずはツールなしでエージェントを作成します
 const agent = new Agent({
-  name: "Multi-tool Agent",
-  instructions: "You help users check stocks and weather.",
+  name: "マルチツールエージェント",
+  instructions: "ユーザーの株価と天気の確認を手伝います。",
   model: openai("gpt-4"),
 });
 
-// Later, configure MCP with user-specific settings
+// 後で、ユーザー固有の設定で MCP を設定します
 const mcp = new MCPClient({
   servers: {
     stockPrice: {
@@ -733,7 +744,7 @@ const mcp = new MCPClient({
       env: {
         API_KEY: "user-123-api-key",
       },
-      timeout: 20000, // Server-specific timeout
+      timeout: 20000, // サーバーごとのタイムアウト
     },
     weather: {
       url: new URL("http://localhost:8080/sse"),
@@ -746,9 +757,9 @@ const mcp = new MCPClient({
   },
 });
 
-// Pass all toolsets to stream() or generate()
+// すべてのツールセットを stream() または generate() に渡します
 const response = await agent.stream(
-  "How is AAPL doing and what is the weather?",
+  "AAPLの状況と天気を教えて",
   {
     toolsets: await mcp.getToolsets(),
   },
@@ -756,17 +767,16 @@ const response = await agent.stream(
 ```
 
 
-
 ## インスタンス管理
 
-`MCPClient`クラスには、複数のインスタンスを管理するためのメモリリーク防止機能が組み込まれています：
+`MCPClient` クラスには、複数インスタンスの管理におけるメモリリーク防止機能が組み込まれています:
 
-1. `id`なしで同一の構成で複数のインスタンスを作成すると、メモリリークを防ぐためにエラーがスローされます
-2. 同一の構成で複数のインスタンスが必要な場合は、各インスタンスに一意の`id`を提供してください
-3. 同じ構成でインスタンスを再作成する前に、`await configuration.disconnect()`を呼び出してください
-4. 1つのインスタンスだけが必要な場合は、再作成を避けるために構成をより高いスコープに移動することを検討してください
+1. `id` を指定せずに同じ構成で複数のインスタンスを作成しようとすると、メモリリーク防止のためにエラーがスローされます
+2. 同一構成で複数のインスタンスが必要な場合は、各インスタンスに固有の `id` を指定してください
+3. 同じ構成でインスタンスを再作成する前に、`await configuration.disconnect()` を呼び出してください
+4. 単一のインスタンスで足りる場合は、再作成を避けるために構成をより上位のスコープに移動することを検討してください
 
-例えば、`id`なしで同じ構成の複数のインスタンスを作成しようとすると：
+たとえば、`id` を指定せずに同じ構成で複数のインスタンスを作成しようとすると:
 
 ```typescript
 // 最初のインスタンス - OK
@@ -776,15 +786,15 @@ const mcp1 = new MCPClient({
   },
 });
 
-// 同じ構成の2番目のインスタンス - エラーがスローされます
+// 同一設定で2つ目のインスタンスを作成するとエラーになります
 const mcp2 = new MCPClient({
   servers: {
     /* ... */
   },
 });
 
-// 修正するには、以下のいずれかを行います：
-// 1. 一意のIDを追加する
+// 解決方法はいずれか:
+// 1. 一意のIDを付与する
 const mcp3 = new MCPClient({
   id: "instance-1",
   servers: {
@@ -792,7 +802,7 @@ const mcp3 = new MCPClient({
   },
 });
 
-// 2. または再作成する前に切断する
+// 2. もしくは再作成前に切断する
 await mcp1.disconnect();
 const mcp4 = new MCPClient({
   servers: {
@@ -802,33 +812,30 @@ const mcp4 = new MCPClient({
 ```
 
 
+## サーバーのライフサイクル
 
-## サーバーライフサイクル
+MCPClient はサーバー接続を適切に処理します:
 
-MCPClientはサーバー接続を適切に処理します：
-
-1. 複数のサーバーへの自動接続管理
-2. 開発中にエラーメッセージが表示されないようにするための適切なサーバーシャットダウン
+1. 複数サーバーに対する自動的な接続管理
+2. 開発中のエラーメッセージを防ぐための、落ち着いた（グレースフルな）サーバーシャットダウン
 3. 切断時のリソースの適切なクリーンアップ
 
+## SSE リクエストヘッダーの使用
 
-
-## SSEリクエストヘッダーの使用
-
-レガシーSSE MCPトランスポートを使用する場合、MCP SDKのバグにより、`requestInit`と`eventSourceInit`の両方を設定する必要があります：
+レガシーな SSE MCP トランスポートを使用する場合、MCP SDK の不具合により、`requestInit` と `eventSourceInit` の両方を設定する必要があります。
 
 ```ts
 const sseClient = new MCPClient({
   servers: {
     exampleServer: {
       url: new URL("https://your-mcp-server.com/sse"),
-      // 注意：requestInitだけではSSEには不十分です
+      // 注意: SSE では requestInit だけでは不十分です
       requestInit: {
         headers: {
           Authorization: "Bearer your-token",
         },
       },
-      // これもカスタムヘッダーを持つSSE接続には必要です
+      // カスタムヘッダーを伴う SSE 接続では、これも必須です
       eventSourceInit: {
         fetch(input: Request | URL | string, init?: RequestInit) {
           const headers = new Headers(init?.headers || {});
@@ -845,8 +852,7 @@ const sseClient = new MCPClient({
 ```
 
 
-
 ## 関連情報
 
-- MCPサーバーの作成については、[MCPServerのドキュメント](./mcp-server)を参照してください。
-- Model Context Protocolの詳細については、[@modelcontextprotocol/sdkのドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)を参照してください。
+- MCP サーバーの作成については、[MCPServer ドキュメント](./mcp-server)を参照してください。
+- Model Context Protocol の詳細については、[@modelcontextprotocol/sdk ドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)を参照してください。

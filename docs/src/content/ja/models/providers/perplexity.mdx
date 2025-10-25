@@ -1,0 +1,145 @@
+---
+title: "Perplexity | モデル | Mastra"
+description: "Mastra で Perplexity モデルを使用します。4 つのモデルを利用できます。"
+---
+
+{/* このファイルは generate-model-docs.ts によって自動生成されています — 手動で編集しないでください */}
+
+import { ProviderModelsTable } from "@/components/provider-models-table";
+import { PropertiesTable } from "@/components/properties-table";
+import { Callout } from "nextra/components";
+import { Tabs, Tab } from "@/components/tabs";
+
+
+# <img src="https://models.dev/logos/perplexity.svg" alt="Perplexity logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Perplexity
+
+Mastra のモデルルーター経由で、Perplexity の4つのモデルにアクセスできます。認証は `PERPLEXITY_API_KEY` 環境変数によって自動的に行われます。
+
+詳しくは [Perplexity のドキュメント](https://docs.perplexity.ai)をご覧ください。
+
+```bash
+PERPLEXITY_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: "perplexity/sonar"
+});
+
+// レスポンスを生成
+const response = await agent.generate("Hello!");
+
+// レスポンスをストリーミング
+const stream = await agent.stream("物語を聞かせて");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+<Callout type="info">
+  Mastra は、OpenAI 互換の `/chat/completions` エンドポイントを使用します。プロバイダー固有の機能の一部は利用できない場合があります。詳細は [Perplexity のドキュメント](https://docs.perplexity.ai)をご確認ください。
+</Callout>
+
+
+## モデル
+
+<ProviderModelsTable 
+  models={[
+  {
+    "model": "perplexity/sonar",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 1,
+    "outputCost": 1
+  },
+  {
+    "model": "perplexity/sonar-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "perplexity/sonar-reasoning",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "perplexity/sonar-reasoning-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 8
+  }
+]}
+/>
+
+## 高度な設定
+
+### カスタムヘッダー
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.perplexity.ai",
+    id: "perplexity/sonar",
+    apiKey: process.env.PERPLEXITY_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+
+### 動的モデル選択
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "perplexity/sonar-reasoning-pro"
+      : "perplexity/sonar";
+  }
+});
+```
+
+
+## プロバイダーを直接インストール
+
+このプロバイダーはスタンドアロンのパッケージとして直接インストールでき、Mastra のモデルルーター用文字列の代替として使用できます。詳しくは[パッケージのドキュメント](https://www.npmjs.com/package/@perplexity-ai/perplexity_ai)をご覧ください。
+
+```bash npm2yarn copy
+npm install @perplexity-ai/perplexity_ai
+```
+
+各プロバイダー向けの詳細なドキュメントは、[AI SDK の Perplexity プロバイダーに関するドキュメント](https://ai-sdk.dev/providers/ai-sdk-providers/perplexity)をご覧ください。

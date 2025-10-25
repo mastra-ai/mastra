@@ -1,7 +1,7 @@
 const meta = {
-  "embed-text-chunk": "テキストチャンクを埋め込む",
-  "embed-chunk-array": "チャンク配列を埋め込む",
-  "embed-text-with-cohere": "Cohereでテキストを埋め込む",
+  "embed-text-chunk": "テキストチャンクの埋め込み",
+  "embed-chunk-array": "チャンク配列の埋め込み",
+  "embed-text-with-cohere": "Cohere を用いたテキスト埋め込み",
   "metadata-extraction": "メタデータ抽出",
 };
 export default meta;

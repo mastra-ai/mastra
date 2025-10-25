@@ -1,0 +1,131 @@
+---
+title: "Langfuse Exporter | AI トレーシング | 可観測性 | Mastra ドキュメント"
+description: "LLM の可観測性と分析のために、AI のトレースを Langfuse に送信する"
+---
+
+import { Callout } from "nextra/components";
+
+
+# Langfuse Exporter
+
+[Langfuse](https://langfuse.com/) は、LLM アプリケーション向けに設計されたオープンソースの可観測性プラットフォームです。Langfuse Exporter は AI のトレースを Langfuse に送信し、モデルの性能、トークン使用量、会話フローに関する詳細なインサイトを提供します。
+
+## Langfuse を使うタイミング
+
+Langfuse は次の用途に最適です:
+
+- **LLM 向けの分析** - トークン使用量、コスト、レイテンシの内訳
+- **会話の追跡** - セッション単位でのトレースのグルーピング
+- **品質評価** - 手動・自動の評価スコア
+- **モデル比較** - A/B テストやバージョン比較
+- **セルフホストの選択肢** - 自社インフラへのデプロイ
+
+## インストール
+
+```bash npm2yarn
+npm install @mastra/langfuse
+```
+
+
+## 構成
+
+### 前提条件
+
+1. **Langfuse アカウント**: [cloud.langfuse.com](https://cloud.langfuse.com) で登録するか、セルフホスト版をデプロイ
+2. **API キー**: Langfuse の Settings → API Keys で public/secret のキー ペアを作成
+3. **環境変数**: 認証情報を設定
+
+```bash filename=".env"
+LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxxxxxx
+LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxx
+LANGFUSE_BASE_URL=https://cloud.langfuse.com  # またはセルフホストのURL
+```
+
+
+### 基本設定
+
+```typescript filename="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LangfuseExporter } from "@mastra/langfuse";
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      langfuse: {
+        serviceName: 'my-service',
+        exporters: [
+          new LangfuseExporter({
+            publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+            secretKey: process.env.LANGFUSE_SECRET_KEY!,
+            baseUrl: process.env.LANGFUSE_BASE_URL,
+            options: {
+              environment: process.env.NODE_ENV,
+            },
+          }),
+        ],
+      },
+    },
+  },
+});
+```
+
+
+## 設定項目
+
+### リアルタイムモードとバッチモード
+
+Langfuse エクスポーターは、トレースを送信するために2つのモードをサポートしています：
+
+#### リアルタイムモード（開発）
+
+トレースは即座に Langfuse ダッシュボードに表示され、デバッグに最適です。
+
+```typescript
+new LangfuseExporter({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+  realtime: true,  // 各イベント後にフラッシュする
+})
+```
+
+
+#### バッチモード（本番）
+
+自動バッチ化によるパフォーマンス向上：
+
+```typescript
+new LangfuseExporter({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+  realtime: false,  // デフォルト - バッチでトレース処理
+})
+```
+
+
+### 完全な設定
+
+```typescript
+new LangfuseExporter({
+  // 必要な認証情報
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+
+  // オプション設定
+  baseUrl: process.env.LANGFUSE_BASE_URL,     // デフォルト: https://cloud.langfuse.com
+  realtime: process.env.NODE_ENV === 'development',  // 動的モード選択
+  logLevel: 'info',  // 診断ログ: debug | info | warn | error
+
+  // Langfuse固有のオプション
+  options: {
+    environment: process.env.NODE_ENV,        // フィルタリング用にUIに表示
+    version: process.env.APP_VERSION,         // 異なるバージョンを追跡
+    release: process.env.GIT_COMMIT,          // Gitコミットハッシュ
+  },
+})
+```
+
+
+## 関連情報
+
+- [AI トレーシングの概要](/docs/observability/ai-tracing/overview)
+- [Langfuse ドキュメント](https://langfuse.com/docs)

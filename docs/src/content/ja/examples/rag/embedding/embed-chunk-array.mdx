@@ -1,22 +1,21 @@
 ---
-title: "例: チャンク配列の埋め込み | RAG | Mastra ドキュメント"
-description: 類似性検索のために、Mastra を使ってテキストチャンクの配列に対して埋め込みを生成する例です。
+title: "例: チャンク配列への埋め込み | RAG | Mastra ドキュメント"
+description: 類似検索のために、テキストチャンクの配列に埋め込みを生成する方法の例（Mastra を使用）。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
+# チャンク配列を埋め込む
 
-# Embed Chunk Array
-
-ドキュメントをチャンク化した後、テキストチャンクを類似検索に利用できる数値ベクトルに変換する必要があります。`embed` メソッドは、選択したプロバイダーとモデルを使ってテキストチャンクを埋め込みに変換します。この例では、テキストチャンクの配列に対して埋め込みを生成する方法を示しています。
+ドキュメントをチャンク化した後、テキストチャンクを類似検索に使える数値ベクトルへ変換する必要があります。`embed` メソッドは、選択したプロバイダーとモデルを用いてテキストチャンクを埋め込み（ベクトル）に変換します。以下の例では、テキストチャンクの配列に対して埋め込みを生成する方法を示します。
 
 ```tsx copy
 import { openai } from "@ai-sdk/openai";
 import { MDocument } from "@mastra/rag";
 import { embed } from "ai";
 
-const doc = MDocument.fromText("Your text content...");
+const doc = MDocument.fromText("テキストコンテンツ…");
 
 const chunks = await doc.chunk();
 
@@ -27,12 +26,17 @@ const { embeddings } = await embedMany({
 ```
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-chunk-array"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-chunk-array"
+}
 />

@@ -1,66 +1,60 @@
 ---
-title: "リファレンス: トーン一貫性 | メトリクス | Evals | Mastra Docs"
-description: テキストの感情的なトーンと感情の一貫性を評価するMastraのトーン一貫性メトリクスのドキュメント。
+title: "リファレンス: トーンの一貫性 | メトリクス | 評価 | Mastra ドキュメント"
+description: Mastra のトーン一貫性メトリクスに関するドキュメント。テキスト内の感情的なトーンとセンチメントの一貫性を評価します。
 ---
 
 import { ScorerCallout } from '@/components/scorer-callout'
-
 
 
 # ToneConsistencyMetric
 
 <ScorerCallout />
 
-`ToneConsistencyMetric`クラスは、テキストの感情的なトーンと感情の一貫性を評価します。このクラスは2つのモードで動作できます：入力/出力ペア間のトーンを比較するか、単一のテキスト内でのトーンの安定性を分析するかです。
+`ToneConsistencyMetric` クラスは、テキストの感情的なトーンおよびセンチメントの一貫性を評価します。入力と出力のペア間でトーンを比較するモードと、単一のテキスト内でトーンの安定性を分析するモードの2通りで動作します。
 
-
-
-## 基本的な使い方
+## 基本的な使用方法
 
 ```typescript
 import { ToneConsistencyMetric } from "@mastra/evals/nlp";
 
 const metric = new ToneConsistencyMetric();
 
-// Compare tone between input and output
+// 入力と出力のトーンを比較
 const result1 = await metric.measure(
-  "I love this amazing product!",
-  "This product is wonderful and fantastic!",
+  "この素晴らしい製品が大好き！",
+  "この製品は素晴らしくて最高！",
 );
 
-// Analyze tone stability in a single text
+// 単一のテキスト内のトーンの安定性を分析
 const result2 = await metric.measure(
-  "The service is excellent. The staff is friendly. The atmosphere is perfect.",
-  "", // Empty string for single-text analysis
+  "サービスは最高です。スタッフは親切です。雰囲気は完璧です。",
+  "", // 単一テキスト分析用の空文字列
 );
 
-console.log(result1.score); // Tone consistency score from 0-1
-console.log(result2.score); // Tone stability score from 0-1
+console.log(result1.score); // トーン一貫性スコア（0〜1）
+console.log(result2.score); // トーン安定性スコア（0〜1）
 ```
 
 
-
-## measure() のパラメーター
+## measure() のパラメータ
 
 <PropertiesTable
   content={[
     {
       name: "input",
       type: "string",
-      description: "トーンを分析するためのテキスト",
+      description: "トーンを分析する対象のテキスト",
       isOptional: false,
     },
     {
       name: "output",
       type: "string",
       description:
-        "トーン比較のための参照テキスト（安定性分析の場合は空文字列）",
+        "トーン比較用の参照テキスト（安定性分析では空文字列）",
       isOptional: false,
     },
   ]}
 />
-
-
 
 ## 戻り値
 
@@ -69,12 +63,12 @@ console.log(result2.score); // Tone stability score from 0-1
     {
       name: "score",
       type: "number",
-      description: "トーンの一貫性／安定性スコア（0-1）",
+      description: "トーンの一貫性・安定性スコア（0～1）",
     },
     {
       name: "info",
       type: "object",
-      description: "詳細なトーン情報",
+      description: "トーンに関する詳細情報",
     },
   ]}
 />
@@ -86,92 +80,88 @@ console.log(result2.score); // Tone stability score from 0-1
     {
       name: "responseSentiment",
       type: "number",
-      description: "入力テキストのセンチメントスコア",
+      description: "入力テキストの感情スコア",
     },
     {
       name: "referenceSentiment",
       type: "number",
-      description: "出力テキストのセンチメントスコア",
+      description: "出力テキストの感情スコア",
     },
     {
       name: "difference",
       type: "number",
-      description: "センチメントスコア間の絶対差",
+      description: "感情スコアの絶対差",
     },
   ]}
 />
 
-### info オブジェクト（トーン安定性）
+### info オブジェクト（トーンの安定性）
 
 <PropertiesTable
   content={[
     {
       name: "avgSentiment",
       type: "number",
-      description: "文ごとの平均センチメントスコア",
+      description: "文全体における平均感情スコア",
     },
     {
       name: "sentimentVariance",
       type: "number",
-      description: "文間のセンチメントの分散",
+      description: "文間における感情の分散",
     },
   ]}
 />
 
-
-
 ## スコアリングの詳細
 
-このメトリックは、トーンパターンの分析とモード別スコアリングを通じて感情の一貫性を評価します。
+このメトリクスは、トーンのパターン分析とモード別スコアリングを用いて、感情の一貫性を評価します。
 
 ### スコアリングプロセス
 
-1. トーンパターンを分析：
+1. トーンパターンを解析:
 
-   - 感情の特徴を抽出
+   - 感情特徴を抽出
    - 感情スコアを算出
    - トーンの変動を測定
 
-2. モード別スコアを計算：
-   **トーンの一貫性**（入力と出力）：
+2. モード別スコアを計算:
+   **トーンの一貫性**（入力と出力）:
 
    - テキスト間の感情を比較
-   - 感情の差分を計算
-   - スコア = 1 - (感情の差分 / 最大差分)
+   - 感情差を算出
+   - スコア = 1 - (sentiment_difference / max_difference)
 
-   **トーンの安定性**（単一入力）：
+   **トーンの安定性**（単一入力）:
 
-   - 文ごとの感情を分析
-   - 感情の分散を計算
-   - スコア = 1 - (感情の分散 / 最大分散)
+   - 文間の感情を解析
+   - 感情分散を算出
+   - スコア = 1 - (sentiment_variance / max_variance)
 
-最終スコア：`mode_specific_score * scale`
+最終スコア: `mode_specific_score * scale`
 
 ### スコアの解釈
 
-（0 から scale、デフォルトは 0-1）
+（0からのスケール、デフォルトは0～1）
 
-- 1.0: 完全なトーンの一貫性／安定性
-- 0.7-0.9: 軽微な変動を伴う強い一貫性
-- 0.4-0.6: 目立つ変化を伴う中程度の一貫性
-- 0.1-0.3: 大きなトーン変化を伴う低い一貫性
-- 0.0: 一貫性なし ― 完全に異なるトーン
+- 1.0：トーンの一貫性・安定性が完璧
+- 0.7～0.9：わずかな変動はあるが高い一貫性
+- 0.4～0.6：目立つ変化がある中程度の一貫性
+- 0.1～0.3：大きなトーン変化を伴う低い一貫性
+- 0.0：一貫性なし（まったく別のトーン）
 
-
-
-## 両方のモードの例
+## 両方のモードを使う例
 
 ```typescript
 import { ToneConsistencyMetric } from "@mastra/evals/nlp";
 
 const metric = new ToneConsistencyMetric();
 
-// Tone Consistency Mode
+// トーン一貫性モード
 const consistencyResult = await metric.measure(
-  "This product is fantastic and amazing!",
-  "The product is excellent and wonderful!",
+  "この製品は本当に素晴らしくて最高です！",
+  "この製品は優れていてとても素晴らしい！",
 );
-// Example output:
+// 出力例:
 // {
 //   score: 0.95,
 //   info: {
@@ -181,12 +171,12 @@ const consistencyResult = await metric.measure(
 //   }
 // }
 
-// Tone Stability Mode
+// トーン安定性モード
 const stabilityResult = await metric.measure(
-  "Great service! Friendly staff. Perfect atmosphere.",
+  "素晴らしいサービス！ 親切なスタッフ。 最高の雰囲気。",
   "",
 );
-// Example output:
+// 出力例:
 // {
 //   score: 0.9,
 //   info: {
@@ -197,8 +187,7 @@ const stabilityResult = await metric.measure(
 ```
 
 
+## 関連項目
 
-## 関連
-
-- [コンテンツ類似度メトリック](./content-similarity)
-- [有害性メトリック](./toxicity)
+- [コンテンツ類似度メトリクス](./content-similarity)
+- [有害性メトリクス](./toxicity)

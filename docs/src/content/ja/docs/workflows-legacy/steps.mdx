@@ -1,21 +1,17 @@
 ---
-title: "ステップの作成とワークフローへの追加（レガシー） | Mastra ドキュメント"
-description: "Mastra のワークフローにおけるステップは、入力、出力、実行ロジックを定義することで、業務を体系的に管理する方法を提供します。"
+title: "ステップの作成とワークフローへの追加（レガシー） | Mastra Docs"
+description: "Mastra のワークフローにおけるステップは、入力・出力・実行ロジックを定義し、処理を体系的に管理するための枠組みを提供します。"
 ---
 
+# ワークフローにおけるステップの定義（レガシー）
 
+ワークフローを構築する際は、処理をリンクして再利用できる小さなタスクに分解するのが一般的です。ステップは、入力・出力・実行ロジックを定義することで、これらのタスクを体系的に管理する手段を提供します。
 
-# ワークフロー内のステップの定義（レガシー）
+以下のコードは、ステップをインラインで定義する方法と、別途定義する方法を示しています。
 
-ワークフローを構築する際には、通常、操作をより小さなタスクに分割し、それらを連携させて再利用できるようにします。ステップは、入力、出力、および実行ロジックを定義することで、これらのタスクを体系的に管理する方法を提供します。
+## インラインでのステップ作成
 
-以下のコードは、これらのステップをインラインまたは個別に定義する方法を示しています。
-
-
-
-## インラインステップの作成
-
-`.step()` と `.then()` を使って、ワークフロー内で直接ステップを作成できます。以下のコードは、2つのステップを順番に定義し、リンクし、実行する方法を示しています。
+`.step()` と `.then()` を使って、ワークフロー内でステップを直接作成できます。次のコードは、2つのステップを順番に定義・連結・実行する方法を示しています。
 
 ```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
 import { Mastra } from "@mastra/core";
@@ -60,24 +56,23 @@ myWorkflow
   )
   .commit();
 
-// Register the workflow with Mastra
+// Mastra にワークフローを登録する
 export const mastra = new Mastra({
   legacy_workflows: { myWorkflow },
 });
 ```
 
 
-
 ## ステップを個別に作成する
 
-ステップのロジックを別々のエンティティで管理したい場合は、ステップを外部で定義し、その後ワークフローに追加することができます。以下のコードは、ステップを独立して定義し、後からリンクする方法を示しています。
+ステップのロジックを別のエンティティで管理したい場合は、ステップを外部で定義してからワークフローに追加できます。次のコードは、ステップを独立して定義し、その後でワークフローに紐づける方法を示しています。
 
 ```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
-// Define steps separately
+// ステップを個別に定義する
 const stepOne = new LegacyStep({
   id: "stepOne",
   outputSchema: z.object({
@@ -101,7 +96,7 @@ const stepTwo = new LegacyStep({
   },
 });
 
-// Build the workflow
+// ワークフローを構築する
 const myWorkflow = new LegacyWorkflow({
   name: "my-workflow",
   triggerSchema: z.object({
@@ -112,7 +107,7 @@ const myWorkflow = new LegacyWorkflow({
 myWorkflow.step(stepOne).then(stepTwo);
 myWorkflow.commit();
 
-// Register the workflow with Mastra
+// Mastra にワークフローを登録する
 export const mastra = new Mastra({
   legacy_workflows: { myWorkflow },
 });

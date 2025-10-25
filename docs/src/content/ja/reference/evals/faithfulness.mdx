@@ -1,19 +1,16 @@
 ---
-title: "リファレンス: Faithfulness | Metrics | Evals | Mastra Docs"
-description: Mastraの忠実性メトリックのドキュメント。提供されたコンテキストと比較してLLM出力の事実的正確性を評価します。
+title: "リファレンス: Faithfulness | 指標 | 評価 | Mastra ドキュメント"
+description: Mastra における Faithfulness 指標のドキュメント。提供されたコンテキストに照らして、LLM の出力の事実的正確性を評価します。
 ---
 
 import { ScorerCallout } from '@/components/scorer-callout'
 
 
-
-# FaithfulnessMetric Reference
+# FaithfulnessMetric リファレンス
 
 <ScorerCallout />
 
-Mastraの`FaithfulnessMetric`は、提供されたコンテキストと比較して、LLMの出力がどの程度事実的に正確であるかを評価します。出力からクレームを抽出し、コンテキストに対してそれらを検証するため、RAGパイプラインレスポンスの信頼性を測定するのに不可欠です。
-
-
+Mastra の `FaithfulnessMetric` は、提供されたコンテキストに対して LLM の出力がどれだけ事実に忠実かを評価します。出力から主張を抽出し、それらをコンテキストと照合して検証するため、RAG パイプラインの応答の信頼性を測定するうえで不可欠です。
 
 ## 基本的な使い方
 
@@ -21,41 +18,40 @@ Mastraの`FaithfulnessMetric`は、提供されたコンテキストと比較し
 import { openai } from "@ai-sdk/openai";
 import { FaithfulnessMetric } from "@mastra/evals/llm";
 
-// Configure the model for evaluation
+// 評価用にモデルを設定する
 const model = openai("gpt-4o-mini");
 
 const metric = new FaithfulnessMetric(model, {
   context: [
-    "The company was established in 1995.",
-    "Currently employs around 450-550 people.",
+    "その会社は1995年に設立されました。",
+    "現在は約450〜550人を雇用しています。",
   ],
 });
 
 const result = await metric.measure(
-  "Tell me about the company.",
-  "The company was founded in 1995 and has 500 employees.",
+  "その会社について教えてください。",
+  "その会社は1995年に設立され、従業員数は500人です。",
 );
 
 console.log(result.score); // 1.0
-console.log(result.info.reason); // "All claims are supported by the context."
+console.log(result.info.reason); // "すべての記述はコンテキストによって裏付けられています。"
 ```
 
 
-
-## コンストラクタのパラメータ
+## コンストラクターのパラメーター
 
 <PropertiesTable
   content={[
     {
       name: "model",
       type: "LanguageModel",
-      description: "忠実性を評価するために使用されるモデルの設定。",
+      description: "忠実性評価に使用するモデルの設定。",
       isOptional: false,
     },
     {
       name: "options",
       type: "FaithfulnessMetricOptions",
-      description: "メトリックを設定するための追加オプション。",
+      description: "このメトリクスの構成用の追加オプション。",
       isOptional: false,
     },
   ]}
@@ -69,7 +65,7 @@ console.log(result.info.reason); // "All claims are supported by the context."
       name: "scale",
       type: "number",
       description:
-        "最大スコア値。最終的なスコアはこのスケールに正規化されます。",
+        "スコアの最大値。最終的なスコアはこの尺度に正規化されます。",
       isOptional: false,
       defaultValue: "1",
     },
@@ -77,15 +73,13 @@ console.log(result.info.reason); // "All claims are supported by the context."
       name: "context",
       type: "string[]",
       description:
-        "出力の主張が検証されるコンテキストチャンクの配列。",
+        "出力の主張を検証するために照合されるコンテキストチャンクの配列。",
       isOptional: false,
     },
   ]}
 />
 
-
-
-## measure() のパラメーター
+## measure() のパラメータ
 
 <PropertiesTable
   content={[
@@ -98,13 +92,11 @@ console.log(result.info.reason); // "All claims are supported by the context."
     {
       name: "output",
       type: "string",
-      description: "忠実性を評価するための LLM の応答。",
+      description: "忠実性を評価する対象となる LLM の応答。",
       isOptional: false,
     },
   ]}
 />
-
-
 
 ## 戻り値
 
@@ -114,12 +106,12 @@ console.log(result.info.reason); // "All claims are supported by the context."
       name: "score",
       type: "number",
       description:
-        "0から設定されたスケールまでのスコアで、文脈によって裏付けられた主張の割合を表します。",
+        "0 から設定済みスケールまでの数値で、コンテキストによって裏付けられた主張の割合を表します。",
     },
     {
       name: "info",
       type: "object",
-      description: "スコアの理由を含むオブジェクト",
+      description: "スコアの根拠を含むオブジェクト",
       properties: [
         {
           type: "string",
@@ -128,7 +120,7 @@ console.log(result.info.reason); // "All claims are supported by the context."
               name: "reason",
               type: "string",
               description:
-                "どの主張が裏付けられたか、矛盾していたか、または不明とされたかを含む、スコアの詳細な説明です。",
+                "どの主張が支持・矛盾・不確かと判断されたかを含む、スコアの詳細な説明。",
             },
           ],
         },
@@ -137,41 +129,37 @@ console.log(result.info.reason); // "All claims are supported by the context."
   ]}
 />
 
-
-
 ## スコアリングの詳細
 
-このメトリックは、提供されたコンテキストに対するクレーム検証を通じて忠実性を評価します。
+この指標は、与えられたコンテキストに照らして主張を検証し、その結果に基づいて忠実性を評価します。
 
 ### スコアリングプロセス
 
-1. クレームとコンテキストを分析します:
+1. 主張とコンテキストを分析:
 
-   - すべてのクレーム（事実および推測）を抽出
-   - 各クレームをコンテキストと照合して検証
-   - 3つの判定のいずれかを割り当てる:
-     - "yes" - クレームがコンテキストによって支持されている
-     - "no" - クレームがコンテキストと矛盾している
-     - "unsure" - クレームが検証できない
+   - すべての主張（事実・推測を含む）を抽出
+   - 各主張をコンテキストに照らして検証
+   - 次の3つの判定のいずれかを付与:
+     - "yes" - コンテキストにより主張が裏付けられる
+     - "no" - コンテキストと主張が矛盾する
+     - "unsure" - 主張は検証不能
 
-2. 忠実性スコアを計算:
-   - 支持されたクレームの数をカウント
-   - 総クレーム数で割る
-   - 設定された範囲にスケーリング
+2. 忠実性スコアを算出:
+   - 裏付けられた主張の数を数える
+   - 総主張数で割る
+   - 設定された範囲にスケーリングする
 
 最終スコア: `(supported_claims / total_claims) * scale`
 
 ### スコアの解釈
 
-(0 から scale、デフォルトは 0-1)
+（スケールは0から。デフォルトは0〜1）
 
-- 1.0: すべてのクレームがコンテキストによって支持されている
-- 0.7-0.9: ほとんどのクレームが支持されており、検証できないものは少数
-- 0.4-0.6: 支持と矛盾が混在
-- 0.1-0.3: 支持は限定的で、多くが矛盾
-- 0.0: 支持されたクレームがない
-
-
+- 1.0: すべての主張が文脈で裏付けられている
+- 0.7〜0.9: ほとんどの主張が裏付けられており、検証不能なものは少数
+- 0.4〜0.6: 一部に矛盾が見られるなど、裏付けはまちまち
+- 0.1〜0.3: 裏付けは限定的で、矛盾が多い
+- 0.0: 裏付けられた主張はない
 
 ## 応用例
 
@@ -179,36 +167,37 @@ console.log(result.info.reason); // "All claims are supported by the context."
 import { openai } from "@ai-sdk/openai";
 import { FaithfulnessMetric } from "@mastra/evals/llm";
 
-// Configure the model for evaluation
+// 評価用にモデルを設定
 const model = openai("gpt-4o-mini");
 
 const metric = new FaithfulnessMetric(model, {
   context: [
-    "The company had 100 employees in 2020.",
-    "Current employee count is approximately 500.",
+    "その会社の従業員数は2020年に100人だった。",
+    "現在の従業員数は約500人である。",
   ],
 });
 
-// Example with mixed claim types
+// 異なる種類の主張を含む例
 const result = await metric.measure(
-  "What's the company's growth like?",
-  "The company has grown from 100 employees in 2020 to 500 now, and might expand to 1000 by next year.",
+  "その会社の成長はどのような状況ですか？",
+  "その会社は2020年の100人から現在は500人へと増加しており、来年までに1000人へ拡大する可能性がある。",
 );
 
-// Example output:
+// 出力例:
 // {
 //   score: 0.67,
 //   info: {
-//     reason: "The score is 0.67 because two claims are supported by the context
-//           (initial employee count of 100 in 2020 and current count of 500),
+//     reason: "スコアが0.67であるのは、2つの主張（2020年の従業員数100人と現在の従業員数500人）がコンテキストで裏付けられる一方で、
+//           将来の拡大に関する主張はコンテキストで検証できないため不確実と判断されたためである。"
 //           while the future expansion claim is marked as unsure as it cannot
 //           be verified against the context."
 //   }
 // }
 ```
 
+
 ### 関連項目
 
-- [Answer Relevancy Metric](./answer-relevancy)
-- [Hallucination Metric](./hallucination)
-- [Context Relevancy Metric](./context-relevancy)
+- [回答関連性メトリック](./answer-relevancy)
+- [幻覚（ハルシネーション）メトリック](./hallucination)
+- [コンテキスト関連性メトリック](./context-relevancy)

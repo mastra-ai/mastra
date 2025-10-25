@@ -1,404 +1,469 @@
 ---
-title: "Reference: Agent.streamLegacy() (Legacy) | Agents | Mastra Docs"  
-description: "Documentation for the legacy `Agent.streamLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version."
+title: "リファレンス: Agent.streamLegacy()（レガシー） | エージェント | Mastra ドキュメント"
+description: "Mastra のエージェントにおける旧式の `Agent.streamLegacy()` メソッドのドキュメント。このメソッドは非推奨で、今後のバージョンで削除されます。"
 ---
 
 import { Callout } from 'nextra/components';
 
-# Agent.streamLegacy() (Legacy)
+
+# Agent.streamLegacy()（レガシー）
 
 <Callout type="warning">
-  **Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.stream()`](./stream.mdx) method instead. See the [migration guide](../../agents/migration-guide.mdx) for details on upgrading.
+  **非推奨**: このメソッドは非推奨で、V1モデルでのみ動作します。V2モデルでは、新しい[`.stream()`](./stream.mdx)メソッドを使用してください。アップグレードの詳細は[移行ガイド](../../../guides/migrations/vnext-to-standard-apis)を参照してください。
 </Callout>
 
-The `.streamLegacy()` method is the legacy version of the agent streaming API, used for real-time streaming of responses from V1 model agents. This method accepts messages and optional streaming options.
+`.streamLegacy()` メソッドは、エージェントのストリーミングAPIの旧式のバージョンで、V1モデルのエージェントからの応答をリアルタイムにストリーミングするために使用されます。このメソッドは、メッセージと任意のストリーミングオプションを受け取ります。
 
-## Usage example
+## 使い方の例
 
 ```typescript copy
-await agent.streamLegacy("message for agent");
+await agent.streamLegacy("エージェント用メッセージ");
 ```
 
-## Parameters
+
+## パラメータ
 
 <PropertiesTable
   content={[
     {
       name: "messages",
       type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
-      description: "The messages to send to the agent. Can be a single string, array of strings, or structured message objects.",
+      description: "エージェントに送信するメッセージ。単一の文字列、文字列の配列、または構造化メッセージオブジェクトを指定できます。",
     },
     {
       name: "options",
       type: "AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT>",
       isOptional: true,
-      description: "Optional configuration for the streaming process.",
+      description: "ストリーミング処理に関する任意の設定。",
     },
   ]}
 />
 
-### Options parameters
+### オプションパラメータ
 
 <PropertiesTable
   content={[
-    {
-      name: "abortSignal",
-      type: "AbortSignal",
-      isOptional: true,
-      description:
-        "Signal object that allows you to abort the agent's execution. When the signal is aborted, all ongoing operations will be terminated.",
-    },
-    {
-      name: "context",
-      type: "CoreMessage[]",
-      isOptional: true,
-      description: "Additional context messages to provide to the agent.",
-    },
-    {
-      name: "experimental_output",
-      type: "Zod schema | JsonSchema7",
-      isOptional: true,
-      description:
-        "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
-    },
-    {
-      name: "instructions",
-      type: "string",
-      isOptional: true,
-      description:
-        "Custom instructions that override the agent's default instructions for this specific generation. Useful for dynamically modifying agent behavior without creating a new agent instance.",
-    },
-    {
-      name: "output",
-      type: "Zod schema | JsonSchema7",
-      isOptional: true,
-      description:
-        "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
-    },
-    {
-      name: "memory",
-      type: "object",
-      isOptional: true,
-      description: "Configuration for memory. This is the preferred way to manage memory.",
-      properties: [
-        {
-          parameters: [{
-              name: "thread",
-              type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
-              isOptional: false,
-              description: "The conversation thread, as a string ID or an object with an `id` and optional `metadata`."
-          }]
-        },
-        {
-          parameters: [{
-              name: "resource",
-              type: "string",
-              isOptional: false,
-              description: "Identifier for the user or resource associated with the thread."
-          }]
-        },
-        {
-          parameters: [{
-              name: "options",
-              type: "MemoryConfig",
-              isOptional: true,
-              description: "Configuration for memory behavior, like message history and semantic recall."
-          }]
-        }
-      ]
-    },
-    {
-      name: "maxSteps",
-      type: "number",
-      isOptional: true,
-      defaultValue: "5",
-      description: "Maximum number of execution steps allowed.",
-    },
-    {
-      name: "maxRetries",
-      type: "number",
-      isOptional: true,
-      defaultValue: "2",
-      description: "Maximum number of retries. Set to 0 to disable retries.",
-    },
-    {
-      name: "memoryOptions",
-      type: "MemoryConfig",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.options` instead. Configuration options for memory management.",
-      properties: [
-        {
-          parameters: [{
+  {
+    name: "abortSignal",
+    type: "AbortSignal",
+    isOptional: true,
+    description:
+      "エージェントの実行を中止するためのシグナルオブジェクト。シグナルが中止されると、実行中のすべての操作が終了されます。"
+  },
+  {
+    name: "context",
+    type: "CoreMessage[]",
+    isOptional: true,
+    description: "エージェントに提供する追加のコンテキストメッセージ。"
+  },
+  {
+    name: "experimental_output",
+    type: "Zod schema | JsonSchema7",
+    isOptional: true,
+    description:
+      "テキスト生成とツール呼び出しと並行して構造化出力生成を有効にします。モデルは提供されたスキーマに準拠した応答を生成します。"
+  },
+  {
+    name: "instructions",
+    type: "string",
+    isOptional: true,
+    description:
+      "この特定の生成でエージェントのデフォルト指示を上書きするカスタム指示。新しいエージェントインスタンスを作成せずにエージェントの動作を動的に変更するのに便利です。"
+  },
+  {
+    name: "output",
+    type: "Zod schema | JsonSchema7",
+    isOptional: true,
+    description:
+      "出力の期待される構造を定義します。JSONスキーマオブジェクトまたはZodスキーマを指定できます。"
+  },
+  {
+    name: "memory",
+    type: "object",
+    isOptional: true,
+    description:
+      "メモリの設定。これがメモリを管理する推奨方法です。",
+    properties: [
+      {
+        parameters: [
+          {
+            name: "thread",
+            type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
+            isOptional: false,
+            description:
+              "会話スレッド。文字列IDまたは`id`とオプションの`metadata`を持つオブジェクトとして指定します。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "resource",
+            type: "string",
+            isOptional: false,
+            description:
+              "スレッドに関連付けられたユーザーまたはリソースの識別子。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "options",
+            type: "MemoryConfig",
+            isOptional: true,
+            description:
+              "メッセージ履歴やセマンティック想起などのメモリ動作の設定。"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    name: "maxSteps",
+    type: "number",
+    isOptional: true,
+    defaultValue: "5",
+    description: "許可される実行ステップの最大数。"
+  },
+  {
+    name: "maxRetries",
+    type: "number",
+    isOptional: true,
+    defaultValue: "2",
+    description: "最大再試行回数。再試行を無効にするには0に設定します。"
+  },
+  {
+    name: "memoryOptions",
+    type: "MemoryConfig",
+    isOptional: true,
+    description:
+      "**非推奨。** 代わりに`memory.options`を使用してください。メモリ管理の設定オプション。",
+    properties: [
+      {
+        parameters: [
+          {
             name: "lastMessages",
             type: "number | false",
             isOptional: true,
-            description: "Number of recent messages to include in context, or false to disable."
-          }]
-        },
-        {
-          parameters: [{
+            description:
+              "コンテキストに含める最近のメッセージ数、または無効にするにはfalse。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
             name: "semanticRecall",
             type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
             isOptional: true,
-            description: "Enable semantic recall to find relevant past messages. Can be a boolean or detailed configuration."
-          }]
-        },
-        {
-          parameters: [{
+            description:
+              "関連する過去のメッセージを見つけるためのセマンティック想起を有効にします。ブール値または詳細設定を指定できます。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
             name: "workingMemory",
             type: "WorkingMemory",
             isOptional: true,
-            description: "Configuration for working memory functionality."
-          }]
-        },
-        {
-          parameters: [{
+            description: "ワーキングメモリ機能の設定。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
             name: "threads",
             type: "{ generateTitle?: boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> } }",
             isOptional: true,
-            description: "Thread-specific configuration, including automatic title generation."
-          }]
-        }
-      ]
-    },
-    {
-      name: "onFinish",
-      type: "StreamTextOnFinishCallback<any> | StreamObjectOnFinishCallback<OUTPUT>",
-      isOptional: true,
-      description:
-        "Callback function called when streaming completes. Receives the final result.",
-    },
-    {
-      name: "onStepFinish",
-      type: "StreamTextOnStepFinishCallback<any> | never",
-      isOptional: true,
-      description:
-        "Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output",
-    },
-    {
-      name: "resourceId",
-      type: "string",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.resource` instead. Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
-    },
-    {
-      name: "telemetry",
-      type: "TelemetrySettings",
-      isOptional: true,
-      description:
-        "Settings for telemetry collection during streaming.",
-      properties: [
-        {
-          parameters: [{
+            description:
+              "自動タイトル生成を含むスレッド固有の設定。"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    name: "onFinish",
+    type: "StreamTextOnFinishCallback<any> | StreamObjectOnFinishCallback<OUTPUT>",
+    isOptional: true,
+    description:
+      "ストリーミング完了時に呼び出されるコールバック関数。最終結果を受け取ります。"
+  },
+  {
+    name: "onStepFinish",
+    type: "StreamTextOnStepFinishCallback<any> | never",
+    isOptional: true,
+    description:
+      "各実行ステップ後に呼び出されるコールバック関数。ステップの詳細をJSON文字列として受け取ります。構造化出力では利用できません。"
+  },
+  {
+    name: "resourceId",
+    type: "string",
+    isOptional: true,
+    description:
+      "**非推奨。** 代わりに`memory.resource`を使用してください。エージェントと対話するユーザーまたはリソースの識別子。threadIdが提供される場合は必須です。"
+  },
+  {
+    name: "telemetry",
+    type: "TelemetrySettings",
+    isOptional: true,
+    description: "ストリーミング中のテレメトリ収集の設定。",
+    properties: [
+      {
+        parameters: [
+          {
             name: "isEnabled",
             type: "boolean",
             isOptional: true,
-            description: "Enable or disable telemetry. Disabled by default while experimental."
-          }]
-        },
-        {
-          parameters: [{
+            description:
+              "テレメトリを有効または無効にします。実験的機能のためデフォルトでは無効です。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
             name: "recordInputs",
             type: "boolean",
             isOptional: true,
-            description: "Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information."
-          }]
-        },
-        {
-          parameters: [{
+            description:
+              "入力記録を有効または無効にします。デフォルトで有効です。機密情報の記録を避けるために入力記録を無効にしたい場合があります。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
             name: "recordOutputs",
             type: "boolean",
             isOptional: true,
-            description: "Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information."
-          }]
-        },
-        {
-          parameters: [{
+            description:
+              "出力記録を有効または無効にします。デフォルトで有効です。機密情報の記録を避けるために出力記録を無効にしたい場合があります。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
             name: "functionId",
             type: "string",
             isOptional: true,
-            description: "Identifier for this function. Used to group telemetry data by function."
-          }]
-        }
-      ]
-    },
-    {
-      name: "temperature",
-      type: "number",
-      isOptional: true,
-      description:
-        "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
-    },
-    {
-      name: "threadId",
-      type: "string",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.thread` instead. Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
-    },
-    {
-      name: "toolChoice",
-      type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
-      isOptional: true,
-      defaultValue: "'auto'",
-      description: "Controls how the agent uses tools during streaming.",
-      properties: [
-        {
-          parameters: [{
+            description:
+              "この関数の識別子。関数別にテレメトリデータをグループ化するために使用されます。"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    name: "temperature",
+    type: "number",
+    isOptional: true,
+    description:
+      "モデル出力のランダム性を制御します。高い値（例：0.8）は出力をよりランダムにし、低い値（例：0.2）はより集中的で決定論的にします。"
+  },
+  {
+    name: "threadId",
+    type: "string",
+    isOptional: true,
+    description:
+      "**非推奨。** 代わりに`memory.thread`を使用してください。会話スレッドの識別子。複数の対話間でコンテキストを維持できます。resourceIdが提供される場合は必須です。"
+  },
+  {
+    name: "toolChoice",
+    type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
+    isOptional: true,
+    defaultValue: "'auto'",
+    description: "ストリーミング中にエージェントがツールを使用する方法を制御します。",
+    properties: [
+      {
+        parameters: [
+          {
             name: "'auto'",
             type: "string",
-            description: "Let the model decide whether to use tools (default)."
-          }]
-        },
-        {
-          parameters: [{
+            description: "モデルにツールを使用するかどうかを決定させます（デフォルト）。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
             name: "'none'",
             type: "string",
-            description: "Do not use any tools."
-          }]
-        },
-        {
-          parameters: [{
+            description: "ツールを使用しません。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
             name: "'required'",
             type: "string",
-            description: "Require the model to use at least one tool."
-          }]
-        },
-        {
-          parameters: [{
+            description: "モデルに少なくとも1つのツールの使用を要求します。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
             name: "{ type: 'tool'; toolName: string }",
             type: "object",
-            description: "Require the model to use a specific tool by name."
-          }]
-        }
-      ]
-    },
-    {
-      name: "toolsets",
-      type: "ToolsetsInput",
-      isOptional: true,
-      description:
-        "Additional toolsets to make available to the agent during streaming.",
-    },
-    {
-      name: "clientTools",
-      type: "ToolsInput",
-      isOptional: true,
-      description:
-        "Tools that are executed on the 'client' side of the request. These tools do not have execute functions in the definition.",
-    },
-    {
-      name: "savePerStep",
-      type: "boolean",
-      isOptional: true,
-      description: "Save messages incrementally after each stream step completes (default: false).",
-    },
-    {
-      name: "providerOptions",
-      type: "Record<string, Record<string, JSONValue>>",
-      isOptional: true,
-      description: "Additional provider-specific options that are passed through to the underlying LLM provider. The structure is `{ providerName: { optionKey: value } }`. For example: `{ openai: { reasoningEffort: 'high' }, anthropic: { maxTokens: 1000 } }`.",
-      properties: [
-        {
-          parameters: [{
+            description: "モデルに名前で特定のツールの使用を要求します。"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    name: "toolsets",
+    type: "ToolsetsInput",
+    isOptional: true,
+    description:
+      "ストリーミング中にエージェントが利用できる追加のツールセット。"
+  },
+  {
+    name: "clientTools",
+    type: "ToolsInput",
+    isOptional: true,
+    description:
+      "リクエストの「クライアント」側で実行されるツール。これらのツールは定義に実行関数を持ちません。"
+  },
+  {
+    name: "savePerStep",
+    type: "boolean",
+    isOptional: true,
+    description:
+      "各ストリームステップ完了後にメッセージを段階的に保存します（デフォルト：false）。"
+  },
+  {
+    name: "providerOptions",
+    type: "Record<string, Record<string, JSONValue>>",
+    isOptional: true,
+    description:
+      "基盤となるLLMプロバイダーに渡される追加のプロバイダー固有オプション。構造は`{ providerName: { optionKey: value } }`です。例：`{ openai: { reasoningEffort: 'high' }, anthropic: { maxTokens: 1000 } }`。",
+    properties: [
+      {
+        parameters: [
+          {
             name: "openai",
             type: "Record<string, JSONValue>",
             isOptional: true,
-            description: "OpenAI-specific options. Example: `{ reasoningEffort: 'high' }`"
-          }]
-        },
-        {
-          parameters: [{
+            description:
+              "OpenAI固有のオプション。例：`{ reasoningEffort: 'high' }`"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
             name: "anthropic",
             type: "Record<string, JSONValue>",
             isOptional: true,
-            description: "Anthropic-specific options. Example: `{ maxTokens: 1000 }`"
-          }]
-        },
-        {
-          parameters: [{
+            description:
+              "Anthropic固有のオプション。例：`{ maxTokens: 1000 }`"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
             name: "google",
             type: "Record<string, JSONValue>",
             isOptional: true,
-            description: "Google-specific options. Example: `{ safetySettings: [...] }`"
-          }]
-        },
-        {
-          parameters: [{
+            description:
+              "Google固有のオプション。例: `{ safetySettings: [...] }`"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
             name: "[providerName]",
             type: "Record<string, JSONValue>",
             isOptional: true,
-            description: "Other provider-specific options. The key is the provider name and the value is a record of provider-specific options."
-          }]
-        }
-      ]
-    },
-    {
-      name: "runId",
-      type: "string",
-      isOptional: true,
-      description: "Unique ID for this generation run. Useful for tracking and debugging purposes.",
-    },
-    {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      isOptional: true,
-      description: "Runtime context for dependency injection and contextual information.",
-    },
-    {
-      name: "maxTokens",
-      type: "number",
-      isOptional: true,
-      description: "Maximum number of tokens to generate.",
-    },
-    {
-      name: "topP",
-      type: "number",
-      isOptional: true,
-      description: "Nucleus sampling. This is a number between 0 and 1. It is recommended to set either `temperature` or `topP`, but not both.",
-    },
-    {
-      name: "topK",
-      type: "number",
-      isOptional: true,
-      description: "Only sample from the top K options for each subsequent token. Used to remove 'long tail' low probability responses.",
-    },
-    {
-      name: "presencePenalty",
-      type: "number",
-      isOptional: true,
-      description: "Presence penalty setting. It affects the likelihood of the model to repeat information that is already in the prompt. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
-    },
-    {
-      name: "frequencyPenalty",
-      type: "number",
-      isOptional: true,
-      description: "Frequency penalty setting. It affects the likelihood of the model to repeatedly use the same words or phrases. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
-    },
-    {
-      name: "stopSequences",
-      type: "string[]",
-      isOptional: true,
-      description: "Stop sequences. If set, the model will stop generating text when one of the stop sequences is generated.",
-    },
-    {
-      name: "seed",
-      type: "number",
-      isOptional: true,
-      description: "The seed (integer) to use for random sampling. If set and supported by the model, calls will generate deterministic results.",
-    },
-    {
-      name: "headers",
-      type: "Record<string, string | undefined>",
-      isOptional: true,
-      description: "Additional HTTP headers to be sent with the request. Only applicable for HTTP-based providers.",
-    }
-  ]}
+            description:
+              "その他のプロバイダー固有のオプション。キーはプロバイダー名、値はプロバイダー固有のオプションのレコードです。"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    name: "runId",
+    type: "string",
+    isOptional: true,
+    description:
+      "この生成実行の一意のID。追跡とデバッグ用途に使用されます。"
+  },
+  {
+    name: "runtimeContext",
+    type: "RuntimeContext",
+    isOptional: true,
+    description:
+      "依存性注入とコンテキスト情報のためのランタイムコンテキスト。"
+  },
+  {
+    name: "maxTokens",
+    type: "number",
+    isOptional: true,
+    description: "生成するトークンの最大数。"
+  },
+  {
+    name: "topP",
+    type: "number",
+    isOptional: true,
+    description:
+      "ニュークリアスサンプリング。0から1の間の数値です。`temperature`または`topP`のいずれかを設定することを推奨しますが、両方は設定しないでください。"
+  },
+  {
+    name: "topK",
+    type: "number",
+    isOptional: true,
+    description:
+      "後続の各トークンに対して上位K個のオプションからのみサンプリングします。「ロングテール」の低確率応答を除去するために使用されます。"
+  },
+  {
+    name: "presencePenalty",
+    type: "number",
+    isOptional: true,
+    description:
+      "プレゼンスペナルティ設定。プロンプトに既に含まれている情報をモデルが繰り返す可能性に影響します。-1（繰り返しを増加）から1（最大ペナルティ、繰り返しを減少）の間の数値です。"
+  },
+  {
+    name: "frequencyPenalty",
+    type: "number",
+    isOptional: true,
+    description:
+      "頻度ペナルティ設定。モデルが同じ単語やフレーズを繰り返し使用する可能性に影響します。-1（繰り返しを増加）から1（最大ペナルティ、繰り返しを減少）の間の数値です。"
+  },
+  {
+    name: "stopSequences",
+    type: "string[]",
+    isOptional: true,
+    description:
+      "停止シーケンス。設定された場合、停止シーケンスの1つが生成されるとモデルはテキストの生成を停止します。"
+  },
+  {
+    name: "seed",
+    type: "number",
+    isOptional: true,
+    description:
+      "ランダムサンプリングに使用するシード（整数）。設定されてモデルでサポートされている場合、呼び出しは決定論的な結果を生成します。"
+  },
+  {
+    name: "headers",
+    type: "Record<string, string | undefined>",
+    isOptional: true,
+    description:
+      "リクエストと共に送信される追加のHTTPヘッダー。HTTPベースのプロバイダーにのみ適用されます。"
+  }
+]}
 />
 
-## Returns
+## 戻り値
 
 <PropertiesTable
   content={[
@@ -407,49 +472,49 @@ await agent.streamLegacy("message for agent");
       type: "AsyncGenerator<string>",
       isOptional: true,
       description:
-        "Async generator that yields text chunks as they become available.",
+        "利用可能になり次第テキストのチャンクを順次返す非同期ジェネレーター。",
     },
     {
       name: "fullStream",
       type: "Promise<ReadableStream>",
       isOptional: true,
       description:
-        "Promise that resolves to a ReadableStream for the complete response.",
+        "完全なレスポンスを表す ReadableStream へ解決される Promise。",
     },
     {
       name: "text",
       type: "Promise<string>",
       isOptional: true,
       description:
-        "Promise that resolves to the complete text response.",
+        "完全なテキストレスポンスへ解決される Promise。",
     },
     {
       name: "usage",
       type: "Promise<{ totalTokens: number; promptTokens: number; completionTokens: number }>",
       isOptional: true,
       description:
-        "Promise that resolves to token usage information.",
+        "トークン使用量の情報へ解決される Promise。",
     },
     {
       name: "finishReason",
       type: "Promise<string>",
       isOptional: true,
       description:
-        "Promise that resolves to the reason why the stream finished.",
+        "ストリームが終了した理由へ解決される Promise。",
     },
     {
       name: "toolCalls",
       type: "Promise<Array<ToolCall>>",
       isOptional: true,
       description:
-        "Promise that resolves to the tool calls made during the streaming process.",
+        "ストリーミング中に行われたツール呼び出しへ解決される Promise。",
       properties: [
         {
           parameters: [{
             name: "toolName",
             type: "string",
             required: true,
-            description: "The name of the tool invoked."
+            description: "呼び出されたツール名。"
           }]
         },
         {
@@ -457,7 +522,7 @@ await agent.streamLegacy("message for agent");
             name: "args",
             type: "any",
             required: true,
-            description: "The arguments passed to the tool."
+            description: "ツールに渡された引数。"
           }]
         }
       ]
@@ -465,10 +530,10 @@ await agent.streamLegacy("message for agent");
   ]}
 />
 
-## Extended usage example
+## 拡張された使用例
 
 ```typescript showLineNumbers copy
-await agent.streamLegacy("message for agent", {
+await agent.streamLegacy("エージェントへのメッセージ", {
   temperature: 0.7,
   maxSteps: 3,
   memory: {
@@ -479,15 +544,17 @@ await agent.streamLegacy("message for agent", {
 });
 ```
 
-## Migration to New API
+
+## 新しい API への移行
 
 <Callout type="info">
-  The new `.stream()` method offers enhanced capabilities including AI SDK v5 compatibility, better structured output handling, and improved callback system. See the [migration guide](../../agents/migration-guide.mdx) for detailed migration instructions.
+  新しい `.stream()` メソッドは、AI SDK v5 への対応、構造化出力のより適切な取り扱い、改良されたコールバックシステムなど、強化された機能を提供します。詳細な移行手順は [移行ガイド](../../../guides/migrations/vnext-to-standard-apis) を参照してください。
 </Callout>
 
-### Quick Migration Example
+### 迅速な移行の例
 
-#### Before (Legacy)
+#### 以前（レガシー）
+
 ```typescript
 const result = await agent.streamLegacy("message", {
   temperature: 0.7,
@@ -496,7 +563,9 @@ const result = await agent.streamLegacy("message", {
 });
 ```
 
-#### After (New API)
+
+#### 以降（新しい API）
+
 ```typescript
 const result = await agent.stream("message", {
   modelSettings: {
@@ -507,9 +576,10 @@ const result = await agent.stream("message", {
 });
 ```
 
-## Related
 
-- [Migration Guide](../../agents/migration-guide.mdx)
-- [New .stream() method](./stream.mdx)
-- [Generating responses](../../docs/agents/overview.mdx#generating-responses)
-- [Streaming responses](../../docs/agents/overview.mdx#streaming-responses)
+## 関連
+
+- [移行ガイド](../../../guides/migrations/vnext-to-standard-apis)
+- [新しい .stream() メソッド](./stream.mdx)
+- [レスポンスの生成](../../../docs/agents/overview.mdx#generating-responses)
+- [レスポンスのストリーミング](../../../docs/agents/overview.mdx#streaming-responses)

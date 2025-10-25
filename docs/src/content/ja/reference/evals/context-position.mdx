@@ -1,49 +1,45 @@
 ---
-title: "リファレンス: Context Position | Metrics | Evals | Mastra Docs"
-description: クエリと出力に対するコンテキストノードの関連性に基づいて、その順序を評価するMastraのContext Position Metricのドキュメント。
+title: "リファレンス: コンテキスト位置 | メトリクス | Evals | Mastra ドキュメント"
+description: Mastra における Context Position メトリクスのドキュメント。クエリおよび出力との関連性に基づいて、コンテキストノードの並びを評価します。
 ---
 
 import { ScorerCallout } from '@/components/scorer-callout'
-
 
 
 # ContextPositionMetric
 
 <ScorerCallout />
 
-`ContextPositionMetric`クラスは、クエリと出力に対するコンテキストノードの関連性に基づいて、それらがどの程度適切に順序付けされているかを評価します。位置重み付けスコアリングを使用して、最も関連性の高いコンテキスト部分がシーケンスの早い段階に現れることの重要性を強調します。
+`ContextPositionMetric` クラスは、クエリや出力との関連性に基づいて、コンテキストノードの並び順がどれだけ適切かを評価します。位置に重みを置いたスコアリングを用い、最も関連性の高いコンテキストがシーケンスの早い段階に現れることの重要性を強調します。
 
-
-
-## 基本的な使い方
+## 基本の使い方
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
 import { ContextPositionMetric } from "@mastra/evals/llm";
 
-// Configure the model for evaluation
+// 評価用にモデルを設定する
 const model = openai("gpt-4o-mini");
 
 const metric = new ContextPositionMetric(model, {
   context: [
-    "Photosynthesis is a biological process used by plants to create energy from sunlight.",
-    "The process of photosynthesis produces oxygen as a byproduct.",
-    "Plants need water and nutrients from the soil to grow.",
+    "光合成は、植物が太陽光からエネルギーを作り出すために行う生物学的な過程です。",
+    "光合成の過程では、副産物として酸素が生成されます。",
+    "植物は成長するために土壌から水分と栄養分を必要とします。",
   ],
 });
 
 const result = await metric.measure(
-  "What is photosynthesis?",
-  "Photosynthesis is the process by which plants convert sunlight into energy.",
+  "光合成とは何ですか？",
+  "光合成は、植物が太陽光をエネルギーに変換する過程です。",
 );
 
-console.log(result.score); // Position score from 0-1
-console.log(result.info.reason); // Explanation of the score
+console.log(result.score); // 位置スコア（0～1）
+console.log(result.info.reason); // スコアの説明
 ```
 
 
-
-## コンストラクターのパラメーター
+## コンストラクターのパラメータ
 
 <PropertiesTable
   content={[
@@ -51,13 +47,13 @@ console.log(result.info.reason); // Explanation of the score
       name: "model",
       type: "ModelConfig",
       description:
-        "コンテキストの位置評価に使用されるモデルの設定",
+        "コンテキスト配置の評価に使用するモデルの設定",
       isOptional: false,
     },
     {
       name: "options",
       type: "ContextPositionMetricOptions",
-      description: "このメトリックの設定オプション",
+      description: "メトリクスの設定オプション",
       isOptional: false,
     },
   ]}
@@ -77,15 +73,13 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "context",
       type: "string[]",
-      description: "取得順に並んだコンテキスト要素の配列",
+      description: "取得順に並んだコンテキスト片の配列",
       isOptional: false,
     },
   ]}
 />
 
-
-
-## measure() のパラメーター
+## measure() のパラメータ
 
 <PropertiesTable
   content={[
@@ -98,13 +92,11 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "output",
       type: "string",
-      description: "評価対象となる生成された応答",
+      description: "評価する生成結果",
       isOptional: false,
     },
   ]}
 />
-
-
 
 ## 戻り値
 
@@ -113,7 +105,7 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "score",
       type: "number",
-      description: "ポジションスコア（0からスケール、デフォルトは0-1）",
+      description: "位置スコア（0 〜 scale。標準では 0〜1）",
     },
     {
       name: "info",
@@ -135,80 +127,75 @@ console.log(result.info.reason); // Explanation of the score
   ]}
 />
 
-
-
 ## スコアリングの詳細
 
-このメトリクスは、バイナリの関連性評価と位置に基づく重み付けを通じて、コンテキストの配置を評価します。
+この指標は、二値の関連性評価と位置に基づく重み付けを用いて、コンテキストの位置付けを評価します。
 
 ### スコアリングプロセス
 
-1. コンテキストの関連性を評価します:
+1. コンテキストの妥当性を評価:
 
-   - 各要素にバイナリ判定（はい／いいえ）を割り当てる
-   - シーケンス内の位置を記録する
-   - 関連性の理由を記録する
+   - 各要素に二値判定（yes/no）を付与
+   - シーケンス内での位置を記録
+   - 妥当性の根拠を記録
 
-2. 位置の重みを適用します:
-   - 先頭の位置ほど重みが大きい（重み = 1/(位置 + 1)）
-   - 関連する要素の重みを合計する
-   - 最大可能スコアで正規化する
+2. 位置に基づく重み付けを適用:
+   - 先頭に近いほど重みが大きい（weight = 1/(position + 1)）
+   - 関連ありと判定された要素の重みを合算
+   - 取りうる最大スコアで正規化
 
 最終スコア: `(weighted_sum / max_possible_sum) * scale`
 
 ### スコアの解釈
 
-（0 から scale、デフォルトは 0-1）
+（スケールは0から、デフォルトは0〜1）
 
-- 1.0: 最適 - 最も関連性の高いコンテキストが最初
-- 0.7-0.9: 良好 - 関連性の高いコンテキストが主に早い段階
-- 0.4-0.6: 混在 - 関連性の高いコンテキストが散在
-- 0.1-0.3: 最適でない - 関連性の高いコンテキストが主に後半
-- 0.0: 不適切な順序 - 関連性の高いコンテキストが最後または欠落
+- 1.0: 最適 - 最も関連するコンテキストが最初に来る
+- 0.7〜0.9: 良好 - 関連するコンテキストが主に早い段階にある
+- 0.4〜0.6: ばらつきあり - 関連するコンテキストが散在している
+- 0.1〜0.3: やや不十分 - 関連するコンテキストが主に後半にある
+- 0.0: 並びが不適切 - 関連するコンテキストが末尾にある、または欠落している
 
-
-
-## 分析付きの例
+## 例と解説
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
 import { ContextPositionMetric } from "@mastra/evals/llm";
 
-// Configure the model for evaluation
+// 評価用にモデルを設定する
 const model = openai("gpt-4o-mini");
 
 const metric = new ContextPositionMetric(model, {
   context: [
-    "A balanced diet is important for health.",
-    "Exercise strengthens the heart and improves blood circulation.",
-    "Regular physical activity reduces stress and anxiety.",
-    "Exercise equipment can be expensive.",
+    "バランスの取れた食事は健康のために重要です。",
+    "運動は心臓を強化し、血液循環を改善します。",
+    "定期的な身体活動はストレスや不安を軽減します。",
+    "運動器具は高価になり得ます。",
   ],
 });
 
 const result = await metric.measure(
-  "What are the benefits of exercise?",
-  "Regular exercise improves cardiovascular health and mental wellbeing.",
+  "運動の利点は何ですか？",
+  "定期的な運動は心血管の健康とメンタルの健康を向上させます。",
 );
 
-// Example output:
+// 出力例:
 // {
 //   score: 0.5,
 //   info: {
-//     reason: "The score is 0.5 because while the second and third contexts are highly
-//           relevant to the benefits of exercise, they are not optimally positioned at
-//           the beginning of the sequence. The first and last contexts are not relevant
-//           to the query, which impacts the position-weighted scoring."
+//     reason: "スコアが0.5である理由は、2番目と3番目のコンテキストは運動の利点に強く関連しているものの、
+//           それらがシーケンスの先頭に最適に配置されていないためです。
+//           1番目と最後のコンテキストは問いに関連しておらず、
+//           そのことが位置重み付きのスコアリングに影響しています。"
 //   }
 // }
 ```
 
 
+## 関連項目
 
-## 関連
+- [コンテキスト精度メトリクス](./context-precision)
+- [回答関連性メトリクス](./answer-relevancy)
+- [完全性メトリクス](./completeness)
 
-- [Context Precision Metric](./context-precision)
-- [Answer Relevancy Metric](./answer-relevancy)
-- [Completeness Metric](./completeness)
-
-* [Context Relevancy Metric](./context-relevancy)
+* [コンテキスト関連性メトリクス](./context-relevancy)

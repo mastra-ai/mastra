@@ -1,17 +1,13 @@
 ---
 title: "リファレンス: start() | ワークフローの実行（レガシー） | Mastra ドキュメント"
-description: "ワークフロー内の `start()` メソッドのドキュメント。ワークフローの実行を開始します。"
+description: "ワークフローで使用する `start()` メソッドのドキュメント。ワークフローの実行を開始します。"
 ---
-
-
 
 # start()
 
-start関数は、ワークフローの実行を開始します。定義されたワークフローの順序に従ってすべてのステップを処理し、並列実行、分岐ロジック、ステップ間の依存関係を管理します。
+start 関数はワークフローの実行を開始します。定義された順序に従ってすべてのステップを処理し、並列実行、分岐ロジック、ステップ間の依存関係を適切に扱います。
 
-
-
-## 使用方法
+## 使い方
 
 ```typescript copy showLineNumbers
 const { runId, start } = workflow.createRun();
@@ -21,8 +17,7 @@ const result = await start({
 ```
 
 
-
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
@@ -42,13 +37,11 @@ const result = await start({
     {
       name: "triggerData",
       type: "Record<string, any>",
-      description: "ワークフローの triggerSchema に一致する初期データ",
+      description: "ワークフローの triggerSchema に適合する初期データ",
       isOptional: false,
     },
   ]}
 />
-
-
 
 ## 戻り値
 
@@ -57,43 +50,39 @@ const result = await start({
     {
       name: "results",
       type: "Record<string, any>",
-      description: "完了したすべてのワークフローステップからの統合出力",
+      description: "完了したすべてのワークフロー手順の統合出力",
     },
     {
       name: "status",
       type: "'completed' | 'error' | 'suspended'",
-      description: "ワークフロー実行の最終ステータス",
+      description: "ワークフロー実行の最終的な状態",
     },
   ]}
 />
 
-
-
 ## エラー処理
 
-start関数は、いくつかの種類のバリデーションエラーをスローする可能性があります。
+start 関数は、複数の種類の検証エラーをスローすることがあります：
 
 ```typescript copy showLineNumbers
 try {
   const result = await start({ triggerData: data });
 } catch (error) {
   if (error instanceof ValidationError) {
-    console.log(error.type); // 'circular_dependency' | 'no_terminal_path' | 'unreachable_step'
+    console.log(error.type); // '循環依存' | '終端経路なし' | '到達不能なステップ'
     console.log(error.details);
   }
 }
 ```
 
 
+## 関連項目
 
-## 関連
-
-- [例：ワークフローの作成](../../examples/workflows_legacy/creating-a-workflow.mdx)
-- [例：一時停止と再開](../../examples/workflows_legacy/suspend-and-resume.mdx)
-- [createRun リファレンス](./createRun.mdx)
-- [Workflow クラスリファレンス](./workflow.mdx)
-- [Step クラスリファレンス](./step-class.mdx)
+* [例: ワークフローの作成](../../examples/workflows_legacy/creating-a-workflow.mdx)
+* [例: 一時停止と再開](../../examples/workflows_legacy/suspend-and-resume.mdx)
+* [createRun リファレンス](./createRun.mdx)
+* [Workflow クラスリファレンス](./workflow.mdx)
+* [Step クラスリファレンス](./step-class.mdx)
 
 ```
-
 ```

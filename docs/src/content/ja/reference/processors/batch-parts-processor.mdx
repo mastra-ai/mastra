@@ -1,0 +1,113 @@
+---
+title: "リファレンス: Batch Parts Processor | プロセッサー | Mastra ドキュメント"
+description: "Mastra の BatchPartsProcessor のドキュメント。複数のストリームパートをまとめてバッチ化し、エミッション（出力）の頻度を抑えます。"
+---
+
+# BatchPartsProcessor
+
+`BatchPartsProcessor` は、ストリーミング中の出力回数を減らすために複数のストリームのパートをまとめてバッチ化する **出力プロセッサ** です。小さなテキストチャンクをまとめてユーザー体験を向上させ、ネットワークオーバーヘッドを削減し、クライアントへのパートの送出タイミングを制御することでストリーミングのパフォーマンスを最適化できます。
+
+## 使い方の例
+
+```typescript copy
+import { BatchPartsProcessor } from "@mastra/core/processors";
+
+const processor = new BatchPartsProcessor({
+  batchSize: 5,
+  maxWaitTime: 100,
+  emitOnNonText: true
+});
+```
+
+
+## コンストラクタの引数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "ストリームの一部をバッチ処理するための設定オプション",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### オプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "batchSize",
+      type: "number",
+      description: "出力前にまとめる要素数",
+      isOptional: true,
+      default: "5",
+    },
+    {
+      name: "maxWaitTime",
+      type: "number",
+      description: "バッチを出力するまでに待機する最大時間（ミリ秒）。設定されている場合、batchSize に達していなくても現在のバッチを出力します",
+      isOptional: true,
+      default: "undefined（タイムアウトなし）",
+    },
+    {
+      name: "emitOnNonText",
+      type: "boolean",
+      description: "非テキスト要素に遭遇した場合に即時に出力するかどうか",
+      isOptional: true,
+      default: "true",
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "プロセッサ名（'batch-parts' に設定）",
+      isOptional: false,
+    },
+    {
+      name: "processOutputStream",
+      type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never }) => Promise<ChunkType | null>",
+      description: "ストリーミング出力のパーツを処理してバッチ化します",
+      isOptional: false,
+    },
+    {
+      name: "flush",
+      type: "(state?: BatchPartsState) => ChunkType | null",
+      description: "ストリーム終了時に残っているバッチ化済みパーツを強制的にフラッシュします",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 拡張的な使用例
+
+```typescript filename="src/mastra/agents/batched-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { BatchPartsProcessor } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "batched-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: openai("gpt-4o-mini"),
+  outputProcessors: [
+    new BatchPartsProcessor({
+      batchSize: 5,
+      maxWaitTime: 100,
+      emitOnNonText: true
+    })
+  ]
+});
+```
+
+
+## 関連項目
+
+- [Output Processors ドキュメント](/docs/agents/output-processors)

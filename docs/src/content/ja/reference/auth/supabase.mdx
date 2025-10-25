@@ -5,7 +5,7 @@ description: "Supabase Auth を用いて Mastra アプリケーションを認�
 
 # MastraAuthSupabase クラス
 
-`MastraAuthSupabase` クラスは、Supabase Auth を利用して Mastra の認証を提供します。Supabase の認証システムで受信リクエストを検証し、`experimental_auth` オプションを通じて Mastra サーバーと統合します。
+`MastraAuthSupabase` クラスは、Supabase Auth を用いて Mastra の認証を提供します。Supabase の認証システムで受信リクエストを検証し、`experimental_auth` オプションを介して Mastra サーバーと統合します。
 
 ## 使い方の例
 
@@ -24,6 +24,7 @@ export const mastra = new Mastra({
 });
 ```
 
+
 ## コンストラクターのパラメーター
 
 <PropertiesTable
@@ -31,32 +32,32 @@ export const mastra = new Mastra({
     {
       name: "url",
       type: "string",
-      description: "Supabase プロジェクトの URL。プロジェクトの設定で確認できます。",
+      description: "Supabase プロジェクトの URL。プロジェクト設定で確認できます。",
       isOptional: true,
       defaultValue: "process.env.SUPABASE_URL"
     },
     {
       name: "anonKey",
       type: "string",
-      description: "Supabase プロジェクトの匿名/公開キー。クライアントサイドの認証に使用します。",
+      description: "Supabase プロジェクトの匿名/公開キー。クライアント側の認証に使用します。",
       isOptional: true,
       defaultValue: "process.env.SUPABASE_ANON_KEY"
     },
     {
       name: "name",
       type: "string",
-      description: "認証プロバイダーインスタンスのカスタム名。",
+      description: "この認証プロバイダーインスタンスのカスタム名。",
       isOptional: true,
     },
     {
       name: "authorizeUser",
       type: "(user: User, request: HoneRequest) => Promise<boolean> | boolean",
-      description: "ユーザーにアクセスを許可するかどうかを判定するカスタム認可関数。トークンの検証後に呼び出されます。デフォルトでは 'users' テーブルの 'isAdmin' 列を確認します。",
+      description: "ユーザーにアクセス権を付与すべきか判定するカスタム認可関数。トークンの検証後に呼び出されます。既定では 'users' テーブルの 'isAdmin' 列をチェックします。",
       isOptional: true,
     },
   ]}
 />
 
-## 関連項目
+## 関連情報
 
 [MastraAuthSupabase](/docs/auth/supabase.mdx)

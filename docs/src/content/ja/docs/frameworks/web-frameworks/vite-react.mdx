@@ -1,37 +1,34 @@
 ---
 title: "Mastra と Vite/React の始め方 | Mastra ガイド"
-description: Mastra を Vite と React に統合するためのステップバイステップガイド。
+description: Mastra を Vite と React に統合するための手順ガイド。
 ---
 
 import { Callout, Steps, Tabs } from "nextra/components";
 
 
-
 # Vite/React プロジェクトに Mastra を統合する
 
-Mastra は Vite と統合されており、次のことを容易にします:
+Mastra は Vite と統合されており、次のことが簡単に行えます。
 
-- 柔軟な API を構築して、AI 搭載の機能を提供できる
-- フロントエンドとバックエンドを単一のコードベースにまとめ、デプロイを簡素化
-- Mastra の Client SDK を活用
+- AI 機能を提供する柔軟な API を構築する
+- フロントエンドとバックエンドを単一のコードベースにまとめ、デプロイを簡素化する
+- Mastra の Client SDK を活用する
 
-このガイドに従って、Vite/React プロジェクトに Mastra をスキャフォールドして統合しましょう。
+このガイドを使って、Vite/React プロジェクトに Mastra の足場を作成し、統合しましょう。
 
 <Callout type="warning">
-  このガイドは、プロジェクトのルート (例: `app`) で React Router v7 を用いた
-  Vite/React 構成を前提としています。
+  このガイドは、プロジェクトのルート (例: `app`) で React Router v7 を使う Vite/React 構成を前提としています。
 </Callout>
-
-
 
 ## Mastra をインストール
 
-必要な Mastra パッケージをインストールします：
+必要な Mastra パッケージをインストールします:
+
 {/*
-LLM CONTEXT: この Tabs コンポーネントは、異なるパッケージマネージャーを使って新しい Mastra バックエンドプロジェクトを統合するためのコマンドを表示します。
-各タブには、そのパッケージマネージャー用のコマンドが表示され、統合済みの Mastra バックエンドサービスを作成します。
-これは Vite/React プロジェクト向けの「統合バックエンド統合」アプローチの一部です。
-すべてのコマンドは同じ Mastra プロジェクトを作成しますが、パッケージマネージャーごとに構文が異なります。
+LLM CONTEXT: この Tabs コンポーネントは、各種パッケージマネージャーで新しい Mastra バックエンドプロジェクトを統合するためのコマンドを表示します。
+各タブには、そのパッケージマネージャー向けの、統合済みの Mastra バックエンドサービスを作成するコマンドが表示されます。
+これは Vite/React プロジェクト向けの「統合型バックエンド統合」アプローチの一部です。
+すべてのコマンドは同じ Mastra プロジェクトを作成しますが、パッケージマネージャーごとに記法が異なります。
 */}
 
 <Tabs items={["npm", "yarn", "pnpm", "bun"]}>
@@ -57,35 +54,34 @@ LLM CONTEXT: この Tabs コンポーネントは、異なるパッケージマ�
   </Tabs.Tab>
 </Tabs>
 
+## Mastra を統合する
 
-
-## Mastra を導入する
-
-プロジェクトに Mastra を組み込むには、次の 2 通りの方法があります。
+プロジェクトに Mastra を統合するには、次の2つの方法があります：
 
 ### 1. ワンライナーを使う
 
-以下のコマンドを実行すると、妥当なデフォルト設定で Weather エージェントを手早く雛形作成できます：
+次のコマンドを実行して、妥当なデフォルト設定付きのデフォルトの Weather エージェントを手早く作成します:
 
 ```bash copy
 npx mastra@latest init --dir . --components agents,tools --example --llm openai
 ```
 
-> 詳細は [mastra init](/reference/cli/init) を参照してください。
+> 詳細は [mastra init](/reference/cli/init) をご覧ください。
+
 
 ### 2. 対話型 CLI を使う
 
-セットアップをカスタマイズしたい場合は、`init` コマンドを実行し、プロンプトに従ってオプションを選択してください:
+セットアップをカスタマイズする場合は、`init` コマンドを実行し、表示される選択肢から選んでください。
 
 ```bash copy
 npx mastra@latest init
 ```
 
 <Callout type="warning">
-デフォルトでは、`mastra init` はインストール先として `src` を提案します。プロジェクトのルート直下で Vite/React を使っている場合（例：`app`、`src/app` ではない）、プロンプトで `.` を入力してください：
+  既定では、`mastra init` はインストール先として `src` を提案します。プロジェクトのルート直下で Vite/React を使っている場合（例: `app`、`src/app` ではない）、プロンプトが表示されたら `.` を入力してください:
 </Callout>
 
-`package.json` に `dev` と `build` のスクリプトを追加します:
+`package.json` に `dev` と `build` スクリプトを追加します:
 
 <Tabs items={["app", "src/app"]}>
   <Tabs.Tab>
@@ -99,6 +95,7 @@ npx mastra@latest init
     }
     ```
   </Tabs.Tab>
+
   <Tabs.Tab>
     ```json filename="package.json"
     {
@@ -113,10 +110,9 @@ npx mastra@latest init
 </Tabs>
 
 
-
 ## TypeScript を設定する
 
-プロジェクトのルートにある `tsconfig.json` ファイルを編集します:
+プロジェクトのルートにある `tsconfig.json` ファイルを編集します：
 
 ```json filename="tsconfig.json"
 {
@@ -126,15 +122,13 @@ npx mastra@latest init
 ```
 
 
-
-## API キーを設定する
+## API キーの設定
 
 ```bash filename=".env" copy
-OPENAI_API_KEY=<your-api-key>
+OPENAI_API_KEY=<APIキー>
 ```
 
-> LLM プロバイダーごとに使用する環境変数が異なります。詳しくは [Model Capabilities](/docs/getting-started/model-capability) をご覧ください。
-
+> LLM のプロバイダーごとに使用する環境変数が異なります。詳しくは [Model Capabilities](/docs/getting-started/model-capability) をご覧ください。
 
 
 ## .gitignore を更新する
@@ -144,7 +138,6 @@ OPENAI_API_KEY=<your-api-key>
 ```bash filename=".gitignore" copy
 .mastra
 ```
-
 
 
 ## Mastra Dev Server を起動する
@@ -164,19 +157,15 @@ Mastra Dev Server を起動して、エージェントを REST エンドポイ�
   </Tabs.Tab>
 </Tabs>
 
-> 起動後、エージェントはローカル環境で利用可能になります。詳細は [ローカル開発環境](/docs/server-db/local-dev-playground) を参照してください。
-
-
+> 起動後、エージェントはローカルで利用可能になります。詳しくは「[ローカル開発環境](/docs/server-db/local-dev-playground)」を参照してください。
 
 ## Vite 開発サーバーを起動する
 
-Mastra Dev Server が起動していれば、通常どおり Vite アプリを起動できます。
+Mastra Dev Server が稼働していれば、通常どおり Vite アプリを起動できます。
 
+## Mastra クライアントを作成する
 
-
-## Mastra クライアントを作成
-
-新しいディレクトリとファイルを作成し、次のサンプルコードを追加します。
+新しいディレクトリとファイルを作成し、以下のサンプルコードを追加します。
 
 ```bash copy
 mkdir lib
@@ -192,8 +181,7 @@ export const mastraClient = new MastraClient({
 ```
 
 
-
-## テスト用のルート設定を作成する
+## テストルートのルート設定を作成する
 
 設定に新しい `route` を追加します:
 
@@ -207,10 +195,9 @@ export default [
 ```
 
 
+## テスト用ルートを作成
 
-## テスト用ルートを作成する
-
-新しいルートを作成し、次のサンプルコードを追加します:
+新しい Route を作成し、次のサンプルコードを追加します:
 
 ```bash copy
 touch app/routes/test.tsx
@@ -231,7 +218,7 @@ export default function Test() {
     const agent = mastraClient.getAgent("weatherAgent");
 
     const response = await agent.generate({
-      messages: [{ role: "user", content: `What's the weather like in ${city}?` }]
+      messages: [{ role: "user", content: `${city}の天気はどう？` }]
     });
 
     setResult(response.text);
@@ -239,10 +226,10 @@ export default function Test() {
 
   return (
     <>
-      <h1>Test</h1>
+      <h1>テスト</h1>
       <form onSubmit={handleSubmit}>
-        <input name="city" placeholder="Enter city" required />
-        <button type="submit">Get Weather</button>
+        <input name="city" placeholder="都市名を入力してください" required />
+        <button type="submit">天気を表示</button>
       </form>
       {result && <pre>{result}</pre>}
     </>
@@ -255,10 +242,8 @@ export default function Test() {
 都市に **London** を入力して送信すると、次のような結果が返ってきます:
 
 ```plaintext
-The current weather in London is partly cloudy with a temperature of 19.3°C, feeling like 17.4°C. The humidity is at 53%, and there is a wind speed of 15.9 km/h, with gusts up to 38.5 km/h.
+ロンドンの現在の天気は晴れ時々曇り、気温19.3°C（体感17.4°C）。湿度53%、風速15.9 km/h、最大瞬間風速38.5 km/h。
 ```
-
-
 
 
 ## 次のステップ

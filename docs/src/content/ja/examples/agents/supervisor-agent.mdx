@@ -1,37 +1,33 @@
 ---
 title: "例: スーパーバイザーエージェント | エージェント | Mastra"
-description: Mastra を使ってスーパーバイザーエージェントを作成し、エージェント同士がツール関数を通じてやり取りする例。
+description: Mastra を用いてスーパーバイザーエージェントを作成し、エージェント同士がツール機能を通じてやり取りする例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
-
 # 監督エージェント
 
-複雑なAIアプリケーションを構築する際には、タスクの異なる側面に取り組む複数の専門エージェントが連携する必要があります。監督エージェントは、あるエージェントが監督者として振る舞い、各自の専門領域に特化した他のエージェントの作業を調整できるようにします。この構造により、エージェントは委任し、協働し、単独のエージェントでは実現できない高度な成果を生み出せます。
+複雑な AI アプリケーションを構築する際には、タスクの異なる側面に対して複数の専門エージェントが連携する必要がよくあります。監督エージェントは、あるエージェントが監督者として機能し、各自の専門分野に特化した他のエージェントの作業を調整できるようにする仕組みです。この構造により、エージェント同士が委任や協働を行い、単一のエージェントでは実現できない高度な成果を生み出せます。
 
-この例では、システムは3つのエージェントで構成されています:
+この例では、このシステムは 3 つのエージェントで構成されています:
 
-1. 初期コンテンツを作成する[**Copywriter エージェント**](#copywriter-agent)。
-2. コンテンツを洗練する[**Editor エージェント**](#editor-agent)。
-3. 他のエージェントを監督・調整する[**Publisher エージェント**](#publisher-agent)。
-
-
+1. 初稿を作成する [**Copywriter エージェント**](#copywriter-agent)。
+2. コンテンツを推敲・改良する [**Editor エージェント**](#editor-agent)。
+3. 他のエージェントを監督・調整する [**Publisher エージェント**](#publisher-agent)。
 
 ## 前提条件
 
-このサンプルでは `openai` モデルを使用します。.env ファイルに `OPENAI_API_KEY` を追加してください。
+この例では `openai` モデルを使用します。`.env` ファイルに `OPENAI_API_KEY` を追加してください。
 
 ```bash filename=".env" copy
-OPENAI_API_KEY=<your-api-key>
+OPENAI_API_KEY=<あなたのAPIキー>
 ```
-
 
 
 ## コピーライターエージェント
 
-この `copywriterAgent` は、与えられたトピックに基づいてブログ記事の初稿を作成します。
+この `copywriterAgent` は、与えられたトピックに基づいてブログ記事の初稿を作成する役割を担います。
 
 ```typescript filename="src/mastra/agents/example-copywriter-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -39,16 +35,15 @@ import { Agent } from "@mastra/core/agent";
 
 export const copywriterAgent = new Agent({
   name: "copywriter-agent",
-  instructions: "You are a copywriter agent that writes blog post copy.",
+  instructions: "あなたはブログ記事用のテキストを書くコピーライターエージェントです。",
   model: openai("gpt-4o")
 });
 ```
 
 
+## Copywriter ツール
 
-## コピーライター・ツール
-
-`copywriterTool` は `copywriterAgent` を呼び出し、`topic` を渡すためのインターフェースを提供します。
+`copywriterTool` は、`copywriterAgent` を呼び出すためのインターフェースを提供し、`topic` を渡します。
 
 ```typescript filename="src/mastra/tools/example-copywriter-tool.ts"
 import { createTool } from "@mastra/core/tools";
@@ -56,7 +51,7 @@ import { z } from "zod";
 
 export const copywriterTool = createTool({
   id: "copywriter-agent",
-  description: "Calls the copywriter agent to write blog post copy.",
+  description: "ブログ記事の執筆のためにcopywriterエージェントを呼び出します。",
   inputSchema: z.object({
     topic: z.string()
   }),
@@ -67,7 +62,7 @@ export const copywriterTool = createTool({
     const { topic } = context;
 
     const agent = mastra!.getAgent("copywriterAgent");
-    const result = await agent!.generate(`Create a blog post about ${topic}`);
+    const result = await agent!.generate(`「${topic}」に関するブログ記事を作成してください`);
 
     return {
       copy: result.text
@@ -77,27 +72,25 @@ export const copywriterTool = createTool({
 ```
 
 
+## Editor agent
 
-## 編集エージェント
-
-この `editorAgent` は初稿を受け取り、品質と読みやすさを高めるためにブラッシュアップします。
+この`editorAgent`は初稿を受け取り、品質と可読性を高めるよう文章をブラッシュアップします。
 
 ```typescript filename="src/mastra/agents/example-editor-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const editorAgent = new Agent({
-  name: "Editor",
-  instructions: "You are an editor agent that edits blog post copy.",
+  name: "編集者",
+  instructions: "あなたはブログ記事の本文を編集する編集エージェントです。",
   model: openai("gpt-4o-mini")
 });
 ```
 
 
+## Editor tool
 
-## Editor ツール
-
-`editorTool` は `editorAgent` を呼び出すためのインターフェースを提供し、`copy` を引き渡します。
+`editorTool` は `editorAgent` を呼び出すためのインターフェースを提供し、`copy` を渡します。
 
 ```typescript filename="src/mastra/tools/example-editor-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
@@ -105,7 +98,7 @@ import { z } from "zod";
 
 export const editorTool = createTool({
   id: "editor-agent",
-  description: "ブログ記事の本文を編集するためにエディターエージェントを呼び出します。",
+  description: "ブログ記事の本文編集のために、editor エージェントを呼び出します。",
   inputSchema: z.object({
     copy: z.string()
   }),
@@ -126,10 +119,9 @@ export const editorTool = createTool({
 ```
 
 
-
 ## Publisher agent
 
-この`publisherAgent`は、まず`copywriterTool`を呼び出し、続いて`editorTool`を呼び出して、プロセス全体をオーケストレーションします。
+この `publisherAgent` は、最初に `copywriterTool`、続いて `editorTool` を呼び出して、プロセス全体を統括します。
 
 ```typescript filename="src/mastra/agents/example-publisher-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -141,17 +133,16 @@ import { editorTool } from "../tools/example-editor-tool";
 export const publisherAgent = new Agent({
   name: "publisherAgent",
   instructions:
-    "You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.",
+    "あなたはパブリッシャーエージェントです。まずコピーライターエージェントを呼び出して特定のトピックに関するブログ記事の原稿を作成し、その後エディターエージェントを呼び出して原稿を編集します。最終的な編集済みの原稿のみを返してください。",
   model: openai("gpt-4o-mini"),
   tools: { copywriterTool, editorTool }
 });
 ```
 
 
-
 ## エージェントの登録
 
-3つのエージェントはすべて、相互にアクセスできるようメインの Mastra インスタンスに登録されています。
+3 つのエージェントはいずれもメインの Mastra インスタンスに登録され、相互にアクセスできます。
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -166,7 +157,6 @@ export const mastra = new Mastra({
 ```
 
 
-
 ## 使用例
 
 `getAgent()` を使ってエージェントの参照を取得し、プロンプトを渡して `generate()` を呼び出します。
@@ -178,17 +168,12 @@ import { mastra } from "./mastra";
 
 const agent = mastra.getAgent("publisherAgent");
 
-const response = await agent.generate("Write a blog post about React JavaScript frameworks. Only return the final edited copy.");
+const response = await agent.generate("ReactのJavaScriptフレームワークについてのブログ記事を書いてください。編集済みの最終稿のみを返してください。");
 
 console.log(response.text);
 ```
 
-<GithubLink
-  outdated={true}
-  marginTop='mt-16'
-  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/hierarchical-multi-agent"
-/>
-
+<GithubLink outdated={true} marginTop="mt-16" link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/hierarchical-multi-agent" />
 
 
 ## 関連項目

@@ -1,45 +1,41 @@
 ---
-title: "例: ワークフローによる構造化推論 | RAG | Mastra ドキュメント"
-description: Mastra のワークフロー機能を使った RAG システムでの構造化推論の実装例。
+title: "例: ワークフローを用いた構造化推論 | RAG | Mastra ドキュメント"
+description: Mastra のワークフロー機能を活用して、RAG システムに構造化推論を実装する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
-
 # ワークフローによる構造化推論
 
-この例では、Mastra、OpenAIの埋め込み、そしてベクトルストレージとしてPGVectorを使用し、定義されたワークフローを通じて構造化推論を重視したRetrieval-Augmented Generation（RAG）システムの実装方法を示します。
-
-
+この例では、Mastra、OpenAIの埋め込み、PGVectorによるベクトルストレージを用いてRAG（Retrieval-Augmented Generation）システムを実装する方法を示し、定義されたワークフローを通じた構造化推論に重点を置いて解説します。
 
 ## 概要
 
-このシステムは、定義されたワークフローを通じて、Mastra と OpenAI を用いた chain-of-thought プロンプトによる RAG を実装しています。主な機能は以下の通りです。
+このシステムは、定義済みワークフローに基づく chain-of-thought プロンプトを用いて、Mastra と OpenAI による RAG を実装します。機能は次のとおりです。
 
-1. 応答生成のために gpt-4o-mini を使った Mastra エージェントをセットアップ
-2. ベクトルストアとのやり取りを管理するベクトルクエリツールを作成
-3. chain-of-thought 推論のための複数ステップからなるワークフローを定義
-4. テキストドキュメントを処理し、チャンク化
-5. 埋め込みを作成し、PostgreSQL に保存
-6. ワークフローステップを通じて応答を生成
-
-
+1. 応答生成のために gpt-4o-mini を用いた Mastra エージェントをセットアップする
+2. ベクターストアとのやり取りを管理するためのベクタークエリツールを作成する
+3. chain-of-thought 推論のための複数ステップのワークフローを定義する
+4. テキストドキュメントを処理してチャンク化する
+5. 埋め込みを作成し、PostgreSQL に保存する
+6. ワークフローの各ステップを通じて応答を生成する
 
 ## セットアップ
 
-### 環境セットアップ
+### 環境のセットアップ
 
-環境変数を必ず設定してください：
+環境変数を必ず設定してください:
 
 ```bash filename=".env"
-OPENAI_API_KEY=your_openai_api_key_here
-POSTGRES_CONNECTION_STRING=your_connection_string_here
+OPENAI_API_KEY=あなたのOpenAI APIキーをここに入力
+POSTGRES_CONNECTION_STRING=あなたの接続文字列をここに入力
 ```
+
 
 ### 依存関係
 
-必要な依存関係をインポートします：
+必要な依存モジュールをインポートします：
 
 ```typescript copy showLineNumbers filename="index.ts"
 import { openai } from "@ai-sdk/openai";
@@ -53,10 +49,9 @@ import { z } from "zod";
 ```
 
 
-
 ## ワークフローの定義
 
-まず、トリガースキーマとともにワークフローを定義します。
+まず、トリガーのスキーマを含めてワークフローを定義します。
 
 ```typescript copy showLineNumbers{10} filename="index.ts"
 export const ragWorkflow = new Workflow({
@@ -68,10 +63,9 @@ export const ragWorkflow = new Workflow({
 ```
 
 
+## ベクター検索ツールの作成
 
-## ベクタークエリツールの作成
-
-ベクターデータベースをクエリするためのツールを作成します：
+ベクターデータベースを検索するためのツールを作成します:
 
 ```typescript copy showLineNumbers{17} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
@@ -82,15 +76,14 @@ const vectorQueryTool = createVectorQueryTool({
 ```
 
 
+## エージェントの設定
 
-## エージェント設定
-
-Mastraエージェントをセットアップします：
+Mastra エージェントを設定します:
 
 ```typescript copy showLineNumbers{23} filename="index.ts"
 export const ragAgent = new Agent({
-  name: "RAG Agent",
-  instructions: `You are a helpful assistant that answers questions based on the provided context.`,
+  name: "RAG エージェント",
+  instructions: `あなたは、与えられたコンテキストに基づいて質問に回答する有用なアシスタントです。`,
   model: openai("gpt-4o-mini"),
   tools: {
     vectorQueryTool,
@@ -99,12 +92,11 @@ export const ragAgent = new Agent({
 ```
 
 
+## ワークフローのステップ
 
-## ワークフローステップ
+このワークフローは、思考の連鎖をたどるために複数のステップに分かれています。
 
-このワークフローは、チェーン・オブ・ソート推論のために複数のステップに分かれています。
-
-### 1. コンテキスト分析ステップ
+### 1. コンテキスト分析のステップ
 
 ```typescript copy showLineNumbers{32} filename="index.ts"
 const analyzeContext = new Step({
@@ -117,7 +109,7 @@ const analyzeContext = new Step({
     const ragAgent = mastra?.getAgent("ragAgent");
     const query = context?.getStepResult<{ query: string }>("trigger")?.query;
 
-    const analysisPrompt = `${query} 1. First, carefully analyze the retrieved context chunks and identify key information.`;
+    const analysisPrompt = `${query} 1. まず、取得したコンテキストのチャンクを注意深く分析し、重要な情報を特定してください。`;
 
     const analysis = await ragAgent?.generate(analysisPrompt);
     console.log(analysis?.text);
@@ -128,7 +120,8 @@ const analyzeContext = new Step({
 });
 ```
 
-### 2. 思考分解ステップ
+
+### 2. 思考の分解段階
 
 ```typescript copy showLineNumbers{54} filename="index.ts"
 const breakdownThoughts = new Step({
@@ -146,7 +139,7 @@ const breakdownThoughts = new Step({
     const connectionPrompt = `
       Based on the initial analysis: ${analysis}
 
-      2. Break down your thinking process about how the retrieved information relates to the query.
+      2. 取得した情報がクエリにどう関連するかについて、あなたの考えの過程を段階的に整理してください。
     `;
 
     const connectionAnalysis = await ragAgent?.generate(connectionPrompt);
@@ -158,7 +151,8 @@ const breakdownThoughts = new Step({
 });
 ```
 
-### 3. 接続ステップ
+
+### 3. 接続手順
 
 ```typescript copy showLineNumbers{80} filename="index.ts"
 const connectPieces = new Step({
@@ -173,9 +167,9 @@ const connectPieces = new Step({
       breakdown: string;
     }>("breakdownThoughts")?.breakdown;
     const connectionPrompt = `
-        Based on the breakdown: ${process}
+        内訳に基づいて: ${process}
 
-        3. Explain how you're connecting different pieces from the retrieved chunks.
+        3. 取得したチャンクから得られたさまざまな情報をどのようにつなぎ合わせているかを説明してください。
     `;
 
     const connections = await ragAgent?.generate(connectionPrompt);
@@ -187,7 +181,8 @@ const connectPieces = new Step({
 });
 ```
 
-### 4. 結論ステップ
+
+### 4. 結論のステップ
 
 ```typescript copy showLineNumbers{105} filename="index.ts"
 const drawConclusions = new Step({
@@ -202,9 +197,9 @@ const drawConclusions = new Step({
       connections: string;
     }>("connectPieces")?.connections;
     const conclusionPrompt = `
-        Based on the connections: ${evidence}
+        つながりに基づいて: ${evidence}
 
-        4. Draw conclusions based only on the evidence in the retrieved context.
+        4. 取得したコンテキスト内の証拠のみに基づいて結論を導いてください。
     `;
 
     const conclusions = await ragAgent?.generate(conclusionPrompt);
@@ -216,7 +211,8 @@ const drawConclusions = new Step({
 });
 ```
 
-### 5. 最終回答ステップ
+
+### 5. 最終回答の手順
 
 ```typescript copy showLineNumbers{130} filename="index.ts"
 const finalAnswer = new Step({
@@ -231,15 +227,15 @@ const finalAnswer = new Step({
       conclusions: string;
     }>("drawConclusions")?.conclusions;
     const answerPrompt = `
-        Based on the conclusions: ${conclusions}
-        Format your response as:
-        THOUGHT PROCESS:
-        - Step 1: [Initial analysis of retrieved chunks]
-        - Step 2: [Connections between chunks]
-        - Step 3: [Reasoning based on chunks]
+        結論に基づき: ${conclusions}
+        応答は次の形式で記述してください:
+        思考プロセス:
+        - ステップ1: [取得したチャンクの初期分析]
+        - ステップ2: [チャンク間の関連性]
+        - ステップ3: [チャンクに基づく推論]
 
-        FINAL ANSWER:
-        [Your concise answer based on the retrieved context]`;
+        最終回答:
+        [取得したコンテキストに基づく簡潔な回答]
 
     const finalAnswer = await ragAgent?.generate(answerPrompt);
     console.log(finalAnswer?.text);
@@ -251,10 +247,9 @@ const finalAnswer = new Step({
 ```
 
 
+## ワークフローの構成
 
-## ワークフロー設定
-
-ワークフロー内のすべてのステップを接続します：
+ワークフロー内のすべてのステップをつなげます：
 
 ```typescript copy showLineNumbers{160} filename="index.ts"
 ragWorkflow
@@ -268,10 +263,9 @@ ragWorkflow.commit();
 ```
 
 
+## PgVector と Mastra をインスタンス化する
 
-## PgVector と Mastra のインスタンス化
-
-すべてのコンポーネントを使って PgVector と Mastra をインスタンス化します。
+すべてのコンポーネントを含めて、PgVector と Mastra をインスタンス化します:
 
 ```typescript copy showLineNumbers{169} filename="index.ts"
 const pgVector = new PgVector({
@@ -286,14 +280,13 @@ export const mastra = new Mastra({
 ```
 
 
-
 ## ドキュメント処理
 
-ドキュメントを処理し、チャンクに分割します：
+ドキュメントを処理してチャンクに分割します：
 
 ```typescript copy showLineNumbers{177} filename="index.ts"
 const doc = MDocument.fromText(
-  `The Impact of Climate Change on Global Agriculture...`,
+  `気候変動が世界の農業に与える影響...`,
 );
 
 const chunks = await doc.chunk({
@@ -305,10 +298,9 @@ const chunks = await doc.chunk({
 ```
 
 
-
 ## 埋め込みの作成と保存
 
-埋め込みを生成して保存します：
+埋め込みを生成して保存する:
 
 ```typescript copy showLineNumbers{186} filename="index.ts"
 const { embeddings } = await embedMany({
@@ -329,42 +321,46 @@ await vectorStore.upsert({
 ```
 
 
-
 ## ワークフローの実行
 
 クエリを使用してワークフローを実行する方法は次のとおりです：
 
 ```typescript copy showLineNumbers{202} filename="index.ts"
-const query = "What are the main adaptation strategies for farmers?";
+const query = "農業者の主な適応戦略は何ですか？";
 
-console.log("\nQuery:", query);
+console.log("\nクエリ:", query);
 const prompt = `
-    Please answer the following question:
+    次の質問にお答えください:
     ${query}
 
-    Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
+    回答はツールで提供されたコンテキストのみに基づいて作成してください。コンテキストに質問へ完全に答えるのに十分な情報が含まれていない場合は、その旨を明確に述べてください。
     `;
 
 const { runId, start } = await ragWorkflow.createRunAsync();
 
-console.log("Run:", runId);
+console.log("実行:", runId);
 
 const workflowResult = await start({
   triggerData: {
     query: prompt,
   },
 });
-console.log("\nThought Process:");
+console.log("\n思考プロセス:");
 console.log(workflowResult.results);
 ```
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-workflow-rag"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-workflow-rag"
+}
 />

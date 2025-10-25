@@ -1,31 +1,28 @@
 ---
-title: Assistant UIとの使用
-description: "Assistant UIをMastraと統合する方法を学ぶ"
+title: Assistant UI を使う
+description: "Assistant UI を Mastra と統合する方法を学ぶ"
 ---
 
 import { Callout, FileTree, Steps } from 'nextra/components'
 
 
+# Assistant UI と併用する
 
-# Assistant UIとの使用
-
-[Assistant UI](https://assistant-ui.com)は、AI ChatのためのTypeScript/Reactライブラリです。
-shadcn/uiとTailwind CSSをベースに構築されており、開発者が数分で美しいエンタープライズグレードのチャット体験を作成できます。
+[Assistant UI](https://assistant-ui.com) は、AI チャット向けの TypeScript/React ライブラリです。
+shadcn/ui と Tailwind CSS の上に構築されており、開発者がわずか数分で美しく、エンタープライズ級のチャット体験を構築できるようにします。
 
 <Callout type="info">
-MastraがNext.js APIルートで直接実行されるフルスタック統合アプローチについては、Assistant UIのドキュメントサイトの[フルスタック統合ガイド](https://www.assistant-ui.com/docs/runtimes/mastra/full-stack-integration)をご覧ください。
+Mastra を Next.js の API ルートで直接動かすフルスタック統合アプローチについては、Assistant UI のドキュメントサイトにある [Full-Stack Integration Guide](https://www.assistant-ui.com/docs/runtimes/mastra/full-stack-integration) をご覧ください。
 </Callout>
-
-
 
 ## 統合ガイド
 
-Mastraをスタンドアロンサーバーとして実行し、Next.jsフロントエンド（Assistant UI付き）をそのAPIエンドポイントに接続します。
+Mastra をスタンドアロンのサーバーとして実行し、Next.js フロントエンド（Assistant UI 使用）からその API エンドポイントに接続します。
 
 <Steps>
-### スタンドアロンMastraサーバーの作成
+### スタンドアロンの Mastra サーバーを作成
 
-ディレクトリ構造を設定します。可能なディレクトリ構造は次のようになります：
+ディレクトリ構成を用意します。例として、次のような構成が考えられます。
 
 <FileTree>
     <FileTree.Folder name="project-root" defaultOpen>
@@ -41,16 +38,16 @@ Mastraをスタンドアロンサーバーとして実行し、Next.jsフロン�
     </FileTree.Folder>
 </FileTree>
 
-Mastraサーバーをブートストラップします：
+Mastra サーバーの初期セットアップを行います:
 
 ```bash copy
 npx create-mastra@latest
 ```
 
-このコマンドは、新しいMastraプロジェクトをスキャフォールドするためのインタラクティブウィザードを起動し、プロジェクト名の入力を求めて基本的な設定を行います。
+このコマンドは対話型ウィザードを起動し、プロジェクト名の入力や基本設定のセットアップなど、新規 Mastra プロジェクトのひな型作成を手助けします。
 プロンプトに従ってサーバープロジェクトを作成してください。
 
-これで基本的なMastraサーバープロジェクトの準備が整いました。次のファイルとフォルダが作成されているはずです：
+これで基本的な Mastra サーバープロジェクトが用意できました。以下のファイル／フォルダが作成されているはずです。
 
 <FileTree>
     <FileTree.Folder name="src" defaultOpen>
@@ -70,34 +67,34 @@ npx create-mastra@latest
 </FileTree>
 
 <Callout>
-`.env`ファイルでLLMプロバイダーの適切な環境変数を設定していることを確認してください。
+`.env` ファイルに、利用する LLM プロバイダー向けの適切な環境変数が設定されていることを確認してください。
 </Callout>
 
-### Mastraサーバーの実行
+### Mastra サーバーを起動
 
-次のコマンドを使用してMastraサーバーを実行します：
+次のコマンドで Mastra サーバーを起動します:
 
 ```bash copy
 npm run dev
 ```
 
-デフォルトでは、Mastraサーバーは`http://localhost:4111`で実行されます。`weatherAgent`は通常、POSTリクエストエンドポイント`http://localhost:4111/api/agents/weatherAgent/stream`経由でアクセス可能になります。次のステップでAssistant UIフロントエンドを設定してこのサーバーに接続するため、このサーバーを実行し続けてください。
+デフォルトでは Mastra サーバーは `http://localhost:4111` で動作します。`weatherAgent` には、通常 `http://localhost:4111/api/agents/weatherAgent/stream` の POST リクエストエンドポイントからアクセスできます。続く手順で Assistant UI フロントエンドを接続するため、このサーバーは起動したままにしておいてください。
 
-### Assistant UIの初期化
+### Assistant UI を初期化
 
-次のコマンドで新しい`assistant-ui`プロジェクトを作成します。
+次のコマンドで新しい `assistant-ui` プロジェクトを作成します。
 
 ```bash copy
 npx assistant-ui@latest create
 ```
 
-<Callout>APIキーの追加、基本設定、手動セットアップ手順を含む詳細なセットアップ手順については、[assistant-uiの公式ドキュメント](https://assistant-ui.com/docs)を参照してください。</Callout>
+<Callout>API キーの追加、基本設定、手動セットアップ手順などの詳細については、[assistant-ui の公式ドキュメント](https://assistant-ui.com/docs)を参照してください。</Callout>
 
-### フロントエンドAPIエンドポイントの設定
+### フロントエンドの API エンドポイントを設定
 
-デフォルトのAssistant UIセットアップでは、チャットランタイムがNext.jsプロジェクト内のローカルAPIルート（`/api/chat`）を使用するように設定されています。Mastraエージェントは別のサーバーで実行されているため、フロントエンドをそのサーバーのエンドポイントを指すように更新する必要があります。
+デフォルトの Assistant UI 設定では、Next.js プロジェクト内のローカル API ルート（`/api/chat`）をチャットランタイムで使用します。Mastra エージェントは別サーバーで動作しているため、フロントエンドをそのサーバーのエンドポイントに向けるよう更新する必要があります。
 
-`assistant-ui`プロジェクトの`useChatRuntime`フック（通常は`app/assistant.tsx`にあります）を見つけて、`api`プロパティをMastraエージェントのストリームエンドポイントの完全なURLに変更します：
+`assistant-ui` プロジェクト内の `useChatRuntime` フック（通常は `app/assistant.tsx`）を開き、`api` プロパティを Mastra エージェントのストリームエンドポイントのフル URL に変更します:
 
 ```typescript showLineNumbers copy filename="app/assistant.tsx" {6}
 import {
@@ -112,18 +109,18 @@ const runtime = useChatRuntime({
 });
 ```
 
-これで、Assistant UIフロントエンドは実行中のMastraサーバーに直接チャットリクエストを送信するようになります。
+これで Assistant UI フロントエンドは、起動中の Mastra サーバーへ直接チャットリクエストを送信します。
 
-### アプリケーションの実行
+### アプリケーションを起動
 
-これで各部分を接続する準備が整いました！MastraサーバーとAssistant UIフロントエンドの両方が実行されていることを確認してください。Next.js開発サーバーを起動します：
+準備完了です。Mastra サーバーと Assistant UI フロントエンドの両方が起動していることを確認し、Next.js の開発サーバーを起動します:
 
 ```bash copy
 npm run dev
 ```
 
-これで、ブラウザでエージェントとチャットできるようになります。
+これでブラウザ上でエージェントとチャットできるはずです。
 
 </Steps>
 
-おめでとうございます！別サーバーアプローチを使用してMastraとAssistant UIの統合に成功しました。Assistant UIフロントエンドがスタンドアロンMastraエージェントサーバーと通信するようになりました。
+おめでとうございます。スタンドアロンのサーバー方式で Mastra を Assistant UI と正常に統合できました。Assistant UI フロントエンドは、スタンドアロンの Mastra エージェントサーバーと通信するようになりました。

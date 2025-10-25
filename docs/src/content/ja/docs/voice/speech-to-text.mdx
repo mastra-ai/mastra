@@ -1,26 +1,22 @@
 ---
-title: Mastra における音声認識（STT） | Mastra ドキュメント
-description: Mastra の音声認識機能の概要、設定方法、使用方法、音声プロバイダーとの連携について説明します。
+title: Mastra の音声認識（Speech-to-Text, STT） | Mastra ドキュメント
+description: Mastra の音声認識（Speech-to-Text）機能の概要。設定、使用方法、音声プロバイダーとの連携について解説します。
 ---
-
-
 
 # 音声認識（STT）
 
-Mastraの音声認識（STT）は、複数のサービスプロバイダー間で音声入力をテキストに変換するための標準化されたインターフェースを提供します。
-STTは、人間の音声に応答できる音声対応アプリケーションの作成を支援し、ハンズフリーでの操作、障害を持つユーザーのためのアクセシビリティ、そしてより自然な人間とコンピューターのインターフェースを可能にします。
-
-
+Mastra の音声認識（STT）は、複数のサービスプロバイダーに対応し、音声入力をテキストに変換するための標準化インターフェースを提供します。
+STT は、人間の音声に反応する音声対応アプリケーションの構築を支援し、ハンズフリー操作、障害のあるユーザーのアクセシビリティ向上、より自然な人間とコンピューターのインターフェースを実現します。
 
 ## 設定
 
-MastraでSTTを使用するには、ボイスプロバイダーを初期化する際に`listeningModel`を指定する必要があります。これには以下のようなパラメータが含まれます：
+Mastra で STT を利用するには、音声プロバイダーを初期化する際に `listeningModel` を指定します。これには次のようなパラメータが含まれます:
 
-- **`name`**: 使用する特定のSTTモデル。
-- **`apiKey`**: 認証用のAPIキー。
-- **プロバイダー固有のオプション**: 特定のボイスプロバイダーで必要またはサポートされている追加オプション。
+* **`name`**: 使用する STT モデル名。
+* **`apiKey`**: 認証用 API キー。
+* **プロバイダー固有のオプション**: 利用する音声プロバイダーで必要/サポートされる追加オプション。
 
-**注意**: これらのパラメータはすべて省略可能です。使用しているボイスプロバイダーによって異なりますが、プロバイダーが提供するデフォルト設定を利用することもできます。
+**注意**: これらのパラメータはすべて任意です。使用するプロバイダーに応じて、音声プロバイダーが提供するデフォルト設定をそのまま利用できます。
 
 ```typescript
 const voice = new OpenAIVoice({
@@ -30,35 +26,33 @@ const voice = new OpenAIVoice({
   },
 });
 
-// If using default settings the configuration can be simplified to:
+// 既定の設定を使用する場合、設定は次のように簡略化できます:
 const voice = new OpenAIVoice();
 ```
 
 
-
 ## 利用可能なプロバイダー
 
-Mastra は複数の Speech-to-Text プロバイダーをサポートしており、それぞれ独自の機能と強みがあります。
+Mastra は複数の Speech-to-Text プロバイダーをサポートしており、それぞれに固有の機能と強みがあります。
 
-- [**OpenAI**](/reference/voice/openai/) - Whisper モデルによる高精度な文字起こし
-- [**Azure**](/reference/voice/azure/) - Microsoft のエンタープライズレベルの信頼性を持つ音声認識
-- [**ElevenLabs**](/reference/voice/elevenlabs/) - 複数言語対応の高度な音声認識
-- [**Google**](/reference/voice/google/) - 幅広い言語サポートを持つ Google の音声認識
-- [**Cloudflare**](/reference/voice/cloudflare/) - 低遅延アプリケーション向けのエッジ最適化音声認識
-- [**Deepgram**](/reference/voice/deepgram/) - 様々なアクセントに対応した高精度の AI 音声認識
-- [**Sarvam**](/reference/voice/sarvam/) - インド系言語とアクセントに特化
+* [**OpenAI**](/reference/voice/openai/) - Whisper モデルによる高精度な文字起こし
+* [**Azure**](/reference/voice/azure/) - 企業向けの高い信頼性を備えた Microsoft の音声認識
+* [**ElevenLabs**](/reference/voice/elevenlabs/) - 多言語対応の高度な音声認識
+* [**Google**](/reference/voice/google/) - 幅広い言語をサポートする Google の音声認識
+* [**Cloudflare**](/reference/voice/cloudflare/) - 低レイテンシ用途向けのエッジ最適化音声認識
+* [**Deepgram**](/reference/voice/deepgram/) - 多様なアクセントに高精度で対応する AI 搭載の音声認識
+* [**Sarvam**](/reference/voice/sarvam/) - インド系言語とアクセントに特化
 
-各プロバイダーは、必要に応じてインストールできる個別のパッケージとして実装されています。
+各プロバイダーは、必要に応じてインストールできる個別パッケージとして提供されています。
 
 ```bash
-pnpm add @mastra/voice-openai  # Example for OpenAI
+pnpm add @mastra/voice-openai  # OpenAI の例
 ```
 
 
+## Listen メソッドの使用
 
-## Listen メソッドの使用方法
-
-STT の主なメソッドは `listen()` メソッドであり、話された音声をテキストに変換します。使い方は以下の通りです。
+STT の主要なメソッドは `listen()` で、音声をテキストに変換します。使い方は次のとおりです。
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -71,24 +65,24 @@ const voice = new OpenAIVoice();
 const agent = new Agent({
   name: "Voice Agent",
   instructions:
-    "You are a voice assistant that provides recommendations based on user input.",
+    "あなたは、ユーザーの入力に基づいて推薦を行う音声アシスタントです。",
   model: openai("gpt-4o"),
   voice,
 });
 
-const audioStream = getMicrophoneStream(); // Assume this function gets audio input
+const audioStream = getMicrophoneStream(); // この関数が音声入力を取得すると仮定
 
 const transcript = await agent.voice.listen(audioStream, {
-  filetype: "m4a", // Optional: specify the audio file type
+  filetype: "m4a", // オプション: 音声ファイルの種類を指定
 });
 
-console.log(`User said: ${transcript}`);
+console.log(`ユーザーの発言: ${transcript}`);
 
 const { text } = await agent.generate(
-  `Based on what the user said, provide them a recommendation: ${transcript}`,
+  `ユーザーの発言に基づき、推奨を提示してください: ${transcript}`,
 );
 
-console.log(`Recommendation: ${text}`);
+console.log(`推奨: ${text}`);
 ```
 
-STT をエージェントで使用する方法については、[エージェントに音声を追加する](../agents/adding-voice.mdx) ドキュメントもご覧ください。
+エージェントでの STT の使い方は、[Adding Voice to Agents](../agents/adding-voice.mdx) のドキュメントをご参照ください。

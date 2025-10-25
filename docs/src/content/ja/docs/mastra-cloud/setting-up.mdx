@@ -1,105 +1,92 @@
 ---
 title: プロジェクトのセットアップ
-description: Mastra Cloudプロジェクトの設定手順
+description: Mastra Cloud プロジェクトの設定手順
 ---
 
 import { MastraCloudCallout } from '@/components/mastra-cloud-callout'
 import { Steps } from "nextra/components";
 
 
-
 # セットアップとデプロイ
 
-このページでは、GitHub統合を使用した自動デプロイメントで[Mastra Cloud](https://mastra.ai/cloud)にプロジェクトをセットアップする方法について説明します。
+このページでは、GitHub 連携による自動デプロイを用いて、[Mastra Cloud](https://mastra.ai/cloud) 上にプロジェクトをセットアップする方法を説明します。
 
 <MastraCloudCallout />
 
-
-
 ## 前提条件
 
-- [Mastra Cloud](https://mastra.ai/cloud) アカウント
-- Mastraアプリケーションを含むGitHubアカウント/リポジトリ
+- [Mastra Cloud](https://mastra.ai/cloud) のアカウント
+- Mastra アプリが含まれる GitHub アカウント／リポジトリ
 
-> 適切なデフォルト設定で新しいMastraプロジェクトを構築するには、[はじめに](/docs/getting-started/installation)ガイドをご覧ください。
+> 適切なデフォルト設定で新しい Mastra プロジェクトを作成するには、[はじめに](/docs/getting-started/installation) ガイドをご覧ください。
 
-
-
-## セットアップとデプロイプロセス
+## セットアップとデプロイ手順
 
 <Steps>
 
-### Mastra Cloudにサインイン
+### Mastra Cloud にサインイン
 
-[https://cloud.mastra.ai/](https://cloud.mastra.ai)にアクセスし、以下のいずれかでサインインしてください：
+[https://cloud.mastra.ai/](https://cloud.mastra.ai) にアクセスし、次のいずれかでサインインします：
 
 - **GitHub**
 - **Google**
 
-### Mastra GitHub appをインストール
+### Mastra GitHub アプリをインストール
 
-プロンプトが表示されたら、Mastra GitHub appをインストールしてください。
+案内に従って、Mastra GitHub アプリをインストールします。
 
 ![Install GitHub](/image/mastra-cloud/mastra-cloud-install-github.jpg)
 
-### 新しいプロジェクトを作成
+### 新規プロジェクトを作成
 
-**Create new project**ボタンをクリックして新しいプロジェクトを作成してください。
+新しいプロジェクトを作成するには、**Create new project** ボタンをクリックします。
 
 ![Create new project](/image/mastra-cloud/mastra-cloud-create-new-project.jpg)
 
-### Gitリポジトリをインポート
+### Git リポジトリをインポート
 
-リポジトリを検索し、**Import**をクリックしてください。
+リポジトリを検索し、**Import** をクリックします。
 
 ![Import Git repository](/image/mastra-cloud/mastra-cloud-import-git-repository.jpg)
 
-### デプロイメントを設定
+### デプロイの設定
 
-Mastra Cloudは適切なビルド設定を自動的に検出しますが、以下で説明するオプションを使用してカスタマイズできます。
+Mastra Cloud は適切なビルド設定を自動検出しますが、以下のオプションでカスタマイズできます。
 
 ![Deployment details](/image/mastra-cloud/mastra-cloud-deployment-details.jpg)
 
-- **Importing from GitHub**: GitHubリポジトリ名
-- **Project name**: プロジェクト名をカスタマイズ
-- **Branch**: デプロイするブランチ
+- **Importing from GitHub**: GitHub のリポジトリ名
+- **Project name**: プロジェクト名のカスタマイズ
+- **Branch**: デプロイ元のブランチ
 - **Project root**: プロジェクトのルートディレクトリ
-- **Mastra directory**: Mastraファイルが配置されている場所
-- **Environment variables**: アプリケーションで使用される環境変数を追加
+- **Mastra directory**: Mastra のファイル配置先
+- **Environment variables**: アプリで使用する環境変数の追加
 - **Build and Store settings**:
-   - **Install command**: プロジェクトの依存関係をインストールするためのプリビルド実行
-   - **Project setup command**: 外部依存関係を準備するためのプリビルド実行
+   - **Install command**: ビルド前にプロジェクトの依存関係をインストール
+   - **Project setup command**: ビルド前に外部依存関係を準備
    - **Port**: サーバーが使用するネットワークポート
-   - **Store settings**: Mastra Cloudの組み込み[LibSQLStore](/docs/storage/overview)ストレージを使用
-- **Deploy Project**: デプロイメントプロセスを開始
+   - **Store settings**: Mastra Cloud 組み込みの [LibSQLStore](/docs/storage/overview) ストレージを使用
+- **Deploy Project**: デプロイを開始
 
 ### プロジェクトをデプロイ
 
-**Deploy Project**をクリックして、設定した構成を使用してアプリケーションを作成およびデプロイしてください。
+設定内容に基づいてアプリケーションを作成・デプロイするには、**Deploy Project** をクリックします。
 
 </Steps>
 
+## デプロイの成功
 
-
-## デプロイメント成功
-
-デプロイメントが成功すると、**Overview**画面が表示され、プロジェクトのステータス、ドメイン、最新のデプロイメント、接続されたエージェントとワークフローを確認できます。
+デプロイが成功すると、**Overview** 画面が表示され、プロジェクトのステータス、ドメイン、最新のデプロイ、接続中のエージェントやワークフローを確認できます。
 
 ![Successful deployment](/image/mastra-cloud/mastra-cloud-successful-deployment.jpg)
 
-
-
 ## 継続的インテグレーション
 
-あなたのプロジェクトは、GitHubリポジトリの設定されたブランチにプッシュするたびに自動デプロイが実行されるように設定されました。
-
-
+このプロジェクトは、GitHub リポジトリの指定ブランチにプッシュするたびに自動デプロイが実行されるよう構成されています。
 
 ## アプリケーションのテスト
 
-デプロイが成功した後、Mastra Cloudの[Playground](/docs/mastra-cloud/dashboard#playground)からエージェントとワークフローをテストしたり、[Client SDK](/docs/client-js/overview)を使用してそれらと対話したりできます。
-
-
+デプロイが成功したら、Mastra Cloud の [Playground](/docs/mastra-cloud/dashboard#playground) でエージェントやワークフローをテストするか、[Client SDK](/docs/client-js/overview) を使ってそれらを操作・対話できます。
 
 ## 次のステップ
 

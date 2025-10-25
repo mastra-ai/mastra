@@ -1,48 +1,44 @@
 ---
-title: "例: ハイブリッドベクトル検索 | RAG | Mastra ドキュメント"
-description: PGVector でメタデータフィルターを使用し、Mastra のベクトル検索結果を強化する例。
+title: "例: ハイブリッド・ベクトル検索 | RAG | Mastra ドキュメント"
+description: Mastra のベクトル検索結果を高めるために、PGVector とメタデータフィルターを用いる例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
-
 # ハイブリッドベクター検索
 
-ベクター類似性検索とメタデータフィルターを組み合わせることで、より精度が高く効率的なハイブリッド検索を実現できます。
-このアプローチは以下を組み合わせています：
+ベクトル類似検索とメタデータフィルタを組み合わせることで、より正確かつ効率的なハイブリッド検索を実現できます。
+この手法は次の要素を組み合わせます:
 
-- 最も関連性の高いドキュメントを見つけるためのベクター類似性検索
-- 追加の条件に基づいて検索結果を絞り込むためのメタデータフィルター
+- 最も関連性の高いドキュメントを見つけるためのベクトル類似検索
+- 追加の条件に基づいて検索結果を絞り込むためのメタデータフィルタ
 
-この例では、Mastra と PGVector を使ったハイブリッドベクター検索の方法を示します。
-
-
+この例では、Mastra と PGVector を用いたハイブリッドベクター検索の使い方を示します。
 
 ## 概要
 
-このシステムは、Mastra と PGVector を使用したフィルタ付きベクトル検索を実装しています。主な機能は以下の通りです。
+本システムは、Mastra と PGVector を用いたフィルタ付きベクトル検索を実装しています。主な内容は次のとおりです:
 
-1. PGVector に保存されている既存の埋め込みをメタデータフィルターで検索します
-2. 異なるメタデータフィールドでのフィルタリング方法を示します
-3. ベクトル類似度とメタデータフィルタリングの組み合わせを実演します
+1. メタデータのフィルタを使用して PGVector に保存された既存の埋め込みを照会
+2. 異なるメタデータフィールドでのフィルタ方法を例示
+3. ベクトル類似度とメタデータフィルタリングの組み合わせをデモ
 
-> **注意**: ドキュメントからメタデータを抽出する方法の例については、[Metadata Extraction](../embedding/metadata-extraction.mdx) ガイドをご覧ください。
+> 注: ドキュメントからメタデータを抽出する方法の例は、[Metadata Extraction](../embedding/metadata-extraction.mdx) ガイドを参照してください。
 >
-> 埋め込みの作成と保存方法については、[Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) ガイドをご参照ください。
-
-
+> 埋め込みの作成と保存方法については、[Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) ガイドを参照してください。
 
 ## セットアップ
 
-### 環境設定
+### 環境のセットアップ
 
-環境変数を必ず設定してください：
+環境変数を設定していることを確認してください:
 
 ```bash filename=".env"
-OPENAI_API_KEY=your_openai_api_key_here
-POSTGRES_CONNECTION_STRING=your_connection_string_here
+OPENAI_API_KEY=あなたの_openai_api_key_をここに入力
+POSTGRES_CONNECTION_STRING=あなたの接続文字列をここに入力
 ```
+
 
 ### 依存関係
 
@@ -55,10 +51,9 @@ import { openai } from "@ai-sdk/openai";
 ```
 
 
-
 ## ベクターストアの初期化
 
-接続文字列を使ってPgVectorを初期化します：
+接続文字列を使用して PgVector を初期化します:
 
 ```typescript copy showLineNumbers{4} filename="src/index.ts"
 const pgVector = new PgVector({
@@ -67,19 +62,18 @@ const pgVector = new PgVector({
 ```
 
 
+## 使い方の例
 
-## 使用例
-
-### メタデータ値でフィルタリング
+### メタデータの値でフィルタリング
 
 ```typescript copy showLineNumbers{6} filename="src/index.ts"
-// Create embedding for the query
+// クエリの埋め込みを作成
 const { embedding } = await embed({
   model: openai.embedding("text-embedding-3-small"),
-  value: "[Insert query based on document here]",
+  value: "[ここにドキュメントに基づくクエリを挿入]",
 });
 
-// Query with metadata filter
+// メタデータのフィルターを使ってクエリを実行
 const result = await pgVector.query({
   indexName: "embeddings",
   queryVector: embedding,
@@ -91,16 +85,21 @@ const result = await pgVector.query({
   },
 });
 
-console.log("Results:", result);
+console.log("結果:", result);
 ```
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/hybrid-vector-search"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/hybrid-vector-search"
+}
 />

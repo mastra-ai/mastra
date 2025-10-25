@@ -1,35 +1,31 @@
 ---
-title: "例：画像分析エージェント | Agents | Mastra Docs"
-description: Unsplashの画像を分析して、物体の認識、種の特定、場所の説明を行うMastraのAIエージェントの使用例。
+title: "例：画像解析エージェント | Agents | Mastra Docs"
+description: Unsplashの画像をMastraのAIエージェントで解析し、物体の識別、種の特定、場所の説明を行う例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
-
 # 画像解析
 
-AIエージェントは、テキストによる指示と併せて視覚コンテンツを処理することで、画像を分析し理解できます。この能力により、エージェントは物体の認識、シーンの記述、画像に関する質問への回答、さらには複雑な視覚的推論タスクの遂行が可能になります。
-
-
+AI エージェントは、テキストの指示とあわせて視覚コンテンツを処理することで、画像を分析し理解できます。この機能により、エージェントは物体の特定、シーンの説明、画像に関する質問への回答、さらには複雑な視覚的推論タスクの実行が可能になります。
 
 ## 前提条件
 
-- [Unsplash](https://unsplash.com/documentation#creating-a-developer-account) の開発者アカウント、アプリケーション、APIキー
-- OpenAI の APIキー
+* [Unsplash](https://unsplash.com/documentation#creating-a-developer-account) の開発者アカウント、アプリケーション、APIキー
+* OpenAI APIキー
 
-この例では `openai` モデルを使用します。`OPENAI_API_KEY` と `UNSPLASH_ACCESS_KEY` の両方を `.env` ファイルに追加してください。
+この例では`openai`モデルを使用します。`OPENAI_API_KEY` と `UNSPLASH_ACCESS_KEY` の両方を `.env` ファイルに追加してください。
 
 ```bash filename=".env" copy
-OPENAI_API_KEY=<your-api-key>
-UNSPLASH_ACCESS_KEY=<your-unsplash-access-key>
+OPENAI_API_KEY=<あなたの API キー>
+UNSPLASH_ACCESS_KEY=<あなたの Unsplash アクセスキー>
 ```
-
 
 
 ## エージェントの作成
 
-画像を分析して物体を検出し、シーンを説明し、視覚コンテンツに関する質問に答えるシンプルなエージェントを作成します。
+画像を分析して物体を認識し、場面を描写し、視覚的な内容に関する質問に答えるシンプルなエージェントを作成します。
 
 ```typescript filename="src/mastra/agents/example-image-analysis-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -37,22 +33,21 @@ import { Agent } from "@mastra/core/agent";
 
 export const imageAnalysisAgent = new Agent({
   name: "image-analysis",
-  description: "Analyzes images to identify objects and describe scenes",
+  description: "画像を分析して物体を特定し、シーンを説明します",
   instructions: `
-    You can view an image and identify objects, describe scenes, and answer questions about the content.
-    You can also determine species of animals and describe locations in the image.
+    画像を表示して物体を特定し、シーンを説明し、内容に関する質問に回答できます。
+    また、動物の種を判別したり、画像内の場所を説明したりすることもできます。
    `,
   model: openai("gpt-4o")
 });
 ```
 
-> 設定オプションの詳細は [Agent](../../reference/agents/agent.mdx) をご覧ください。
-
+> 設定オプションの全一覧は、[Agent](../../reference/agents/agent.mdx)を参照してください。
 
 
 ## エージェントの登録
 
-エージェントを使用するには、メインの Mastra インスタンスに登録します。
+エージェントを使用するには、メインの Mastra インスタンスに登録してください。
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -60,20 +55,19 @@ import { Mastra } from "@mastra/core/mastra";
 import { imageAnalysisAgent } from "./agents/example-image-analysis-agent";
 
 export const mastra = new Mastra({
-  // ...
+  // 省略
   agents: { imageAnalysisAgent }
 });
 ```
 
 
-
 ## 関数の作成
 
-この関数は、エージェントによる分析に渡すため、Unsplash からランダムな画像を取得します。
+この関数は、エージェントに解析させるために、Unsplash からランダムな画像を取得します。
 
 ```typescript filename="src/mastra/utils/get-random-image.ts" showLineNumbers copy
 export const getRandomImage = async (): Promise<string> => {
-  const queries = ["wildlife", "feathers", "flying", "birds"];
+  const queries = ["野生生物", "羽毛", "飛翔", "鳥類"];
   const query = queries[Math.floor(Math.random() * queries.length)];
   const page = Math.floor(Math.random() * 20);
   const order_by = Math.random() < 0.5 ? "relevant" : "latest";
@@ -92,10 +86,9 @@ export const getRandomImage = async (): Promise<string> => {
 ```
 
 
-
 ## 使用例
 
-`getAgent()` でエージェント参照を取得し、プロンプトとともに `generate()` を呼び出します。画像の `type`、`imageUrl`、`mimeType` に加え、エージェントの応答方針を明確に示す指示を含む `content` 配列を渡します。
+`getAgent()` でエージェント参照を取得し、プロンプトを渡して `generate()` を呼び出します。`content` 配列には、画像の `type`、`imageUrl`、`mimeType`、そしてエージェントの応答方法に関する明確な指示を含めてください。
 
 ```typescript filename="src/test-image-analysis.ts" showLineNumbers copy
 import "dotenv/config";
@@ -117,7 +110,7 @@ const response = await agent.generate([
       },
       {
         type: "text",
-        text: `Analyze this image and identify the main objects or subjects. If there are animals, provide their common name and scientific name. Also describe the location or setting in one or two short sentences.`
+        text: `この画像を分析し、主要な物体や被写体を特定してください。動物がいる場合は、その一般名と学名を記してください。場所や環境についても、1～2文で簡潔に説明してください。`
       }
     ]
   }
@@ -126,14 +119,9 @@ const response = await agent.generate([
 console.log(response.text);
 ```
 
-<GithubLink
-  outdated={true}
-  marginTop='mt-16'
-  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/bird-checker"
-/>
+<GithubLink outdated={true} marginTop="mt-16" link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/bird-checker" />
 
 
-
-## 関連情報
+## 関連項目
 
 - [エージェントの呼び出し](./calling-agents.mdx#from-the-command-line)

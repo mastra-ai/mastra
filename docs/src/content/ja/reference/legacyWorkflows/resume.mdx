@@ -1,17 +1,13 @@
 ---
 title: "リファレンス: run.resume() | ワークフローの実行（レガシー） | Mastra ドキュメント"
-description: ワークフロー内の `.resume()` メソッドのドキュメント。中断されたワークフローステップの実行を再開します。
+description: ワークフローにおける`.resume()`メソッドのドキュメント。中断されたワークフローのステップの実行を再開します。
 ---
-
-
 
 # run.resume()
 
-`.resume()` メソッドは、一時停止されたワークフローステップの実行を再開し、オプションで新しいコンテキストデータを提供できます。このデータは、そのステップの inputData プロパティからアクセス可能です。
+`.resume()` メソッドは、一時停止中のワークフローステップの実行を再開し、必要に応じてステップが `inputData` プロパティから参照できる新しいコンテキストデータを渡せます。
 
-
-
-## 使用方法
+## 使い方
 
 ```typescript copy showLineNumbers
 await run.resume({
@@ -24,15 +20,14 @@ await run.resume({
 ```
 
 
-
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
     {
       name: "config",
       type: "object",
-      description: "ワークフローの再開用設定",
+      description: "ワークフロー再開用の設定",
       isOptional: false,
     },
   ]}
@@ -45,7 +40,7 @@ await run.resume({
     {
       name: "runId",
       type: "string",
-      description: "再開するワークフロー実行の一意な識別子",
+      description: "再開するワークフロー実行の一意の識別子",
       isOptional: false,
     },
     {
@@ -58,13 +53,11 @@ await run.resume({
       name: "context",
       type: "Record<string, any>",
       description:
-        "ステップのinputDataプロパティに注入する新しいコンテキストデータ",
+        "ステップのinputDataプロパティに挿入する新しいコンテキストデータ",
       isOptional: true,
     },
   ]}
 />
-
-
 
 ## 戻り値
 
@@ -78,26 +71,24 @@ await run.resume({
   ]}
 />
 
+## Async/Await のフロー
 
-
-## Async/Awaitのフロー
-
-ワークフローが再開されると、実行はステップの実行関数内で `suspend()` 呼び出しの直後のポイントから続行されます。これにより、コード内で自然なフローが生まれます。
+ワークフローが再開されると、処理はステップの実行関数内での `suspend()` 呼び出し直後の位置から再開されます。これにより、コードは自然な流れになります。
 
 ```typescript
-// Step definition with suspend point
+// サスペンドポイントを含むステップ定義
 const reviewStep = new LegacyStep({
   id: "review",
   execute: async ({ context, suspend }) => {
-    // First part of execution
+    // 実行の前半部分
     const initialAnalysis = analyzeData(context.inputData.data);
 
     if (initialAnalysis.needsReview) {
-      // Suspend execution here
+      // ここで実行をサスペンドします
       await suspend({ analysis: initialAnalysis });
 
-      // This code runs after resume() is called
-      // context.inputData now contains any data provided during resume
+      // このコードは resume() が呼び出された後に実行されます
+      // context.inputData には、resume 時に渡されたデータが含まれます
       return {
         reviewedData: enhanceWithFeedback(
           initialAnalysis,
@@ -118,32 +109,31 @@ await start({
   },
 });
 
-// Later, resume the workflow
+// 後でワークフローを再開します
 const result = await resume({
   runId: "workflow-123",
   stepId: "review",
   context: {
-    // This data will be available in `context.inputData`
-    feedback: "Looks good, but improve section 3",
+    // このデータは `context.inputData` から参照できます
+    feedback: "良さそうですが、セクション3を改善してください",
   },
 });
 ```
 
+
 ### 実行フロー
 
 1. ワークフローは `review` ステップ内の `await suspend()` に到達するまで実行されます
-2. ワークフローの状態が保存され、実行が一時停止します
+2. ワークフローの状態が永続化され、実行が一時停止します
 3. 後で、新しいコンテキストデータとともに `run.resume()` が呼び出されます
-4. 実行は `review` ステップ内の `suspend()` の直後のポイントから続行されます
-5. 新しいコンテキストデータ（`feedback`）が `inputData` プロパティでステップに渡されます
-6. ステップが完了し、その結果を返します
-7. ワークフローは次のステップへと続行します
-
-
+4. 実行は `review` ステップ内の `suspend()` の直後から再開されます
+5. 新しいコンテキストデータ（`feedback`）は `inputData` プロパティ経由で当該ステップから利用できます
+6. ステップが完了し、結果を返します
+7. ワークフローは後続のステップへと進みます
 
 ## エラー処理
 
-resume関数は、いくつかの種類のエラーをスローする可能性があります。
+resume 関数はいくつかの種類のエラーをスローする可能性があります：
 
 ```typescript
 try {
@@ -153,20 +143,19 @@ try {
     context: newData,
   });
 } catch (error) {
-  if (error.message === "No snapshot found for workflow run") {
-    // Handle missing workflow state
+  if (error.message === "ワークフロー実行のスナップショットが見つかりません") {
+    // ワークフローの状態が見つからない場合の処理
   }
-  if (error.message === "Failed to parse workflow snapshot") {
-    // Handle corrupted workflow state
+  if (error.message === "ワークフローのスナップショットを解析できませんでした") {
+    // 破損したワークフロー状態の処理
   }
 }
 ```
 
 
+## 関連項目
 
-## 関連
-
-- [サスペンドと再開](../../docs/workflows-legacy/suspend-and-resume.mdx)
+- [一時停止と再開](../../docs/workflows-legacy/suspend-and-resume.mdx)
 - [`suspend` リファレンス](./suspend.mdx)
 - [`watch` リファレンス](./watch.mdx)
 - [Workflow クラスリファレンス](./workflow.mdx)

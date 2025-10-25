@@ -1,43 +1,37 @@
 ---
-title: "分岐、マージ、条件 | ワークフロー（レガシー） | Mastra ドキュメント"
-description: "Mastraレガシーワークフローの制御フローでは、分岐、マージ、条件を管理して、ロジック要件を満たすレガシーワークフローを構築できます。"
+title: "分岐・マージ・条件 | ワークフロー（レガシー） | Mastra Docs"
+description: "Mastra のレガシー ワークフローでは、制御フローにより分岐・マージ・条件を管理し、要件に合致するレガシー ワークフローを構築できます。"
 ---
 
+# レガシー ワークフローにおける制御フロー：分岐、マージ、条件
 
-
-# レガシーワークフローにおける制御フロー：分岐、マージ、条件
-
-複数ステップのプロセスを作成する場合、ステップを並行して実行したり、順番に連鎖させたり、結果に基づいて異なるパスをたどる必要があるかもしれません。このページでは、ロジック要件を満たすワークフローを構築するために、分岐、マージ、条件をどのように管理できるかを説明します。コードスニペットは、複雑な制御フローを構築するための主要なパターンを示しています。
-
-
+複数ステップのプロセスを作成する際には、ステップを並列に実行したり、順次に連結したり、結果に応じて異なる経路をたどったりする必要が生じる場合があります。このページでは、分岐・マージ・条件を管理し、ロジック要件を満たすワークフローを構築する方法を説明します。コードスニペットでは、複雑な制御フローを組み立てるための主要なパターンを示します。
 
 ## 並列実行
 
-互いに依存関係のないステップを同時に実行することができます。ステップが独立したタスクを実行する場合、このアプローチによってワークフローを高速化できます。以下のコードは、2つのステップを並列に追加する方法を示しています：
+互いに依存していなければ、複数のステップを同時に実行できます。この方法は、ステップが独立したタスクを行う場合にワークフローの高速化に役立ちます。以下のコードは、2つのステップを並列に追加する方法を示しています。
 
 ```typescript
 myWorkflow.step(fetchUserData).step(fetchOrderData);
 ```
 
-詳細については、[並列ステップ](../../examples/workflows_legacy/parallel-steps.mdx)の例を参照してください。
+詳しくは、[Parallel Steps](../../examples/workflows_legacy/parallel-steps.mdx) の例をご覧ください。
 
 
+## 逐次実行
 
-## 順次実行
-
-時には、あるステップの出力が次のステップの入力になるように、厳密な順序でステップを実行する必要があります。依存する操作をリンクするには .then() を使用します。以下のコードは、ステップを順番に連鎖させる方法を示しています：
+あるステップの出力を次のステップの入力にするために、処理を厳密な順序で実行する必要がある場合があります。依存関係のある処理をつなぐには .then() を使用します。以下のコードは、ステップを順番にチェーンする方法を示しています。
 
 ```typescript
 myWorkflow.step(fetchOrderData).then(validateData).then(processOrder);
 ```
 
-詳細については、[順次ステップ](../../examples/workflows_legacy/sequential-steps.mdx)の例を参照してください。
+詳しくは、[Sequential Steps](../../examples/workflows_legacy/sequential-steps.mdx) の例をご覧ください。
 
 
+## 分岐とマージのパス
 
-## 分岐と合流パス
-
-異なる結果に異なるパスが必要な場合、分岐が役立ちます。また、完了後にパスを後で合流させることもできます。以下のコードは、stepAの後に分岐し、後でstepFで収束する方法を示しています：
+異なる結果に応じて別のパスが必要な場合は、分岐が有効です。完了後にパスをマージすることもできます。以下のコードは、stepA の後で分岐し、その後 stepF に合流する方法を示しています:
 
 ```typescript
 myWorkflow
@@ -53,17 +47,16 @@ myWorkflow
 
 この例では：
 
-- stepAはstepBに進み、その後stepDに進みます。
-- 別途、stepAはstepCもトリガーし、それがstepEにつながります。
-- 別途、stepFはstepDとstepEの両方が完了したときにトリガーされます。
+* stepA は stepB に進み、その後 stepD に進みます。
+* 別途、stepA は stepC もトリガーし、その結果として stepE に進みます。
+* さらに、stepD と stepE の両方が完了すると stepF がトリガーされます。
 
-詳細については、[分岐パス](../../examples/workflows_legacy/branching-paths.mdx)の例を参照してください。
+詳しくは、[Branching Paths](../../examples/workflows_legacy/branching-paths.mdx) の例をご覧ください。
 
 
+## 複数ブランチのマージ
 
-## 複数のブランチのマージ
-
-時には、複数の他のステップが完了した後にのみ実行されるステップが必要な場合があります。Mastraは、ステップに対して複数の依存関係を指定できる複合的な`.after([])`構文を提供しています。
+複数の他のステップが完了してからのみ実行されるステップが必要になることがあります。Mastra では、複数の依存関係を1つのステップに指定できる複合的な `.after([])` 構文を提供しています。
 
 ```typescript
 myWorkflow
@@ -71,54 +64,53 @@ myWorkflow
   .then(validateUserData)
   .step(fetchProductData)
   .then(validateProductData)
-  // This step will only run after BOTH validateUserData AND validateProductData have completed
+  // このステップは、validateUserData と validateProductData の両方が完了した場合にのみ実行されます
   .after([validateUserData, validateProductData])
   .step(processOrder);
 ```
 
-この例では：
+この例では:
 
-- `fetchUserData`と`fetchProductData`は並列ブランチで実行されます
-- 各ブランチには独自の検証ステップがあります
-- `processOrder`ステップは、両方の検証ステップが正常に完了した後にのみ実行されます
+* `fetchUserData` と `fetchProductData` は並列ブランチで実行されます
+* 各ブランチにそれぞれ検証ステップがあります
+* 両方の検証ステップが正常に完了した場合にのみ、`processOrder` ステップが実行されます
 
-このパターンは特に以下の場合に役立ちます：
+このパターンは次の用途に特に有用です:
 
-- 並列実行パスの結合
-- ワークフローに同期ポイントを実装する
-- 進行する前にすべての必要なデータが利用可能であることを確認する
+* 並列実行パスの合流
+* ワークフローにおける同期ポイントの実装
+* 先に進む前に必要なデータがすべて揃っていることの担保
 
-複数の`.after([])`呼び出しを組み合わせることで、複雑な依存関係パターンを作成することもできます：
+複数の `.after([])` 呼び出しを組み合わせることで、より複雑な依存関係パターンを作成することもできます:
 
 ```typescript
 myWorkflow
-  // First branch
+  // 第1ブランチ
   .step(stepA)
   .then(stepB)
   .then(stepC)
 
-  // Second branch
+  // 第2ブランチ
   .step(stepD)
   .then(stepE)
 
-  // Third branch
+  // 第3ブランチ
   .step(stepF)
   .then(stepG)
 
-  // This step depends on the completion of multiple branches
+  // このステップは複数ブランチの完了に依存します
   .after([stepC, stepE, stepG])
   .step(finalStep);
 ```
 
 
+## 循環的な依存関係とループ
 
-## 循環依存関係とループ
+ワークフローでは、特定の条件が満たされるまで手順を繰り返す必要が生じることがよくあります。Mastra には、ループを作成するための強力な手段として `until` と `while` の 2 つが用意されています。これらのメソッドにより、反復処理を直感的に実装できます。
 
-ワークフローでは、特定の条件が満たされるまでステップを繰り返す必要がよくあります。Mastra では、ループを作成するための強力な2つの方法、`until` と `while` を提供しています。これらのメソッドは、繰り返しタスクを直感的に実装する方法を提供します。
+### 手動による循環依存の利用（レガシー手法）
 
-### 手動による循環依存関係の利用（レガシーな方法）
-
-以前のバージョンでは、条件付きで循環依存関係を手動で定義することでループを作成できました：
+以前のバージョンでは、条件を用いて循環依存関係を手動で定義し、ループを作成できました。
 
 ```typescript
 myWorkflow
@@ -133,21 +125,22 @@ myWorkflow
   });
 ```
 
-この方法も引き続き利用できますが、より新しい `until` や `while` メソッドを使うことで、よりシンプルで保守しやすいループを作成できます。
+この方法でも機能しますが、より新しい `until` と `while` メソッドを使うと、ループをより簡潔で保守しやすい形で作成できます。
 
-### `until` を使った条件付きループ
 
-`until` メソッドは、指定した条件が真になるまでステップを繰り返します。引数は以下の通りです：
+### 条件に基づくループでの `until` の使用
 
-1. ループを終了する条件
+`until` メソッドは、指定した条件が true になるまでステップを繰り返します。引数は次のとおりです。
+
+1. ループを停止する条件
 2. 繰り返すステップ
-3. 繰り返しステップに渡すオプションの変数
+3. 繰り返しステップに渡す任意の変数
 
 ```typescript
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
-// 目標値に達するまでカウンターをインクリメントするステップ
+// 目標に達するまでカウンターをインクリメントするステップ
 const incrementStep = new LegacyStep({
   id: "increment",
   inputSchema: z.object({
@@ -168,13 +161,13 @@ workflow
   .step(incrementStep)
   .until(
     async ({ context }) => {
-      // カウンターが10に達したら停止
+      // カウンターが10に達したら停止する
       const result = context.getStepResult(incrementStep);
       return (result?.updatedCounter ?? 0) >= 10;
     },
     incrementStep,
     {
-      // 現在のカウンターを次のイテレーションに渡す
+      // 現在のカウンターを次の反復処理に渡す
       counter: {
         step: incrementStep,
         path: "updatedCounter",
@@ -184,7 +177,7 @@ workflow
   .then(finalStep);
 ```
 
-参照ベースの条件も利用できます：
+参照に基づく条件も使用できます：
 
 ```typescript
 workflow
@@ -205,24 +198,25 @@ workflow
   .then(finalStep);
 ```
 
-### `while` を使った条件付きループ
 
-`while` メソッドは、指定した条件が真である間ステップを繰り返します。引数は `until` と同じです：
+### 条件ベースのループでの `while` の使用
 
-1. ループを継続する条件
-2. 繰り返すステップ
-3. 繰り返しステップに渡すオプションの変数
+`while` メソッドは、指定した条件が真である間、処理を繰り返します。引数は `until` と同じです:
+
+1. ループを続行するかどうかを判定する条件
+2. 繰り返す処理
+3. 繰り返す処理に渡す任意の変数
 
 ```typescript
-// 目標値未満の間カウンターをインクリメントするステップ
+// 目標値に達するまでカウンターを増やすステップ
 const incrementStep = new LegacyStep({
   id: "increment",
   inputSchema: z.object({
-    // 現在のカウンター値
+    // 現在のカウンターの値
     counter: z.number().optional(),
   }),
   outputSchema: z.object({
-    // 更新後のカウンター値
+    // 更新後のカウンターの値
     updatedCounter: z.number(),
   }),
   execute: async ({ context }) => {
@@ -235,13 +229,13 @@ workflow
   .step(incrementStep)
   .while(
     async ({ context }) => {
-      // カウンターが10未満の間継続
+      // カウンターが10未満の間は継続
       const result = context.getStepResult(incrementStep);
       return (result?.updatedCounter ?? 0) < 10;
     },
     incrementStep,
     {
-      // 現在のカウンターを次のイテレーションに渡す
+      // 現在のカウンターを次の反復処理へ渡す
       counter: {
         step: incrementStep,
         path: "updatedCounter",
@@ -251,7 +245,7 @@ workflow
   .then(finalStep);
 ```
 
-参照ベースの条件も利用できます：
+参照に基づく条件も使用できます：
 
 ```typescript
 workflow
@@ -273,25 +267,22 @@ workflow
 ```
 
 
-
 ### 参照条件の比較演算子
 
-参照ベースの条件を使用する場合、以下の比較演算子を使用できます：
+参照ベースの条件を使用する場合、次の比較演算子を使用できます：
 
-| 演算子 | 説明              |
-| -------- | ------------------------ |
-| `$eq`    | 等しい                 |
-| `$ne`    | 等しくない             |
-| `$gt`    | より大きい             |
-| `$gte`   | 以上                   |
-| `$lt`    | より小さい             |
-| `$lte`   | 以下                   |
-
-
+| Operator | Description        |
+| -------- | ------------------ |
+| `$eq`    | 等しい             |
+| `$ne`    | 等しくない         |
+| `$gt`    | より大きい         |
+| `$gte`   | 以上               |
+| `$lt`    | より小さい         |
+| `$lte`   | 以下               |
 
 ## 条件
 
-前のステップからのデータに基づいてステップを実行するかどうかを制御するには、when プロパティを使用します。以下は条件を指定する3つの方法です。
+前のステップのデータに基づいてステップを実行するかどうかを制御するには、when プロパティを使用します。条件の指定方法は次の3通りです。
 
 ### オプション1：関数
 
@@ -300,7 +291,7 @@ myWorkflow.step(
   new Step({
     id: "processData",
     execute: async ({ context }) => {
-      // Action logic
+      // アクション処理のロジック
     },
   }),
   {
@@ -312,14 +303,15 @@ myWorkflow.step(
 );
 ```
 
-### オプション2：クエリオブジェクト
+
+### オプション 2: Query オブジェクト
 
 ```typescript
 myWorkflow.step(
   new Step({
     id: "processData",
     execute: async ({ context }) => {
-      // Action logic
+      // アクション処理のロジック
     },
   }),
   {
@@ -336,14 +328,15 @@ myWorkflow.step(
 );
 ```
 
-### オプション3：シンプルなパス比較
+
+### オプション3: シンプルなパス比較
 
 ```typescript
 myWorkflow.step(
   new Step({
     id: "processData",
     execute: async ({ context }) => {
-      // Action logic
+      // アクションの処理ロジック
     },
   }),
   {
@@ -355,24 +348,23 @@ myWorkflow.step(
 ```
 
 
-
 ## データアクセスパターン
 
-Mastraはステップ間でデータを受け渡すためのいくつかの方法を提供しています：
+Mastra では、ステップ間でデータを受け渡す方法が複数用意されています：
 
-1. **コンテキストオブジェクト** - コンテキストオブジェクトを通じて直接ステップの結果にアクセスする
-2. **変数マッピング** - あるステップの出力を別のステップの入力に明示的にマッピングする
-3. **getStepResultメソッド** - ステップの出力を取得するための型安全なメソッド
+1. **Context オブジェクト** - コンテキスト経由でステップの結果に直接アクセス
+2. **変数マッピング** - あるステップの出力を別のステップの入力に明示的にマップ
+3. **getStepResult メソッド** - ステップの出力を型安全に取得
 
-各アプローチは、ユースケースと型安全性の要件に応じて、それぞれ利点があります。
+それぞれの方法には、ユースケースや型安全性の要件に応じた利点があります。
 
-### getStepResultメソッドの使用
+### getStepResult メソッドの使用
 
-`getStepResult`メソッドは、ステップの結果にアクセスするための型安全な方法を提供します。TypeScriptを使用する場合は、型情報を保持するためにこのアプローチが推奨されます。
+`getStepResult` メソッドは、ステップ結果へ型安全にアクセスする方法を提供します。TypeScript で作業する際は、型情報を保持できるため、この方法を推奨します。
 
-#### 基本的な使用法
+#### 基本的な使い方
 
-より良い型安全性のために、`getStepResult`に型パラメータを提供することができます：
+型安全性を高めるために、`getStepResult` に型パラメーターを指定できます：
 
 ```typescript showLineNumbers filename="src/mastra/workflows/get-step-result.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
@@ -392,32 +384,33 @@ const fetchUserStep = new LegacyStep({
 const analyzeDataStep = new LegacyStep({
   id: "analyzeData",
   execute: async ({ context }) => {
-    // Type-safe access to previous step result
+    // 前のステップの結果に型安全にアクセス
     const userData = context.getStepResult<{ name: string; userId: string }>(
       "fetchUser",
     );
 
     if (!userData) {
-      return { status: "error", message: "User data not found" };
+      return { status: "error", message: "ユーザー データが見つかりません" };
     }
 
     return {
-      analysis: `Analyzed data for user ${userData.name}`,
+      analysis: `ユーザー ${userData.name} のデータを分析しました`,
       userId: userData.userId,
     };
   },
 });
 ```
 
+
 #### ステップ参照の使用
 
-最も型安全なアプローチは、`getStepResult`呼び出しで直接ステップを参照することです：
+最も型安全な方法は、`getStepResult` の呼び出しでステップを直接参照することです。
 
 ```typescript showLineNumbers filename="src/mastra/workflows/step-reference.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
-// Define step with output schema
+// 出力スキーマを定義
 const fetchUserStep = new LegacyStep({
   id: "fetchUser",
   outputSchema: z.object({
@@ -437,7 +430,7 @@ const fetchUserStep = new LegacyStep({
 const processUserStep = new LegacyStep({
   id: "processUser",
   execute: async ({ context }) => {
-    // TypeScript will infer the correct type from fetchUserStep's outputSchema
+    // TypeScript は fetchUserStep の outputSchema から正確な型を推論します
     const userData = context.getStepResult(fetchUserStep);
 
     return {
@@ -454,11 +447,12 @@ const workflow = new LegacyWorkflow({
 workflow.step(fetchUserStep).then(processUserStep).commit();
 ```
 
+
 ### 変数マッピングの使用
 
-変数マッピングは、ステップ間のデータフローを定義する明示的な方法です。
-このアプローチは依存関係を明確にし、優れた型安全性を提供します。
-ステップに注入されたデータは`context.inputData`オブジェクトで利用可能であり、ステップの`inputSchema`に基づいて型付けされます。
+変数マッピングは、ステップ間のデータフローを明示的に定義する方法です。
+この手法により依存関係が明確になり、型安全性も高まります。
+ステップに渡されるデータは `context.inputData` オブジェクトで参照でき、ステップの `inputSchema` に基づいて型付けされます。
 
 ```typescript showLineNumbers filename="src/mastra/workflows/variable-mapping.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
@@ -489,7 +483,7 @@ const sendEmailStep = new LegacyStep({
   execute: async ({ context }) => {
     const { recipientEmail, recipientName } = context.inputData;
 
-    // Send email logic here
+    // ここにメール送信のロジックを実装
     return {
       status: "sent",
       to: recipientEmail,
@@ -505,7 +499,7 @@ workflow
   .step(fetchUserStep)
   .then(sendEmailStep, {
     variables: {
-      // Map specific fields from fetchUser to sendEmail inputs
+      // fetchUser の出力から sendEmail の入力へ特定のフィールドをマップ
       recipientEmail: { step: fetchUserStep, path: "email" },
       recipientName: { step: fetchUserStep, path: "name" },
     },
@@ -513,14 +507,13 @@ workflow
   .commit();
 ```
 
+変数マッピングの詳細は、[Data Mapping with Workflow Variables](./variables.mdx) のドキュメントをご覧ください。
 
 
-変数マッピングの詳細については、[ワークフローバリアブルによるデータマッピング](./variables.mdx)のドキュメントをご覧ください。
+### コンテキストオブジェクトの使用
 
-### Contextオブジェクトの使用
-
-contextオブジェクトは、すべてのステップ結果とその出力に直接アクセスすることができます。この方法はより柔軟ですが、型安全性を維持するためには慎重な取り扱いが必要です。
-ステップの結果には `context.steps` オブジェクトを通じて直接アクセスできます。
+コンテキストオブジェクトは、すべてのステップ結果とその出力に直接アクセスできます。こちらの方法はより柔軟ですが、型安全性を保つために注意が必要です。
+ステップ結果には、`context.steps` オブジェクト経由で直接アクセスできます:
 
 ```typescript showLineNumbers filename="src/mastra/workflows/context-access.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
@@ -529,19 +522,19 @@ import { z } from "zod";
 const processOrderStep = new LegacyStep({
   id: "processOrder",
   execute: async ({ context }) => {
-    // Access data from a previous step
+    // 前のステップのデータにアクセスする
     let userData: { name: string; userId: string };
     if (context.steps["fetchUser"]?.status === "success") {
       userData = context.steps.fetchUser.output;
     } else {
-      throw new Error("User data not found");
+      throw new Error("ユーザー データが見つかりません");
     }
 
     return {
       orderId: "order123",
       userId: userData.userId,
       status: "processing",
-    };
+      status: "processing",
   },
 });
 
@@ -552,16 +545,17 @@ const workflow = new LegacyWorkflow({
 workflow.step(fetchUserStep).then(processOrderStep).commit();
 ```
 
-### ワークフローレベルの型安全性
 
-ワークフロー全体で包括的な型安全性を確保するために、すべてのステップの型を定義し、それらをWorkflowに渡すことができます。
-これにより、条件や最終的なワークフロー出力でcontextオブジェクトやステップ結果に対して型安全性を得ることができます。
+### ワークフロー単位の型安全性
+
+ワークフロー全体で高い型安全性を確保するには、すべてのステップに型を定義し、それらを Workflow に渡します。
+これにより、条件で参照する context オブジェクトや、最終的なワークフロー出力での各ステップの結果に型安全性を持たせられます。
 
 ```typescript showLineNumbers filename="src/mastra/workflows/workflow-typing.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
-// Create steps with typed outputs
+// 型付き出力でステップを作成する
 const fetchUserStep = new LegacyStep({
   id: "fetchUser",
   outputSchema: z.object({
@@ -581,7 +575,7 @@ const fetchUserStep = new LegacyStep({
 const processOrderStep = new LegacyStep({
   id: "processOrder",
   execute: async ({ context }) => {
-    // TypeScript knows the shape of userData
+    // TypeScript は userData の型（構造）を把握しています
     const userData = context.getStepResult(fetchUserStep);
 
     return {
@@ -601,22 +595,23 @@ workflow
   .step(fetchUserStep)
   .then(processOrderStep)
   .until(async ({ context }) => {
-    // TypeScript knows the shape of userData here
+    // ここでも TypeScript は userData の型（構造）を把握しています
     const res = context.getStepResult("fetchUser");
     return res?.userId === "123";
   }, processOrderStep)
   .commit();
 ```
 
-### トリガーデータへのアクセス
 
-ステップ結果に加えて、ワークフローを開始した元のトリガーデータにもアクセスできます。
+### トリガー データへのアクセス
+
+ステップの結果に加えて、ワークフローを開始した元のトリガー データにもアクセスできます。
 
 ```typescript showLineNumbers filename="src/mastra/workflows/trigger-data.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
-// Define trigger schema
+// トリガースキーマを定義
 const triggerSchema = z.object({
   customerId: z.string(),
   orderItems: z.array(z.string()),
@@ -627,7 +622,7 @@ type TriggerType = z.infer<typeof triggerSchema>;
 const processOrderStep = new LegacyStep({
   id: "processOrder",
   execute: async ({ context }) => {
-    // Access trigger data with type safety
+    // 型安全にトリガーデータへアクセス
     const triggerData = context.getStepResult<TriggerType>("trigger");
 
     return {
@@ -646,11 +641,10 @@ const workflow = new LegacyWorkflow({
 workflow.step(processOrderStep).commit();
 ```
 
-### レジュームデータへのアクセス
 
-ステップに注入されたデータは `context.inputData` オブジェクトで利用でき、ステップの `inputSchema` に基づいて型付けされます。
+### 履歴書データへのアクセス
 
-
+ステップに注入されたデータは `context.inputData` オブジェクトで参照でき、ステップの `inputSchema` に基づいて型付けされています。
 
 ```typescript showLineNumbers filename="src/mastra/workflows/resume-data.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
@@ -671,7 +665,7 @@ const processOrderStep = new LegacyStep({
 
     return {
       orderId,
-      status: "processed",
+      status: "処理完了",
     };
   },
 });
@@ -696,9 +690,10 @@ const resumedResult = await workflow.resume({
 console.log({ resumedResult });
 ```
 
+
 ### ワークフロー結果へのアクセス
 
-`Workflow` 型パラメータにステップ型を注入することで、ワークフローの結果に型安全にアクセスできます。
+`Workflow` の型パラメータにステップの型を渡すことで、ワークフローの結果に型安全にアクセスできます。
 
 ```typescript showLineNumbers filename="src/mastra/workflows/get-results.ts" copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
@@ -714,8 +709,8 @@ const fetchUserStep = new LegacyStep({
   execute: async () => {
     return {
       userId: "user123",
-      name: "John Doe",
-      email: "john@example.com",
+      name: "山田太郎",
+      email: "taro@example.com",
     };
   },
 });
@@ -738,7 +733,7 @@ const processOrderStep = new LegacyStep({
 const workflow = new LegacyWorkflow<
   [typeof fetchUserStep, typeof processOrderStep]
 >({
-  name: "typed-workflow",
+  name: "型付きワークフロー",
 });
 
 workflow.step(fetchUserStep).then(processOrderStep).commit();
@@ -746,10 +741,10 @@ workflow.step(fetchUserStep).then(processOrderStep).commit();
 const run = workflow.createRun();
 const result = await run.start();
 
-// The result is a discriminated union of the step results
-// So it needs to be narrowed down via status checks
+// 結果は各ステップ結果の判別可能ユニオン型です
+// そのため、ステータスのチェックで絞り込む必要があります
 if (result.results.processOrder.status === "success") {
-  // TypeScript will know the shape of the results
+  // TypeScript は結果の型を把握します
   const orderId = result.results.processOrder.output.orderId;
   console.log({ orderId });
 }
@@ -760,39 +755,40 @@ if (result.results.fetchUser.status === "success") {
 }
 ```
 
+
 ### データフローのベストプラクティス
 
-1. **型安全性のために Step 参照とともに getStepResult を使用する**
+1. **型安全性のために Step 参照付きで getStepResult を使う**
 
    - TypeScript が正しい型を推論できるようにする
    - コンパイル時に型エラーを検出できる
 
-2. \*_依存関係を明示するために変数マッピングを使用する_
+2. \*_明示的な依存関係には Variable Mapping を使う_
 
-   - データフローが明確かつ保守しやすくなる
-   - ステップ間の依存関係をドキュメント化できる
+   - データフローを明確にし、保守しやすくする
+   - ステップ間の依存関係の良いドキュメントになる
 
-3. **ステップごとに出力スキーマを定義する**
+3. **ステップの出力スキーマを定義する**
 
-   - 実行時にデータを検証できる
-   - `execute` 関数の戻り値の型を検証できる
-   - TypeScript での型推論が向上する
+   - 実行時にデータを検証する
+   - `execute` 関数の戻り値の型を検証する
+   - TypeScript における型推論を向上させる
 
-4. **データが存在しない場合も適切に処理する**
+4. **欠損データを適切に扱う**
 
-   - プロパティへアクセスする前に必ずステップ結果の有無を確認する
-   - オプションデータにはフォールバック値を用意する
+   - プロパティにアクセスする前に、常にステップ結果が存在するか確認する
+   - オプションのデータにはフォールバック値を用意する
 
 5. **データ変換はシンプルに保つ**
-   - 変数マッピング内ではなく、専用のステップでデータを変換する
-   - ワークフローのテストやデバッグが容易になる
+   - 変数マッピングではなく、専用のステップでデータを変換する
+   - ワークフローのテストやデバッグを容易にする
 
 ### データフロー手法の比較
 
-| 手法              | 型安全性     | 明示性        | ユースケース                                         |
-| ----------------- | ----------- | ------------ | ---------------------------------------------------- |
-| getStepResult     | 最高        | 高い         | 厳格な型付けが必要な複雑なワークフロー               |
-| 変数マッピング    | 高い        | 高い         | 依存関係を明確にしたい場合                           |
-| context.steps     | 中程度      | 低い         | シンプルなワークフローでステップデータへ素早くアクセスしたい場合 |
+| 手法              | 型安全性 | 明示性 | ユースケース                                         |
+| ----------------- | -------- | ------ | ---------------------------------------------------- |
+| getStepResult     | 最高     | 高い   | 厳密な型付けが必要な複雑なワークフロー               |
+| Variable Mapping  | 高い     | 高い   | 依存関係を明確かつ明示的に示す必要がある場合         |
+| context.steps     | 中程度   | 低い   | シンプルなワークフローでステップデータに素早くアクセス |
 
-ユースケースに合ったデータフロー手法を選択することで、型安全かつ保守性の高いワークフローを構築できます。
+ユースケースに適したデータフロー手法を選択することで、型安全性と保守性を両立したワークフローを構築できます。

@@ -1,17 +1,18 @@
 ---
 title: "リファレンス: Memory.createThread() | Memory | Mastra ドキュメント"
-description: "Mastra の `Memory.createThread()` メソッドに関するドキュメント。メモリシステム内で新しい会話スレッドを作成します。"
+description: "Mastra における `Memory.createThread()` メソッドのリファレンス。メモリシステムで新しい会話スレッドを作成します。"
 ---
 
 # Memory.createThread()
 
-`.createThread()` メソッドは、メモリシステム内に新しい会話スレッドを作成します。各スレッドは、個別の会話またはコンテキストを表し、複数のメッセージを含むことができます。
+`.createThread()` メソッドは、メモリシステム内に新たな会話スレッドを作成します。各スレッドは個別の会話またはコンテキストを表し、複数のメッセージを含められます。
 
 ## 使い方の例
 
 ```typescript copy
 await memory?.createThread({ resourceId: "user-123" });
 ```
+
 
 ## パラメータ
 
@@ -53,12 +54,12 @@ await memory?.createThread({ resourceId: "user-123" });
     {
       name: "id",
       type: "string",
-      description: "作成されたスレッドの固有識別子",
+      description: "作成されたスレッドの一意の識別子",
     },
     {
       name: "resourceId",
       type: "string",
-      description: "スレッドに関連付けられたリソースID",
+      description: "スレッドに関連付けられたリソース ID",
     },
     {
       name: "title",
@@ -78,12 +79,12 @@ await memory?.createThread({ resourceId: "user-123" });
     {
       name: "metadata",
       type: "Record<string, unknown>",
-      description: "スレッドに関連する追加のメタデータ",
+      description: "スレッドに関連付けられた追加メタデータ",
     },
   ]}
 />
 
-## 応用使用例
+## 詳細な使用例
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
 import { mastra } from "./mastra";
@@ -93,14 +94,14 @@ const memory = await agent.getMemory();
 
 const thread = await memory?.createThread({
   resourceId: "user-123",
-  title: "Memory Test Thread",
+  title: "メモリテストスレッド",
   metadata: {
     source: "test-script",
-    purpose: "memory-testing"
+    purpose: "メモリテスト用",
   }
 });
 
-const response = await agent.generate("message for agent", {
+const response = await agent.generate("エージェント向けメッセージ", {
   memory: {
     thread: thread!.id,
     resource: thread!.resourceId
@@ -110,10 +111,11 @@ const response = await agent.generate("message for agent", {
 console.log(response.text);
 ```
 
-### 関連情報
+
+### 関連
 
 - [Memory クラスリファレンス](/reference/memory/Memory.mdx)
-- [Memory 入門](/docs/memory/overview.mdx)（スレッドの概念を解説）
+- [Memory のはじめ方](/docs/memory/overview.mdx)（スレッドの概念を解説）
 - [getThreadById](/reference/memory/getThreadById.mdx)
 - [getThreadsByResourceId](/reference/memory/getThreadsByResourceId.mdx)
 - [query](/reference/memory/query.mdx)

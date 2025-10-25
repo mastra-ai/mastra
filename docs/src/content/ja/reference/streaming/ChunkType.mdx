@@ -1,23 +1,19 @@
 ---
-title: "リファレンス: ChunkType（実験的） | Agents | Mastra ドキュメント"
-description: "Mastra のストリーミングレスポンスで使用される ChunkType 型に関するドキュメント。可能なすべてのチャンクタイプとそのペイロードを定義します。"
+title: "リファレンス: ChunkType | Agents | Mastra ドキュメント"
+description: "Mastra のストリーミングレスポンスで使用される ChunkType 型のドキュメント。想定されるすべてのチャンクタイプとそのペイロードを定義します。"
 ---
 
 import { Callout } from "nextra/components";
 import { PropertiesTable } from "@/components/properties-table";
 
 
-# ChunkType（実験的）
+# ChunkType
 
-<Callout type="important">
-  <strong className="block">実験的なAPI：</strong>この型は実験的な `.streamVNext()` メソッドの一部です。フィードバックに基づいて機能を洗練していくに伴い、APIは変更される可能性があります。
-</Callout>
-
-`ChunkType` 型は、エージェントのストリーミング応答中に出力されるチャンクの mastra 形式を定義します。
+`ChunkType` 型は、エージェントのストリーミング応答で出力されるストリームチャンクの mastra 形式を定義します。
 
 ## 基本プロパティ
 
-すべてのチャンクには次の基本プロパティが含まれます:
+すべてのチャンクには次の基本プロパティが含まれます。
 
 <PropertiesTable
   content={[
@@ -34,14 +30,14 @@ import { PropertiesTable } from "@/components/properties-table";
     {
       name: "from",
       type: "ChunkFrom",
-      description: "チャンクの出所",
+      description: "チャンクの発生元",
       properties: [{
         type: "enum",
         parameters: [
-          { name: "AGENT", type: "'AGENT'", description: "エージェントの実行によるチャンク" },
-          { name: "USER", type: "'USER'", description: "ユーザー入力によるチャンク" },
-          { name: "SYSTEM", type: "'SYSTEM'", description: "システム処理によるチャンク" },
-          { name: "WORKFLOW", type: "'WORKFLOW'", description: "ワークフローの実行によるチャンク" }
+          { name: "AGENT", type: "'AGENT'", description: "エージェントの実行に由来するチャンク" },
+          { name: "USER", type: "'USER'", description: "ユーザー入力に由来するチャンク" },
+          { name: "SYSTEM", type: "'SYSTEM'", description: "システム処理に由来するチャンク" },
+          { name: "WORKFLOW", type: "'WORKFLOW'", description: "ワークフロー実行に由来するチャンク" }
         ]
       }]
     }
@@ -52,7 +48,7 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ### text-start
 
-テキスト生成の開始を通知します。
+テキスト生成の開始を示します。
 
 <PropertiesTable
   content={[
@@ -68,7 +64,7 @@ import { PropertiesTable } from "@/components/properties-table";
       properties: [{
         type: "TextStartPayload",
         parameters: [
-          { name: "id", type: "string", description: "このテキスト生成の一意の識別子" },
+          { name: "id", type: "string", description: "このテキスト生成の固有識別子" },
           { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダー固有のメタデータ" }
         ]
       }]
@@ -90,13 +86,13 @@ import { PropertiesTable } from "@/components/properties-table";
     {
       name: "payload",
       type: "TextDeltaPayload",
-      description: "増分テキスト",
+      description: "増分テキストの内容",
       properties: [{
         type: "TextDeltaPayload",
         parameters: [
-          { name: "id", type: "string", description: "このテキスト生成の一意の識別子" },
-          { name: "text", type: "string", description: "増分テキスト" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダー固有のメタデータ" }
+          { name: "id", type: "string", description: "このテキスト生成の一意識別子" },
+          { name: "text", type: "string", description: "増分テキストの内容" },
+          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダ固有のメタデータ" }
         ]
       }]
     }
@@ -112,7 +108,7 @@ import { PropertiesTable } from "@/components/properties-table";
     {
       name: "type",
       type: '"text-end"',
-      description: "チャンクの種類を示す識別子"
+      description: "チャンク種別識別子"
     },
     {
       name: "payload",
@@ -129,11 +125,11 @@ import { PropertiesTable } from "@/components/properties-table";
   ]}
 />
 
-## 推論のチャンク
+## 推論チャンク
 
 ### reasoning-start
 
-推論生成の開始を示します（推論対応モデル向け）。
+（推論をサポートするモデルで）推論生成の開始を示します。
 
 <PropertiesTable
   content={[
@@ -178,7 +174,7 @@ import { PropertiesTable } from "@/components/properties-table";
         parameters: [
           { name: "id", type: "string", description: "この推論生成の一意の識別子" },
           { name: "text", type: "string", description: "逐次的な推論テキスト" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダー固有のメタデータ" }
+          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダ固有のメタデータ" }
         ]
       }]
     }
@@ -187,14 +183,14 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ### reasoning-end
 
-推論生成の終了を通知します。
+推論生成の終了を示します。
 
 <PropertiesTable
   content={[
     {
       name: "type",
       type: '"reasoning-end"',
-      description: "チャンク種別識別子"
+      description: "チャンク種別の識別子"
     },
     {
       name: "payload",
@@ -203,9 +199,9 @@ import { PropertiesTable } from "@/components/properties-table";
       properties: [{
         type: "ReasoningEndPayload",
         parameters: [
-          { name: "id", type: "string", description: "この推論生成に固有の識別子" },
-          { name: "signature", type: "string", isOptional: true, description: "利用可能な場合の最終的な推論署名" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダ固有のメタデータ" }
+          { name: "id", type: "string", description: "この推論生成の一意の識別子" },
+          { name: "signature", type: "string", isOptional: true, description: "利用可能な場合の最終推論シグネチャ" },
+          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダー固有のメタデータ" }
         ]
       }]
     }
@@ -214,24 +210,24 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ### reasoning-signature
 
-高度な推論をサポートするモデル（OpenAI の o1 シリーズなど）からの推論シグネチャを含みます。シグネチャは、モデルの内部推論プロセスに関するメタデータ（労力レベルや推論アプローチなど）を表しますが、実際の推論内容自体は含みません。
+高度な推論をサポートするモデル（OpenAI の o1 シリーズなど）からの「推論シグネチャ」を含みます。シグネチャは、努力度や推論アプローチといったモデル内部の推論プロセスに関するメタデータを表しますが、実際の推論内容そのものは含みません。
 
 <PropertiesTable
   content={[
     {
       name: "type",
       type: '"reasoning-signature"',
-      description: "チャンクタイプの識別子"
+      description: "チャンク種別の識別子"
     },
     {
       name: "payload",
       type: "ReasoningSignaturePayload",
-      description: "モデルの推論プロセス特性に関するメタデータ",
+      description: "モデルの推論プロセスの特性に関するメタデータ",
       properties: [{
         type: "ReasoningSignaturePayload",
         parameters: [
           { name: "id", type: "string", description: "推論セッションの一意の識別子" },
-          { name: "signature", type: "string", description: "推論アプローチや労力レベルを示すシグネチャ（例：推論の労力設定）" },
+          { name: "signature", type: "string", description: "推論アプローチや努力度を示すシグネチャ（例：推論努力の設定）" },
           { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダー固有のメタデータ" }
         ]
       }]
@@ -239,18 +235,18 @@ import { PropertiesTable } from "@/components/properties-table";
   ]}
 />
 
-## ツールチャンク
+## ツールのチャンク
 
 ### tool-call
 
-ツールが呼び出されています。
+ツールを呼び出しています。
 
 <PropertiesTable
   content={[
     {
       name: "type",
       type: '"tool-call"',
-      description: "チャンクタイプの識別子"
+      description: "チャンク種別の識別子"
     },
     {
       name: "payload",
@@ -260,8 +256,8 @@ import { PropertiesTable } from "@/components/properties-table";
         type: "ToolCallPayload",
         parameters: [
           { name: "toolCallId", type: "string", description: "このツール呼び出しの一意の識別子" },
-          { name: "toolName", type: "string", description: "呼び出されているツール名" },
-          { name: "args", type: "Record<string, any>", isOptional: true, description: "ツールに渡される引数" },
+          { name: "toolName", type: "string", description: "呼び出すツール名" },
+          { name: "args", type: "Record<string, any>", isOptional: true, description: "ツールに渡す引数" },
           { name: "providerExecuted", type: "boolean", isOptional: true, description: "プロバイダーがツールを実行したかどうか" },
           { name: "output", type: "any", isOptional: true, description: "利用可能な場合のツールの出力" },
           { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダー固有のメタデータ" }
@@ -273,14 +269,14 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ### tool-result
 
-ツール実行の結果。
+ツールの実行結果。
 
 <PropertiesTable
   content={[
     {
       name: "type",
       type: '"tool-result"',
-      description: "チャンク種別の識別子"
+      description: "チャンクタイプ識別子"
     },
     {
       name: "payload",
@@ -293,9 +289,9 @@ import { PropertiesTable } from "@/components/properties-table";
           { name: "toolName", type: "string", description: "実行されたツール名" },
           { name: "result", type: "any", description: "ツール実行の結果" },
           { name: "isError", type: "boolean", isOptional: true, description: "結果がエラーかどうか" },
-          { name: "providerExecuted", type: "boolean", isOptional: true, description: "プロバイダーがツールを実行したかどうか" },
+          { name: "providerExecuted", type: "boolean", isOptional: true, description: "プロバイダがツールを実行したかどうか" },
           { name: "args", type: "Record<string, any>", isOptional: true, description: "ツールに渡された引数" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダー固有のメタデータ" }
+          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダ固有のメタデータ" }
         ]
       }]
     }
@@ -304,14 +300,14 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ### tool-call-input-streaming-start
 
-ツール呼び出し引数のストリーミング開始を通知します。
+ツール呼び出し引数のストリーミング開始を示します。
 
 <PropertiesTable
   content={[
     {
       name: "type",
       type: '"tool-call-input-streaming-start"',
-      description: "チャンク種別識別子"
+      description: "チャンク種別の識別子"
     },
     {
       name: "payload",
@@ -320,7 +316,7 @@ import { PropertiesTable } from "@/components/properties-table";
       properties: [{
         type: "ToolCallInputStreamingStartPayload",
         parameters: [
-          { name: "toolCallId", type: "string", description: "このツール呼び出しの一意な識別子" },
+          { name: "toolCallId", type: "string", description: "このツール呼び出しの一意の識別子" },
           { name: "toolName", type: "string", description: "呼び出されるツール名" },
           { name: "providerExecuted", type: "boolean", isOptional: true, description: "プロバイダーがツールを実行したかどうか" },
           { name: "dynamic", type: "boolean", isOptional: true, description: "ツール呼び出しが動的かどうか" },
@@ -333,7 +329,7 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ### tool-call-delta
 
-ストリーミング中に段階的に出力されるツール呼び出し引数。
+ストリーミング中に送られるツール呼び出し引数の逐次更新。
 
 <PropertiesTable
   content={[
@@ -345,11 +341,11 @@ import { PropertiesTable } from "@/components/properties-table";
     {
       name: "payload",
       type: "ToolCallDeltaPayload",
-      description: "段階的に出力されるツール呼び出し引数",
+      description: "ツール呼び出し引数の逐次更新",
       properties: [{
         type: "ToolCallDeltaPayload",
         parameters: [
-          { name: "argsTextDelta", type: "string", description: "ツール引数に対する段階的なテキスト差分" },
+          { name: "argsTextDelta", type: "string", description: "ツール引数に対するテキスト差分の逐次更新" },
           { name: "toolCallId", type: "string", description: "このツール呼び出しの一意の識別子" },
           { name: "toolName", type: "string", isOptional: true, description: "呼び出されるツール名" },
           { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダー固有のメタデータ" }
@@ -361,19 +357,19 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ### tool-call-input-streaming-end
 
-ツール呼び出しの引数ストリーミングの終了を示します。
+ツール呼び出しの引数ストリーミングが終了したことを示します。
 
 <PropertiesTable
   content={[
     {
       name: "type",
       type: '"tool-call-input-streaming-end"',
-      description: "チャンク種別の識別子"
+      description: "チャンク種別識別子"
     },
     {
       name: "payload",
       type: "ToolCallInputStreamingEndPayload",
-      description: "ツール呼び出し入力のストリーミング終了情報",
+      description: "ツール呼び出し入力ストリーミング終了の情報",
       properties: [{
         type: "ToolCallInputStreamingEndPayload",
         parameters: [
@@ -394,7 +390,7 @@ import { PropertiesTable } from "@/components/properties-table";
     {
       name: "type",
       type: '"tool-error"',
-      description: "チャンク種別識別子"
+      description: "チャンク種別の識別子"
     },
     {
       name: "payload",
@@ -420,29 +416,29 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ### source
 
-コンテンツに関するソース情報が含まれます。
+コンテンツの出典情報を含みます。
 
 <PropertiesTable
   content={[
     {
       name: "type",
       type: '"source"',
-      description: "チャンク種別の識別子"
+      description: "チャンク種別識別子"
     },
     {
       name: "payload",
       type: "SourcePayload",
-      description: "ソース情報",
+      description: "出典情報",
       properties: [{
         type: "SourcePayload",
         parameters: [
           { name: "id", type: "string", description: "一意の識別子" },
-          { name: "sourceType", type: "'url' | 'document'", description: "ソースの種類" },
-          { name: "title", type: "string", description: "ソースのタイトル" },
-          { name: "mimeType", type: "string", isOptional: true, description: "ソースのMIME タイプ" },
+          { name: "sourceType", type: "'url' | 'document'", description: "出典の種類" },
+          { name: "title", type: "string", description: "出典のタイトル" },
+          { name: "mimeType", type: "string", isOptional: true, description: "出典の MIME タイプ" },
           { name: "filename", type: "string", isOptional: true, description: "該当する場合のファイル名" },
           { name: "url", type: "string", isOptional: true, description: "該当する場合の URL" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダ固有のメタデータ" }
+          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダー固有のメタデータ" }
         ]
       }]
     }
@@ -451,7 +447,7 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ### file
 
-ファイルデータを含みます。
+ファイルのデータを含みます。
 
 <PropertiesTable
   content={[
@@ -467,7 +463,7 @@ import { PropertiesTable } from "@/components/properties-table";
       properties: [{
         type: "FilePayload",
         parameters: [
-          { name: "data", type: "string | Uint8Array", description: "ファイルデータ本体" },
+          { name: "data", type: "string | Uint8Array", description: "ファイルのデータ" },
           { name: "base64", type: "string", isOptional: true, description: "該当する場合のBase64エンコード済みデータ" },
           { name: "mimeType", type: "string", description: "ファイルのMIMEタイプ" },
           { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダー固有のメタデータ" }
@@ -479,16 +475,16 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ## 制御チャンク
 
-### 開始
+### start
 
-ストリーミングの開始を示します。
+ストリーミングの開始を通知します。
 
 <PropertiesTable
   content={[
     {
       name: "type",
       type: '"start"',
-      description: "チャンクの種類を示す識別子"
+      description: "チャンク種別の識別子"
     },
     {
       name: "payload",
@@ -497,7 +493,7 @@ import { PropertiesTable } from "@/components/properties-table";
       properties: [{
         type: "StartPayload",
         parameters: [
-          { name: "[key: string]", type: "any", description: "追加の開始データ" }
+          { name: "[key: string]", type: "any", description: "開始時の追加データ" }
         ]
       }]
     }
@@ -523,8 +519,8 @@ import { PropertiesTable } from "@/components/properties-table";
         type: "StepStartPayload",
         parameters: [
           { name: "messageId", type: "string", isOptional: true, description: "任意のメッセージ ID" },
-          { name: "request", type: "object", description: "ボディなどを含むリクエスト情報" },
-          { name: "warnings", type: "LanguageModelV2CallWarning[]", isOptional: true, description: "言語モデル呼び出しからの警告一覧" }
+          { name: "request", type: "object", description: "本文やその他のデータを含むリクエスト情報" },
+          { name: "warnings", type: "LanguageModelV2CallWarning[]", isOptional: true, description: "言語モデル呼び出しからの警告" }
         ]
       }]
     }
@@ -533,30 +529,30 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ### step-finish
 
-処理ステップが完了したことを示します。
+処理ステップの完了を通知します。
 
 <PropertiesTable
   content={[
     {
       name: "type",
       type: '"step-finish"',
-      description: "チャンクタイプの識別子"
+      description: "チャンク種別の識別子"
     },
     {
       name: "payload",
       type: "StepFinishPayload",
-      description: "ステップ完了に関する情報",
+      description: "ステップ完了情報",
       properties: [{
         type: "StepFinishPayload",
         parameters: [
           { name: "id", type: "string", isOptional: true, description: "任意の識別子" },
           { name: "messageId", type: "string", isOptional: true, description: "任意のメッセージ識別子" },
-          { name: "stepResult", type: "object", description: "理由・警告・継続情報を含むステップ実行結果" },
+          { name: "stepResult", type: "object", description: "理由・警告・継続可否などを含むステップ実行結果" },
           { name: "output", type: "object", description: "使用状況統計を含む出力情報" },
-          { name: "metadata", type: "object", description: "リクエストおよびプロバイダー情報を含む実行時メタデータ" },
-          { name: "totalUsage", type: "LanguageModelV2Usage", isOptional: true, description: "総使用状況の統計" },
+          { name: "metadata", type: "object", description: "リクエストおよびプロバイダー情報を含む実行メタデータ" },
+          { name: "totalUsage", type: "LanguageModelV2Usage", isOptional: true, description: "総使用量の統計" },
           { name: "response", type: "LanguageModelV2ResponseMetadata", isOptional: true, description: "レスポンスのメタデータ" },
-          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダー固有メタデータ" }
+          { name: "providerMetadata", type: "SharedV2ProviderMetadata", isOptional: true, description: "プロバイダー固有のメタデータ" }
         ]
       }]
     }
@@ -565,23 +561,23 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ### raw
 
-プロバイダー提供の未加工データを含みます。
+プロバイダー提供の生データを含みます。
 
 <PropertiesTable
   content={[
     {
       name: "type",
       type: '"raw"',
-      description: "チャンク種別識別子"
+      description: "チャンク種類の識別子"
     },
     {
       name: "payload",
       type: "RawPayload",
-      description: "プロバイダーの未加工データ",
+      description: "プロバイダーの生データ",
       properties: [{
         type: "RawPayload",
         parameters: [
-          { name: "[key: string]", type: "any", description: "プロバイダーからの未加工データ" }
+          { name: "[key: string]", type: "any", description: "プロバイダーからの生データ" }
         ]
       }]
     }
@@ -597,7 +593,7 @@ import { PropertiesTable } from "@/components/properties-table";
     {
       name: "type",
       type: '"finish"',
-      description: "チャンクタイプの識別子"
+      description: "チャンクタイプ識別子"
     },
     {
       name: "payload",
@@ -606,7 +602,7 @@ import { PropertiesTable } from "@/components/properties-table";
       properties: [{
         type: "FinishPayload",
         parameters: [
-          { name: "stepResult", type: "object", description: "ステップ実行結果" },
+          { name: "stepResult", type: "object", description: "ステップの実行結果" },
           { name: "output", type: "object", description: "使用量を含む出力情報" },
           { name: "metadata", type: "object", description: "実行メタデータ" },
           { name: "messages", type: "object", description: "メッセージ履歴" }
@@ -625,12 +621,12 @@ import { PropertiesTable } from "@/components/properties-table";
     {
       name: "type",
       type: '"error"',
-      description: "チャンク種別を識別するID"
+      description: "チャンクの種類を示す識別子"
     },
     {
       name: "payload",
       type: "ErrorPayload",
-      description: "エラー情報",
+      description: "エラーに関する情報",
       properties: [{
         type: "ErrorPayload",
         parameters: [
@@ -643,23 +639,23 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ### abort
 
-ストリームが中断されました。
+ストリームが停止しました。
 
 <PropertiesTable
   content={[
     {
       name: "type",
       type: '"abort"',
-      description: "チャンクタイプ識別子"
+      description: "チャンク種別識別子"
     },
     {
       name: "payload",
       type: "AbortPayload",
-      description: "中断情報",
+      description: "中止情報",
       properties: [{
         type: "AbortPayload",
         parameters: [
-          { name: "[key: string]", type: "any", description: "追加の中断データ" }
+          { name: "[key: string]", type: "any", description: "追加の中止データ" }
         ]
       }]
     }
@@ -670,26 +666,26 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ### object
 
-定義済みスキーマでの出力生成時に発行されます。指定の Zod または JSON スキーマに適合する、部分的または完全な構造化データを含みます。このチャンクは、実行コンテキストによってはスキップされることがあり、構造化オブジェクト生成のストリーミングに用いられます。
+定義済みスキーマを用いた出力生成時に出力されます。指定された Zod または JSON スキーマに準拠する、部分的または完全な構造化データを含みます。このチャンクは、実行コンテキストによっては通常スキップされ、構造化オブジェクト生成のストリーミングに使用されます。
 
 <PropertiesTable
   content={[
     {
       name: "type",
       type: '"object"',
-      description: "チャンク種別の識別子"
+      description: "チャンクの種類を示す識別子"
     },
     {
       name: "object",
       type: "PartialSchemaOutput<OUTPUT>",
-      description: "定義済みスキーマに適合する部分的または完全な構造化データ。型は OUTPUT スキーマパラメータによって決まります。"
+      description: "定義済みスキーマに適合する部分的または完全な構造化データ。型は OUTPUT スキーマパラメータによって決定されます。"
     }
   ]}
 />
 
 ### tool-output
 
-エージェントまたはワークフローの実行結果を含み、特に使用状況の統計や完了イベントの追跡に用いられます。入れ子の実行コンテキストを提供するために、他のチャンクタイプ（finish チャンクなど）をラップすることがよくあります。
+エージェントまたはワークフローの実行結果を含み、特に使用状況の統計や完了イベントの追跡に用いられます。入れ子の実行コンテキストを提供するため、他のチャンクタイプ（finish チャンクなど）をラップすることがよくあります。
 
 <PropertiesTable
   content={[
@@ -705,7 +701,7 @@ import { PropertiesTable } from "@/components/properties-table";
       properties: [{
         type: "ToolOutputPayload",
         parameters: [
-          { name: "output", type: "ChunkType", description: "入れ子のチャンクデータ。使用状況の統計を含む完了イベントを含むことがよくあります" }
+          { name: "output", type: "ChunkType", description: "入れ子のチャンクデータ。使用状況の統計を含む完了イベントを含むことが多い" }
         ]
       }]
     }
@@ -714,14 +710,14 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ### step-output
 
-ワークフローステップの実行出力を含み、主に利用状況の追跡やステップ完了イベントに使用されます。tool-output に似ていますが、個々のワークフローステップに特化しています。
+ワークフローのステップ実行の出力を含み、主に利用状況の追跡やステップ完了イベントに使用されます。tool-output に似ていますが、個々のワークフローステップ向けに特化しています。
 
 <PropertiesTable
   content={[
     {
       name: "type",
       type: '"step-output"',
-      description: "チャンク種別識別子"
+      description: "チャンクタイプの識別子"
     },
     {
       name: "payload",
@@ -730,7 +726,7 @@ import { PropertiesTable } from "@/components/properties-table";
       properties: [{
         type: "StepOutputPayload",
         parameters: [
-          { name: "output", type: "ChunkType", description: "ステップ実行からの入れ子になったチャンクデータ。通常は終了イベントやその他のステップ結果を含みます" }
+          { name: "output", type: "ChunkType", description: "ステップ実行に由来する入れ子のチャンクデータ。通常は完了イベントやその他のステップ結果を含みます" }
         ]
       }]
     }
@@ -741,19 +737,19 @@ import { PropertiesTable } from "@/components/properties-table";
 
 ### response-metadata
 
-LLMプロバイダーのレスポンスに関するメタデータを含みます。テキスト生成後に、一部のプロバイダーがモデルID、タイムスタンプ、レスポンスヘッダーなどの追加情報を提供するために出力します。このチャンクは内部の状態追跡に使用され、メッセージの組み立てには影響しません。
+LLMプロバイダーのレスポンスに関するメタデータを含みます。モデルID、タイムスタンプ、レスポンスヘッダーなどの追加情報を提供するために、テキスト生成後に一部のプロバイダーによって出力されます。このチャンクは内部の状態追跡に使用され、メッセージの組み立てには影響しません。
 
 <PropertiesTable
   content={[
     {
       name: "type",
       type: '"response-metadata"',
-      description: "チャンクタイプの識別子"
+      description: "チャンク種別の識別子"
     },
     {
       name: "payload",
       type: "ResponseMetadataPayload",
-      description: "追跡およびデバッグ用のプロバイダーのレスポンスメタデータ",
+      description: "追跡およびデバッグのためのプロバイダーのレスポンスメタデータ",
       properties: [{
         type: "ResponseMetadataPayload",
         parameters: [
@@ -767,24 +763,24 @@ LLMプロバイダーのレスポンスに関するメタデータを含みま�
 
 ### watch
 
-エージェント実行に関する監視・可観測性データを含みます。`streamVNext()` の使用コンテキストに応じて、ワークフローの状態情報、実行進行状況、その他のランタイム詳細が含まれる場合があります。
+エージェント実行に関する監視・観測データを含みます。`stream()` が使用される文脈に応じて、ワークフローの状態情報、実行の進捗、その他のランタイムの詳細を含む場合があります。
 
 <PropertiesTable
   content={[
     {
       name: "type",
       type: '"watch"',
-      description: "チャンク種別の識別子"
+      description: "チャンクタイプ識別子"
     },
     {
       name: "payload",
       type: "WatchPayload",
-      description: "エージェント実行の可観測性とデバッグのための監視データ",
+      description: "エージェント実行の観測性とデバッグのための監視データ",
       properties: [{
         type: "WatchPayload",
         parameters: [
           { name: "workflowState", type: "object", isOptional: true, description: "現在のワークフロー実行状態（ワークフローで使用される場合）" },
-          { name: "eventTimestamp", type: "number", isOptional: true, description: "イベント発生時刻のタイムスタンプ" },
+          { name: "eventTimestamp", type: "number", isOptional: true, description: "イベント発生時刻（タイムスタンプ）" },
           { name: "[key: string]", type: "any", description: "追加の監視・実行データ" }
         ]
       }]
@@ -794,7 +790,7 @@ LLMプロバイダーのレスポンスに関するメタデータを含みま�
 
 ### tripwire
 
-出力プロセッサによりコンテンツがブロックされた結果、ストリームが強制終了された際に発行されます。これは、有害または不適切なコンテンツのストリーミングを防ぐためのセーフティ機構として機能します。
+出力プロセッサによりコンテンツがブロックされた結果、ストリームが強制的に終了されたときに発生します。これは、有害または不適切なコンテンツの配信を防ぐための安全機構として機能します。
 
 <PropertiesTable
   content={[
@@ -806,11 +802,11 @@ LLMプロバイダーのレスポンスに関するメタデータを含みま�
     {
       name: "payload",
       type: "TripwirePayload",
-      description: "セーフティ機構によってストリームが終了された理由に関する情報",
+      description: "安全機構によってストリームが終了された理由に関する情報",
       properties: [{
         type: "TripwirePayload",
         parameters: [
-          { name: "tripwireReason", type: "string", description: "コンテンツがブロックされた理由の説明（例：'Output processor blocked content'）" }
+          { name: "tripwireReason", type: "string", description: "コンテンツがブロックされた理由の説明（例：「Output processor blocked content」）" }
         ]
       }]
     }
@@ -820,7 +816,7 @@ LLMプロバイダーのレスポンスに関するメタデータを含みま�
 ## 使用例
 
 ```typescript
-const stream = await agent.streamVNext("Hello");
+const stream = await agent.stream("こんにちは");
 
 for await (const chunk of stream.fullStream) {
   switch (chunk.type) {
@@ -852,7 +848,9 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
+
 ## 関連する型
 
-- [MastraModelOutput](./MastraModelOutput.mdx) - これらのチャンクを生成して流すストリームオブジェクト
-- [.streamVNext()](./streamVNext.mdx) - これらのチャンクを流すストリームを返すメソッド
+- [.stream()](./agents/stream.mdx) - これらのチャンクを出力するストリームを返すメソッド
+- [MastraModelOutput](./agents/MastraModelOutput.mdx) - これらのチャンクを出力するストリームオブジェクト
+- [workflow.streamVNext()](./workflows/streamVNext.mdx) - ワークフロー用にこれらのチャンクを出力するストリームを返すメソッド

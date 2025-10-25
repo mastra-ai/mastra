@@ -1,17 +1,13 @@
 ---
 title: "リファレンス: Workflow.createRun() | ワークフローの実行（レガシー） | Mastra ドキュメント"
-description: "ワークフロー（レガシー）における `.createRun()` メソッドのドキュメント。新しいワークフロー実行インスタンスを初期化します。"
+description: "ワークフロー（レガシー）における `.createRun()` メソッドのリファレンス。新しいワークフロー実行を初期化します。"
 ---
-
-
 
 # Workflow.createRun()
 
-`.createRun()` メソッドは、新しいワークフロー実行インスタンスを初期化します。トラッキング用のユニークな実行IDを生成し、呼び出されたときにワークフローの実行を開始する start 関数を返します。
+`.createRun()` メソッドは、新しいワークフロー実行インスタンスを初期化します。追跡用の一意の実行 ID を生成し、呼び出すとワークフローの実行を開始する start 関数を返します。
 
-`.createRun()` を `.execute()` の代わりに使用する理由の一つは、トラッキングやログ記録、`.watch()` を使った購読のためにユニークな実行IDを取得できることです。
-
-
+`.createRun()` を `.execute()` の代わりに使用する理由のひとつは、`.watch()` による監視や、追跡・ログ記録のために一意の実行 ID を取得できる点です。
 
 ## 使い方
 
@@ -22,7 +18,6 @@ const result = await start();
 ```
 
 
-
 ## 戻り値
 
 <PropertiesTable
@@ -30,18 +25,18 @@ const result = await start();
     {
       name: "runId",
       type: "string",
-      description: "このワークフロー実行を追跡するための一意の識別子",
+      description: "このワークフロー実行を追跡するための固有の識別子",
     },
     {
       name: "start",
       type: "() => Promise<LegacyWorkflowResult>",
-      description: "呼び出すことでワークフローの実行を開始する関数",
+      description: "呼び出すとワークフローの実行を開始する関数",
     },
     {
       name: "watch",
       type: "(callback: (record: LegacyWorkflowResult) => void) => () => void",
       description:
-        "ワークフロー実行の各遷移ごとにコールバック関数が呼び出される関数",
+        "ワークフロー実行の各遷移時にコールバックを呼び出すためのコールバック関数を受け取る関数",
     },
     {
       name: "resume",
@@ -58,11 +53,9 @@ const result = await start();
   ]}
 />
 
-
-
 ## エラー処理
 
-start 関数は、ワークフローの設定が無効な場合にバリデーションエラーをスローすることがあります。
+ワークフローの設定が無効な場合、start 関数は検証エラーを送出することがあります:
 
 ```typescript
 try {
@@ -70,17 +63,16 @@ try {
   await start({ triggerData: data });
 } catch (error) {
   if (error instanceof ValidationError) {
-    // Handle validation errors
-    console.log(error.type); // 'circular_dependency' | 'no_terminal_path' | 'unreachable_step'
+    // バリデーションエラーを処理する
+    console.log(error.type); // '循環依存' | '終端パスなし' | '到達不能なステップ'
     console.log(error.details);
   }
 }
 ```
 
 
-
 ## 関連
 
-- [Workflow クラスリファレンス](./workflow.mdx)
-- [Step クラスリファレンス](./step-class.mdx)
-- 完全な使用方法については、[ワークフローの作成](../../examples/workflows_legacy/creating-a-workflow.mdx)の例を参照してください
+- [Workflow クラス リファレンス](./workflow.mdx)
+- [Step クラス リファレンス](./step-class.mdx)
+- 使い方の全体像は、[Creating a Workflow](../../examples/workflows_legacy/creating-a-workflow.mdx) の例をご参照ください

@@ -1,60 +1,52 @@
 ---
-title: Mastra Cloudでの可観測性
-description: Mastra Cloudデプロイメントのモニタリングとデバッグツール
+title: Mastra Cloud の可観測性
+description: Mastra Cloud 環境向けの監視・デバッグツール
 ---
 
 import { MastraCloudCallout } from '@/components/mastra-cloud-callout'
 
 
+# トレーシングとログを理解する
 
-# トレーシングとログの理解
-
-Mastra Cloudは実行データを取得して、本番環境でのアプリケーションの動作を監視するのに役立ちます。
+Mastra Cloud は、本番環境でのアプリケーションの挙動を監視できるよう、実行データを取得します。
 
 <MastraCloudCallout />
 
-
-
 ## ログ
 
-アプリケーションの動作をデバッグおよび監視するための詳細なログは、ダッシュボードの[ログ](/docs/mastra-cloud/dashboard#logs)ページで確認できます。
+Dashboard の [Logs](/docs/mastra-cloud/dashboard#logs) ページで、アプリケーションの挙動をデバッグ・監視するための詳細なログを確認できます。
 
 ![Dashboard logs](/image/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
 
-主な機能：
+主な機能:
 
-各ログエントリには重要度レベルと、エージェント、ワークフロー、またはストレージアクティビティを示す詳細なメッセージが含まれています。
+各ログエントリには、重大度レベルと、エージェント、ワークフロー、ストレージの各アクティビティを示す詳細なメッセージが含まれます。
 
+## トレース
 
+より詳細なトレースは、[logger](/docs/observability/logging) を使用するか、[サポートされているプロバイダー](/reference/observability/providers) のいずれかで [telemetry](/docs/observability/tracing) を有効化することで、エージェントとワークフローの双方で利用できます。
 
-## Traces
+### エージェント
 
-[logger](/docs/observability/logging)または[サポートされているプロバイダー](/reference/observability/providers)のいずれかを使用して[telemetry](/docs/observability/tracing)を有効にすることで、エージェントとワークフローの両方でより詳細なトレースを利用できます。
-
-### Agents
-
-[logger](/docs/observability/logging)を有効にすると、Agents Playgroundの**Traces**セクションでエージェントからの詳細な出力を表示できます。
+[logger](/docs/observability/logging) を有効にすると、Agents Playground の **Traces** セクションでエージェントの詳細な出力を確認できます。
 
 ![observability agents](/image/mastra-cloud/mastra-cloud-observability-agents.jpg)
 
-主な機能：
+主な機能:
 
-生成中にエージェントに渡されるツールは`convertTools`を使用して標準化されます。これには、クライアントサイドツール、メモリツール、およびワークフローから公開されるツールの取得が含まれます。
+生成中にエージェントに渡されるツールは、`convertTools` を用いて標準化されます。これには、クライアント側のツール、メモリツール、ワークフローから公開されるツールの取得が含まれます。
 
+### ワークフロー
 
-### Workflows
-
-[logger](/docs/observability/logging)を有効にすると、Workflows Playgroundの**Traces**セクションでワークフローからの詳細な出力を表示できます。
+[logger](/docs/observability/logging) を有効にすると、Workflows Playground の **Traces** セクションでワークフローの詳細な出力を確認できます。
 
 ![observability workflows](/image/mastra-cloud/mastra-cloud-observability-workflows.jpg)
 
-主な機能：
+主な機能:
 
-ワークフローは`createWorkflow`を使用して作成され、ステップ、メタデータ、およびツールを設定します。入力とオプションを渡すことで`runWorkflow`を使用してワークフローを実行できます。
-
-
+ワークフローは `createWorkflow` を使って作成し、ステップ、メタデータ、ツールを設定します。入力とオプションを渡して `runWorkflow` で実行できます。
 
 ## 次のステップ
 
-- [Logging](/docs/observability/logging)
-- [Tracing](/docs/observability/tracing)
+- [ログ記録](/docs/observability/logging)
+- [トレーシング](/docs/observability/tracing)

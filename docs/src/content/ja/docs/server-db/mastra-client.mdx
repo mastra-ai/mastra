@@ -1,6 +1,6 @@
 ---
 title: "Mastra Client SDK | Mastra ドキュメント"
-description: "Mastra Client SDK のセットアップ方法と使い方を学ぶ"
+description: "Mastra Client SDK のセットアップと使用方法を学ぶ"
 ---
 
 import { Tabs } from "nextra/components";
@@ -12,7 +12,7 @@ Mastra Client SDKは、クライアント環境から [Mastra Server](/docs/depl
 
 ## 前提条件
 
-ローカル開発を円滑に進めるため、以下を用意してください：
+ローカル開発をスムーズに行うため、次をご用意ください:
 
 - Node.js `v18` 以上
 - TypeScript `v4.7` 以上（TypeScript を使用する場合）
@@ -24,11 +24,11 @@ Mastra Client SDK はブラウザ環境向けに設計されており、Mastra �
 
 ## インストール
 
-Mastra Client SDK を使用するには、必要な依存関係をインストールしてください:
+Mastra Client SDK を使用するには、必要な依存関係をインストールしてください。
 
 {/*
 LLM CONTEXT:
-この Tabs コンポーネントは、さまざまなパッケージマネージャーを用いた Mastra Client SDK のインストールコマンドを表示します。
+この Tabs コンポーネントは、異なるパッケージマネージャーを使って Mastra Client SDK をインストールするためのコマンドを表示します。
 各タブには、そのパッケージマネージャー（npm、yarn、pnpm）のインストールコマンドが表示されます。
 これにより、ユーザーは好みのパッケージマネージャーでクライアント SDK をインストールできます。
 すべてのコマンドは同じ @mastra/client-js パッケージをインストールしますが、パッケージマネージャーごとに構文が異なります。
@@ -57,9 +57,9 @@ LLM CONTEXT:
   </Tabs.Tab>
 </Tabs>
 
-### `MastraClient` を初期化する
+### `MastraClient` の初期化
 
-`baseUrl` を指定して初期化すると、`MastraClient` はエージェント、ツール、ワークフローを呼び出すための型安全なインターフェースを公開します。
+`baseUrl` を指定して初期化すると、`MastraClient` はエージェント、ツール、ワークフローを呼び出すための型安全なインターフェースを提供します。
 
 ```typescript filename="lib/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -69,21 +69,22 @@ export const mastraClient = new MastraClient({
 });
 ```
 
+
 ## コア API
 
-Mastra Client SDK は、Mastra Server が提供するすべてのリソースを公開します。
+Mastra Client SDK は、Mastra Server が提供するすべてのリソースにアクセスできます。
 
-- **[Agents](/reference/client-js/agents.mdx)**: 応答を生成し、会話をストリーミング配信します。
+- **[Agents](/reference/client-js/agents.mdx)**: 応答を生成し、会話をストリーミングします。
 - **[Memory](/reference/client-js/memory.mdx)**: 会話スレッドとメッセージ履歴を管理します。
 - **[Tools](/reference/client-js/tools.mdx)**: ツールを実行・管理します。
 - **[Workflows](/reference/client-js/workflows.mdx)**: ワークフローをトリガーし、実行状況を追跡します。
-- **[Vectors](/reference/client-js/vectors.mdx)**: セマンティック検索のためにベクトル埋め込みを使用します。
-- **[Logs](/reference/client-js/logs.mdx)**: ログを確認し、システムの挙動をデバッグします。
+- **[Vectors](/reference/client-js/vectors.mdx)**: セマンティック検索のためにベクトル埋め込みを利用します。
+- **[Logs](/reference/client-js/logs.mdx)**: ログを閲覧し、システムの挙動をデバッグします。
 - **[Telemetry](/reference/client-js/telemetry.mdx)**: アプリのパフォーマンスを監視し、アクティビティをトレースします。
 
-## 応答の生成
+## レスポンスの生成
 
-`role` と `content` を含むメッセージオブジェクトの配列を渡して `.generate()` を呼び出します:
+`role` と `content` を含むメッセージオブジェクトの配列を渡して、`.generate()` を呼び出します。
 
 ```typescript showLineNumbers copy
 import { mastraClient } from "lib/mastra-client";
@@ -96,23 +97,24 @@ const testAgent = async () => {
       messages: [
         {
           role: "user",
-          content: "Hello"
+          content: "こんにちは"
         }
       ]
     });
 
     console.log(response.text);
   } catch (error) {
-    return "応答の生成中にエラーが発生しました";
+    return "応答の生成中にエラーが発生しました"
   }
 };
 ```
 
-> 詳細は [.generate()](../../reference/client-js/agents.mdx#generate-response) を参照してください。
+> 詳細は [.generate()](../../reference/client-js/agents.mdx#generate-response) をご覧ください。
+
 
 ## ストリーミング応答
 
-`role` と `content` を含むメッセージオブジェクトの配列でリアルタイム応答を受け取るには、`.stream()` を使用します:
+`role` と `content` を含むメッセージオブジェクトの配列に対して、リアルタイム応答には `.stream()` を使用します：
 
 ```typescript showLineNumbers copy
 import { mastraClient } from "lib/mastra-client";
@@ -125,7 +127,7 @@ const testAgent = async () => {
       messages: [
         {
           role: "user",
-          content: "Hello"
+          content: "こんにちは"
         }
       ]
     });
@@ -136,16 +138,17 @@ const testAgent = async () => {
       }
     });
   } catch (error) {
-    return "応答の生成中にエラーが発生しました";
+    return "応答の生成中にエラーが発生しました"
   }
 };
 ```
 
-> 詳細は [.stream()](../../reference/client-js/agents.mdx#stream-response) を参照してください。
+> 詳細は [.stream()](../../reference/client-js/agents.mdx#stream-response) をご覧ください。
+
 
 ## 設定オプション
 
-`MastraClient` は、リクエストの挙動を制御するために `retries`、`backoffMs`、`headers` などのオプションパラメータを受け取ります。これらのパラメータは、リトライの制御や診断用メタデータの付加に役立ちます。
+`MastraClient` は `retries`、`backoffMs`、`headers` などのオプションパラメータを受け取り、リクエストの動作を制御できます。これらのパラメータは、再試行の挙動を調整したり、診断用のメタデータを含めたりするのに役立ちます。
 
 ```typescript filename="lib/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -161,11 +164,12 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-> さらに詳しい設定オプションは [MastraClient](../../reference/client-js/mastra-client.mdx) を参照してください。
+> さらに多くの設定オプションについては、[MastraClient](../../reference/client-js/mastra-client.mdx) を参照してください。
+
 
 ## リクエストのキャンセルを追加する
 
-`MastraClient` は、標準の Node.js の `AbortSignal` API によるリクエストのキャンセルをサポートします。ユーザーが操作を中断した場合や、古いネットワーク呼び出しを整理する場合など、実行中のリクエストを取り消すのに便利です。
+`MastraClient` は、標準的な Node.js の `AbortSignal` API によるリクエストのキャンセルに対応しています。ユーザーが操作を中止した場合や、古いネットワーク呼び出しを整理する場合など、進行中のリクエストをキャンセルするのに役立ちます。
 
 すべてのリクエストでキャンセルを有効にするには、クライアントのコンストラクターに `AbortSignal` を渡します。
 
@@ -175,14 +179,15 @@ import { MastraClient } from "@mastra/client-js";
 export const controller = new AbortController();
 
 export const mastraClient = new MastraClient({
-  baseUrl: process.env.MASTRA_API_URL || "http://localhost:4111",
+  baseUrl: process.env.MASTRA_API_URL ?? "http://localhost:4111",
   abortSignal: controller.signal
 });
 ```
 
+
 ### `AbortController` の使用
 
-`.abort()` を呼び出すと、そのシグナルに紐づいた進行中のリクエストがキャンセルされます。
+`.abort()` を呼び出すと、そのシグナルに結び付けられた進行中のリクエストがキャンセルされます。
 
 ```typescript {4} showLineNumbers copy
 import { mastraClient, controller } from "lib/mastra-client";
@@ -192,11 +197,12 @@ const handleAbort = () => {
 };
 ```
 
+
 ## クライアントツール
 
-`createTool()` 関数を使って、クライアントサイドのアプリケーション内でツールを直接定義します。`.generate()` または `.stream()` の呼び出しで、`clientTools` パラメータを通じてエージェントに渡します。
+`createTool()` 関数を使って、クライアント側アプリケーション内でツールを直接定義します。`.generate()` や `.stream()` の呼び出し時に、`clientTools` パラメータへ渡します。
 
-これにより、エージェントは DOM 操作、ローカルストレージへのアクセス、その他の Web API などのブラウザ側の機能をトリガーでき、ツールをサーバーではなくユーザーの環境で実行できるようになります。
+これにより、エージェントは DOM 操作、ローカルストレージへのアクセス、その他の Web API などのブラウザ側の機能を起動し、サーバーではなくユーザーの環境でツールを実行できるようになります。
 
 ```typescript {27} showLineNumbers copy
 import { createTool } from '@mastra/client-js';
@@ -208,7 +214,7 @@ const handleClientTool = async () => {
 
     const colorChangeTool = createTool({
       id: "color-change-tool",
-      description: "Changes the HTML background color",
+      description: "HTMLの背景色を変更します",
       inputSchema: z.object({
         color: z.string()
       }),
@@ -224,7 +230,7 @@ const handleClientTool = async () => {
     });
 
     const response = await agent.generate({
-      messages: "Change the background to blue",
+      messages: "背景を青に変更してください",
       clientTools: { colorChangeTool }
     });
 
@@ -235,9 +241,10 @@ const handleClientTool = async () => {
 };
 ```
 
+
 ### クライアントツールのエージェント
 
-これは、上で定義したブラウザベースのクライアントツールと連携し、ユーザーからのリクエストに対して16進カラーコードを返すように構成された、標準的な Mastra の[エージェント](../agents/overview#creating-an-agent)です。
+これは、上で定義したブラウザベースのクライアントツールと連携し、16進数のカラーコードを返すように構成された、標準的な Mastra の[エージェント](../agents/overview#creating-an-agent)です。
 
 ```typescript filename="src/mastra/agents/color-agent" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -245,32 +252,34 @@ import { Agent } from "@mastra/core/agent";
 
 export const colorAgent = new Agent({
   name: "test-agent",
-  instructions: `You are a helpful CSS assistant.
-  You can change the background color of web pages.
-  Respond with a hex reference for the color requested by the user`,
+  instructions: `あなたは有能なCSSアシスタントです。
+  Webページの背景色を変更できます。
+  ユーザーが指定した色を16進数のカラーコード（#RRGGBB）で返答してください`,
   model: openai("gpt-4o-mini")
 });
 ```
 
+
 ## サーバーサイド環境
 
-`MastraClient` は、API ルートやサーバーレス関数、アクションなどのサーバーサイド環境でも使用できます。使い方は概ね同様ですが、クライアントに返すレスポンスを再生成する必要がある場合があります。
+`MastraClient` は、API ルート、サーバーレス関数、アクションなどのサーバーサイド環境でも使用できます。使い方は概ね同じですが、クライアント向けのレスポンスを再構築する必要が生じる場合があります。
 
 ```typescript {8} showLineNumbers
 export async function action() {
   const agent = mastraClient.getAgent("testAgent");
 
   const stream = await agent.stream({
-    messages: [{ role: "user", content: "Hello" }]
+    messages: [{ role: "user", content: "やあ" }]
   });
 
   return new Response(stream.body);
 }
 ```
 
+
 ## ベストプラクティス
 
-1. **エラー処理**: 開発時の各種ケースに対応できるよう、適切な[エラー処理](/reference/client-js/error-handling)を実装します。
-2. **環境変数**: 設定には環境変数を利用します。
+1. **エラーハンドリング**: 開発環境向けに適切な[エラーハンドリング](/reference/client-js/error-handling)を実装します。
+2. **環境変数**: 設定には環境変数を使用します。
 3. **デバッグ**: 必要に応じて詳細な[ログ](/reference/client-js/logs)を有効化します。
-4. **パフォーマンス**: アプリケーションのパフォーマンス、[テレメトリ](/reference/client-js/telemetry)、トレースを監視します。
+4. **パフォーマンス**: アプリケーションのパフォーマンス、[テレメトリー](/reference/client-js/telemetry)、トレースを監視します。

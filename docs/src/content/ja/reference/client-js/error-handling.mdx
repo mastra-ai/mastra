@@ -1,27 +1,23 @@
 ---
-title: Mastraクライアントのエラー処理
-description: Mastra client-js SDKに組み込まれた再試行メカニズムとエラー処理機能について学びます。
+title: Mastra クライアントのエラー処理
+description: Mastra client-js SDK の組み込みリトライ機構とエラー処理機能について学びましょう。
 ---
-
-
 
 # エラー処理
 
-Mastra Client SDKには、組み込みの再試行メカニズムとエラー処理機能が含まれています。
+Mastra Client SDK には、組み込みのリトライ機能とエラー処理機能が備わっています。
 
+## エラー処理
 
-
-## エラーハンドリング
-
-すべてのAPIメソッドは、キャッチして処理できるエラーを投げる可能性があります：
+すべての API メソッドはエラーをスローする可能性があり、捕捉して処理できます。
 
 ```typescript
 try {
   const agent = mastraClient.getAgent("agent-id");
   const response = await agent.generate({
-    messages: [{ role: "user", content: "Hello" }],
+    messages: [{ role: "user", content: "こんにちは" }],
   });
 } catch (error) {
-  console.error("An error occurred:", error.message);
+  console.error("エラーが発生しました:", error.message);
 }
 ```

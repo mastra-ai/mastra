@@ -1,29 +1,32 @@
 ---
 title: "ワークフローストリーミング | ストリーミング | Mastra"
-description: "Mastra におけるワークフローストリーミングの使い方、ワークフロー実行イベントの処理、ステップのストリーミング、エージェントやツールとのワークフロー統合について学びます。"
+description: "Mastra におけるワークフローストリーミングの使い方を学びます。ワークフロー実行イベントのハンドリング、ステップのストリーミング、エージェントやツールとのワークフロー統合などを扱います。"
 ---
 
 import { Callout } from "nextra/components";
 
 
-
 # ワークフローのストリーミング
 
-Mastra のワークフロー・ストリーミングでは、完了を待たずに実行中の増分結果を送信できます。これにより、部分的な進捗、中間状態、または段階的なデータを、ユーザーや上流のエージェント／ワークフローに直接提示できます。
+Mastra のワークフローのストリーミングは、完了を待たずに実行中の段階的な結果を送信できます。これにより、部分的な進捗や中間状態、逐次的なデータを、ユーザーや上流のエージェント／ワークフローに直接提示できます。
 
-ストリームへの書き込み方法は主に2つあります:
+ストリームへの書き込み方法は主に次の2つです:
 
-- **ワークフローステップ内から**: 各ワークフローステップは `writer` 引数を受け取ります。これは、実行の進行に応じて更新をプッシュできる書き込み可能なストリームです。
-- **エージェントのストリームから**: エージェントの `streamVNext` の出力をワークフローステップの writer に直接パイプすることもでき、余計なグルーコードなしでエージェントの応答をワークフローの結果へと容易に連結できます。
+- **ワークフローのステップ内から**: すべてのワークフローのステップは `writer` 引数を受け取ります。これは、実行の進行に合わせて更新をプッシュできる書き込み可能なストリームです。
+- **エージェントのストリームから**: エージェントの `stream` 出力をワークフローのステップの writer に直接パイプし、グルーコードを追加せずにエージェントの応答をワークフローの結果へと簡単に連結できます。
 
-書き込み可能なワークフローストリームとエージェントのストリーミングを組み合わせることで、中間結果がシステム内をどのように流れ、ユーザー体験へ届くかをきめ細かく制御できます。
+書き込み可能なワークフローストリームとエージェントのストリーミングを組み合わせることで、中間結果がシステム内を流れてユーザー体験へ届くまでのプロセスをきめ細かく制御できます。
 
 ### `writer` 引数の使用
 
-`writer` 引数はワークフローステップの `execute` 関数に渡され、アクティブなストリームへカスタムイベント、データ、値を送出するのに使用できます。これにより、実行中でもワークフローステップが中間結果やステータス更新を提供できます。
+<Callout type="warning">
+  `writer` は `streamVNext` を使用している場合にのみ利用できます。
+</Callout>
+
+`writer` 引数はワークフローステップの `execute` 関数に渡され、アクティブなストリームにカスタムイベント、データ、または値を送出するために使用できます。これにより、実行中でもワークフローステップが中間結果や進捗の更新を提供できるようになります。
 
 <Callout type="warning">
-`writer.write(...)` の呼び出しは必ず `await` してください。そうしないとストリームがロックされ、`WritableStream is locked` エラーが発生します。
+  `writer.write(...)` の呼び出しは必ず `await` してください。そうしないとストリームがロックされ、`WritableStream is locked` エラーが発生します。
 </Callout>
 
 ```typescript {5,8,15} showLineNumbers copy
@@ -53,9 +56,10 @@ export const testStep = createStep({
 });
 ```
 
-### ワークフローストリームのペイロードを検査する
 
-ストリームに書き込まれたイベントは、出力されるチャンクに含まれます。これらのチャンクを検査して、イベントタイプ、中間値、ステップ固有のデータなどの任意のカスタムフィールドにアクセスできます。
+### ワークフローのストリームペイロードを確認する
+
+ストリームに書き込まれたイベントは、出力されるチャンクに含まれます。これらのチャンクを確認することで、イベントタイプ、中間値、ステップ固有データなどのカスタムフィールドにアクセスできます。
 
 ```typescript showLineNumbers copy
 const testWorkflow = mastra.getWorkflow("testWorkflow");
@@ -71,13 +75,36 @@ const stream = await run.streamVNext({
 for await (const chunk of stream) {
   console.log(chunk);
 }
+
+if (result!.status === "suspended") {
+  // ワークフローが中断されている場合は、resumeStreamVNextメソッドで再開できます
+  const resumedStream = await run.resumeStreamVNext({
+    resumeData: { value: "resume data" }
+  });
+
+  for await (const chunk of resumedStream) {
+    console.log(chunk);
+  }
+}
 ```
 
 
+### 中断されたワークフロー ストリームの再開
 
-## エージェントを使ったワークフロー
+ワークフロー ストリームが何らかの理由でクローズまたは中断された場合は、`resumeStreamVNext` メソッドで再開できます。これにより、新しい `ReadableStream` が返され、ワークフローのイベントを観察できます。
 
-エージェントの `textStream` をワークフローステップの `writer` にパイプします。これにより部分的な出力がストリーミングされ、Mastra はエージェントの使用状況をワークフロー実行に自動的に集約します。
+```typescript showLineNumbers copy
+const newStream = await run.resumeStreamVNext();
+
+for await (const chunk of newStream) {
+  console.log(chunk);
+}
+```
+
+
+## エージェントを用いたワークフロー
+
+エージェントの `textStream` をワークフローのステップの `writer` にパイプします。これにより部分的な出力がストリーミングされ、Mastra がワークフロー実行におけるエージェントの使用量を自動的に集計します。
 
 ```typescript showLineNumbers copy
 import { createStep } from "@mastra/core/workflows";
@@ -89,7 +116,7 @@ export const testStep = createStep({
     const { city } = inputData
 
     const testAgent = mastra?.getAgent("testAgent");
-    const stream = await testAgent?.streamVNext(`What is the weather in ${city}$?`);
+    const stream = await testAgent?.stream(`${city}の天気はどうですか？`);
 
     await stream!.textStream.pipeTo(writer!);
 

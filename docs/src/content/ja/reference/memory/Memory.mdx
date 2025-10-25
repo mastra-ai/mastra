@@ -1,13 +1,13 @@
 ---
 title: "リファレンス: Memory クラス | Memory | Mastra ドキュメント"
-description: "Mastra の `Memory` クラスに関するドキュメント。会話履歴の管理やスレッド単位でのメッセージ保存を行うための堅牢なシステムを提供します。"
+description: "Mastra の `Memory` クラスに関するドキュメント。会話履歴の管理やスレッドベースのメッセージ保存に対応する堅牢なシステムを提供します。"
 ---
 
 # Memory クラス
 
-`Memory` クラスは、Mastra における会話履歴とスレッド型メッセージ保存を管理するための堅牢なシステムを提供します。これにより、会話の永続保存、セマンティック検索、効率的なメッセージ取得が可能になります。会話履歴にはストレージプロバイダーの設定が必要で、セマンティックリコールを有効にする場合は、ベクターストアとエンベッダーの用意も必要です。
+`Memory` クラスは、Mastra における会話履歴とスレッドベースのメッセージ保存を管理するための堅牢なシステムを提供します。これにより、会話の永続保存、セマンティック検索機能、効率的なメッセージ取得が可能になります。会話履歴にはストレージプロバイダーの設定が必須で、セマンティックリコールを有効にする場合は、ベクターストアとエンベッダーも用意する必要があります。
 
-## 使用例
+## 使い方の例
 
 ```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
@@ -16,7 +16,7 @@ import { openai } from "@ai-sdk/openai";
 
 export const agent = new Agent({
   name: "test-agent",
-  instructions: "You are an agent with memory.",
+  instructions: "あなたは記憶機能を備えたエージェントです。",
   model: openai("gpt-4o"),
   memory: new Memory({
     options: {
@@ -28,28 +28,29 @@ export const agent = new Agent({
 });
 ```
 
-> エージェントで `workingMemory` を有効化するには、メインの Mastra インスタンスにストレージプロバイダーを設定する必要があります。詳しくは [Mastra class](../core/mastra-class.mdx) を参照してください。
+> エージェントで `workingMemory` を有効化するには、メインの Mastra インスタンスでストレージプロバイダーを設定する必要があります。詳しくは [Mastra クラス](../core/mastra-class.mdx) をご覧ください。
 
-## コンストラクターのパラメーター
+
+## コンストラクターのパラメータ
 
 <PropertiesTable
   content={[
     {
       name: "storage",
       type: "MastraStorage",
-      description: "メモリデータを永続化するためのストレージ実装。指定しない場合は `new DefaultStorage({ config: { url: \"file:memory.db\" } })` が既定になります。",
+      description: "メモリデータを永続化するためのストレージ実装。指定しない場合は `new DefaultStorage({ config: { url: \"file:memory.db\" } })` がデフォルトです。",
       isOptional: true,
     },
     {
       name: "vector",
       type: "MastraVector | false",
-      description: "セマンティック検索向けのベクターストア。ベクター機能を無効化するには `false` を指定します。",
+      description: "セマンティック検索のためのベクトルストア。ベクトル処理を無効化するには `false` を指定します。",
       isOptional: true,
     },
     {
       name: "embedder",
       type: "EmbeddingModel<string> | EmbeddingModelV2<string>",
-      description: "ベクトル埋め込み用のエンベッダーインスタンス。セマンティックリコールが有効な場合は必須です。",
+      description: "ベクトル埋め込み用のエンベッダーインスタンス。セマンティックリコールを有効にする場合は必須です。",
       isOptional: true,
     },
     {
@@ -67,35 +68,35 @@ export const agent = new Agent({
   ]}
 />
 
-### オプションパラメータ
+### オプションパラメーター
 
 <PropertiesTable
   content={[
     {
       name: "lastMessages",
       type: "number | false",
-      description: "取得する最新メッセージの数。無効にする場合は false を指定します。",
+      description: "取得する直近のメッセージ数。無効化する場合は false を指定します。",
       isOptional: true,
       defaultValue: "10",
     },
     {
       name: "semanticRecall",
       type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
-      description: "メッセージ履歴に対するセマンティック検索を有効化します。boolean か、設定オプションを持つオブジェクトを指定できます。有効化するには、ベクトルストアとエンベッダーの両方の設定が必要です。",
+      description: "メッセージ履歴に対するセマンティック検索を有効にします。boolean または設定用オブジェクトを指定できます。有効時は vector store と embedder の両方の設定が必要です。topK のデフォルトは 4、messageRange のデフォルトは {before: 1, after: 1} です。",
       isOptional: true,
       defaultValue: "false",
     },
     {
       name: "workingMemory",
       type: "WorkingMemory",
-      description: "ワーキングメモリ機能の設定。`{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` または `{ enabled: boolean }`（無効化）を指定できます。",
+      description: "ワーキングメモリ機能の設定。`{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` または `{ enabled: boolean }`（無効化用）を指定できます。",
       isOptional: true,
       defaultValue: "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
     },
     {
       name: "threads",
       type: "{ generateTitle?: boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> } }",
-      description: "メモリスレッドの作成に関する設定。`generateTitle` は、ユーザーの最初のメッセージからスレッドタイトルを自動生成するかどうかを制御します。boolean か、カスタムの model と instructions を含むオブジェクトを指定できます。",
+      description: "メモリのスレッド作成に関する設定。`generateTitle` はユーザーの最初のメッセージからスレッドタイトルを自動生成するかを制御します。boolean またはカスタムの model と instructions を持つオブジェクトを指定できます。",
       isOptional: true,
       defaultValue: "{ generateTitle: false }",
     },
@@ -109,12 +110,12 @@ export const agent = new Agent({
     {
       name: "memory",
       type: "Memory",
-      description: "指定された構成の新しい Memory インスタンス。",
+      description: "指定した構成を備えた新しい Memory インスタンス。",
     },
   ]}
 />
 
-## 拡張的な使用例
+## 拡張された使用例
 
 ```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
@@ -124,7 +125,7 @@ import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 export const agent = new Agent({
   name: "test-agent",
-  instructions: "You are an agent with memory.",
+  instructions: "あなたはメモリを備えたエージェントです。",
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
@@ -144,16 +145,59 @@ export const agent = new Agent({
         enabled: true
       },
       threads: {
-        generateTitle: true  // 自動タイトル生成を明示的に有効化
+        generateTitle: true
       }
     }
   })
 });
 ```
 
+
+## インデックス設定付きの PostgreSQL
+
+```typescript filename="src/mastra/agents/pg-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { PgStore, PgVector } from "@mastra/pg";
+
+export const agent = new Agent({
+  name: "pg-agent",
+  instructions: "あなたはPostgreSQLメモリが最適化されたエージェントです。",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new PgStore({
+      connectionString: process.env.DATABASE_URL
+    }),
+    vector: new PgVector({
+      connectionString: process.env.DATABASE_URL
+    }),
+    embedder: openai.embedding("text-embedding-3-small"),
+    options: {
+      lastMessages: 20,
+      semanticRecall: {
+        topK: 5,
+        messageRange: 3,
+        scope: 'resource',
+        indexConfig: {
+          type: 'hnsw',              // パフォーマンス向上のためHNSWを使用
+          metric: 'dotproduct',      // OpenAI埋め込みに最適
+          m: 16,                     // 双方向リンク数
+          efConstruction: 64         // 構築時候補リストサイズ
+        }
+      },
+      workingMemory: {
+        enabled: true
+      }
+    }
+  })
+});
+```
+
+
 ### 関連
 
-- [Memory のはじめ方](/docs/memory/overview.mdx)
+- [Memory の始め方](/docs/memory/overview.mdx)
 - [セマンティックリコール](/docs/memory/semantic-recall.mdx)
 - [ワーキングメモリ](/docs/memory/working-memory.mdx)
 - [メモリプロセッサ](/docs/memory/memory-processors.mdx)

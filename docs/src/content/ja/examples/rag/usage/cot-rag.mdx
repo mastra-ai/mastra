@@ -1,46 +1,42 @@
 ---
-title: "例: Chain of Thought プロンプティング | RAG | Mastra ドキュメント"
-description: OpenAI と PGVector を使用し、Mastra で chain-of-thought 推論を用いた RAG システムの実装例。
+title: "例: Chain-of-Thought プロンプティング | RAG | Mastra ドキュメント"
+description: OpenAI と PGVector を用いて、Mastra で Chain-of-Thought 推論を活用する RAG システムを実装する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
+# 連鎖思考プロンプティング
 
-# チェーン・オブ・ソート・プロンプティング
-
-この例では、Mastra、OpenAIの埋め込み、そしてベクトルストレージとしてPGVectorを使用し、チェーン・オブ・ソート推論に重点を置いた検索拡張生成（RAG）システムの実装方法を示します。
-
-
+この例では、Mastra、OpenAI の埋め込み、そしてベクトルストアとしての PGVector を用いて、連鎖思考型の推論に重点を置いた Retrieval-Augmented Generation（RAG）システムの実装方法を示します。
 
 ## 概要
 
-このシステムは、Mastra と OpenAI を用いて chain-of-thought プロンプティングによる RAG を実装しています。主な処理内容は以下の通りです。
+このシステムは、Mastra と OpenAI を用いて、Chain-of-Thought プロンプティングによる RAG を実装しています。主な処理は次のとおりです。
 
-1. 応答生成のために gpt-4o-mini を使った Mastra エージェントをセットアップする
-2. ベクタークエリツールを作成し、ベクターストアとのやり取りを管理する
-3. テキストドキュメントを小さなセグメントに分割する
-4. これらのセグメントに対して埋め込みを作成する
-5. それらを PostgreSQL ベクターデータベースに保存する
-6. ベクタークエリツールを使ってクエリに基づき関連するセグメントを取得する
-7. chain-of-thought 推論を用いてコンテキストに応じた応答を生成する
-
-
+1. 応答生成のために gpt-4o-mini を用いる Mastra エージェントをセットアップ
+2. ベクトルストアとのやり取りを管理するためのベクトルクエリツールを作成
+3. テキストドキュメントを小さなチャンクに分割
+4. これらのチャンクに対して埋め込みを作成
+5. PostgreSQL のベクトルデータベースに保存
+6. ベクトルクエリツールでクエリに基づき関連チャンクを取得
+7. Chain-of-Thought 推論を用いて文脈に即した応答を生成
 
 ## セットアップ
 
-### 環境設定
+### 環境のセットアップ
 
-環境変数を必ず設定してください：
+環境変数が設定されていることを確認してください:
 
 ```bash filename=".env"
-OPENAI_API_KEY=your_openai_api_key_here
-POSTGRES_CONNECTION_STRING=your_connection_string_here
+OPENAI_API_KEY=あなたの_openai_api_key_をここに入力
+POSTGRES_CONNECTION_STRING=あなたの接続文字列をここに入力
 ```
+
 
 ### 依存関係
 
-次に、必要な依存関係をインポートします：
+次に、必要な依存関係をインポートします。
 
 ```typescript copy showLineNumbers filename="index.ts"
 import { openai } from "@ai-sdk/openai";
@@ -52,10 +48,9 @@ import { embedMany } from "ai";
 ```
 
 
-
 ## ベクタークエリツールの作成
 
-@mastra/rag からインポートした createVectorQueryTool を使用すると、ベクターデータベースをクエリできるツールを作成できます。
+@mastra/rag からインポートした createVectorQueryTool を使うと、ベクターデータベースに対してクエリを実行するツールを作成できます。
 
 ```typescript copy showLineNumbers{8} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
@@ -66,35 +61,34 @@ const vectorQueryTool = createVectorQueryTool({
 ```
 
 
+## エージェントの設定
 
-## エージェント設定
-
-Mastraエージェントをチェーン・オブ・ソートプロンプティングの指示で設定します：
+Mastra エージェントを chain-of-thought によるプロンプト指示で設定します：
 
 ```typescript copy showLineNumbers{14} filename="index.ts"
 export const ragAgent = new Agent({
   name: "RAG Agent",
-  instructions: `あなたは、提供されたコンテキストに基づいて質問に答える親切なアシスタントです。
-各回答について、以下の手順に従ってください：
+  instructions: `あなたは、提供されたコンテキストに基づいて質問に回答する有用なアシスタントです。
+各回答では、次の手順に従ってください:
 
-1. まず、取得したコンテキストチャンクを注意深く分析し、重要な情報を特定します。
-2. 取得した情報がクエリとどのように関連しているか、思考プロセスを分解します。
-3. 取得したチャンクから異なる部分をどのようにつなげているか説明します。
-4. 取得したコンテキストの証拠のみに基づいて結論を導きます。
-5. 取得したチャンクに十分な情報が含まれていない場合、不足している内容を明確に述べてください。
+1. まず、取得したコンテキストのチャンクを注意深く分析し、重要な情報を特定する。
+2. 取得情報が問い合わせにどう関係するかについて、考え方のプロセスを分解する。
+3. 取得したチャンクの異なる要素同士をどう結び付けているかを説明する。
+4. 取得コンテキスト中の証拠のみに基づいて結論を導く。
+5. 取得したチャンクに十分な情報がない場合は、何が不足しているかを明確に述べる。
 
-回答のフォーマットは以下の通りです：
-THOUGHT PROCESS:
-- Step 1: [取得したチャンクの初期分析]
-- Step 2: [チャンク間のつながり]
-- Step 3: [チャンクに基づく推論]
+回答の形式:
+思考プロセス:
+- ステップ1: [取得したチャンクの初期分析]
+- ステップ2: [チャンク間の関連付け]
+- ステップ3: [チャンクに基づく推論]
 
-FINAL ANSWER:
+最終回答:
 [取得したコンテキストに基づく簡潔な回答]
 
-重要: 質問に答えるよう求められた場合は、必ずツールで提供されたコンテキストのみに基づいて回答してください。
-もしコンテキストに質問に完全に答えるための十分な情報が含まれていない場合は、その旨を明確に述べてください。
-注意: 取得した情報をどのように使って結論に至ったかを説明してください。
+重要: 質問に答える際は、ツールで提供されたコンテキストのみに基づいて回答してください。
+コンテキストに質問へ完全に回答するのに十分な情報が含まれていない場合は、その旨を明確に述べてください。
+注意: 結論に至るまでに、取得情報をどのように活用したかを説明してください。
 `,
   model: openai("gpt-4o-mini"),
   tools: { vectorQueryTool },
@@ -102,10 +96,9 @@ FINAL ANSWER:
 ```
 
 
-
 ## PgVector と Mastra のインスタンス化
 
-すべてのコンポーネントを使って PgVector と Mastra をインスタンス化します：
+すべてのコンポーネントを含めて、PgVector と Mastra をインスタンス化します。
 
 ```typescript copy showLineNumbers{36} filename="index.ts"
 const pgVector = new PgVector({
@@ -120,14 +113,13 @@ const agent = mastra.getAgent("ragAgent");
 ```
 
 
-
 ## ドキュメント処理
 
 ドキュメントを作成し、チャンクに分割して処理します：
 
 ```typescript copy showLineNumbers{44} filename="index.ts"
 const doc = MDocument.fromText(
-  `The Impact of Climate Change on Global Agriculture...`,
+  `気候変動が世界の農業に及ぼす影響...`,
 );
 
 const chunks = await doc.chunk({
@@ -139,10 +131,9 @@ const chunks = await doc.chunk({
 ```
 
 
-
 ## 埋め込みの作成と保存
 
-チャンクの埋め込みを生成し、ベクターデータベースに保存します。
+チャンクの埋め込みを生成し、ベクター データベースに保存します。
 
 ```typescript copy showLineNumbers{55} filename="index.ts"
 const { embeddings } = await embedMany({
@@ -163,41 +154,45 @@ await vectorStore.upsert({
 ```
 
 
+## Chain-of-Thought クエリ
 
-## チェーン・オブ・ソート クエリ
-
-エージェントがどのように推論を分解するか、さまざまなクエリを試してみましょう。
+エージェントがどのように思考過程を分解するかを確認するため、さまざまなクエリを試してみてください。
 
 ```typescript copy showLineNumbers{83} filename="index.ts"
 const answerOne = await agent.generate(
-  "What are the main adaptation strategies for farmers?",
+  "農業者の主な適応戦略は何ですか？",
 );
-console.log("\nQuery:", "What are the main adaptation strategies for farmers?");
-console.log("Response:", answerOne.text);
+console.log("\nクエリ:", "農業者の主な適応戦略は何ですか？");
+console.log("回答:", answerOne.text);
 
 const answerTwo = await agent.generate(
-  "Analyze how temperature affects crop yields.",
+  "気温が作物収量に与える影響を分析してください。",
 );
-console.log("\nQuery:", "Analyze how temperature affects crop yields.");
-console.log("Response:", answerTwo.text);
+console.log("\nクエリ:", "気温が作物収量に与える影響を分析してください。");
+console.log("回答:", answerTwo.text);
 
 const answerThree = await agent.generate(
-  "What connections can you draw between climate change and food security?",
+  "気候変動と食料安全保障にはどのような関係がありますか？",
 );
 console.log(
-  "\nQuery:",
-  "What connections can you draw between climate change and food security?",
+  "\nクエリ:",
+  "気候変動と食料安全保障にはどのような関係がありますか？",
 );
-console.log("Response:", answerThree.text);
+console.log("回答:", answerThree.text);
 ```
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-rag"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/cot-rag"
+}
 />

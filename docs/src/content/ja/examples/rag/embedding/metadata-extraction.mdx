@@ -1,27 +1,22 @@
 ---
 title: "例: メタデータ抽出 | 検索 | RAG | Mastra ドキュメント"
-description: Mastra でドキュメントからメタデータを抽出し、強化されたドキュメント処理と検索に活用する例。
+description: Mastra でドキュメントからメタデータを抽出・活用し、ドキュメント処理と検索を強化する方法の例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
-
 # メタデータ抽出
 
-この例では、Mastra のドキュメント処理機能を使ってドキュメントからメタデータを抽出し、活用する方法を示します。
-抽出されたメタデータは、ドキュメントの整理、フィルタリング、RAG システムでの高度な検索に利用できます。
-
-
+この例では、Mastra のドキュメント処理機能を使って、ドキュメントからメタデータを抽出し、活用する方法を紹介します。
+抽出したメタデータは、ドキュメントの整理やフィルタリング、RAG システムにおける検索の高度化に活用できます。
 
 ## 概要
 
-このシステムは、2つの方法でメタデータ抽出を実演します。
+このシステムは、次の2つの方法でメタデータ抽出を示します。
 
 1. ドキュメントからの直接的なメタデータ抽出
-2. チャンク分割とメタデータ抽出
-
-
+2. チャンク分割とメタデータ抽出の併用
 
 ## セットアップ
 
@@ -34,100 +29,102 @@ import { MDocument } from "@mastra/rag";
 ```
 
 
+## ドキュメントの作成
 
-## ドキュメント作成
-
-テキストコンテンツからドキュメントを作成します：
+テキストコンテンツからドキュメントを作成する:
 
 ```typescript copy showLineNumbers{3} filename="src/index.ts"
-const doc = MDocument.fromText(`Title: The Benefits of Regular Exercise
+const doc = MDocument.fromText(`Title: 定期的な運動の利点
 
-Regular exercise has numerous health benefits. It improves cardiovascular health, 
-strengthens muscles, and boosts mental wellbeing.
+定期的な運動には多くの健康効果があります。心血管の健康を高め、 
+筋力を強化し、メンタルの健やかさも向上させます。
 
-Key Benefits:
-• Reduces stress and anxiety
-• Improves sleep quality
-• Helps maintain healthy weight
-• Increases energy levels
+主な効果:
+• ストレスや不安の軽減
+• 睡眠の質の向上
+• 健康的な体重の維持に役立つ
+• 活力（エネルギー）の向上
 
-For optimal results, experts recommend at least 150 minutes of moderate exercise 
-per week.`);
+最良の結果のために、専門家は週に少なくとも150分の中強度の運動を 
+推奨しています。`);
 ```
 
 
+## 1. メタデータの直接抽出
 
-## 1. 直接メタデータ抽出
-
-ドキュメントから直接メタデータを抽出します：
+ドキュメントからメタデータを直接抽出します。
 
 ```typescript copy showLineNumbers{17} filename="src/index.ts"
-// Configure metadata extraction options
+// メタデータ抽出オプションを設定
 await doc.extractMetadata({
-  keywords: true, // Extract important keywords
-  summary: true, // Generate a concise summary
+  keywords: true, // 重要キーワードを抽出
+  summary: true, // 簡潔な要約を生成
 });
 
-// Retrieve the extracted metadata
+// 抽出したメタデータを取得
 const meta = doc.getMetadata();
-console.log("Extracted Metadata:", meta);
+console.log("抽出したメタデータ:", meta);
 
-// Example Output:
-// Extracted Metadata: {
+// 出力例:
+// 抽出したメタデータ: {
 //   keywords: [
-//     'exercise',
-//     'health benefits',
-//     'cardiovascular health',
-//     'mental wellbeing',
-//     'stress reduction',
-//     'sleep quality'
+//     '運動',
+//     '健康上の利点',
+//     '心血管の健康',
+//     'メンタルウェルビーイング',
+//     'ストレス軽減',
+//     '睡眠の質'
 //   ],
-//   summary: 'Regular exercise provides multiple health benefits including improved cardiovascular health, muscle strength, and mental wellbeing. Key benefits include stress reduction, better sleep, weight management, and increased energy. Recommended exercise duration is 150 minutes per week.'
+//   summary: '定期的な運動は、心血管の健康、筋力、メンタルウェルビーイングの向上など、さまざまな健康効果をもたらします。主な効果には、ストレス軽減、睡眠の質の向上、体重管理、エネルギー増加が含まれます。推奨される運動時間は週150分です。'
 // }
 ```
-
 
 
 ## 2. メタデータ付きチャンク化
 
-ドキュメントのチャンク化とメタデータ抽出を組み合わせます：
+ドキュメントのチャンク化をメタデータ抽出と組み合わせます：
 
 ```typescript copy showLineNumbers{40} filename="src/index.ts"
-// Configure chunking with metadata extraction
+// メタデータ抽出を有効にしたチャンク化を設定
 await doc.chunk({
-  strategy: "recursive", // Use recursive chunking strategy
-  size: 200, // Maximum chunk size
+  strategy: "recursive", // 再帰的チャンク化戦略を使用
+  size: 200, // チャンクの最大サイズ
   extract: {
-    keywords: true, // Extract keywords per chunk
-    summary: true, // Generate summary per chunk
+    keywords: true, // チャンクごとのキーワード抽出
+    summary: true, // チャンクごとの要約生成
   },
 });
 
-// Get metadata from chunks
+// チャンクのメタデータを取得
 const metaTwo = doc.getMetadata();
 console.log("Chunk Metadata:", metaTwo);
 
-// Example Output:
+// 出力例:
 // Chunk Metadata: {
 //   keywords: [
-//     'exercise',
-//     'health benefits',
-//     'cardiovascular health',
-//     'mental wellbeing',
-//     'stress reduction',
-//     'sleep quality'
+//     '運動',
+//     '健康効果',
+//     '心血管の健康',
+//     '心理的ウェルビーイング',
+//     'ストレス軽減',
+//     '睡眠の質'
 //   ],
-//   summary: 'Regular exercise provides multiple health benefits including improved cardiovascular health, muscle strength, and mental wellbeing. Key benefits include stress reduction, better sleep, weight management, and increased energy. Recommended exercise duration is 150 minutes per week.'
+//   summary: '定期的な運動は、心血管の健康、筋力、心理的ウェルビーイングの向上など、さまざまな健康効果をもたらします。主な効果には、ストレス軽減、睡眠の質の向上、体重管理、エネルギーの増加が含まれます。推奨される運動時間は週150分です。'
 // }
 ```
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/metadata-extraction"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/metadata-extraction"
+}
 />

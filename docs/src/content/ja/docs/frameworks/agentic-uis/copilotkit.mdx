@@ -1,32 +1,29 @@
 ---
-title: "CopilotKitとの使用"
-description: "MastraがCopilotKitのAGUIライブラリをどのように活用し、ユーザーエクスペリエンスの構築にどのように活用できるかを学ぶ"
+title: "CopilotKit と一緒に使う"
+description: "Mastra が CopilotKit の AGUI ライブラリをどのように活用しているか、またそれを使ってユーザー体験を構築する方法を学びましょう"
 ---
 
 import { Tabs, Steps } from "nextra/components";
 import Image from "next/image";
 
 
+# Mastra と CopilotKit を統合する
 
-# CopilotKitをMastraと統合する
+CopilotKit は、アプリケーションにカスタマイズ可能な AI コパイロットを手早く組み込むための React コンポーネントを提供します。Mastra と組み合わせることで、双方向の状態同期やインタラクティブな UI を備えた高度な AI アプリを構築できます。
 
-CopilotKitは、カスタマイズ可能なAIコパイロットをアプリケーションに素早く統合するためのReactコンポーネントを提供します。Mastraと組み合わせることで、双方向の状態同期とインタラクティブなUIを特徴とする洗練されたAIアプリを構築できます。
+CopilotKit のコンセプト、コンポーネント、発展的な活用パターンについては、[CopilotKit ドキュメント](https://docs.copilotkit.ai/)をご覧ください。
 
-CopilotKitの概念、コンポーネント、高度な使用パターンについて詳しく学ぶには、[CopilotKitドキュメント](https://docs.copilotkit.ai/)をご覧ください。
+このガイドでは、次の 2 つの統合方法を紹介します。
 
-このガイドでは、2つの異なる統合アプローチを紹介します：
-
-1. 別のReactフロントエンドを持つMastraサーバーにCopilotKitを統合する
-2. Next.jsアプリにCopilotKitを統合する
-
-
+1. Mastra サーバーに CopilotKit を統合し、フロントエンドは別の React として構築する
+2. Next.js アプリに CopilotKit を統合する
 
 <Tabs items={["Mastra Server", "Next.js" ]}>
   <Tabs.Tab>
     <Steps>
-      ## React依存関係をインストール
+      ## React の依存関係をインストール
 
-      Reactフロントエンドで、必要なCopilotKitパッケージをインストールします：
+      React フロントエンドで、必要な CopilotKit パッケージをインストールします:
 
       <Tabs items={["npm", "yarn", "pnpm"]}>
         <Tabs.Tab>
@@ -48,11 +45,11 @@ CopilotKitの概念、コンポーネント、高度な使用パターンにつ�
         </Tabs.Tab>
       </Tabs>
 
-      ## CopilotKitコンポーネントを作成
+      ## CopilotKit コンポーネントを作成
 
-      Reactフロントエンドでコンポーネントを作成します：
+      React フロントエンドに CopilotKit コンポーネントを作成します:
 
-      ```tsx filename="components/copilotkit-component.tsx" showLineNumbers copy
+      ```tsx filename="components/copilotkit-component.tsx" copy
       import { CopilotChat } from "@copilotkit/react-ui";
       import { CopilotKit } from "@copilotkit/react-core";
       import "@copilotkit/react-ui/styles.css";
@@ -76,9 +73,9 @@ CopilotKitの概念、コンポーネント、高度な使用パターンにつ�
 
       ## 依存関係をインストール
 
-      まだMastraサーバーをセットアップしていない場合は、[はじめに](/docs/getting-started/installation)ガイドに従って新しいMastraプロジェクトをセットアップしてください。
+      まだ Mastra サーバーをセットアップしていない場合は、[クイックスタートガイド](/docs/getting-started/installation)に従って新しい Mastra プロジェクトを作成してください。
 
-      MastraサーバーでCopilotKit統合用の追加パッケージをインストールします：
+      Mastra サーバー側で、CopilotKit 連携用の追加パッケージをインストールします:
 
       <Tabs items={["npm", "yarn", "pnpm"]}>
         <Tabs.Tab>
@@ -100,13 +97,13 @@ CopilotKitの概念、コンポーネント、高度な使用パターンにつ�
         </Tabs.Tab>
       </Tabs>
 
-      ## Mastraサーバーを設定
+      ## Mastra サーバーを構成
 
-      CopilotKitのランタイムエンドポイントを含むようにMastraインスタンスを設定します：
+      CopilotKit のランタイムエンドポイントを含めるように Mastra インスタンスを構成します:
 
-      ```typescript filename="src/mastra/index.ts" showLineNumbers copy {5-8,12-28}
+      ```typescript filename="src/mastra/index.ts" copy {2,5-8,12-28}
       import { Mastra } from "@mastra/core/mastra";
-      import { registerCopilotKit } from "@ag-ui/mastra";
+      import { registerCopilotKit } from "@ag-ui/mastra/copilotkit";
       import { weatherAgent } from "./agents/weather-agent";
 
       type WeatherRuntimeContext = {
@@ -136,11 +133,11 @@ CopilotKitの概念、コンポーネント、高度な使用パターンにつ�
       });
       ```
 
-      ## ReactアプリでのUsage
+      ## React アプリでの使用
 
-      MastraサーバーのURLを使用してReactアプリでコンポーネントを使用します：
+      Mastra サーバーの URL を指定して、React アプリでこのコンポーネントを使用します:
 
-      ```tsx filename="App.tsx" showLineNumbers copy {5}
+      ```tsx filename="App.tsx" copy {5}
       import { CopilotKitComponent } from "./components/copilotkit-component";
 
       function App() {
@@ -151,6 +148,8 @@ CopilotKitの概念、コンポーネント、高度な使用パターンにつ�
 
       export default App;
       ```
+
+      これで、Mastra サーバーとフロントエンドの両方を起動してください。
     </Steps>
   </Tabs.Tab>
 
@@ -158,7 +157,7 @@ CopilotKitの概念、コンポーネント、高度な使用パターンにつ�
     <Steps>
       ## 依存関係のインストール
 
-      Next.jsアプリで、必要なパッケージをインストールします：
+      Next.jsアプリに、必要なパッケージをインストールします:
 
       <Tabs items={["npm", "yarn", "pnpm"]}>
         <Tabs.Tab>
@@ -180,11 +179,11 @@ CopilotKitの概念、コンポーネント、高度な使用パターンにつ�
         </Tabs.Tab>
       </Tabs>
 
-      ## CopilotKitコンポーネントを作成する \[#full-stack-nextjs-create-copilotkit-component]
+      ## CopilotKitコンポーネントの作成 [#full-stack-nextjs-create-copilotkit-component]
 
-      CopilotKitコンポーネントを作成します：
+      CopilotKitコンポーネントを作成する:
 
-      ```tsx filename="components/copilotkit-component.tsx" showLineNumbers copy
+      ```tsx filename="components/copilotkit-component.tsx" copy
       'use client';
       import { CopilotChat } from "@copilotkit/react-ui";
       import { CopilotKit } from "@copilotkit/react-core";
@@ -198,8 +197,8 @@ CopilotKitの概念、コンポーネント、高度な使用パターンにつ�
           >
             <CopilotChat
               labels={{
-                title: "Your Assistant",
-                initial: "Hi! 👋 How can I assist you today?",
+                title: "アシスタント",
+                initial: "こんにちは!👋 今日はどうされましたか?",
               }}
             />
           </CopilotKit>
@@ -207,18 +206,18 @@ CopilotKitの概念、コンポーネント、高度な使用パターンにつ�
       }
       ```
 
-      ## API ルートの作成
+      ## APIルートを作成する
 
-      Next.js アプリケーションでMastraを統合する方法によって決まる、API ルートの2つのアプローチがあります。
+      Next.jsアプリケーションへのMastraの統合方法に応じて、APIルートには2つのアプローチがあります。
 
-      1. アプリにMastraのインスタンスが統合されたフルスタックNext.jsアプリの場合
-      2. 別のMastraサーバーとMastra Client SDKを使用するNext.jsアプリの場合
+      1. アプリに Mastra のインスタンスが統合されたフルスタックの Next.js アプリ向け。
+      2. 別個の Mastra サーバーと Mastra Client SDK を利用する Next.js アプリの場合。
 
-      <Tabs items={["Mastraインスタンスを使用", "Mastra Client SDKを使用"]}>
+      <Tabs items={["With a Mastra instance", "With the Mastra Client SDK"]}>
         <Tabs.Tab>
-          ローカルのMastraエージェントに接続するAPIルートを作成します。
+          ローカルの Mastra エージェントに接続する API ルートを作成します。
 
-          ```typescript filename="app/api/copilotkit/route.ts" showLineNumbers copy {1-7,11-26}
+          ```typescript filename="app/api/copilotkit/route.ts" copy {1-7,11-26}
           import { mastra } from "../../mastra";
           import {
             CopilotRuntime,
@@ -250,9 +249,9 @@ CopilotKitの概念、コンポーネント、高度な使用パターンにつ�
         </Tabs.Tab>
 
         <Tabs.Tab>
-          ## Mastra Client SDKのインストール
+          ## Mastra Client SDK をインストール
 
-          Mastra Client SDKをインストールします。
+          Mastra Client SDK をインストールします。
 
           <Tabs items={["npm", "yarn", "pnpm"]}>
             <Tabs.Tab>
@@ -274,9 +273,9 @@ CopilotKitの概念、コンポーネント、高度な使用パターンにつ�
             </Tabs.Tab>
           </Tabs>
 
-          リモートのMastraエージェントに接続するAPIルートを作成します：
+          リモートの Mastra エージェントに接続する API ルートを作成します。
 
-          ```typescript filename="app/api/copilotkit/route.ts" showLineNumbers copy {1-7,12-26}
+          ```typescript filename="app/api/copilotkit/route.ts" copy {1-7,12-26}
           import { MastraClient } from "@mastra/client-js";
           import {
             CopilotRuntime,
@@ -310,9 +309,9 @@ CopilotKitの概念、コンポーネント、高度な使用パターンにつ�
 
       ## コンポーネントを使用する
 
-      ローカルAPIエンドポイントでコンポーネントを使用します：
+      ローカルAPIエンドポイントでコンポーネントを使用する:
 
-      ```tsx filename="App.tsx" showLineNumbers copy {5}
+      ```tsx filename="App.tsx" copy {5}
       import { CopilotKitComponent } from "./components/copilotkit-component";
 
       function App() {
@@ -327,25 +326,20 @@ CopilotKitの概念、コンポーネント、高度な使用パターンにつ�
   </Tabs.Tab>
 </Tabs>
 
-
-
-
-未来の構築を始めましょう！
+未来を築き始めよう！
 
 <br />
 
 <Image
   className="rounded-lg"
   src="/image/copilotkit/cpkoutput.jpg"
-  alt="CopilotKit output"
+  alt="CopilotKitの出力"
   width={700}
   height={700}
 />
 
-
-
 ## 次のステップ
 
-- [CopilotKit Documentation](https://docs.copilotkit.ai) - 完全なCopilotKitリファレンス
-- [React Hooks with CopilotKit](https://docs.copilotkit.ai/reference/hooks/useCoAgent) - 高度なReact統合パターン
-- [Next.js Integration with Mastra](/docs/frameworks/web-frameworks/next-js) - フルスタックNext.jsセットアップガイド
+- [CopilotKit Documentation](https://docs.copilotkit.ai) - CopilotKit の包括的なリファレンス
+- [React Hooks with CopilotKit](https://docs.copilotkit.ai/reference/hooks/useCoAgent) - React の高度な統合パターン
+- [Next.js Integration with Mastra](/docs/frameworks/web-frameworks/next-js) - フルスタックの Next.js セットアップガイド

@@ -1,21 +1,15 @@
 ---
-title: "リファレンス: Hallucination | Scorers | Mastra Docs"
-description: Mastraにおけるハルシネーションスコアラーのドキュメント。提供されたコンテキストとの矛盾を特定することで、LLM出力の事実的正確性を評価します。
+title: "リファレンス: Hallucination | Scorers | Mastra ドキュメント"
+description: 提供されたコンテキストとの矛盾を特定し、LLM の出力の事実的な正確性を評価する Mastra の Hallucination Scorer のドキュメント。
 ---
 
+# ハルシネーションスコアラー
 
+`createHallucinationScorer()` 関数は、提供されたコンテキストと出力を照合し、LLM が事実に基づく情報を生成しているかを評価します。このスコアラーは、コンテキストと出力の間の直接的な矛盾を特定することで、ハルシネーションを測定します。
 
-# Hallucination Scorer
+## パラメーター
 
-`createHallucinationScorer()`関数は、LLMの出力を提供されたコンテキストと比較することで、LLMが事実的に正しい情報を生成するかどうかを評価します。このスコアラーは、コンテキストと出力の間の直接的な矛盾を特定することで幻覚を測定します。
-
-使用例については、[Hallucination Examples](/examples/scorers/hallucination)を参照してください。
-
-
-
-## Parameters
-
-`createHallucinationScorer()`関数は、以下のプロパティを持つ単一のオプションオブジェクトを受け取ります：
+`createHallucinationScorer()` 関数は、次のプロパティを持つ単一のオプションオブジェクトを受け取ります：
 
 <PropertiesTable
   content={[
@@ -23,21 +17,19 @@ description: Mastraにおけるハルシネーションスコアラーのドキ�
       name: "model",
       type: "LanguageModel",
       required: true,
-      description: "幻覚を評価するために使用されるモデルの設定。",
+      description: "幻覚（hallucination）を評価するために用いるモデルの設定。",
     },
     {
       name: "scale",
       type: "number",
       required: false,
       defaultValue: "1",
-      description: "最大スコア値。",
+      description: "スコアの最大値。",
     },
   ]}
 />
 
-この関数はMastraScorerクラスのインスタンスを返します。`.run()`メソッドは他のスコアラーと同じ入力を受け取りますが（[MastraScorerリファレンス](./mastra-scorer)を参照）、戻り値には以下に記載されているLLM固有のフィールドが含まれます。
-
-
+この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドは他のスコアラーと同じ入力を受け取ります（[MastraScorer リファレンス](./mastra-scorer)を参照）が、返り値には以下に記載の LLM 固有のフィールドが含まれます。
 
 ## .run() の戻り値
 
@@ -46,7 +38,7 @@ description: Mastraにおけるハルシネーションスコアラーのドキ�
     {
       name: "runId",
       type: "string",
-      description: "実行のID（任意）。",
+      description: "実行ID（任意）。",
     },
     {
       name: "preprocessStepResult",
@@ -56,85 +48,202 @@ description: Mastraにおけるハルシネーションスコアラーのドキ�
     {
       name: "preprocessPrompt",
       type: "string",
-      description: "前処理ステップでLLMに送信されたプロンプト（任意）。",
+      description: "preprocess ステップで LLM に送信されたプロンプト（任意）。",
     },
     {
       name: "analyzeStepResult",
       type: "object",
-      description: "判定結果を含むオブジェクト: { verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }> }",
+      description: "判定を含むオブジェクト: { verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }> }",
     },
     {
       name: "analyzePrompt",
       type: "string",
-      description: "分析ステップでLLMに送信されたプロンプト（任意）。",
+      description: "analyze ステップで LLM に送信されたプロンプト（任意）。",
     },
     {
       name: "score",
       type: "number",
-      description: "ハルシネーションスコア（0からスケール、デフォルトは0-1）。",
+      description: "ハルシネーション・スコア（0 からのスケール、既定は 0–1）。",
     },
     {
       name: "reason",
       type: "string",
-      description: "スコアと特定された矛盾の詳細な説明。",
+      description: "スコアおよび特定された矛盾の詳細な説明。",
     },
     {
       name: "generateReasonPrompt",
       type: "string",
-      description: "理由生成ステップでLLMに送信されたプロンプト（任意）。",
+      description: "generateReason ステップで LLM に送信されたプロンプト（任意）。",
     },
   ]}
 />
 
+## スコアリングの詳細
 
-
-## スコアリング詳細
-
-スコアラーは矛盾検出とサポートされていない主張の分析を通じて幻覚を評価します。
+評価者は、矛盾の検出と根拠のない主張の分析を通じて、ハルシネーションを評価します。
 
 ### スコアリングプロセス
 
-1. 事実的コンテンツを分析：
-   - コンテキストから文を抽出
-   - 数値と日付を特定
-   - 文の関係をマッピング
-2. 幻覚についてアウトプットを分析：
-   - コンテキストの文と比較
-   - 直接的な矛盾を幻覚としてマーク
-   - サポートされていない主張を幻覚として特定
+1. 事実内容を分析:
+   - コンテキストから記述（ステートメント）を抽出
+   - 数値や日付を特定
+   - 記述間の関係をマッピング
+2. 出力のハルシネーションを分析:
+   - コンテキスト上の記述と照合
+   - 直接の矛盾をハルシネーションとしてマーク
+   - 裏付けのない主張をハルシネーションとして特定
    - 数値の正確性を評価
-   - 近似のコンテキストを考慮
-3. 幻覚スコアを計算：
-   - 幻覚文（矛盾とサポートされていない主張）をカウント
-   - 総文数で除算
+   - 近似の扱い（前提）を考慮
+3. ハルシネーション・スコアを算出:
+   - ハルシネーションに該当する記述（矛盾・根拠のない主張）をカウント
+   - 総記述数で割る
    - 設定された範囲にスケール
 
-最終スコア：`(hallucinated_statements / total_statements) * scale`
+最終スコア: `(hallucinated_statements / total_statements) * scale`
 
 ### 重要な考慮事項
 
-- コンテキストに存在しない主張は幻覚として扱われます
-- 主観的な主張は明示的にサポートされない限り幻覚です
-- コンテキスト内の事実に関する推測的言語（「might」、「possibly」）は許可されます
-- コンテキストにない事実に関する推測的言語は幻覚として扱われます
-- 空のアウトプットは幻覚ゼロとなります
-- 数値評価では以下を考慮します：
-  - スケールに適した精度
-  - コンテキストでの近似
-  - 明示的な精度指標
+- コンテキストにない主張はハルシネーションとして扱う
+- 主観的な主張は、明示的な裏付けがない限りハルシネーションとみなす
+- コンテキスト内の事実についての推測的な表現（"might"、"possibly"）は許容される
+- コンテキスト外の事実についての推測的な表現はハルシネーションとして扱う
+- 出力が空の場合、ハルシネーションはゼロとなる
+- 数値評価では次を考慮する:
+  - スケールに見合った精度
+  - 文脈に基づく近似
+  - 明示的な精度の指標
 
-### スコア解釈
+### スコアの解釈
 
-（0からスケール、デフォルト0-1）
+ハルシネーション・スコアは 0 から 1 の範囲です。
 
-- 1.0：完全な幻覚 - すべてのコンテキスト文と矛盾
-- 0.75：高い幻覚 - コンテキスト文の75%と矛盾
-- 0.5：中程度の幻覚 - コンテキスト文の半分と矛盾
-- 0.25：低い幻覚 - コンテキスト文の25%と矛盾
-- 0.0：幻覚なし - アウトプットはすべてのコンテキスト文と一致
+- **0.0**: ハルシネーションなし — すべての記述がコンテキストと一致。
+- **0.3–0.4**: 低いハルシネーション — いくつか矛盾がある。
+- **0.5–0.6**: 中程度のハルシネーション — 複数の矛盾がある。
+- **0.7–0.8**: 高いハルシネーション — 多くの矛盾がある。
+- **0.9–1.0**: 完全なハルシネーション — ほとんど、またはすべての記述がコンテキストと矛盾。
 
-**注意：** スコアは幻覚の程度を表します - 低いスコアは提供されたコンテキストとのより良い事実的一致を示します
+**注:** このスコアはハルシネーションの程度を示します。スコアが低いほど、与えられたコンテキストとの事実整合性が高いことを意味します。
 
+## 例
+
+### 幻覚なしの例
+
+この例では、応答は提供されたコンテキストと完全に整合しています。すべての主張は事実に基づいて正確で、元の資料によって直接裏づけられているため、ハルシネーションスコアは低くなります。
+
+```typescript filename="src/example-no-hallucination.ts" showLineNumbers copy
+import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
+  context: [
+    "iPhoneは2007年に初めて発売されました。",
+    "Steve JobsがMacworldで発表しました。",
+    "初代モデルは3.5インチの画面を搭載していました。"
+  ]
+});
+
+const query = "初代iPhoneはいつ発売されましたか?";
+const response = "iPhoneは2007年に初めて発売され、Steve JobsがMacworldで発表しました。初代iPhoneは3.5インチの画面を搭載していました。";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+
+#### 幻覚出力なし
+
+矛盾がないため、応答のスコアは0となります。すべての記述は文脈と整合しており、新たな情報や捏造された情報は含まれていません。
+
+```typescript
+{
+  score: 0,
+  reason: 'スコアが0なのは、コンテキストのステートメントがいずれも出力と矛盾していないためです。'
+}
+```
+
+
+### 混合型ハルシネーションの例
+
+この例では、応答に正確な主張と不正確な主張が混在しています。いくつかの詳細は文脈と一致している一方で、誇張された数値や誤った位置情報など、文脈と真っ向から矛盾するものもあります。こうした矛盾により、ハルシネーションスコアが高くなります。
+
+```typescript filename="src/example-mixed-hallucination.ts" showLineNumbers copy
+import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
+  context: [
+    "最初のスター・ウォーズ映画は1977年に公開されました。",
+    "ジョージ・ルーカスが監督しました。",
+    "この映画は世界中で7億7500万ドルを稼ぎました。",
+    "この映画はチュニジアとイングランドで撮影されました。"
+  ]
+});
+
+const query = "最初のスター・ウォーズ映画について教えてください。";
+const response = "最初のスター・ウォーズ映画は1977年に公開され、ジョージ・ルーカスが監督しました。興行収入は10億ドルを超え、カリフォルニアで完全に撮影されました。";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+
+#### 混在型ハルシネーションの出力
+
+Scorer は、応答の一部が文脈と矛盾しているため、中程度のスコアを付与します。正しい事実も含まれている一方で、不正確または捏造された内容もあり、全体としての信頼性が損なわれます。
+
+```typescript
+{
+  score: 0.5,
+  reason: 'スコアが0.5である理由は、出力の4つの記述のうち2つがコンテキストの主張と矛盾しており、正確な情報と不正確な情報が均衡していることを示しているためです。'
+}
+```
+
+
+### 完全な幻覚の例
+
+この例では、回答が文脈中のあらゆる重要な事実と矛盾しています。どの主張も検証できず、提示された詳細はすべて事実と異なります。
+
+```typescript filename="src/example-complete-hallucination.ts" showLineNumbers copy
+import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
+  context: [
+    "ライト兄弟は1903年に初飛行を行った。",
+    "飛行時間は12秒だった。",
+    "飛行距離は120フィートだった。"
+  ]
+});
+
+const query = "ライト兄弟が初めて飛行したのはいつですか?";
+const response = "ライト兄弟は1908年に歴史的な初飛行を達成しました。飛行時間は約2分で、距離はほぼ1マイルでした。";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+
+```
+
+
+#### 完全な幻覚出力
+
+Scorer は、回答中のあらゆる記述が文脈と矛盾しているため、スコアを1と付与します。詳細は全体的に捏造されているか、不正確です。
+
+```typescript
+{
+  score: 1,
+  reason: 'スコアが1.0である理由は、出力の3つの記述すべてがコンテキストと直接矛盾しているためです：初飛行は1908年ではなく1903年、飛行時間は約2分ではなく12秒、飛行距離はほぼ1マイルではなく120フィートでした。'
+}
+```
 
 
 ## 関連項目

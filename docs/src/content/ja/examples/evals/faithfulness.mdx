@@ -1,20 +1,17 @@
 ---
-title: "例: Faithfulness（忠実性） | Evals | Mastra Docs"
-description: コンテキストに対する応答の事実性（正確さ）を、Faithfulness 指標で評価する例。
+title: "例: Faithfulness | Evals | Mastra Docs"
+description: コンテキストと照らし合わせて、応答の事実忠実性を評価するために Faithfulness メトリックを用いる例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 import { ScorerCallout } from '@/components/scorer-callout'
 
 
-
-## 忠実性評価
+## Faithfulness Evaluation（忠実性評価）
 
 <ScorerCallout />
 
-`FaithfulnessMetric` を使用すると、提供されたコンテキストにより裏付けられている内容のみを応答が主張しているかを評価できます。このメトリックは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
-
-
+`FaithfulnessMetric` を使って、レスポンスの主張が提供されたコンテキストによって裏付けられているかを評価します。このメトリクスは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
 
 ## インストール
 
@@ -23,10 +20,9 @@ npm install @mastra/evals
 ```
 
 
+## 高い忠実度の例
 
-## 高忠実度の例
-
-この例では、レスポンスがコンテキストと密接に一致しています。出力内の各記述は検証可能で、提供されたコンテキスト項目によって裏付けられており、高いスコアにつながります。
+この例では、応答が文脈と密接に整合しています。出力内の各記述は検証可能で、提供されたコンテキスト項目によって裏付けられており、高いスコアにつながります。
 
 ```typescript filename="src/example-high-faithfulness.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -34,38 +30,38 @@ import { FaithfulnessMetric } from "@mastra/evals/llm";
 
 const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
   context: [
-    "The Tesla Model 3 was launched in 2017.",
-    "It has a range of up to 358 miles.",
-    "The base model accelerates 0-60 mph in 5.8 seconds."
+    "Tesla Model 3 は 2017 年に発売されました。",
+    "航続距離は最長で 358 マイルです。",
+    "ベースモデルは 0～60 mph 加速が 5.8 秒です。"
   ]
 });
 
-const query = "Tell me about the Tesla Model 3.";
-const response = "The Tesla Model 3 was introduced in 2017. It can travel up to 358 miles on a single charge and the base version goes from 0 to 60 mph in 5.8 seconds.";
+const query = "Tesla Model 3 について教えてください。";
+const response = "Tesla Model 3 は 2017 年に発表されました。1 回の充電で最長 358 マイル走行でき、ベースバージョンは 0～60 mph を 5.8 秒で達成します。";
 
 const result = await metric.measure(query, response);
 
 console.log(result);
 ```
 
-### 高忠実度の出力
 
-この出力は、提供されたすべての情報がコンテキストに直接ひもづけられるため、スコアは1となります。欠落や矛盾する事実はありません。
+### 高い忠実度の出力
+
+この出力は、示されているすべての情報が文脈に直接たどれるため、スコア1となります。欠落や矛盾はありません。
 
 ```typescript
 {
   score: 1,
   info: {
-    reason: 'The score is 1 because all claims made in the output are supported by the provided context.'
+    reason: 'スコアが1であるのは、出力中のすべての主張が提供されたコンテキストによって裏付けられているためです。'
   }
 }
 ```
 
 
-
 ## 忠実性が混在する例
 
-この例では、根拠のある主張とない主張が混在しています。レスポンスの一部はコンテキストで裏付けられていますが、他の部分は元の資料にない新情報を含んでいます。
+この例では、裏付けのある主張と、裏付けのない主張が混在しています。応答の一部はコンテキストによって支えられていますが、他の部分はソース資料にない新たな情報を持ち込んでいます。
 
 ```typescript filename="src/example-mixed-faithfulness.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -73,38 +69,38 @@ import { FaithfulnessMetric } from "@mastra/evals/llm";
 
 const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
   context: [
-    "Python was created by Guido van Rossum.",
-    "The first version was released in 1991.",
-    "Python emphasizes code readability."
+    "Python は Guido van Rossum によって作られました。",
+    "最初のバージョンは 1991 年にリリースされました。",
+    "Python はコードの可読性を重視しています。"
   ]
 });
 
-const query = "What can you tell me about Python?";
-const response = "Python was created by Guido van Rossum and released in 1991. It is the most popular programming language today and is used by millions of developers worldwide.";
+const query = "Python について教えてください。";
+const response = "Python は Guido van Rossum によって作られ、1991 年にリリースされました。現在、最も人気のあるプログラミング言語の一つで、世界中の何百万人もの開発者に利用されています。";
 
 const result = await metric.measure(query, response);
 
 console.log(result);
 ```
 
-### 忠実性が混在する場合の出力
 
-スコアが低いのは、レスポンスの一部しか検証できないためです。いくつかの主張はコンテキストと一致しますが、他は未確認または範囲外であり、全体の忠実性を下げています。
+### 忠実性が混在した出力
+
+検証可能なのが応答の一部にとどまるため、スコアは低くなります。いくつかの主張は文脈と一致する一方、他は未確認または範囲外であり、全体としての忠実性を損なっています。
 
 ```typescript
 {
   score: 0.5,
   info: {
-    reason: "The score is 0.5 because while two claims are supported by the context (Python was created by Guido van Rossum and Python was released in 1991), the other two claims regarding Python's popularity and usage cannot be verified as they are not mentioned in the context."
+    reason: "スコアが0.5であるのは、文脈で裏付けられる主張が2つ（「PythonはGuido van Rossumによって作られた」「Pythonは1991年にリリースされた」）ある一方で、Pythonの人気や利用状況に関する残りの2つの主張は文脈に記載がなく検証できないためです。"
   }
 }
 ```
 
 
+## 忠実度が低い例
 
-## 忠実性が低い例
-
-この例では、回答が文脈と直接矛盾しています。どの主張にも裏付けがなく、いくつかは提示された事実と衝突しています。
+この例では、回答が文脈と直接矛盾しています。どの主張にも根拠がなく、いくつかは提示された事実と矛盾しています。
 
 ```typescript filename="src/example-low-faithfulness.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -112,38 +108,38 @@ import { FaithfulnessMetric } from "@mastra/evals/llm";
 
 const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
   context: [
-    "Mars is the fourth planet from the Sun.",
-    "It has a thin atmosphere of mostly carbon dioxide.",
-    "Two small moons orbit Mars: Phobos and Deimos."
+    "火星は太陽から4番目の惑星です。",
+    "主成分が二酸化炭素の薄い大気を持っています。",
+    "フォボスとダイモスという2つの小さな衛星が火星の周りを回っています。"
   ]
 });
 
-const query = "What do we know about Mars?";
-const response = "Mars is the third planet from the Sun. It has a thick atmosphere rich in oxygen and nitrogen, and is orbited by three large moons.";
+const query = "火星について何が分かっていますか？";
+const response = "火星は太陽から3番目の惑星です。酸素と窒素が豊富な濃い大気を持ち、3つの大きな衛星が周回しています。";
 
 const result = await metric.measure(query, response);
 
 console.log(result);
 ```
 
-### 忠実性が低い出力
 
-各主張が不正確、または文脈と矛盾しているため、スコアは0となります。
+### 忠実度の低い出力
+
+各主張が不正確、または文脈と矛盾しているため、スコアは0になります。
 
 ```typescript
 {
   score: 0,
   info: {
-    reason: "The score is 0 because all claims made in the output contradict the provided context. The output states that Mars is the third planet from the Sun, while the context clearly states it is the fourth. Additionally, it claims that Mars has a thick atmosphere rich in oxygen and nitrogen, contradicting the context's description of a thin atmosphere mostly composed of carbon dioxide. Finally, the output mentions that Mars is orbited by three large moons, while the context specifies that it has only two small moons, Phobos and Deimos. Therefore, there are no supported claims, leading to a score of 0."
+    reason: "スコアが0なのは、出力内のすべての主張が提示されたコンテキストと矛盾しているためです。出力は火星が太陽から3番目の惑星だと述べていますが、コンテキストでは明確に4番目だとしています。さらに、火星には酸素と窒素に富む厚い大気があると主張していますが、これは主に二酸化炭素で構成された薄い大気だというコンテキストの記述と矛盾します。最後に、出力は火星が3つの大きな衛星に周回されていると述べていますが、コンテキストはフォボスとダイモスという2つの小さな衛星しかないと明記しています。以上より、裏付けられる主張はなく、スコアは0となります。"
   }
 }
 ```
 
 
+## メトリックの設定
 
-## メトリックの構成
-
-評価の事実ベースとなる情報源を定義する `context` 配列を指定して、`FaithfulnessMetric` のインスタンスを作成できます。最大スコアを制御する `scale` などの任意パラメータも設定できます。
+評価における事実の参照元を定義する `context` 配列を指定して、`FaithfulnessMetric` インスタンスを作成できます。最大スコアを調整する `scale` などのオプションパラメータも設定できます。
 
 ```typescript showLineNumbers copy
 const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
@@ -151,41 +147,42 @@ const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
   scale: 1
 });
 ```
-> 設定可能なオプションの一覧は [FaithfulnessMetric](/reference/evals/faithfulness.mdx) を参照してください。
 
+> すべての設定オプションの一覧は、[FaithfulnessMetric](/reference/evals/faithfulness.mdx) を参照してください。
 
 
 ## 結果の理解
 
-`FaithfulnessMetric` は次の形式で結果を返します：
+`FaithfulnessMetric` は次の形式で結果を返します:
 
 ```typescript
 {
   score: number,
   info: {
-    reason: string
+    reason: 文字列
   }
 }
 ```
 
-### Faithfulness スコア
 
-Faithfulness スコアは 0 から 1 の範囲です：
+### 忠実性スコア
 
-- **1.0**: すべての主張が正確で、文脈によって直接裏付けられている。
-- **0.7–0.9**: ほとんどの主張は正しいが、軽微な追加や省略がある。
-- **0.4–0.6**: 一部の主張は裏付けられるが、他は検証不能。
+0～1の範囲の忠実性スコア:
+
+- **1.0**: すべての記述が正確で、文脈によって直接裏付けられている。
+- **0.7–0.9**: ほとんどの記述は正しいが、軽微な付加や省略がある。
+- **0.4–0.6**: 一部の記述は裏付けられているが、他は検証できない。
 - **0.1–0.3**: 内容の大半が不正確、または裏付けがない。
-- **0.0**: すべての主張が誤り、または文脈と矛盾している。
+- **0.0**: すべての記述が誤り、または文脈と矛盾している。
 
-### Faithfulness 情報
+### 忠実性に関する情報
 
-スコアの理由の説明。次の詳細を含む：
+スコアの説明。以下を含みます:
 
-- どの主張が検証されたか、あるいは矛盾していたか
-- 事実整合性の度合い
-- 欠落や捏造の詳細に関する指摘
-- 全体的な応答の信頼性の要約
+- どの主張が検証されたか、あるいは反証されたか
+- 事実との整合度
+- 欠落や捏造された詳細に関する所見
+- 応答全体の信頼性の要約
 
 <GithubLink
   outdated={true}

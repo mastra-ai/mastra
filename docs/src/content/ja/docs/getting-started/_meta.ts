@@ -1,9 +1,8 @@
 const meta = {
   installation: "インストール",
-  "project-structure": "プロジェクト構造",
-  "mcp-docs-server": "MCP ドキュメントサーバー",
-  "model-providers": "モデルプロバイダー",
-  "model-capability": "モデルの機能",
+  studio: "プレイグラウンド",
+  "project-structure": "プロジェクト構成",
+  "mcp-docs-server": "MCP ドキュメント サーバー",
   templates: "テンプレート",
 };
 export default meta;

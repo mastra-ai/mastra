@@ -1,0 +1,270 @@
+---
+title: "OpenTelemetry エクスポーター | AI トレーシング | 可観測性 | Mastra ドキュメント"
+description: "AI トレースを OpenTelemetry 互換の任意の可観測性プラットフォームに送信する"
+---
+
+import { Callout } from "nextra/components";
+
+
+# OpenTelemetry エクスポーター
+
+<Callout type="warning">
+OpenTelemetry エクスポーターは現在**試験的**な機能です。API や設定オプションは今後のリリースで変更される可能性があります。
+</Callout>
+
+OpenTelemetry (OTEL) エクスポーターは、標準化された [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/) に基づき、AI トレースを任意の OTEL 互換の可観測性プラットフォームに送信します。これにより、Datadog、New Relic、SigNoz、Dash0、Traceloop、Laminar などのプラットフォームとの高い互換性が確保されます。
+
+## OTEL Exporter を使うべきタイミング
+
+OTEL exporter は次のような場合に最適です:
+
+- **プラットフォームの柔軟性** - 任意の OTEL 互換バックエンドへトレースを送信
+- **標準準拠** - OpenTelemetry GenAI のセマンティック規約に従う
+- **マルチベンダー対応** - 一度の設定でプロバイダーを容易に切り替え可能
+- **エンタープライズ向けプラットフォーム** - 既存の可観測性基盤と統合
+- **カスタムコレクター** - 自社の OTEL Collector へ送信
+
+## インストール
+
+各プロバイダーには専用のプロトコルパッケージが必要です。ベースのエクスポーターに加えて、利用するプロバイダー用のプロトコルパッケージをインストールしてください。
+
+### HTTP/Protobuf プロバイダー（SigNoz、New Relic、Laminar）向け
+
+```bash npm2yarn
+npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-proto
+```
+
+
+### gRPC プロバイダ向け（Dash0）
+
+```bash npm2yarn
+npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
+```
+
+
+### HTTP/JSON プロバイダ向け（Traceloop）
+
+```bash npm2yarn
+npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-http
+```
+
+
+## プロバイダー設定
+
+### Dash0
+
+[Dash0](https://www.dash0.com/) は、自動分析によるリアルタイムの可観測性を提供します。
+
+```typescript filename="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { OtelExporter } from "@mastra/otel-exporter";
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      otel: {
+        serviceName: 'my-service',
+        exporters: [
+          new OtelExporter({
+            provider: {
+              dash0: {
+                apiKey: process.env.DASH0_API_KEY,
+                endpoint: process.env.DASH0_ENDPOINT, // 例: 'ingress.us-west-2.aws.dash0.com:4317'
+                dataset: 'production', // データセット名(オプション)
+              }
+            },
+            resourceAttributes: { // トレース用のOpenTelemetryリソース属性(オプション)
+              ['deployment.environment']: 'dev',
+            },
+          }),
+        ],
+      },
+    },
+  },
+});
+```
+
+<Callout type="info">
+  Dash0 のエンドポイントはダッシュボードから取得してください。形式は `ingress.{region}.aws.dash0.com:4317` です。
+</Callout>
+
+
+### SigNoz
+
+[SigNoz](https://signoz.io/) は、AI トレーシングを標準搭載したオープンソースの APM 代替ツールです。
+
+```typescript filename="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    signoz: {
+      apiKey: process.env.SIGNOZ_API_KEY,
+      region: 'us', // 'us' | 'eu' | 'in'
+      // endpoint: 'https://my-signoz.example.com', // セルフホスティング用
+    }
+  },
+})
+```
+
+
+### New Relic
+
+[New Relic](https://newrelic.com/) は、AI によるモニタリング機能を備えた包括的な可観測性を提供します。
+
+```typescript filename="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    newrelic: {
+      apiKey: process.env.NEW_RELIC_LICENSE_KEY,
+      // endpoint: 'https://otlp.eu01.nr-data.net', // EU リージョン用
+    }
+  },
+})
+```
+
+
+### Traceloop
+
+[Traceloop](https://www.traceloop.com/) は、自動プロンプト追跡機能により LLM の可観測性を提供することに特化しています。
+
+```typescript filename="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    traceloop: {
+      apiKey: process.env.TRACELOOP_API_KEY,
+      destinationId: 'my-destination', // 省略可能
+    }
+  },
+})
+```
+
+
+### Laminar
+
+[Laminar](https://www.lmnr.ai/) は、LLM 向けの特化型の可観測性と分析機能を提供します。
+
+```typescript filename="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    laminar: {
+      apiKey: process.env.LMNR_PROJECT_API_KEY,
+      // teamId: process.env.LAMINAR_TEAM_ID, // オプション。後方互換性のため
+    }
+  },
+})
+```
+
+
+### カスタム／汎用 OTEL エンドポイント
+
+他の OTEL 対応プラットフォームやカスタムコレクターを使用する場合:
+
+```typescript filename="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: 'https://your-collector.example.com/v1/traces',
+      protocol: 'http/protobuf', // 'http/json' | 'http/protobuf' | 'grpc'
+      headers: {
+        'x-api-key': process.env.API_KEY,
+      },
+    }
+  },
+})
+```
+
+
+## 設定オプション
+
+### 完全な設定
+
+```typescript
+new OtelExporter({
+  // プロバイダー設定(必須)
+  provider: {
+    // 次のいずれかを使用: dash0, signoz, newrelic, traceloop, laminar, custom
+  },
+
+  // エクスポート設定
+  timeout: 30000,        // エクスポートタイムアウト(ミリ秒)
+  batchSize: 100,        // バッチあたりのスパン数
+
+  // デバッグオプション
+  logLevel: 'info',      // 'debug' | 'info' | 'warn' | 'error'
+})
+```
+
+
+## OpenTelemetry セマンティック規約
+
+エクスポーターは [GenAI 向け OpenTelemetry セマンティック規約](https://opentelemetry.io/docs/specs/semconv/gen-ai/)に準拠し、各種オブザーバビリティプラットフォームとの互換性を確保します。
+
+### スパンの命名
+
+- **LLM のオペレーション**: `chat {model}` または `tool_selection {model}`
+- **ツール実行**: `tool.execute {tool_name}`
+- **エージェント実行**: `agent.{agent_id}`
+- **ワークフロー実行**: `workflow.{workflow_id}`
+
+### 主要属性
+
+- `gen_ai.operation.name` - 操作タイプ（chat、tool.execute など）
+- `gen_ai.system` - AI プロバイダー（OpenAI、Anthropic など）
+- `gen_ai.request.model` - モデル識別子
+- `gen_ai.usage.input_tokens` - 入力トークン数
+- `gen_ai.usage.output_tokens` - 出力トークン数
+- `gen_ai.request.temperature` - サンプリング温度
+- `gen_ai.response.finish_reasons` - 完了理由
+
+## バッファリング戦略
+
+エクスポーターは、トレースが完了するまでスパンをバッファリングします:
+
+1. 1つのトレースに属するすべてのスパンを収集する
+2. ルートスパンの完了から5秒間待機する
+3. 親子関係を保持した完全なトレースをエクスポートする
+4. 孤立スパンが発生しないようにする
+
+## プロトコル選択ガイド
+
+ご利用のプロバイダーに応じて、適切なプロトコルパッケージを選択してください：
+
+| プロバイダー | プロトコル | 必要なパッケージ |
+|----------|----------|------------------|
+| Dash0 | gRPC | `@opentelemetry/exporter-trace-otlp-grpc` |
+| SigNoz | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| New Relic | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| Traceloop | HTTP/JSON | `@opentelemetry/exporter-trace-otlp-http` |
+| Laminar | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| カスタム | さまざま | コレクターに依存 |
+
+<Callout type="warning">
+ご利用のプロバイダーに対応する正しいプロトコルパッケージを必ずインストールしてください。誤ったパッケージがインストールされている場合、エクスポーターがわかりやすいエラーメッセージを表示します。
+</Callout>
+
+## トラブルシューティング
+
+### 依存関係が見つからないエラー
+
+次のようなエラーが表示される場合:
+
+```
+HTTP/Protobuf エクスポーターがインストールされていません（signoz に必要）。
+HTTP/Protobuf エクスポートを使用するには、以下のパッケージをインストールしてください：
+  npm install @opentelemetry/exporter-trace-otlp-proto
+```
+
+使用しているプロバイダー向けの推奨パッケージをインストールしてください。
+
+
+### よくある問題
+
+1. **誤ったプロトコルパッケージ**: ご利用のプロバイダーに対応するエクスポーターを正しくインストールしているか確認してください
+2. **無効なエンドポイント**: エンドポイントの形式がプロバイダーの要件に合致しているか確認してください
+3. **認証エラー**: APIキーとヘッダーが正しいか確認してください
+4. **トレースが表示されない**: トレースが完了しているか確認してください（ルートスパンが終了している必要があります）
+
+## 関連情報
+
+- [AI トレーシングの概要](/docs/observability/ai-tracing/overview)
+- [OpenTelemetry GenAI の規約](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
+- [OTEL エクスポーターリファレンス](/reference/observability/ai-tracing/exporters/otel)

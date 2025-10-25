@@ -1,30 +1,26 @@
 ---
-title: "リファレンス: OpenAI Realtime Voice | Voice Providers | Mastra ドキュメント"
-description: "OpenAIRealtimeVoice クラスのドキュメント。WebSocket を通じてリアルタイムのテキスト読み上げおよび音声認識機能を提供します。"
+title: "リファレンス: OpenAI Realtime Voice | 音声プロバイダー | Mastra ドキュメント"
+description: "WebSocket 経由でリアルタイムの音声合成（テキスト読み上げ）と音声認識（音声→テキスト）を提供する OpenAIRealtimeVoice クラスのドキュメント。"
 ---
-
-
 
 # OpenAI Realtime Voice
 
-OpenAIRealtimeVoice クラスは、OpenAI の WebSocket ベースの API を使用してリアルタイムの音声対話機能を提供します。リアルタイムの音声から音声への変換、音声活動検出、イベントベースの音声ストリーミングをサポートしています。
+OpenAIRealtimeVoice クラスは、OpenAI の WebSocket ベースの API を用いて、リアルタイムの音声対話機能を提供します。音声から音声へのリアルタイム変換、音声活動検出、イベント駆動型のオーディオストリーミングに対応しています。
 
-
-
-## 使用例
+## 使い方の例
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
-// Initialize with default configuration using environment variables
+// 環境変数によるデフォルト設定で初期化
 const voice = new OpenAIRealtimeVoice();
 
-// Or initialize with specific configuration
+// もしくは特定の設定で初期化
 const voiceWithConfig = new OpenAIRealtimeVoice({
   apiKey: "your-openai-api-key",
   model: "gpt-4o-mini-realtime-preview-2024-12-17",
-  speaker: "alloy", // Default voice
+  speaker: "alloy", // 既定の音声
 });
 
 voiceWithConfig.updateSession({
@@ -35,38 +31,37 @@ voiceWithConfig.updateSession({
   },
 });
 
-// Establish connection
+// 接続を開始
 await voice.connect();
 
-// Set up event listeners
+// イベントリスナーを設定
 voice.on("speaker", ({ audio }) => {
-  // Handle audio data (Int16Array) pcm format by default
+  // オーディオデータ（Int16Array）を既定の PCM 形式で処理
   playAudio(audio);
 });
 
 voice.on("writing", ({ text, role }) => {
-  // Handle transcribed text
+  // 文字起こしされたテキストを処理
   console.log(`${role}: ${text}`);
 });
 
-// Convert text to speech
-await voice.speak("Hello, how can I help you today?", {
-  speaker: "echo", // Override default voice
+// テキスト読み上げを実行
+await voice.speak("こんにちは。本日はいかがお手伝いできますか？", {
+  speaker: "echo", // 既定の音声を上書き
 });
 
-// Process audio input
+// 音声入力を処理
 const microphoneStream = getMicrophoneStream();
 await voice.send(microphoneStream);
 
-// When done, disconnect
+// 完了したら切断
 voice.connect();
 ```
 
 
-
 ## 設定
 
-### コンストラクタオプション
+### コンストラクターのオプション
 
 <PropertiesTable
   content={[
@@ -81,20 +76,20 @@ voice.connect();
       name: "apiKey",
       type: "string",
       description:
-        "OpenAI APIキー。OPENAI_API_KEY環境変数にフォールバックします。",
+        "OpenAI の API キー。未指定の場合は環境変数 OPENAI_API_KEY が使用されます。",
       isOptional: true,
     },
     {
       name: "speaker",
       type: "string",
-      description: "音声合成のデフォルトボイスID。",
+      description: "音声合成で使用するデフォルトのボイスID。",
       isOptional: true,
       defaultValue: "'alloy'",
     },
   ]}
 />
 
-### 音声アクティビティ検出（VAD）設定
+### Voice Activity Detection (VAD) の設定
 
 <PropertiesTable
   content={[
@@ -102,14 +97,14 @@ voice.connect();
       name: "type",
       type: "string",
       description:
-        "使用するVADのタイプ。サーバーサイドVADはより高い精度を提供します。",
+        "使用するVADの種類。サーバー側のVADは精度が高くなります。",
       isOptional: true,
       defaultValue: "'server_vad'",
     },
     {
       name: "threshold",
       type: "number",
-      description: "音声検出の感度（0.0-1.0）。",
+      description: "音声検出の感度（0.0〜1.0）。",
       isOptional: true,
       defaultValue: "0.5",
     },
@@ -117,65 +112,63 @@ voice.connect();
       name: "prefix_padding_ms",
       type: "number",
       description:
-        "音声が検出される前に含める音声のミリ秒数。",
+        "音声が検出される前に含める音声の長さ（ミリ秒）。",
       isOptional: true,
       defaultValue: "1000",
     },
     {
       name: "silence_duration_ms",
       type: "number",
-      description: "ターンを終了する前の無音のミリ秒数。",
+      description: "発話を終了とみなすまでの無音時間（ミリ秒）。",
       isOptional: true,
       defaultValue: "1000",
     },
   ]}
 />
 
-
-
-## メソッド
+## 手法
 
 ### connect()
 
-OpenAI リアルタイムサービスへの接続を確立します。speak、listen、send 関数を使用する前に呼び出す必要があります。
+OpenAI のリアルタイムサービスに接続します。speak、listen、send 関数を使用する前に呼び出す必要があります。
 
 <PropertiesTable
   content={[
     {
       name: "returns",
       type: "Promise<void>",
-      description: "接続が確立されたときに解決される Promise。",
+      description: "接続が確立されると解決される Promise。",
     },
   ]}
 />
 
 ### speak()
 
-設定された音声モデルを使用して発話イベントを発行します。入力として文字列またはリーダブルストリームのいずれかを受け付けます。
+設定済みの音声モデルで発話イベントを発生させます。入力は文字列または readable なストリームを受け付けます。
 
 <PropertiesTable
   content={[
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "音声に変換するテキストまたはテキストストリーム。",
+      description: "音声に変換するテキストまたはテキストのストリーム。",
       isOptional: false,
     },
     {
       name: "options.speaker",
       type: "string",
-      description: "この特定の発話リクエストで使用する音声 ID。",
+      description: "この音声リクエストで使用する Voice ID。",
       isOptional: true,
-      defaultValue: "Constructor's speaker value",
+      defaultValue: "コンストラクターの speaker の値",
     },
   ]}
 />
 
-戻り値: `Promise<void>`
+Returns: `Promise<void>`
 
 ### listen()
 
-音声認識のために音声入力を処理します。音声データのリーダブルストリームを受け取り、書き起こされたテキストとともに 'listening' イベントを発行します。
+音声認識のために音声入力を処理します。音声データの読み取り可能なストリームを受け取り、書き起こし結果のテキストを含む「listening」イベントを発行します。
 
 <PropertiesTable
   content={[
@@ -188,11 +181,11 @@ OpenAI リアルタイムサービスへの接続を確立します。speak、li
   ]}
 />
 
-戻り値: `Promise<void>`
+Returns: `Promise<void>`
 
 ### send()
 
-ライブマイク入力など、連続的な音声ストリーミングシナリオのために、音声データをリアルタイムで OpenAI サービスにストリーミングします。
+ライブのマイク入力など、連続的な音声ストリーミングのユースケースで、OpenAI サービスに音声データをリアルタイムでストリーミングします。
 
 <PropertiesTable
   content={[
@@ -205,11 +198,11 @@ OpenAI リアルタイムサービスへの接続を確立します。speak、li
   ]}
 />
 
-戻り値: `Promise<void>`
+Returns: `Promise<void>`
 
 ### updateConfig()
 
-音声インスタンスのセッション設定を更新します。これにより、音声設定やターン検出、その他のパラメータを変更できます。
+音声インスタンスのセッション設定を更新します。これにより、音声設定、発話ターン検出、その他のパラメータを変更できます。
 
 <PropertiesTable
   content={[
@@ -226,14 +219,14 @@ OpenAI リアルタイムサービスへの接続を確立します。speak、li
 
 ### addTools()
 
-音声インスタンスにツールセットを追加します。ツールを追加することで、モデルが会話中に追加のアクションを実行できるようになります。OpenAIRealtimeVoice が Agent に追加されている場合、Agent に設定されたツールは自動的に音声インターフェースでも利用可能になります。
+音声インスタンスにツールのセットを追加します。ツールを使うと、モデルは会話中に追加の処理を実行できます。OpenAIRealtimeVoice を Agent に追加すると、その Agent に設定されたツールは自動的に音声インターフェースで利用可能になります。
 
 <PropertiesTable
   content={[
     {
       name: "tools",
       type: "ToolsInput",
-      description: "装備するツールの設定。",
+      description: "適用するツールの設定。",
       isOptional: true,
     },
   ]}
@@ -243,32 +236,32 @@ OpenAI リアルタイムサービスへの接続を確立します。speak、li
 
 ### close()
 
-OpenAI リアルタイムセッションから切断し、リソースをクリーンアップします。音声インスタンスの使用が終了したら呼び出してください。
+OpenAI のリアルタイムセッションから切断し、リソースを解放します。音声インスタンスの使用が完了したら呼び出してください。
 
-戻り値: `void`
+Returns: `void`
 
 ### getSpeakers()
 
-利用可能な音声スピーカーのリストを返します。
+利用可能な音声の話者一覧を返します。
 
 戻り値: `Promise<Array<{ voiceId: string; [key: string]: any }>>`
 
 ### on()
 
-音声イベントのイベントリスナーを登録します。
+音声イベントのリスナーを登録します。
 
 <PropertiesTable
   content={[
     {
       name: "event",
       type: "string",
-      description: "リッスンするイベント名。",
+      description: "監視するイベント名。",
       isOptional: false,
     },
     {
       name: "callback",
       type: "Function",
-      description: "イベントが発生したときに呼び出す関数。",
+      description: "イベント発生時に呼び出す関数。",
       isOptional: false,
     },
   ]}
@@ -278,7 +271,7 @@ OpenAI リアルタイムセッションから切断し、リソースをクリ�
 
 ### off()
 
-以前に登録したイベントリスナーを削除します。
+以前に登録したイベントリスナーを解除します。
 
 <PropertiesTable
   content={[
@@ -291,7 +284,7 @@ OpenAI リアルタイムセッションから切断し、リソースをクリ�
     {
       name: "callback",
       type: "Function",
-      description: "削除する特定のコールバック関数。",
+      description: "解除する対象のコールバック関数。",
       isOptional: false,
     },
   ]}
@@ -299,11 +292,9 @@ OpenAI リアルタイムセッションから切断し、リソースをクリ�
 
 戻り値: `void`
 
-
-
 ## イベント
 
-OpenAIRealtimeVoiceクラスは以下のイベントを発生させます：
+OpenAIRealtimeVoice クラスは次のイベントを送出します:
 
 <PropertiesTable
   content={[
@@ -311,26 +302,26 @@ OpenAIRealtimeVoiceクラスは以下のイベントを発生させます：
       name: "speaking",
       type: "event",
       description:
-        "モデルから音声データを受信したときに発生します。コールバックは { audio: Int16Array } を受け取ります。",
+        "モデルから音声データを受信したときに送出されます。コールバックは { audio: Int16Array } を受け取ります。",
     },
     {
       name: "writing",
       type: "event",
       description:
-        "文字起こしされたテキストが利用可能になったときに発生します。コールバックは { text: string, role: string } を受け取ります。",
+        "書き起こしテキストが利用可能になったときに送出されます。コールバックは { text: string, role: string } を受け取ります。",
     },
     {
       name: "error",
       type: "event",
       description:
-        "エラーが発生したときに発生します。コールバックはエラーオブジェクトを受け取ります。",
+        "エラー発生時に送出されます。コールバックはエラーオブジェクトを受け取ります。",
     },
   ]}
 />
 
-### OpenAI Realtimeイベント
+### OpenAI Realtime のイベント
 
-[OpenAI Realtimeユーティリティイベント](https://github.com/openai/openai-realtime-api-beta#reference-client-utility-events)も'openAIRealtime:'を接頭辞として付けることでリッスンできます：
+'openAIRealtime:' をプレフィックスとして付けることで、[OpenAI Realtime のユーティリティイベント](https://github.com/openai/openai-realtime-api-beta#reference-client-utility-events)を購読できます:
 
 <PropertiesTable
   content={[
@@ -352,7 +343,7 @@ OpenAIRealtimeVoiceクラスは以下のイベントを発生させます：
     {
       name: "openAIRealtime:conversation.item.appended",
       type: "event",
-      description: "アイテムが会話に追加されたときに発生します。",
+      description: "会話にアイテムが追加されたときに発生します。",
     },
     {
       name: "openAIRealtime:conversation.item.completed",
@@ -362,29 +353,25 @@ OpenAIRealtimeVoiceクラスは以下のイベントを発生させます：
   ]}
 />
 
-
-
 ## 利用可能な音声
 
-以下の音声オプションが利用できます：
+利用できる音声オプションは次のとおりです：
 
-- `alloy`: ニュートラルでバランスが取れている
-- `ash`: クリアで正確
-- `ballad`: メロディックで滑らか
-- `coral`: 暖かく親しみやすい
-- `echo`: 共鳴して深みがある
+- `alloy`: 中立的でバランスが取れている
+- `ash`: クリアで精確
+- `ballad`: メロディアスで滑らか
+- `coral`: 温かみがあり親しみやすい
+- `echo`: 深みのある共鳴
 - `sage`: 落ち着いて思慮深い
 - `shimmer`: 明るくエネルギッシュ
-- `verse`: 多才で表現力豊か
+- `verse`: 多用途で表現力豊か
 
+## 注記
 
-
-## メモ
-
-- APIキーはコンストラクタオプションまたは`OPENAI_API_KEY`環境変数を通じて提供できます
-- OpenAI リアルタイム音声APIはリアルタイム通信にWebSocketsを使用しています
-- サーバーサイドの音声アクティビティ検出（VAD）は音声検出のための精度が向上します
-- すべての音声データはInt16Array形式で処理されます
-- 音声インスタンスは他のメソッドを使用する前に`connect()`で接続する必要があります
-- 終了時には必ず`close()`を呼び出してリソースを適切にクリーンアップしてください
-- メモリ管理はOpenAI リアルタイムAPIによって処理されます
+- API キーはコンストラクターのオプション、または `OPENAI_API_KEY` 環境変数で指定できます
+- OpenAI Realtime Voice API はリアルタイム通信に WebSocket を使用します
+- サーバー側の Voice Activity Detection（VAD）により、音声検出の精度が向上します
+- すべての音声データは Int16Array 形式で処理されます
+- ほかのメソッドを使う前に、ボイスインスタンスは `connect()` で接続しておく必要があります
+- 終了時は必ず `close()` を呼び出して、リソースを適切に解放してください
+- メモリ管理は OpenAI Realtime API が行います

@@ -1,17 +1,13 @@
 ---
-title: "リファレンス: run.watch() | ワークフロー（レガシー） | Mastra ドキュメント"
-description: ワークフロー内の `.watch()` メソッドのドキュメント。ワークフロー実行のステータスを監視します。
+title: "リファレンス: run.watch() | Workflows（レガシー） | Mastra ドキュメント"
+description: ワークフロー実行のステータスを監視する `.watch()` メソッドのドキュメント。
 ---
-
-
 
 # run.watch()
 
-`.watch()` 関数は mastra run の状態変化を購読し、実行の進行状況を監視したり、状態の更新に反応したりすることができます。
+`.watch()` 関数は、mastra の実行（run）の状態変化を購読し、実行の進捗を監視して状態更新に応答できるようにします。
 
-
-
-## 使用例
+## 使い方の例
 
 ```typescript
 import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
@@ -24,22 +20,21 @@ const run = workflow.createRun();
 
 // Subscribe to state changes
 const unsubscribe = run.watch(({ results, activePaths }) => {
-  console.log("Results:", results);
-  console.log("Active paths:", activePaths);
+  console.log("結果:", results);
+  console.log("アクティブなパス:", activePaths);
 });
 
-// Run the workflow
+// 状態変更を監視する
 await run.start({
-  input: { text: "Process this document" },
+  input: { text: "このドキュメントを処理してください" },
 });
 
-// Stop watching
-unsubscribe();
+// ワークフローを実行
+// 監視を停止
 ```
 
 
-
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
@@ -59,13 +54,13 @@ unsubscribe();
     {
       name: "results",
       type: "Record<string, any>",
-      description: "完了したワークフローステップからの出力",
+      description: "完了したワークフローステップの出力結果",
       isOptional: false,
     },
     {
       name: "activePaths",
       type: "Map<string, { status: string; suspendPayload?: any; stepPath: string[] }>",
-      description: "各ステップの現在のステータス",
+      description: "各ステップの現在の状態",
       isOptional: false,
     },
     {
@@ -77,13 +72,11 @@ unsubscribe();
     {
       name: "timestamp",
       type: "number",
-      description: "ワークフロー実行のタイムスタンプ",
+      description: "ワークフロー実行時のタイムスタンプ",
       isOptional: false,
     },
   ]}
 />
-
-
 
 ## 戻り値
 
@@ -97,38 +90,37 @@ unsubscribe();
   ]}
 />
 
+## 追加例
 
-
-## 追加の例
-
-特定のステップの完了を監視する：
+特定のステップの完了を監視する:
 
 ```typescript
 run.watch(({ results, activePaths }) => {
   if (activePaths.get("processDocument")?.status === "completed") {
     console.log(
-      "Document processing output:",
+      "ドキュメント処理の出力：",
       results["processDocument"].output,
     );
   }
 });
 ```
 
-エラー処理：
+エラー処理:
 
 ```typescript
 run.watch(({ results, activePaths }) => {
   if (activePaths.get("processDocument")?.status === "failed") {
     console.error(
-      "Document processing failed:",
+      "ドキュメント処理に失敗しました:",
       results["processDocument"].error,
     );
-    // Implement error recovery logic
+    // エラー復旧ロジックを実装する
   }
 });
 ```
 
-### 関連
 
-- [ワークフロー作成](./createRun.mdx)
-- [ステップ設定](./step-class.mdx)
+### 関連項目
+
+- [ワークフローの作成](./createRun.mdx)
+- [ステップの設定](./step-class.mdx)

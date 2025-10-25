@@ -1,32 +1,32 @@
 ---
 title: "Mastra の本番サーバーを構築する"
-description: "API や CORS などのカスタム設定を用いて、本番運用に適した Mastra サーバーを構成し、デプロイする方法を学ぶ"
+description: "API や CORS などのカスタム設定で本番運用に対応した Mastra サーバーを構成・デプロイする方法を学ぶ"
 ---
 
 # Mastra の本番サーバーを作成する
 
-Mastra アプリケーションを本番環境にデプロイすると、エージェント、ワークフロー、その他の機能を API エンドポイントとして公開する HTTP サーバーとして動作します。このページでは、本番環境向けにサーバーを構成・カスタマイズする方法を説明します。
+Mastra アプリケーションを本番環境にデプロイすると、エージェントやワークフロー、その他の機能を API エンドポイントとして提供する HTTP サーバーとして動作します。このページでは、本番環境向けにサーバーを設定およびカスタマイズする方法を説明します。
 
 ## サーバーアーキテクチャ
 
 Mastra は基盤となる HTTP サーバーフレームワークとして [Hono](https://hono.dev) を使用しています。`mastra build` で Mastra アプリケーションをビルドすると、`.mastra` ディレクトリに Hono ベースの HTTP サーバーが生成されます。
 
-このサーバーでは次の機能を提供します：
+このサーバーでは次の機能を提供します:
 
-- すべての登録済みエージェント向けの API エンドポイント
-- すべての登録済みワークフロー向けの API エンドポイント
+- 登録済みのすべてのエージェント向け API エンドポイント
+- 登録済みのすべてのワークフロー向け API エンドポイント
 - カスタム API ルートのサポート
 - カスタムミドルウェアのサポート
 - タイムアウトの設定
 - ポートの設定
-- リクエストボディサイズ制限の設定
+- リクエストボディサイズ上限の設定
 
 追加のサーバー機能の追加方法については、[Middleware](/docs/server-db/middleware) および
-[Custom API Routes](/docs/server-db/custom-api-routes) のページを参照してください。
+[Custom API Routes](/docs/server-db/custom-api-routes) の各ページを参照してください。
 
-## サーバー構成
+## サーバー設定
 
-Mastra インスタンスでサーバーの `port` と `timeout` を設定できます。
+Mastra インスタンスでサーバーの `port` と `timeout` を構成できます。
 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers
 import { Mastra } from "@mastra/core/mastra";
@@ -34,17 +34,18 @@ import { Mastra } from "@mastra/core/mastra";
 export const mastra = new Mastra({
   // ...
   server: {
-    port: 3000, // 既定値は 4111
-    timeout: 10000, // 既定値は 30000（30秒）
+    port: 3000, // デフォルトは 4111
+    timeout: 10000, // デフォルトは 30000（30秒）
   },
 });
 ```
 
-`method` オプションには `"GET"`, `"POST"`, `"PUT"`, `"DELETE"` または `"ALL"` を指定できます。`"ALL"` を使用すると、パスに一致する任意の HTTP メソッドでハンドラーが呼び出されます。
+`method` オプションには `"GET"`、`"POST"`、`"PUT"`、`"DELETE"`、または `"ALL"` を指定できます。`"ALL"` を使用すると、そのパスに一致するあらゆる HTTP メソッドでハンドラーが呼び出されます。
+
 
 ## TypeScript の設定
 
-Mastra では、最新の Node.js に対応した `module` と `moduleResolution` の設定が必要です。`CommonJS` や `node` といった旧来の設定は Mastra のパッケージと互換性がなく、解決時のエラーを引き起こします。
+Mastra では、最新の Node.js バージョンに対応した `module` と `moduleResolution` の設定値が必要です。`CommonJS` や `node` といった旧来の設定は Mastra のパッケージと互換性がなく、モジュール解決エラーの原因になります。
 
 ```json {4-5} filename="tsconfig.json" copy
 {
@@ -65,11 +66,12 @@ Mastra では、最新の Node.js に対応した `module` と `moduleResolution
 }
 ```
 
-> この TypeScript 設定は、最新のモジュール解決方式と厳密な型チェックを採用し、Mastra プロジェクト向けに最適化されています。
+> この TypeScript 設定は、最新のモジュール解決と厳密な型チェックを採用し、Mastra プロジェクト向けに最適化されています。
+
 
 ## CORS の設定
 
-Mastra では、サーバーの CORS（クロスオリジンリソース共有）を設定できます。
+Mastra では、サーバーの CORS（Cross-Origin Resource Sharing）設定を行えます。
 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers
 import { Mastra } from "@mastra/core/mastra";

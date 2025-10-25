@@ -1,283 +1,534 @@
 ---
 title: "リファレンス: Agent.generate() | Agents | Mastra ドキュメント"
-description: "Mastra のエージェントにおける `Agent.generate()` メソッドのドキュメント。テキストまたは構造化された応答を生成します。"
+description: "Mastra のエージェントにおける `Agent.generate()` メソッドのドキュメント。強化された機能により、ストリーミングなしでレスポンスを生成できます。"
 ---
 
+import { Callout } from 'nextra/components';
 
 
 # Agent.generate()
 
-`.generate()` メソッドは、エージェントとやり取りして、テキストまたは構造化レスポンスを生成するために使用します。このメソッドは、メッセージと任意の生成オプションを受け取ります。
+`.generate()` メソッドは、エージェントによる非ストリーミングでの応答生成を可能にし、拡張された機能と柔軟な出力形式を提供します。メッセージと任意の生成オプションを受け取り、Mastra のネイティブ形式と AI SDK v5 互換形式の両方をサポートします。
 
-
-
-## 使用例
+## 使い方の例
 
 ```typescript copy
-await agent.generate("message for agent");
+// デフォルトのMastra形式
+const mastraResult = await agent.generate("エージェントへのメッセージ");
+
+// AI SDK v5互換形式
+const aiSdkResult = await agent.generate("エージェントへのメッセージ", {
+  format: 'aisdk'
+});
 ```
 
+<Callout type="info">
+  **モデルの互換性**: このメソッドは V2 モデル向けに設計されています。V1 モデルは [`.generateLegacy()`](./generateLegacy.mdx) メソッドを使用してください。フレームワークはモデルのバージョンを自動的に検出し、ミスマッチがある場合はエラーをスローします。
+</Callout>
 
 
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
     {
       name: "messages",
       type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
-      description: "エージェントに送信するメッセージ。単一の文字列、文字列配列、またはマルチモーダルコンテンツ（テキスト、画像など）を含む構造化メッセージオブジェクトを指定できます。",
+      description: "エージェントに送信するメッセージ。単一の文字列、文字列配列、または構造化メッセージオブジェクトを指定できます。",
     },
     {
       name: "options",
-      type: "AgentGenerateOptions",
+      type: "AgentExecutionOptions<Output, Format>",
       isOptional: true,
       description: "生成処理に関する任意の設定。",
     },
   ]}
 />
 
-### オプションパラメーター
-
-
+### 設定
 
 <PropertiesTable
   content={[
+  {
+    name: "format",
+    type: "'mastra' | 'aisdk'",
+    isOptional: true,
+    defaultValue: "'mastra'",
+    description:
+      "出力形式を指定します。Mastraのネイティブ形式には'mastra'(デフォルト)を、AI SDK v5との互換性には'aisdk'を使用します。"
+  },
+  {
+    name: "maxSteps",
+    type: "number",
+    isOptional: true,
+    description: "実行時の最大ステップ数。"
+  },
+  {
+    name: "scorers",
+    type: "MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>",
+    isOptional: true,
+    description: "実行結果に対して実行する評価スコアラー。",
+    properties: [
+      {
+        parameters: [
+          {
+            name: "scorer",
+            type: "string",
+            isOptional: false,
+            description: "使用するスコアラーの名前。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "sampling",
+            type: "ScoringSamplingConfig",
+            isOptional: true,
+            description: "スコアラーのサンプリング設定。",
+            properties: [
+              {
+                parameters: [
+                  {
+                    name: "type",
+                    type: "'none' | 'ratio'",
+                    isOptional: false,
+                    description:
+                      "サンプリング戦略のタイプ。サンプリングを無効にする場合は'none'を、パーセンテージベースのサンプリングには'ratio'を使用します。"
+                  }
+                ]
+              },
+              {
+                parameters: [
+                  {
+                    name: "rate",
+                    type: "number",
+                    isOptional: true,
+                    description:
+                      "サンプリングレート(0-1)。typeが'ratio'の場合は必須です。"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    name: "tracingContext",
+    type: "TracingContext",
+    isOptional: true,
+    description: "スパン階層とメタデータのためのAIトレーシングコンテキスト。"
+  },
+  {
+    name: "returnScorerData",
+    type: "boolean",
+    isOptional: true,
+    description: "レスポンスに詳細なスコアリングデータを含めるかどうか。"
+  },
+  {
+    name: "onChunk",
+    type: "(chunk: ChunkType) => Promise<void> | void",
+    isOptional: true,
+    description: "生成中の各チャンクに対して呼び出されるコールバック関数。"
+  },
+  {
+    name: "onError",
+    type: "({ error }: { error: Error | string }) => Promise<void> | void",
+    isOptional: true,
+    description:
+      "生成中にエラーが発生した際に呼び出されるコールバック関数。"
+  },
+  {
+    name: "onAbort",
+    type: "(event: any) => Promise<void> | void",
+    isOptional: true,
+    description: "生成が中止された際に呼び出されるコールバック関数。"
+  },
+  {
+    name: "activeTools",
+    type: "Array<keyof ToolSet> | undefined",
+    isOptional: true,
+    description:
+      "実行中にアクティブにするツール名の配列。undefinedの場合、利用可能なすべてのツールがアクティブになります。"
+  },
   {
     name: "abortSignal",
     type: "AbortSignal",
     isOptional: true,
     description:
-      "Signal object that allows you to abort the agent's execution. When the signal is aborted, all ongoing operations will be terminated.",
+      "エージェントの実行を中止するためのシグナルオブジェクト。シグナルが中止されると、進行中のすべての操作が終了します。"
+  },
+  {
+    name: "prepareStep",
+    type: "PrepareStepFunction<any>",
+    isOptional: true,
+    description:
+      "マルチステップ実行の各ステップの前に呼び出されるコールバック関数。"
   },
   {
     name: "context",
-    type: "CoreMessage[]",
+    type: "ModelMessage[]",
     isOptional: true,
-    description: "Additional context messages to provide to the agent.",
+    description: "エージェントに提供する追加のコンテキストメッセージ。"
   },
   {
     name: "structuredOutput",
     type: "StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny>",
     isOptional: true,
-    description: "Enables structured output generation with better developer experience. Automatically creates and uses a StructuredOutputProcessor internally.",
+    description: "構造化出力生成を微調整するためのオプション。",
     properties: [
       {
-        parameters: [{
-          name: "schema",
-          type: "z.ZodSchema<S>",
-          isOptional: false,
-          description: "Zod schema to validate the output against."
-        }]
+        parameters: [
+          {
+            name: "schema",
+            type: "z.ZodSchema<S>",
+            isOptional: false,
+            description: "期待される出力構造を定義するZodスキーマ。"
+          }
+        ]
       },
       {
-        parameters: [{
-          name: "model",
-          type: "MastraLanguageModel",
-          isOptional: false,
-          description: "Model to use for the internal structuring agent."
-        }]
+        parameters: [
+          {
+            name: "model",
+            type: "MastraLanguageModel",
+            isOptional: true,
+            description:
+              "構造化出力生成に使用する言語モデル。指定した場合、エージェントはツール呼び出し、テキスト、構造化出力を含むマルチステップで応答できるようになります"
+          }
+        ]
       },
       {
-        parameters: [{
-          name: "errorStrategy",
-          type: "'strict' | 'warn' | 'fallback'",
-          isOptional: true,
-          description: "Strategy when parsing or validation fails. Defaults to 'strict'."
-        }]
+        parameters: [
+          {
+            name: "errorStrategy",
+            type: "'strict' | 'warn' | 'fallback'",
+            isOptional: true,
+            description:
+              "スキーマ検証エラーの処理戦略。'strict'はエラーをスローし、'warn'は警告をログに記録し、'fallback'はフォールバック値を使用します。"
+          }
+        ]
       },
       {
-        parameters: [{
-          name: "fallbackValue",
-          type: "<S extends ZodTypeAny>",
-          isOptional: true,
-          description: "Fallback value when errorStrategy is 'fallback'."
-        }]
+        parameters: [
+          {
+            name: "fallbackValue",
+            type: "<S extends ZodTypeAny>",
+            isOptional: true,
+            description:
+              "スキーマ検証が失敗し、errorStrategyが'fallback'の場合に使用するフォールバック値。"
+          }
+        ]
       },
       {
-        parameters: [{
-          name: "instructions",
-          type: "string",
-          isOptional: true,
-          description: "Custom instructions for the structuring agent."
-        }]
+        parameters: [
+          {
+            name: "instructions",
+            type: "string",
+            isOptional: true,
+            description:
+              "構造化出力モデルのための追加の指示。"
+          }
+        ]
       },
+      {
+        parameters: [
+          {
+            name: "jsonPromptInjection",
+            type: "boolean",
+            isOptional: true,
+            description:
+              "構造化出力を返すようにメインエージェントに指示するシステムプロンプトを注入します。モデルがネイティブに構造化出力をサポートしていない場合に有用です。"
+          }
+        ]
+      }
     ]
   },
   {
     name: "outputProcessors",
     type: "Processor[]",
     isOptional: true,
-    description: "Overrides the output processors set on the agent. Output processors that can modify or validate messages from the agent before they are returned to the user. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
+    description:
+      "この実行に使用する出力プロセッサー(エージェントのデフォルトを上書きします)。"
   },
   {
     name: "inputProcessors",
     type: "Processor[]",
     isOptional: true,
-    description: "Overrides the input processors set on the agent. Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
-  },
-  {
-    name: "experimental_output",
-    type: "Zod schema | JsonSchema7",
-    isOptional: true,
     description:
-      "Note, the preferred route is to use the `structuredOutput` property. Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
+      "この実行に使用する入力プロセッサー(エージェントのデフォルトを上書きします)。"
   },
   {
     name: "instructions",
     type: "string",
     isOptional: true,
     description:
-      "Custom instructions that override the agent's default instructions for this specific generation. Useful for dynamically modifying agent behavior without creating a new agent instance.",
+      "この実行でエージェントのデフォルト指示を上書きするカスタム指示。"
+  },
+  {
+    name: "system",
+    type: "string | string[] | CoreSystemMessage | SystemModelMessage | CoreSystemMessage[] | SystemModelMessage[]",
+    isOptional: true,
+    description:
+      "プロンプトに含めるカスタムシステムメッセージ。単一の文字列、メッセージオブジェクト、またはそれらの配列を指定できます。システムメッセージは、エージェントのメイン指示を補完する追加のコンテキストや動作指示を提供します。"
   },
   {
     name: "output",
     type: "Zod schema | JsonSchema7",
     isOptional: true,
     description:
-      "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
+      "**非推奨。** 同じことを実現するには、モデルなしでstructuredOutputを使用してください。出力の期待される構造を定義します。JSONスキーマオブジェクトまたはZodスキーマを指定できます。"
   },
   {
     name: "memory",
     type: "object",
     isOptional: true,
-    description: "Configuration for memory. This is the preferred way to manage memory.",
+    description:
+      "会話の永続化と取得のためのメモリ設定。",
     properties: [
       {
-        parameters: [{
+        parameters: [
+          {
             name: "thread",
             type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
             isOptional: false,
-            description: "The conversation thread, as a string ID or an object with an `id` and optional `metadata`."
-        }]
+            description:
+              "会話の継続性のためのスレッド識別子。文字列IDまたはIDとオプションのメタデータ/タイトルを含むオブジェクトを指定できます。"
+          }
+        ]
       },
       {
-        parameters: [{
+        parameters: [
+          {
             name: "resource",
             type: "string",
             isOptional: false,
-            description: "Identifier for the user or resource associated with the thread."
-        }]
+            description:
+              "ユーザー、セッション、またはコンテキストごとに会話を整理するためのリソース識別子。"
+          }
+        ]
       },
       {
-        parameters: [{
+        parameters: [
+          {
             name: "options",
             type: "MemoryConfig",
             isOptional: true,
-            description: "Configuration for memory behavior, like message history and semantic recall. See `MemoryConfig` below."
-        }]
+            description:
+              "会話管理のための追加のメモリ設定オプション。"
+          }
+        ]
       }
     ]
   },
   {
-    name: "maxSteps",
-    type: "number",
+    name: "onFinish",
+    type: "StreamTextOnFinishCallback<any> | StreamObjectOnFinishCallback<OUTPUT>",
     isOptional: true,
-    defaultValue: "5",
-    description: "Maximum number of execution steps allowed.",
-  },
-  {
-    name: "maxRetries",
-    type: "number",
-    isOptional: true,
-    defaultValue: "2",
-    description: "Maximum number of retries. Set to 0 to disable retries.",
+    description:
+      "生成が完了した際に発火するコールバック。タイプは形式によって異なります。"
   },
   {
     name: "onStepFinish",
-    type: "GenerateTextOnStepFinishCallback<any> | never",
+    type: "StreamTextOnStepFinishCallback<any> | never",
     isOptional: true,
     description:
-      "Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output",
+      "各生成ステップの後に発火するコールバック。タイプは形式によって異なります。"
   },
   {
-    name: "runId",
+    name: "resourceId",
     type: "string",
     isOptional: true,
-    description: "Unique ID for this generation run. Useful for tracking and debugging purposes.",
+    description:
+      "非推奨。代わりにmemory.resourceを使用してください。リソース/ユーザーの識別子。"
   },
   {
     name: "telemetry",
     type: "TelemetrySettings",
     isOptional: true,
     description:
-      "Settings for telemetry collection during generation.",
+      "生成中のOTLPテレメトリ収集の設定(AIトレーシングではありません)。",
     properties: [
       {
-        parameters: [{
-          name: "isEnabled",
-          type: "boolean",
-          isOptional: true,
-          description: "Enable or disable telemetry. Disabled by default while experimental."
-        }]
+        parameters: [
+          {
+            name: "isEnabled",
+            type: "boolean",
+            isOptional: true,
+            description: "テレメトリ収集が有効かどうか。"
+          }
+        ]
       },
       {
-        parameters: [{
-          name: "recordInputs",
-          type: "boolean",
-          isOptional: true,
-          description: "Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information."
-        }]
+        parameters: [
+          {
+            name: "recordInputs",
+            type: "boolean",
+            isOptional: true,
+            description: "テレメトリに入力データを記録するかどうか。"
+          }
+        ]
       },
       {
-        parameters: [{
-          name: "recordOutputs",
-          type: "boolean",
-          isOptional: true,
-          description: "Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information."
-        }]
+        parameters: [
+          {
+            name: "recordOutputs",
+            type: "boolean",
+            isOptional: true,
+            description: "テレメトリに出力データを記録するかどうか。"
+          }
+        ]
       },
       {
-        parameters: [{
-          name: "functionId",
-          type: "string",
-          isOptional: true,
-          description: "Identifier for this function. Used to group telemetry data by function."
-        }]
+        parameters: [
+          {
+            name: "functionId",
+            type: "string",
+            isOptional: true,
+            description: "実行される関数の識別子。"
+          }
+        ]
       }
     ]
   },
   {
-    name: "temperature",
-    type: "number",
+    name: "modelSettings",
+    type: "CallSettings",
+    isOptional: true,
+    description: "temperature、topPなどのモデル固有の設定。",
+    properties: [
+      {
+        parameters: [
+          {
+            name: "temperature",
+            type: "number",
+            isOptional: true,
+            description:
+              "生成のランダム性を制御します(0-2)。値が高いほど出力がランダムになります。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "maxRetries",
+            type: "number",
+            isOptional: true,
+            description: "失敗したリクエストの最大再試行回数。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "topP",
+            type: "number",
+            isOptional: true,
+            description:
+              "ニュークリアスサンプリングパラメータ(0-1)。生成されるテキストの多様性を制御します。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "topK",
+            type: "number",
+            isOptional: true,
+            description:
+              "トップkサンプリングパラメータ。語彙をk個の最も可能性の高いトークンに制限します。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "presencePenalty",
+            type: "number",
+            isOptional: true,
+            description:
+              "トークンの存在に対するペナルティ(-2から2)。繰り返しを減らします。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "frequencyPenalty",
+            type: "number",
+            isOptional: true,
+            description:
+              "トークンの頻度に対するペナルティ(-2から2)。頻出トークンの繰り返しを減らします。"
+          }
+        ]
+      },
+      {
+        parameters: [
+          {
+            name: "stopSequences",
+            type: "string[]",
+            isOptional: true,
+            description:
+              "検出時に生成を停止する文字列の配列。"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    name: "threadId",
+    type: "string",
     isOptional: true,
     description:
-      "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
+      "非推奨。代わりにmemory.threadを使用してください。会話の連続性を保つためのスレッド識別子。"
   },
   {
     name: "toolChoice",
     type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
     isOptional: true,
-    defaultValue: "'auto'",
-    description: "Controls how the agent uses tools during generation.",
+    description: "生成中のツール選択方法を制御します。",
     properties: [
       {
-        parameters: [{
-          name: "'auto'",
-          type: "string",
-          description: "Let the model decide whether to use tools (default)."
-        }]
+        parameters: [
+          {
+            name: "'auto'",
+            type: "string",
+            isOptional: false,
+            description: "モデルにツールを使用するタイミングを決定させます(デフォルト)。"
+          }
+        ]
       },
       {
-        parameters: [{
-          name: "'none'",
-          type: "string",
-          description: "Do not use any tools."
-        }]
+        parameters: [
+          {
+            name: "'none'",
+            type: "string",
+            isOptional: false,
+            description: "ツールの使用を完全に無効にします。"
+          }
+        ]
       },
       {
-        parameters: [{
-          name: "'required'",
-          type: "string",
-          description: "Require the model to use at least one tool."
-        }]
+        parameters: [
+          {
+            name: "'required'",
+            type: "string",
+            isOptional: false,
+            description: "モデルに少なくとも1つのツールを使用させます。"
+          }
+        ]
       },
       {
-        parameters: [{
-          name: "{ type: 'tool'; toolName: string }",
-          type: "object",
-          description: "Require the model to use a specific tool by name."
-        }]
+        parameters: [
+          {
+            name: "{ type: 'tool'; toolName: string }",
+            type: "object",
+            isOptional: false,
+            description: "モデルに特定のツールを使用させます。"
+          }
+        ]
       }
     ]
   },
@@ -285,226 +536,145 @@ await agent.generate("message for agent");
     name: "toolsets",
     type: "ToolsetsInput",
     isOptional: true,
-    description:
-      "Additional toolsets to make available to the agent during generation.",
+    description: "この実行で使用できる追加のツールセット。"
   },
   {
     name: "clientTools",
     type: "ToolsInput",
     isOptional: true,
-    description:
-      "Tools that are executed on the 'client' side of the request. These tools do not have execute functions in the definition.",
+    description: "実行中に利用可能なクライアント側のツール。"
   },
   {
     name: "savePerStep",
     type: "boolean",
     isOptional: true,
-    description: "Save messages incrementally after each stream step completes (default: false).",
+    description:
+      "各生成ステップの完了後にメッセージを段階的に保存します(デフォルト: false)。"
   },
   {
     name: "providerOptions",
     type: "Record<string, Record<string, JSONValue>>",
     isOptional: true,
-    description: "Additional provider-specific options that are passed through to the underlying LLM provider. The structure is `{ providerName: { optionKey: value } }`. Since Mastra extends AI SDK, see the [AI SDK documentation](https://sdk.vercel.ai/docs/providers/ai-sdk-providers) for complete provider options.",
+    description: "言語モデルに渡されるプロバイダー固有のオプション。",
     properties: [
       {
-        parameters: [{
-          name: "openai",
-          type: "Record<string, JSONValue>",
-          isOptional: true,
-          description: "OpenAI-specific options. Example: `{ reasoningEffort: 'high' }`"
-        }]
+        parameters: [
+          {
+            name: "openai",
+            type: "Record<string, JSONValue>",
+            isOptional: true,
+            description:
+              "reasoningEffort、responseFormatなどのOpenAI固有のオプション。"
+          }
+        ]
       },
       {
-        parameters: [{
-          name: "anthropic",
-          type: "Record<string, JSONValue>",
-          isOptional: true,
-          description: "Anthropic-specific options. Example: `{ maxTokens: 1000 }`"
-        }]
+        parameters: [
+          {
+            name: "anthropic",
+            type: "Record<string, JSONValue>",
+            isOptional: true,
+            description: "maxTokensなどのAnthropic固有のオプション。"
+          }
+        ]
       },
       {
-        parameters: [{
-          name: "google",
-          type: "Record<string, JSONValue>",
-          isOptional: true,
-          description: "Google-specific options. Example: `{ safetySettings: [...] }`"
-        }]
+        parameters: [
+          {
+            name: "google",
+            type: "Record<string, JSONValue>",
+            isOptional: true,
+            description: "Google固有のオプション。"
+          }
+        ]
       },
       {
-        parameters: [{
-          name: "[providerName]",
-          type: "Record<string, JSONValue>",
-          isOptional: true,
-          description: "Other provider-specific options. The key is the provider name and the value is a record of provider-specific options."
-        }]
+        parameters: [
+          {
+            name: "[providerName]",
+            type: "Record<string, JSONValue>",
+            isOptional: true,
+            description: "任意のプロバイダー固有のオプション。"
+          }
+        ]
       }
     ]
+  },
+  {
+    name: "runId",
+    type: "string",
+    isOptional: true,
+    description: "この実行の一意の識別子。"
   },
   {
     name: "runtimeContext",
     type: "RuntimeContext",
     isOptional: true,
-    description: "Runtime context for dependency injection and contextual information.",
+    description: "動的な設定と状態を含むランタイムコンテキスト。"
+  },
+  {
+    name: "tracingContext",
+    type: "TracingContext",
+    isOptional: true,
+    description:
+      "子スパンの作成とメタデータの追加のためのAIトレーシングコンテキスト。Mastraのトレーシングシステムを使用する際に自動的に注入されます。",
+    properties: [
+      {
+        parameters: [
+          {
+            name: "currentSpan",
+            type: "AISpan",
+            isOptional: true,
+            description:
+              "子スパンの作成とメタデータの追加のための現在のAIスパン。実行中にカスタム子スパンを作成したり、スパン属性を更新したりするために使用します。"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    name: "tracingOptions",
+    type: "TracingOptions",
+    isOptional: true,
+    description: "AIトレーシング設定のオプション。",
+    properties: [
+      {
+        parameters: [
+          {
+            name: "metadata",
+            type: "Record<string, any>",
+            isOptional: true,
+            description:
+              "ルートトレーススパンに追加するメタデータ。ユーザーID、セッションID、機能フラグなどのカスタム属性を追加するのに便利です。"
+          }
+        ]
+      }
+    ]
   },
   {
     name: "maxTokens",
     type: "number",
     isOptional: true,
-    description: "Maximum number of tokens to generate.",
-  },
-  {
-    name: "topP",
-    type: "number",
-    isOptional: true,
-    description: "Nucleus sampling. This is a number between 0 and 1. It is recommended to set either `temperature` or `topP`, but not both.",
-  },
-  {
-    name: "topK",
-    type: "number",
-    isOptional: true,
-    description: "Only sample from the top K options for each subsequent token. Used to remove 'long tail' low probability responses.",
-  },
-  {
-    name: "presencePenalty",
-    type: "number",
-    isOptional: true,
-    description: "Presence penalty setting. It affects the likelihood of the model to repeat information that is already in the prompt. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
-  },
-  {
-    name: "frequencyPenalty",
-    type: "number",
-    isOptional: true,
-    description: "Frequency penalty setting. It affects the likelihood of the model to repeatedly use the same words or phrases. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
-  },
-  {
-    name: "stopSequences",
-    type: "string[]",
-    isOptional: true,
-    description: "Stop sequences. If set, the model will stop generating text when one of the stop sequences is generated.",
-  },
-  {
-    name: "seed",
-    type: "number",
-    isOptional: true,
-    description: "The seed (integer) to use for random sampling. If set and supported by the model, calls will generate deterministic results.",
-  },
-  {
-    name: "headers",
-    type: "Record<string, string | undefined>",
-    isOptional: true,
-    description: "Additional HTTP headers to be sent with the request. Only applicable for HTTP-based providers.",
+    description:
+      "実行を停止する条件(例: ステップ数、トークン制限)。"
   }
 ]}
 />
-
-
-
-
 
 ## 戻り値
 
 <PropertiesTable
   content={[
     {
-      name: "text",
+      name: "result",
+      type: "Awaited<ReturnType<MastraModelOutput<Output>['getFullOutput']>> | Awaited<ReturnType<AISDKV5OutputStream<Output>['getFullOutput']>>",
+      description: "生成処理の完全な出力を返します。format が「mastra」（デフォルト）の場合は MastraModelOutput の結果を、format が「aisdk」の場合は AI SDK v5 互換の AISDKV5OutputStream の結果を返します。",
+    },
+    {
+      name: "traceId",
       type: "string",
       isOptional: true,
-      description: "生成されたテキスト応答。出力が「text」（スキーマ未指定）の場合に返されます。",
-    },
-    {
-      name: "object",
-      type: "object",
-      isOptional: true,
-      description: "生成された構造化応答。`output`、`structuredOutput`、または `experimental_output` でスキーマが指定された場合に返されます。",
-    },
-    {
-      name: "toolCalls",
-      type: "Array<ToolCall>",
-      isOptional: true,
-      description: "生成処理中に行われたツール呼び出し。テキストモードとオブジェクトモードのいずれでも返されます。",
-      properties: [
-        {
-          parameters: [{
-            name: "toolName",
-            type: "string",
-            required: true,
-            description: "呼び出されたツール名。",
-          }]
-        },
-        {
-          parameters: [{
-            name: "args",
-            type: "any",
-            required: true,
-            description: "ツールに渡された引数。",
-          }]
-        }
-      ]
+      description: "AI トレースが有効な場合、この実行に関連付けられるトレース ID です。これを使用してログの相関付けや実行フローのデバッグを行います。",
     },
   ]}
 />
-
-
-
-## 発展的な使用例
-
-```typescript showLineNumbers copy
-import { z } from "zod";
-import { ModerationProcessor, TokenLimiterProcessor } from "@mastra/core/processors";
-
-await agent.generate(
-  [
-    { role: "user", content: "エージェントへのメッセージ" },
-    {
-      role: "user",
-      content: [
-        {
-          type: "text",
-          text: "エージェントへのメッセージ"
-        },
-        {
-          type: "image",
-          imageUrl: "https://example.com/image.jpg",
-          mimeType: "image/jpeg"
-        }
-      ]
-    }
-  ],
-  {
-    temperature: 0.7,
-    maxSteps: 3,
-    memory: {
-      thread: "user-123",
-      resource: "test-app"
-    },
-    toolChoice: "auto",
-    providerOptions: {
-      openai: {
-        reasoningEffort: "high"
-      }
-    },
-    // より良い DX のための構造化出力
-    structuredOutput: {
-      schema: z.object({
-        sentiment: z.enum(['positive', 'negative', 'neutral']),
-        confidence: z.number(),
-      }),
-      model: openai("gpt-4o-mini"),
-      errorStrategy: 'warn',
-    },
-    // 応答検証用の出力プロセッサ
-    outputProcessors: [
-      new ModerationProcessor({ model: openai("gpt-4.1-nano") }),
-      new TokenLimiterProcessor({ maxTokens: 1000 }),
-    ],
-  }
-);
-```
-
-
-
-## 関連情報
-
-- [レスポンスの生成](../../docs/agents/overview.mdx#generating-responses)
-- [レスポンスのストリーミング](../../docs/agents/overview.mdx#streaming-responses)

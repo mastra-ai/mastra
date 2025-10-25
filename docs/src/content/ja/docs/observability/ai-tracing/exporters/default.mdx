@@ -1,0 +1,173 @@
+---
+title: "デフォルトエクスポーター | AI トレーシング | 可観測性 | Mastra ドキュメント"
+description: "開発・デバッグ用途にトレースをローカル保存する"
+---
+
+# デフォルトエクスポーター
+
+`DefaultExporter` はトレースを設定済みのストレージバックエンドに保存し、Mastra Playground から参照できるようにします。デフォルトのオブザーバビリティ構成を使用している場合は自動的に有効になり、外部サービスは不要です。
+
+## DefaultExporter を使うべきとき
+
+DefaultExporter は次の用途に最適です:
+
+- **ローカル開発** - トレースをオフラインでデバッグ・分析
+- **データの所有** - トレースデータを完全にコントロール
+- **依存関係なし** - 外部サービスは不要
+- **Playground との統合** - Mastra Playground の UI でトレースを表示
+
+## 設定
+
+### 前提条件
+
+1. **ストレージバックエンド**: ストレージプロバイダー（LibSQL、PostgreSQL など）を設定する
+2. **Mastra Playground**: ローカルでトレースを確認できるようインストールする
+
+### 基本設定
+
+```typescript filename="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { DefaultExporter } from "@mastra/core/ai-tracing";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    url: "file:./mastra.db",  // トレースの永続化に必要
+  }),
+  observability: {
+    configs: {
+      local: {
+        serviceName: 'my-service',
+        exporters: [
+          new DefaultExporter(),
+        ],
+      },
+    },
+  },
+});
+```
+
+
+### 自動設定
+
+デフォルトのオブザーバビリティ設定を使用すると、DefaultExporter が自動的に組み込まれます。
+
+```typescript
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    url: "file:./mastra.db",
+  }),
+  observability: {
+    default: { enabled: true },  // DefaultExporterを自動的に含みます
+  },
+});
+```
+
+
+## トレースの閲覧
+
+### Mastra Playground
+
+ローカルのPlaygroundからトレースにアクセスします：
+
+1. Playground を起動する
+2. Observability に移動する
+3. ローカルのトレースをフィルタリング・検索する
+4. スパンの詳細を確認する
+
+## トレース戦略
+
+DefaultExporter は、利用しているストレージプロバイダーに応じて、最適なトレース戦略を自動的に選択します。必要に応じて、この選択を手動で上書きすることも可能です。
+
+### 利用可能な戦略
+
+| 戦略 | 説明 | ユースケース |
+|----------|-------------|----------|
+| **realtime** | 各イベントを即時に処理する | 開発、デバッグ、低トラフィック |
+| **batch-with-updates** | イベントをバッファし、更新を含むフルライフサイクル対応でバッチ書き込みする | 低トラフィックの本番 |
+| **insert-only** | 完了したスパンのみ処理し、更新は無視する | 高トラフィックの本番 |
+
+### 戦略の設定
+
+```typescript
+new DefaultExporter({
+  strategy: 'auto',  // デフォルト - ストレージプロバイダに判断を委ねる
+  // または明示的に設定:
+  // strategy: 'realtime' | 'batch-with-updates' | 'insert-only'
+
+  // バッチング設定 (batch-with-updates と insert-only の両方に適用)
+  maxBatchSize: 1000,      // バッチあたりの最大スパン数
+  maxBatchWaitMs: 5000,    // フラッシュ前の最大待機時間
+  maxBufferSize: 10000,    // バッファする最大スパン数
+})
+```
+
+
+## ストレージプロバイダーのサポート
+
+ストレージプロバイダーごとに、サポートするトレーシング戦略が異なります。
+
+strategy を `'auto'` に設定すると、`DefaultExporter` がストレージプロバイダーに最適な戦略を自動選択します。プロバイダーがサポートしていないモードを指定した場合は、エラーが表示されます。
+
+| Storage Provider | Preferred Strategy | Supported Strategies | Notes |
+|-----------------|-------------------|---------------------|--------|
+| **[LibSQL](/reference/storage/libsql)** | batch-with-updates | realtime, batch-with-updates, insert-only | 既定のストレージ。開発向け |
+| **[PostgreSQL](/reference/storage/postgresql)** | batch-with-updates | batch-with-updates, insert-only | 本番環境向けに推奨 |
+
+### 戦略のメリット
+
+- **realtime**: 即時に可視化でき、デバッグに最適
+- **batch-with-updates**: スループットが10〜100倍に向上し、スパンのライフサイクルを完全にカバー
+- **insert-only**: データベース操作をさらに70%削減し、分析に最適
+
+## バッチ化の挙動
+
+### フラッシュトリガー
+
+両方のバッチ戦略（`batch-with-updates` と `insert-only`）では、次のいずれかの条件を満たすとトレースはストレージにフラッシュされます：
+
+1. **サイズトリガー**：バッファが `maxBatchSize` スパンに到達したとき
+2. **時間トリガー**：最初のイベントから `maxBatchWaitMs` 経過したとき
+3. **緊急フラッシュ**：バッファが `maxBufferSize` の上限に近づいたとき
+4. **シャットダウン**：保留中のすべてのイベントを強制的にフラッシュ
+
+### エラー処理
+
+DefaultExporter は本番環境向けに堅牢なエラー処理を備えています:
+
+- **再試行ロジック**: 指数バックオフ（500ms、1s、2s、4s）
+- **一時的な障害**: バックオフ付きで自動再試行
+- **永続的な障害**: 4回失敗した後にバッチを破棄
+- **バッファオーバーフロー**: ストレージ障害時のメモリ問題を防止
+
+### 設定の例
+
+```typescript
+// ゼロ設定 - ほとんどのユーザーに推奨
+new DefaultExporter()
+
+// 開発環境でのオーバーライド
+new DefaultExporter({
+  strategy: 'realtime',  // デバッグ用の即座の可視化
+})
+
+// 高スループット本番環境
+new DefaultExporter({
+  maxBatchSize: 2000,      // より大きなバッチサイズ
+  maxBatchWaitMs: 10000,   // バッチを満たすまで長時間待機
+  maxBufferSize: 50000,    // 長時間の障害に対応
+})
+
+// 低レイテンシ本番環境
+new DefaultExporter({
+  maxBatchSize: 100,       // より小さなバッチサイズ
+  maxBatchWaitMs: 1000,    // 素早くフラッシュ
+})
+```
+
+
+## 関連情報
+
+- [AI トレーシングの概要](/docs/observability/ai-tracing/overview)
+- [CloudExporter](/docs/observability/ai-tracing/exporters/cloud)
+- [ストレージの設定](/docs/storage/overview)

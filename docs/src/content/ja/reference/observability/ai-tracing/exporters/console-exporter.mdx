@@ -1,0 +1,160 @@
+---
+title: "ConsoleExporter | Exporters | AI Tracing | リファレンス"
+description: ConsoleExporter の API リファレンス
+---
+
+import { PropertiesTable } from "@/components/properties-table";
+
+
+# ConsoleExporter
+
+デバッグや開発時のトレースイベントをコンソールに出力します。
+
+## コンストラクタ
+
+```typescript
+new ConsoleExporter(logger?: IMastraLogger)
+```
+
+<PropertiesTable
+  props={[
+{
+  name: "logger",
+  type: "IMastraLogger",
+  description: "使用するロガーインスタンス。未指定の場合は、INFO レベルの ConsoleLogger が使用されます",
+  required: false,
+},
+]}
+/>
+
+
+## プロパティ
+
+```typescript
+readonly name = 'tracing-console-exporter';
+```
+
+
+## 方法
+
+### exportEvent
+
+```typescript
+async exportEvent(event: AITracingEvent): Promise<void>
+```
+
+トレースイベントをコンソールに出力します。
+
+<PropertiesTable
+  props={[
+{
+  name: "event",
+  type: "AITracingEvent",
+  description: "出力するトレースイベント",
+  required: true,
+},
+]}
+/>
+
+
+### シャットダウン
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+シャットダウンメッセージを記録します。
+
+
+## 出力形式
+
+エクスポーターはイベントの種類に応じて、異なる形式で出力します。
+
+### SPAN&#95;STARTED
+
+```
+🚀 SPAN_STARTED
+   タイプ: [span type]
+   名前: [span name]
+   ID: [span id]
+   トレースID: [trace id]
+   入力: [formatted input]
+   属性: [formatted attributes]
+────────────────────────────────────────
+```
+
+
+### SPAN&#95;ENDED
+
+```
+✅ SPAN_ENDED
+   タイプ: [span type]
+   名前: [span name]
+   ID: [span id]
+   実行時間: [duration]ms
+   トレースID: [trace id]
+   入力: [formatted input]
+   出力: [formatted output]
+   エラー: [formatted error if present]
+   属性: [formatted attributes]
+────────────────────────────────────────
+```
+
+
+### SPAN&#95;UPDATED
+
+```
+📝 SPAN_UPDATED
+   タイプ: [span type]
+   名前: [span name]
+   ID: [span id]
+   トレースID: [trace id]
+   入力: [formatted input]
+   出力: [formatted output]
+   エラー: [formatted error if present]
+   更新された属性: [formatted attributes]
+────────────────────────────────────────
+```
+
+
+## 使い方
+
+```typescript
+import { ConsoleExporter } from '@mastra/core/ai-tracing';
+import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
+
+// デフォルトロガーを使用（INFOレベル）
+const exporter = new ConsoleExporter();
+
+// カスタムロガーを使用
+const customLogger = new ConsoleLogger({ level: LogLevel.DEBUG });
+const exporterWithLogger = new ConsoleExporter(customLogger);
+```
+
+
+## 実装の詳細
+
+- 属性を2スペースインデントのJSONとして整形
+- スパンの継続時間をミリ秒単位で計算して表示
+- シリアライズエラーを適切に処理
+- 未実装のイベントタイプを警告として記録
+- イベント間に80文字幅の区切り線を使用
+
+## 参照
+
+### ドキュメント
+
+- [AI トレーシングの概要](/docs/observability/ai-tracing/overview) - 総合ガイド
+- [エクスポーター](/docs/observability/ai-tracing/overview#exporters) - エクスポーターの概念
+
+### その他のエクスポーター
+
+- [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - ストレージへの永続化
+- [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud
+- [Langfuse](/reference/observability/ai-tracing/exporters/langfuse) - Langfuse との統合
+- [Braintrust](/reference/observability/ai-tracing/exporters/braintrust) - Braintrust との統合
+
+### 参考資料
+
+- [Configuration](/reference/observability/ai-tracing/configuration) - 設定項目
+- [Interfaces](/reference/observability/ai-tracing/interfaces) - 型定義

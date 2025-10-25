@@ -1,20 +1,17 @@
 ---
 title: "例: Answer Relevancy | Evals | Mastra Docs"
-description: Answer Relevancy 指標を用いて、クエリに対する応答の妥当性（関連性）を評価する例。
+description: Answer Relevancy 指標を使って、クエリに対する回答の関連性を評価する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 import { ScorerCallout } from '@/components/scorer-callout'
 
 
-
 # 回答の関連性評価
 
 <ScorerCallout />
 
-`AnswerRelevancyMetric` を使用して、応答が元のクエリにどれだけ関連しているかを評価します。メトリクスは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
-
-
+`AnswerRelevancyMetric` を使って、応答が元のクエリにどれだけ関連しているかを評価します。メトリックは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
 
 ## インストール
 
@@ -23,10 +20,9 @@ npm install @mastra/evals
 ```
 
 
-
 ## 関連性が高い例
 
-この例では、応答が入力クエリに対して、具体的で関連性の高い情報を用いて的確に回答しています。
+この例では、レスポンスが入力クエリに対して、具体的で関連性の高い情報を正確に提示しています。
 
 ```typescript filename="src/example-high-answer-relevancy.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -34,32 +30,32 @@ import { AnswerRelevancyMetric } from "@mastra/evals/llm";
 
 const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"));
 
-const query = "What are the health benefits of regular exercise?";
-const response = "Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.";
+const query = "定期的な運動にはどのような健康上のメリットがありますか？";
+const response = "定期的な運動は、心血管の健康を向上させ、筋力を高め、代謝を活性化し、エンドルフィンの分泌によってメンタルの健康を改善します。";
 
 const result = await metric.measure(query, response);
 
 console.log(result);
 ```
 
-### 関連性が高い出力
 
-この出力は、無関係な情報を含めずにクエリに正確に答えているため、高いスコアを獲得しています。
+### 関連性の高い出力
+
+この出力は、無関係な情報を含めずに問いに正確に答えているため、高いスコアを獲得します。
 
 ```typescript
 {
   score: 1,
   info: {
-    reason: 'The score is 1 because the output directly addresses the question by providing multiple explicit health benefits of regular exercise, including improvements in cardiovascular health, muscle strength, metabolism, and mental well-being. Each point is relevant and contributes to a comprehensive understanding of the health benefits.'
+    reason: 'スコアが1なのは、定期的な運動の具体的な健康効果を複数挙げて質問に直接答えているためです。これには、心血管の健康、筋力、代謝、そしてメンタルヘルスの向上が含まれます。いずれの点も関連性が高く、健康効果への包括的な理解に貢献しています。'
   }
 }
 ```
 
 
-
 ## 部分的な関連性の例
 
-この例では、応答が質問の一部には答えているものの、直接的に関連しない追加情報が含まれています。
+この例では、応答はクエリの一部には答えていますが、直接は関係のない情報も含まれています。
 
 ```typescript filename="src/example-partial-answer-relevancy.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -67,33 +63,33 @@ import { AnswerRelevancyMetric } from "@mastra/evals/llm";
 
 const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"));
 
-const query = "What should a healthy breakfast include?";
+const query = "健康的な朝食には何を含めるとよいですか？";
 const response =
-  "A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.";
+  "栄養価の高い朝食には、全粒穀物とタンパク質を含めるとよいでしょう。ただし、朝食のタイミングも同様に重要です—起床後2時間以内に食べると、1日を通して代謝とエネルギーレベルが最適化されることが研究で示されています。";
 
 const result = await metric.measure(query, response);
 
 console.log(result);
 ```
 
-### 部分的な関連性の出力
 
-この出力は、質問に部分的にしか答えていないため、スコアが低くなります。関連する情報は含まれている一方で、無関係な詳細が全体の関連性を下げています。
+### 部分的に関連する出力
+
+この出力はクエリに一部しか答えていないため、スコアが低くなります。関連情報は含まれているものの、無関係な詳細が全体の関連性を損ねています。
 
 ```typescript
 {
   score: 0.25,
   info: {
-    reason: 'スコアが 0.25 なのは、健全な朝食の構成要素として全粒穀物とタンパク質に言及しており、直接的な回答になっているためです。しかし、朝食のタイミングやそれが代謝や一日のエネルギーレベルに及ぼす影響に関する追加情報は、質問に直接関係していないため、全体の関連性スコアが低くなっています。'
+    reason: 'スコアが0.25であるのは、出力が健康的な朝食の構成要素として全粒穀物とタンパク質に言及し、直接的な回答を示していて一定の関連性があるためです。ただし、朝食のタイミングやそれが代謝・エネルギーレベルに及ぼす影響に関する追加情報は質問に直接関係せず、全体としての関連性スコアを下げています。'
   }
 }
 ```
 
 
-
 ## 関連性が低い例
 
-この例では、応答がクエリに答えておらず、内容もまったく無関係です。
+この例では、応答が問い合わせに答えておらず、まったく関係のない情報が含まれています。
 
 ```typescript filename="src/example-low-answer-relevancy.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -101,32 +97,32 @@ import { AnswerRelevancyMetric } from "@mastra/evals/llm";
 
 const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"));
 
-const query = "What are the benefits of meditation?";
-const response = "The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.";
+const query = "瞑想にはどんな利点がありますか？";
+const response = "万里の長城は全長が13,000マイル以上あり、侵攻から身を守るために明代に建設されました。";
 
 const result = await metric.measure(query, response);
 
 console.log(result);
 ```
 
-### 関連性が低い出力
 
-この出力は、クエリに答えておらず関連情報も提供していないため、スコアは0となります。
+### 関連性の低い出力
+
+この出力は、クエリに回答しておらず、関連する情報も提供していないため、スコアは0となります。
 
 ```typescript
 {
   score: 0,
   info: {
-    reason: 'The score is 0 because the output about the Great Wall of China is completely unrelated to the benefits of meditation, providing no relevant information or context that addresses the input question.'
+    reason: 'スコアが0なのは、出力が瞑想の利点とは無関係な万里の長城についての内容であり、入力された質問に答えるための関連情報や文脈を一切提供していないためです。'
   }
 }
 ```
 
 
-
 ## メトリクスの設定
 
-任意のパラメータを調整することで、`AnswerRelevancyMetric` のスコア計算方法をカスタマイズできます。たとえば、`uncertaintyWeight` は不確かな応答にどれだけ重みを与えるかを制御し、`scale` は到達可能な最大スコアを設定します。
+任意のパラメータを調整することで、`AnswerRelevancyMetric` のスコア算出方法をカスタマイズできます。例えば、`uncertaintyWeight` は不確かな応答にどの程度の重みを与えるかを制御し、`scale` は可能な最大スコアを設定します。
 
 ```typescript showLineNumbers copy
 const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
@@ -134,8 +130,8 @@ const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
   scale: 1,
 });
 ```
-> 設定可能なオプションの一覧は、[AnswerRelevancyMetric](/reference/evals/answer-relevancy.mdx) を参照してください。
 
+> 設定オプションの一覧については、[AnswerRelevancyMetric](/reference/evals/answer-relevancy.mdx) を参照してください。
 
 
 ## 結果の理解
@@ -144,30 +140,31 @@ const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
 
 ```typescript
 {
-  score: number,
+  score: 数値,
   info: {
-    reason: string
+    reason: 文字列
   }
 }
 ```
 
+
 ### 関連性スコア
 
-0〜1 の関連性スコア:
+0 から 1 の間の関連性スコア:
 
-- **1.0**: 応答は関連性が高く焦点が定まっており、クエリに完全に答えている。
-- **0.7–0.9**: 応答は概ねクエリに答えているが、わずかに無関係な内容を含む場合がある。
-- **0.4–0.6**: 応答は部分的にクエリに答えているが、関連情報と無関係な情報が混在している。
-- **0.1–0.3**: 応答は関連する内容が最小限で、クエリの意図を大きく外している。
-- **0.0**: 応答は完全に無関係で、クエリにまったく答えていない。
+- **1.0**: 回答は関連性が高く、焦点の定まった情報でクエリに完全に答えている。
+- **0.7–0.9**: 回答はおおむねクエリに答えているが、軽微な無関係な内容を含む場合がある。
+- **0.4–0.6**: 回答は部分的にクエリに答えているが、関連情報と無関係な情報が混在している。
+- **0.1–0.3**: 回答は関連する内容が最小限で、クエリの意図を大きく外している。
+- **0.0**: 回答は完全に無関係で、クエリに答えていない。
 
 ### 関連性に関する情報
 
-スコアの説明で、次のような詳細を含む:
+スコアの説明（以下の詳細を含む）:
 
-- クエリと応答の整合性
+- クエリとレスポンスの整合性
 - コンテンツの焦点と関連性
-- 応答を改善するための提案
+- レスポンス改善のための提案
 
 <GithubLink
   outdated={true}

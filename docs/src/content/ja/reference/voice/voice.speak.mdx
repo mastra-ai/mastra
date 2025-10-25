@@ -1,41 +1,36 @@
 ---
 title: "リファレンス: voice.speak() | 音声プロバイダー | Mastra ドキュメント"
-description: "すべてのMastra音声プロバイダーで利用可能なspeak()メソッドのドキュメント。テキストを音声に変換します。"
+description: "すべての Mastra の音声プロバイダーで利用可能な speak() メソッドのリファレンス。テキストを音声に変換します。"
 ---
-
-
 
 # voice.speak()
 
-`speak()` メソッドは、すべてのMastra音声プロバイダーで利用可能な中核機能で、テキストを音声に変換します。テキスト入力を受け取り、再生または保存できるオーディオストリームを返します。
+`speak()` メソッドは、すべての Mastra 音声プロバイダーで利用できる中核的な機能で、テキストを音声に変換します。テキストを入力として受け取り、再生や保存が可能な音声ストリームを返します。
 
-
-
-## 使用例
+## 使い方の例
 
 ```typescript
 import { OpenAIVoice } from "@mastra/voice-openai";
-// Initialize a voice provider
+// 音声プロバイダーを初期化
 const voice = new OpenAIVoice({
-  speaker: "alloy", // Default voice
+  speaker: "alloy", // デフォルトの音声
 });
-// Basic usage with default settings
-const audioStream = await voice.speak("Hello, world!");
-// Using a different voice for this specific request
-const audioStreamWithDifferentVoice = await voice.speak("Hello again!", {
+// デフォルト設定での基本的な使い方
+const audioStream = await voice.speak("こんにちは、世界！");
+// このリクエストでは別の音声を使用
+const audioStreamWithDifferentVoice = await voice.speak("またこんにちは！", {
   speaker: "nova",
 });
-// Using provider-specific options
-const audioStreamWithOptions = await voice.speak("Hello with options!", {
+// プロバイダー固有のオプションを使用
+const audioStreamWithOptions = await voice.speak("オプション付きでこんにちは！", {
   speaker: "echo",
-  speed: 1.2, // OpenAI-specific option
+  speed: 1.2, // OpenAI 固有のオプション
 });
-// Using a text stream as input
+// テキストストリームを入力として使用
 import { Readable } from "stream";
-const textStream = Readable.from(["Hello", " from", " a", " stream!"]);
+const textStream = Readable.from(["こんにちは", " から", " ストリーム", " です！"]);
 const audioStreamFromTextStream = await voice.speak(textStream);
 ```
-
 
 
 ## パラメータ
@@ -46,7 +41,7 @@ const audioStreamFromTextStream = await voice.speak(textStream);
       name: "input",
       type: "string | NodeJS.ReadableStream",
       description:
-        "音声に変換するテキスト。文字列またはテキストの読み取り可能なストリームです。",
+        "音声に変換するテキスト。文字列またはテキストの読み取り可能なストリームを指定できます。",
       isOptional: false,
     },
     {
@@ -59,26 +54,22 @@ const audioStreamFromTextStream = await voice.speak(textStream);
       name: "options.speaker",
       type: "string",
       description:
-        "この特定のリクエストに使用する音声ID。コンストラクタで設定されたデフォルトのスピーカーを上書きします。",
+        "このリクエストで使用する音声ID。コンストラクタで設定されたデフォルトの話者を上書きします。",
       isOptional: true,
     },
   ]}
 />
 
+## 返り値
 
+`Promise<NodeJS.ReadableStream | void>` を返します。内訳は以下のとおりです。
 
-## 戻り値
-
-`Promise<NodeJS.ReadableStream | void>` を返します。内容は以下の通りです：
-
-- `NodeJS.ReadableStream`: 再生または保存が可能な音声データのストリーム
-- `void`: 音声を直接返すのではなく、イベントを通じてリアルタイムで音声を出力するプロバイダーを使用する場合
-
-
+- `NodeJS.ReadableStream`: 再生や保存が可能な音声データのストリーム
+- `void`: 音声を直接返すのではなく、イベント経由で音声を出力するリアルタイム音声プロバイダーを使用している場合
 
 ## プロバイダー固有のオプション
 
-各音声プロバイダーは、それぞれの実装に特有の追加オプションをサポートしている場合があります。以下にいくつかの例を示します。
+各音声プロバイダーは、その実装に固有の追加オプションをサポートしている場合があります。以下はいくつかの例です。
 
 ### OpenAI
 
@@ -88,7 +79,7 @@ const audioStreamFromTextStream = await voice.speak(textStream);
       name: "options.speed",
       type: "number",
       description:
-        "音声の速度倍率。0.25から4.0までの値がサポートされています。",
+        "音声の再生速度の倍率。0.25〜4.0 の範囲をサポートします。",
       isOptional: true,
       defaultValue: "1.0",
     },
@@ -103,14 +94,14 @@ const audioStreamFromTextStream = await voice.speak(textStream);
       name: "options.stability",
       type: "number",
       description:
-        "音声の安定性。値が高いほど、より安定し、抑揚の少ない音声になります。",
+        "音声の安定性。値が高いほど安定し、表現の起伏が少ない音声になります。",
       isOptional: true,
       defaultValue: "0.5",
     },
     {
       name: "options.similarity_boost",
       type: "number",
-      description: "音声の明瞭さと元の声への類似度。",
+      description: "音声の明瞭さと原音声への類似度。",
       isOptional: true,
       defaultValue: "0.75",
     },
@@ -124,7 +115,7 @@ const audioStreamFromTextStream = await voice.speak(textStream);
     {
       name: "options.languageCode",
       type: "string",
-      description: "音声の言語コード（例: 'en-US'）。",
+      description: "音声の言語コード（例：「en-US」）。",
       isOptional: true,
     },
     {
@@ -145,59 +136,56 @@ const audioStreamFromTextStream = await voice.speak(textStream);
     {
       name: "options.properties.rate",
       type: "number",
-      description: "音声の速度倍率。",
+      description: "話速の倍率。",
       isOptional: true,
     },
     {
       name: "options.properties.pitch",
       type: "number",
-      description: "音声のピッチ調整。",
+      description: "声のピッチの調整。",
       isOptional: true,
     },
     {
       name: "options.properties.format",
       type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
-      description: "出力音声のフォーマット。",
+      description: "出力音声の形式。",
       isOptional: true,
     },
   ]}
 />
 
-
-
 ## リアルタイム音声プロバイダー
 
-`OpenAIRealtimeVoice`のようなリアルタイム音声プロバイダーを使用する場合、`speak()`メソッドは異なる動作をします：
+`OpenAIRealtimeVoice` のようなリアルタイム音声プロバイダーを使用する場合、`speak()` メソッドの挙動は次のように異なります：
 
-- オーディオストリームを返す代わりに、オーディオデータを含む「speaking」イベントを発行します
-- オーディオチャンクを受信するためにイベントリスナーを登録する必要があります
+* 音声ストリームを返す代わりに、音声データを含む &#39;speaking&#39; イベントを発火します
+* 音声チャンクを受け取るには、イベントリスナーを登録する必要があります
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import Speaker from "@mastra/node-speaker";
 
 const speaker = new Speaker({
-  sampleRate: 24100, // オーディオサンプルレート（Hz）- MacBook Proの高品質オーディオの標準
-  channels: 1, // モノラルオーディオ出力（ステレオの場合は2）
-  bitDepth: 16, // オーディオ品質のビット深度 - CD品質標準（16ビット解像度）
+  sampleRate: 24100, // オーディオのサンプリングレート（Hz）— MacBook Pro の高音質の標準値
+  channels: 1, // モノラル出力（ステレオなら 2）
+  bitDepth: 16, // 音質用のビット深度 — CD 品質の標準（16 ビット）
 });
 
 const voice = new OpenAIRealtimeVoice();
 await voice.connect();
-// オーディオチャンク用のイベントリスナーを登録
+// 音声データ（チャンク）用のイベントリスナーを登録
 voice.on("speaker", (stream) => {
-  // オーディオチャンクを処理（例：再生または保存）
+  // 音声データ（チャンク）を処理（例：再生または保存）
   stream.pipe(speaker);
 });
 // これはストリームを返す代わりに「speaking」イベントを発行します
-await voice.speak("Hello, this is realtime speech!");
+await voice.speak("こんにちは、これはリアルタイム音声です！");
 ```
 
 
+## CompositeVoice と併用する場合
 
-## CompositeVoiceでの使用
-
-`CompositeVoice`を使用する場合、`speak()`メソッドは設定された音声提供プロバイダーに処理を委任します：
+`CompositeVoice` を使用する際は、`speak()` メソッドが設定された発話プロバイダーに処理を委譲します。
 
 ```typescript
 import { CompositeVoice } from "@mastra/core/voice";
@@ -207,16 +195,15 @@ const voice = new CompositeVoice({
   speakProvider: new PlayAIVoice(),
   listenProvider: new OpenAIVoice(),
 });
-// これはPlayAIVoiceプロバイダーを使用します
-const audioStream = await voice.speak("Hello, world!");
+// PlayAIVoice プロバイダーが使用されます
+const audioStream = await voice.speak("こんにちは、世界！");
 ```
-
 
 
 ## 注意事項
 
-- `speak()` の動作はプロバイダーによって若干異なる場合がありますが、すべての実装は同じ基本インターフェースに従います。
-- リアルタイム音声プロバイダーを使用する場合、このメソッドは音声ストリームを直接返さず、代わりに「speaking」イベントを発行することがあります。
-- 入力としてテキストストリームが提供された場合、プロバイダーは通常それを文字列に変換してから処理します。
-- 返されるストリームの音声フォーマットはプロバイダーによって異なります。一般的なフォーマットには MP3、WAV、OGG などがあります。
-- 最良のパフォーマンスのために、使用後は音声ストリームを閉じるか終了することを検討してください。
+- `speak()` の挙動はプロバイダーによって多少異なる場合がありますが、すべての実装は同一の基本インターフェースに準拠しています。
+- リアルタイムの音声プロバイダーを使用する場合、このメソッドは音声ストリームを直接返さず、代わりに「speaking」イベントを発行することがあります。
+- 入力としてテキストストリームが渡された場合、プロバイダーは通常、処理前にそれを文字列へ変換します。
+- 返されるストリームの音声フォーマットはプロバイダーにより異なります。一般的なフォーマットには MP3、WAV、OGG があります。
+- パフォーマンスを向上させるため、使用が終わったら音声ストリームを閉じる、または終了することを検討してください。

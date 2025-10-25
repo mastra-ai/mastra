@@ -1,0 +1,239 @@
+---
+title: "リファレンス: Qdrant ベクターストア | ベクターデータベース | Mastra ドキュメント"
+description: Qdrant を Mastra と統合するためのドキュメント。ベクターとペイロードを管理するためのベクトル類似検索エンジンです。
+---
+
+# Qdrant ベクターストア
+
+QdrantVector クラスは、ベクトル類似検索エンジンである [Qdrant](https://qdrant.tech/) を利用したベクトル検索を提供します。
+このクラスは、追加ペイロードや高度なフィルタリングに対応し、ベクトルの保存・検索・管理のための使いやすい API を備えた本番運用向けサービスを提供します。
+
+## コンストラクターのオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description:
+        "Qdrant インスタンスの REST URL。例: https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "任意の Qdrant API キー",
+    },
+    {
+      name: "https",
+      type: "boolean",
+      description:
+        "接続時に TLS を使用するかどうか。推奨。",
+    },
+  ]}
+/>
+
+## メソッド
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するインデックス名",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "ベクトルの次元数（使用する埋め込みモデルと一致させる必要があります）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "類似検索に使用する距離指標",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "埋め込みベクトルの配列",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "各ベクトルに対応するメタデータ",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "ベクトルの任意のID（未指定の場合は自動生成）",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "クエリ対象のインデックス名",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "類似ベクトル検索に用いるクエリベクトル",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "返す結果の件数",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "クエリに適用するメタデータフィルター",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にベクトルを含めるかどうか",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+インデックス名の文字列の配列を返します。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+{
+  name: "indexName",
+  type: "string",
+  description: "説明するインデックス名",
+},
+]}
+/>
+
+戻り値:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除するインデックス名",
+    },
+  ]}
+/>
+
+### updateVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "更新対象のインデックス名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "更新対象のベクターID",
+    },
+    {
+      name: "update",
+      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+      description: "更新するベクターやメタデータを含むオブジェクト",
+    },
+  ]}
+/>
+
+指定したインデックス内のベクターやそのメタデータを更新します。ベクターとメタデータの両方が指定された場合は両方を更新し、どちらか一方のみが指定された場合はその内容のみを更新します。
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルを削除する対象のインデックス名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "削除するベクトルのID",
+    },
+  ]}
+/>
+
+指定したインデックスから、IDを指定してベクトルを削除します。
+
+## レスポンスの種類
+
+クエリの結果は次の形式で返されます。
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // includeVectorがtrueの場合のみ含まれる
+}
+```
+
+
+## エラー処理
+
+ストアは型付きエラーをスローし、catch できます：
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | など
+    console.log(error.details); // エラーの詳細情報
+  }
+}
+```
+
+
+## 関連項目
+
+- [メタデータフィルター](../rag/metadata-filters)

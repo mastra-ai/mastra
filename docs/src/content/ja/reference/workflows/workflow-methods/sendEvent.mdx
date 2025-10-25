@@ -1,19 +1,20 @@
 ---
 title: "リファレンス: Workflow.sendEvent() | Workflows | Mastra ドキュメント"
-description: ワークフローにおける `Workflow.sendEvent()` メソッドのドキュメント。イベントが送信されると、実行が再開されます。
+description: ワークフローの `Workflow.sendEvent()` メソッドに関するドキュメント。イベントが送信されると、実行が再開されます。
 ---
 
 # Workflow.sendEvent()
 
-`.sendEvent()` は、イベントが送信されると実行を再開します。
+`.sendEvent()` は、イベントの送信によって処理が再開されます。
 
-## 使用例
+## 使い方の例
 
 ```typescript copy
-workflow.sendEvent('event-name', step1);
+run.sendEvent('event-name', { value: "data" });
 ```
 
-## パラメータ
+
+## パラメーター
 
 <PropertiesTable
   content={[
@@ -39,11 +40,33 @@ workflow.sendEvent('event-name', step1);
     {
       name: "workflow",
       type: "Workflow",
-      description: "メソッドチェーンのための Workflow インスタンス",
+      description: "メソッドチェーン用のワークフローインスタンス",
     },
   ]}
 />
 
-## 関連情報
+## 拡張された使用例
 
-- [Sleep とイベント](../../../docs/workflows/pausing-execution.mdx)
+```typescript showLineNumbers copy
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+
+const result = run.start({
+  inputData: {
+    value: "こんにちは"
+  }
+});
+
+setTimeout(() => {
+  run.sendEvent("event-name", { value: "イベントから" });
+}, 3000);
+```
+
+> この例では、ワークフローが待機状態に入る前にイベントを送信できなくなるため、`await run.start()` を直接使うのは避けてください。
+
+
+## 関連項目
+
+- [.waitForEvent()](./waitForEvent.mdx)
+- [一時停止と再開](../../../docs/workflows/suspend-and-resume.mdx#sleep--events)

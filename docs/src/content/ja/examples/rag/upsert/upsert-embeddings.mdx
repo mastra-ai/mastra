@@ -1,30 +1,27 @@
 ---
 title: "例: 埋め込みのアップサート | RAG | Mastra ドキュメント"
-description: 類似性検索のために、Mastra を使ってさまざまなベクトルデータベースに埋め込みを保存する例。
+description: 類似検索のために、さまざまなベクターデータベースへ埋め込みを保存する Mastra の使用例。
 ---
 
 import { Tabs } from "nextra/components";
 import { GithubLink } from "@/components/github-link";
 
 
+# 埋め込みのアップサート
 
-# Upsert Embeddings
-
-埋め込みを生成した後、ベクトル類似性検索をサポートするデータベースに保存する必要があります。この例では、後で取得するために様々なベクトルデータベースに埋め込みを保存する方法を示します。
+埋め込みを生成したら、ベクトル類似検索に対応したデータベースに保存する必要があります。次の例では、後で検索・取得できるよう、各種ベクトルデータベースに埋め込みを保存する方法を示します。
 
 {/*
-LLM CONTEXT: This Tabs component demonstrates how to upsert (insert/update) embeddings into different vector databases.
-Each tab shows a complete example of storing embeddings in a specific vector database provider.
-The tabs help users understand the consistent API pattern across different vector stores while showing provider-specific configuration.
-Each tab includes document chunking, embedding generation, index creation, and data insertion for that specific database.
-The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upstash, Cloudflare, MongoDB, OpenSearch, and Couchbase.
+LLM CONTEXT: この Tabs コンポーネントは、異なるベクトルデータベースに埋め込みをアップサート（挿入／更新）する方法を示します。
+各タブでは、特定のベクトルデータベースプロバイダーに埋め込みを保存する完全な例を紹介します。
+タブは、プロバイダー固有の設定を示しつつ、ベクトルストア間で一貫した API パターンを理解するのに役立ちます。
+各タブには、そのデータベースにおけるドキュメントの分割、埋め込み生成、インデックス作成、データ挿入が含まれます。
+対象のプロバイダーには、PgVector、Pinecone、Qdrant、Chroma、Astra DB、LibSQL、Upstash、Cloudflare、MongoDB、OpenSearch、Couchbase が含まれます。
 */}
-
-
 
 <Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch', 'Couchbase', 'LanceDB']}>
   <Tabs.Tab>
-    `PgVector` クラスは、pgvector 拡張機能を利用する PostgreSQL で、インデックスの作成や埋め込みの挿入を行うためのメソッドを提供します。
+    `PgVector` クラスは、pgvector 拡張機能を用いて PostgreSQL にインデックスを作成し、埋め込みベクトルを挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from "@ai-sdk/openai";
@@ -32,7 +29,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
     import { MDocument } from "@mastra/rag";
     import { embedMany } from "ai";
 
-    const doc = MDocument.fromText("Your text content...");
+    const doc = MDocument.fromText("テキスト内容...");
 
     const chunks = await doc.chunk();
 
@@ -63,13 +60,13 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
 
     <GithubLink
       link={
-      "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pgvector"
-    }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pgvector"
+}
     />
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `PineconeVector` クラスは、マネージド型ベクターデータベースサービスである Pinecone で、インデックスの作成や埋め込みの挿入を行うためのメソッドを提供します。
+    `PineconeVector` クラスは、マネージドなベクターデータベースサービスである Pinecone に対して、インデックスの作成や埋め込みの挿入を行うメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -77,7 +74,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
     import { MDocument } from '@mastra/rag';
     import { embedMany } from 'ai';
 
-    const doc = MDocument.fromText('Your text content...');
+    const doc = MDocument.fromText('テキストの内容...');
 
     const chunks = await doc.chunk();
 
@@ -112,7 +109,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `QdrantVector` クラスは、高性能なベクターデータベースである Qdrant で、コレクションの作成や埋め込みの挿入を行うためのメソッドを提供します。
+    `QdrantVector` クラスは、高性能なベクターデータベースである Qdrant に対して、コレクションの作成や埋め込みの挿入を行うためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -120,7 +117,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
     import { MDocument } from '@mastra/rag';
     import { embedMany } from 'ai';
 
-    const doc = MDocument.fromText('Your text content...');
+    const doc = MDocument.fromText('テキストの内容…');
 
     const chunks = await doc.chunk();
 
@@ -149,7 +146,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `ChromaVector` クラスは、オープンソースの埋め込みデータベースである Chroma に対して、コレクションの作成や埋め込みの挿入を行うためのメソッドを提供します。
+    `ChromaVector` クラスは、オープンソースの埋め込みデータベースである Chroma にコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -157,7 +154,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
     import { MDocument } from '@mastra/rag';
     import { embedMany } from 'ai';
 
-    const doc = MDocument.fromText('Your text content...');
+    const doc = MDocument.fromText('任意のテキスト内容...');
 
     const chunks = await doc.chunk();
 
@@ -166,10 +163,10 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
       model: openai.embedding('text-embedding-3-small'),
     });
 
-    // Running Chroma locally
+    // Chroma をローカルで実行する
     const store = new ChromaVector();
 
-    // Running on Chroma Cloud
+    // Chroma Cloud で実行する
     const store = new ChromaVector({
       apiKey: process.env.CHROMA_API_KEY,
       tenant: process.env.CHROMA_TENANT,
@@ -199,7 +196,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `AstraVector` クラスは、クラウドネイティブなベクターデータベースである DataStax Astra DB に対して、コレクションの作成や埋め込みの挿入を行うためのメソッドを提供します。
+    `AstraVector` クラスは、クラウドネイティブなベクトルデータベースである DataStax Astra DB にコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -207,7 +204,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
     import { MDocument } from '@mastra/rag';
     import { embedMany } from 'ai';
 
-    const doc = MDocument.fromText('Your text content...');
+    const doc = MDocument.fromText('テキストの内容...');
 
     const chunks = await doc.chunk();
 
@@ -236,7 +233,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `LibSQLVector` クラスは、ベクター拡張を備えた SQLite のフォークである LibSQL に対して、コレクションの作成や埋め込みの挿入を行うためのメソッドを提供します。
+    `LibSQLVector` クラスは、コレクションの作成や、ベクトル拡張を備えた SQLite のフォークである LibSQL への埋め込みの挿入を行うメソッドを提供します。
 
     ```tsx copy
     import { openai } from "@ai-sdk/openai";
@@ -244,7 +241,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
     import { MDocument } from "@mastra/rag";
     import { embedMany } from "ai";
 
-    const doc = MDocument.fromText("Your text content...");
+    const doc = MDocument.fromText("テキストの内容…");
 
     const chunks = await doc.chunk();
 
@@ -255,7 +252,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
 
     const libsql = new LibSQLVector({
       connectionUrl: process.env.DATABASE_URL,
-      authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
+      authToken: process.env.DATABASE_AUTH_TOKEN, // オプション: Turso クラウドデータベース用
     });
 
     await libsql.createIndex({
@@ -280,7 +277,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `UpstashVector` クラスは、コレクションの作成や、サーバーレスのベクターデータベースである Upstash Vector への埋め込みの挿入を行うためのメソッドを提供します。
+    `UpstashVector` クラスは、コレクションの作成や埋め込みの挿入を行うためのメソッドを提供し、サーバーレスのベクターデータベースである Upstash Vector に対応しています。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -288,7 +285,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
     import { MDocument } from '@mastra/rag';
     import { embedMany } from 'ai';
 
-    const doc = MDocument.fromText('Your text content...');
+    const doc = MDocument.fromText('テキストの内容...');
 
     const chunks = await doc.chunk();
 
@@ -302,10 +299,10 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
       token: process.env.UPSTASH_TOKEN,
     });
 
-    // ここでは store.createIndex の呼び出しは不要です。Upstash では、アップサート時に
-    // その名前空間（Upstash では namespace と呼びます）が存在しない場合、自動的にインデックスを作成します。
+    // ここでは store.createIndex は呼び出しません。Upstash では、存在しない名前空間への upsert 時にインデックス（Upstash では「名前空間」と呼ばれる）が自動作成されます。
+    // その名前空間が存在しない場合、upsert によって作成されます。
     await upstash.upsert({
-      indexName: 'test_collection', // Upstash における namespace 名
+      indexName: 'test_collection', // Upstash の名前空間名
       vectors: embeddings,
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
@@ -313,7 +310,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `CloudflareVector` クラスは、コレクションの作成や、サーバーレスのベクターデータベースサービスである Cloudflare Vectorize への埋め込みの挿入を行うためのメソッドを提供します。
+    `CloudflareVector` クラスは、コレクションの作成や埋め込みの挿入を行うためのメソッドを提供し、Cloudflare Vectorize（サーバーレスのベクターデータベースサービス）に対応しています。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -321,7 +318,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
     import { MDocument } from '@mastra/rag';
     import { embedMany } from 'ai';
 
-    const doc = MDocument.fromText('Your text content...');
+    const doc = MDocument.fromText('テキスト内容...');
 
     const chunks = await doc.chunk();
 
@@ -349,7 +346,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `MongoDBVector` クラスは、Atlas Search を用いた MongoDB へのインデックス作成と埋め込みの挿入を行うためのメソッドを提供します。
+    `MongoDBVector` クラスは、Atlas Search を用いて MongoDB にインデックスを作成し、埋め込みを挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from "@ai-sdk/openai";
@@ -357,7 +354,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
     import { MDocument } from "@mastra/rag";
     import { embedMany } from "ai";
 
-    const doc = MDocument.fromText("Your text content...");
+    const doc = MDocument.fromText("テキストの内容…");
 
     const chunks = await doc.chunk();
 
@@ -385,7 +382,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `OpenSearchVector` クラスは、ベクター検索機能を備えた分散型検索エンジンである OpenSearch へのインデックス作成と埋め込みの挿入を行うためのメソッドを提供します。
+    `OpenSearchVector` クラスは、ベクター検索機能を備えた分散検索エンジンである OpenSearch に対して、インデックスの作成と埋め込みの挿入を行うためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -393,7 +390,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
     import { MDocument } from '@mastra/rag';
     import { embedMany } from 'ai';
 
-    const doc = MDocument.fromText('Your text content...');
+    const doc = MDocument.fromText('テキストの内容...');
 
     const chunks = await doc.chunk();
 
@@ -420,7 +417,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `CouchbaseVector` クラスは、ベクトル検索に対応した分散型 NoSQL データベースである Couchbase で、インデックスの作成やベクトル埋め込みの挿入を行うためのメソッドを提供します。
+    `CouchbaseVector` クラスは、ベクトル検索機能を備えた分散型 NoSQL データベースである Couchbase に、インデックスを作成したり埋め込みを挿入したりするためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -428,7 +425,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
     import { MDocument } from '@mastra/rag';
     import { embedMany } from 'ai';
 
-    const doc = MDocument.fromText('Your text content...');
+    const doc = MDocument.fromText('テキスト内容...');
 
     const chunks = await doc.chunk();
 
@@ -460,7 +457,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `LanceVectorStore` クラスは、Lance カラムナ形式の上に構築された組み込み型ベクトルデータベースである LanceDB で、テーブルやインデックスの作成、ベクトル埋め込みの挿入を行うためのメソッドを提供します。
+    `LanceVectorStore` クラスは、Lance のカラムナー形式を基盤とする組み込みベクトルデータベース LanceDB に対し、テーブルやインデックスの作成や埋め込みの挿入を行うメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -468,7 +465,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
     import { MDocument } from '@mastra/rag';
     import { embedMany } from 'ai';
 
-    const doc = MDocument.fromText('Your text content...');
+    const doc = MDocument.fromText('テキストの内容…');
 
     const chunks = await doc.chunk();
 
@@ -494,6 +491,3 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
     ```
   </Tabs.Tab>
 </Tabs>
-
-
-

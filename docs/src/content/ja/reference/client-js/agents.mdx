@@ -5,27 +5,29 @@ description: client-js SDK を使って、応答生成、ストリーミング�
 
 # Agents API
 
-Agents API は、応答の生成、ストリーミングでのやり取り、エージェントツールの管理など、Mastra の AI エージェントと対話するためのメソッドを提供します。
+Agents API は、Mastra の AI エージェントとの対話に用いるメソッドを提供し、応答生成、ストリーミングでのやり取り、エージェントツールの管理を行えます。
 
-## すべてのエージェントを取得する
+## すべてのエージェントの取得
 
-利用可能なすべてのエージェント一覧を取得します：
+利用可能なエージェントの一覧を取得します。
 
 ```typescript
 const agents = await mastraClient.getAgents();
 ```
 
-## 特定のエージェントを扱う
 
-特定のエージェントのインスタンスを取得します:
+## 特定のエージェントを操作する
+
+特定のエージェントのインスタンスを取得するには:
 
 ```typescript
 const agent = mastraClient.getAgent("agent-id");
 ```
 
+
 ## エージェントのメソッド
 
-### エージェントの詳細を取得する
+### エージェントの詳細を取得
 
 エージェントの詳細情報を取得します:
 
@@ -33,63 +35,49 @@ const agent = mastraClient.getAgent("agent-id");
 const details = await agent.details();
 ```
 
-### レスポンスの生成
 
-エージェントからレスポンスを生成します:
+### 応答を生成
+
+エージェントから応答を生成します:
 
 ```typescript
 const response = await agent.generate({
   messages: [
     {
       role: "user",
-      content: "Hello, how are you?",
+      content: "こんにちは。お元気ですか？",
     },
   ],
-  threadId: "thread-1", // 省略可: 会話コンテキスト用のスレッドID
-  resourceId: "resource-1", // 省略可: リソースID
-  output: {}, // 省略可: 出力設定
+  threadId: "thread-1", // 任意: 会話コンテキスト用のスレッドID
+  resourceId: "resource-1", // 任意: リソースID
+  output: {}, // 任意: 出力設定
 });
 ```
 
-### ストリームレスポンス
 
-エージェントからリアルタイムに応答をストリーミングするには:
+### ストリーム応答
+
+リアルタイムのやり取りに向けて、エージェントからの応答をストリーミング配信します：
 
 ```typescript
 const response = await agent.stream({
   messages: [
     {
       role: "user",
-      content: "Tell me a story",
+      content: "物語を聞かせて",
     },
   ],
 });
 
 // processDataStream ユーティリティでデータストリームを処理
 response.processDataStream({
-  onTextPart: (text) => {
-    process.stdout.write(text);
-  },
-  onFilePart: (file) => {
-    console.log(file);
-  },
-  onDataPart: (data) => {
-    console.log(data);
-  },
-  onErrorPart: (error) => {
-    console.error(error);
+  onChunk: async(chunk) => {
+    console.log(chunk);
   },
 });
 
-// processTextStream ユーティリティでテキストストリームを処理
-// （構造化出力で使用）
- response.processTextStream({
-      onTextPart: text => {
-        process.stdout.write(text);
-      },
-});
 
-// レスポンスボディから直接読み取ることも可能
+// レスポンスボディから直接読み取ることも可能です
 const reader = response.body.getReader();
 while (true) {
   const { done, value } = await reader.read();
@@ -98,11 +86,12 @@ while (true) {
 }
 ```
 
+
 ### クライアントツール
 
-クライアント側のツールを使うと、エージェントからの要求に応じて、クライアント側でカスタム関数を実行できます。
+クライアント側ツールを使うと、エージェントからの要求に応じてクライアント側でカスタム関数を実行できます。
 
-#### 基本的な使い方
+#### 基本的な使用方法
 
 ```typescript
 import { createTool } from '@mastra/client-js';
@@ -121,87 +110,116 @@ const colorChangeTool = createTool({
 })
 
 
-// generate で使用
+// generateで使用
 const response = await agent.generate({
-  messages: '背景を青に変更して',
+  messages: '背景を青に変更',
   clientTools: {colorChangeTool},
 });
 
-// stream で使用
+// streamで使用
 const response = await agent.stream({
-  messages: '背景を緑に変更して',
+  messages: '背景を緑に変更',
   clientTools: {colorChangeTool},
 });
 
 response.processDataStream({
-  onTextPart: (text) => console.log(text),
-  onToolCallPart: (toolCall) => console.log('ツールが呼び出されました:', toolCall.toolName),
+  onChunk: async (chunk) => {
+    if (chunk.type === 'text-delta') {
+      console.log(chunk.payload.text);
+    } else if (chunk.type === 'tool-call') {
+      console.log(`ツール ${chunk.payload.toolName} を引数 ${JSON.stringify(chunk.payload.args, null, 2)} で呼び出し中`);
+    }
+  },
 });
 ```
 
+
 ### エージェントのツールを取得
 
-エージェントで利用可能な特定のツールの情報を取得します。
+エージェントで利用可能な特定のツールの情報を取得します：
 
 ```typescript
 const tool = await agent.getTool("tool-id");
 ```
 
-### エージェントの評価を取得する
 
-エージェントの評価結果を取得します：
+### エージェントの評価を取得
+
+エージェントの評価結果を取得します。
 
 ```typescript
-// CI の評価を取得
+// CI 評価を取得
 const evals = await agent.evals();
 
 // ライブ評価を取得
 const liveEvals = await agent.liveEvals();
 ```
 
-### Stream VNext（実験的）
 
-強化されたメソッドシグネチャを備えた拡張 VNext API を使って、レスポンスをストリーミングします。本手法は機能面とフォーマットの柔軟性が向上しており、Mastra のネイティブ形式と AI SDK v5 互換形式の両方をサポートします:
+### Stream
+
+拡張 API と改良されたメソッドシグネチャを用いて、レスポンスをストリーミングします。このメソッドは Mastra のネイティブ形式をサポートし、より強力な機能と柔軟なフォーマットを提供します。
 
 ```typescript
-const response = await agent.streamVNext(
-  "Tell me a story",
+const response = await agent.stream(
+  "物語を聞かせて",
   {
-    format: 'mastra', // Default: Mastra's native format
     threadId: "thread-1",
     clientTools: { colorChangeTool },
   }
 );
 
-// AI SDK v5 compatible format
-const response = await agent.streamVNext(
-  "Tell me a story",
-  {
-    format: 'aisdk', // Enable AI SDK v5 compatibility
-    threadId: "thread-1",
-  }
-);
-
-// Process the stream
+// ストリームを処理
 response.processDataStream({
-  onChunk: (chunk) => {
-    console.log(chunk);
+  onChunk: async (chunk) => {
+    if (chunk.type === 'text-delta') {
+      console.log(chunk.payload.text);
+    }
   },
 });
 ```
 
-`format` パラメータは出力ストリームの形式を指定します:
 
-- 'mastra'（デフォルト）: Mastra のネイティブ形式を返します
-- 'aisdk': フロントエンド統合向けの AI SDK v5 互換形式を返します
+#### AI SDK 互換フォーマット
 
-### Generate VNext（実験的）
+クライアント側で `agent.stream(...)` のレスポンスから AI SDK 形式のパーツをストリーミングするには、`response.processDataStream` を `ReadableStream<ChunkType>` でラップし、`toAISdkFormat` を使用します。
 
-改良されたメソッドシグネチャと AI SDK v5 との互換性を備えた、強化版 VNext API を使ってレスポンスを生成します：
+```typescript filename="client-ai-sdk-transform.ts" copy
+import { createUIMessageStream } from 'ai';
+import { toAISdkFormat } from '@mastra/ai-sdk';
+import type { ChunkType, MastraModelOutput } from '@mastra/core/stream';
+
+const response = await agent.stream({ messages: '物語を聞かせて' });
+
+const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
+  start(controller) {
+    response.processDataStream({
+      onChunk: async (chunk) => controller.enqueue(chunk as ChunkType),
+    }).finally(() => controller.close());
+  },
+});
+
+const uiMessageStream = createUIMessageStream({
+  execute: async ({ writer }) => {
+    for await (const part of toAISdkFormat(chunkStream as unknown as MastraModelOutput, { from: 'agent' })) {
+      writer.write(part);
+    }
+  },
+});
+
+for await (const part of uiMessageStream) {
+  console.log(part);
+}
+```
+
+
+### 生成
+
+拡張された API を使い、改良されたメソッドシグネチャと AI SDK v5 の互換性に対応してレスポンスを生成します:
 
 ```typescript
-const response = await agent.generateVNext(
-  "Hello, how are you?",
+const response = await agent.generate(
+  "こんにちは、元気ですか？",
   {
     threadId: "thread-1",
     resourceId: "resource-1",

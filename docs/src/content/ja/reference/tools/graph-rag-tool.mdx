@@ -1,6 +1,6 @@
 ---
 title: "リファレンス: createGraphRAGTool() | RAG | Mastra Tools ドキュメント"
-description: Mastra の Graph RAG ツールのドキュメント。ドキュメント間の意味的関係をグラフ化することで、RAG を強化します。
+description: Mastra の Graph RAG ツールに関するドキュメント。ドキュメント間の意味的関係をグラフ化することで、RAG を強化します。
 ---
 
 import { Callout } from "nextra/components";
@@ -8,9 +8,9 @@ import { Callout } from "nextra/components";
 
 # createGraphRAGTool()
 
-`createGraphRAGTool()` は、ドキュメント間の意味的関係のグラフを構築することで RAG を強化するツールを作成します。内部では `GraphRAG` システムを用いてグラフベースの検索を行い、直接的な類似性だけでなく、接続関係にもとづいて関連コンテンツを見つけます。
+`createGraphRAGTool()` は、ドキュメント間の意味関係をグラフ化して RAG を強化するツールを作成します。内部では `GraphRAG` システムを用いてグラフベースのリトリーバルを行い、直接的な類似性と接続関係の両面から関連コンテンツを見つけます。
 
-## 使用例
+## 使い方の例
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -29,13 +29,12 @@ const graphTool = createGraphRAGTool({
 });
 ```
 
+
 ## パラメーター
 
 <Callout>
   **パラメーター要件:** ほとんどのフィールドは作成時にデフォルトとして設定できます。
-  一部のフィールドは実行時コンテキストまたは入力で上書きできます。
-  必須フィールドが作成時と実行時の双方で欠けている場合はエラーになります。
-  なお、`model`、`id`、`description` は作成時にのみ設定可能です。
+  一部のフィールドは実行時コンテキストまたは入力によって実行時に上書きできます。作成時と実行時の両方で必須フィールドが欠けている場合はエラーになります。なお、`model`、`id`、`description` は作成時にのみ設定可能です。
 </Callout>
 
 <PropertiesTable
@@ -79,7 +78,7 @@ const graphTool = createGraphRAGTool({
       name: "enableFilter",
       type: "boolean",
       description:
-        "メタデータに基づく結果のフィルタリングを有効化します。（作成時のみ設定可能ですが、実行時コンテキストでフィルターが指定された場合は自動的に有効化されます）",
+        "メタデータに基づく結果のフィルタリングを有効にします。（作成時のみ設定可能ですが、実行時コンテキストでフィルターが指定された場合は自動的に有効になります）",
       isOptional: true,
       defaultValue: "false",
     },
@@ -102,7 +101,7 @@ const graphTool = createGraphRAGTool({
       name: "providerOptions",
       type: "Record<string, Record<string, any>>",
       description:
-        "埋め込みモデルのプロバイダー固有オプション（例: outputDimensionality）。**重要**: AI SDK の EmbeddingModelV2 でのみ有効です。V1 モデルの場合はモデル作成時にオプションを設定してください。",
+        "埋め込みモデル向けのプロバイダー固有オプション（例: outputDimensionality）。**重要**: AI SDK の EmbeddingModel V2 にのみ対応します。V1 ではモデル作成時にオプションを設定してください。",
       isOptional: true,
     },
   ]}
@@ -115,7 +114,7 @@ const graphTool = createGraphRAGTool({
     {
       name: "dimension",
       type: "number",
-      description: "埋め込みベクトルの次元",
+      description: "埋め込みベクトルの次元数",
       isOptional: true,
       defaultValue: "1536",
     },
@@ -123,7 +122,7 @@ const graphTool = createGraphRAGTool({
       name: "threshold",
       type: "number",
       description:
-        "ノード間にエッジを作成する際の類似度のしきい値（0〜1）",
+        "ノード間にエッジを作成するための類似度のしきい値（0〜1）",
       isOptional: true,
       defaultValue: "0.7",
     },
@@ -131,7 +130,7 @@ const graphTool = createGraphRAGTool({
       name: "randomWalkSteps",
       type: "number",
       description:
-        "グラフ探索におけるランダムウォークのステップ数。（作成時に設定、または実行時に上書き可能）",
+        "グラフ探索におけるランダムウォークのステップ数（作成時に設定、または実行時に上書き可能）",
       isOptional: true,
       defaultValue: "100",
     },
@@ -139,14 +138,14 @@ const graphTool = createGraphRAGTool({
       name: "restartProb",
       type: "number",
       description:
-        "クエリノードからランダムウォークを再開する確率。（作成時に設定、または実行時に上書き可能）",
+        "クエリノードからランダムウォークを再開する確率（作成時に設定、または実行時に上書き可能）",
       isOptional: true,
       defaultValue: "0.15",
     },
   ]}
 />
 
-## 戻り値
+## 返り値
 
 このツールは次のプロパティを持つオブジェクトを返します:
 
@@ -156,36 +155,37 @@ const graphTool = createGraphRAGTool({
       name: "relevantContext",
       type: "string",
       description:
-        "グラフベースのランキングで取得した、最も関連性の高いドキュメントチャンクのテキストを結合したもの",
+        "グラフベースのランキングで特定した最も関連性の高いドキュメントのチャンクから抽出したテキストを結合したもの",
     },
     {
       name: "sources",
       type: "QueryResult[]",
       description:
-        "完全な検索結果オブジェクトの配列。各オブジェクトには、元のドキュメント、チャンク、類似度スコアを参照するために必要な情報がすべて含まれます。",
+        "取得結果の完全なオブジェクト配列。各オブジェクトには、元のドキュメント、チャンク、類似度スコアを参照するために必要なすべての情報が含まれます。",
     },
   ]}
 />
 
-### QueryResult オブジェクトの構造
+### QueryResult オブジェクト構造
 
 ```typescript
 {
-  id: string;         // チャンク／ドキュメントの一意な識別子
-  metadata: any;      // すべてのメタデータフィールド（ドキュメント ID など）
-  vector: number[];   // 埋め込みベクトル（取得可能な場合）
-  score: number;      // この検索での類似度スコア
-  document: string;   // チャンク／ドキュメントの本文全体（取得可能な場合）
+  id: string;         // 一意のチャンク／ドキュメント識別子
+  metadata: any;      // すべてのメタデータフィールド（ドキュメントID など）
+  vector: number[];   // 埋め込みベクトル（利用可能な場合）
+  score: number;      // この取得結果の類似度スコア
+  document: string;   // チャンク／ドキュメントの全文（利用可能な場合）
 }
 ```
 
-## 既定のツールの説明
 
-既定の説明では次の点に焦点を当てます:
+## デフォルトのツール説明
 
-- 文書間の関係を分析すること
-- パターンや関連性を見つけ出すこと
-- 複雑な問い合わせに答えること
+デフォルトの説明は次の点に重点を置きます:
+
+- 文書間の関係を分析する
+- パターンや関連性を見つける
+- 複雑な質問に答える
 
 ## 応用例
 
@@ -196,14 +196,15 @@ const graphTool = createGraphRAGTool({
   model: openai.embedding("text-embedding-3-small"),
   graphOptions: {
     dimension: 1536,
-    threshold: 0.8, // 類似度のしきい値を高める
+    threshold: 0.8, // 類似度のしきい値を上げる
     randomWalkSteps: 200, // 探索ステップを増やす
-    restartProb: 0.2, // 再開確率を高める
+    restartProb: 0.2, // 再開確率を上げる
   },
 });
 ```
 
-## カスタム説明の例
+
+## カスタムの説明付きの例
 
 ```typescript
 const graphTool = createGraphRAGTool({
@@ -211,13 +212,14 @@ const graphTool = createGraphRAGTool({
   indexName: "docs",
   model: openai.embedding("text-embedding-3-small"),
   description:
-    "当社の履歴データにおける複雑なパターンやつながりを見つけるため、ドキュメント間の関係を分析します",
+    "社内の過去データにおける複雑なパターンや関連性を見つけるために、文書間の関係を分析します",
 });
 ```
 
-この例は、関係分析という本来の目的を保ちながら、特定のユースケースに合わせてツールの説明をカスタマイズする方法を示しています。
+この例では、関係性分析という本来の目的を保ちながら、特定のユースケースに合わせてツールの説明をカスタマイズする方法を示します。
 
-## 例: ランタイムコンテキストの利用
+
+## 例: ランタイムコンテキストの使用
 
 ```typescript
 const graphTool = createGraphRAGTool({
@@ -227,7 +229,7 @@ const graphTool = createGraphRAGTool({
 });
 ```
 
-ランタイムコンテキストを使う場合は、実行時にランタイムコンテキスト経由で必要なパラメータを指定します。
+ランタイムコンテキストを使用する場合、必須パラメータは実行時にランタイムコンテキスト経由で指定してください。
 
 ```typescript
 const runtimeContext = new RuntimeContext<{
@@ -244,17 +246,18 @@ runtimeContext.set("randomWalkSteps", 100);
 runtimeContext.set("restartProb", 0.15);
 
 const response = await agent.generate(
-  "Find documentation from the knowledge base.",
+  "ナレッジベースからドキュメントを検索してください。",
   {
     runtimeContext,
   },
 );
 ```
 
-ランタイムコンテキストの詳細は、次をご覧ください。
+実行時コンテキストの詳細については、以下を参照してください。
 
-- [Agent Runtime Context](../../docs/agents/runtime-context.mdx)
-- [Tool Runtime Context](../../docs/tools-mcp/runtime-context.mdx)
+* [Agent Runtime Context](../../docs/server-db/runtime-context.mdx)
+* [Tool Runtime Context](../../docs/tools-mcp/overview.mdx#using-runtimecontext)
+
 
 ## 関連項目
 

@@ -1,15 +1,11 @@
 ---
-title: "LibSQL ストレージ | ストレージシステム | Mastra Core"
-description: Mastraにおける LibSQL ストレージ実装のドキュメント。
+title: "LibSQL ストレージ | ストレージ システム | Mastra Core"
+description: Mastra における LibSQL ストレージ実装のドキュメントです。
 ---
-
-
 
 # LibSQL ストレージ
 
-LibSQL ストレージの実装は、インメモリと永続的データベースの両方として実行できる SQLite 互換のストレージソリューションを提供します。
-
-
+LibSQL のストレージ実装は、インメモリでも永続的なデータベースとしても動作する、SQLite 互換のストレージソリューションを提供します。
 
 ## インストール
 
@@ -18,23 +14,21 @@ npm install @mastra/libsql@latest
 ```
 
 
-
-## 使用方法
+## 使い方
 
 ```typescript copy showLineNumbers
 import { LibSQLStore } from "@mastra/libsql";
 
-// ファイルデータベース（開発環境）
+// ファイルベースのデータベース（開発）
 const storage = new LibSQLStore({
   url: "file:./storage.db",
 });
 
-// 永続的データベース（本番環境）
+// 永続型データベース（本番環境）
 const storage = new LibSQLStore({
   url: process.env.DATABASE_URL,
 });
 ```
-
 
 
 ## パラメータ
@@ -45,40 +39,38 @@ const storage = new LibSQLStore({
       name: "url",
       type: "string",
       description:
-        "データベースURL。インメモリデータベースには':memory:'を、ファイルデータベースには'file:filename.db'を、または永続的ストレージには任意のLibSQL互換の接続文字列を使用します。",
+        "データベースの URL。インメモリデータベースには ':memory:'、ファイルデータベースには 'file:filename.db'、永続的なストレージには LibSQL 互換の任意の接続文字列を使用します。",
       isOptional: false,
     },
     {
       name: "authToken",
       type: "string",
-      description: "リモートLibSQLデータベース用の認証トークン。",
+      description: "リモートの LibSQL データベース用の認証トークン。",
       isOptional: true,
     },
   ]}
 />
 
-
-
-## 追加の注意事項
+## 追記
 
 ### インメモリ vs 永続ストレージ
 
-ファイル設定（`file:storage.db`）は以下の用途に適しています：
+ファイル設定（`file:storage.db`）は次の用途に便利です：
 
-- 開発とテスト
-- 一時的なストレージ
-- 迅速なプロトタイピング
+- 開発・テスト
+- 一時的な保存
+- 素早いプロトタイピング
 
-本番環境での使用には、永続データベースURLを使用してください：`libsql://your-database.turso.io`
+本番環境では、永続的なデータベースのURLを使用してください：`libsql://your-database.turso.io`
 
 ### スキーマ管理
 
-ストレージ実装は、スキーマの作成と更新を自動的に処理します。以下のテーブルが作成されます：
+ストレージ実装はスキーマの作成と更新を自動的に行います。次のテーブルを作成します：
 
 - `mastra_workflow_snapshot`: ワークフローの状態と実行データを保存
 - `mastra_evals`: 評価結果とメタデータを保存  
 - `mastra_threads`: 会話スレッドを保存
-- `mastra_messages`: 個別のメッセージを保存
-- `mastra_traces`: テレメトリとトレースデータを保存
-- `mastra_scorers`: スコアリングと評価データを保存
-- `mastra_resources`: リソースワーキングメモリデータを保存
+- `mastra_messages`: 個々のメッセージを保存
+- `mastra_traces`: テレメトリおよびトレースデータを保存
+- `mastra_scorers`: スコアリングおよび評価データを保存
+- `mastra_resources`: リソースの作業メモリデータを保存

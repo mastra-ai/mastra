@@ -1,17 +1,14 @@
 ---
-title: "Vercel Deployer"
-description: "Mastra VercelDeployerを使用してMastraアプリケーションをVercelにデプロイする方法を学ぶ"
+title: "Vercel デプロイヤー"
+description: "Mastra VercelDeployer を使って Mastra アプリケーションを Vercel にデプロイする方法を学ぶ"
 ---
 
 import { FileTree } from "nextra/components";
 
 
-
 # VercelDeployer
 
-`VercelDeployer`クラスは、スタンドアロンのMastraアプリケーションのVercelへのデプロイを処理します。設定、デプロイを管理し、Vercel固有の機能でベースの[Deployer](/reference/deployer/deployer)クラスを拡張します。
-
-
+`VercelDeployer` クラスは、スタンドアロンの Mastra アプリケーションを Vercel にデプロイするためのクラスです。設定やデプロイを管理し、Vercel 固有の機能を追加してベースの [Deployer](/reference/deployer/deployer) クラスを拡張します。
 
 ## インストール
 
@@ -20,54 +17,68 @@ npm install @mastra/deployer-vercel@latest
 ```
 
 
-
-## 使用例
+## 使い方の例
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
-  // ...
+  // 省略
   deployer: new VercelDeployer()
 });
 ```
 
-> 利用可能なすべての設定オプションについては、[VercelDeployer](/reference/deployer/vercel) APIリファレンスを参照してください。
+> 利用可能な設定オプションの一覧は [VercelDeployer](/reference/deployer/vercel) の API リファレンスをご覧ください。
 
+
+### 任意のオーバーライド
+
+Vercel デプロイヤーは、Vercel Output API の関数設定（`.vc-config.json`）に、重要な設定をいくつか書き込むことができます：
+
+* `maxDuration?: number` — 関数の実行タイムアウト（秒）
+* `memory?: number` — 関数のメモリ割り当て（MB）
+* `regions?: string[]` — リージョン（例：`['sfo1','iad1']`）
+
+例：
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+deployer: new VercelDeployer({
+  maxDuration: 600,
+  memory: 1536,
+  regions: ["sfo1", "iad1"],
+})
+```
 
 
 ## 継続的インテグレーション
 
-MastraプロジェクトのGitリポジトリをVercelに接続した後、プロジェクト設定を更新します。Vercelダッシュボードで、**Settings** > **Build and Deployment**に移動し、**Framework settings**の下で以下を設定します：
+Mastra プロジェクトの Git リポジトリを Vercel に接続したら、プロジェクト設定を更新します。Vercel ダッシュボードで **Settings** > **Build and Deployment** に進み、**Framework settings** の項目で次のように設定します:
 
-- **Build command**: `npm run build` (オプション)
+- **Build command**: `npm run build`（任意）
 
 ### 環境変数
 
-初回デプロイメントの前に、アプリケーションで使用される環境変数を必ず追加してください。例えば、LLMとしてOpenAIを使用している場合、Vercelプロジェクト設定で`OPENAI_API_KEY`を設定する必要があります。
+初回のデプロイ前に、アプリケーションで使用する環境変数を追加してください。たとえば、LLM に OpenAI を使用している場合は、Vercel のプロジェクト設定で `OPENAI_API_KEY` を設定する必要があります。
 
-> 詳細については[Environment variables](https://vercel.com/docs/environment-variables)を参照してください。
+> 詳細は [Environment variables](https://vercel.com/docs/environment-variables) をご覧ください。
 
-これで、GitHubリポジトリの設定されたブランチにプッシュするたびに自動デプロイメントが実行されるようにプロジェクトが設定されました。
-
-
+これで、GitHub リポジトリの指定ブランチにプッシュするたびに自動デプロイが実行されるようにプロジェクトが設定されました。
 
 ## 手動デプロイ
 
-[Vercel CLI](https://vercel.com/docs/cli)を使用した手動デプロイも可能です。Vercel CLIをインストールした後、プロジェクトルートから以下のコマンドを実行してアプリケーションをデプロイします。
+[Vercel CLI](https://vercel.com/docs/cli) を使用して手動でデプロイすることもできます。Vercel CLI をインストールしたら、プロジェクトのルートで次を実行してアプリケーションをデプロイしてください。
 
 ```bash copy
 npm run build && vercel --prod --prebuilt --archive=tgz
 ```
 
-> プロジェクトルートから`vercel dev`を実行して、Mastraアプリケーションをローカルでテストすることもできます。
-
+> プロジェクトのルートで `vercel dev` を実行すると、Mastra アプリをローカルでテストできます。
 
 
 ## ビルド出力
 
-`VercelDeployer`を使用したMastraアプリケーションのビルド出力には、プロジェクト内のすべてのエージェント、ツール、ワークフローと、Vercel上でアプリケーションを実行するために必要なMastra固有のファイルが含まれます。
+`VercelDeployer` を使用する Mastra アプリケーションのビルド出力には、プロジェクト内のすべてのエージェント、ツール、ワークフローに加え、Vercel 上でアプリケーションを実行するために必要な Mastra 固有のファイルが含まれます。
 
 <FileTree>
   <FileTree.Folder name=".vercel" defaultOpen>
@@ -77,14 +88,15 @@ npm run build && vercel --prod --prebuilt --archive=tgz
           <FileTree.File name="index.mjs" />
         </FileTree.Folder>
       </FileTree.Folder>
+
       <FileTree.File name="config.json" />
     </FileTree.Folder>
   </FileTree.Folder>
+
   <FileTree.File name="package.json" />
 </FileTree>
 
-
-`VercelDeployer`は、`.vercel/output`内に以下の設定を含む`config.json`設定ファイルを自動的に生成します：
+`VercelDeployer` は、`.vercel/output` に以下の設定を含む `config.json` 設定ファイルを自動生成します。
 
 ```json
 {
@@ -99,7 +111,6 @@ npm run build && vercel --prod --prebuilt --archive=tgz
 ```
 
 
-
 ## 次のステップ
 
-- [Mastra Client SDK](/docs/client-js/overview)
+- [Mastra クライアント SDK](/docs/client-js/overview)

@@ -1,38 +1,33 @@
 ---
-title: "AI株式エージェントの構築 | Mastra Agents | ガイド"
-description: 指定したシンボルの前日の終値を取得する、Mastraでのシンプルな株式エージェントの作成ガイド。
+title: "AI株式エージェントを構築する | Mastra Agents | ガイド"
+description: 指定した銘柄の前日の終値を取得する、Mastra におけるシンプルな株式エージェントの作成ガイド。
 ---
 
 import { Steps } from "nextra/components";
 import YouTube from "@/components/youtube";
 
 
-
 # AI株式エージェントの作成
 
-このガイドでは、指定した銘柄の前日の終値を取得するシンプルなエージェントを作成します。ツールの作り方、それをエージェントに追加する方法、そしてエージェントを使って株価を取得する方法を学びます。
+このガイドでは、指定した銘柄の前日の終値を取得するシンプルなエージェントを作成します。ツールの作り方、エージェントへの組み込み方、そしてエージェントを使って株価を取得する方法を学びます。
 
 <YouTube id="rIaZ4l7y9wo" />
-
-
 
 ## 前提条件
 
 - Node.js `v20.0` 以降がインストールされていること
-- サポート対象の[モデルプロバイダー](/docs/getting-started/model-providers)から取得した API キー
-- 既存の Mastra プロジェクト（新規プロジェクトのセットアップは[インストールガイド](/docs/getting-started/installation)を参照）
-
-
+- 対応する[モデルプロバイダー](/models)の API キー
+- 既存の Mastra プロジェクト（新規プロジェクトの作成は[インストールガイド](/docs/getting-started/installation)に従って設定してください）
 
 ## エージェントの作成
 
-Mastra でエージェントを作成するには、まず `Agent` クラスで定義し、その後 Mastra に登録します。
+Mastra でエージェントを作成するには、`Agent` クラスで定義し、その後 Mastra に登録します。
 
 <Steps>
 
 ### エージェントを定義する
 
-新規ファイル `src/mastra/agents/stockAgent.ts` を作成し、次のようにエージェントを定義します:
+新しいファイル `src/mastra/agents/stockAgent.ts` を作成し、エージェントを定義します：
 
 ```ts copy filename="src/mastra/agents/stockAgent.ts"
 import { openai } from "@ai-sdk/openai";
@@ -46,9 +41,9 @@ export const stockAgent = new Agent({
 });
 ```
 
-### Mastra にエージェントを登録する
+### エージェントを Mastra に登録する
 
-`src/mastra/index.ts` ファイルで、エージェントを登録します:
+`src/mastra/index.ts` ファイルでエージェントを登録します：
 
 ```ts copy filename="src/mastra/index.ts" {2, 5}
 import { Mastra } from "@mastra/core";
@@ -61,17 +56,15 @@ export const mastra = new Mastra({
 
 </Steps>
 
+## 株価ツールを作成する
 
-
-## 株価ツールの作成
-
-現時点では、Stock Agent は最新の株価を把握していません。これを解消するために、ツールを作成してエージェントに追加します。
+現時点では、Stock Agent は最新の株価を把握していません。これを解決するため、ツールを作成してエージェントに追加します。
 
 <Steps>
 
 ### ツールを定義する
 
-新しいファイル `src/mastra/tools/stockPrices.ts` を作成します。ファイル内で、指定したシンボルの前営業日の終値を取得する `stockPrices` ツールを追加します:
+新しいファイル `src/mastra/tools/stockPrices.ts` を作成します。その中で、指定したシンボルの前日の終値を取得する `stockPrices` ツールを追加します:
 
 ```ts filename="src/mastra/tools/stockPrices.ts"
 import { createTool } from "@mastra/core/tools";
@@ -89,9 +82,9 @@ export const stockPrices = createTool({
   inputSchema: z.object({
     symbol: z.string(),
   }),
-  description: `指定したシンボルの前営業日の終値を取得します`,
+  description: `Fetches the last day's closing stock price for a given symbol`,
   execute: async ({ context: { symbol } }) => {
-    console.log("株価取得ツールを使用中:", symbol);
+    console.log("Using tool to fetch stock price for", symbol);
     return {
       symbol,
       currentPrice: await getStockPrice(symbol),
@@ -102,7 +95,7 @@ export const stockPrices = createTool({
 
 ### ツールを Stock Agent に追加する
 
-`src/mastra/agents/stockAgent.ts` で、新しく作成した `stockPrices` ツールをインポートし、エージェントに追加します。
+`src/mastra/agents/stockAgent.ts` 内で、新しく作成した `stockPrices` ツールをインポートし、エージェントに追加します。
 
 ```ts copy filename="src/mastra/agents/stockAgent.ts" {3, 10-12}
 import { openai } from "@ai-sdk/openai";
@@ -122,11 +115,9 @@ export const stockAgent = new Agent({
 
 </Steps>
 
-
-
 ## エージェントサーバーの実行
 
-Mastra の API を通じてエージェントとやり取りする方法を学びましょう。
+Mastra の API を通じてエージェントと対話する方法を学びます。
 
 <Steps>
 
@@ -138,19 +129,19 @@ Mastra の API を通じてエージェントとやり取りする方法を学�
 mastra dev
 ```
 
-これにより、登録済みのエージェントとやり取りするためのエンドポイントを公開するサーバーが立ち上がります。[playground](../../docs/server-db/local-dev-playground.mdx) では、UI を通じて `stockAgent` と `stockPrices` ツールをテストできます。
+これにより、登録済みエージェントと対話するためのエンドポイントを公開するサーバーが立ち上がります。[playground](../../docs/server-db/local-dev-playground.mdx) では、UI を通じて `stockAgent` と `stockPrices` ツールをテストできます。
 
 ### Stock Agent API へのアクセス
 
-デフォルトでは `mastra dev` は `http://localhost:4111` で動作します。Stock エージェントには以下からアクセスできます:
+デフォルトでは `mastra dev` は `http://localhost:4111` で動作します。Stock エージェントには次のエンドポイントでアクセスできます:
 
 ```
 POST http://localhost:4111/api/agents/stockAgent/generate
 ```
 
-### `curl` でエージェントとやり取りする
+### `curl` でエージェントと対話する
 
-コマンドラインから `curl` を使ってエージェントとやり取りできます:
+コマンドラインから `curl` を使ってエージェントと対話できます:
 
 ```bash copy
 curl -X POST http://localhost:4111/api/agents/stockAgent/generate \

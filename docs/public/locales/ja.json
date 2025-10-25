@@ -1,531 +1,323 @@
 {
-  "11bef4d9654cd19d23012b7e772ebd1dabce34f828f0e6085421faf15ed2e2ae": {
-    "type": "p",
-    "props": {
-      "children": "申し訳ありません、そのページが見つかりませんでした",
-      "data-_gt": {
-        "id": 1
-      }
-    }
-  },
-  "978f83723de942dc40edd3e3fdd07730e6a9ffcd12c8ad75aa96571659b714a0": {
-    "type": "Link",
-    "props": {
-      "children": [
-        {
-          "type": "span",
-          "props": {
-            "children": {
-              "id": 3,
-              "key": "_gt_value_3",
-              "variable": "variable"
-            },
-            "data-_gt": {
-              "id": 2
-            }
-          }
+  "_locale_.layout.edit_link": "このページを編集",
+  "_locale_.layout.feedback": "質問がありますか？ご意見をお聞かせください",
+  "_locale_.layout.toc": "このページの内容",
+  "_locale_.notFound.link": {
+    "c": [
+      {
+        "c": {
+          "i": 3,
+          "k": "_gt_value_3",
+          "v": "v"
         },
-        "に戻る"
-      ],
-      "data-_gt": {
-        "id": 1
-      }
-    }
+        "i": 2,
+        "t": "span"
+      },
+      " に戻る"
+    ],
+    "i": 1,
+    "t": "Link"
   },
-  "381d6a56e8bbf08695586155fa6563690e0913fa1337c7739d45d6d487b327df": {
-    "type": "div",
-    "props": {
-      "children": {
-        "type": "div",
-        "props": {
-          "children": [
+  "_locale_.notFound.title": {
+    "c": "申し訳ありませんが、そのページは見つかりませんでした",
+    "i": 1,
+    "t": "p"
+  },
+  "components.cookie_banner.0": {
+    "c": {
+      "c": [
+        {
+          "c": "お客様の製品のご利用状況を把握し、改善に役立てるためにトラッキングクッキーを使用しています。改善にご協力いただくため、クッキーの使用に同意してください。",
+          "i": 3,
+          "t": "p"
+        },
+        {
+          "c": "クッキーを受け入れる",
+          "i": 4,
+          "t": "Button"
+        },
+        {
+          "c": " ",
+          "i": 5,
+          "t": "span"
+        },
+        {
+          "c": "クッキーを拒否する",
+          "i": 6,
+          "t": "Button"
+        }
+      ],
+      "i": 2,
+      "t": "div"
+    },
+    "i": 1,
+    "t": "div"
+  },
+  "components.footer.0": {
+    "c": {
+      "c": [
+        {
+          "c": [
             {
-              "type": "p",
-              "props": {
-                "children": "製品の使用状況を理解し、改善するためにトラッキングCookieを使用しています。改善にご協力いただくため、Cookieの使用を承諾してください。",
-                "data-_gt": {
-                  "id": 3
-                }
-              }
+              "i": 4,
+              "t": "Logo"
             },
             {
-              "type": "Button",
-              "props": {
-                "children": "Cookieを承諾する",
-                "data-_gt": {
-                  "id": 4
+              "c": [
+                {
+                  "c": "Mastra ニュースレター",
+                  "i": 6,
+                  "t": "label"
+                },
+                {
+                  "d": {
+                    "pl": "you@company.com"
+                  },
+                  "i": 7,
+                  "t": "SubscribeForm"
                 }
-              }
-            },
-            {
-              "type": "span",
-              "props": {
-                "children": " ",
-                "data-_gt": {
-                  "id": 5
-                }
-              }
-            },
-            {
-              "type": "Button",
-              "props": {
-                "children": "Cookieを拒否する",
-                "data-_gt": {
-                  "id": 6
-                }
-              }
+              ],
+              "i": 5,
+              "t": "div"
             }
           ],
-          "data-_gt": {
-            "id": 2
-          }
-        }
-      },
-      "data-_gt": {
-        "id": 1
-      }
-    }
-  },
-  "6bd10c53bdd4f2c01f476d90295af582c78413160a99bf14e8855bbacddc3ee0": "ありがとうございます。ご意見は送信されました。",
-  "a7028e4b38a2ebd1f07e584acb4f221bd07fe34cdec91decf96bee2a28522702": "これは役に立ちましたか？",
-  "e6d9b43104549c231ade784593a391327627e0c43461366effb06207ffd7b8a3": "問題が発生しました。もう一度お試しください。",
-  "9af001fe095f6e6170466d501fb883c885870ca7ebb34cfc07ee2f0156dabbc2": "質問がありますか？ フィードバックをお寄せください",
-  "dd2217f7ca55ef5421960843aa60a9c2810632d7f7ea8777eca8ce666f11ed9e": {
-    "type": "footer",
-    "props": {
-      "children": {
-        "type": "div",
-        "props": {
-          "children": [
-            {
-              "type": "div",
-              "props": {
-                "children": [
-                  {
-                    "type": "Image",
-                    "props": {
-                      "data-_gt": {
-                        "id": 4
-                      }
-                    }
-                  },
-                  {
-                    "type": "div",
-                    "props": {
-                      "children": [
-                        {
-                          "type": "label",
-                          "props": {
-                            "children": "Mastra ニュースレター",
-                            "data-_gt": {
-                              "id": 6
-                            }
-                          }
-                        },
-                        {
-                          "type": "SubscribeForm",
-                          "props": {
-                            "data-_gt": {
-                              "id": 7
-                            }
-                          }
-                        }
-                      ],
-                      "data-_gt": {
-                        "id": 5
-                      }
-                    }
-                  }
-                ],
-                "data-_gt": {
-                  "id": 3
-                }
-              }
-            },
-            {
-              "type": "div",
-              "props": {
-                "children": [
-                  {
-                    "type": "div",
-                    "props": {
-                      "children": [
-                        {
-                          "type": "ul",
-                          "props": {
-                            "children": [
-                              {
-                                "type": "p",
-                                "props": {
-                                  "children": "開発者",
-                                  "data-_gt": {
-                                    "id": 11
-                                  }
-                                }
-                              },
-                              {
-                                "id": 12,
-                                "key": "_gt_value_12",
-                                "variable": "variable"
-                              }
-                            ],
-                            "data-_gt": {
-                              "id": 10
-                            }
-                          }
-                        },
-                        {
-                          "type": "ul",
-                          "props": {
-                            "children": [
-                              {
-                                "type": "p",
-                                "props": {
-                                  "children": "会社情報",
-                                  "data-_gt": {
-                                    "id": 14
-                                  }
-                                }
-                              },
-                              {
-                                "id": 15,
-                                "key": "_gt_value_15",
-                                "variable": "variable"
-                              }
-                            ],
-                            "data-_gt": {
-                              "id": 13
-                            }
-                          }
-                        }
-                      ],
-                      "data-_gt": {
-                        "id": 9
-                      }
-                    }
-                  },
-                  {
-                    "type": "div",
-                    "props": {
-                      "children": {
-                        "type": "SubscribeForm",
-                        "props": {
-                          "data-_gt": {
-                            "id": 17
-                          }
-                        }
-                      },
-                      "data-_gt": {
-                        "id": 16
-                      }
-                    }
-                  }
-                ],
-                "data-_gt": {
-                  "id": 8
-                }
-              }
-            }
-          ],
-          "data-_gt": {
-            "id": 2
-          }
-        }
-      },
-      "data-_gt": {
-        "id": 1
-      }
-    }
-  },
-  "9eff57cce7ee1e8224f9203a447caeed06eb72a03155f32450708860814e61e9": "このページの内容",
-  "bab1f362e68557745019447cb573b7585f0e3dd421e5aa642ba6b3d8315ddd1e": "このページを編集",
-  "c4c665976ff5f2d2649eeba39bc290676f2267a50270f1d20cd61b0eb6b3868e": {
-    "type": "div",
-    "props": {
-      "children": [
-        {
-          "id": 2,
-          "key": "_gt_value_2",
-          "variable": "variable"
+          "i": 3,
+          "t": "div"
         },
         {
-          "type": "div",
-          "props": {
-            "children": {
-              "type": "table",
-              "props": {
-                "children": [
-                  {
-                    "type": "thead",
-                    "props": {
-                      "children": {
-                        "type": "tr",
-                        "props": {
-                          "children": [
-                            {
-                              "type": "th",
-                              "props": {
-                                "children": "演算子",
-                                "data-_gt": {
-                                  "id": 7
-                                }
-                              }
-                            },
-                            {
-                              "type": "th",
-                              "props": {
-                                "children": "説明",
-                                "data-_gt": {
-                                  "id": 8
-                                }
-                              }
-                            },
-                            {
-                              "type": "th",
-                              "props": {
-                                "children": "例",
-                                "data-_gt": {
-                                  "id": 9
-                                }
-                              }
-                            },
-                            {
-                              "type": "th",
-                              "props": {
-                                "children": "サポート",
-                                "data-_gt": {
-                                  "id": 10
-                                }
-                              }
-                            }
-                          ],
-                          "data-_gt": {
-                            "id": 6
-                          }
-                        }
-                      },
-                      "data-_gt": {
-                        "id": 5
-                      }
-                    }
-                  },
-                  {
-                    "type": "tbody",
-                    "props": {
-                      "children": {
-                        "id": 12,
-                        "key": "_gt_value_12",
-                        "variable": "variable"
-                      },
-                      "data-_gt": {
-                        "id": 11
-                      }
-                    }
-                  }
-                ],
-                "data-_gt": {
-                  "id": 4
-                }
-              }
-            },
-            "data-_gt": {
-              "id": 3
-            }
-          }
-        }
-      ],
-      "data-_gt": {
-        "id": 1
-      }
-    }
-  },
-  "bf330e3f7d77c2092f1ff2feb8b127c76346aba22dd160c12a2d223c8da31444": "?:",
-  "53683184913f758ac29d4bada1505538e5a8ed49f109be372c0fbd7fe1dda03b": ":",
-  "989ac06e1d91a95495ec48b983d596998be58c97b5fad20cd3a9f5a07b623a4d": "?:",
-  "ce864b1cfbbf2e9f36951de49c84eb8ad737c38a7f2b6a9771e5f35ce8784029": ":",
-  "728725808f9ba9569acdfa05c371304a30cd879ca89c20e6d374118c5b5c2c12": {
-    "type": "div",
-    "props": {
-      "children": [
-        {
-          "type": "div",
-          "props": {
-            "children": [
-              {
-                "type": "h1",
-                "props": {
-                  "children": "ショーケース",
-                  "data-_gt": {
-                    "id": 3
-                  }
-                }
-              },
-              {
-                "type": "p",
-                "props": {
-                  "children": "Mastraで構築されたこれらのアプリケーションをご覧ください。",
-                  "data-_gt": {
-                    "id": 4
-                  }
-                }
-              }
-            ],
-            "data-_gt": {
-              "id": 2
-            }
-          }
-        },
-        {
-          "type": "div",
-          "props": {
-            "children": {
-              "id": 6,
-              "key": "_gt_value_6",
-              "variable": "variable"
-            },
-            "data-_gt": {
-              "id": 5
-            }
-          }
-        }
-      ],
-      "data-_gt": {
-        "id": 1
-      }
-    }
-  },
-  "e1c027096479212741af89b4a3911e90f2e6a405b654de1e0ccbb4007f3bd1e3": {
-    "type": "FormLabel",
-    "props": {
-      "children": {
-        "id": 2,
-        "key": "_gt_value_2",
-        "variable": "variable"
-      },
-      "data-_gt": {
-        "id": 1
-      }
-    }
-  },
-  "92c32fae15ccbe96dc437cd84aa273561f2e1e5d2f56a1df2b52e0215fcaaf64": [
-    "ドキュメントを検索..."
-  ],
-  "d56e85b3e7896b56826ba87a285983e158614e0b0d3e991a72a99c99324c33f2": {
-    "type": "a",
-    "props": {
-      "children": [
-        {
-          "type": "div",
-          "props": {
-            "children": [
-              {
-                "type": "div",
-                "props": {
-                  "children": {
-                    "type": "svg",
-                    "props": {
-                      "children": [
-                        {
-                          "type": "g",
-                          "props": {
-                            "children": {
-                              "type": "path",
-                              "props": {
-                                "data-_gt": {
-                                  "id": 6
-                                }
-                              }
-                            },
-                            "data-_gt": {
-                              "id": 5
-                            }
-                          }
-                        },
-                        {
-                          "type": "defs",
-                          "props": {
-                            "children": {
-                              "type": "clipPath",
-                              "props": {
-                                "children": {
-                                  "type": "rect",
-                                  "props": {
-                                    "data-_gt": {
-                                      "id": 9
-                                    }
-                                  }
-                                },
-                                "data-_gt": {
-                                  "id": 8
-                                }
-                              }
-                            },
-                            "data-_gt": {
-                              "id": 7
-                            }
-                          }
-                        }
-                      ],
-                      "data-_gt": {
-                        "id": 4
-                      }
-                    }
-                  },
-                  "data-_gt": {
-                    "id": 3
-                  }
-                }
-              },
-              {
-                "type": "div",
-                "props": {
-                  "children": [
-                    "GitHub で例を表示 ",
+          "c": [
+            {
+              "c": [
+                {
+                  "c": [
                     {
-                      "key": "_gt_value_11",
-                      "variable": "variable",
-                      "id": 11
+                      "c": "開発者向け",
+                      "i": 11,
+                      "t": "p"
+                    },
+                    {
+                      "i": 12,
+                      "k": "_gt_value_12",
+                      "v": "v"
                     }
                   ],
-                  "data-_gt": {
-                    "id": 10
-                  }
-                }
-              }
-            ],
-            "data-_gt": {
-              "id": 2
-            }
-          }
-        },
-        {
-          "type": "div",
-          "props": {
-            "children": {
-              "type": "svg",
-              "props": {
-                "children": {
-                  "type": "path",
-                  "props": {
-                    "data-_gt": {
-                      "id": 14
-                    }
-                  }
+                  "i": 10,
+                  "t": "ul"
                 },
-                "data-_gt": {
-                  "id": 13
+                {
+                  "c": [
+                    {
+                      "c": "会社情報",
+                      "i": 14,
+                      "t": "p"
+                    },
+                    {
+                      "i": 15,
+                      "k": "_gt_value_15",
+                      "v": "v"
+                    }
+                  ],
+                  "i": 13,
+                  "t": "ul"
                 }
-              }
+              ],
+              "i": 9,
+              "t": "div"
             },
-            "data-_gt": {
-              "id": 12
+            {
+              "c": {
+                "d": {
+                  "pl": "you@company.com"
+                },
+                "i": 17,
+                "t": "SubscribeForm"
+              },
+              "i": 16,
+              "t": "div"
             }
-          }
+          ],
+          "i": 8,
+          "t": "div"
         }
       ],
-      "data-_gt": {
-        "id": 1
+      "i": 2,
+      "t": "div"
+    },
+    "i": 1,
+    "t": "footer"
+  },
+  "components.github_link.0": {
+    "c": [
+      {
+        "c": [
+          {
+            "c": {
+              "c": [
+                {
+                  "c": {
+                    "i": 6,
+                    "t": "path"
+                  },
+                  "i": 5,
+                  "t": "g"
+                },
+                {
+                  "c": {
+                    "c": {
+                      "i": 9,
+                      "t": "rect"
+                    },
+                    "i": 8,
+                    "t": "clipPath"
+                  },
+                  "i": 7,
+                  "t": "defs"
+                }
+              ],
+              "i": 4,
+              "t": "svg"
+            },
+            "i": 3,
+            "t": "div"
+          },
+          {
+            "c": [
+              "GitHub で例を見る ",
+              {
+                "i": 11,
+                "k": "_gt_value_11",
+                "v": "v"
+              }
+            ],
+            "i": 10,
+            "t": "div"
+          }
+        ],
+        "i": 2,
+        "t": "div"
+      },
+      {
+        "c": {
+          "c": {
+            "i": 14,
+            "t": "path"
+          },
+          "i": 13,
+          "t": "svg"
+        },
+        "i": 12,
+        "t": "div"
       }
-    }
-  }
+    ],
+    "i": 1,
+    "t": "a"
+  },
+  "components.operators_table.0": {
+    "c": [
+      {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      },
+      {
+        "c": {
+          "c": [
+            {
+              "c": {
+                "c": [
+                  {
+                    "c": "演算子",
+                    "i": 7,
+                    "t": "th"
+                  },
+                  {
+                    "c": "説明",
+                    "i": 8,
+                    "t": "th"
+                  },
+                  {
+                    "c": "例",
+                    "i": 9,
+                    "t": "th"
+                  },
+                  {
+                    "c": "対応プラットフォーム",
+                    "i": 10,
+                    "t": "th"
+                  }
+                ],
+                "i": 6,
+                "t": "tr"
+              },
+              "i": 5,
+              "t": "thead"
+            },
+            {
+              "c": {
+                "i": 12,
+                "k": "_gt_value_12",
+                "v": "v"
+              },
+              "i": 11,
+              "t": "tbody"
+            }
+          ],
+          "i": 4,
+          "t": "table"
+        },
+        "i": 3,
+        "t": "div"
+      }
+    ],
+    "i": 1,
+    "t": "div"
+  },
+  "components.properties_table.0": "?:",
+  "components.properties_table.1": ":",
+  "components.properties_table.2": "?:",
+  "components.properties_table.3": ":",
+  "components.showcase_grid.0": {
+    "c": [
+      {
+        "c": [
+          {
+            "c": "ショーケース",
+            "i": 3,
+            "t": "h1"
+          },
+          {
+            "c": "Mastra で構築されたこれらのアプリケーションをご覧ください。",
+            "i": 4,
+            "t": "p"
+          }
+        ],
+        "i": 2,
+        "t": "div"
+      },
+      {
+        "c": {
+          "i": 6,
+          "k": "_gt_value_6",
+          "v": "v"
+        },
+        "i": 5,
+        "t": "div"
+      }
+    ],
+    "i": 1,
+    "t": "div"
+  },
+  "components.subscribe_form.0": {
+    "c": {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    },
+    "i": 1,
+    "t": "FormLabel"
+  },
+  "d253ece7ec6edbe7": "ドキュメントを検索…",
+  "feedback.error": "問題が発生しました。もう一度お試しください。",
+  "feedback.rating_label": "お役に立ちましたか？",
+  "feedback.success.message": "ありがとうございます。ご意見は送信されました。"
 }

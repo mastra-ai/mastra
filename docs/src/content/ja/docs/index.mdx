@@ -1,24 +1,57 @@
 ---
-title: "はじめに | Mastra ドキュメント"
-description: "Mastraは、TypeScriptエージェントフレームワークです。AIアプリケーションや機能を素早く構築するのに役立ちます。ワークフロー、エージェント、RAG、統合、同期、評価など、必要なプリミティブセットを提供します。"
+title: "Mastra について | Mastra ドキュメント"
+description: "Mastra は、最新の TypeScript スタックで AI 搭載のアプリケーションやエージェントを構築するためのオールインワンフレームワークです。"
 ---
 
+import YouTube from "@/components/youtube";
 
 
-# Mastraについて
+# Mastra について
 
-MastraはオープンソースのTypeScriptエージェントフレームワークです。
+Gatsby を手がけたチームによる Mastra は、モダンな TypeScript スタックで AI 搭載のアプリケーションやエージェントを構築するためのフレームワークです。
 
-AIアプリケーションや機能を構築するために必要なプリミティブを提供するように設計されています。
+試作段階から本番運用レベルのアプリケーションまでに必要なものがすべて揃っています。Mastra は React、Next.js、Node などのフロントエンド／バックエンドフレームワークと統合でき、単体のサーバーとしてどこにでもデプロイすることも可能です。信頼性の高い AI プロダクトを構築・チューニング・スケールする最も簡単な方法です。
 
-Mastraを使用して、メモリを持ち関数を実行できる[AIエージェント](/docs/agents/overview.mdx)を構築したり、決定論的な[ワークフロー](/docs/workflows/overview.mdx)でLLM呼び出しをチェーンしたりできます。Mastraの[ローカル開発プレイグラウンド](/docs/server-db/local-dev-playground.mdx)でエージェントとチャットしたり、[RAG](/docs/rag/overview.mdx)でアプリケーション固有の知識を提供したり、Mastraの[評価](/docs/evals/overview.mdx)でその出力をスコア化したりできます。
+<YouTube id="8o_Ejbcw5s8" />
 
-主な機能には以下が含まれます：
+## なぜ Mastra なのか？
 
-- **[モデルルーティング](https://sdk.vercel.ai/docs/introduction)**: Mastraは[Vercel AI SDK](https://sdk.vercel.ai/docs/introduction)をモデルルーティングに使用し、OpenAI、Anthropic、Google Geminiを含む任意のLLMプロバイダーとやり取りするための統一されたインターフェースを提供します。
-- **[エージェントメモリとツール呼び出し](/docs/agents/agent-memory.mdx)**: Mastraを使用すると、エージェントが呼び出すことができるツール（関数）を提供できます。エージェントメモリを永続化し、最新性、意味的類似性、または会話スレッドに基づいて取得できます。
-- **[ワークフローグラフ](/docs/workflows/overview.mdx)**: LLM呼び出しを決定論的な方法で実行したい場合、Mastraはグラフベースのワークフローエンジンを提供します。個別のステップを定義し、各実行の各ステップで入力と出力をログに記録し、それらを観測可能性ツールにパイプできます。Mastraワークフローには、分岐とチェーンを可能にする制御フロー（`.then()`、`.branch()`、`.parallel()`）のシンプルな構文があります。
-- **[エージェント開発プレイグラウンド](/docs/server-db/local-dev-playground.mdx)**: ローカルでエージェントを開発している際、Mastraのエージェント開発環境でエージェントとチャットし、その状態とメモリを確認できます。
-- **[検索拡張生成（RAG）](/docs/rag/overview.mdx)**: Mastraは、ドキュメント（テキスト、HTML、Markdown、JSON）をチャンクに処理し、埋め込みを作成し、ベクトルデータベースに保存するAPIを提供します。クエリ時には、関連するチャンクを取得してLLM応答をあなたのデータに基づかせ、複数のベクトルストア（Pinecone、pgvectorなど）と埋め込みプロバイダー（OpenAI、Cohereなど）の上に統一されたAPIを提供します。
-- **[デプロイメント](/docs/deployment/deployment.mdx)**: Mastraは、既存のReact、Next.js、またはNode.jsアプリケーション内、またはスタンドアロンエンドポイントへのエージェントとワークフローのバンドルをサポートします。Mastraデプロイヘルパーを使用すると、Honoを使用してエージェントとワークフローをNode.jsサーバーに簡単にバンドルしたり、Vercel、Cloudflare Workers、Netlifyなどのサーバーレスプラットフォームにデプロイしたりできます。
-- **[評価](/docs/evals/overview.mdx)**: Mastraは、モデル評価、ルールベース、統計的手法を使用してLLM出力を評価する自動評価メトリクスを提供し、毒性、バイアス、関連性、事実の正確性のための組み込みメトリクスを備えています。独自の評価を定義することもできます。
+TypeScript 向けに特化設計され、確立された AI パターンに基づく Mastra は、優れた AI アプリケーションをすぐに構築できるよう、必要な機能をすべて提供します。
+
+主なポイント:
+
+- [**モデルルーティング**](/models) - 1 つの標準インターフェースで 40 社以上のプロバイダーに接続。OpenAI、Anthropic、Gemini などのモデルを利用できます。
+
+- [**エージェント**](/docs/agents/overview) - LLM とツールを活用してオープンエンドなタスクを解決する自律エージェントを構築。エージェントは目標に基づいて推論し、使うツールを選択し、モデルが最終回答を出すか、任意の停止条件を満たすまで内部で反復します。
+
+- [**ワークフロー**](/docs/workflows/overview) - 実行を明示的に制御したい場合は、Mastra のグラフベースのワークフローエンジンで複雑な多段処理をオーケストレーション。Mastra のワークフローは制御フローに直感的な構文（`.then()`、`.branch()`、`.parallel()`）を採用しています。
+
+- [**Human-in-the-loop**](/docs/workflows/suspend-and-resume) - エージェントやワークフローを一時停止し、再開前にユーザー入力や承認を待機可能。Mastra は[ストレージ](/docs/server-db/storage)で実行状態を保持するため、無期限に一時停止し、中断地点から再開できます。
+
+- **コンテキスト管理** - 適切なタイミングで適切なコンテキストをエージェントに付与。[会話履歴](/docs/memory/conversation-history)を提供し、ソース（API、データベース、ファイル）からデータを[検索・取得](/docs/rag/overview)し、人間らしい[ワーキング](/docs/memory/working-memory)および[セマンティック](/docs/memory/semantic-recall)メモリを付与して、一貫した振る舞いを実現します。 
+
+- **インテグレーション** - エージェントやワークフローを既存の React、Next.js、Node.js アプリに組み込むか、スタンドアロンのエンドポイントとして提供。UI 構築時は、Vercel の AI SDK UI や CopilotKit などのエージェント指向ライブラリと統合して、ウェブ上で AI アシスタントを実装できます。
+
+- **本番運用の必携機能** - 信頼性の高いエージェントを提供するには、継続的なインサイト、評価、反復が不可欠。組み込みの[評価](/docs/evals/overview)と[可観測性](/docs/observability/overview)により、Mastra は観測・計測・継続的な改善のためのツールを提供します。
+
+## 何が作れる？
+
+- 言語理解・推論・アクションを組み合わせ、現実の課題を解決するAI搭載アプリケーション。
+
+- カスタマーサポート、オンボーディング、社内問い合わせ向けの会話型エージェント。
+
+- コーディング、法務、財務、リサーチ、クリエイティブワークといった分野に特化したコパイロット。
+
+- 発火・ルーティングから完了までを自動化するマルチステップのワークフロー。
+
+- データを分析し、実行可能な提言を行う意思決定支援ツール。
+
+実例は[ケーススタディ](/blog/category/case-studies)や[コミュニティショーケース](/showcase)をご覧ください。
+
+## はじめに
+
+[インストールガイド](/docs/getting-started/installation)に沿って、CLIまたは手動で手順どおりにセットアップしましょう。
+
+AIエージェントが初めての方は、[テンプレート](/docs/getting-started/templates)、[コース](/course)、そして[YouTube 動画](https://youtube.com/@mastra-ai)をチェックして、今日から Mastra で開発を始めましょう。
+
+皆さんがどんなものを作るのか、楽しみにしています ✌️ 

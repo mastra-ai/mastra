@@ -1,33 +1,29 @@
 ---
-title: "例: システムプロンプトを使ったエージェント | Agents | Mastra Docs"
-description: Mastraで、システムプロンプトにより性格と機能を定義したAIエージェントを作成する例。
+title: "例: システムプロンプト付きエージェント | Agents | Mastra Docs"
+description: Mastraでシステムプロンプトを使い、エージェントの性格や能力を定義したAIエージェントを作成する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
-
 # システムプロンプトの変更
 
-エージェントを作成する際、`instructions` はその挙動に関する一般的なルールを定義します。これらはエージェントの役割や人格、全体的な方針を定め、すべてのやり取りで一貫して適用されます。特定のリクエストに限ってエージェントの応答傾向に影響を与えたい場合は、元の `instructions` を変更せずに、`.generate()` に `system` プロンプトを渡せます。
+エージェントを作成する際、`instructions` はその振る舞いの基本的なルールを定義します。エージェントの役割や性格、全体的な方針を定め、すべてのやり取りで一貫して適用されます。元の `instructions` を変更せずに、特定のリクエストでエージェントの応答に影響を与えるために、`.generate()` に `system` プロンプトを渡すことができます。
 
-この例では、`system` プロンプトを使ってエージェントの声をハリー・ポッターのさまざまな登場人物風に切り替え、コアの設定を変えずに同じエージェントがスタイルを適応できることを示しています。
-
-
+この例では、`system` プロンプトを使ってエージェントの文体をハリー・ポッターのさまざまなキャラクター風に切り替え、コア設定を変えずに同じエージェントがスタイルを柔軟に適応できることを示します。
 
 ## 前提条件
 
-この例では `openai` モデルを使用します。`.env` ファイルに `OPENAI_API_KEY` を追加してください。
+この例では `openai` モデルを使用します。`.env` ファイルに `OPENAI_API_KEY` を追加していることを確認してください。
 
 ```bash filename=".env" copy
-OPENAI_API_KEY=<your-api-key>
+OPENAI_API_KEY=<あなたの API キー>
 ```
-
 
 
 ## エージェントの作成
 
-エージェントを定義し、`instructions` を指定します。これは既定の動作を定義し、実行時にシステムプロンプトが与えられない場合の応答方針を示します。
+エージェントを定義し、`instructions` を指定します。これはデフォルトの動作を設定し、実行時にシステムプロンプトが与えられない場合の応答方法を定義します。
 
 ```typescript filename="src/mastra/agents/example-harry-potter-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -35,21 +31,20 @@ import { Agent } from "@mastra/core/agent";
 
 export const harryPotterAgent = new Agent({
   name: "harry-potter-agent",
-  description: "Provides character-style responses from the Harry Potter universe.",
-  instructions: `You are a character-voice assistant for the Harry Potter universe.
-    Reply in the speaking style of the requested character (e.g., Harry, Hermione, Ron, Dumbledore, Snape, Hagrid).
-    If no character is specified, default to Harry Potter.`,
+  description: "ハリー・ポッターの世界のキャラクターになりきって応答します。",
+  instructions: `あなたはハリー・ポッターの世界におけるキャラクター音声アシスタントです。
+    指定されたキャラクター（例：ハリー、ハーマイオニー、ロン、ダンブルドア、スネイプ、ハグリッド）の話し方で返信してください。
+    キャラクターの指定がない場合は、ハリー・ポッターで応答してください。`,
   model: openai("gpt-4o")
 });
 ```
 
-> 設定オプションの一覧については、[Agent](../../reference/agents/agent.mdx) を参照してください。
-
+> 設定オプションの全一覧は [Agent](../../reference/agents/agent.mdx) を参照してください。
 
 
 ## エージェントの登録
 
-エージェントを使用するには、メインの Mastra インスタンスに登録します。
+エージェントを使用するには、メインの Mastra インスタンスに登録してください。
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -57,16 +52,15 @@ import { Mastra } from "@mastra/core/mastra";
 import { harryPotterAgent } from "./agents/example-harry-potter-agent";
 
 export const mastra = new Mastra({
-  // ...
+  // ほか
   agents: { harryPotterAgent }
 });
 ```
 
 
+## 既定のキャラクター応答
 
-## デフォルトのキャラクターの応答
-
-`getAgent()` を使ってエージェントを取得し、プロンプトを渡して `generate()` を呼び出します。指示にあるとおり、キャラクターを指定しない場合、このエージェントは Harry Potter の口調がデフォルトになります。
+`getAgent()` でエージェントを取得し、プロンプトを渡して `generate()` を呼び出します。手順で定義されているとおり、キャラクターが指定されていない場合、このエージェントは Harry Potter の声が既定になります。
 
 ```typescript filename="src/test-harry-potter-agent.ts" showLineNumbers copy
 import "dotenv/config";
@@ -75,14 +69,15 @@ import { mastra } from "./mastra";
 
 const agent = mastra.getAgent("harryPotterAgent");
 
-const response = await agent.generate("What is your favorite room in Hogwarts?");
+const response = await agent.generate("ホグワーツで一番好きな部屋はどこですか？");
 
 console.log(response.text);
 ```
 
-### キャラクターの口調を変更する
 
-実行時に別の system プロンプトを与えることで、エージェントの口調を別のキャラクターに切り替えられます。これにより、元の指示を変えることなく、そのリクエストに対するエージェントの応答が変わります。
+### キャラクターの声を変更する
+
+実行時に別の system プロンプトを指定することで、エージェントの声を別のキャラクターに切り替えられます。これにより、そのリクエストに対するエージェントの応答の仕方は変わりますが、元の指示自体は変更されません。
 
 ```typescript {9-10} filename="src/test-harry-potter-agent.ts" showLineNumbers copy
 import "dotenv/config";
@@ -94,24 +89,18 @@ const agent = mastra.getAgent("harryPotterAgent");
 const response = await agent.generate([
   {
     role: "system",
-    content: "You are Draco Malfoy."
+    content: "あなたはドラコ・マルフォイです。"
   },
   {
     role: "user",
-    content: "What is your favorite room in Hogwarts?"
+    content: "ホグワーツで一番好きな部屋はどこですか？"
   }
 ]);
 
 console.log(response.text);
 ```
 
-<GithubLink
-  outdated={true}
-  marginTop='mt-16'
-  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/system-prompt"
-/>
-
-
+<GithubLink outdated={true} marginTop="mt-16" link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/system-prompt" />
 
 
 ## 関連項目

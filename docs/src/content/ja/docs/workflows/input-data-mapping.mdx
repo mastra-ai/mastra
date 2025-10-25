@@ -1,26 +1,22 @@
 ---
-title: "ワークフローを使った入力データマッピング | Mastra ドキュメント"
-description: "Mastraワークフローでより動的なデータフローを作成するためのワークフロー入力マッピングの使用方法を学びましょう。"
+title: "ワークフローの入力データマッピング | Mastra Docs"
+description: "Mastra のワークフローで入力マッピングを使って、より動的なデータフローを実現する方法を学びましょう。"
 ---
 
+# 入力データのマッピング
 
-
-# 入力データマッピング
-
-入力データマッピングは、次のステップの入力に対する値の明示的なマッピングを可能にします。これらの値は、以下のような複数のソースから取得できます：
+入力データのマッピングでは、次のステップの入力に値を明示的にマッピングできます。これらの値は、次のいずれかのソースから取得されます:
 
 - 前のステップの出力
 - ランタイムコンテキスト
-- 定数値
+- 定数
 - ワークフローの初期入力
 
+## `.map()` を使ったマッピング
 
+この例では、`step1` の `output` を `step2` に必要な `inputSchema` に合うように変換します。`step1` の値は、`.map` 関数の `inputData` パラメータで参照できます。
 
-## `.map()`を使用したマッピング
-
-この例では、`step1`からの`output`が`step2`に必要な`inputSchema`に合うように変換されます。`step1`からの値は、`.map`関数の`inputData`パラメータを使用してアクセスできます。
-
-![Mapping with .map()](/image/workflows/workflows-data-mapping-map.jpg)
+![.map() を使ったマッピング](/image/workflows/workflows-data-mapping-map.jpg)
 
 ```typescript {9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({...});
@@ -39,10 +35,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
+## `inputData` の使用
 
-## `inputData`の使用
-
-`inputData`を使用して前のステップの完全な出力にアクセスします：
+前のステップの出力全体にアクセスするには、`inputData` を使用します。
 
 ```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
   .then(step1)
@@ -52,10 +47,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
+## `getStepResult()` の使用
 
-## `getStepResult()`の使用
-
-`getStepResult`を使用して、ステップのインスタンスを参照することで特定のステップの完全な出力にアクセスします：
+`getStepResult` を使うと、ステップのインスタンスを参照して、特定のステップの完全な出力にアクセスできます。
 
 ```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
   .then(step1)
@@ -65,10 +59,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
+## `getInitData()` の使用
 
-## `getInitData()`の使用
-
-`getInitData`を使用して、ワークフローに提供された初期入力データにアクセスします：
+ワークフローに提供された初期入力データにアクセスするには、`getInitData()` を使用します。
 
 ```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
   .then(step1)
@@ -78,18 +71,18 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
+## `mapVariable()` の使い方
 
-## `mapVariable()`の使用
-
-`mapVariable`を使用するには、workflowsモジュールから必要な関数をインポートします：
+`mapVariable` を使用するには、workflows モジュールから対象の関数をインポートします。
 
 ```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { mapVariable } from "@mastra/core/workflows";
 ```
 
-### `mapVariable()`を使用したステップの名前変更
 
-`.map()`でオブジェクト構文を使用してステップの出力の名前を変更できます。以下の例では、`step1`からの`value`出力が`details`に名前変更されています：
+### `mapVariable()` を使ったステップ出力の名称変更
+
+`.map()` のオブジェクト構文を使って、ステップの出力名を変更できます。次の例では、`step1` の `value` 出力が `details` に変更されています:
 
 ```typescript {3-6} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
   .then(step1)
@@ -101,9 +94,10 @@ import { mapVariable } from "@mastra/core/workflows";
   })
 ```
 
-### `mapVariable()`を使用したワークフローの名前変更
 
-**参照合成**を使用してワークフローの出力の名前を変更できます。これは、ワークフローインスタンスを`initData`として渡すことを含みます。
+### `mapVariable()` を使ったワークフロー出力のリネーム
+
+**参照合成**を使うと、ワークフローの出力名を変更できます。これは、`initData` にワークフローインスタンスを渡すことで行います。
 
 ```typescript {6-9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 export const testWorkflow = createWorkflow({...});

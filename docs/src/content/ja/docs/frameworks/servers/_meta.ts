@@ -1,4 +1,4 @@
 const meta = {
-  express: "Expressと一緒に",
+  express: "Express を使用",
 };
 export default meta;

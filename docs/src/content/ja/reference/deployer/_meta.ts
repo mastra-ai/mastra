@@ -1,5 +1,5 @@
 const meta = {
-  deployer: "Deployer",
+  deployer: "デプロイ担当",
   cloudflare: "Cloudflare",
   netlify: "Netlify",
   vercel: "Vercel",

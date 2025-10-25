@@ -1,19 +1,19 @@
 ---
-title: "リファレンス: MCPServer | MCP 経由での Mastra ツール公開 | Mastra ドキュメント"
-description: MCPServer の API リファレンス — Mastra のツールや機能を Model Context Protocol サーバーとして公開するクラス。
+title: "リファレンス: MCPServer | MCP での Mastra ツール公開 | Mastra Docs"
+description: MCPServer の API リファレンス — Mastra のツールや機能を Model Context Protocol サーバーとして公開するためのクラス。
 ---
 
 # MCPServer
 
-`MCPServer` クラスは、既存の Mastra のツールやエージェントを Model Context Protocol（MCP）サーバーとして公開するための機能を提供します。これにより、任意の MCP クライアント（Cursor、Windsurf、Claude Desktop など）がこれらの機能に接続し、エージェントで利用できるようになります。
+`MCPServer` クラスは、既存の Mastra のツールやエージェントを Model Context Protocol（MCP）サーバーとして公開する機能を提供します。これにより、任意の MCP クライアント（Cursor、Windsurf、Claude Desktop など）がこれらの機能に接続し、エージェントで利用できるようになります。
 
-ツールやエージェントを Mastra アプリケーション内で直接使うだけで十分な場合は、必ずしも MCP サーバーを作成する必要はありません。この API は、Mastra のツールやエージェントを外部の MCP クライアントに公開するためのものです。
+ツールやエージェントを Mastra アプリケーション内で直接使うだけでよい場合は、必ずしも MCP サーバーを作成する必要はありません。この API は、Mastra のツールやエージェントを外部の MCP クライアントに公開するためのものです。
 
-[stdio（サブプロセス）および SSE（HTTP）の MCP トランスポート](https://modelcontextprotocol.io/docs/concepts/transports)の両方に対応しています。
+[stdio（サブプロセス）および SSE（HTTP）の MCP トランスポート](https://modelcontextprotocol.io/docs/concepts/transports) の両方をサポートしています。
 
-## コンストラクター
+## コンストラクタ
 
-新しい `MCPServer` を作成するには、サーバーに関する基本情報、そのサーバーが提供するツール、そして任意で、ツールとして公開したいエージェントを指定します。
+新しい `MCPServer` を作成するには、サーバーの基本情報、提供するツール、そして必要に応じてツールとして公開するエージェントを指定します。
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -25,30 +25,31 @@ import { dataProcessingWorkflow } from "../workflows/dataProcessingWorkflow";
 
 const myAgent = new Agent({
   name: "MyExampleAgent",
-  description: "A generalist to help with basic questions."
-  instructions: "You are a helpful assistant.",
+  description: "基本的な質問に対応できる汎用アシスタントです。"
+  instructions: "あなたは役に立つアシスタントです。",
   model: openai("gpt-4o-mini"),
 });
 
 const weatherTool = createTool({
   id: "getWeather",
-  description: "Gets the current weather for a location.",
+  description: "指定した場所の現在の天気を取得します。",
   inputSchema: z.object({ location: z.string() }),
-  execute: async ({ context }) => `Weather in ${context.location} is sunny.`,
+  execute: async ({ context }) => `${context.location}の天気は晴れです。`,
 });
 
 const server = new MCPServer({
-  name: "My Custom Server",
+  name: "カスタムサーバー",
   version: "1.0.0",
   tools: { weatherTool },
-  agents: { myAgent }, // このエージェントはツール「ask_myAgent」になります
+  agents: { myAgent }, // this agent will become tool "ask_myAgent"
   workflows: {
-    dataProcessingWorkflow, // このワークフローはツール「run_dataProcessingWorkflow」になります
+    dataProcessingWorkflow, // this workflow will become tool "run_dataProcessingWorkflow"
   }
 });
 ```
 
-### 設定プロパティ
+
+### 構成プロパティ
 
 コンストラクタは、以下のプロパティを持つ `MCPServerConfig` オブジェクトを受け取ります:
 
@@ -72,68 +73,68 @@ const server = new MCPServer({
       type: "ToolsInput",
       isOptional: false,
       description:
-        "キーがツール名、値が Mastra のツール定義（`createTool` または Vercel AI SDK で作成）であるオブジェクト。これらのツールは直接公開されます。",
+        "キーがツール名、値が Mastra のツール定義（`createTool` または Vercel AI SDK で作成）のオブジェクト。これらのツールはそのまま公開されます。",
     },
     {
       name: "agents",
       type: "Record<string, Agent>",
       isOptional: true,
       description:
-        "キーがエージェント識別子、値が Mastra Agent インスタンスであるオブジェクト。各エージェントは自動的に `ask_<agentIdentifier>` という名前のツールに変換されます。エージェントはコンストラクタ設定で空でない `description` 文字列プロパティを必ず定義している必要があります。この説明はツールの説明に使用されます。エージェントの説明がない、または空の場合、MCPServer の初期化時にエラーが発生します。",
+        "キーがエージェント識別子、値が Mastra Agent インスタンスのオブジェクト。各エージェントは自動的に `ask_<agentIdentifier>` という名前のツールに変換されます。エージェントはコンストラクタの設定で空でない `description` 文字列プロパティを定義している必要があります。この説明はツールの説明として使用されます。エージェントの説明が欠落している、または空の場合、MCPServer の初期化時にエラーがスローされます。",
     },
     {
       name: "workflows",
       type: "Record<string, Workflow>",
       isOptional: true,
       description:
-        "キーがワークフロー識別子、値が Mastra Workflow インスタンスであるオブジェクト。各ワークフローは `run_<workflowKey>` という名前のツールに変換されます。ワークフローの `inputSchema` はツールの入力スキーマになります。ワークフローには空でない `description` 文字列プロパティが必須で、ツールの説明に使用されます。説明がない、または空の場合はエラーになります。ツールは `workflow.createRunAsync()` を呼び出し、続けて `run.start({ inputData: <tool_input> })` を実行してワークフローを起動します。エージェントまたはワークフローから派生したツール名（例: `ask_myAgent` や `run_myWorkflow`）が、明示的に定義されたツール名や他の派生名と衝突した場合は、明示的に定義されたツールが優先され、警告が記録されます。以降の衝突を引き起こすエージェント/ワークフローはスキップされます。",
+        "キーがワークフロー識別子、値が Mastra Workflow インスタンスのオブジェクト。各ワークフローは `run_<workflowKey>` という名前のツールに変換されます。ワークフローの `inputSchema` はツールの入力スキーマになります。ワークフローは空でない `description` 文字列プロパティを持っている必要があり、これはツールの説明に使用されます。ワークフローの説明が欠落している、または空の場合、エラーがスローされます。ツールは `workflow.createRunAsync()` を呼び出し、その後 `run.start({ inputData: <tool_input> })` を実行してワークフローを起動します。エージェントやワークフローから派生したツール名（例: `ask_myAgent` や `run_myWorkflow`）が、明示的に定義されたツール名や他の派生名と衝突した場合は、明示的に定義されたツールが優先され、警告がログに記録されます。以降の衝突を引き起こすエージェント／ワークフローはスキップされます。",
     },
     {
       name: "id",
       type: "string",
       isOptional: true,
       description:
-        "サーバーの任意の一意識別子。指定しない場合は UUID が生成されます。この ID は確定値とみなされ、指定された場合は Mastra によって変更されません。",
+        "サーバーの任意の一意な識別子。指定しない場合は UUID が生成されます。この ID は確定値とみなされ、指定された場合は Mastra によって変更されません。",
     },
     {
       name: "description",
       type: "string",
       isOptional: true,
-      description: "MCP サーバーの概要（任意）。",
+      description: "MCP サーバーの役割・機能に関する任意の説明。",
     },
     {
       name: "repository",
       type: "Repository", // { url: string; source: string; id: string; }
       isOptional: true,
       description:
-        "サーバーのソースコードに関するリポジトリ情報（任意）。",
+        "サーバーのソースコードに関する任意のリポジトリ情報。",
     },
     {
       name: "releaseDate",
       type: "string", // ISO 8601
       isOptional: true,
       description:
-        "このサーバーバージョンのリリース日（ISO 8601 文字列、任意）。指定しない場合はインスタンス化時刻が既定になります。",
+        "このサーバーバージョンの任意のリリース日（ISO 8601 文字列）。指定しない場合はインスタンス化時刻が既定になります。",
     },
     {
       name: "isLatest",
       type: "boolean",
       isOptional: true,
       description:
-        "これが最新バージョンであることを示すフラグ（任意）。指定しない場合は true が既定です。",
+        "これが最新バージョンであるかを示す任意のフラグ。指定しない場合は true が既定です。",
     },
     {
       name: "packageCanonical",
       type: "'npm' | 'docker' | 'pypi' | 'crates' | string",
       isOptional: true,
       description:
-        "サーバーをパッケージとして配布する場合の正準パッケージ形式（例: 'npm', 'docker'、任意）。",
+        "サーバーをパッケージとして配布する場合の正準パッケージ形式（例: 'npm', 'docker'）。",
     },
     {
       name: "packages",
       type: "PackageInfo[]",
       isOptional: true,
-      description: "このサーバー用のインストール可能なパッケージ一覧（任意）。",
+      description: "このサーバーのインストール可能なパッケージ一覧（任意）。",
     },
     {
       name: "remotes",
@@ -146,69 +147,70 @@ const server = new MCPServer({
       type: "MCPServerResources",
       isOptional: true,
       description:
-        "サーバーが MCP リソースをどのように扱うかを定義するオブジェクト。詳細は Resource Handling セクションを参照してください。",
+        "サーバーが MCP リソースをどのように扱うかを定義するオブジェクト。詳細は「Resource Handling」のセクションを参照してください。",
     },
     {
       name: "prompts",
       type: "MCPServerPrompts",
       isOptional: true,
       description:
-        "サーバーが MCP プロンプトをどのように扱うかを定義するオブジェクト。詳細は Prompt Handling セクションを参照してください。",
+        "サーバーが MCP プロンプトをどのように扱うかを定義するオブジェクト。詳細は「Prompt Handling」のセクションを参照してください。",
     },
   ]}
 />
 
 ## エージェントをツールとして公開する
 
-`MCPServer` の強力な機能の1つは、Mastra エージェントを自動的に呼び出し可能なツールとして公開できることです。設定の `agents` プロパティにエージェントを指定すると:
+`MCPServer` の強力な機能のひとつは、Mastra エージェントを呼び出し可能なツールとして自動的に公開できる点です。設定の `agents` プロパティにエージェントを指定すると、次のように動作します。
 
-- **ツール名**: 各エージェントは `ask_<agentKey>` という名前のツールに変換されます。ここで `<agentKey>` は `agents` オブジェクトでそのエージェントに使用したキーです。たとえば、`agents: { myAgentKey: myAgentInstance }` と設定した場合、`ask_myAgentKey` という名前のツールが作成されます。
+- **ツール命名**: 各エージェントは `ask_<agentKey>` という名前のツールに変換されます。ここで `<agentKey>` は `agents` オブジェクト内でそのエージェントに割り当てたキーです。たとえば `agents: { myAgentKey: myAgentInstance }` と設定すると、`ask_myAgentKey` という名前のツールが作成されます。
 
 - **ツールの機能**:
 
   - **説明**: 生成されるツールの説明は次の形式になります: "エージェント `<AgentName>` に質問します。元のエージェントの指示: `<agent description>`"
-  - **入力**: ツールは `message` プロパティ（文字列）を持つ単一のオブジェクト引数を受け取ります: `{ message: "エージェントへの質問内容" }`。
-  - **実行**: このツールが呼び出されると、対応するエージェントの `generate()` メソッドを、渡された `query` とともに実行します。
+  - **入力**: ツールは `message` プロパティ（文字列）を持つ単一のオブジェクト引数を受け取ります: `{ message: "エージェントへの質問内容" }`
+  - **実行**: このツールが呼び出されると、対応するエージェントの `generate()` メソッドを、提供された `query` を渡して実行します。
   - **出力**: エージェントの `generate()` メソッドの結果が、そのままツールの出力として返されます。
 
-- **名前の衝突**: `tools` 設定で定義された明示的なツールが、エージェント由来のツールと同じ名前を持つ場合（例: `ask_myAgentKey` というツールがあり、同時にキー `myAgentKey` のエージェントもある場合）、_明示的に定義されたツールが優先されます_。この衝突が起きた場合、そのエージェントはツールに変換されず、警告がログに記録されます。
+- **名前の衝突**: `tools` 設定で明示的に定義されたツールが、エージェント由来のツールと同じ名前を持つ場合（例: `ask_myAgentKey` というツールがあり、同時にキー `myAgentKey` のエージェントもある場合）、_明示的に定義されたツールが優先されます_。この競合がある場合、エージェントはツールに変換されず、警告がログに記録されます。
 
-これにより、MCP クライアントは他のツールと同様に、自然言語によるクエリでエージェントとやり取りできるようになります。
+これにより、MCP クライアントは他のツール同様に、自然言語のクエリでエージェントとやり取りできるようになります。
 
 ### エージェントからツールへの変換
 
-`agents` 構成プロパティでエージェントを指定すると、`MCPServer` は各エージェントに対応するツールを自動的に作成します。ツール名は `ask_<agentIdentifier>` となり、`<agentIdentifier>` は `agents` オブジェクトで使用したキーです。
+`agents` 構成プロパティでエージェントを指定すると、`MCPServer` は各エージェントに対応するツールを自動的に作成します。ツール名は `ask_<agentIdentifier>` で、`<agentIdentifier>` は `agents` オブジェクトで使用したキーです。
 
-生成されるツールの説明は次のとおりです: "エージェント `<agent.name>` に質問します。エージェントの説明: `<agent.description>`"。
+生成されたツールの説明は次のとおりです: "エージェント `<agent.name>` に質問します。エージェントの説明: `<agent.description>`"
 
-**重要**: エージェントをツールに変換するには、インスタンス化時の構成で空でない `description` 文字列プロパティが設定されている必要があります（例: `new Agent({ name: 'myAgent', description: 'This agent does X.', ... })`）。`description` が欠落している、または空のエージェントが `MCPServer` に渡された場合、`MCPServer` のインスタンス化時にエラーがスローされ、サーバーのセットアップは失敗します。
+**重要**: エージェントをツールに変換するには、インスタンス化時の構成で空でない `description` 文字列プロパティが**必ず**設定されている必要があります（例: `new Agent({ name: 'myAgent', description: 'This agent does X.', ... })`）。`description` が欠落している、または空のエージェントが `MCPServer` に渡された場合、`MCPServer` のインスタンス化時にエラーがスローされ、サーバーのセットアップは失敗します。
 
-これにより、MCP を通じてエージェントの生成能力を迅速に公開でき、クライアントはエージェントに直接「質問」できるようになります。
+これにより、MCP を通じてエージェントの生成機能を素早く公開でき、クライアントはエージェントへ直接「質問」できるようになります。
 
 ## メソッド
 
-`MCPServer` インスタンスに対して呼び出して、動作を制御したり情報を取得したりできる関数です。
+`MCPServer` インスタンスに対して呼び出し、動作を制御したり情報を取得したりできる関数です。
 
 ### startStdio()
 
-このメソッドは、サーバーを標準入力・標準出力（stdio）で通信するモードで起動します。サーバーをコマンドラインプログラムとして実行する場合に一般的です。
+標準入力・標準出力（stdio）で通信するサーバーを起動するには、このメソッドを使用します。コマンドラインのプログラムとしてサーバーを実行する場合によく使われます。
 
 ```typescript
 async startStdio(): Promise<void>
 ```
 
-stdio を使ってサーバーを起動する方法は次のとおりです:
+stdio を使ってサーバーを起動する方法は次のとおりです：
 
 ```typescript
 const server = new MCPServer({
-  // example configuration above
+  // 上記は設定例です
 });
 await server.startStdio();
 ```
 
+
 ### startSSE()
 
-このメソッドは、既存のウェブサーバーにMCPサーバーを統合し、通信にServer-Sent Events (SSE) を利用できるようにするためのものです。SSE用またはメッセージ用のパスへのリクエストを受け取った際、ウェブサーバー側のコードから呼び出してください。
+このメソッドは、既存のウェブサーバーと MCP サーバーを統合し、通信に Server-Sent Events（SSE）を使用できるようにするためのものです。SSE 用またはメッセージ用のパスへのリクエストを受け取った際に、ウェブサーバー側のコードから呼び出してください。
 
 ```typescript
 async startSSE({
@@ -226,7 +228,7 @@ async startSSE({
 }): Promise<void>
 ```
 
-以下は、HTTPサーバーのリクエストハンドラー内で`startSSE`を使用する例です。この例では、MCPクライアントは`http://localhost:1234/sse`であなたのMCPサーバーに接続できます。
+次の例は、HTTP サーバーのリクエストハンドラー内で `startSSE` を使用する方法の一例です。この例では、MCP クライアントは `http://localhost:1234/sse` にあるあなたの MCP サーバーに接続できます。
 
 ```typescript
 import http from "http";
@@ -242,48 +244,49 @@ const httpServer = http.createServer(async (req, res) => {
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`HTTP server listening on port ${PORT}`);
+  console.log(`HTTP サーバーがポート ${PORT} で待ち受け中`);
 });
 ```
 
-`startSSE`メソッドに必要な値の詳細は次のとおりです:
+`startSSE` メソッドに必要な値の詳細は次のとおりです:
 
 <PropertiesTable
   content={[
-    {
-      name: "url",
-      type: "URL",
-      description: "ユーザーが要求しているウェブアドレス。",
-    },
-    {
-      name: "ssePath",
-      type: "string",
-      description:
-        "クライアントがSSEに接続するURLのパス（例: '/sse'）。",
-    },
-    {
-      name: "messagePath",
-      type: "string",
-      description:
-        "クライアントがメッセージを送信するURLのパス（例: '/message'）。",
-    },
-    {
-      name: "req",
-      type: "any",
-      description: "ウェブサーバーから受け取るリクエストオブジェクト。",
-    },
-    {
-      name: "res",
-      type: "any",
-      description:
-        "データを返すために使用する、ウェブサーバーのレスポンスオブジェクト。",
-    },
-  ]}
+{
+  name: "url",
+  type: "URL",
+  description: "ユーザーが要求しているウェブアドレス。",
+},
+{
+  name: "ssePath",
+  type: "string",
+  description:
+    "クライアントが SSE に接続するための URL の特定のパス（例: '/sse'）。",
+},
+{
+  name: "messagePath",
+  type: "string",
+  description:
+    "クライアントがメッセージを送信するための URL の特定のパス（例: '/message'）。",
+},
+{
+  name: "req",
+  type: "any",
+  description: "ウェブサーバーから受け取るリクエストオブジェクト。",
+},
+{
+  name: "res",
+  type: "any",
+  description:
+    "データを返送するために使用する、ウェブサーバーのレスポンスオブジェクト。",
+},
+]}
 />
+
 
 ### startHonoSSE()
 
-このメソッドは、既存のウェブサーバーにMCPサーバーを統合し、通信にServer-Sent Events（SSE）を利用できるようにします。SSE用またはメッセージ用のパスへのリクエストを受け取った際に、ウェブサーバー側のコードから呼び出してください。
+このメソッドは、既存のWebサーバーにMCPサーバーを統合し、通信にServer-Sent Events（SSE）を使えるようにします。SSE用またはメッセージ用のパスへのリクエストを受け取ったときに、Webサーバー側のコードから呼び出します。
 
 ```typescript
 async startHonoSSE({
@@ -301,7 +304,7 @@ async startHonoSSE({
 }): Promise<void>
 ```
 
-以下は、HTTPサーバーのリクエストハンドラー内で`startHonoSSE`を使用する例です。この例では、MCPクライアントは`http://localhost:1234/hono-sse`であなたのMCPサーバーに接続できます。
+次の例は、HTTP サーバーのリクエストハンドラー内で `startHonoSSE` を使用する方法を示しています。この例では、MCP クライアントが `http://localhost:1234/hono-sse` にあるあなたの MCP サーバーに接続できます。
 
 ```typescript
 import http from "http";
@@ -317,48 +320,49 @@ const httpServer = http.createServer(async (req, res) => {
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`HTTP server listening on port ${PORT}`);
+  console.log(`HTTP サーバーがポート ${PORT} で待機中`);
 });
 ```
 
-`startHonoSSE`メソッドに必要な値の詳細は次のとおりです。
+`startHonoSSE` メソッドに必要な値の詳細は次のとおりです。
 
 <PropertiesTable
   content={[
-    {
-      name: "url",
-      type: "URL",
-      description: "ユーザーがリクエストしているWebアドレス。",
-    },
-    {
-      name: "ssePath",
-      type: "string",
-      description:
-        "クライアントがSSEに接続するURLのパス（例: '/hono-sse'）。",
-    },
-    {
-      name: "messagePath",
-      type: "string",
-      description:
-        "クライアントがメッセージを送信するURLのパス（例: '/message'）。",
-    },
-    {
-      name: "req",
-      type: "any",
-      description: "ウェブサーバーからの受信リクエストオブジェクト。",
-    },
-    {
-      name: "res",
-      type: "any",
-      description:
-        "データを返すために使用されるウェブサーバーのレスポンスオブジェクト。",
-    },
-  ]}
+{
+  name: "url",
+  type: "URL",
+  description: "ユーザーがリクエストしているウェブアドレス。",
+},
+{
+  name: "ssePath",
+  type: "string",
+  description:
+    "クライアントがSSEに接続するURLの特定のパス（例: '/hono-sse'）。",
+},
+{
+  name: "messagePath",
+  type: "string",
+  description:
+    "クライアントがメッセージを送信するURLの特定のパス（例: '/message'）。",
+},
+{
+  name: "req",
+  type: "any",
+  description: "Webサーバーに届いたリクエストオブジェクト。",
+},
+{
+  name: "res",
+  type: "any",
+  description:
+    "データを返すために使用されるWebサーバーのレスポンスオブジェクト。",
+},
+]}
 />
+
 
 ### startHTTP()
 
-このメソッドは、既存のWebサーバーにMCPサーバーを統合し、通信にストリーム対応のHTTPを使えるようにします。WebサーバーがHTTPリクエストを受け取ったときに、その処理コードから呼び出してください。
+このメソッドは、既存のWebサーバーにMCPサーバーを統合し、通信にストリーミング対応のHTTPを使用できるようにするためのものです。WebサーバーがHTTPリクエストを受信したときに、サーバー側のコードからこれを呼び出します。
 
 ```typescript
 async startHTTP({
@@ -376,7 +380,7 @@ async startHTTP({
 }): Promise<void>
 ```
 
-以下は、HTTPサーバーのリクエストハンドラー内で`startHTTP`を使用する例です。この例では、MCPクライアントは`http://localhost:1234/http`であなたのMCPサーバーに接続できます。
+次の例は、HTTP サーバーのリクエストハンドラー内で `startHTTP` を使用する方法を示しています。この例では、MCP クライアントは `http://localhost:1234/http` の MCP サーバーに接続できます。
 
 ```typescript
 import http from "http";
@@ -394,119 +398,125 @@ const httpServer = http.createServer(async (req, res) => {
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`HTTP server listening on port ${PORT}`);
+  console.log(`HTTP サーバーがポート ${PORT} で待ち受けています`);
 });
 ```
 
-`startHTTP`メソッドに必要な各値の詳細は次のとおりです。
+`startHTTP` メソッドに必要な値の詳細は次のとおりです。
 
 <PropertiesTable
   content={[
-    {
-      name: 'url',
-      type: 'URL',
-      description: 'ユーザーがリクエストしているWebアドレス。',
-    },
-    {
-      name: 'httpPath',
-      type: 'string',
-      description:
-        "MCPサーバーがHTTPリクエストを処理するURLのパス（例: '/mcp'）。",
-    },
-    {
-      name: 'req',
-      type: 'http.IncomingMessage',
-      description: 'Webサーバーからの受信リクエストオブジェクト。',
-    },
-    {
-      name: 'res',
-      type: 'http.ServerResponse',
-      description:
-        'データを返すために使用する、Webサーバーのレスポンスオブジェクト。',
-    },
-    {
-      name: 'options',
-      type: 'StreamableHTTPServerTransportOptions',
-      description:
-        'HTTPトランスポートのオプション設定。詳細は下記のオプション表を参照してください。',
-      optional: true,
-    },
-  ]}
+{
+  name: 'url',
+  type: 'URL',
+  description: 'ユーザーがリクエストしているウェブアドレス。',
+},
+{
+  name: 'httpPath',
+  type: 'string',
+  description:
+    "MCP サーバーが HTTP リクエストを処理する URL の特定のパス（例: '/mcp'）。",
+},
+{
+  name: 'req',
+  type: 'http.IncomingMessage',
+  description: 'ウェブサーバーからの受信リクエストオブジェクト。',
+},
+{
+  name: 'res',
+  type: 'http.ServerResponse',
+  description:
+    'データの返送に使用する、ウェブサーバーのレスポンスオブジェクト。',
+},
+{
+  name: 'options',
+  type: 'StreamableHTTPServerTransportOptions',
+  description:
+    'HTTP トランスポートのオプション設定。詳しくは下記のオプション表を参照してください。',
+  optional: true,
+},
+]}
 />
 
-`StreamableHTTPServerTransportOptions`オブジェクトでは、HTTPトランスポートの動作をカスタマイズできます。利用可能なオプションは次のとおりです。
+`StreamableHTTPServerTransportOptions` オブジェクトを使用すると、HTTP トランスポートの動作をカスタマイズできます。利用可能なオプションは次のとおりです。
 
 <PropertiesTable
   content={[
-    {
-      name: 'sessionIdGenerator',
-      type: '(() => string) | undefined',
-      description:
-        '一意のセッションIDを生成する関数。暗号学的に安全で、全球で一意な文字列である必要があります。セッション管理を無効化するには`undefined`を返します。',
-    },
-    {
-      name: 'onsessioninitialized',
-      type: '(sessionId: string) => void',
-      description:
-        '新しいセッションが初期化されたときに呼び出されるコールバック。アクティブなMCPセッションの追跡に役立ちます。',
-      optional: true,
-    },
-    {
-      name: 'enableJsonResponse',
-      type: 'boolean',
-      description:
-        '`true`の場合、サーバーはストリーミングにServer-Sent Events (SSE)を使用せず、プレーンなJSONレスポンスを返します。デフォルトは`false`です。',
-      optional: true,
-    },
-    {
-      name: 'eventStore',
-      type: 'EventStore',
-      description:
-        'メッセージ再開性のためのイベントストア。これを指定すると、クライアントは再接続してメッセージストリームを再開できます。',
-      optional: true,
-    },
-  ]}
+{
+  name: 'sessionIdGenerator',
+  type: '(() => string) | undefined',
+  description:
+    '一意のセッション ID を生成する関数。暗号学的に安全で、グローバルに一意な文字列である必要があります。セッション管理を無効化するには `undefined` を返します。',
+},
+{
+  name: 'onsessioninitialized',
+  type: '(sessionId: string) => void',
+  description:
+    '新しいセッションが初期化されたときに呼び出されるコールバック。アクティブな MCP セッションの追跡に役立ちます。',
+  optional: true,
+},
+{
+  name: 'enableJsonResponse',
+  type: 'boolean',
+  description:
+    '`true` の場合、サーバーはストリーミングに Server-Sent Events (SSE) を使用せず、プレーンな JSON レスポンスを返します。既定値は `false` です。',
+  optional: true,
+},
+{
+  name: 'eventStore',
+  type: 'EventStore',
+  description:
+    'メッセージの再開を可能にするイベントストア。これを指定すると、クライアントは再接続してメッセージストリームを再開できます。',
+  optional: true,
+},
+]}
 />
+
 
 ### close()
 
-このメソッドはサーバーを終了し、すべてのリソースを解放します。
+このメソッドはサーバーを停止し、すべてのリソースを解放します。
 
 ```typescript
 async close(): Promise<void>
 ```
 
+
 ### getServerInfo()
 
-このメソッドはサーバーの基本情報を取得します。
+このメソッドでサーバーの基本情報を確認できます。
 
 ```typescript
 getServerInfo(): ServerInfo
 ```
 
+
 ### getServerDetail()
 
-このメソッドはサーバーの詳細情報を取得します。
+このメソッドは、サーバー情報の詳細を取得できます。
 
 ```typescript
 getServerDetail(): ServerDetail
 ```
 
+
 ### getToolListInfo()
 
-このメソッドを使うと、サーバー作成時に設定されたツールの一覧を確認できます。読み取り専用のリストで、デバッグに役立ちます。
+このメソッドでは、サーバー作成時に設定されたツールの一覧を参照できます。読み取り専用のリストで、デバッグに有用です。
 
 ```typescript
 getToolListInfo(): ToolListInfo
 ```
 
+
 ### getToolInfo()
 
-このメソッドは、特定のツールの詳細情報を取得します。
+このメソッドは、特定のツールの詳細情報を返します。
 
 ```typescript
 getToolInfo(toolName: string): ToolInfo
 ```
+
 
 ### executeTool()
 
@@ -516,37 +526,42 @@ getToolInfo(toolName: string): ToolInfo
 executeTool(toolName: string, input: any): Promise<any>
 ```
 
+
 ### getStdioTransport()
 
-サーバーを `startStdio()` で起動した場合、stdio 通信を管理するオブジェクトを取得するために使用できます。これは主に内部チェックやテストのために用いられます。
+`startStdio()` でサーバーを起動した場合、stdio 通信を管理するオブジェクトを取得できます。これは主に内部的な確認やテストのために使用します。
 
 ```typescript
 getStdioTransport(): StdioServerTransport | undefined
 ```
 
+
 ### getSseTransport()
 
-サーバーを `startSSE()` で起動している場合、SSE 通信を管理するオブジェクトを取得できます。`getStdioTransport` と同様に、主に内部確認やテスト用途で使用します。
+サーバーを `startSSE()` で起動している場合、SSE 通信を管理するオブジェクトを取得できます。`getStdioTransport` と同様に、主に内部確認やテスト用途向けです。
 
 ```typescript
-getSseTransport(): SSEServerTransport | undefined
+getSseTransport(): SSEサーバートランスポート | undefined
 ```
+
 
 ### getSseHonoTransport()
 
-サーバーを `startHonoSSE()` で起動した場合、SSE 通信を管理するオブジェクトを取得するために使用できます。`getSseTransport` と同様に、主に内部的な確認やテストのために用いられます。
+サーバーを `startHonoSSE()` で起動した場合、SSE 通信を管理するオブジェクトを取得するために使用できます。`getSseTransport` と同様に、主に内部的な確認やテストのために使います。
 
 ```typescript
 getSseHonoTransport(): SSETransport | undefined
 ```
 
+
 ### getStreamableHTTPTransport()
 
-サーバーを `startHTTP()` で起動した場合、HTTP 通信を管理するオブジェクトを取得するために使用できます。`getSseTransport` と同様に、主に内部確認やテスト用途を想定しています。
+`startHTTP()` でサーバーを起動した場合、HTTP 通信を管理するオブジェクトを取得するためにこれを使用できます。`getSseTransport` と同様、主に内部チェックやテストのために使用します。
 
 ```typescript
 getStreamableHTTPTransport(): StreamableHTTPServerTransport | undefined
 ```
+
 
 ### tools()
 
@@ -562,60 +577,61 @@ async executeTool(
 
 <PropertiesTable
   content={[
-    {
-      name: "toolId",
-      type: "string",
-      description: "実行するツールの ID/名称。",
-    },
-    {
-      name: "args",
-      type: "any",
-      description: "ツールの execute 関数に渡す引数。",
-    },
-    {
-      name: "executionContext",
-      type: "object",
-      isOptional: true,
-      description:
-        "messages や toolCallId など、ツール実行時の任意のコンテキスト。",
-    },
-  ]}
+{
+  name: "toolId",
+  type: "string",
+  description: "実行するツールのIDまたは名前。",
+},
+{
+  name: "args",
+  type: "any",
+  description: "ツールのexecute関数に渡す引数。",
+},
+{
+  name: "executionContext",
+  type: "object",
+  isOptional: true,
+  description:
+    "メッセージやtoolCallIdなど、ツール実行時の任意のコンテキスト。",
+},
+]}
 />
+
 
 ## リソースの扱い
 
-### MCP Resources とは？
+### MCP リソースとは？
 
-Resources は Model Context Protocol (MCP) における中核的なプリミティブで、サーバーがクライアントから読み取られ、LLM とのやり取りの文脈として利用できるデータやコンテンツを公開するための仕組みです。これは MCP サーバーが提供したいあらゆる種類のデータを表し、例えば次のようなものがあります:
+リソースは Model Context Protocol（MCP）における基本的な概念で、サーバーがクライアントに対して読み取り可能なデータやコンテンツを公開し、LLM とのやり取りにおけるコンテキストとして利用できるようにするものです。これは、MCP サーバーが提供したいあらゆる種類のデータを表し、例えば次のようなものがあります:
 
 - ファイルの内容
 - データベースのレコード
-- API のレスポンス
-- ライブシステムのデータ
+- API レスポンス
+- ライブなシステムデータ
 - スクリーンショットや画像
 - ログファイル
 
-Resources は一意の URI（例: `file:///home/user/documents/report.pdf`, `postgres://database/customers/schema`）で識別され、テキスト（UTF-8 エンコード）またはバイナリデータ（base64 エンコード）を含むことができます。
+リソースは固有の URI（例: `file:///home/user/documents/report.pdf`, `postgres://database/customers/schema`）で識別され、テキスト（UTF-8 エンコード）またはバイナリデータ（base64 エンコード）を含むことができます。
 
-クライアントは次の方法で Resources を発見できます:
+クライアントは次の方法でリソースを発見できます:
 
-1.  **Direct resources**: サーバーは `resources/list` エンドポイントを通じて具体的な Resource の一覧を公開します。
-2.  **Resource templates**: 動的な Resource のために、サーバーはクライアントが Resource URI を構築する際に用いる URI テンプレート（RFC 6570）を公開できます。
+1.  **ダイレクトリソース**: サーバーは `resources/list` エンドポイントを通じて具体的なリソースの一覧を公開します。
+2.  **リソーステンプレート**: 動的なリソースに対して、サーバーはクライアントがリソース URI を構築するために使用する URI テンプレート（RFC 6570）を公開できます。
 
-Resource を読み取るには、クライアントは対象の URI を指定して `resources/read` リクエストを送信します。クライアントがその Resource を購読している場合、サーバーは Resource 一覧の変更（`notifications/resources/list_changed`）や特定の Resource コンテンツの更新（`notifications/resources/updated`）をクライアントに通知できます。
+リソースを読み取るには、クライアントはその URI を指定して `resources/read` リクエストを送信します。クライアントがそのリソースを購読している場合、サーバーはリソース一覧の変更（`notifications/resources/list_changed`）や特定リソースの内容更新（`notifications/resources/updated`）を通知することもできます。
 
-より詳しくは、[Resources に関する公式 MCP ドキュメント](https://modelcontextprotocol.io/docs/concepts/resources)を参照してください。
+より詳しい情報は、[Resources に関する公式 MCP ドキュメント](https://modelcontextprotocol.io/docs/concepts/resources)を参照してください。
 
 ### `MCPServerResources` 型
 
-`resources` オプションには `MCPServerResources` 型のオブジェクトを渡します。この型は、サーバーがリソース要求を処理するために用いるコールバックを定義します：
+`resources` オプションには `MCPServerResources` 型のオブジェクトを指定します。この型は、サーバーがリソース要求を処理するために使用するコールバック群を定義します。
 
 ```typescript
 export type MCPServerResources = {
   // 利用可能なリソースを一覧するコールバック
   listResources: () => Promise<Resource[]>;
 
-  // 特定のリソースの内容を取得するコールバック
+  // 特定のリソースのコンテンツを取得するコールバック
   getResourceContent: ({
     uri,
   }: {
@@ -639,20 +655,20 @@ import type {
   ResourceTemplate,
 } from "@mastra/mcp";
 
-// リソースやリソーステンプレートは、通常は動的に取得されます。
+// リソース／リソーステンプレートは通常、動的にフェッチされます。
 const myResources: Resource[] = [
-  { uri: "file://data/123.txt", name: "Data File", mimeType: "text/plain" },
+  { uri: "file://data/123.txt", name: "データファイル", mimeType: "text/plain" },
 ];
 
 const myResourceContents: Record<string, MCPServerResourceContent> = {
-  "file://data.txt/123": { text: "This is the content of the data file." },
+  "file://data.txt/123": { text: "これはデータファイルの内容です。" },
 };
 
 const myResourceTemplates: ResourceTemplate[] = [
   {
     uriTemplate: "file://data/{id}",
-    name: "Data File",
-    description: "A file containing data.",
+    name: "データファイル",
+    description: "データを含むファイルです。",
     mimeType: "text/plain",
   },
 ];
@@ -678,58 +694,61 @@ const serverWithResources = new MCPServer({
 });
 ```
 
+
 ### リソース変更のクライアントへの通知
 
-利用可能なリソースやその内容が変更された場合、サーバーはそのリソースを購読している接続中のクライアントに通知できます。
+利用可能なリソースやその内容が変更された場合、サーバーは特定のリソースを購読している接続中のクライアントに通知できます。
 
 #### `server.resources.notifyUpdated({ uri: string })`
 
-特定のリソース（`uri` で識別される）の内容が更新されたときに、このメソッドを呼び出します。いずれかのクライアントがこの URI を購読している場合、`notifications/resources/updated` メッセージを受信します。
+特定のリソース（`uri` で識別される）の内容が更新されたときにこのメソッドを呼び出します。この URI を購読しているクライアントがいる場合、`notifications/resources/updated` メッセージが送信されます。
 
 ```typescript
 async server.resources.notifyUpdated({ uri: string }): Promise<void>
 ```
 
-例:
+例：
 
 ```typescript
 // 'file://data.txt' の内容を更新した後
 await serverWithResources.resources.notifyUpdated({ uri: "file://data.txt" });
 ```
 
+
 #### `server.resources.notifyListChanged()`
 
-利用可能なリソースの一覧全体に変更があったとき（例: リソースが追加または削除されたとき）に、このメソッドを呼び出します。これによりクライアントに `notifications/resources/list_changed` メッセージが送信され、リソース一覧の再取得を促します。
+利用可能なリソースの一覧に変更があったとき（例：リソースが追加・削除されたとき）に、このメソッドを呼び出します。これにより、クライアントに `notifications/resources/list_changed` メッセージが送信され、リソース一覧の再取得を促します。
 
 ```typescript
 async server.resources.notifyListChanged(): Promise<void>
 ```
 
-例:
+例：
 
 ```typescript
-// 'myResourceHandlers.listResources' が管理する一覧に新しいリソースを追加した後
+// 'myResourceHandlers.listResources' で管理されているリストに新しいリソースを追加したあと
 await serverWithResources.resources.notifyListChanged();
 ```
 
+
 ## プロンプトの取り扱い
 
-### MCP プロンプトとは？
+### MCPプロンプトとは？
 
-プロンプトは、MCP サーバーがクライアントに公開する再利用可能なテンプレートまたはワークフローです。引数の受け取り、リソースコンテキストの取り込み、バージョン管理のサポートが可能で、LLM とのやり取りを標準化するために使えます。
+プロンプトは、MCPサーバーがクライアントに公開する再利用可能なテンプレートまたはワークフローです。引数を受け取り、リソースのコンテキストを含め、バージョン管理をサポートし、LLMとのやり取りの標準化に利用できます。
 
-プロンプトは一意の名前（必要に応じてバージョン）で識別され、動的にも静的にもなり得ます。
+プロンプトは固有の名前（および任意のバージョン）で識別され、動的にも静的にもなり得ます。
 
 ### `MCPServerPrompts` 型
 
-`prompts` オプションには `MCPServerPrompts` 型のオブジェクトを渡します。この型は、サーバーがプロンプト要求を処理するために使用するコールバックを定義します。
+`prompts` オプションには、`MCPServerPrompts` 型のオブジェクトを指定します。この型は、サーバーがプロンプトリクエストを処理するために使用するコールバックを定義します。
 
 ```typescript
 export type MCPServerPrompts = {
-  // 利用可能なプロンプトを一覧するコールバック
+  // 利用可能なプロンプトを一覧取得するコールバック
   listPrompts: () => Promise<Prompt[]>;
 
-  // 特定のプロンプトのメッセージ/コンテンツを取得するコールバック
+  // 特定のプロンプトのメッセージ／コンテンツを取得するコールバック
   getPromptMessages?: ({
     name,
     version,
@@ -742,7 +761,7 @@ export type MCPServerPrompts = {
 };
 ```
 
-例:
+例：
 
 ```typescript
 import { MCPServer } from "@mastra/mcp";
@@ -751,12 +770,12 @@ import type { Prompt, PromptMessage, MCPServerPrompts } from "@mastra/mcp";
 const prompts: Prompt[] = [
   {
     name: "analyze-code",
-    description: "Analyze code for improvements",
+    description: "コードを改善するために分析する",
     version: "v1"
   },
   {
     name: "analyze-code",
-    description: "Analyze code for improvements (new logic)",
+    description: "コードを改善するために分析する（新しいロジック）",
     version: "v2"
   }
 ];
@@ -767,31 +786,31 @@ const myPromptHandlers: MCPServerPrompts = {
     if (name === "analyze-code") {
       if (version === "v2") {
         const prompt = prompts.find(p => p.name === name && p.version === "v2");
-        if (!prompt) throw new Error("Prompt version not found");
+        if (!prompt) throw new Error("プロンプトのバージョンが見つかりません"),
         return {
           prompt,
           messages: [
             {
               role: "user",
-              content: { type: "text", text: `Analyze this code with the new logic: ${args.code}` }
+              content: { type: "text", text: `新しいロジックでこのコードを分析してください: ${args.code}` }
             }
           ]
         };
       }
-      // デフォルトまたは v1
+      // 既定値または v1
       const prompt = prompts.find(p => p.name === name && p.version === "v1");
-      if (!prompt) throw new Error("Prompt version not found");
+      if (!prompt) throw new Error("プロンプトのバージョンが見つかりません"),
       return {
         prompt,
         messages: [
           {
             role: "user",
-            content: { type: "text", text: `Analyze this code: ${args.code}` }
+            content: { type: "text", text: `このコードを分析してください: ${args.code}` }
           }
         ]
       };
     }
-    throw new Error("Prompt not found");
+    throw new Error("プロンプトが見つかりません"),
   }
 };
 
@@ -803,82 +822,85 @@ const serverWithPrompts = new MCPServer({
 });
 ```
 
-### プロンプトの変更をクライアントに通知する
 
-利用可能なプロンプトが変更された場合、サーバーは接続中のクライアントに通知できます。
+### プロンプト変更のクライアントへの通知
+
+利用可能なプロンプトに変更があった場合、サーバーは接続中のクライアントに通知できます。
 
 #### `server.prompts.notifyListChanged()`
 
-利用可能なプロンプトの一覧に変更があった場合（例：プロンプトが追加または削除された場合）に、このメソッドを呼び出してください。これにより、クライアントに `notifications/prompts/list_changed` メッセージが送信され、プロンプト一覧の再取得を促します。
+利用可能なプロンプトの一覧に変更があった場合（例：プロンプトが追加・削除された場合）に、このメソッドを呼び出します。これにより、クライアントに `notifications/prompts/list_changed` メッセージが送信され、プロンプト一覧の再取得が促されます。
 
 ```typescript
 await serverWithPrompts.prompts.notifyListChanged();
 ```
 
+
 ### プロンプト処理のベストプラクティス
 
-- わかりやすく具体的なプロンプト名と説明を付ける。
+- 明確で具体的なプロンプト名と説明を使用する。
 - `getPromptMessages` で必須引数をすべて検証する。
-- 互換性のない変更を行う可能性がある場合は `version` フィールドを含める。
-- 適切なプロンプトロジックを選択するために `version` パラメータを使用する。
-- プロンプト一覧に変更があった場合はクライアントに通知する。
-- わかりやすいメッセージでエラーを処理する。
-- 引数の要件と利用可能なバージョンを文書化する。
+- 破壊的変更の可能性がある場合は `version` フィールドを含める。
+- 適切なプロンプトのロジックを選択するために `version` パラメータを使用する。
+- プロンプトのリストに変更があった場合はクライアントに通知する。
+- 分かりやすいメッセージでエラーを処理する。
+- 引数の要件と利用可能なバージョンをドキュメント化する。
 
 ---
 
 ## 例
 
-MCPServer のセットアップとデプロイの実用的な例については、[Deploying an MCPServer Example](/examples/agents/deploying-mcp-server) を参照してください。
+MCPServer のセットアップとデプロイの実践的な例については、[Deploying an MCPServer Example](/examples/agents/deploying-mcp-server) を参照してください。
 
-このページ冒頭の例では、ツールとエージェントの両方を使って `MCPServer` をインスタンス化する方法も示しています。
+このページ冒頭の例では、ツールとエージェントの両方を用いて `MCPServer` をインスタンス化する方法も示しています。
 
-## 要求整理
+## エリシテーション
 
 ### Elicitation とは？
 
-Elicitation は Model Context Protocol (MCP) の機能で、サーバーがユーザーに対して構造化された情報の提供を求められるようにします。これにより、サーバーが動的に追加データを収集できる双方向型のワークフローが可能になります。
+Elicitation は Model Context Protocol（MCP）の機能で、サーバーがユーザーに対して構造化された情報の提供を求められるようにするものです。これにより、サーバーが動的に追加データを収集できるインタラクティブなワークフローが実現します。
 
-`MCPServer` クラスには Elicitation 機能が自動的に組み込まれています。ツールは `execute` 関数で `options` パラメータを受け取り、その中の `elicitation.sendRequest()` メソッドを使ってユーザー入力を要求できます。
+`MCPServer` クラスには、Elicitation 機能が自動的に組み込まれています。ツールは `execute` 関数で、ユーザー入力を要求するための `elicitation.sendRequest()` メソッドを含む `options` パラメータを受け取ります。
 
 ### ツール実行シグネチャ
 
-ツールが MCP サーバーのコンテキスト内で実行されると、追加の `options` パラメータを受け取ります：
+ツールが MCP サーバーのコンテキスト内で実行される場合、追加の `options` パラメータを受け取ります:
 
 ```typescript
 execute: async ({ context }, options) => {
   // context にはツールの入力パラメータが含まれます
-  // options にはエリシテーションや認証情報などのサーバー機能が含まれます
+  // options には引き出し機能や認証情報などのサーバー機能が含まれます
   
   // 認証情報にアクセス（利用可能な場合）
   if (options.extra?.authInfo) {
-    console.log('Authenticated request from:', options.extra.authInfo.clientId);
+    console.log('認証済みリクエストの発信元:', options.extra.authInfo.clientId);
   }
   
-  // エリシテーション機能を使用
+  // 引き出し機能を使用
   const result = await options.elicitation.sendRequest({
-    message: "Please provide information",
-    requestedSchema: { /* schema */ }
+    message: "情報をご提供ください",
+    requestedSchema: { /* スキーマ */ }
   });
   
   return result;
 }
 ```
 
+
 ### Elicitation の仕組み
 
-一般的なユースケースはツールの実行中です。ツールがユーザー入力を必要とする場合は、ツールの実行オプションで提供されている elicitation 機能を利用します:
+一般的なユースケースはツールの実行中です。ツールがユーザー入力を必要とする場合、ツールの実行オプションで提供される elicitation 機能を使用できます:
 
 1. ツールはメッセージとスキーマを指定して `options.elicitation.sendRequest()` を呼び出します
-2. リクエストは接続中の MCP クライアントに送信されます
-3. クライアントがユーザーにリクエストを提示します（UI、コマンドラインなど）
-4. ユーザーは入力を行うか、辞退するか、リクエストをキャンセルします
-5. クライアントがレスポンスをサーバーに返送します
-6. ツールがレスポンスを受け取り、実行を続行します
+2. リクエストは接続されている MCP クライアントに送信されます
+3. クライアントはユーザーにリクエストを提示します（UI、コマンドラインなど）
+4. ユーザーは入力する、拒否する、またはリクエストをキャンセルします
+5. クライアントはレスポンスをサーバーに返送します
+6. ツールはレスポンスを受け取り、実行を続行します
 
-### ツールでのエリシテーションの活用
+### ツールでの引き出しの活用
 
-以下は、エリシテーションを用いてユーザーの連絡先情報を収集するツールの例です:
+以下は、ユーザーの連絡先情報を引き出すためにエリシテーションを用いるツールの例です：
 
 ```typescript
 import { MCPServer } from "@mastra/mcp";
@@ -886,23 +908,23 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 const server = new MCPServer({
-  name: "Interactive Server",
+  name: "インタラクティブサーバー",
   version: "1.0.0",
   tools: {
     collectContactInfo: createTool({
       id: "collectContactInfo",
-      description: "エリシテーションを通じてユーザーの連絡先情報を収集します",
+      description: "対話を通じてユーザーの連絡先情報を収集します",
       inputSchema: z.object({
         reason: z.string().optional().describe("連絡先情報を収集する理由"),
       }),
       execute: async ({ context }, options) => {
         const { reason } = context;
         
-        // セッション情報があればログに記録
-        console.log('Request from session:', options.extra?.sessionId);
+        // Log session info if available
+        console.log('セッションからのリクエスト:', options.extra?.sessionId);
 
         try {
-          // エリシテーションでユーザー入力を要求
+          // Request user input via elicitation
           const result = await options.elicitation.sendRequest({
             message: reason 
               ? `連絡先情報をご提供ください。${reason}`
@@ -918,26 +940,26 @@ const server = new MCPServer({
                 email: {
                   type: 'string',
                   title: 'メールアドレス', 
-                  description: 'あなたのメールアドレス',
+                  description: 'メールアドレス',
                   format: 'email',
                 },
                 phone: {
                   type: 'string',
                   title: '電話番号',
-                  description: 'あなたの電話番号（任意）',
+                  description: '電話番号（任意）',
                 },
               },
               required: ['name', 'email'],
             },
           });
 
-          // ユーザーの応答を処理
+          // Handle the user's response
           if (result.action === 'accept') {
             return `連絡先情報を収集しました: ${JSON.stringify(result.content, null, 2)}`;
           } else if (result.action === 'decline') {
-            return 'ユーザーが連絡先情報の収集を拒否しました。';
+            return 'ユーザーが連絡先情報の提供を拒否しました。';
           } else {
-            return 'ユーザーが連絡先情報の収集をキャンセルしました。';
+            return 'ユーザーが連絡先情報の提供をキャンセルしました。';
           }
         } catch (error) {
           return `連絡先情報の収集中にエラーが発生しました: ${error}`;
@@ -948,16 +970,17 @@ const server = new MCPServer({
 });
 ```
 
-### 取得リクエスト用スキーマ
 
-`requestedSchema` はプリミティブなプロパティのみを持つフラットなオブジェクトである必要があります。サポートされる型は次のとおりです：
+### 要求スキーマの定義
 
-- **String**: `{ type: 'string', title: 'Display Name', description: 'Help text' }`
-- **Number**: `{ type: 'number', minimum: 0, maximum: 100 }`
-- **Boolean**: `{ type: 'boolean', default: false }`
-- **Enum**: `{ type: 'string', enum: ['option1', 'option2'] }`
+`requestedSchema` は、プリミティブなプロパティのみを持つフラットなオブジェクトである必要があります。サポートされる型は次のとおりです：
 
-スキーマの例：
+* **String**: `{ type: 'string', title: 'Display Name', description: 'Help text' }`
+* **Number**: `{ type: 'number', minimum: 0, maximum: 100 }`
+* **Boolean**: `{ type: 'boolean', default: false }`
+* **Enum**: `{ type: 'string', enum: ['option1', 'option2'] }`
+
+スキーマ例：
 
 ```typescript
 {
@@ -965,18 +988,18 @@ const server = new MCPServer({
   properties: {
     name: {
       type: 'string',
-      title: 'Full Name',
-      description: 'Your complete name',
+      title: '氏名',
+      description: 'フルネーム',
     },
     age: {
       type: 'number',
-      title: 'Age',
+      title: '年齢',
       minimum: 18,
       maximum: 120,
     },
     newsletter: {
       type: 'boolean',
-      title: 'Subscribe to Newsletter',
+      title: 'ニュースレターを購読する',
       default: false,
     },
   },
@@ -984,38 +1007,39 @@ const server = new MCPServer({
 }
 ```
 
-### レスポンスアクション
 
-ユーザーは引き出し要求に対して次の3つの方法で応答できます:
+### 応答アクション
 
-1. **Accept** (`action: 'accept'`): ユーザーがデータを提供し、送信を確定した
-   - 送信したデータを保持する `content` フィールドがある
-2. **Decline** (`action: 'decline'`): ユーザーが情報提供を明示的に拒否した
+ユーザーは、情報提示（エリシテーション）リクエストに対して次の3通りに応答できます:
+
+1. **Accept** (`action: 'accept'`): ユーザーがデータを提供し、送信を確定
+   - 提供されたデータを含む `content` フィールドがある
+2. **Decline** (`action: 'decline'`): ユーザーが情報提供を明確に拒否
    - `content` フィールドはない
-3. **Cancel** (`action: 'cancel'`): ユーザーが判断せずにリクエストを閉じた
+3. **Cancel** (`action: 'cancel'`): ユーザーが判断せずにリクエストをキャンセル
    - `content` フィールドはない
 
-ツールは3種類すべてのレスポンスタイプを適切に処理する必要があります。
+ツールは、この3種類すべての応答タイプを適切に処理する必要があります。
 
-### セキュリティに関する留意事項
+### セキュリティに関する注意事項
 
-- パスワード、社会保障番号（SSN）、クレジットカード番号などの機密情報を絶対に要求しない
-- すべてのユーザー入力を提供されたスキーマに基づいて検証する
-- 辞退やキャンセルを丁寧かつ円滑に処理する
+- **パスワード、社会保障番号（SSN）、クレジットカード番号**などの機密情報を決して求めない
+- 提供されたスキーマに照らして、すべてのユーザー入力を検証する
+- 辞退やキャンセルを丁寧に処理する
 - データ収集の目的を明確に説明する
 - ユーザーのプライバシーと設定・選好を尊重する
 
 ### ツール実行 API
 
-エリシテーション機能は、ツール実行時の `options` パラメータから利用できます:
+エリシテーション機能は、ツール実行時の `options` パラメータで利用できます。
 
 ```typescript
 // ツールの execute 関数内
 execute: async ({ context }, options) => {
-  // ユーザー入力にエリシテーションを使用
+  // ユーザー入力には elicitation を使用
   const result = await options.elicitation.sendRequest({
     message: string,           // ユーザーに表示するメッセージ
-    requestedSchema: object    // 期待される応答構造を定義する JSON スキーマ
+    requestedSchema: object    // 期待するレスポンス構造を定義する JSON スキーマ
   }): Promise<ElicitResult>
   
   // 必要に応じて認証情報にアクセス
@@ -1025,28 +1049,29 @@ execute: async ({ context }, options) => {
 }
 ```
 
-HTTP ベースのトランスポート（SSE または HTTP）を使用する場合、エリシテーションは**セッション認識**であることに注意してください。これは、複数のクライアントが同じサーバーに接続されているとき、エリシテーションのリクエストが、ツール実行を開始した正しいクライアントセッションにルーティングされることを意味します。
+HTTP ベースのトランスポート（SSE または HTTP）を使用する場合、elicit は**セッション対応**であることに注意してください。これは、複数のクライアントが同じサーバーに接続している場合、ツール実行を開始したクライアントの正しいセッションへ elicit リクエストがルーティングされることを意味します。
 
 `ElicitResult` 型:
 
 ```typescript
 type ElicitResult = {
   action: 'accept' | 'decline' | 'cancel';
-  content?: any; // action が 'accept' の場合にのみ存在
+  content?: any; // action が 'accept' のときにのみ存在します
 }
 ```
 
+
 ## 認証コンテキスト
 
-HTTP ベースのトランスポートを使用する場合、ツールは `options.extra` を通じてリクエストのメタデータにアクセスできます:
+HTTP ベースのトランスポートを使用する場合、ツールは `options.extra` を通じてリクエストのメタデータにアクセスできます。
 
 ```typescript
 execute: async ({ context }, options) => {
   if (!options.extra?.authInfo?.token) {
-    return "Authentication required";
+    return "認証が必要です";
   }
   
-  // 認証トークンを使用
+  // 認証トークンを利用する
   const response = await fetch('/api/data', {
     headers: { Authorization: `Bearer ${options.extra.authInfo.token}` },
     signal: options.extra.signal,
@@ -1058,23 +1083,25 @@ execute: async ({ context }, options) => {
 
 `extra` オブジェクトには次が含まれます:
 
-- `authInfo`: 認証情報（サーバーのミドルウェアにより提供される場合）
-- `sessionId`: セッション ID
-- `signal`: キャンセル用の AbortSignal
-- `sendNotification`/`sendRequest`: MCP プロトコル関数
+* `authInfo`: 認証情報（サーバー側ミドルウェアが提供する場合）
+* `sessionId`: セッション識別子
+* `signal`: 取り消し用の AbortSignal
+* `sendNotification`/`sendRequest`: MCP プロトコルの関数
 
 > 注: 認証を有効にするには、`server.startHTTP()` を呼び出す前に `req.auth` を設定するミドルウェアを HTTP サーバーに用意する必要があります。例:
+>
 > ```typescript
 > httpServer.createServer((req, res) => {
 >   // 認証ミドルウェアを追加
 >   req.auth = validateAuthToken(req.headers.authorization);
 >   
->   // その後 MCP サーバーに渡す
+>   // その後 MCP サーバーへ渡す
 >   await server.startHTTP({ url, httpPath, req, res });
 > });
 > ```
 
+
 ## 関連情報
 
-- Mastra で MCP サーバーに接続する方法については、[MCPClient のドキュメント](./mcp-client)をご参照ください。
-- Model Context Protocol の詳細については、[@modelcontextprotocol/sdk のドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)をご参照ください。
+- Mastra で MCP サーバーに接続する方法については、[MCPClient のドキュメント](./mcp-client)をご覧ください。
+- Model Context Protocol について詳しくは、[@modelcontextprotocol/sdk のドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)をご覧ください。

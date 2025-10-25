@@ -1,17 +1,18 @@
 ---
 title: "リファレンス: Memory.getThreadsByResourceId() | Memory | Mastra ドキュメント"
-description: "Mastra の `Memory.getThreadsByResourceId()` メソッドに関するドキュメント。特定のリソースに属するすべてのスレッドを取得します。"
+description: "Mastra における `Memory.getThreadsByResourceId()` メソッドのリファレンス。特定のリソースに属するすべてのスレッドを取得します。"
 ---
 
 # Memory.getThreadsByResourceId()
 
-`.getThreadsByResourceId()` 関数は、ストレージから特定のリソース ID に紐づくすべてのスレッドを取得します。スレッドは、作成時刻または更新時刻を基準に、昇順または降順で並べ替えられます。
+`.getThreadsByResourceId()` 関数は、ストレージから特定のリソース ID に紐づくすべてのスレッドを取得します。スレッドは作成時刻または更新時刻で、昇順または降順に並べ替えられます。
 
-## 使用例
+## 使い方の例
 
 ```typescript
 await memory?.getThreadsByResourceId({ resourceId: "user-123" });
 ```
+
 
 ## パラメータ
 
@@ -26,13 +27,13 @@ await memory?.getThreadsByResourceId({ resourceId: "user-123" });
     {
       name: "orderBy",
       type: "ThreadOrderBy",
-      description: "スレッドの並び替えに使うフィールド。'createdAt' または 'updatedAt' を指定できます。既定値: 'createdAt'",
+      description: "スレッドの並び替えに使用するフィールド。'createdAt' または 'updatedAt' を指定可能。既定値: 'createdAt'",
       isOptional: true,
     },
     {
       name: "sortDirection",
       type: "ThreadSortDirection",
-      description: "並び順の方向。'ASC' または 'DESC' を指定できます。既定値: 'DESC'",
+      description: "並び順の方向。'ASC' または 'DESC' を指定可能。既定値: 'DESC'",
       isOptional: true,
     },
   ]}
@@ -51,7 +52,7 @@ await memory?.getThreadsByResourceId({ resourceId: "user-123" });
   ]}
 />
 
-## 詳細な使用例
+## 拡張的な使用例
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
 import { mastra } from "./mastra";
@@ -68,10 +69,11 @@ const thread = await memory?.getThreadsByResourceId({
 console.log(thread);
 ```
 
+
 ### 関連
 
 - [Memory クラスリファレンス](/reference/memory/Memory.mdx)
-- [getThreadsByResourceIdPaginated](/reference/memory/getThreadsByResourceIdPaginated.mdx) - ページネーション対応版
-- [Memory の始め方](/docs/memory/overview.mdx)（スレッド／リソースの概念を解説）
+- [getThreadsByResourceIdPaginated](/reference/memory/getThreadsByResourceIdPaginated.mdx) - ページネーション版
+- [Memory 入門](/docs/memory/overview.mdx)（スレッド／リソースの概念を解説）
 - [createThread](/reference/memory/createThread.mdx)
 - [getThreadById](/reference/memory/getThreadById.mdx)

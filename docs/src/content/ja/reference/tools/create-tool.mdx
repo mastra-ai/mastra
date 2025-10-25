@@ -5,9 +5,9 @@ description: Mastra の `createTool()` 関数に関するドキュメント。�
 
 # createTool()
 
-`createTool()` 関数は、Mastra エージェントが実行できるカスタムツールを定義するために使用されます。ツールは、外部システムとの連携、計算の実行、特定のデータへのアクセスを可能にすることで、エージェントの機能を拡張します。
+`createTool()` 関数は、Mastra エージェントが実行できるカスタムツールを定義するために使用します。ツールを用いることで、エージェントは外部システムとの連携、計算の実行、特定データへのアクセスなどの能力を拡張できます。
 
-## 使用例
+## 使い方の例
 
 ```typescript filename="src/mastra/tools/reverse-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
@@ -33,6 +33,7 @@ export const tool = createTool({
 });
 ```
 
+
 ## パラメータ
 
 <PropertiesTable
@@ -40,7 +41,7 @@ export const tool = createTool({
     {
       name: "id",
       type: "string",
-      description: "ツールの一意の識別子。",
+      description: "ツールの一意な識別子。",
       isOptional: false,
     },
     {
@@ -61,20 +62,53 @@ export const tool = createTool({
       name: "outputSchema",
       type: "Zod schema",
       description:
-        "ツールの `execute` 関数の期待される出力構造を定義する Zod スキーマ。",
+        "ツールの `execute` 関数に期待される出力構造を定義する Zod スキーマ。",
       isOptional: true,
     },
     {
       name: "execute",
       type: "function",
       description:
-        "ツールのロジックを実装する関数。`context`（`inputSchema` に基づいてパースされた入力）、`runtimeContext`、および `abortSignal` を含むオブジェクトを受け取ります。",
+        "ツールのロジックを実装する関数。`context`（`inputSchema` に基づき解析済みの入力）、`runtimeContext`、`tracingContext`、および `abortSignal` を含むオブジェクトを受け取ります。",
       isOptional: false,
+      properties: [
+        {
+          parameters: [{
+            name: "context",
+            type: "z.infer<TInput>",
+            description: "inputSchema に基づき解析済みの入力"
+          }]
+        },
+        {
+          parameters: [{
+            name: "runtimeContext",
+            type: "RuntimeContext",
+            isOptional: true,
+            description: "共有状態や依存関係へアクセスするための実行時コンテキスト"
+          }]
+        },
+        {
+          parameters: [{
+            name: "tracingContext",
+            type: "TracingContext",
+            isOptional: true,
+            description: "子スパンの作成やメタデータ追加のための AI トレーシングコンテキスト。トレース対象の操作内でツールが呼び出される場合、自動的に注入されます。"
+          }]
+        },
+        {
+          parameters: [{
+            name: "abortSignal",
+            type: "AbortSignal",
+            isOptional: true,
+            description: "ツール実行を中断するためのシグナル"
+          }]
+        }
+      ]
     },
   ]}
 />
 
-## 返り値
+## 戻り値
 
 `createTool()` 関数は `Tool` オブジェクトを返します。
 
@@ -84,14 +118,14 @@ export const tool = createTool({
       name: "Tool",
       type: "object",
       description:
-        "定義したツールを表すオブジェクトで、エージェントに追加可能な状態です。",
+        "定義されたツールを表すオブジェクトで、エージェントに追加できる状態です。",
     },
   ]}
 />
 
-## 関連
+## 関連情報
 
-- [ツールの概要](/docs/tools-mcp/overview.mdx)
-- [エージェントでのツール利用](/docs/agents/using-tools-and-mcp.mdx)
-- [ツールのランタイムコンテキスト](/docs/tools-mcp/runtime-context.mdx)
-- [高度なツールの使い方](/docs/tools-mcp/advanced-usage.mdx)
+- [ツール概要](/docs/tools-mcp/overview.mdx)
+- [エージェントによるツールの利用](/docs/agents/using-tools-and-mcp.mdx)
+- [ツールのランタイムコンテキスト](/docs/tools-mcp/overview.mdx#using-runtimecontext)
+- [ツールの高度な利用](/docs/tools-mcp/advanced-usage.mdx)

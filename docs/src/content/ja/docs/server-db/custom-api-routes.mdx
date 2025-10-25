@@ -1,15 +1,13 @@
 ---
-title: "カスタムAPIルート"
-description: "Mastraサーバーから追加のHTTPエンドポイントを公開します。"
+title: "カスタム API ルート"
+description: "Mastra サーバーから追加の HTTP エンドポイントを公開する。"
 ---
 
+# カスタム API ルート
 
+デフォルトでは、Mastra は登録済みのエージェントとワークフローをサーバー経由で自動的に公開します。追加の動作が必要な場合は、独自の HTTP ルートを定義できます。
 
-# カスタムAPIルート
-
-デフォルトでは、Mastraは登録されたエージェントとワークフローをサーバー経由で自動的に公開します。追加の動作が必要な場合は、独自のHTTPルートを定義できます。
-
-ルートは`@mastra/core/server`の`registerApiRoute`ヘルパーで提供されます。ルートは`Mastra`インスタンスと同じファイルに配置できますが、分離することで設定を簡潔に保つことができます。
+ルートは `@mastra/core/server` のヘルパー `registerApiRoute` で提供されます。ルートは `Mastra` インスタンスと同じファイルに置くこともできますが、分離することで設定を簡潔に保てます。
 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers
 import { Mastra } from "@mastra/core/mastra";
@@ -25,7 +23,7 @@ export const mastra = new Mastra({
           const mastra = c.get("mastra");
           const agents = await mastra.getAgent("my-agent");
 
-          return c.json({ message: "Custom route" });
+          return c.json({ message: "カスタムルート" });
         },
       }),
     ],
@@ -33,15 +31,15 @@ export const mastra = new Mastra({
 });
 ```
 
-登録されると、カスタムルートはサーバーのルートからアクセス可能になります。例えば：
+登録が完了すると、カスタムルートはサーバーのルートパスからアクセス可能になります。例：
 
 ```bash
 curl http://localhost:4111/my-custom-route
 ```
 
-各ルートのハンドラーはHonoの`Context`を受け取ります。ハンドラー内では`Mastra`インスタンスにアクセスして、エージェントやワークフローを取得または呼び出すことができます。
+各ルートのハンドラーは Hono の `Context` を受け取ります。ハンドラー内では、`Mastra` インスタンスにアクセスして、エージェントやワークフローをフェッチしたり呼び出したりできます。
 
-ルート固有のミドルウェアを追加するには、`registerApiRoute`を呼び出す際に`middleware`配列を渡します。
+ルート固有のミドルウェアを追加するには、`registerApiRoute` を呼び出す際に `middleware` 配列を渡します。
 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers
 import { Mastra } from "@mastra/core/mastra";
@@ -60,7 +58,7 @@ export const mastra = new Mastra({
           }
         ],
         handler: async (c) => {
-          return c.json({ message: "Custom route with middleware" });
+          return c.json({ message: "ミドルウェア付きカスタムルート" });
         }
       })
     ]

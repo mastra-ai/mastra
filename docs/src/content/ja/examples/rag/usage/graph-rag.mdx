@@ -1,48 +1,44 @@
 ---
-title: "例: 完全なグラフRAGシステム | RAG | Mastra ドキュメント"
-description: OpenAIの埋め込みとPGVectorによるベクトルストレージを用いた、MastraでのグラフRAGシステム実装例。
+title: "例: 完全な Graph RAG システム | RAG | Mastra ドキュメント"
+description: OpenAI のエンベディングと PGVector を用いたベクトルストレージを使って、Mastra で Graph RAG システムを実装する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
-
 # Graph RAG
 
-この例では、Mastra、OpenAIの埋め込み、そしてベクトルストレージとしてPGVectorを使用して、検索拡張生成（RAG）システムを実装する方法を示します。
-
-
+この例では、Mastra、OpenAI の埋め込み、そしてベクトル格納に PGVector を用いて、Retrieval-Augmented Generation（RAG）システムを実装する方法を示します。
 
 ## 概要
 
-このシステムは、Mastra と OpenAI を用いて Graph RAG を実装しています。主な機能は以下の通りです。
+このシステムは、Mastra と OpenAI を用いて Graph RAG を実装しています。主な処理は次のとおりです：
 
-1. 応答生成のために gpt-4o-mini を使用した Mastra エージェントをセットアップ
-2. ベクトルストアの操作やナレッジグラフの作成・トラバーサルを管理する GraphRAG ツールを作成
-3. テキストドキュメントを小さなセグメントに分割
+1. 応答生成のために gpt-4o-mini を用いた Mastra エージェントをセットアップ
+2. ベクトルストアとのやり取りとナレッジグラフの作成・走査を管理する GraphRAG ツールを作成
+3. テキストドキュメントを小さなチャンクに分割
 4. これらのチャンクに対して埋め込みを作成
-5. PostgreSQL ベクトルデータベースに保存
-6. GraphRAG ツールを使ってクエリに基づき関連するチャンクのナレッジグラフを作成
-   - ツールはベクトルストアから結果を返し、ナレッジグラフを作成
-   - クエリを使ってナレッジグラフをトラバース
-7. Mastra エージェントを用いてコンテキストに応じた応答を生成
-
-
+5. それらを PostgreSQL のベクトルデータベースに保存
+6. GraphRAG ツールを使い、クエリに基づいて関連チャンクのナレッジグラフを作成
+   - ツールはベクトルストアから結果を返し、ナレッジグラフを生成
+   - クエリを用いてナレッジグラフを走査
+7. Mastra エージェントでコンテキストを踏まえた応答を生成
 
 ## セットアップ
 
 ### 環境設定
 
-環境変数を必ず設定してください：
+環境変数を設定してください:
 
 ```bash filename=".env"
-OPENAI_API_KEY=your_openai_api_key_here
-POSTGRES_CONNECTION_STRING=your_connection_string_here
+OPENAI_API_KEY=あなたのOpenAI APIキーをここに入力
+POSTGRES_CONNECTION_STRING=あなたの接続文字列をここに入力
 ```
+
 
 ### 依存関係
 
-次に、必要な依存関係をインポートします：
+次に、必要な依存モジュールをインポートします。
 
 ```typescript copy showLineNumbers filename="index.ts"
 import { openai } from "@ai-sdk/openai";
@@ -54,10 +50,9 @@ import { embedMany } from "ai";
 ```
 
 
+## GraphRAG ツールの作成
 
-## GraphRAGツールの作成
-
-@mastra/ragからインポートしたcreateGraphRAGToolを使用すると、ベクターデータベースにクエリを実行し、その結果をナレッジグラフに変換するツールを作成できます。
+@mastra/rag からインポートした createGraphRAGTool を使用すると、ベクターデータベースを照会し、結果をナレッジグラフに変換するツールを作成できます。
 
 ```typescript copy showLineNumbers{8} filename="index.ts"
 const graphRagTool = createGraphRAGTool({
@@ -72,24 +67,23 @@ const graphRagTool = createGraphRAGTool({
 ```
 
 
+## エージェントの設定
 
-## エージェント設定
-
-応答を処理するMastraエージェントを設定します：
+応答を処理する Mastra エージェントを設定します。
 
 ```typescript copy showLineNumbers{19} filename="index.ts"
 const ragAgent = new Agent({
   name: "GraphRAG Agent",
-  instructions: `You are a helpful assistant that answers questions based on the provided context. Format your answers as follows:
+  instructions: `あなたは、提供されたコンテキストに基づいて質問に答える有用なアシスタントです。回答は次の形式で整えてください：
 
-1. DIRECT FACTS: List only the directly stated facts from the text relevant to the question (2-3 bullet points)
-2. CONNECTIONS MADE: List the relationships you found between different parts of the text (2-3 bullet points)
-3. CONCLUSION: One sentence summary that ties everything together
+1. 直接の事実: 質問に関連するテキスト中で直接述べられている事実のみを列挙（箇条書きで2〜3件）
+2. 関係性: テキストの異なる部分間で見つけた関係を列挙（箇条書きで2〜3件）
+3. 結論: 全体をまとめる1文の要約
 
-Keep each section brief and focus on the most important points.
+各セクションは簡潔にし、最も重要な点に焦点を当ててください。
 
-Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
-If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
+重要: 質問に回答する際は、ツールで提供されたコンテキストのみに基づいてください。
+コンテキストに質問へ完全に答えるのに十分な情報が含まれていない場合は、その旨を明確に述べてください。`,
   model: openai("gpt-4o-mini"),
   tools: {
     graphRagTool,
@@ -98,10 +92,9 @@ If the context doesn't contain enough information to fully answer the question, 
 ```
 
 
-
 ## PgVector と Mastra のインスタンス化
 
-以下のコンポーネントを使って PgVector と Mastra をインスタンス化します。
+コンポーネントを使って PgVector と Mastra をインスタンス化します:
 
 ```typescript copy showLineNumbers{36} filename="index.ts"
 const pgVector = new PgVector({
@@ -116,15 +109,14 @@ const agent = mastra.getAgent("ragAgent");
 ```
 
 
-
 ## ドキュメント処理
 
-ドキュメントを作成し、チャンクに分割します：
+ドキュメントを作成し、チャンクに分割して処理します:
 
 ```typescript copy showLineNumbers{45} filename="index.ts"
 const doc = MDocument.fromText(`
-# Riverdale Heights: Community Development Study
-// ... text content ...
+# リバーデール・ハイツ：地域開発調査
+// ... テキスト内容 ...
 `);
 
 const chunks = await doc.chunk({
@@ -136,10 +128,9 @@ const chunks = await doc.chunk({
 ```
 
 
-
 ## 埋め込みの作成と保存
 
-チャンクの埋め込みを生成し、ベクターデータベースに保存します。
+チャンクの埋め込みを生成し、ベクトルデータベースに保存します。
 
 ```typescript copy showLineNumbers{56} filename="index.ts"
 const { embeddings } = await embedMany({
@@ -160,44 +151,48 @@ await vectorStore.upsert({
 ```
 
 
-
 ## グラフベースのクエリ
 
-さまざまなクエリを試して、データ内の関係性を探索してみましょう。
+データ内の関係性を調べるために、さまざまなクエリを試してみましょう。
 
 ```typescript copy showLineNumbers{82} filename="index.ts"
 const queryOne =
-  "What are the direct and indirect effects of early railway decisions on Riverdale Heights' current state?";
+  "初期の鉄道に関する意思決定が、直接・間接に Riverdale Heights の現在の状況へどのような影響を及ぼしていますか？";
 const answerOne = await ragAgent.generate(queryOne);
-console.log("\nQuery:", queryOne);
-console.log("Response:", answerOne.text);
+console.log("\nクエリ:", queryOne);
+console.log("応答:", answerOne.text);
 
 const queryTwo =
-  "How have changes in transportation infrastructure affected different generations of local businesses and community spaces?";
+  "交通インフラの変化は、地域の事業やコミュニティ空間の世代ごとにどのような影響を与えてきましたか？";
 const answerTwo = await ragAgent.generate(queryTwo);
-console.log("\nQuery:", queryTwo);
-console.log("Response:", answerTwo.text);
+console.log("\nクエリ:", queryTwo);
+console.log("応答:", answerTwo.text);
 
 const queryThree =
-  "Compare how the Rossi family business and Thompson Steel Works responded to major infrastructure changes, and how their responses affected the community.";
+  "Rossi 家の事業と Thompson Steel Works は、主要なインフラの変化にどう対応し、その対応はコミュニティにどのような影響を与えましたか？ 比較してください。";
 const answerThree = await ragAgent.generate(queryThree);
-console.log("\nQuery:", queryThree);
-console.log("Response:", answerThree.text);
+console.log("\nクエリ:", queryThree);
+console.log("応答:", answerThree.text);
 
 const queryFour =
-  "Trace how the transformation of the Thompson Steel Works site has influenced surrounding businesses and cultural spaces from 1932 to present.";
+  "Thompson Steel Works の敷地の変遷が、1932年から現在まで周辺の事業や文化的空間に与えてきた影響をたどってください。";
 const answerFour = await ragAgent.generate(queryFour);
-console.log("\nQuery:", queryFour);
-console.log("Response:", answerFour.text);
+console.log("\nクエリ:", queryFour);
+console.log("応答:", answerFour.text);
 ```
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/graph-rag"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/graph-rag"
+}
 />

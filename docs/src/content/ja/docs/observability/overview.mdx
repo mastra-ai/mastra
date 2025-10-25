@@ -1,0 +1,74 @@
+---
+title: "概要 | オブザーバビリティ | Mastra ドキュメント"
+description: Mastra のオブザーバビリティ機能でアプリケーションの監視とデバッグを行います。
+---
+
+import { Callout } from "nextra/components";
+
+
+# オブザーバビリティ概要
+
+Mastraは、AIアプリケーションに特化した包括的なオブザーバビリティ機能を提供します。LLMの動作を監視し、エージェントの意思決定をトレースし、AI特有のパターンを理解する専用ツールで複雑なワークフローをデバッグできます。
+
+## 主な機能
+
+### 構造化ログ
+
+コンテキスト付きのログでアプリケーションをデバッグ:
+
+- **コンテキスト伝播**: トレースとの自動的な相関付け
+- **レベル設定**: 開発・本番で重大度に基づくフィルタリング
+
+### AI トレーシング
+
+AI 処理向けに特化したトレーシングで、以下を捕捉します：
+
+- **LLM のやり取り**：トークン使用量、レイテンシ、プロンプト、生成結果
+- **エージェント実行**：意思決定の経路、ツール呼び出し、メモリ操作
+- **ワークフローの各ステップ**：分岐ロジック、並列実行、各ステップの出力
+- **自動インストルメンテーション**：デコレータによるゼロコンフィグのトレーシング
+
+### OTEL トレーシング
+
+OpenTelemetry を用いた従来型の分散トレーシング:
+
+- **標準 OTLP プロトコル**: 既存のオブザーバビリティ基盤と互換
+- **HTTP とデータベースのインストルメンテーション**: 一般的な操作に対するスパンを自動生成
+- **プロバイダー連携**: Datadog、New Relic、Jaeger、その他の OTLP コレクターに対応
+- **分散コンテキスト**: W3C Trace Context の伝播に対応
+
+## クイックスタート
+
+Mastra インスタンスでオブザーバビリティを設定します:
+
+```typescript filename="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { PinoLogger } from "@mastra/core";
+import { LibSqlStorage } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  // ... その他の設定
+  logger: new PinoLogger(),
+  observability: {
+    default: { enabled: true }, // AIトレーシングを有効化
+  },
+  storage: new LibSQLStore({
+    url: "file:./mastra.db", // トレーシングにはストレージが必須
+  }),
+  telemetry: {
+    enabled: true, // OTELトレーシングを有効化
+  }
+});
+```
+
+この基本的なセットアップにより、Playground と Mastra Cloud の両方でトレースとログを確認できます。
+
+また、Langfuse、Braintrust、そして OpenTelemetry 互換のプラットフォーム（Datadog、New Relic、SigNoz など）など、各種の外部トレーシングプロバイダーにも対応しています。詳しくは [AI Tracing](/docs/observability/ai-tracing.mdx) のドキュメントをご覧ください。
+
+
+## 次は？
+
+- **[AI トレーシングをセットアップ](/docs/observability/ai-tracing.mdx)**: アプリケーションのトレーシングを構成する
+- **[ロギングを構成](/docs/observability/logging.mdx)**: 構造化ログを追加する
+- **[サンプルを見る](/examples/observability/basic-ai-tracing.mdx)**: オブザーバビリティを体験する
+- **[API リファレンス](/reference/observability/ai-tracing/ai-tracing.mdx)**: 詳細な設定項目

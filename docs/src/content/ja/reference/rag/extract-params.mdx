@@ -1,15 +1,11 @@
 ---
 title: "リファレンス: ExtractParams | ドキュメント処理 | RAG | Mastra ドキュメント"
-description: Mastraにおけるメタデータ抽出設定のドキュメント。
+description: Mastra におけるメタデータ抽出設定に関するドキュメント。
 ---
-
-
 
 # ExtractParams
 
-ExtractParamsは、LLM解析を用いてドキュメントチャンクからメタデータを抽出する設定を行います。
-
-
+ExtractParams は、LLM 解析に基づいてドキュメントのチャンクからメタデータを抽出するための設定です。
 
 ## 例
 
@@ -19,25 +15,24 @@ import { MDocument } from "@mastra/rag";
 const doc = MDocument.fromText(text);
 const chunks = await doc.chunk({
   extract: {
-    title: true, // Extract titles using default settings
-    summary: true, // Generate summaries using default settings
-    keywords: true, // Extract keywords using default settings
+    title: true, // 既定の設定でタイトルを抽出
+    summary: true, // 既定の設定で要約を生成
+    keywords: true, // 既定の設定でキーワードを抽出
   },
 });
 
-// Example output:
+// 出力例:
 // chunks[0].metadata = {
 //   documentTitle: "AI Systems Overview",
-//   sectionSummary: "Overview of artificial intelligence concepts and applications",
-//   excerptKeywords: "KEYWORDS: AI, machine learning, algorithms"
+//   sectionSummary: "人工知能の概念と応用の概要",
+//   excerptKeywords: "KEYWORDS: AI、機械学習、アルゴリズム"
 // }
 ```
 
 
+## パラメータ
 
-## パラメーター
-
-`extract` パラメーターは以下のフィールドを受け付けます:
+`extract` パラメータは次のフィールドを受け付けます：
 
 <PropertiesTable
   content={[
@@ -46,35 +41,33 @@ const chunks = await doc.chunk({
       type: "boolean | TitleExtractorsArgs",
       isOptional: true,
       description:
-        "タイトル抽出を有効にします。デフォルト設定の場合は true を指定するか、カスタム設定を指定してください。",
+        "タイトル抽出を有効化します。デフォルト設定を使う場合は true、カスタム設定を使う場合は構成を指定してください。",
     },
     {
       name: "summary",
       type: "boolean | SummaryExtractArgs",
       isOptional: true,
       description:
-        "要約抽出を有効にします。デフォルト設定の場合は true を指定するか、カスタム設定を指定してください。",
+        "要約抽出を有効化します。デフォルト設定を使う場合は true、カスタム設定を使う場合は構成を指定してください。",
     },
     {
       name: "questions",
       type: "boolean | QuestionAnswerExtractArgs",
       isOptional: true,
       description:
-        "質問生成を有効にします。デフォルト設定の場合は true を指定するか、カスタム設定を指定してください。",
+        "質問生成を有効化します。デフォルト設定を使う場合は true、カスタム設定を使う場合は構成を指定してください。",
     },
     {
       name: "keywords",
       type: "boolean | KeywordExtractArgs",
       isOptional: true,
       description:
-        "キーワード抽出を有効にします。デフォルト設定の場合は true を指定するか、カスタム設定を指定してください。",
+        "キーワード抽出を有効化します。デフォルト設定を使う場合は true、カスタム設定を使う場合は構成を指定してください。",
     },
   ]}
 />
 
-
-
-## 抽出器の引数
+## Extractor の引数
 
 ### TitleExtractorsArgs
 
@@ -84,27 +77,27 @@ const chunks = await doc.chunk({
       name: "llm",
       type: "MastraLanguageModel",
       isOptional: true,
-      description: "タイトル抽出に使用するAI SDK言語モデル",
+      description: "タイトル抽出に使用する AI SDK の言語モデル",
     },
     {
       name: "nodes",
       type: "number",
       isOptional: true,
-      description: "抽出するタイトルノードの数",
+      description: "抽出するタイトルノード数",
     },
     {
       name: "nodeTemplate",
       type: "string",
       isOptional: true,
       description:
-        "タイトルノード抽出用のカスタムプロンプトテンプレート。{context} プレースホルダーを含める必要があります",
+        "タイトルノード抽出用のカスタムプロンプトテンプレート。{context} プレースホルダーを含める必要があります。",
     },
     {
       name: "combineTemplate",
       type: "string",
       isOptional: true,
       description:
-        "タイトルを結合するためのカスタムプロンプトテンプレート。{context} プレースホルダーを含める必要があります",
+        "タイトルを統合するためのカスタムプロンプトテンプレート。{context} プレースホルダーを含める必要があります。",
     },
   ]}
 />
@@ -117,14 +110,14 @@ const chunks = await doc.chunk({
       name: "llm",
       type: "MastraLanguageModel",
       isOptional: true,
-      description: "要約抽出に使用するAI SDK言語モデル",
+      description: "要約抽出に使用する AI SDK の言語モデル",
     },
     {
       name: "summaries",
       type: "('self' | 'prev' | 'next')[]",
       isOptional: true,
       description:
-        "生成する要約タイプのリスト。'self'（現在のチャンク）、'prev'（前のチャンク）、'next'（次のチャンク）のみ含めることができます",
+        "生成する要約タイプのリスト。含められるのは 'self'（現在のチャンク）、'prev'（前のチャンク）、'next'（次のチャンク）のみです",
     },
     {
       name: "promptTemplate",
@@ -144,13 +137,13 @@ const chunks = await doc.chunk({
       name: "llm",
       type: "MastraLanguageModel",
       isOptional: true,
-      description: "質問生成に使用するAI SDK言語モデル",
+      description: "質問生成に使用する AI SDK の言語モデル",
     },
     {
       name: "questions",
       type: "number",
       isOptional: true,
-      description: "生成する質問の数",
+      description: "生成する質問数",
     },
     {
       name: "promptTemplate",
@@ -163,7 +156,7 @@ const chunks = await doc.chunk({
       name: "embeddingOnly",
       type: "boolean",
       isOptional: true,
-      description: "trueの場合、実際の質問を生成せず埋め込みのみを生成します",
+      description: "true の場合、実際の質問を生成せずに埋め込みのみを作成します",
     },
   ]}
 />
@@ -176,27 +169,25 @@ const chunks = await doc.chunk({
       name: "llm",
       type: "MastraLanguageModel",
       isOptional: true,
-      description: "キーワード抽出に使用するAI SDK言語モデル",
+      description: "キーワード抽出に使用する AI SDK の言語モデル",
     },
     {
       name: "keywords",
       type: "number",
       isOptional: true,
-      description: "抽出するキーワードの数",
+      description: "抽出するキーワード数",
     },
     {
       name: "promptTemplate",
       type: "string",
       isOptional: true,
       description:
-        "キーワード抽出用のカスタムプロンプトテンプレート。{context} と {maxKeywords} の両方のプレースホルダーを含める必要があります",
+        "キーワード抽出用のカスタムプロンプトテンプレート。{context} と {maxKeywords} の両方のプレースホルダーを含める必要があります。",
     },
   ]}
 />
 
-
-
-## 高度な例
+## 上級例
 
 ```typescript showLineNumbers copy
 import { MDocument } from "@mastra/rag";
@@ -204,63 +195,62 @@ import { MDocument } from "@mastra/rag";
 const doc = MDocument.fromText(text);
 const chunks = await doc.chunk({
   extract: {
-    // Title extraction with custom settings
+    // カスタム設定によるタイトル抽出
     title: {
-      nodes: 2, // Extract 2 title nodes
-      nodeTemplate: "Generate a title for this: {context}",
-      combineTemplate: "Combine these titles: {context}",
+      nodes: 2, // タイトルノードを2つ抽出
+      nodeTemplate: "次の内容のタイトルを生成してください: {context}",
+      combineTemplate: "次のタイトルを統合してください: {context}",
     },
 
-    // Summary extraction with custom settings
+    // カスタム設定による要約抽出
     summary: {
-      summaries: ["self"], // Generate summaries for current chunk
-      promptTemplate: "Summarize this: {context}",
+      summaries: ["self"], // 現在のチャンクの要約を生成
+      promptTemplate: "次の内容を要約してください: {context}",
     },
 
-    // Question generation with custom settings
+    // カスタム設定による質問生成
     questions: {
-      questions: 3, // Generate 3 questions
-      promptTemplate: "Generate {numQuestions} questions about: {context}",
+      questions: 3, // 質問を3つ生成
+      promptTemplate: "{context} について {numQuestions} 件の質問を生成してください",
       embeddingOnly: false,
     },
 
-    // Keyword extraction with custom settings
+    // カスタム設定によるキーワード抽出
     keywords: {
-      keywords: 5, // Extract 5 keywords
-      promptTemplate: "Extract {maxKeywords} key terms from: {context}",
+      keywords: 5, // キーワードを5つ抽出
+      promptTemplate: "次の内容から主要な用語を {maxKeywords} 件抽出してください: {context}",
     },
   },
 });
 
-// Example output:
+// 出力例:
 // chunks[0].metadata = {
-//   documentTitle: "AI in Modern Computing",
-//   sectionSummary: "Overview of AI concepts and their applications in computing",
-//   questionsThisExcerptCanAnswer: "1. What is machine learning?\n2. How do neural networks work?",
-//   excerptKeywords: "1. Machine learning\n2. Neural networks\n3. Training data"
+//   documentTitle: "現代のコンピューティングにおけるAI"
+//   sectionSummary: "AIの概念とコンピューティングへの応用の概要"
+//   questionsThisExcerptCanAnswer: "1. 機械学習とは何ですか？\n2. ニューラルネットワークはどのように機能しますか？"
+//   excerptKeywords: "1. 機械学習\n2. ニューラルネットワーク\n3. 学習データ"
 // }
 ```
 
 
+## タイトル抽出のためのドキュメントのグループ化
 
-## タイトル抽出のためのドキュメントグループ化
+`TitleExtractor` を使用する際は、各チャンクの `metadata` フィールドに共通の `docId` を指定することで、複数のチャンクをまとめてタイトル抽出できます。同じ `docId` を持つすべてのチャンクには、同一の抽出タイトルが付与されます。`docId` が設定されていない場合、各チャンクはタイトル抽出において個別のドキュメントとして扱われます。
 
-`TitleExtractor` を使用する際、各チャンクの `metadata` フィールドに共通の `docId` を指定することで、複数のチャンクをまとめてタイトル抽出することができます。同じ `docId` を持つすべてのチャンクは、同じ抽出タイトルを受け取ります。`docId` が設定されていない場合、各チャンクはタイトル抽出のために個別のドキュメントとして扱われます。
-
-**例：**
+**例:**
 
 ```ts
 import { MDocument } from "@mastra/rag";
 
 const doc = new MDocument({
   docs: [
-    { text: "chunk 1", metadata: { docId: "docA" } },
-    { text: "chunk 2", metadata: { docId: "docA" } },
-    { text: "chunk 3", metadata: { docId: "docB" } },
+    { text: "チャンク1", metadata: { docId: "docA" } },
+    { text: "チャンク2", metadata: { docId: "docA" } },
+    { text: "チャンク3", metadata: { docId: "docB" } },
   ],
   type: "text",
 });
 
 await doc.extractMetadata({ title: true });
-// 最初の2つのチャンクは同じタイトルを共有し、3つ目のチャンクには別のタイトルが割り当てられます。
+// 最初の2つのチャンクは同じタイトルになり、3つ目のチャンクには別のタイトルが割り当てられます。
 ```

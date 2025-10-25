@@ -1,25 +1,20 @@
 ---
-title: "リファレンス: Agent.getVoice() | エージェント | Mastra ドキュメント"
-description: "Mastraエージェントの`Agent.getVoice()`メソッドのドキュメント。音声機能用の音声プロバイダを取得します。"
+title: "リファレンス: Agent.getVoice() | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.getVoice()` メソッドのドキュメント。音声機能に使用する音声プロバイダーを取得します。"
 ---
-
-
 
 # Agent.getVoice()
 
-`.getVoice()`メソッドは、エージェントに設定された音声プロバイダーを取得し、それが関数の場合は解決します。このメソッドは、音声合成と音声認識機能のためにエージェントの音声機能にアクセスする際に使用されます。
+`.getVoice()` メソッドは、エージェントに設定された音声プロバイダーを取得し、それが関数であれば実体化（解決）します。テキスト読み上げ（TTS）や音声認識（STT）などの音声機能にアクセスする際に使用されます。
 
-
-
-## 使用例
+## 使い方の例
 
 ```typescript copy
 await agent.getVoice();
 ```
 
 
-
-## パラメータ
+## パラメーター
 
 <PropertiesTable
   content={[
@@ -33,8 +28,6 @@ await agent.getVoice();
   ]}
 />
 
-
-
 ## 戻り値
 
 <PropertiesTable
@@ -42,14 +35,12 @@ await agent.getVoice();
     {
       name: "voice",
       type: "Promise<MastraVoice>",
-      description: "エージェントに設定された音声プロバイダー、または未設定の場合はデフォルトの音声プロバイダーを返すPromise。",
+      description: "エージェントに設定された音声プロバイダー、または未設定の場合はデフォルトの音声プロバイダーに解決される Promise。",
     },
   ]}
 />
 
-
-
-## 詳細な使用例
+## 応用的な使用例
 
 ```typescript copy
 await agent.getVoice({
@@ -57,7 +48,8 @@ await agent.getVoice({
 });
 ```
 
-### オプションパラメータ
+
+### オプションのパラメータ
 
 <PropertiesTable
   content={[
@@ -66,14 +58,12 @@ await agent.getVoice({
       type: "RuntimeContext",
       isOptional: true,
       defaultValue: "new RuntimeContext()",
-      description: "依存性注入とコンテキスト情報のための実行時コンテキスト。",
+      description: "依存性の注入やコンテキスト情報のための実行時コンテキスト。",
     },
   ]}
 />
 
-
-
-## 関連項目
+## 関連情報
 
 - [エージェントに音声を追加する](../../docs/agents/adding-voice.mdx)
 - [音声プロバイダー](../voice/mastra-voice.mdx)

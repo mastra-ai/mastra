@@ -1,17 +1,18 @@
 ---
-title: "リファレンス: Memory.query() | Memory | Mastra ドキュメント"
+title: "リファレンス: Memory.query() | Memory | Mastra Docs"
 description: "Mastra の `Memory.query()` メソッドに関するドキュメント。ページネーション、フィルター、セマンティック検索に対応し、特定のスレッドからメッセージを取得します。"
 ---
 
 # Memory.query()
 
-`.query()` メソッドは、特定のスレッドからメッセージを取得し、ページネーション、フィルターリング、セマンティック検索に対応しています。
+`.query()` メソッドは、ページネーション、フィルタリング、セマンティック検索に対応し、特定のスレッドからメッセージを取得します。
 
-## 使用例
+## 使い方の例
 
 ```typescript copy
 await memory?.query({ threadId: "user-123" });
 ```
+
 
 ## パラメータ
 
@@ -26,25 +27,25 @@ await memory?.query({ threadId: "user-123" });
     {
       name: "resourceId",
       type: "string",
-      description: "スレッドを所有するリソースの任意のID。指定された場合はスレッドの所有権を検証します",
+      description: "そのスレッドを所有するリソースの任意指定ID。指定された場合、スレッドの所有者であることを検証します",
       isOptional: true,
     },
     {
       name: "selectBy",
       type: "object",
-      description: "メッセージのフィルタリングおよび選択用のオプション",
+      description: "メッセージのフィルタリングおよび選択用オプション",
       isOptional: true,
     },
     {
       name: "threadConfig",
       type: "MemoryConfig",
-      description: "メッセージ取得およびセマンティック検索に関する設定オプション",
+      description: "メッセージ取得およびセマンティック検索のための設定オプション",
       isOptional: true,
     },
     {
       name: "format",
       type: "'v1' | 'v2'",
-      description: "返すメッセージのフォーマット。現在の形式には 'v2' がデフォルト、後方互換のためには 'v1' を使用します",
+      description: "返すメッセージ形式。現在の形式には 'v2' がデフォルト、後方互換性には 'v1' を使用します",
       isOptional: true,
     },
   ]}
@@ -57,25 +58,25 @@ await memory?.query({ threadId: "user-123" });
     {
       name: "vectorSearchString",
       type: "string",
-      description: "意味的に類似したメッセージを検索するための文字列。threadConfig で semantic recall を有効にしておく必要があります。",
+      description: "意味的に類似するメッセージを探すための検索文字列。threadConfig で semantic recall を有効化しておく必要があります。",
       isOptional: true,
     },
     {
       name: "last",
       type: "number | false",
-      description: "取得する最新メッセージの件数。制限を無効化するには false を指定します。注意: threadConfig.lastMessages（既定値: 10）がこれより小さい場合はそちらが優先されます。",
+      description: "取得する最新メッセージ数。上限を無効にするには false を指定します。注: threadConfig.lastMessages（既定: 10）がより小さい場合は、そちらが優先されます。",
       isOptional: true,
     },
     {
       name: "include",
       type: "{ id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[]",
-      description: "任意のコンテキストメッセージを添えて取得する特定のメッセージ ID の配列。各要素には必須の `id`、任意の `threadId`（既定ではメインの threadId）、`withPreviousMessages`（前に含めるメッセージ数。ベクトル検索時は既定で 2、それ以外は 0）、`withNextMessages`（後に含めるメッセージ数。ベクトル検索時は既定で 2、それ以外は 0）が含まれます。",
+      description: "必要に応じて前後のコンテキストを付けて含める特定のメッセージ ID の配列。各要素には必須の `id`、任意の `threadId`（省略時はメインの threadId）、`withPreviousMessages`（前に含めるメッセージ数。ベクトル検索時は既定 2、それ以外は 0）、`withNextMessages`（後に含めるメッセージ数。ベクトル検索時は既定 2、それ以外は 0）が含まれます。",
       isOptional: true,
     },
     {
       name: "pagination",
       type: "{ dateRange?: { start?: Date; end?: Date }; page?: number; perPage?: number }",
-      description: "メッセージをバッチで取得するためのページネーション設定。`dateRange`（日付範囲でのフィルター）、`page`（0 始まりのページ番号）、`perPage`（1 ページあたりのメッセージ数）を指定します。",
+      description: "メッセージを分割して取得するためのページネーション設定。`dateRange`（日付範囲でのフィルタ）、`page`（0 始まりのページ番号）、`perPage`（1 ページあたりの件数）を含みます。",
       isOptional: true,
     },
   ]}
@@ -88,52 +89,52 @@ await memory?.query({ threadId: "user-123" });
     {
       name: "lastMessages",
       type: "number | false",
-      description: "取得する最新メッセージ数。無効化する場合は false を指定します。",
+      description: "取得する直近メッセージ数。無効にする場合は false を指定します。",
       isOptional: true,
       defaultValue: "10",
     },
     {
       name: "semanticRecall",
       type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
-      description: "メッセージ履歴でのセマンティック検索を有効にします。boolean か、設定オプションを持つオブジェクトを指定できます。有効化するには、ベクターストアとエンベッダーの両方の設定が必要です。",
+      description: "メッセージ履歴に対するセマンティック検索を有効化します。boolean か、設定オプションを含むオブジェクトを指定できます。有効化には vector store と embedder の両方の設定が必要です。",
       isOptional: true,
       defaultValue: "false",
     },
     {
       name: "workingMemory",
       type: "WorkingMemory",
-      description: "ワーキングメモリ機能の設定。`{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` または `{ enabled: boolean }`（無効化）を指定できます。",
+      description: "ワーキングメモリ機能の設定。`{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` または無効化用の `{ enabled: boolean }` を指定できます。",
       isOptional: true,
       defaultValue: "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
     },
     {
       name: "threads",
       type: "{ generateTitle?: boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> } }",
-      description: "メモリスレッドの作成に関する設定。`generateTitle` はユーザーの最初のメッセージからスレッドタイトルを自動生成するかを制御します。boolean か、カスタムの model と instructions を指定するオブジェクトを渡せます。",
+      description: "メモリスレッド作成に関する設定。`generateTitle` は、ユーザーの最初のメッセージからスレッドタイトルを自動生成するかどうかを制御します。boolean か、カスタムの model と instructions を持つオブジェクトを指定できます。",
       isOptional: true,
       defaultValue: "{ generateTitle: false }",
     },
   ]}
 />
 
-## 戻り値
+## 返り値
 
 <PropertiesTable
   content={[
     {
       name: "messages",
       type: "CoreMessage[]",
-      description: "取得したメッセージをコア形式で収めた配列",
+      description: "コア形式で取得されたメッセージの配列",
     },
     {
       name: "uiMessages",
       type: "UIMessageWithMetadata[]",
-      description: "UI 表示用に整形されたメッセージの配列。ツール呼び出しとその結果のスレッド化を適切に反映",
+      description: "ツール呼び出しと結果の適切なスレッド化を含む、UI表示向けに整形されたメッセージの配列",
     },
   ]}
 />
 
-## 詳細な使用例
+## 拡張的な使用例
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
 import { mastra } from "./mastra";
@@ -145,7 +146,7 @@ const { messages, uiMessages } = await memory!.query({
   threadId: "thread-123",
   selectBy: {
     last: 50,
-    vectorSearchString: "What messages are there?",
+    vectorSearchString: "どんなメッセージがある？",
     include: [
       {
         id: "msg-123"
@@ -166,9 +167,10 @@ console.log(messages);
 console.log(uiMessages);
 ```
 
-### 関連情報
+
+### 関連項目
 
 - [Memory クラス リファレンス](/reference/memory/Memory.mdx)
-- [Memory の開始ガイド](/docs/memory/overview.mdx)
+- [Memory の概要](/docs/memory/overview.mdx)
 - [セマンティックリコール](/docs/memory/semantic-recall.mdx)
 - [createThread](/reference/memory/createThread.mdx)

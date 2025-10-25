@@ -1,17 +1,18 @@
 ---
 title: "リファレンス: Agent.getModel() | Agents | Mastra ドキュメント"
-description: "Mastra のエージェントにおける `Agent.getModel()` メソッドのドキュメント。エージェントを駆動する言語モデルを取得します。"
+description: "Mastra のエージェントで使用される `Agent.getModel()` メソッドのドキュメント。エージェントを動かす言語モデルを取得します。"
 ---
 
 # Agent.getModel()
 
-`.getModel()` メソッドは、エージェントに設定された言語モデルを取得し、それが関数であれば評価して解決します。このメソッドは、エージェントの機能を支える基盤となるモデルにアクセスするために使用されます。
+`.getModel()` メソッドは、エージェントに設定された言語モデルを取得し、それが関数である場合は実体を解決します。このメソッドは、エージェントの機能を支える基盤となるモデルへアクセスするために使用されます。
 
-## 使用例
+## 使い方の例
 
 ```typescript copy
 await agent.getModel();
 ```
+
 
 ## パラメータ
 
@@ -22,7 +23,7 @@ await agent.getModel();
       type: "{ runtimeContext?: RuntimeContext }",
       isOptional: true,
       defaultValue: "new RuntimeContext()",
-      description: "ランタイムコンテキストを含むオプションの設定オブジェクト。",
+      description: "ランタイムコンテキストを含む任意指定の設定オブジェクト。",
     },
   ]}
 />
@@ -34,12 +35,12 @@ await agent.getModel();
     {
       name: "model",
       type: "MastraLanguageModel | Promise<MastraLanguageModel>",
-      description: "エージェントに設定された言語モデル。モデルのインスタンス、またはそのモデルに解決される Promise のいずれかです。",
+      description: "エージェントに設定された言語モデル。モデルの直接インスタンス、またはそのモデルに解決される Promise のいずれかです。",
     },
   ]}
 />
 
-## 拡張された使用例
+## 詳細な使用例
 
 ```typescript copy
 await agent.getModel({
@@ -47,7 +48,8 @@ await agent.getModel({
 });
 ```
 
-### オプションパラメータ
+
+### オプションのパラメーター
 
 <PropertiesTable
   content={[
@@ -56,12 +58,12 @@ await agent.getModel({
       type: "RuntimeContext",
       isOptional: true,
       defaultValue: "undefined",
-      description: "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
+      description: "依存性注入やコンテキスト情報のためのランタイムコンテキスト。",
     },
   ]}
 />
 
 ## 関連項目
 
-- [エージェントの概要](../../docs/agents/overview.mdx)
-- [エージェントのランタイムコンテキスト](../../docs/agents/runtime-context.mdx)
+- [Agents 概要](../../docs/agents/overview.mdx)
+- [ランタイムコンテキスト](../../docs/server-db/runtime-context.mdx)

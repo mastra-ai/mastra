@@ -1,32 +1,27 @@
 ---
-title: "例: Human in the Loop | ワークフロー（レガシー） | Mastra ドキュメント"
-description: Mastra を使用して人間の介入ポイントを持つレガシーワークフローを作成する例。
+title: "例: Human-in-the-Loop | ワークフロー（レガシー） | Mastra Docs"
+description: 人による介入ポイントを組み込んだレガシーなワークフローをMastraで作成する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
-
 # Human in the Loop Workflow (Legacy)
 
-Human-in-the-loop ワークフローでは、特定のポイントで実行を一時停止し、ユーザーからの入力を収集したり、意思決定を行ったり、人間の判断が必要なアクションを実行したりできます。この例では、人による介入ポイントを含むレガシーワークフローの作成方法を示します。
-
-
+Human-in-the-loop ワークフローは、特定のポイントで実行を一時停止し、ユーザー入力の収集や意思決定、人間の判断が必要なアクションの実行を行えるようにします。この例では、人による介入ポイントを含むレガシー版ワークフローの作成方法を示します。
 
 ## 仕組み
 
-1. ワークフローステップは、`suspend()` 関数を使って実行を**一時停止**することができ、人間の意思決定者のためのコンテキストを含むペイロードをオプションで渡すことができます。
-2. ワークフローが**再開**されると、人間の入力が `resume()` 呼び出しの `context` パラメータに渡されます。
-3. この入力は、ステップの実行コンテキスト内で `context.inputData` として利用可能になり、ステップの `inputSchema` に従った型になります。
+1. ワークフローのステップは、必要に応じて人間の意思決定者向けのコンテキストを含むペイロードを添えて、`suspend()` 関数で実行を**一時停止**できます。
+2. ワークフローが**再開**されると、人間からの入力は `resume()` の `context` パラメータとして渡されます。
+3. この入力はステップの実行コンテキストで `context.inputData` として参照でき、ステップの `inputSchema` に従って型付けされます。
 4. その後、ステップは人間の入力に基づいて実行を続行できます。
 
-このパターンにより、自動化されたワークフローにおいて、安全で型チェックされた人間の介入が可能になります。
+このパターンにより、自動化されたワークフローにおいて、安全で型チェックされた人による介入が可能になります。
 
+## Inquirer を使った対話型ターミナルの例
 
-
-## Inquirer を使った対話型ターミナル例
-
-この例では、[Inquirer](https://www.npmjs.com/package/@inquirer/prompts) ライブラリを使用して、ワークフローが一時停止した際にターミナルから直接ユーザー入力を収集し、真にインタラクティブな human-in-the-loop 体験を実現する方法を示します。
+この例では、ワークフローの一時停止中にターミナルから直接ユーザー入力を収集するために [Inquirer](https://www.npmjs.com/package/@inquirer/prompts) ライブラリを使う方法を示し、真にインタラクティブなヒューマン・イン・ザ・ループ体験を実現します。
 
 ```ts showLineNumbers copy
 import { Mastra } from "@mastra/core";
@@ -34,7 +29,7 @@ import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 import { confirm, input, select } from "@inquirer/prompts";
 
-// Step 1: Generate product recommendations
+// ステップ 1: 商品レコメンデーションを生成
 const generateRecommendations = new LegacyStep({
   id: "generateRecommendations",
   outputSchema: z.object({
@@ -51,8 +46,8 @@ const generateRecommendations = new LegacyStep({
   execute: async ({ context }) => {
     const customerName = context.triggerData.customerName;
 
-    // In a real application, you might call an API or ML model here
-    // For this example, we'll return mock data
+    // 実際のアプリケーションでは、ここで API や ML モデルを呼び出すことがあります
+    // この例ではモックデータを返します
     return {
       customerName,
       recommendations: [
@@ -60,19 +55,19 @@ const generateRecommendations = new LegacyStep({
           productId: "prod-001",
           productName: "Premium Widget",
           price: 99.99,
-          description: "Our best-selling premium widget with advanced features",
+          description: "高度な機能を備えた当社のベストセラー高級ウィジェット",
         },
         {
           productId: "prod-002",
           productName: "Basic Widget",
           price: 49.99,
-          description: "Affordable entry-level widget for beginners",
+          description: "初心者向けの手頃な入門用ウィジェット",
         },
         {
           productId: "prod-003",
           productName: "Widget Pro Plus",
           price: 149.99,
-          description: "Professional-grade widget with extended warranty",
+          description: "延長保証付きのプロフェッショナル向けウィジェット",
         },
       ],
     };
@@ -81,7 +76,7 @@ const generateRecommendations = new LegacyStep({
 ```
 
 ```ts showLineNumbers copy
-// Step 2: Get human approval and customization for the recommendations
+// ステップ 2: 推薦内容の人手による承認とカスタマイズ
 const reviewRecommendations = new LegacyStep({
   id: "reviewRecommendations",
   inputSchema: z.object({
@@ -122,10 +117,10 @@ const reviewRecommendations = new LegacyStep({
         customerName,
         recommendations,
         message:
-          "Please review these product recommendations before sending to the customer",
+          "これらの商品の推薦内容を、顧客に送信する前に確認してください。"
       });
 
-      // Placeholder return (won't be reached due to suspend)
+      // プレースホルダーの戻り値（suspend により到達しません）
       return {
         finalRecommendations: [],
         customerNote: "",
@@ -133,7 +128,7 @@ const reviewRecommendations = new LegacyStep({
       };
     }
 
-    // Process the agent's product selections
+    // エージェントが選択した商品を処理する
     const finalRecommendations = recommendations
       .filter((product) =>
         reviewInput.approvedProducts.includes(product.productId),
@@ -154,9 +149,8 @@ const reviewRecommendations = new LegacyStep({
 ```
 
 
-
 ```ts showLineNumbers copy
-// Step 3: Send the recommendations to the customer
+// ステップ 3: おすすめ内容を顧客に送信する
 const sendRecommendations = new LegacyStep({
   id: "sendRecommendations",
   outputSchema: z.object({
@@ -174,8 +168,8 @@ const sendRecommendations = new LegacyStep({
         offerDiscount: false,
       };
 
-    // Generate email content based on the recommendations
-    let emailContent = `Dear ${customerName},\n\nBased on your preferences, we recommend:\n\n`;
+    // おすすめ内容に基づいてメール本文を生成する
+    let emailContent = `拝啓 ${customerName} 様\n\nお客様のご希望に基づき、以下の商品をおすすめいたします。\n\n`;
 
     finalRecommendations.forEach((product) => {
       emailContent += `- ${product.productName}: $${product.price.toFixed(2)}\n`;
@@ -183,17 +177,17 @@ const sendRecommendations = new LegacyStep({
 
     if (offerDiscount) {
       emailContent +=
-        "\nAs a valued customer, use code SAVE10 for 10% off your next purchase!\n";
+        "\n日頃のご愛顧に感謝し、次回のお買い物で10%割引となるコード「SAVE10」をぜひご利用ください。\n";
     }
 
     if (customerNote) {
-      emailContent += `\nPersonal note: ${customerNote}\n`;
+      emailContent += `\n追伸: ${customerNote}\n`;
     }
 
-    emailContent += "\nThank you for your business,\nThe Sales Team";
+    emailContent += "\nいつもご愛顧いただきありがとうございます。\n営業チーム";
 
-    // In a real application, you would send this email
-    console.log("Email content generated:", emailContent);
+    // 実際のアプリケーションでは、このメールを送信します
+    console.log("生成されたメール本文:", emailContent);
 
     return {
       emailSent: true,
@@ -202,7 +196,7 @@ const sendRecommendations = new LegacyStep({
   },
 });
 
-// Build the workflow
+// ワークフローを構築する
 const recommendationWorkflow = new LegacyWorkflow({
   name: "product-recommendation-workflow",
   triggerSchema: z.object({
@@ -216,21 +210,21 @@ recommendationWorkflow
   .then(sendRecommendations)
   .commit();
 
-// Register the workflow
+// ワークフローを登録する
 const mastra = new Mastra({
   legacy_workflows: { recommendationWorkflow },
 });
 ```
 
 ```ts showLineNumbers copy
-// Example of using the workflow with Inquirer prompts
+// Inquirer のプロンプトを使ったワークフローの例
 async function runRecommendationWorkflow() {
   const registeredWorkflow = mastra.legacy_getWorkflow(
     "recommendationWorkflow",
   );
   const run = registeredWorkflow.createRun();
 
-  console.log("Starting product recommendation workflow...");
+  console.log("商品レコメンデーション・ワークフローを開始します...");
   const result = await run.start({
     triggerData: {
       customerName: "Jane Smith",
@@ -240,7 +234,7 @@ async function runRecommendationWorkflow() {
   const isReviewStepSuspended =
     result.activePaths.get("reviewRecommendations")?.status === "suspended";
 
-  // Check if workflow is suspended for human review
+  // 人による確認のためにワークフローが一時停止しているか確認
   if (isReviewStepSuspended) {
     const { customerName, recommendations, message } = result.activePaths.get(
       "reviewRecommendations",
@@ -248,11 +242,11 @@ async function runRecommendationWorkflow() {
 
     console.log("\n===================================");
     console.log(message);
-    console.log(`Customer: ${customerName}`);
+    console.log(`顧客: ${customerName}`);
     console.log("===================================\n");
 
-    // Use Inquirer to collect input from the sales agent in the terminal
-    console.log("Available product recommendations:");
+    // ターミナルで営業担当者の入力を Inquirer で収集
+    console.log("利用可能な商品おすすめ一覧:");
     recommendations.forEach((product, index) => {
       console.log(
         `${index + 1}. ${product.productName} - $${product.price.toFixed(2)}`,
@@ -260,37 +254,37 @@ async function runRecommendationWorkflow() {
       console.log(`   ${product.description}\n`);
     });
 
-    // Let the agent select which products to recommend
+    // 担当者にどの商品をおすすめするか選択してもらう
     const approvedProducts = await checkbox({
-      message: "Select products to recommend to the customer:",
+      message: "顧客におすすめする商品を選択してください:",
       choices: recommendations.map((product) => ({
         name: `${product.productName} ($${product.price.toFixed(2)})`,
         value: product.productId,
       })),
     });
 
-    // Let the agent add a personal note
+    // 担当者にパーソナルメッセージを追加してもらう
     const includeNote = await confirm({
-      message: "Would you like to add a personal note?",
+      message: "パーソナルメッセージを追加しますか？",
       default: false,
     });
 
     let customerNote = "";
     if (includeNote) {
       customerNote = await input({
-        message: "Enter your personalized note for the customer:",
+        message: "顧客向けのパーソナライズドメッセージを入力してください:",
       });
     }
 
-    // Ask if a discount should be offered
+    // 割引を提供するか確認
     const offerDiscount = await confirm({
-      message: "Offer a 10% discount to this customer?",
+      message: "この顧客に10%の割引を提供しますか？",
       default: false,
     });
 
-    console.log("\nSubmitting your review...");
+    console.log("\nレビューを送信しています...");
 
-    // Resume the workflow with the agent's input
+    // 担当者の入力でワークフローを再開
     const resumeResult = await run.resume({
       stepId: "reviewRecommendations",
       context: {
@@ -301,12 +295,12 @@ async function runRecommendationWorkflow() {
     });
 
     console.log("\n===================================");
-    console.log("Workflow completed!");
-    console.log("Email content:");
+    console.log("ワークフローが完了しました！");
+    console.log("メールの内容:");
     console.log("===================================\n");
     console.log(
       resumeResult?.results?.sendRecommendations ||
-        "No email content generated",
+        "メール内容は生成されませんでした",
     );
 
     return resumeResult;
@@ -315,15 +309,14 @@ async function runRecommendationWorkflow() {
   return result;
 }
 
-// Invoke the workflow with interactive terminal input
+// 対話的なターミナル入力でワークフローを実行
 runRecommendationWorkflow().catch(console.error);
 ```
 
 
-
 ## 複数のユーザー入力を伴う高度な例
 
-この例では、コンテンツモデレーションシステムのように、複数回の人間による介入が必要となる、より複雑なワークフローを示します。
+この例は、コンテンツモデレーションシステムなどで、複数の人による介入が必要となる、より複雑なワークフローを示しています。
 
 ```ts showLineNumbers copy
 import { Mastra } from "@mastra/core";
@@ -331,7 +324,7 @@ import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 import { select, input } from "@inquirer/prompts";
 
-// Step 1: Receive and analyze content
+// ステップ1: コンテンツを受け取り分析する
 const analyzeContent = new LegacyStep({
   id: "analyzeContent",
   outputSchema: z.object({
@@ -346,7 +339,7 @@ const analyzeContent = new LegacyStep({
     const aiAnalysisScore = simulateContentAnalysis(content);
     const flaggedCategories =
       aiAnalysisScore < 0.7
-        ? ["potentially inappropriate", "needs review"]
+        ? ["不適切の可能性あり", "要確認"]
         : [];
 
     return {
@@ -359,10 +352,10 @@ const analyzeContent = new LegacyStep({
 ```
 
 ```ts showLineNumbers copy
-// Step 2: Moderate content that needs review
+// ステップ 2: レビュー対象のコンテンツをモデレートする
 const moderateContent = new LegacyStep({
   id: "moderateContent",
-  // Define the schema for human input that will be provided when resuming
+  // 再開時に提供される人間の入力スキーマを定義
   inputSchema: z.object({
     moderatorDecision: z.enum(["approve", "reject", "modify"]).optional(),
     moderatorNotes: z.string().optional(),
@@ -376,14 +369,14 @@ const moderateContent = new LegacyStep({
   // @ts-ignore
   execute: async ({ context, suspend }) => {
     const analysisResult = context.getStepResult(analyzeContent);
-    // Access the input provided when resuming the workflow
+    // ワークフロー再開時に提供された入力にアクセス
     const moderatorInput = {
       decision: context.inputData?.moderatorDecision,
       notes: context.inputData?.moderatorNotes,
       modifiedContent: context.inputData?.modifiedContent,
     };
 
-    // If the AI analysis score is high enough, auto-approve
+    // AIの分析スコアが十分に高い場合は自動承認
     if (
       analysisResult?.aiAnalysisScore > 0.9 &&
       !analysisResult?.flaggedCategories?.length
@@ -391,40 +384,40 @@ const moderateContent = new LegacyStep({
       return {
         moderationResult: "approved",
         moderatedContent: analysisResult.content,
-        notes: "Auto-approved by system",
+        notes: "システムによる自動承認",
       };
     }
 
-    // If we don't have moderator input yet, suspend for human review
+    // まだモデレーターの入力がない場合は、人によるレビューのため一時停止
     if (!moderatorInput.decision) {
       await suspend({
         content: analysisResult?.content,
         aiScore: analysisResult?.aiAnalysisScore,
         flaggedCategories: analysisResult?.flaggedCategories,
-        message: "Please review this content and make a moderation decision",
+        message: "このコンテンツを確認し、モデレーションの判断を行ってください",
       });
 
-      // Placeholder return
+      // プレースホルダーの戻り値
       return {
         moderationResult: "approved",
         moderatedContent: "",
       };
     }
 
-    // Process the moderator's decision
+    // モデレーターの判断を処理
     switch (moderatorInput.decision) {
       case "approve":
         return {
           moderationResult: "approved",
           moderatedContent: analysisResult?.content || "",
-          notes: moderatorInput.notes || "Approved by moderator",
+          notes: moderatorInput.notes || "モデレーターにより承認",
         };
 
       case "reject":
         return {
           moderationResult: "rejected",
           moderatedContent: "",
-          notes: moderatorInput.notes || "Rejected by moderator",
+          notes: moderatorInput.notes || "モデレーターにより却下",
         };
 
       case "modify":
@@ -432,14 +425,14 @@ const moderateContent = new LegacyStep({
           moderationResult: "modified",
           moderatedContent:
             moderatorInput.modifiedContent || analysisResult?.content || "",
-          notes: moderatorInput.notes || "Modified by moderator",
+          notes: moderatorInput.notes || "モデレーターにより修正",
         };
 
       default:
         return {
           moderationResult: "rejected",
           moderatedContent: "",
-          notes: "Invalid moderator decision",
+          notes: "無効なモデレーターの判断",
         };
     }
   },
@@ -447,9 +440,8 @@ const moderateContent = new LegacyStep({
 ```
 
 
-
 ```ts showLineNumbers copy
-// Step 3: Apply moderation actions
+// ステップ3: モデレーションを適用する
 const applyModeration = new LegacyStep({
   id: "applyModeration",
   outputSchema: z.object({
@@ -478,27 +470,27 @@ const applyModeration = new LegacyStep({
     switch (moderationResult?.moderationResult) {
       case "approved":
         return {
-          finalStatus: "Content published",
+          finalStatus: "コンテンツを公開",
           content: moderationResult.moderatedContent,
           auditLog,
         };
 
       case "modified":
         return {
-          finalStatus: "Content modified and published",
+          finalStatus: "コンテンツを修正のうえ公開",
           content: moderationResult.moderatedContent,
           auditLog,
         };
 
       case "rejected":
         return {
-          finalStatus: "Content rejected",
+          finalStatus: "コンテンツを却下",
           auditLog,
         };
 
       default:
         return {
-          finalStatus: "Error in moderation process",
+          finalStatus: "モデレーション処理でエラーが発生",
           auditLog,
         };
     }
@@ -507,9 +499,8 @@ const applyModeration = new LegacyStep({
 ```
 
 
-
 ```ts showLineNumbers copy
-// Build the workflow
+// ワークフローを構築する
 const contentModerationWorkflow = new LegacyWorkflow({
   name: "content-moderation-workflow",
   triggerSchema: z.object({
@@ -523,30 +514,30 @@ contentModerationWorkflow
   .then(applyModeration)
   .commit();
 
-// Register the workflow
+// ワークフローを登録する
 const mastra = new Mastra({
   legacy_workflows: { contentModerationWorkflow },
 });
 
-// Example of using the workflow with Inquirer prompts
+// Inquirer のプロンプトを使ったワークフローの使用例
 async function runModerationDemo() {
   const registeredWorkflow = mastra.legacy_getWorkflow(
     "contentModerationWorkflow",
   );
   const run = registeredWorkflow.createRun();
 
-  // Start the workflow with content that needs review
-  console.log("コンテンツモデレーションワークフローを開始します...");
+  // 審査が必要なコンテンツでワークフローを開始
+  console.log("コンテンツモデレーションのワークフローを開始します...");
   const result = await run.start({
     triggerData: {
-      content: "これはモデレーションが必要なユーザー生成コンテンツです。",
+      content: "モデレーションが必要なユーザー生成コンテンツの例です。",
     },
   });
 
   const isReviewStepSuspended =
     result.activePaths.get("moderateContent")?.status === "suspended";
 
-  // Check if workflow is suspended
+  // ワークフローが一時停止しているか確認
   if (isReviewStepSuspended) {
     const { content, aiScore, flaggedCategories, message } =
       result.activePaths.get("moderateContent")?.suspendPayload;
@@ -557,22 +548,22 @@ async function runModerationDemo() {
 
     console.log("レビュー対象のコンテンツ:");
     console.log(content);
-    console.log(`\nAI解析スコア: ${aiScore}`);
+    console.log(`\nAI 解析スコア: ${aiScore}`);
     console.log(
-      `フラグ付けされたカテゴリ: ${flaggedCategories?.join(", ") || "なし"}\n`,
+      `フラグ対象のカテゴリ: ${flaggedCategories?.join(", ") || "なし"}\n`,
     );
 
-    // Collect moderator decision using Inquirer
+    // Inquirer を使ってモデレーターの判断を取得
     const moderatorDecision = await select({
       message: "モデレーションの判断を選択してください:",
       choices: [
-        { name: "このままコンテンツを承認する", value: "approve" },
+        { name: "コンテンツをそのまま承認する", value: "approve" },
         { name: "コンテンツを完全に却下する", value: "reject" },
         { name: "公開前にコンテンツを修正する", value: "modify" },
       ],
     });
 
-    // Collect additional information based on decision
+    // 判断に基づいて追加情報を入力
     let moderatorNotes = "";
     let modifiedContent = "";
 
@@ -589,7 +580,7 @@ async function runModerationDemo() {
 
     console.log("\nモデレーションの判断を送信しています...");
 
-    // Resume the workflow with the moderator's input
+    // モデレーターの入力でワークフローを再開
     const resumeResult = await run.resume({
       stepId: "moderateContent",
       context: {
@@ -622,62 +613,61 @@ async function runModerationDemo() {
   return result;
 }
 
-// Helper function for AI content analysis simulation
+// AI コンテンツ解析をシミュレーションするヘルパー関数
 function simulateContentAnalysis(content: string): number {
-  // In a real application, this would call an AI service
-  // For the example, we're returning a random score
+  // 実際のアプリケーションでは、ここで AI サービスを呼び出します
+  // この例ではランダムなスコアを返します
   return Math.random();
 }
 
-// Invoke the demo function
+// デモ関数を呼び出す
 runModerationDemo().catch(console.error);
 ```
 
 
+## 重要な概念
 
-## 主要概念
+1. **サスペンドポイント** - ステップの execute 内で `suspend()` 関数を使用して、ワークフローの実行を一時停止します。
 
-1. **中断ポイント** - ステップの実行内で`suspend()`関数を使用してワークフローの実行を一時停止します。
-
-2. **中断ペイロード** - 中断時に関連データを渡して、人間の意思決定のためのコンテキストを提供します：
+2. **サスペンドペイロード** - 一時停止時に関連するデータを渡して、人による意思決定のための文脈を提供します:
 
 ```ts
 await suspend({
-  messageForHuman: "Please review this data",
+  messageForHuman: "このデータをご確認ください",
   data: someImportantData,
 });
 ```
 
-3. **ワークフローステータスの確認** - ワークフローを開始した後、返されたステータスを確認して中断されているかどうかを確認します：
+3. **ワークフローのステータス確認** - ワークフローを開始したら、返されたステータスを確認して、一時停止中かどうかを確認します：
 
 ```ts
 const result = await workflow.start({ triggerData });
 if (result.status === "suspended" && result.suspendedStepId === "stepId") {
-  // Process suspension
-  console.log("Workflow is waiting for input:", result.suspendPayload);
+  // 一時停止状態を処理する
+  console.log("ワークフローは入力待ちです:", result.suspendPayload);
 }
 ```
 
-4. **インタラクティブターミナル入力** - Inquirerなどのライブラリを使用してインタラクティブなプロンプトを作成します：
+4. **インタラクティブなターミナル入力** - Inquirer などのライブラリを使って、対話型プロンプトを作成します:
 
 ```ts
 import { select, input, confirm } from "@inquirer/prompts";
 
-// When the workflow is suspended
+// ワークフローがサスペンドされた場合
 if (result.status === "suspended") {
-  // Display information from the suspend payload
+  // サスペンドペイロードの情報を表示
   console.log(result.suspendPayload.message);
 
-  // Collect user input interactively
+  // 対話的にユーザー入力を取得
   const decision = await select({
-    message: "What would you like to do?",
+    message: "どうしますか？",
     choices: [
-      { name: "Approve", value: "approve" },
-      { name: "Reject", value: "reject" },
+      { name: "承認", value: "approve" },
+      { name: "却下", value: "reject" },
     ],
   });
 
-  // Resume the workflow with the collected input
+  // 取得した入力でワークフローを再開
   await run.resume({
     stepId: result.suspendedStepId,
     context: { decision },
@@ -685,74 +675,78 @@ if (result.status === "suspended") {
 }
 ```
 
-5. **ワークフローの再開** - `resume()`メソッドを使用して人間の入力でワークフローの実行を継続します：
+5. **ワークフローの再開** - 人間の入力でワークフローの実行を続行するには、`resume()` メソッドを使用します:
 
 ```ts
 const resumeResult = await run.resume({
   stepId: "suspendedStepId",
   context: {
-    // This data is passed to the suspended step as context.inputData
-    // and must conform to the step's inputSchema
+    // このデータは中断されたステップに context.inputData として渡されます
+    // また、ステップの inputSchema に適合している必要があります
     userDecision: "approve",
   },
 });
 ```
 
-6. **人間データの入力スキーマ** - 人間の入力で再開される可能性のあるステップに入力スキーマを定義して、型安全性を確保します：
+6. **人によるデータ入力のスキーマ** - 人の入力で再開されうるステップに対して入力スキーマを定義し、型安全性を確保します。
 
 ```ts
 const myStep = new LegacyStep({
   id: "myStep",
   inputSchema: z.object({
-    // This schema validates the data passed in resume's context
-    // and makes it available as context.inputData
+    // このスキーマは、resume のコンテキストで渡されたデータを検証し、
+    // context.inputData として利用できるようにします
     userDecision: z.enum(["approve", "reject"]),
     userComments: z.string().optional(),
   }),
   execute: async ({ context, suspend }) => {
-    // Check if we have user input from a previous suspension
+    // 以前のサスペンド時のユーザー入力があるか確認します
     if (context.inputData?.userDecision) {
-      // Process the user's decision
-      return { result: `User decided: ${context.inputData.userDecision}` };
+      // ユーザーの判断を処理します
+      return { result: `ユーザーの判断: ${context.inputData.userDecision}` };
     }
 
-    // If no input, suspend for human decision
+    // 入力がない場合は、人による判断を待つためにサスペンドします
     await suspend();
   },
 });
 ```
 
-Human-in-the-loopワークフローは、自動化と人間の判断を組み合わせたシステムを構築するために強力です。例えば：
+Human-in-the-loop ワークフローは、自動化と人間の判断を組み合わせたシステムの構築に有効です。例：
 
-- コンテンツモデレーションシステム
-- 承認ワークフロー
-- 監視付きAIシステム
-- エスカレーション機能付きカスタマーサービス自動化
+* コンテンツモデレーションシステム
+* 承認ワークフロー
+* 人間による監督下の AI システム
+* エスカレーションを伴うカスタマーサービス自動化
 
 <br />
+
 <br />
+
 <hr className={"dark:border-[#404040] border-gray-300"} />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/human-in-the-loop"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/human-in-the-loop"
+}
 />
 
 
+## ワークフロー（レガシー）
 
-## Workflows (Legacy)
+以下のリンクは、レガシー版ワークフローの例を示すドキュメントです：
 
-以下のリンクは、レガシーワークフローのサンプルドキュメントを提供します：
-
-- [シンプルなワークフローの作成 (Legacy)](/examples/workflows_legacy/creating-a-workflow)
-- [順次ステップを持つワークフロー (Legacy)](/examples/workflows_legacy/sequential-steps)
-- [ステップでの並列実行](/examples/workflows_legacy/parallel-steps)
-- [分岐パス](/examples/workflows_legacy/branching-paths)
-- [条件分岐を持つワークフロー (Legacy) (実験的)](/examples/workflows_legacy/conditional-branching)
-- [ワークフロー (Legacy) からエージェントを呼び出す](/examples/workflows_legacy/calling-agent)
-- [ワークフローステップとしてのツール (Legacy)](/examples/workflows_legacy/using-a-tool-as-a-step)
-- [循環依存関係を持つワークフロー (Legacy)](/examples/workflows_legacy/cyclical-dependencies)
-- [ワークフロー変数を使用したデータマッピング (Legacy)](/examples/workflows_legacy/workflow-variables)
-- [一時停止と再開を持つワークフロー (Legacy)](/examples/workflows_legacy/suspend-and-resume)
+- [シンプルなワークフローの作成（レガシー）](/examples/workflows_legacy/creating-a-workflow)
+- [順次ステップのワークフロー（レガシー）](/examples/workflows_legacy/sequential-steps)
+- [ステップによる並列実行（レガシー）](/examples/workflows_legacy/parallel-steps)
+- [分岐パス（レガシー）](/examples/workflows_legacy/branching-paths)
+- [条件分岐付きワークフロー（レガシー／実験的）](/examples/workflows_legacy/conditional-branching)
+- [ワークフロー（レガシー）からのエージェント呼び出し](/examples/workflows_legacy/calling-agent)
+- [ツールをワークフローのステップとして使用（レガシー）](/examples/workflows_legacy/using-a-tool-as-a-step)
+- [循環依存を含むワークフロー（レガシー）](/examples/workflows_legacy/cyclical-dependencies)
+- [ワークフロー変数によるデータマッピング（レガシー）](/examples/workflows_legacy/workflow-variables)
+- [一時停止と再開が可能なワークフロー（レガシー）](/examples/workflows_legacy/suspend-and-resume)

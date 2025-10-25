@@ -5,7 +5,7 @@ description: "Mastra における `Mastra.getMCPServers()` メソッドのリフ
 
 # Mastra.getMCPServers()
 
-`.getMCPServers()` メソッドは、Mastra インスタンスに登録されているすべての MCP サーバーインスタンスを取得するために使用します。
+`.getMCPServers()` メソッドは、Mastra インスタンスに登録されているすべての MCP サーバーインスタンスを取得します。
 
 ## 使い方の例
 
@@ -13,9 +13,10 @@ description: "Mastra における `Mastra.getMCPServers()` メソッドのリフ
 mastra.getMCPServers();
 ```
 
+
 ## パラメータ
 
-このメソッドはパラメータを受け付けません。
+このメソッドはパラメータを受け取りません。
 
 ## 戻り値
 
@@ -24,12 +25,12 @@ mastra.getMCPServers();
     {
       name: "servers",
       type: "Record<string, MCPServerBase> | undefined",
-      description: "登録されているすべての MCP サーバーインスタンスを格納したレコード。キーはサーバー ID、値は MCPServerBase インスタンス。サーバーが1つも登録されていない場合は undefined になります。",
+      description: "登録済みのすべての MCP サーバーインスタンスを保持するレコード。キーはサーバー ID、値は MCPServerBase インスタンス。登録済みのサーバーがない場合は undefined。",
     },
   ]}
 />
 
 ## 関連情報
 
-- [MCP 概要](../../docs/tools-mcp/mcp-overview.mdx)
+- [MCP の概要](../../docs/tools-mcp/mcp-overview.mdx)
 - [MCP サーバーリファレンス](../../reference/tools/mcp-server.mdx)

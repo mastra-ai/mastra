@@ -1,0 +1,283 @@
+---
+title: "機密データフィルター | プロセッサー | 可観測性 | Mastra ドキュメント"
+description: "AIのトレース内の機密情報を自動的に編集して保護する"
+---
+
+import { Callout } from "nextra/components";
+
+
+# 機密データフィルター
+
+機密データフィルターは、エクスポート前に AI トレースから機密情報を自動的にマスキングするスパン・プロセッサです。これにより、パスワード、API キー、トークン、その他の秘匿すべきデータがアプリケーションの外へ出たり、オブザーバビリティ・プラットフォームに保存されたりすることがありません。
+
+## 既定の設定
+
+標準の Mastra 設定を使用すると、Sensitive Data Filter は既定で自動的に有効になります。
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    default: { enabled: true }, // SensitiveDataFilterを自動的に含みます
+  },
+  storage: new LibSQLStore({
+    url: "file:./mastra.db",
+  }),
+});
+```
+
+デフォルト設定では、フィルターは次の一般的な機密フィールド名を自動的にマスクします:
+
+* `password`
+* `token`
+* `secret`
+* `key`
+* `apikey`
+* `auth`
+* `authorization`
+* `bearer`
+* `bearertoken`
+* `jwt`
+* `credential`
+* `clientsecret`
+* `privatekey`
+* `refresh`
+* `ssn`
+
+<Callout>
+  フィールドの一致判定は大文字小文字を区別せず、区切り記号を正規化します。たとえば、`api-key`、`api_key`、`Api Key` はいずれも `apikey` として扱われます。
+</Callout>
+
+
+## 仕組み
+
+Sensitive Data Filter は、エクスポーターに送信される前にスパンを処理し、次の項目をスキャンします：
+
+- **Attributes** - スパンのメタデータとプロパティ
+- **Metadata** - スパンに付与されたカスタムメタデータ
+- **Input** - エージェント、ツール、LLM に送信されるデータ
+- **Output** - 応答および結果
+- **Error Information** - スタックトレースとエラーの詳細
+
+機微なフィールドが検出されると、その値は既定で `[REDACTED]` に置き換えられます。フィルターはネストされたオブジェクト、配列、循環参照も安全に処理します。
+
+## カスタム設定
+
+どのフィールドをマスキングし、マスキングの表示方法をどうするかをカスタマイズできます。
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+import { SensitiveDataFilter, DefaultExporter } from '@mastra/core/ai-tracing';
+
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      production: {
+        serviceName: 'my-service',
+        exporters: [new DefaultExporter()],
+        processors: [
+          new SensitiveDataFilter({
+            // カスタム機密フィールドを追加
+            sensitiveFields: [
+              // デフォルトフィールド
+              'password', 'token', 'secret', 'key', 'apikey',
+              // アプリケーション用のカスタムフィールド
+              'creditCard', 'bankAccount', 'routingNumber',
+              'email', 'phoneNumber', 'dateOfBirth',
+            ],
+            // カスタム秘匿化トークン
+            redactionToken: '***SENSITIVE***',
+            // 秘匿化スタイル
+            redactionStyle: 'full', // または 'partial'
+          })
+        ],
+      },
+    },
+  },
+});
+```
+
+
+## マスキングのスタイル
+
+このフィルターは次の2つのマスキングスタイルに対応しています：
+
+### 全面マスキング（デフォルト）
+
+値全体を固定のトークンに置き換えます：
+
+```json
+// Before
+{
+  "apiKey": "sk-abc123xyz789def456",
+  "userId": "user_12345"
+}
+
+// After
+{
+  "apiKey": "[REDACTED]",
+  "userId": "user_12345"
+}
+```
+
+
+### 部分的なマスキング
+
+先頭と末尾の3文字だけを表示します。値の全体を公開せずにデバッグするのに便利です。
+
+```ts
+new SensitiveDataFilter({
+  redactionStyle: 'partial'
+})
+```
+
+```json
+// Before
+{
+  "apiKey": "sk-abc123xyz789def456",
+  "creditCard": "4111111111111111"
+}
+
+// After
+{
+  "apiKey": "sk-…456",
+  "creditCard": "411…111"
+}
+```
+
+7文字未満の値は、情報漏えいを防ぐために完全にマスクされます。
+
+
+## フィールド照合ルール
+
+このフィルターはスマートなフィールド照合を行います:
+
+1. **大文字・小文字を区別しない**: `APIKey`、`apikey`、`ApiKey` はすべて一致します
+2. **区切り文字に依存しない**: `api-key`、`api_key`、`apiKey` は同一として扱われます
+3. **完全一致**: 正規化後は、フィールドは完全に一致している必要があります
+   - `token` は `token`、`Token`、`TOKEN` と一致します
+   - `token` は `promptTokens` や `tokenCount` とは一致しません
+
+## ネストされたオブジェクトの処理
+
+このフィルターはネストした構造を再帰的に処理します。
+
+```json
+// Before
+{
+  "user": {
+    "id": "12345",
+    "credentials": {
+      "password": "SuperSecret123!",
+      "apiKey": "sk-production-key"
+    }
+  },
+  "config": {
+    "auth": {
+      "jwt": "eyJhbGciOiJIUzI1NiIs..."
+    }
+  }
+}
+
+// After
+{
+  "user": {
+    "id": "12345",
+    "credentials": {
+      "password": "[REDACTED]",
+      "apiKey": "[REDACTED]"
+    }
+  },
+  "config": {
+    "auth": {
+      "jwt": "[REDACTED]"
+    }
+  }
+}
+```
+
+
+## パフォーマンスに関する考慮事項
+
+Sensitive Data Filter は軽量かつ効率的に設計されています:
+
+- **同期処理**: 非同期処理は行わず、レイテンシへの影響は最小限
+- **循環参照への対応**: 複雑なオブジェクトグラフも安全に処理
+- **エラーリカバリ**: フィルタリングに失敗した場合はクラッシュせず、該当フィールドをエラーマーカーに置き換えます
+
+## フィルタを無効にする
+
+機密データのフィルタリングを無効にする必要がある場合（本番環境では非推奨）:
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    configs: {
+      debug: {
+        serviceName: 'debug-service',
+        processors: [], // プロセッサなし（SensitiveDataFilterを含む）
+        exporters: [new DefaultExporter()],
+      },
+    },
+  },
+});
+```
+
+<Callout type="warning">
+  機密データのフィルタリングを無効化するのは、管理された環境でのみ行ってください。トレースを外部サービスや共有ストレージに送信する場合は、絶対に無効化しないでください。
+</Callout>
+
+
+## よくあるユースケース
+
+### ヘルスケアアプリケーション
+
+```ts
+new SensitiveDataFilter({
+  sensitiveFields: [
+    // HIPAA関連フィールド
+    'ssn', 'socialSecurityNumber',
+    'medicalRecordNumber', 'mrn',
+    'healthInsuranceNumber',
+    'diagnosisCode', 'icd10',
+    'prescription', 'medication',
+  ]
+})
+```
+
+
+### 金融サービス
+
+```ts
+new SensitiveDataFilter({
+  sensitiveFields: [
+    // PCI準拠フィールド
+    'creditCard', 'ccNumber', 'cardNumber',
+    'cvv', 'cvc', 'securityCode',
+    'expirationDate', 'expiry',
+    'bankAccount', 'accountNumber',
+    'routingNumber', 'iban', 'swift',
+  ]
+})
+```
+
+
+## エラー処理
+
+フィルターがフィールドの処理中にエラーが発生した場合、そのフィールドは安全なエラーマーカーに置き換えられます。
+
+```json
+{
+  "problematicField": {
+    "error": {
+      "processor": "sensitive-data-filter"
+    }
+  }
+}
+```
+
+これにより、処理エラーがトレースのエクスポートを妨げたり、アプリケーションのクラッシュを引き起こしたりしないようにします。
+
+
+## 関連情報
+
+- [SensitiveDataFilter API](/reference/observability/ai-tracing/processors/sensitive-data-filter)
+- [AI トレーシングの基本例](/examples/observability/basic-ai-tracing) 

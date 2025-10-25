@@ -1,17 +1,13 @@
 ---
-title: "リファレンス: voice.answer() | Voice Providers | Mastra ドキュメント"
-description: "リアルタイム音声プロバイダーで利用可能な answer() メソッドのドキュメント。このメソッドは音声プロバイダーに応答の生成を指示します。"
+title: "リファレンス: voice.answer() | 音声プロバイダー | Mastra ドキュメント"
+description: "リアルタイム音声プロバイダーで利用可能な answer() メソッドのドキュメント。音声プロバイダーに応答生成を指示します。"
 ---
-
-
 
 # voice.answer()
 
-`answer()` メソッドは、リアルタイム音声プロバイダーでAIに応答を生成させるために使用されます。このメソッドは、ユーザー入力を受け取った後にAIに明示的に応答を促す必要がある音声対音声の会話で特に便利です。
+`answer()` メソッドは、リアルタイム音声プロバイダーで AI に応答生成を指示するために使用します。特に、ユーザー入力を受け取ったあとに AI に明示的な応答を促す必要がある音声同士の会話で有用です。
 
-
-
-## 使用例
+## 使い方の例
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
@@ -19,61 +15,57 @@ import { getMicrophoneStream } from "@mastra/node-audio";
 import Speaker from "@mastra/node-speaker";
 
 const speaker = new Speaker({
-  sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
-  channels: 1, // Mono audio output (as opposed to stereo which would be 2)
-  bitDepth: 16, // Bit depth for audio quality - CD quality standard (16-bit resolution)
+  sampleRate: 24100, // オーディオのサンプルレート（Hz）— MacBook Proでの高音質の標準
+  channels: 1, // モノラル出力（ステレオなら2）
+  bitDepth: 16, // 音質用のビット深度 — CD品質の標準（16ビット解像度）
 });
 
-// Initialize a real-time voice provider
+// リアルタイム音声プロバイダを初期化
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
     model: "gpt-4o",
     apiKey: process.env.OPENAI_API_KEY,
   },
-  speaker: "alloy", // Default voice
+  speaker: "alloy", // 既定のボイス
 });
-// Connect to the real-time service
+// リアルタイムサービスに接続
 await voice.connect();
-// Register event listener for responses
+// 応答用のイベントリスナーを登録
 voice.on("speaker", (stream) => {
-  // Handle audio response
+  // 音声応答を処理
   stream.pipe(speaker);
 });
-// Send user audio input
+// ユーザーの音声入力を送信
 const microphoneStream = getMicrophoneStream();
 await voice.send(microphoneStream);
-// Trigger the AI to respond
+// AIに応答を指示
 await voice.answer();
 ```
 
 
-
-## パラメーター
+## パラメータ
 
 <br />
+
 <PropertiesTable
   content={[
     {
       name: "options",
       type: "Record<string, unknown>",
-      description: "レスポンスのプロバイダー固有のオプション",
+      description: "レスポンスに対するプロバイダ固有のオプション",
       isOptional: true,
     },
   ]}
 />
 
-
-
 ## 戻り値
 
-レスポンスがトリガーされたときに解決される `Promise<void>` を返します。
-
-
+レスポンスがトリガーされると解決される `Promise<void>` を返します。
 
 ## 注意事項
 
-- このメソッドは、音声から音声への機能をサポートするリアルタイム音声プロバイダーでのみ実装されています
-- この機能をサポートしていない音声プロバイダーで呼び出した場合、警告が記録され、即座に解決されます
-- 応答音声は通常、直接返されるのではなく、'speaking' イベントを通じて出力されます
-- サポートしているプロバイダーでは、このメソッドを使ってAIが生成するのではなく、特定の応答を送信できます
-- このメソッドは、会話の流れを作るために `send()` と組み合わせてよく使われます
+- このメソッドは、音声同士のやり取り（speech-to-speech）に対応したリアルタイム音声プロバイダーでのみ実装されています
+- この機能をサポートしない音声プロバイダーで呼び出すと、警告をログに出力し、即座に処理を終了します
+- 応答音声は通常、直接返されるのではなく「speaking」イベントとして出力されます
+- 対応プロバイダーでは、AI に生成させる代わりに特定の応答をこのメソッドで送信できます
+- このメソッドは、会話の流れを構築するために `send()` と併用されるのが一般的です

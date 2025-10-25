@@ -1,17 +1,13 @@
 ---
 title: "リファレンス: voice.listen() | 音声プロバイダー | Mastra ドキュメント"
-description: "すべてのMastra音声プロバイダーで利用可能な、音声をテキストに変換するlisten()メソッドのドキュメント。"
+description: "すべての Mastra 音声プロバイダーで利用可能な listen() メソッドのドキュメント。音声をテキストに変換します。"
 ---
-
-
 
 # voice.listen()
 
-`listen()` メソッドは、すべてのMastra音声プロバイダーで利用可能な、音声をテキストに変換するコア機能です。音声ストリームを入力として受け取り、文字起こしされたテキストを返します。
+`listen()` メソッドは、すべての Mastra の音声プロバイダーで利用可能な基本機能で、音声をテキストに変換します。音声ストリームを入力として受け取り、書き起こし結果のテキストを返します。
 
-
-
-## 使用例
+## 使い方の例
 
 ```typescript
 import { OpenAIVoice } from "@mastra/voice-openai";
@@ -19,7 +15,7 @@ import { getMicrophoneStream } from "@mastra/node-audio";
 import { createReadStream } from "fs";
 import path from "path";
 
-// Initialize a voice provider
+// 音声プロバイダーを初期化
 const voice = new OpenAIVoice({
   listeningModel: {
     name: "whisper-1",
@@ -27,25 +23,24 @@ const voice = new OpenAIVoice({
   },
 });
 
-// Basic usage with a file stream
+// ファイルストリームを使う基本的な例
 const audioFilePath = path.join(process.cwd(), "audio.mp3");
 const audioStream = createReadStream(audioFilePath);
 const transcript = await voice.listen(audioStream, {
   filetype: "mp3",
 });
-console.log("Transcribed text:", transcript);
+console.log("文字起こし結果:", transcript);
 
-// Using a microphone stream
-const microphoneStream = getMicrophoneStream(); // Assume this function gets audio input
+// マイク入力ストリームを使用
+const microphoneStream = getMicrophoneStream(); // この関数で音声入力を取得すると仮定
 const transcription = await voice.listen(microphoneStream);
 
-// With provider-specific options
+// プロバイダー固有のオプションを指定
 const transcriptWithOptions = await voice.listen(audioStream, {
   language: "en",
-  prompt: "This is a conversation about artificial intelligence.",
+  prompt: "これは人工知能に関する会話です。",
 });
 ```
-
 
 
 ## パラメータ
@@ -56,33 +51,29 @@ const transcriptWithOptions = await voice.listen(audioStream, {
       name: "audioStream",
       type: "NodeJS.ReadableStream",
       description:
-        "文字起こしするオーディオストリーム。これはファイルストリームまたはマイクストリームです。",
+        "書き起こし対象の音声ストリーム。ファイルストリームまたはマイク入力のストリームを指定できます。",
       isOptional: false,
     },
     {
       name: "options",
       type: "object",
-      description: "音声認識のためのプロバイダー固有のオプション",
+      description: "音声認識プロバイダー固有のオプション",
       isOptional: true,
     },
   ]}
 />
 
-
-
 ## 戻り値
 
-以下のいずれかを返します：
+次のいずれかを返します:
 
-- `Promise<string>`: 文字起こしされたテキストを解決するプロミス
-- `Promise<NodeJS.ReadableStream>`: 文字起こしされたテキストのストリームを解決するプロミス（ストリーミング文字起こし用）
-- `Promise<void>`: テキストを直接返す代わりに「writing」イベントを発行するリアルタイムプロバイダー用
-
-
+- `Promise<string>`: 書き起こしテキストに解決される Promise
+- `Promise<NodeJS.ReadableStream>`: 書き起こしテキストのストリームに解決される Promise（ストリーミング書き起こし用）
+- `Promise<void>`: テキストを直接返さずに 'writing' イベントを発行するリアルタイムプロバイダー向け
 
 ## プロバイダー固有のオプション
 
-各音声プロバイダーは、それぞれの実装に特有の追加オプションをサポートしている場合があります。以下にいくつかの例を示します：
+各音声プロバイダーは、実装に特有の追加オプションをサポートしている場合があります。以下に例をいくつか示します：
 
 ### OpenAI
 
@@ -91,20 +82,20 @@ const transcriptWithOptions = await voice.listen(audioStream, {
     {
       name: "options.filetype",
       type: "string",
-      description: "音声ファイル形式（例：'mp3'、'wav'、'm4a'）",
+      description: "音声ファイルの形式（例：「mp3」「wav」「m4a」）",
       isOptional: true,
       defaultValue: "'mp3'",
     },
     {
       name: "options.prompt",
       type: "string",
-      description: "モデルの文字起こしを導くテキスト",
+      description: "モデルの文字起こしを補助するテキスト",
       isOptional: true,
     },
     {
       name: "options.language",
       type: "string",
-      description: "言語コード（例：'en'、'fr'、'de'）",
+      description: "言語コード（例：「en」「fr」「de」）",
       isOptional: true,
     },
   ]}
@@ -125,7 +116,7 @@ const transcriptWithOptions = await voice.listen(audioStream, {
       name: "options.config",
       type: "object",
       description:
-        "Google Cloud Speech-to-Text APIからの認識設定",
+        "Google Cloud Speech-to-Text API の音声認識設定",
       isOptional: true,
       defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
     },
@@ -139,7 +130,7 @@ const transcriptWithOptions = await voice.listen(audioStream, {
     {
       name: "options.model",
       type: "string",
-      description: "文字起こしに使用するDeepgramモデル",
+      description: "文字起こしに使用する Deepgram のモデル",
       isOptional: true,
       defaultValue: "'nova-2'",
     },
@@ -153,14 +144,12 @@ const transcriptWithOptions = await voice.listen(audioStream, {
   ]}
 />
 
-
-
 ## リアルタイム音声プロバイダー
 
-`OpenAIRealtimeVoice`のようなリアルタイム音声プロバイダーを使用する場合、`listen()`メソッドは異なる動作をします：
+`OpenAIRealtimeVoice` のようなリアルタイム音声プロバイダーを使用する場合、`listen()` メソッドの挙動は次のように異なります:
 
-- 文字起こしされたテキストを返す代わりに、文字起こしされたテキストを含む「writing」イベントを発行します
-- 文字起こしを受け取るためにイベントリスナーを登録する必要があります
+* 文字起こし結果を返すのではなく、文字起こしテキストを含む &#39;writing&#39; イベントを発行します
+* 文字起こしを受け取るには、イベントリスナーを登録する必要があります
 
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
@@ -169,21 +158,20 @@ import { getMicrophoneStream } from "@mastra/node-audio";
 const voice = new OpenAIRealtimeVoice();
 await voice.connect();
 
-// Register event listener for transcription
+// 音声書き起こし用のイベントリスナーを登録
 voice.on("writing", ({ text, role }) => {
   console.log(`${role}: ${text}`);
 });
 
-// This will emit 'writing' events instead of returning text
+// これはテキストを返す代わりに 'writing' イベントを発生させます
 const microphoneStream = getMicrophoneStream();
 await voice.listen(microphoneStream);
 ```
 
 
+## CompositeVoice と併用する場合
 
-## CompositeVoiceでの使用
-
-`CompositeVoice`を使用する場合、`listen()`メソッドは設定されたリスニングプロバイダーに処理を委譲します：
+`CompositeVoice` を使用すると、`listen()` メソッドは設定されたリスニングプロバイダーに委譲されます。
 
 ```typescript
 import { CompositeVoice } from "@mastra/core/voice";
@@ -195,25 +183,22 @@ const voice = new CompositeVoice({
   speakProvider: new PlayAIVoice(),
 });
 
-// これはOpenAIVoiceプロバイダーを使用します
+// こちらは OpenAIVoice のプロバイダーを使用します
 const transcript = await voice.listen(audioStream);
 ```
 
 
-
 ## 注意事項
 
-- すべての音声プロバイダーが音声認識機能をサポートしているわけではありません（例：PlayAI、Speechify）
-- `listen()`の動作はプロバイダーによって若干異なる場合がありますが、すべての実装は同じ基本的なインターフェースに従っています
-- リアルタイム音声プロバイダーを使用する場合、このメソッドは直接テキストを返さず、代わりに「writing」イベントを発生させることがあります
-- サポートされる音声フォーマットはプロバイダーによって異なります。一般的なフォーマットにはMP3、WAV、M4Aなどがあります
-- 一部のプロバイダーは、テキストが文字起こしされるとすぐに返される、ストリーミング文字起こしをサポートしています
-- 最高のパフォーマンスを得るには、使用が終わったら音声ストリームを閉じるか終了することを検討してください
-
-
+- すべての音声プロバイダーが音声認識（音声→テキスト）機能をサポートしているわけではありません（例：PlayAI、Speechify）
+- `listen()` の動作はプロバイダーによって多少異なりますが、いずれの実装も同じ基本的なインターフェースに準拠しています
+- リアルタイムの音声プロバイダーを使用する場合、このメソッドはテキストを直接返さず、代わりに「writing」イベントを発行することがあります
+- 対応する音声フォーマットはプロバイダーに依存します。一般的なフォーマットには MP3、WAV、M4A があります
+- 一部のプロバイダーはストリーミング文字起こしに対応しており、書き起こしと同時にテキストが返されます
+- パフォーマンスを最適化するには、使用が終わったら音声ストリームを閉じる（または終了する）ことを検討してください
 
 ## 関連メソッド
 
-- [voice.speak()](./voice.speak) - テキストを音声に変換
-- [voice.send()](./voice.send) - 音声データをリアルタイムで音声プロバイダーに送信
-- [voice.on()](./voice.on) - 音声イベントのイベントリスナーを登録
+- [voice.speak()](./voice.speak) - テキストを音声に変換する
+- [voice.send()](./voice.send) - 音声データをリアルタイムで音声プロバイダーに送信する
+- [voice.on()](./voice.on) - 音声イベント用のイベントリスナーを登録する

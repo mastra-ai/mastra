@@ -1,0 +1,261 @@
+---
+title: "リファレンス: Astra Vector Store | ベクトルデータベース | Mastra ドキュメント"
+description: Mastra の AstraVector クラスに関するドキュメント。DataStax Astra DB を用いたベクトル検索を提供します。
+---
+
+# Astra Vector Store
+
+AstraVector クラスは、Apache Cassandra を基盤とするクラウドネイティブかつサーバーレスのデータベースである [DataStax Astra DB](https://www.datastax.com/products/datastax-astra) を利用してベクトル検索を提供します。
+エンタープライズ級のスケーラビリティと高可用性を備えたベクトル検索機能を提供します。
+
+## コンストラクタのオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "token",
+      type: "string",
+      description: "Astra DB API トークン",
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description: "Astra DB API エンドポイント",
+    },
+    {
+      name: "keyspace",
+      type: "string",
+      isOptional: true,
+      description: "任意の keyspace 名",
+    },
+  ]}
+/>
+
+## 方法
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するインデックス名",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "ベクトルの次元数（使用する埋め込みモデルと一致している必要があります）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description:
+        "類似検索の距離指標（dotproduct の場合は dot_product にマッピングされます）",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "アップサート先のインデックス名",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "埋め込みベクトルの配列",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "各ベクトルのメタデータ",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "任意のベクトルID（未指定の場合は自動生成）",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "クエリ対象のインデックス名",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "類似ベクトルの検索に用いるクエリベクトル",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "返却する結果数",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "クエリのメタデータフィルター",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にベクトルを含めるかどうか",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+インデックス名の文字列の配列を返します。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+{
+  name: "indexName",
+  type: "string",
+  description: "説明対象のインデックス名",
+},
+]}
+/>
+
+戻り値:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除するインデックス名",
+    },
+  ]}
+/>
+
+### updateVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルを含むインデックス名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "更新対象のベクトルID",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "ベクトルおよび/またはメタデータの変更を含む更新オブジェクト",
+      properties: [
+        {
+          name: "vector",
+          type: "number[]",
+          isOptional: true,
+          description: "新しいベクトル値",
+        },
+        {
+          name: "metadata",
+          type: "Record<string, any>",
+          isOptional: true,
+          description: "新しいメタデータ値",
+        },
+      ],
+    },
+  ]}
+/>
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクターを含むインデックス名",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "削除するベクターのID",
+    },
+  ]}
+/>
+
+## レスポンスの種類
+
+クエリの結果は次の形式で返されます。
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // includeVectorがtrueの場合のみ含まれる
+}
+```
+
+
+## エラー処理
+
+ストアは型付きエラーをスローし、捕捉できます。
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | など
+    console.log(error.details); // エラーの詳細情報
+  }
+}
+```
+
+
+## 環境変数
+
+必須の環境変数:
+
+- `ASTRA_DB_TOKEN`: Astra DB の API トークン
+- `ASTRA_DB_ENDPOINT`: Astra DB の API エンドポイント
+
+## 関連項目
+
+- [メタデータフィルター](../rag/metadata-filters)

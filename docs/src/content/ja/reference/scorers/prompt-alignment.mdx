@@ -1,17 +1,14 @@
 ---
-title: "リファレンス: Prompt Alignment Scorer | Scorer | Mastra ドキュメント"
-description: Mastra における Prompt Alignment Scorer のドキュメント。エージェントの応答がユーザーのプロンプトの意図、要件、網羅性、適切性にどの程度合致しているかを、多角的な分析で評価します。
+title: "リファレンス: Prompt Alignment Scorer | Scorers | Mastra ドキュメント"
+description: Mastra の Prompt Alignment Scorer のドキュメント。エージェントの応答がユーザーのプロンプトの意図や要件、網羅性、適切性にどれだけ合致しているかを、多次元的に評価します。
 ---
 
 import { PropertiesTable } from "@/components/properties-table";
 
 
-
 # プロンプト整合性スコアラー
 
-`createPromptAlignmentScorerLLM()` 関数は、エージェントの応答がユーザーのプロンプトとどれだけ整合しているかを、意図の理解、要件の満たし具合、応答の網羅性、形式の適切さといった複数の観点から評価するスコアラーを作成します。
-
-
+`createPromptAlignmentScorerLLM()` 関数は、エージェントの応答がユーザーのプロンプトにどれほど整合しているかを、意図の把握、要件の満たし具合、応答の網羅性、形式の妥当性といった複数の観点から評価するスコアラーを作成します。
 
 ## パラメータ
 
@@ -20,25 +17,25 @@ import { PropertiesTable } from "@/components/properties-table";
     {
       name: "model",
       type: "MastraModelConfig",
-      description: "プロンプトと応答の整合性を評価するために使用する言語モデル",
+      description: "プロンプトとレスポンスの整合性を評価するために使用する言語モデル",
       required: true,
     },
     {
       name: "options",
       type: "PromptAlignmentOptions",
-      description: "スコアリングの構成オプション",
+      description: "スコアリング用の設定オプション",
       required: false,
       children: [
         {
           name: "scale",
           type: "number",
-          description: "最終スコアに乗じるスケール係数（デフォルト: 1）",
+          description: "最終スコアに乗算するスケール係数（既定値: 1）",
           required: false,
         },
         {
           name: "evaluationMode",
           type: "'user' | 'system' | 'both'",
-          description: "評価モード — 'user' はユーザープロンプトとの整合性のみ、'system' はシステム要件への準拠のみ、'both' は両方を重み付きで評価（デフォルト: 'both'）",
+          description: "評価モード — 'user' はユーザープロンプトとの整合性のみを評価、'system' はシステム要件の順守のみを評価、'both' は加重スコアリングで両方を評価（既定値: 'both'）",
           required: false,
         },
       ],
@@ -46,126 +43,299 @@ import { PropertiesTable } from "@/components/properties-table";
   ]}
 />
 
-
-
 ## .run() の戻り値
 
 <PropertiesTable
   content={[
-    {
-      name: "score",
-      type: "number",
-      description: "0 から scale（デフォルトは 0〜1）までの多次元アラインメントスコア",
-    },
-    {
-      name: "reason",
-      type: "string",
-      description: "プロンプトのアラインメント評価に関する、人間が読める詳細な内訳付きの説明",
-    },
-  ]}
+{
+  name: "score",
+  type: "number",
+  description: "0 から scale（既定では 0〜1）までの多次元アライメントスコア",
+},
+{
+  name: "reason",
+  type: "string",
+  description: "プロンプトのアライメント評価についての詳細な内訳を含む、人間にとって読みやすい説明",
+},
+]}
 />
 
+`.run()` は次の形の結果を返します:
+
+```typescript
+{
+  runId: 文字列,
+  score: 数値,
+  reason: 文字列,
+  analyzeStepResult: {
+    intentAlignment: {
+      score: 数値,
+      primaryIntent: 文字列,
+      isAddressed: 真偽値,
+      reasoning: 文字列
+    },
+    requirementsFulfillment: {
+      requirements: Array<{
+        requirement: 文字列,
+        isFulfilled: 真偽値,
+        reasoning: 文字列
+      }>,
+      overallScore: 数値
+    },
+    completeness: {
+      score: 数値,
+      missingElements: 文字列[],
+      reasoning: 文字列
+    },
+    responseAppropriateness: {
+      score: 数値,
+      formatAlignment: 真偽値,
+      toneAlignment: 真偽値,
+      reasoning: 文字列
+    },
+    overallAssessment: 文字列
+  }
+}
+```
 
 
-## スコアリングの詳細
+## スコア詳細
+
+### スコアラーの設定
+
+スコアリングの要件に合わせて、scale パラメータと評価モードを調整することで Prompt Alignment Scorer をカスタマイズできます。
+
+```typescript showLineNumbers copy
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: 'openai/gpt-4o-mini', 
+  options: { 
+    scale: 10, // 0-1ではなく0-10でスコア付け
+    evaluationMode: 'both' // 'user'、'system'、または'both'(デフォルト)
+  }
+});
+```
+
 
 ### 多次元分析
 
-Prompt Alignment は、評価モードに応じて重み付けが変化する4つの主要な次元で応答を評価します:
+Prompt Alignment は、評価モードに応じて変化する重み付きスコアリングを用いて、4つの主要な側面から応答を評価します：
 
-#### ユーザーモード ('user')
-ユーザーのプロンプトとの整合性のみを評価:
+#### ユーザーモード（'user'）
 
-1. **意図の整合** (重み40%) - 応答がユーザーの中核的な要望に対処しているか
-2. **要件の充足** (重み30%) - すべてのユーザー要件が満たされているか
-3. **完全性** (重み20%) - ユーザーのニーズに対して十分に網羅的か  
-4. **応答の適切性** (重み10%) - 形式とトーンがユーザーの期待に合っているか
+ユーザーのプロンプトとの整合性のみを評価します：
 
-#### システムモード ('system')
-システムガイドラインへの準拠のみを評価:
+1. **意図の整合性**（重み 40%）- 応答がユーザーの核心的な依頼に応えているか
+2. **要件の満たし具合**（重み 30%）- ユーザーの要件がすべて満たされているか
+3. **網羅性**（重み 20%）- 応答がユーザーのニーズを十分にカバーしているか  
+4. **応答の適切性**（重み 10%）- 形式とトーンがユーザーの期待に合っているか
 
-1. **意図の整合** (重み35%) - 応答がシステムの行動ガイドラインに従っているか
-2. **要件の充足** (重み35%) - すべてのシステム制約が守られているか
-3. **完全性** (重み15%) - 応答がすべてのシステム規則を満たしているか
-4. **応答の適切性** (重み15%) - 形式とトーンがシステム仕様に合っているか
+#### システムモード（'system'）
 
-#### 両方モード ('both' - デフォルト)
-ユーザーとシステムの整合性の双方を組み合わせて評価:
+システムガイドラインへの準拠のみを評価します：
 
-- **ユーザー整合**: 最終スコアの70%（ユーザーモードの重みを使用）
-- **システム準拠**: 最終スコアの30%（システムモードの重みを使用）
-- ユーザー満足とシステム遵守をバランスよく評価
+1. **意図整合性**（重み35%）- 応答がシステムの行動ガイドラインに従っているか
+2. **要件充足**（重み35%）- すべてのシステム制約が守られているか
+3. **完全性**（重み15%）- 応答がすべてのシステムルールに従っているか
+4. **応答の適切性**（重み15%）- 形式とトーンがシステム仕様に合致しているか
+
+#### 両方モード（'both' - デフォルト）
+
+ユーザーとシステムのアラインメントの双方を評価して統合します:
+
+- **ユーザーアラインメント**: 最終スコアの70%（ユーザーモードの重みを使用）
+- **システムコンプライアンス**: 最終スコアの30%（システムモードの重みを使用）
+- ユーザー満足度とシステム遵守の両立をバランスよく評価
 
 ### スコア計算式
 
-**ユーザーモード:**
+**ユーザーモード：**
+
 ```
-Weighted Score = (intent_score × 0.4) + (requirements_score × 0.3) + 
+加重スコア = (intent_score × 0.4) + (requirements_score × 0.3) + 
                  (completeness_score × 0.2) + (appropriateness_score × 0.1)
-Final Score = Weighted Score × scale
+最終スコア = 加重スコア × scale
 ```
 
 **システムモード:**
+
 ```
-Weighted Score = (intent_score × 0.35) + (requirements_score × 0.35) + 
+加重スコア = (intent_score × 0.35) + (requirements_score × 0.35) + 
                  (completeness_score × 0.15) + (appropriateness_score × 0.15)
-Final Score = Weighted Score × scale
+最終スコア = 加重スコア × scale
 ```
 
-**両方モード (デフォルト):**
+**両方モード（既定）:**
+
 ```
-User Score = (user dimensions with user weights)
-System Score = (system dimensions with system weights)  
-Weighted Score = (User Score × 0.7) + (System Score × 0.3)
-Final Score = Weighted Score × scale
+ユーザースコア =（ユーザーの各指標 × ユーザー側の重み）
+システムスコア =（システムの各指標 × システム側の重み）  
+加重スコア =（ユーザースコア × 0.7）+（システムスコア × 0.3）
+最終スコア = 加重スコア × スケール
 ```
 
-**重み配分の考え方**:
-- **ユーザーモード**: ユーザー満足のため意図(40%)と要件(30%)を優先
-- **システムモード**: 行動準拠(35%)と制約(35%)を同等に重視
-- **両方モード**: 70/30の配分でユーザーのニーズを主としつつシステム準拠を維持
+**重み付けの根拠**:
+
+* **User Mode**: ユーザー満足のため、意図（40%）と要件（30%）を重視
+* **System Mode**: 行動順守（35%）と制約（35%）を同等に重視
+* **Both Mode**: 70/30の配分により、ユーザーのニーズを主としつつシステム順守を維持
+
 
 ### スコアの解釈
 
-- **0.9-1.0** = すべての次元で卓越した整合性
-- **0.8-0.9** = 小さな不足のみの非常に良い整合性
-- **0.7-0.8** = 良好だが一部の要件または完全性が不足
-- **0.6-0.7** = 目立つ不足を伴う中程度の整合性
-- **0.4-0.6** = 重大な問題を伴う不十分な整合性
-- **0.0-0.4** = 整合性が非常に低く、プロンプトに効果的に対処できていない
+- **0.9–1.0** = すべての側面で卓越した整合
+- **0.8–0.9** = わずかな不足はあるが、整合は非常に良好
+- **0.7–0.8** = 概ね良好だが、一部の要件や網羅性に不足あり
+- **0.6–0.7** = 目立つ抜けがある中程度の整合
+- **0.4–0.6** = 重大な問題を伴う不十分な整合
+- **0.0–0.4** = 非常に不十分で、回答がプロンプトに十分に対応できていない
 
-### 他の評価手法との比較
+### 各モードを使うタイミング
 
-| Aspect | Prompt Alignment | Answer Relevancy | Faithfulness |
-|--------|------------------|------------------|--------------|
-| **Focus** | 多次元のプロンプト遵守 | クエリと応答の関連性 | 文脈への根拠付け |
-| **Evaluation** | 意図、要件、完全性、形式 | クエリとの意味的類似性 | 文脈との事実整合性 |
-| **Use Case** | 一般的なプロンプト追従 | 情報検索 | RAG/文脈ベースのシステム |
-| **Dimensions** | 重み付けされた4次元 | 単一の関連性次元 | 単一の忠実性次元 |
+**User Mode (`'user'`)** - 次のような場合に使用:
 
-### 各モードの使いどころ
+- カスタマーサポートの回答をユーザー満足度で評価する
+- ユーザー視点でのコンテンツ生成の品質をテストする  
+- 回答がユーザーの質問にどれだけ的確に応えているかを測定する
+- システム上の制約を意識せず、リクエストの達成に純粋に集中する
 
-**ユーザーモード (`'user'`)** - 次の場面で使用:
-- ユーザー満足度のためのカスタマーサービス応答の評価
-- ユーザー視点でのコンテンツ生成品質のテスト  
-- 応答がユーザーの質問にどれだけ適切に対処しているかの測定
-- システム制約を考慮せず、要望の充足に純粋に集中する場合
+**System Mode (`'system'`)** - 次のような場合に使用:
 
-**システムモード (`'system'`)** - 次の場面で使用:
-- AIの安全性と行動ガイドライン遵守の監査
-- エージェントがブランドのボイスとトーン要件に従っていることの確認
-- コンテンツポリシーと制約への準拠の検証
-- システムレベルの行動一貫性のテスト
+- 行動ガイドラインへの準拠およびAIの安全性を監査する
+- エージェントがブランドのボイスやトーン要件に従っていることを確保する
+- コンテンツポリシーや各種制約の順守を検証する
+- システムレベルでの行動の一貫性をテストする
 
-**両方モード (`'both'`)** - 次の場面で使用 (デフォルト、推奨):
-- AIエージェントの全体的なパフォーマンスの包括的評価
-- ユーザー満足とシステム準拠のバランス
-- ユーザーとシステム双方の要件が重要な本番監視
-- プロンプトと応答の整合性の総合的評価
+**Both Mode (`'both'`)** - 次のような場合に使用（デフォルト・推奨）:
+
+- AIエージェントの全体的なパフォーマンスを総合評価する
+- ユーザー満足度とシステム準拠のバランスを取る
+- ユーザー要件とシステム要件の両方が重要な本番環境のモニタリング
+- プロンプトとレスポンスの整合性を全体的に評価する
+
+## よくある使い方
+
+### コード生成の評価
+
+次の観点の評価に最適:
+
+* プログラミングタスクの達成度
+* コードの品質と完全性
+* コーディング要件の遵守
+* 形式仕様（関数、クラスなど）
+
+```typescript
+// 例: API エンドポイントの作成
+const codePrompt = "認証とレート制限を備えた REST API エンドポイントを作成する";
+// 評価者が確認する点: 目的（API の作成）、要件（認証 + レート制限）、
+// 完全性（実装の網羅性）、形式（コード構造）
+```
 
 
+### 指示追従評価
 
-## 使用例
+最適な用途:
+
+* タスク完了の確認
+* 複数ステップの指示への追従状況の評価
+* 要件への適合性チェック
+* 教育コンテンツの評価
+
+```typescript
+// 例: 複数要件のタスク
+const taskPrompt = "初期化、バリデーション、エラーハンドリング、ドキュメンテーションを備えた Python クラスを書いてください";
+// スコアラーは各要件を個別に追跡し、詳細な内訳を提供します
+```
+
+
+### コンテンツ形式の検証
+
+役立つ用途:
+
+* 形式仕様への準拠確認
+* スタイルガイドの遵守確認
+* 出力構造の検証
+* 応答の適切性の確認
+
+```typescript
+// 例: 構造化された出力
+const formatPrompt = "箇条書きで、JavaScript における let と const の違いを説明してください";
+// スコアラーは内容の正確性と形式の順守の両方を評価します
+```
+
+
+### エージェントの応答品質
+
+AI エージェントがユーザーの指示にどの程度忠実に従っているかを測定します。
+
+```typescript
+const agent = new Agent({
+  name: 'CodingAssistant',
+  instructions: 'あなたは親切なコーディングアシスタントです。常に動作するコード例を提供してください。',
+  model: 'openai/gpt-4o',
+});
+
+// 包括的なアライメントを評価（デフォルト）
+const scorer = createPromptAlignmentScorerLLM({
+  model: 'openai/gpt-4o-mini',
+  options: { evaluationMode: 'both' } // ユーザーの意図とシステムガイドラインの両方を評価
+});
+
+// ユーザー満足度のみを評価
+const userScorer = createPromptAlignmentScorerLLM({
+  model: 'openai/gpt-4o-mini',
+  options: { evaluationMode: 'user' } // ユーザーリクエストの充足度のみに焦点を当てる
+});
+
+// システム準拠を評価
+const systemScorer = createPromptAlignmentScorerLLM({
+  model: 'openai/gpt-4o-mini',
+  options: { evaluationMode: 'system' } // システム指示への準拠を確認
+});
+
+const result = await scorer.run(agentRun);
+```
+
+
+### プロンプトエンジニアリングの最適化
+
+アラインメントを改善するために、さまざまなプロンプトを試験します。
+
+```typescript
+const prompts = [
+  '階乗を計算する関数を書いてください',
+  '負の入力に対するエラー処理を含む階乗を計算するPython関数を作成してください',
+  '入力検証、エラー処理、docstringを含むPythonの階乗計算機を実装してください'
+];
+
+// 最適なプロンプトを見つけるためにアライメントスコアを比較
+for (const prompt of prompts) {
+  const result = await scorer.run(createTestRun(prompt, response));
+  console.log(`プロンプトアライメント: ${result.score}`);
+}
+```
+
+
+### マルチエージェント・システムの評価
+
+異なるエージェントやモデルを比較する：
+
+```typescript
+const agents = [agent1, agent2, agent3];
+const testPrompts = [...]; // テストプロンプトの配列
+
+for (const agent of agents) {
+  let totalScore = 0;
+  for (const prompt of testPrompts) {
+    const response = await agent.run(prompt);
+    const evaluation = await scorer.run({ input: prompt, output: response });
+    totalScore += evaluation.score;
+  }
+  console.log(`${agent.name} 平均アライメント: ${totalScore / testPrompts.length}`);
+}
+```
+
+
+## 例
 
 ### 基本設定
 
@@ -176,57 +346,59 @@ const scorer = createPromptAlignmentScorerLLM({
   model: 'openai/gpt-4o',
 });
 
-// コード生成タスクを評価する
+// コード生成タスクを評価
 const result = await scorer.run({
   input: [{
     role: 'user',
-    content: 'エラーハンドリング付きで階乗を計算する Python 関数を書いてください'
+    content: 'エラー処理を含む階乗計算のPython関数を作成してください'
   }],
   output: {
     role: 'assistant', 
     text: `def factorial(n):
     if n < 0:
-        raise ValueError("Factorial not defined for negative numbers")
+        raise ValueError("負の数に対して階乗は定義されていません")
     if n == 0:
         return 1
     return n * factorial(n-1)`
   }
 });
-// 結果: { score: 0.95, reason: "整合性は非常に高い — 関数は意図を満たしており、エラーハンドリングも含まれています..." }
+// 結果: { score: 0.95, reason: "優れた整合性 - 関数は意図に対応し、エラー処理を含んでいます..." }
 ```
 
-### カスタム設定例
+
+### カスタム構成の例
 
 ```typescript
 // スケールと評価モードを設定
 const scorer = createPromptAlignmentScorerLLM({
   model: 'openai/gpt-4o',
   options: {
-    scale: 10, // スコアを 0–1 ではなく 0–10 に設定
-    evaluationMode: 'both' // 'user'、'system'、または 'both'（デフォルト）
+    scale: 10, // 0-1ではなく0-10でスコア付け
+    evaluationMode: 'both' // 'user'、'system'、または'both'(デフォルト)
   },
 });
 
-// ユーザーのみの評価 — ユーザー満足度を重視
+// ユーザーのみの評価 - ユーザー満足度を重視
 const userScorer = createPromptAlignmentScorerLLM({
   model: 'openai/gpt-4o',
   options: { evaluationMode: 'user' }
 });
 
-// システムのみの評価 — コンプライアンスを重視
+// システムのみの評価 - 準拠性を重視
 const systemScorer = createPromptAlignmentScorerLLM({
   model: 'openai/gpt-4o',
   options: { evaluationMode: 'system' }
 });
 
 const result = await scorer.run(testRun);
-// 結果: { score: 8.5, reason: "スコア: 10 点満点中 8.5 — ユーザーの意図とシステムガイドラインの両方に良好に整合..." }
+// 結果: { score: 8.5, reason: "スコア: 10点満点中8.5点 - ユーザーの意図とシステムガイドラインの両方に良好に整合..." }
 ```
 
-### 形式特化の評価
+
+### フォーマット別評価
 
 ```typescript
-// 箇条書きの形式を評価
+// 箇条書きの形式を評価する
 const result = await scorer.run({
   input: [{
     role: 'user',
@@ -234,153 +406,250 @@ const result = await scorer.run({
   }],
   output: {
     role: 'assistant',
-    text: 'TypeScript provides static typing, better IDE support, and enhanced code reliability.'
+    text: 'TypeScript は静的型付け、優れた IDE サポート、コードの信頼性向上などの利点があります。'
   }
 });
-// 結果: 形式の不一致（段落 vs. 箇条書き）により適合度スコアが低下
+// 結果: 形式の不一致（段落 vs 箇条書き）により適合度スコアが低下する
 ```
 
 
+### 優れた整合の例
 
-## 使用パターン
+この例では、レスポンスがユーザーのプロンプトに完全に応え、すべての要件を満たしています。
 
-### コード生成の評価
-次の用途に最適:
-- プログラミングタスクの達成度
-- コードの品質と網羅性
-- コーディング要件の遵守
-- 形式仕様（関数、クラスなど）
+```typescript filename="src/example-excellent-prompt-alignment.ts" showLineNumbers copy
+import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
 
-```typescript
-// 例: API エンドポイントの作成
-const codePrompt = "Create a REST API endpoint with authentication and rate limiting";
-// Scorer が評価する項目: 意図（API 作成）、要件（認証 + レート制限）、 
-// 網羅性（完全な実装）、形式（コード構造）
-```
-
-### 指示遵守の評価
-次の用途に最適:
-- タスク完了の確認
-- 複数手順の指示の遵守
-- 要件適合性のチェック
-- 教育コンテンツの評価
-
-```typescript
-// 例: 複数要件のタスク
-const taskPrompt = "Write a Python class with initialization, validation, error handling, and documentation";
-// Scorer は各要件を個別に追跡し、詳細な内訳を提示
-```
-
-### コンテンツ形式の検証
-次の用途に有用:
-- 形式仕様の遵守
-- スタイルガイドの順守
-- 出力構造の検証
-- 応答の適切性の確認
-
-```typescript
-// 例: 構造化された出力
-const formatPrompt = "Explain the differences between let and const in JavaScript using bullet points";
-// Scorer はコンテンツの正確性と形式の遵守の両方を評価
-```
-
-
-
-## よくあるユースケース
-
-### 1. エージェントの応答品質
-AIエージェントがユーザーの指示にどれだけ従えているかを測定します。
-
-```typescript
-const agent = new Agent({
-  name: 'CodingAssistant',
-  instructions: 'You are a helpful coding assistant. Always provide working code examples.',
-  model: 'openai/gpt-4o',
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: 'openai/gpt-4o-mini' 
 });
 
-// 包括的な整合性を評価（デフォルト）
-const scorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-4o-mini',
-  options: { evaluationMode: 'both' } // ユーザーの意図とシステムのガイドラインの両方を評価
+const inputMessages = [{ 
+  role: 'user', 
+  content: "負の数のエラー処理を含む階乗計算のPython関数を書いてください" 
+}];
+
+const outputMessage = { 
+  text: `def factorial(n):
+    """数値の階乗を計算します。"""
+    if n < 0:
+        raise ValueError("負の数に対して階乗は定義されていません")
+    if n == 0 or n == 1:
+        return 1
+    return n * factorial(n - 1)` 
+};
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
 });
 
-// ユーザー満足度のみを評価
-const userScorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-4o-mini',
-  options: { evaluationMode: 'user' } // ユーザー要求の充足にのみ焦点を当てる
-});
-
-// システム順守を評価
-const systemScorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-4o-mini',
-  options: { evaluationMode: 'system' } // システム指示への順守を確認
-});
-
-const result = await scorer.run(agentRun);
+console.log(result);
 ```
 
-### 2. プロンプトエンジニアリングの最適化
-アライメント向上のために異なるプロンプトをテストします。
+
+### 優れた整合出力
+
+この出力は、意図を的確に捉え、すべての要件を満たし、適切な形式で表現されているため、高い評価を得ます。
 
 ```typescript
-const prompts = [
-  'Write a function to calculate factorial',
-  'Create a Python function that calculates factorial with error handling for negative inputs',
-  'Implement a factorial calculator in Python with: input validation, error handling, and docstring'
-];
-
-// アライメントスコアを比較して最適なプロンプトを見つける
-for (const prompt of prompts) {
-  const result = await scorer.run(createTestRun(prompt, response));
-  console.log(`Prompt alignment: ${result.score}`);
+{
+  score: 0.95,
+  reason: 'スコアが0.95である理由は、階乗関数を作成するという主要な目的に完全に対応し、Python実装、負の数に対するエラー処理、適切なドキュメントを含むすべての要件を満たしているためです。コード形式は適切で、実装は完全です。'
 }
 ```
 
-### 3. マルチエージェントシステムの評価
-異なるエージェントやモデルを比較します。
+
+### 部分的な整合の例
+
+この例では、応答は核心の意図には対処しているものの、いくつかの要件を満たしていなかったり、形式に問題があります。
+
+```typescript filename="src/example-partial-prompt-alignment.ts" showLineNumbers copy
+import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
+
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: 'openai/gpt-4o-mini' 
+});
+
+const inputMessages = [{ 
+  role: 'user', 
+  content: "TypeScriptの利点を箇条書きで列挙してください" 
+}];
+
+const outputMessage = { 
+  text: "TypeScriptは静的型付け、優れたIDEサポート、およびコンパイル時のエラーチェックによる強化されたコード信頼性を提供します。"
+};
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+
+#### 部分的アラインメントの出力
+
+内容自体は正確ですが、要求された形式（箇条書き）に従っていないため、出力のスコアは低くなります。
 
 ```typescript
-const agents = [agent1, agent2, agent3];
-const testPrompts = [...]; // テスト用プロンプトの配列
+{
+  score: 0.75,
+  reason: 'スコアが0.75なのは、回答がTypeScriptの利点を説明するという意図に応えており、正確な情報を提供しているものの、要求された箇条書き形式を使用していないため、適切性の評価が低くなっているためです。'
+}
+```
 
-for (const agent of agents) {
-  let totalScore = 0;
-  for (const prompt of testPrompts) {
-    const response = await agent.run(prompt);
-    const evaluation = await scorer.run({ input: prompt, output: response });
-    totalScore += evaluation.score;
+
+### 不適切なアラインメントの例
+
+この例では、回答がユーザーの具体的な要件に応えていません。
+
+```typescript filename="src/example-poor-prompt-alignment.ts" showLineNumbers copy
+import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
+
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: 'openai/gpt-4o-mini' 
+});
+
+const inputMessages = [{ 
+  role: 'user', 
+  content: "初期化、バリデーション、エラーハンドリング、ドキュメントを含むPythonクラスを作成してください"
+}];
+
+const outputMessage = { 
+  text: `class Example:
+    def __init__(self, value):
+        self.value = value` 
+};
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+
+### アラインメントが不十分な出力
+
+この出力は要件を一部しか満たしておらず、検証やエラー処理、ドキュメントが不足しているため、評価が低くなっています。
+
+```typescript
+{
+  score: 0.35,
+  reason: 'スコアが0.35である理由は、レスポンスが初期化を含むPythonクラスの作成という基本的な要件には対応しているものの、明示的に要求されていた検証、エラー処理、ドキュメントが含まれていないため、要件を完全には満たしていないからです。'
+}
+```
+
+
+### 評価モードのサンプル
+
+#### ユーザーモード - ユーザープロンプトのみに注目
+
+システムの指示は無視し、応答がユーザーの依頼にどれだけ適切に応えているかを評価します：
+
+```typescript filename="src/example-user-mode.ts" showLineNumbers copy
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: 'openai/gpt-4o-mini',
+  options: { evaluationMode: 'user' }
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [{ 
+      role: 'user', 
+      content: "再帰を例を使って説明してください" 
+    }],
+    systemMessages: [{ 
+      role: 'system', 
+      content: "常にPythonのコード例を提供してください" 
+    }]
+  },
+  output: { 
+    text: "再帰とは、関数が自分自身を呼び出すことです。例: factorial(5) = 5 * factorial(4)" 
   }
-  console.log(`${agent.name} average alignment: ${totalScore / testPrompts.length}`);
-}
-```
-
-
-
-## エラーハンドリング
-
-スコアラーはさまざまなエッジケースを適切に処理します。
-
-```typescript
-// ユーザーのプロンプトが欠落
-try {
-  await scorer.run({ input: [], output: response });
-} catch (error) {
-  // エラー: "プロンプト整合性のスコアリングにはユーザーのプロンプトとエージェントの応答の両方が必要です"
-}
-
-// 空の応答
-const result = await scorer.run({ 
-  input: [userMessage], 
-  output: { role: 'assistant', text: '' } 
 });
-// 不完全性に関する詳細な説明とともに低いスコアを返します
+// Pythonコードがなくても、ユーザーのリクエストに対応しているため高スコアを獲得
 ```
 
 
+#### システムモード - システムガイドラインのみに集中
+
+システムの行動ガイドラインおよび制約への準拠を評価します:
+
+```typescript filename="src/example-system-mode.ts" showLineNumbers copy
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: 'openai/gpt-4o-mini',
+  options: { evaluationMode: 'system' }
+});
+
+const result = await scorer.run({
+  input: {
+    systemMessages: [{ 
+      role: 'system', 
+      content: "あなたは親切なアシスタントです。常に丁寧で簡潔に、例を示してください。" 
+    }],
+    inputMessages: [{ 
+      role: 'user', 
+      content: "機械学習とは何ですか?" 
+    }]
+  },
+  output: { 
+    text: "機械学習はAIの一分野で、コンピュータがデータから学習する技術です。例えば、スパムフィルタは過去にスパムとしてマークされたメールのパターンを分析することで、不要なメールを識別できるようになります。" 
+  }
+});
+// 丁寧さ、簡潔さ、例の提示を評価します
+```
+
+
+#### 両方モード - 統合評価（デフォルト）
+
+ユーザーの意図の達成度とシステムの順守状況の両方を、加重スコア（ユーザー70%、システム30%）で評価します：
+
+```typescript filename="src/example-both-mode.ts" showLineNumbers copy
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: 'openai/gpt-4o-mini',
+  options: { evaluationMode: 'both' } // This is the default
+});
+
+const result = await scorer.run({
+  input: {
+    systemMessages: [{ 
+      role: 'system', 
+      content: "プログラミングの概念を説明する際は、必ずコード例を提供すること" 
+    }],
+    inputMessages: [{ 
+      role: 'user', 
+      content: "文字列を反転する方法を教えてください" 
+    }]
+  },
+  output: { 
+    text: `文字列を反転するには、後ろから順に処理します。以下はPythonの例です:
+    
+    def reverse_string(s):
+        return s[::-1]
+    
+    # 使用例: reverse_string("hello") は "olleh" を返します` 
+  }
+});
+// ユーザーのリクエストへの対応とシステムガイドラインの遵守の両方で高スコアを獲得
+```
+
+
+## 他のスコアラーとの比較
+
+| 側面 | Prompt Alignment | Answer Relevancy | Faithfulness |
+|--------|------------------|------------------|--------------|
+| **焦点** | 多面的なプロンプト遵守 | クエリと回答の関連性 | コンテキストへの根拠づけ |
+| **評価** | 意図・要件・網羅性・形式 | クエリとの意味的類似度 | コンテキストとの事実整合性 |
+| **ユースケース** | 一般的なプロンプト追従 | 情報検索 | RAG／コンテキストベースのシステム |
+| **次元** | 重み付きの4次元 | 単一の関連性次元 | 単一の忠実性次元 |
 
 ## 関連
 
-- [Answer Relevancy Scorer](/reference/scorers/answer-relevancy) - クエリと応答の関連性を評価
-- [Faithfulness Scorer](/reference/scorers/faithfulness) - コンテキストへの忠実さを測定
-- [Tool Call Accuracy Scorer](/reference/scorers/tool-call-accuracy) - ツール選択の適切さを評価
+- [Answer Relevancy Scorer](/reference/scorers/answer-relevancy) - クエリと回答の関連性を評価
+- [Faithfulness Scorer](/reference/scorers/faithfulness) - コンテキストへの忠実性を評価
+- [Tool Call Accuracy Scorer](/reference/scorers/tool-call-accuracy) - ツール選択の正確さを評価
 - [Custom Scorers](/docs/scorers/custom-scorers) - 独自の評価指標を作成

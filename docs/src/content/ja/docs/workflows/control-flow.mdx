@@ -1,18 +1,18 @@
 ---
-title: "分岐、マージ、条件 | Workflows | Mastra ドキュメント"
-description: "Mastra のワークフローにおける制御フローでは、分岐、マージ、条件を管理し、要件に合ったロジックのワークフローを構築できます。"
+title: "分岐・マージ・条件 | Workflows | Mastra ドキュメント"
+description: "Mastra のワークフローの制御フローを使うと、分岐やマージ、条件を管理して、要件に合ったロジックのワークフローを構築できます。"
 ---
 
 # 制御フロー
 
-ワークフローを構築する際は、通常、処理を再利用可能な小さなタスクに分解してつなげます。**ステップ**は、入力・出力・実行ロジックを定義し、これらのタスクを体系的に管理するための枠組みを提供します。
+ワークフローを構築する際は、通常、処理を小さなタスクに分割し、それらを連結して再利用します。**Steps** は、入力・出力・実行ロジックを定義することで、これらのタスクを体系的に管理するための仕組みを提供します。
 
 - スキーマが一致する場合、各ステップの `outputSchema` は自動的に次のステップの `inputSchema` に渡されます。
-- スキーマが一致しない場合は、[Input data mapping](./input-data-mapping.mdx) を使用して、`outputSchema` を想定される `inputSchema` に変換します。
+- スキーマが一致しない場合は、[Input data mapping](./input-data-mapping.mdx) を使用して、`outputSchema` を期待される `inputSchema` に変換します。
 
 ## `.then()` を使ったステップのチェーン
 
-`.then()` を使ってステップをチェーンし、順番に実行します：
+`.then()` を使ってステップを順番に実行するようにチェーンします:
 
 ![.then() を使ったステップのチェーン](/image/workflows/workflows-control-flow-then.jpg)
 
@@ -29,13 +29,14 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-これは想定どおりに動作します。`step1` を実行し、続いて `step2` を実行します。
+これは期待どおりに動作します。まず `step1` を実行し、続いて `step2` を実行します。
 
-## `.parallel()` を使った並列ステップ
 
-`.parallel()` を使ってステップを並列実行します：
+## `.parallel()` を使った同時実行ステップ
 
-![.parallel() を使った並列ステップ](/image/workflows/workflows-control-flow-parallel.jpg)
+`.parallel()` を使ってステップを同時に実行します:
+
+![.parallel() による同時実行ステップ](/image/workflows/workflows-control-flow-parallel.jpg)
 
 ```typescript {9,4-5} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -51,15 +52,16 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-`step1` と `step2` を並行して実行し、両方の完了後に `step3` に進みます。
+`step1` と `step2` を同時に実行し、両方が完了したら `step3` に進みます。
 
-> 詳しくは [Parallel Execution with Steps](../../examples/workflows/parallel-steps.mdx) をご覧ください。
+> 詳細は [Parallel Execution with Steps](../../examples/workflows/parallel-steps.mdx) を参照してください。
 
-> 📹 視聴: ステップを並列実行して Mastra ワークフローを最適化する方法 → [YouTube（3分）](https://youtu.be/GQJxve5Hki4)
+> 📹 視聴: ステップを並列実行して Mastra のワークフローを最適化する方法 → [YouTube（3分）](https://youtu.be/GQJxve5Hki4)
 
-## `.branch()` を使った条件分岐ロジック
 
-`.branch()` を使って条件付きでステップを実行します：
+## `.branch()` を使った条件分岐
+
+`.branch()` を用いて条件に応じてステップを実行します:
 
 ![.branch() による条件分岐](/image/workflows/workflows-control-flow-branch.jpg)
 
@@ -78,24 +80,25 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-分岐条件は順に評価されますが、条件に一致したステップは並行して実行されます。
+分岐条件は順番に評価されますが、条件に一致したステップは並行して実行されます。
 
 > 詳細は [Workflow with Conditional Branching](../../examples/workflows/conditional-branching.mdx) を参照してください。
 
-## ループ処理のステップ
 
-Workflows は2種類のループをサポートします。ステップやネストされたワークフローなど、ステップ互換の構成要素をループさせる場合、初期の `inputData` は前のステップの出力から供給されます。
+## ステップのループ処理
 
-互換性を確保するため、ループの初期入力は前のステップの出力の構造と一致しているか、`map` 関数を使って明示的に変換されている必要があります。
+Workflows は 2 種類のループをサポートします。ステップや、ネストされた workflow のようなステップ互換の構成要素をループさせる場合、初期の `inputData` は前のステップの出力から供給されます。
 
-- 前のステップの出力の構造と一致させる、または
-- `map` 関数を使って明示的に変換する。
+互換性を保つために、ループの初期入力は前のステップの出力の形に一致しているか、`map` 関数で明示的に変換されている必要があります。
 
-### `.dowhile()` で繰り返す
+- 前のステップの出力の形に一致させる、または
+- `map` 関数で明示的に変換する。
 
-条件が真のあいだ、ステップを繰り返し実行します。
+### `.dowhile()` での繰り返し
 
-![`.dowhile()` で繰り返す](/image/workflows/workflows-control-flow-dowhile.jpg)
+条件が true の間、ステップを繰り返し実行します。
+
+![.dowhile() での繰り返し](/image/workflows/workflows-control-flow-dowhile.jpg)
 
 ```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -108,11 +111,12 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-### `.dountil()` を使った繰り返し
+
+### `.dountil()` による繰り返し
 
 条件が真になるまでステップを繰り返し実行します。
 
-![`.dountil()` を使った繰り返し](/image/workflows/workflows-control-flow-dountil.jpg)
+![.dountil() による繰り返し](/image/workflows/workflows-control-flow-dountil.jpg)
 
 ```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -125,11 +129,69 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-### `.foreach()` による繰り返し
 
-`inputSchema` の各アイテムに対して、同じステップを順に実行します。
+### ループ管理
 
-![.foreach() による繰り返し](/image/workflows/workflows-control-flow-foreach.jpg)
+ループの終了方法に応じて、ループ条件はさまざまに実装できます。一般的なパターンとしては、`inputData` で返される値のチェック、反復回数の上限設定、上限に達した際の実行中止などがあります。
+
+#### 条件付きループ
+
+ループステップの `inputData` は前のステップの出力です。`inputData` の値を使って、ループを継続するか停止するかを判断します。
+
+```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const counterStep = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+.dountil(nestedWorkflowStep, async ({ inputData: { userResponse } }) => userResponse === "yes")
+.commit();
+```
+
+
+#### ループの制限
+
+`iterationCount` は、ループステップが何回実行されたかを追跡します。これを使って反復回数を制限し、無限ループを防げます。`inputData` の値と組み合わせて、指定した回数に達したらループを停止します。
+
+```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const counterStep = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+.dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => userResponse === "yes" || iterationCount >= 10)
+.commit();
+```
+
+
+#### ループの中断
+
+`iterationCount` を使用して、ループの実行回数に上限を設けます。回数がしきい値を超えた場合は、エラーをスローしてステップを失敗させ、ワークフローを停止します。
+
+```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const counterStep = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+.dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => {
+  if (iterationCount >= 10) {
+    throw new Error("最大繰り返し回数に達しました");
+  }
+  return userResponse === "yes";
+})
+.commit();
+```
+
+
+### `.foreach()` での繰り返し
+
+`inputSchema` の各項目に対して、同じステップを順に実行します。
+
+![.foreach() での繰り返し](/image/workflows/workflows-control-flow-foreach.jpg)
 
 ```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -142,9 +204,10 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-#### 同時実行の上限を設定する
 
-`concurrency` を使うと、同時に実行する数の上限を指定しつつ、ステップを並列で実行できます。
+#### 同時実行数の制限を設定する
+
+`concurrency` を使うと、同時実行数の上限を設けてステップを並列実行できます。
 
 ```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -157,9 +220,10 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-## ネストされたワークフローを使う
 
-`.then()` に渡して、ステップとしてネストされたワークフローを使用します。これにより、その各ステップが親ワークフローの一部として順番に実行されます。
+## ネストしたワークフローの使用
+
+`.then()` に渡して、ステップとしてネストしたワークフローを使用します。これにより、親ワークフローの一部として、その各ステップが順番に実行されます。
 
 ```typescript {4,7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -172,9 +236,10 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-## ワークフローのクローン作成
 
-既存のワークフローを複製するには `cloneWorkflow` を使用します。これにより、`id` などのパラメータを上書きしながら、その構造を再利用できます。
+## ワークフローのクローン
+
+既存のワークフローを複製するには `cloneWorkflow` を使用します。これにより、`id` などのパラメーターを上書きしつつ、その構造を再利用できます。
 
 ```typescript {6,10} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep, cloneWorkflow } from "@mastra/core/workflows";
@@ -190,9 +255,10 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
+
 ## 実行インスタンスの例
 
-次の例は、複数の入力で実行を開始する方法を示します。各入力は `mapStep` を順番に通過します。
+次の例では、複数の入力で実行を開始する方法を示します。各入力は `mapStep` を順に通過します。
 
 ```typescript {6} filename="src/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
@@ -204,7 +270,7 @@ const result = await run.start({
 });
 ```
 
-この実行をターミナルから実行するには:
+ターミナルで次のコマンドを実行します：
 
 ```bash copy
 npx tsx src/test-workflow.ts
