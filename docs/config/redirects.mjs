@@ -1358,4 +1358,9 @@ export const redirectList = [
     destination: "/:locale/docs/getting-started/studio",
     permanent: true,
   },
+  {
+    source: "/:locale/docs/workflows/inngest-workflow",
+    destination: "/:locale/docs/workflows/third-party-workflows",
+    permanent: true,
+  },
 ];
