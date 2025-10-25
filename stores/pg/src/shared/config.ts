@@ -11,6 +11,7 @@ export type PostgresConfig<SSLType = ISSLConfig | ConnectionOptions> = {
   schemaName?: string;
   max?: number;
   idleTimeoutMillis?: number;
+  tableMap?: Partial<Record<string, string>>;
 } & (
   | {
       host: string;
