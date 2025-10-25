@@ -477,14 +477,16 @@ export class StoreOperationsMSSQL extends StoreOperations {
     tableName,
     keys,
     data,
+    transaction,
   }: {
     tableName: TABLE_NAMES;
     keys: Record<string, any>;
     data: Record<string, any>;
+    transaction?: sql.Transaction;
   }): Promise<void> {
     try {
       const setClauses: string[] = [];
-      const request = this.pool.request();
+      const request = transaction ? transaction.request() : this.pool.request();
       let paramIndex = 0;
 
       // Build SET clause
@@ -544,9 +546,11 @@ export class StoreOperationsMSSQL extends StoreOperations {
     const transaction = this.pool.transaction();
     try {
       await transaction.begin();
+
       for (const { keys, data } of updates) {
-        await this.update({ tableName, keys, data });
+        await this.update({ tableName, keys, data, transaction });
       }
+
       await transaction.commit();
     } catch (error) {
       await transaction.rollback();
