@@ -355,11 +355,17 @@ class WorkflowMonitor {
 
 ---
 
-## Recommendation
+## Updated Recommendation (Based on Step-Mode Analysis)
 
-**Do not build a traditional execution engine adapter** like the Inngest integration. The architectural differences are too fundamental.
+**The initial assessment was incorrect!** After examining the SWC transformation output, **integration IS feasible** using step-mode compilation.
 
-### Recommended Approach: Side-by-Side + Documentation
+### Recommended Approach: Step-Mode Adapter
+
+Build an adapter that uses Workflow's step-mode compiled output with Mastra's orchestration. See the detailed implementation guide in `WORKFLOW_STEP_MODE_INTEGRATION.md` and the proof-of-concept in `workflow-adapter/`.
+
+**Key insight**: In step mode, the SWC plugin preserves function bodies as plain async functions. We can import and wrap these as Mastra steps without any Workflow runtime dependencies.
+
+### Alternative Approach: Side-by-Side (If Step-Mode Not Desired)
 
 1. **Document clear use cases** for each system:
    - **Workflow DevKit**: Function-level durability, AI agents, long-running API calls

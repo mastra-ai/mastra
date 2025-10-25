@@ -1,0 +1,18 @@
+{
+  "name": "@mastra/workflow-adapter",
+  "version": "0.1.0",
+  "description": "Adapter to use Workflow step-mode compiled functions in Mastra workflows",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "compile-steps": "swc workflows --plugin @workflow/swc-plugin-workflow={\"mode\":\"step\"} --out-dir .compiled"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=0.22.2-0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "devDependencies": {
+    "@swc/core": "^1.4.0",
+    "@workflow/swc-plugin-workflow": "latest"
+  }
+}
