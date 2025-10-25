@@ -51,6 +51,34 @@ const response = await agent.generate({
 });
 ```
 
+#### Model settings
+
+Control the behavior of the model for individual requests by passing model settings:
+
+```typescript
+const response = await agent.generate({
+  messages: "Write a creative story about space",
+  modelSettings: {
+    temperature: 0.9,      // Higher temperature for more creative responses
+    topP: 0.95,            // Nucleus sampling
+    maxTokens: 2000,       // Maximum tokens to generate
+    frequencyPenalty: 0.5, // Reduce repetition
+    presencePenalty: 0.3,  // Encourage topic diversity
+  }
+});
+```
+
+Available model settings:
+
+| Setting | Type | Range | Description |
+|---------|------|-------|-------------|
+| `temperature` | `number` | 0-2 | Controls randomness. Lower = more focused, higher = more creative |
+| `topP` | `number` | 0-1 | Nucleus sampling. Lower = more focused, higher = more diverse |
+| `maxTokens` | `number` | - | Maximum tokens to generate |
+| `frequencyPenalty` | `number` | -2 to 2 | Reduce repetition based on frequency |
+| `presencePenalty` | `number` | -2 to 2 | Encourage new topics |
+| `seed` | `number` | - | For deterministic sampling |
+
 ### Stream Response
 
 Stream responses from the agent for real-time interactions:
@@ -80,6 +108,27 @@ while (true) {
   if (done) break;
   console.log(new TextDecoder().decode(value));
 }
+```
+
+#### Model settings for streaming
+
+Control model behavior while streaming responses:
+
+```typescript
+const response = await agent.stream({
+  messages: "Tell me a long, creative story",
+  modelSettings: {
+    temperature: 0.8,
+    topP: 0.9,
+    maxTokens: 3000,
+  }
+});
+
+response.processDataStream({
+  onTextPart: (text) => {
+    process.stdout.write(text);
+  },
+});
 ```
 
 ### Client tools

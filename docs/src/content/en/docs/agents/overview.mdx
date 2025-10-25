@@ -134,6 +134,106 @@ instructions: {
 
 > See the [Agent reference doc](../../reference/agents/agent.mdx) for more information.
 
+#### Model settings
+
+Control the behavior of your agent's model by configuring parameters like `temperature`, `topP`, `maxTokens`, and more. These settings can be defined as defaults when creating the agent, ensuring consistent behavior across all invocations.
+
+##### Static configuration
+
+Set default model settings that apply to all agent calls:
+
+```typescript copy
+import { Agent } from "@mastra/core/agent";
+
+export const creativeAgent = new Agent({
+  name: "creative-agent",
+  instructions: "You are a creative writing assistant.",
+  model: "openai/gpt-4o",
+  
+  // For generate() and stream() methods (AI SDK v5)
+  defaultVNextStreamOptions: {
+    modelSettings: {
+      temperature: 0.9,        // Higher temperature for more creative responses
+      topP: 0.95,              // Nucleus sampling parameter
+      maxTokens: 2000,         // Maximum tokens in response
+      frequencyPenalty: 0.5,   // Reduce repetition
+      presencePenalty: 0.3,    // Encourage topic diversity
+    }
+  }
+});
+```
+
+For legacy methods (`generateLegacy()` and `streamLegacy()` using AI SDK v4):
+
+```typescript copy
+export const preciseAgent = new Agent({
+  name: "precise-agent",
+  instructions: "You are a precise and factual assistant.",
+  model: "openai/gpt-4o",
+  
+  // For generateLegacy() method
+  defaultGenerateOptions: {
+    temperature: 0.3,
+    topP: 0.8,
+    maxTokens: 1000,
+  },
+  
+  // For streamLegacy() method
+  defaultStreamOptions: {
+    temperature: 0.3,
+    topP: 0.8,
+    maxTokens: 1000,
+  }
+});
+```
+
+##### Dynamic configuration
+
+Adjust model settings based on runtime context for more flexible behavior:
+
+```typescript copy
+export const adaptiveAgent = new Agent({
+  name: "adaptive-agent",
+  instructions: "You are an adaptive assistant.",
+  model: "openai/gpt-4o",
+  
+  defaultVNextStreamOptions: ({ runtimeContext }) => {
+    const mode = runtimeContext.get("mode");
+    
+    // Different settings based on user preference
+    const settings = {
+      creative: { temperature: 0.9, topP: 0.95, maxTokens: 2000 },
+      balanced: { temperature: 0.7, topP: 0.9, maxTokens: 1500 },
+      precise: { temperature: 0.3, topP: 0.8, maxTokens: 1000 },
+    };
+    
+    return {
+      modelSettings: settings[mode] || settings.balanced
+    };
+  }
+});
+
+// Usage with runtime context
+const response = await adaptiveAgent.generate("Write a story", {
+  runtimeContext: new RuntimeContext({ mode: "creative" })
+});
+```
+
+##### Available model settings
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `temperature` | `number` | Controls randomness (0-2). Lower values make output more focused and deterministic, higher values make it more creative and varied. |
+| `topP` | `number` | Nucleus sampling parameter (0-1). Controls diversity by only sampling from tokens whose cumulative probability is above this threshold. |
+| `maxTokens` | `number` | Maximum number of tokens to generate in the response. |
+| `frequencyPenalty` | `number` | Penalizes tokens based on their frequency in the text so far (−2 to 2). Reduces repetition. |
+| `presencePenalty` | `number` | Penalizes tokens based on whether they appear in the text so far (−2 to 2). Encourages new topics. |
+| `seed` | `number` | Random seed for deterministic sampling. Using the same seed should produce similar outputs. |
+
+<Callout type="info">
+  Model settings defined in `defaultVNextStreamOptions`, `defaultGenerateOptions`, or `defaultStreamOptions` are applied automatically to every agent call. You can still override these on individual calls if needed.
+</Callout>
+
 ### Registering an agent
 
 Register your agent in the Mastra instance to make it available throughout your application. Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features:
