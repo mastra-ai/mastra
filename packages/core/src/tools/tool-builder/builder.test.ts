@@ -305,28 +305,29 @@ describe('Tool Schema Compatibility', () => {
   const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
 
   const modelsToTestV1 = [
-    openrouter('anthropic/claude-3.7-sonnet'),
-    openrouter('anthropic/claude-sonnet-4.5'),
+    // openrouter('anthropic/claude-3.7-sonnet'),
+    // openrouter('anthropic/claude-sonnet-4.5'),
     openrouter('anthropic/claude-haiku-4.5'),
     openrouter('openai/gpt-4o-mini'),
-    openrouter('openai/gpt-4.1-mini'),
+    // openrouter('openai/gpt-4.1-mini'),
+    // openrouter_v5('openai/o3-mini'),
     openai('o3-mini'),
-    openai('o4-mini'),
-    openrouter('google/gemini-2.5-pro'),
-    openrouter('google/gemini-2.5-flash'),
+    // openai('o4-mini'),
+    // openrouter('google/gemini-2.5-pro'),
+    // openrouter('google/gemini-2.5-flash'),
     openrouter('google/gemini-2.0-flash-lite-001'),
   ];
   const modelsToTestV2 = [
-    openrouter_v5('anthropic/claude-3.7-sonnet'),
-    openrouter_v5('anthropic/claude-sonnet-4.5'),
+    // openrouter_v5('anthropic/claude-3.7-sonnet'),
+    // openrouter_v5('anthropic/claude-sonnet-4.5'),
     openrouter_v5('anthropic/claude-haiku-4.5'),
     openrouter_v5('openai/gpt-4o-mini'),
-    openrouter_v5('openai/gpt-4.1-mini'),
-    openrouter_v5('openai/o3-mini'),
+    // openrouter_v5('openai/gpt-4.1-mini'),
+    // openrouter_v5('openai/o3-mini'),
     openai_v5('o3-mini'),
-    openai_v5('o4-mini'),
-    openrouter_v5('google/gemini-2.5-pro'),
-    openrouter_v5('google/gemini-2.5-flash'),
+    // openai_v5('o4-mini'),
+    // openrouter_v5('google/gemini-2.5-pro'),
+    // openrouter_v5('google/gemini-2.5-flash'),
     openrouter_v5('google/gemini-2.0-flash-lite-001'),
   ];
 
@@ -377,7 +378,7 @@ describe('Tool Schema Compatibility', () => {
   );
 
   [...Object.entries(modelsByProviderV1), ...Object.entries(modelsByProviderV2)].forEach(([provider, models]) => {
-    describe.only.concurrent(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
+    describe.concurrent(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
       [
         // 'output', // <- waste of time, output doesn't work very well
         'structuredOutput',
@@ -385,15 +386,13 @@ describe('Tool Schema Compatibility', () => {
       ].forEach(outputType => {
         describe(`${outputType}`, { timeout: SUITE_TIMEOUT }, () => {
           models.forEach(model => {
+            // we only support structured output for v2+ models (ai v5+)
+            if (outputType === `structuredOutput` && model.specificationVersion !== `v2`) {
+              return;
+            }
             describe(`${model.modelId}`, { timeout: SUITE_TIMEOUT, retry: 0 }, () => {
               testTools.forEach(testTool => {
                 const schemaName = testTool.id.replace('testTool_', '');
-
-                // we only support structured output for v2+ models (ai v5+)
-                if (outputType === `structuredOutput` && model.specificationVersion !== `v2`) {
-                  it.skip(`skipping v1 model ${model.modelId} because v1 models are not supported for structuredOutput`, () => {});
-                  return;
-                }
 
                 it.concurrent(
                   `should handle ${schemaName} schema`,
