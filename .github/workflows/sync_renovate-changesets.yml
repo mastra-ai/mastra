@@ -51,7 +51,7 @@ jobs:
           fi
 
       - name: Create/Update Changesets
-        uses: 'wardpeet/changesets-dependencies-action@1ac684b9885a8e9bb1d24f09fd2c253b36b3700d'
+        uses: 'wardpeet/changesets-dependencies-action@f11b16181c79e07d62b112c2f32c9db534a9df09'
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
           SKIP_CREDENTIALS: '1'
