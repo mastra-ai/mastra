@@ -127,13 +127,21 @@ export class StoreOperationsMSSQL extends StoreOperations {
     await this.setupSchemaPromise;
   }
 
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+  async insert({
+    tableName,
+    record,
+    transaction,
+  }: {
+    tableName: TABLE_NAMES;
+    record: Record<string, any>;
+    transaction?: sql.Transaction;
+  }): Promise<void> {
     try {
       const columns = Object.keys(record);
       const parsedColumns = columns.map(col => parseSqlIdentifier(col, 'column name'));
       const paramNames = columns.map((_, i) => `@param${i}`);
       const insertSql = `INSERT INTO ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} (${parsedColumns.map(c => `[${c}]`).join(', ')}) VALUES (${paramNames.join(', ')})`;
-      const request = this.pool.request();
+      const request = transaction ? transaction.request() : this.pool.request();
 
       columns.forEach((col, i) => {
         const value = record[col];
@@ -397,7 +405,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
     try {
       await transaction.begin();
       for (const record of records) {
-        await this.insert({ tableName, record });
+        await this.insert({ tableName, record, transaction });
       }
       await transaction.commit();
     } catch (error) {
