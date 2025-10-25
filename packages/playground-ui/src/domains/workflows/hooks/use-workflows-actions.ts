@@ -1,58 +1,10 @@
-import { StreamVNextChunkType, WorkflowWatchResult } from '@mastra/client-js';
+import { StreamVNextChunkType } from '@mastra/client-js';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { WorkflowStreamResult as CoreWorkflowStreamResult } from '@mastra/core/workflows';
 import { useMutation } from '@tanstack/react-query';
 import { useState, useRef, useEffect } from 'react';
-import { useDebouncedCallback } from 'use-debounce';
 import { mapWorkflowStreamChunkToWatchResult, useMastraClient } from '@mastra/react';
 import type { ReadableStreamDefaultReader } from 'stream/web';
-
-export type ExtendedWorkflowWatchResult = WorkflowWatchResult & {
-  sanitizedOutput?: string | null;
-  sanitizedError?: {
-    message: string;
-    stack?: string;
-  } | null;
-};
-
-const sanitizeWorkflowWatchResult = (record: WorkflowWatchResult) => {
-  const formattedResults = Object.entries(record.payload.workflowState.steps || {}).reduce(
-    (acc, [key, value]) => {
-      let output = value.status === 'success' ? value.output : undefined;
-      if (output) {
-        output = Object.entries(output).reduce(
-          (_acc, [_key, _value]) => {
-            const val = _value as { type: string; data: unknown };
-            _acc[_key] = val.type?.toLowerCase() === 'buffer' ? { type: 'Buffer', data: `[...buffered data]` } : val;
-            return _acc;
-          },
-          {} as Record<string, unknown>,
-        );
-      }
-      acc[key] = { ...value, output };
-      return acc;
-    },
-    {} as Record<string, unknown>,
-  );
-  const sanitizedRecord: ExtendedWorkflowWatchResult = {
-    ...record,
-    sanitizedOutput: record
-      ? JSON.stringify(
-          {
-            ...record,
-            payload: {
-              ...record.payload,
-              workflowState: { ...record.payload.workflowState, steps: formattedResults },
-            },
-          },
-          null,
-          2,
-        ).slice(0, 50000) // Limit to 50KB
-      : null,
-  };
-
-  return sanitizedRecord;
-};
 
 export const useExecuteWorkflow = () => {
   const client = useMastraClient();

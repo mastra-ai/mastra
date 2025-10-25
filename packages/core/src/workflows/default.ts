@@ -129,33 +129,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
 
     if (lastOutput.status === 'success') {
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          workflowState: {
-            status: lastOutput.status,
-            steps: stepResults,
-            result: lastOutput.output,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
-
       base.result = lastOutput.output;
     } else if (lastOutput.status === 'failed') {
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          workflowState: {
-            status: lastOutput.status,
-            steps: stepResults,
-            result: null,
-            error: lastOutput.error,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
-
       if (error instanceof Error) {
         base.error = error?.stack ?? error;
       } else if (lastOutput.error) {
@@ -178,19 +153,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         return [];
       });
       base.suspended = suspendedStepIds;
-
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          workflowState: {
-            status: lastOutput.status,
-            steps: stepResults,
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
     }
 
     executionSpan?.end();
@@ -810,27 +772,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     if (!skipEmits) {
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: step.id,
-            ...stepInfo,
-          },
-          workflowState: {
-            status: 'running',
-            steps: {
-              ...stepResults,
-              [step.id]: {
-                ...stepInfo,
-              },
-            },
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
       await emitter.emit('watch-v2', {
         type: 'workflow-step-start',
         payload: {
@@ -1026,31 +967,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     if (!skipEmits) {
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: step.id,
-            ...stepInfo,
-            ...execResults,
-          },
-          workflowState: {
-            status: 'running',
-            steps: {
-              ...stepResults,
-              [step.id]: {
-                ...stepInfo,
-                ...execResults,
-              },
-            },
-
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
-
       if (execResults.status === 'suspended') {
         await emitter.emit('watch-v2', {
           type: 'workflow-step-suspended',
@@ -1783,29 +1699,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       tracingPolicy: this.options?.tracingPolicy,
     });
 
-    await emitter.emit('watch', {
-      type: 'watch',
-      payload: {
-        currentStep: {
-          id: step.id,
-          status: 'running',
-          ...stepInfo,
-        },
-        workflowState: {
-          status: 'running',
-          steps: {
-            ...stepResults,
-            [step.id]: {
-              status: 'running',
-              ...stepInfo,
-            },
-          },
-          result: null,
-          error: null,
-        },
-      },
-      eventTimestamp: Date.now(),
-    });
     await emitter.emit('watch-v2', {
       type: 'workflow-step-start',
       payload: {
@@ -1877,31 +1770,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           const { status, error, suspendPayload, suspendedAt, endedAt, output } = result;
           const execResults = { status, error, suspendPayload, suspendedAt, endedAt, output };
 
-          await emitter.emit('watch', {
-            type: 'watch',
-            payload: {
-              currentStep: {
-                id: step.id,
-                ...stepInfo,
-                ...execResults,
-              },
-              workflowState: {
-                status: 'running',
-                steps: {
-                  ...stepResults,
-                  [step.id]: {
-                    ...stepInfo,
-                    ...execResults,
-                  },
-                },
-
-                result: null,
-                error: null,
-              },
-            },
-            eventTimestamp: Date.now(),
-          });
-
           if (execResults.status === 'suspended') {
             foreachIndexObj[i + resultIndex] = execResults;
           } else {
@@ -1967,35 +1835,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         } as StepSuspended<any, any>;
       }
     }
-
-    await emitter.emit('watch', {
-      type: 'watch',
-      payload: {
-        currentStep: {
-          id: step.id,
-          ...stepInfo,
-          status: 'success',
-          output: results,
-          endedAt: Date.now(),
-        },
-        workflowState: {
-          status: 'running',
-          steps: {
-            ...stepResults,
-            [step.id]: {
-              ...stepInfo,
-              status: 'success',
-              output: results,
-              endedAt: Date.now(),
-            },
-          },
-
-          result: null,
-          error: null,
-        },
-      },
-      eventTimestamp: Date.now(),
-    });
 
     await emitter.emit('watch-v2', {
       type: 'workflow-step-result',
@@ -2327,31 +2166,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     } else if (entry.type === 'sleep') {
       const startedAt = Date.now();
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: entry.id,
-            status: 'waiting',
-            payload: prevOutput,
-            startedAt,
-          },
-          workflowState: {
-            status: 'waiting',
-            steps: {
-              ...stepResults,
-              [entry.id]: {
-                status: 'waiting',
-                payload: prevOutput,
-                startedAt,
-              },
-            },
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
       await emitter.emit('watch-v2', {
         type: 'workflow-step-waiting',
         payload: {
@@ -2409,27 +2223,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
       execResults = { ...stepInfo, status: 'success', output: prevOutput };
       stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: entry.id,
-            ...execResults,
-          },
-          workflowState: {
-            status: 'running',
-            steps: {
-              ...stepResults,
-              [entry.id]: {
-                ...execResults,
-              },
-            },
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
       await emitter.emit('watch-v2', {
         type: 'workflow-step-result',
         payload: {
@@ -2449,31 +2242,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     } else if (entry.type === 'sleepUntil') {
       const startedAt = Date.now();
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: entry.id,
-            status: 'waiting',
-            payload: prevOutput,
-            startedAt,
-          },
-          workflowState: {
-            status: 'waiting',
-            steps: {
-              ...stepResults,
-              [entry.id]: {
-                status: 'waiting',
-                payload: prevOutput,
-                startedAt,
-              },
-            },
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
       await emitter.emit('watch-v2', {
         type: 'workflow-step-waiting',
         payload: {
@@ -2533,27 +2301,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       execResults = { ...stepInfo, status: 'success', output: prevOutput };
       stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
 
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: entry.id,
-            ...execResults,
-          },
-          workflowState: {
-            status: 'running',
-            steps: {
-              ...stepResults,
-              [entry.id]: {
-                ...execResults,
-              },
-            },
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
       await emitter.emit('watch-v2', {
         type: 'workflow-step-result',
         payload: {
@@ -2574,31 +2321,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     } else if (entry.type === 'waitForEvent') {
       const startedAt = Date.now();
       let eventData: any;
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: entry.step.id,
-            status: 'waiting',
-            payload: prevOutput,
-            startedAt,
-          },
-          workflowState: {
-            status: 'waiting',
-            steps: {
-              ...stepResults,
-              [entry.step.id]: {
-                status: 'waiting',
-                payload: prevOutput,
-                startedAt,
-              },
-            },
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
       await emitter.emit('watch-v2', {
         type: 'workflow-step-waiting',
         payload: {
