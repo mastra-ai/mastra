@@ -365,7 +365,11 @@ export class SchemaCompatLayer {
       | { defaultValue?: unknown },
   ): string | undefined {
     if (Object.keys(constraints).length > 0) {
-      return (description ? description + '\n' : '') + JSON.stringify(constraints);
+      return (
+        (description ? description + '\n' : '') +
+        `The following constraint hints should be followed, but these constraints are not a schema shape: ` +
+        JSON.stringify(constraints)
+      );
     } else {
       return description;
     }
@@ -514,12 +518,8 @@ export class SchemaCompatLayer {
                     constraints.cuid = true;
                     break;
                   case 'regex':
-                    constraints.regex = {
-                      // @ts-expect-error - fix later
-                      pattern: check._zod.def.pattern,
-                      // @ts-expect-error - fix later
-                      flags: check._zod.def.flags,
-                    };
+                    // @ts-expect-error - fix later
+                    constraints.regex = `output a single string that follows this pattern: ${check._zod.def.pattern}`;
                     break;
                 }
               }
