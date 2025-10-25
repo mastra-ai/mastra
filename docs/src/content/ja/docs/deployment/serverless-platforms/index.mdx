@@ -1,46 +1,40 @@
 ---
-title: "サーバーレスデプロイメント"
-description: "プラットフォーム固有のデプロイヤーまたは標準HTTPサーバーを使用してMastraアプリケーションをビルドおよびデプロイする"
+title: "サーバーレスへのデプロイ"
+description: "プラットフォーム専用のデプロイヤーまたは標準のHTTPサーバーを使って、Mastraアプリケーションをビルドしてデプロイする"
 ---
 
+# サーバーレスへのデプロイ
 
-
-# サーバーレスデプロイメント
-
-スタンドアロンのMastraアプリケーションは、当社のデプロイヤーパッケージの1つを使用して、人気のサーバーレスプラットフォームにデプロイできます：
+スタンドアロンの Mastra アプリケーションは、以下のデプロイアーのいずれかを使って一般的なサーバーレスプラットフォームにデプロイできます:
 
 - [Cloudflare](/docs/deployment/serverless-platforms/cloudflare-deployer)
 - [Netlify](/docs/deployment/serverless-platforms/netlify-deployer)
 - [Vercel](/docs/deployment/serverless-platforms/vercel-deployer)
 
-Mastraをフレームワークと統合する場合、デプロイヤーは**必要ありません**。詳細については、[Webフレームワーク統合](/docs/deployment/web-framework)を参照してください。
+Mastra をフレームワークに統合する場合は、デプロイアーは必須ではありません。詳しくは [Web Framework Integration](/docs/deployment/web-framework) を参照してください。
 
-セルフホストのNode.jsサーバーデプロイメントについては、[Mastraサーバーの作成](/docs/deployment/server)ガイドを参照してください。
-
-
+セルフホストの Node.js サーバーへのデプロイについては、[Creating A Mastra Server](/docs/deployment/server) ガイドをご覧ください。
 
 ## 前提条件
 
-開始する前に、以下を確認してください：
+始める前に、次のものを用意してください:
 
 - Node.js `v20.0` 以上
-- プラットフォーム固有のデプロイヤーを使用する場合：
+- プラットフォーム固有のデプロイヤーを使用する場合:
   - 選択したプラットフォームのアカウント
-  - 必要なAPIキーまたは認証情報
-
-
+  - 必要な API キーまたは認証情報
 
 ## LibSQLStore
 
-`LibSQLStore`はローカルファイルシステムに書き込みを行いますが、これはサーバーレス環境の一時的な性質により、サーバーレス環境ではサポートされていません。Vercel、Netlify、Cloudflareなどのプラットフォームにデプロイする場合は、`LibSQLStore`の使用を**すべて削除する**必要があります。
+`LibSQLStore` はローカルファイルシステムに書き込みますが、サーバーレス環境はその性質上ストレージが短命なため、これはサポートされていません。Vercel、Netlify、Cloudflare などのプラットフォームにデプロイする場合は、`LibSQLStore` の使用を必ず**すべて削除してください**。
 
-具体的には、`src/mastra/index.ts`と`src/mastra/agents/weather-agent.ts`の両方から削除していることを確認してください：
+具体的には、`src/mastra/index.ts` と `src/mastra/agents/weather-agent.ts` の両方から削除していることを確認してください。
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({ // [!code --]
-    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db // [!code --]
+    // テレメトリや評価などをメモリに保存します。永続化が必要な場合は file:../mastra.db に変更してください // [!code --]
     url: ":memory:", // [!code --]
   })//[!code --]
 });
@@ -51,7 +45,7 @@ export const weatherAgent = new Agent({
  // ..
  memory: new Memory({  // [!code --]
    storage: new LibSQLStore({ // [!code --]
-      url: "file:../mastra.db" // path is relative to the .mastra/output directory // [!code --]
+      url: "file:../mastra.db" // パスは .mastra/output ディレクトリからの相対パス // [!code --]
    }) // [!code --]
  })//  [!code --]
 });

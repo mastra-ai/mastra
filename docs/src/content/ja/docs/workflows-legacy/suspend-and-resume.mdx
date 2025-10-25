@@ -1,36 +1,30 @@
 ---
 title: "ワークフローの一時停止と再開（レガシー） | Human-in-the-Loop | Mastra ドキュメント"
-description: "Mastra のワークフローにおける一時停止と再開機能は、外部からの入力やリソースを待つ間に実行を一時停止することを可能にします。"
+description: "Mastra のワークフローでは、一時停止と再開により、外部からの入力やリソースを待機している間、実行を一時停止できます。"
 ---
 
+# ワークフローにおけるサスペンドと再開（レガシー）
 
+複雑なワークフローは、外部からの入力やリソースを待つ間、実行を一時停止する必要があることがよくあります。
 
-# ワークフローにおけるサスペンドとレジューム（レガシー）
+Mastra のサスペンドと再開機能を使うと、任意のステップでワークフローの実行を一時停止し、ワークフローのスナップショットをストレージに永続化し、準備ができたら保存されたスナップショットから実行を再開できます。
+この一連のプロセスはすべて Mastra によって自動的に管理されます。設定は不要で、ユーザーによる手動操作も要しません。
 
-複雑なワークフローでは、外部からの入力やリソースを待つ間に実行を一時停止する必要がよくあります。
+ワークフローのスナップショットをストレージ（デフォルトでは LibSQL）に保存することで、セッション、デプロイ、サーバー再起動をまたいでもワークフローの状態が恒久的に保持されます。こうした永続性は、外部の入力やリソースを待っている間に、数分、数時間、あるいは数日にわたってサスペンドされたままになり得るワークフローにとって極めて重要です。
 
-Mastra のサスペンドとレジューム機能を使うことで、ワークフローの実行を任意のステップで一時停止し、ワークフローのスナップショットをストレージに保存し、準備ができたら保存されたスナップショットから実行を再開できます。
-この一連のプロセスはすべて Mastra によって自動的に管理されます。設定やユーザーによる手動操作は必要ありません。
+## Suspend/Resume を使うタイミング
 
-ワークフローのスナップショットをストレージ（デフォルトでは LibSQL）に保存することで、ワークフローの状態はセッション、デプロイ、サーバーの再起動をまたいで永続的に保持されます。この永続性は、外部からの入力やリソースを待つ間に数分、数時間、あるいは数日間サスペンドされたままになる可能性があるワークフローにとって非常に重要です。
+ワークフローを一時停止する一般的なケースには次のようなものがあります：
 
-
-
-## サスペンド／レジュームを使用するタイミング
-
-ワークフローをサスペンドする一般的なシナリオには、以下が含まれます。
-
-- 人による承認や入力を待つ場合
-- 外部APIリソースが利用可能になるまで一時停止する場合
-- 後続のステップで必要となる追加データを収集する場合
-- 高コストな処理のレート制限やスロットリングを行う場合
-- 外部トリガーによるイベント駆動型プロセスを処理する場合
-
-
+- 人による承認や入力を待つ
+- 外部 API のリソースが利用可能になるまで一時停止する
+- 後続のステップに必要な追加データを収集する
+- コストの高い処理に対してレート制限（スロットリング）を適用する
+- 外部トリガーを伴うイベント駆動型のプロセスを扱う
 
 ## 基本的なサスペンドの例
 
-こちらは、値が低すぎる場合にサスペンドし、より高い値が与えられたときに再開するシンプルなワークフローです：
+値が低すぎるとサスペンドし、より高い値が与えられると再開する、シンプルなワークフローの例です。
 
 ```typescript
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
@@ -57,36 +51,35 @@ const stepTwo = new LegacyStep({
 ```
 
 
-
 ## Async/Await ベースのフロー
 
-Mastra のサスペンドとレジュームの仕組みは、async/await パターンを利用しており、サスペンドポイントを含む複雑なワークフローの実装を直感的に行うことができます。コード構造は実行フローを自然に反映します。
+Mastra のサスペンド／リジューム機構は、サスペンドポイントを含む複雑なワークフローを直感的に実装できる async/await パターンに基づいています。コードの構造は実行フローを自然に反映します。
 
 ### 仕組み
 
-1. ステップの実行関数は、パラメータとして `suspend` 関数を受け取ります
+1. ステップの実行関数は、引数として `suspend` 関数を受け取ります
 2. `await suspend()` を呼び出すと、その時点でワークフローが一時停止します
 3. ワークフローの状態が永続化されます
-4. 後で、適切なパラメータで `workflow.resume()` を呼び出すことでワークフローを再開できます
-5. 実行は `suspend()` 呼び出しの後のポイントから続行されます
+4. 後で、適切な引数を指定して `workflow.resume()` を呼び出すことで、ワークフローを再開できます
+5. 実行は `suspend()` の呼び出し直後の位置から再開されます
 
-### 複数のサスペンドポイントを持つ例
+### 複数のサスペンドポイントがある例
 
-複数のステップでサスペンド可能なワークフローの例を示します：
+複数のステップでサスペンド可能なワークフローの例を次に示します：
 
 ```typescript
-// Define steps with suspend capability
+// サスペンド機能付きのステップを定義する
 const promptAgentStep = new LegacyStep({
   id: "promptAgent",
   execute: async ({ context, suspend }) => {
-    // Some condition that determines if we need to suspend
+    // サスペンドが必要かどうかを判定する条件
     if (needHumanInput) {
-      // Optionally pass payload data that will be stored with suspended state
-      await suspend({ requestReason: "Need human input for prompt" });
-      // Code after suspend() will execute when the step is resumed
+      // サスペンド状態とともに保存されるペイロードを任意で渡す
+      await suspend({ requestReason: "プロンプトに人の入力が必要" });
+      // suspend() の後のコードはステップ再開時に実行される
       return { modelOutput: context.userInput };
     }
-    return { modelOutput: "AI generated output" };
+    return { modelOutput: "AI 生成出力" };
   },
   outputSchema: z.object({ modelOutput: z.string() }),
 });
@@ -94,17 +87,17 @@ const promptAgentStep = new LegacyStep({
 const improveResponseStep = new LegacyStep({
   id: "improveResponse",
   execute: async ({ context, suspend }) => {
-    // Another condition for suspension
+    // サスペンドのための別の条件
     if (needFurtherRefinement) {
       await suspend();
       return { improvedOutput: context.refinedOutput };
     }
-    return { improvedOutput: "Improved output" };
+    return { improvedOutput: "改良済みの出力" };
   },
   outputSchema: z.object({ improvedOutput: z.string() }),
 });
 
-// Build the workflow
+// ワークフローを構築する
 const workflow = new LegacyWorkflow({
   name: "multi-suspend-workflow",
   triggerSchema: z.object({ input: z.string() }),
@@ -118,20 +111,21 @@ workflow
   .then(evaluateImproved)
   .commit();
 
-// Register the workflow with Mastra
+// Mastra にワークフローを登録する
 export const mastra = new Mastra({
   legacy_workflows: { workflow },
 });
 ```
 
+
 ### ワークフローの開始と再開
 
 ```typescript
-// Get the workflow and create a run
+// ワークフローを取得してランを作成する
 const wf = mastra.legacy_getWorkflow("multi-suspend-workflow");
 const run = wf.createRun();
 
-// Start the workflow
+// ワークフローを開始する
 const initialResult = await run.start({
   triggerData: { input: "initial input" },
 });
@@ -139,14 +133,14 @@ const initialResult = await run.start({
 let promptAgentStepResult = initialResult.activePaths.get("promptAgent");
 let promptAgentResumeResult = undefined;
 
-// Check if a step is suspended
+// ステップが一時停止中か確認する
 if (promptAgentStepResult?.status === "suspended") {
-  console.log("Workflow suspended at promptAgent step");
+  console.log("ワークフローは promptAgent ステップで一時停止しています");
 
-  // Resume the workflow with new context
+  // 新しいコンテキストでワークフローを再開する
   const resumeResult = await run.resume({
     stepId: "promptAgent",
-    context: { userInput: "Human provided input" },
+    context: { userInput: "ユーザーが入力した内容" },
   });
 
   promptAgentResumeResult = resumeResult;
@@ -156,48 +150,47 @@ const improveResponseStepResult =
   promptAgentResumeResult?.activePaths.get("improveResponse");
 
 if (improveResponseStepResult?.status === "suspended") {
-  console.log("Workflow suspended at improveResponse step");
+  console.log("ワークフローは improveResponse ステップで一時停止しています");
 
-  // Resume again with different context
+  // 別のコンテキストで再度再開する
   const finalResult = await run.resume({
     stepId: "improveResponse",
-    context: { refinedOutput: "Human refined output" },
+    context: { refinedOutput: "ユーザーが洗練した出力" },
   });
 
-  console.log("Workflow completed:", finalResult?.results);
+  console.log("ワークフローが完了しました:", finalResult?.results);
 }
 ```
 
 
-
 ## イベントベースの一時停止と再開
 
-手動でステップを一時停止する方法に加えて、Mastra では `afterEvent` メソッドを使ったイベントベースの一時停止が提供されています。これにより、ワークフローは特定のイベントが発生するまで自動的に一時停止し、発生後に処理を再開できます。
+手動でステップを一時停止する方法に加え、Mastra は `afterEvent` メソッドによってイベントベースの一時停止を提供します。これにより、ワークフローは自動的に一時停止し、処理を続行する前に特定のイベントの発生を待機できます。
 
-### afterEvent と resumeWithEvent の使い方
+### afterEvent と resumeWithEvent の使用
 
-`afterEvent` メソッドは、ワークフロー内に特定のイベントが発生するのを待つ一時停止ポイントを自動的に作成します。イベントが発生した際には、`resumeWithEvent` を使ってイベントデータとともにワークフローを再開できます。
+`afterEvent` メソッドは、特定のイベントが発生するまで待機するワークフロー内のサスペンドポイントを自動的に作成します。イベントが発生したら、`resumeWithEvent` を使って、そのイベントのデータを渡しつつワークフローを再開できます。
 
-仕組みは以下の通りです：
+仕組みは次のとおりです:
 
-1. ワークフロー設定でイベントを定義する
-2. `afterEvent` を使ってそのイベントを待つ一時停止ポイントを作成する
+1. ワークフローの設定でイベントを定義する
+2. `afterEvent` を使って、そのイベントを待機するサスペンドポイントを作成する
 3. イベントが発生したら、イベント名とデータを指定して `resumeWithEvent` を呼び出す
 
-### 例：イベントベースのワークフロー
+### 例: イベントベースのワークフロー
 
 ```typescript
-// Define steps
+// ステップを定義
 const getUserInput = new LegacyStep({
   id: "getUserInput",
-  execute: async () => ({ userInput: "initial input" }),
+  execute: async () => ({ userInput: "初期入力" }),
   outputSchema: z.object({ userInput: z.string() }),
 });
 
 const processApproval = new LegacyStep({
   id: "processApproval",
   execute: async ({ context }) => {
-    // Access the event data from the context
+    // コンテキストからイベントデータを取得
     const approvalData = context.inputData?.resumedEvent;
     return {
       approved: approvalData?.approved,
@@ -210,7 +203,7 @@ const processApproval = new LegacyStep({
   }),
 });
 
-// Create workflow with event definition
+// イベント定義付きのワークフローを作成
 const approvalWorkflow = new LegacyWorkflow({
   name: "approval-workflow",
   triggerSchema: z.object({ requestId: z.string() }),
@@ -224,42 +217,43 @@ const approvalWorkflow = new LegacyWorkflow({
   },
 });
 
-// Build workflow with event-based suspension
+// イベント待機（サスペンド）を含むワークフローを構築
 approvalWorkflow
   .step(getUserInput)
-  .afterEvent("approvalReceived") // Workflow will automatically suspend here
-  .step(processApproval) // This step runs after the event is received
+  .afterEvent("approvalReceived") // ワークフローはここで自動的にサスペンドされる
+  .step(processApproval) // このステップはイベント受信後に実行される
   .commit();
 ```
 
-### イベントベースのワークフローの実行
+
+### イベント駆動型ワークフローの実行
 
 ```typescript
-// Get the workflow
+// ワークフローを取得
 const workflow = mastra.legacy_getWorkflow("approval-workflow");
 const run = workflow.createRun();
 
-// Start the workflow
+// ワークフローを開始
 const initialResult = await run.start({
   triggerData: { requestId: "request-123" },
 });
 
-console.log("Workflow started, waiting for approval event");
+console.log("ワークフローを開始しました。承認イベントを待っています");
 console.log(initialResult.results);
-// Output will show the workflow is suspended at the event step:
+// 出力は、イベントのステップでワークフローがサスペンドされていることを示します:
 // {
 //   getUserInput: { status: 'success', output: { userInput: 'initial input' } },
 //   __approvalReceived_event: { status: 'suspended' }
 // }
 
-// Later, when the approval event occurs:
+// 後で、承認イベントが発生したら:
 const resumeResult = await run.resumeWithEvent("approvalReceived", {
   approved: true,
   approverName: "Jane Doe",
 });
 
-console.log("Workflow resumed with event data:", resumeResult.results);
-// Output will show the completed workflow:
+console.log("イベントデータでワークフローを再開しました:", resumeResult.results);
+// 出力は、ワークフローが完了したことを示します:
 // {
 //   getUserInput: { status: 'success', output: { userInput: 'initial input' } },
 //   __approvalReceived_event: { status: 'success', output: { executed: true, resumedEvent: { approved: true, approverName: 'Jane Doe' } } },
@@ -267,31 +261,30 @@ console.log("Workflow resumed with event data:", resumeResult.results);
 // }
 ```
 
-### イベントベースワークフローの重要ポイント
 
-- `suspend()` 関数は、オプションで一時停止状態とともに保存されるペイロードオブジェクトを受け取ることができます
-- `await suspend()` 呼び出しの後のコードは、ステップが再開されるまで実行されません
-- ステップが一時停止されると、そのステータスはワークフロー結果で `'suspended'` になります
-- 再開時には、ステップのステータスは `'suspended'` から `'success'` に変わります
-- `resume()` メソッドは、どの一時停止中のステップを再開するかを特定するために `stepId` が必要です
-- 再開時に新しいコンテキストデータを渡すことができ、既存のステップ結果とマージされます
+### イベントベースのワークフローに関する重要ポイント
 
-- イベントはワークフロー設定でスキーマとともに定義する必要があります
-- `afterEvent` メソッドは、そのイベントを待つ特別な一時停止ステップを作成します
-- イベントステップは自動的に `__eventName_event`（例：`__approvalReceived_event`）という名前になります
-- `resumeWithEvent` を使ってイベントデータを渡し、ワークフローを継続します
-- イベントデータは、そのイベント用に定義されたスキーマで検証されます
-- イベントデータはコンテキスト内の `inputData.resumedEvent` として利用できます
+- `suspend()` 関数は、一時停止時の状態に保存されるペイロードオブジェクトを任意で受け取れる
+- `await suspend()` の後に続くコードは、そのステップが再開されるまで実行されない
+- ステップが一時停止されると、ワークフロー結果上のステータスは `'suspended'` になる
+- 再開後、そのステップが完了するとステータスは `'suspended'` から `'success'` に変わる
+- `resume()` メソッドには、どの一時停止中のステップを再開するかを特定するために `stepId` が必要
+- 再開時に新しいコンテキストデータを渡すことができ、既存のステップ結果にマージされる
 
+- イベントはスキーマとともにワークフロー設定で定義しておく必要がある
+- `afterEvent` メソッドは、そのイベントを待つ特別な一時停止ステップを作成する
+- イベントステップは自動的に `__eventName_event`（例: `__approvalReceived_event`）という名前になる
+- イベントデータを渡してワークフローを継続するには `resumeWithEvent` を使用する
+- イベントデータは、そのイベント用に定義されたスキーマで検証される
+- イベントデータはコンテキスト上で `inputData.resumedEvent` として参照できる
 
+## サスペンドと再開のためのストレージ
 
-## サスペンドとレジュームのためのストレージ
+ワークフローが `await suspend()` を使用してサスペンドされると、Mastra はワークフローの状態全体を自動的にストレージへ永続化します。これは、長期間サスペンドされる可能性のあるワークフローに不可欠であり、アプリケーションの再起動やサーバーインスタンス間をまたいでも状態が保持されることを保証します。
 
-ワークフローが `await suspend()` を使ってサスペンドされると、Mastra はワークフローの全状態を自動的にストレージへ永続化します。これは、ワークフローが長期間サスペンドされたままになる可能性がある場合に重要であり、アプリケーションの再起動やサーバーインスタンスをまたいでも状態が保持されることを保証します。
+### 既定のストレージ: LibSQL
 
-### デフォルトストレージ: LibSQL
-
-デフォルトでは、Mastra は LibSQL をストレージエンジンとして使用します:
+Mastra は既定で、ストレージエンジンとして LibSQL を使用します。
 
 ```typescript
 import { Mastra } from "@mastra/core/mastra";
@@ -299,25 +292,26 @@ import { LibSQLStore } from "@mastra/libsql";
 
 const mastra = new Mastra({
   storage: new LibSQLStore({
-    url: "file:./storage.db", // 開発用のローカルファイルベースデータベース
+    url: "file:./storage.db", // 開発用のローカルファイルベースのデータベース
     // 本番環境では永続的なURLを使用してください:
     // url: process.env.DATABASE_URL,
-    // authToken: process.env.DATABASE_AUTH_TOKEN, // 認証接続の場合はオプション
+    // authToken: process.env.DATABASE_AUTH_TOKEN, // 認証付き接続のためのオプション設定
   }),
 });
 ```
 
-LibSQL ストレージはさまざまなモードで設定できます:
+LibSQL のストレージは、次のモードで構成できます:
 
-- インメモリデータベース（テスト用）: `:memory:`
-- ファイルベースデータベース（開発用）: `file:storage.db`
-- リモートデータベース（本番用）: `libsql://your-database.turso.io` のようなURL
+* メモリ内データベース（テスト用）: `:memory:`
+* ファイルベースのデータベース（開発用）: `file:storage.db`
+* リモートデータベース（本番用）: `libsql://your-database.turso.io` のような URL
 
-### 代替ストレージオプション
 
-#### Upstash（Redis互換）
+### 代替のストレージオプション
 
-サーバーレスアプリケーションや Redis を好む環境向け:
+#### Upstash（Redis 互換）
+
+Redis を採用するサーバーレスアプリケーションや環境向け：
 
 ```bash copy
 npm install @mastra/upstash@latest
@@ -335,33 +329,32 @@ const mastra = new Mastra({
 });
 ```
 
-### ストレージに関する注意点
 
-- すべてのストレージオプションは、サスペンドとレジュームの機能を同じようにサポートします
-- ワークフローの状態はサスペンド時に自動的にシリアライズされ保存されます
-- サスペンド／レジュームがストレージで動作するために追加の設定は不要です
-- インフラ、スケーリングの必要性、既存の技術スタックに基づいてストレージオプションを選択してください
+### ストレージに関する考慮事項
 
-
+- すべてのストレージオプションは、サスペンドと再開の機能を同等にサポートします
+- サスペンド時にワークフローの状態は自動的にシリアライズされ、保存されます
+- ストレージでサスペンド／再開を機能させるための追加設定は不要です
+- インフラ、スケーリング要件、既存のテクノロジースタックに合わせてストレージオプションを選択してください
 
 ## 監視と再開
 
-一時停止されたワークフローを処理するには、`watch` メソッドを使用して各実行ごとにワークフローのステータスを監視し、`resume` で実行を再開します。
+サスペンドされたワークフローを扱うには、各実行のワークフロー状態を監視するには `watch` メソッドを、処理を再開するには `resume` を使用します。
 
 ```typescript
 import { mastra } from "./index";
 
-// Get the workflow
+// ワークフローを取得
 const myWorkflow = mastra.legacy_getWorkflow("myWorkflow");
 const { start, watch, resume } = myWorkflow.createRun();
 
-// Start watching the workflow before executing it
+// 実行前にワークフローの監視を開始
 watch(async ({ activePaths }) => {
   const isStepTwoSuspended = activePaths.get("stepTwo")?.status === "suspended";
   if (isStepTwoSuspended) {
-    console.log("Workflow suspended, resuming with new value");
+    console.log("ワークフローが一時停止しました。新しい値で再開します");
 
-    // Resume the workflow with new context
+    // 新しいコンテキストでワークフローを再開
     await resume({
       stepId: "stepTwo",
       context: { secondValue: 100 },
@@ -369,54 +362,52 @@ watch(async ({ activePaths }) => {
   }
 });
 
-// Start the workflow execution
+// ワークフローの実行を開始
 await start({ triggerData: { inputValue: 45 } });
 ```
 
-### イベントベースのワークフローの監視と再開
 
-同じ監視パターンをイベントベースのワークフローでも利用できます。
+### イベント駆動型ワークフローの監視と再開
+
+イベント駆動型のワークフローでも、同じ監視パターンを使用できます。
 
 ```typescript
 const { start, watch, resumeWithEvent } = workflow.createRun();
 
-// Watch for suspended event steps
+// 一時停止中のイベントステップを監視
 watch(async ({ activePaths }) => {
   const isApprovalReceivedSuspended =
     activePaths.get("__approvalReceived_event")?.status === "suspended";
   if (isApprovalReceivedSuspended) {
-    console.log("Workflow waiting for approval event");
+    console.log("承認イベントを待機中のワークフローです");
 
-    // In a real scenario, you would wait for the actual event to occur
-    // For example, this could be triggered by a webhook or user interaction
+    // 実運用では、実際のイベント発生を待ちます
+    // たとえば、webhook やユーザー操作でトリガーされます
     setTimeout(async () => {
       await resumeWithEvent("approvalReceived", {
         approved: true,
         approverName: "Auto Approver",
       });
-    }, 5000); // Simulate event after 5 seconds
+    }, 5000); // 5秒後にイベントを模擬
   }
 });
 
-// Start the workflow
+// ワークフローを開始する
 await start({ triggerData: { requestId: "auto-123" } });
 ```
 
 
+## さらに詳しく
 
-## 参考文献
+サスペンドとリジュームの内部動作をより深く理解するために:
 
-サスペンドとレジュームの仕組みについてより深く理解するには：
-
-- [Mastra ワークフローにおけるスナップショットの理解](../../reference/legacyWorkflows/snapshots.mdx) - サスペンドとレジューム機能を支えるスナップショットメカニズムについて学ぶ
-- [ステップ設定ガイド](./steps.mdx) - ワークフローでのステップ設定についてさらに学ぶ
+- [Mastra ワークフローにおけるスナップショットの理解](../../reference/legacyWorkflows/snapshots.mdx) - サスペンド／リジューム機能を支えるスナップショットの仕組みを解説
+- [ステップ設定ガイド](./steps.mdx) - ワークフロー内のステップの設定方法を詳しく学ぶ
 - [制御フローガイド](./control-flow.mdx) - 高度なワークフロー制御パターン
-- [イベント駆動型ワークフロー](../../reference/legacyWorkflows/events.mdx) - イベントベースのワークフローに関する詳細なリファレンス
-
-
+- [イベント駆動ワークフロー](../../reference/legacyWorkflows/events.mdx) - イベントベースのワークフローに関する詳細なリファレンス
 
 ## 関連リソース
 
-- 完全な動作例については、[Suspend and Resume Example](../../examples/workflows_legacy/suspend-and-resume.mdx) をご覧ください
-- suspend/resume API の詳細については、[Step Class Reference](../../reference/legacyWorkflows/step-class.mdx) をご確認ください
-- サスペンドされたワークフローの監視については、[Workflow Observability](../../reference/observability/otel-config.mdx) をご参照ください
+- 完全な動作例は [Suspend and Resume Example](../../examples/workflows_legacy/suspend-and-resume.mdx) をご覧ください
+- サスペンド／リジューム API の詳細は [Step Class Reference](../../reference/legacyWorkflows/step-class.mdx) を参照してください
+- サスペンド中のワークフローの監視については [Workflow Observability](../../reference/observability/otel-config.mdx) を参照してください

@@ -1,36 +1,32 @@
 ---
 title: "例: 分岐パス | ワークフロー（レガシー） | Mastra ドキュメント"
-description: 中間結果に基づいて分岐パスを持つレガシーワークフローを作成するためのMastraの使用例。
+description: 中間結果に応じて分岐するレガシーなワークフローを Mastra で作成する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
+# 分岐するパス
 
-# 分岐パス
+データを処理する際には、中間結果に応じて異なる処理を行う必要がよくあります。この例では、レガシーなワークフローを作成し、複数のパスに分岐させる方法を示します。各パスでは、直前のステップの出力に基づいて異なる手順を実行します。
 
-データを処理する際、中間結果に基づいて異なる処理を行う必要がよくあります。この例では、レガシーワークフローを作成し、途中で複数のパスに分岐させる方法を示します。それぞれのパスは、前のステップの出力に基づいて異なる処理を実行します。
+## 制御フロー図
 
+この例では、前のステップの出力に基づいて各パスが異なるステップを実行する、分岐して別々の経路に進む従来型ワークフローの作成方法を示します。
 
-
-## フロー制御ダイアグラム
-
-この例では、レガシーワークフローを作成し、途中で分岐して各パスが前のステップの出力に基づいて異なる処理を実行する方法を示します。
-
-フロー制御ダイアグラムは次のとおりです：
+制御フロー図は次のとおりです。
 
 <img
   src="/subscribed-chains.png"
-  alt="分岐パスを持つワークフローのダイアグラム"
+  alt="分岐経路を持つワークフローを示す図"
 />
-
-
 
 ## ステップの作成
 
-まず、ステップを作成し、ワークフローを初期化しましょう。
+まずは、ステップを作成してワークフローを初期化しましょう。
 
 {/* prettier-ignore */}
+
 ```ts showLineNumbers copy
 import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod"
@@ -79,11 +75,11 @@ const stepFour = new LegacyStep({
   }
 });
 
-// New step that depends on both branches
+// 両方の分岐に依存する新しいステップ
 const finalStep = new LegacyStep({
   id: "finalStep",
   execute: async ({ context }) => {
-    // Get results from both branches using getStepResult
+    // getStepResult を使って両方の分岐の結果を取得
     const stepTwoResult = context.getStepResult<{ isDivisibleByFive: boolean }>("stepTwo");
     const stepFourResult = context.getStepResult<{ isDivisibleByThree: boolean }>("stepFour");
 
@@ -91,14 +87,14 @@ const finalStep = new LegacyStep({
     const isDivisibleByThree = stepFourResult?.isDivisibleByThree || false;
 
     return {
-      summary: `The number ${context.triggerData.inputValue} when doubled ${isDivisibleByFive ? 'is' : 'is not'} divisible by 5, and when doubled and incremented ${isDivisibleByThree ? 'is' : 'is not'} divisible by 3.`,
+      summary: `数値 ${context.triggerData.inputValue} は、2倍にすると5で${isDivisibleByFive ? '割り切れ' : '割り切れ'}ず、2倍にして1を加えると3で${isDivisibleByThree ? '割り切れ' : '割り切れ'}ない。`,
       isDivisibleByFive,
       isDivisibleByThree
     }
   }
 });
 
-// Build the workflow
+// ワークフローを構築する
 const myWorkflow = new LegacyWorkflow({
   name: "my-workflow",
   triggerSchema: z.object({
@@ -108,24 +104,23 @@ const myWorkflow = new LegacyWorkflow({
 ```
 
 
-
 ## 分岐パスとステップの連結
 
-ここでは、レガシーワークフローを分岐パスで構成し、それらを複合的な `.after([])` 構文でマージしてみましょう。
+それでは、分岐パスを持つレガシーなワークフローを設定し、複合的な `.after([])` 構文でそれらをマージしていきましょう。
 
 ```ts showLineNumbers copy
-// Create two parallel branches
+// 2 つの並行ブランチを作成する
 myWorkflow
-  // First branch
+  // 1 つ目のブランチ
   .step(stepOne)
   .then(stepTwo)
 
-  // Second branch
+  // 2 つ目のブランチ
   .after(stepOne)
   .step(stepThree)
   .then(stepFour)
 
-  // Merge both branches using compound after syntax
+  // 複合的な after 構文で両ブランチをマージする
   .after([stepTwo, stepFour])
   .step(finalStep)
   .commit();
@@ -134,14 +129,13 @@ const { start } = myWorkflow.createRun();
 
 const result = await start({ triggerData: { inputValue: 3 } });
 console.log(result.steps.finalStep.output.summary);
-// Output: "The number 3 when doubled is not divisible by 5, and when doubled and incremented is divisible by 3."
+// 出力: "数値 3 は 2 倍にすると 5 で割り切れず、2 倍にして 1 を足すと 3 で割り切れます。"
 ```
 
 
+## 高度なブランチとマージ
 
-## 高度な分岐とマージ
-
-複数の分岐とマージポイントを持つ、より複雑なワークフローを作成できます：
+複数のブランチやマージポイントを使って、より複雑なワークフローを作成できます。
 
 ```ts showLineNumbers copy
 const complexWorkflow = new LegacyWorkflow({
@@ -153,18 +147,18 @@ const complexWorkflow = new LegacyWorkflow({
 
 // Create multiple branches with different merge points
 complexWorkflow
-  // Main step
+  // メインステップ
   .step(stepOne)
 
-  // First branch
+  // 第1ブランチ
   .then(stepTwo)
 
-  // Second branch
+  // 第2ブランチ
   .after(stepOne)
   .step(stepThree)
   .then(stepFour)
 
-  // Third branch (another path from stepOne)
+  // 第3ブランチ（stepOne からの別ルート）
   .after(stepOne)
   .step(
     new LegacyStep({
@@ -180,7 +174,7 @@ complexWorkflow
     }),
   )
 
-  // Merge first and second branches
+  // 第1・第2ブランチをマージ
   .after([stepTwo, stepFour])
   .step(
     new LegacyStep({
@@ -194,7 +188,7 @@ complexWorkflow
         }>("stepFour");
 
         return {
-          intermediateResult: "Processed first two branches",
+          intermediateResult: "最初の2つのブランチを処理済み",
           branchResults: {
             branch1: stepTwoResult?.isDivisibleByFive,
             branch2: stepFourResult?.isDivisibleByThree,
@@ -204,7 +198,7 @@ complexWorkflow
     }),
   )
 
-  // Final merge of all branches
+  // すべてのブランチを最終的にマージ
   .after(["partialMerge", "alternativePath"])
   .step(
     new LegacyStep({
@@ -220,7 +214,7 @@ complexWorkflow
         );
 
         return {
-          finalResult: "All branches processed",
+          finalResult: "すべてのブランチを処理完了",
           combinedData: {
             fromPartialMerge: partialMergeResult?.branchResults,
             fromAlternativePath: alternativePathResult?.result,
@@ -233,30 +227,35 @@ complexWorkflow
 ```
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/workflow-with-branching-paths"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/workflow-with-branching-paths"
+}
 />
+
 `
 
 
+## ワークフロー（レガシー）
 
-## Workflows (Legacy)
+以下のリンクでは、レガシー版ワークフローのサンプルドキュメントを参照できます。
 
-以下のリンクは、レガシーワークフローのサンプルドキュメントを提供します：
-
-- [シンプルなWorkflow (Legacy)の作成](/examples/workflows_legacy/creating-a-workflow)
-- [順次ステップを持つWorkflow (Legacy)](/examples/workflows_legacy/sequential-steps)
-- [ステップでの並列実行](/examples/workflows_legacy/parallel-steps)
-- [条件分岐を持つWorkflow (Legacy)（実験的）](/examples/workflows_legacy/conditional-branching)
-- [Workflow (Legacy)からAgentを呼び出す](/examples/workflows_legacy/calling-agent)
-- [Workflowステップとしてのツール (Legacy)](/examples/workflows_legacy/using-a-tool-as-a-step)
-- [循環依存を持つWorkflow (Legacy)](/examples/workflows_legacy/cyclical-dependencies)
-- [Workflow変数を使用したデータマッピング (Legacy)](/examples/workflows_legacy/workflow-variables)
-- [Human in the Loop Workflow (Legacy)](/examples/workflows_legacy/human-in-the-loop)
-- [一時停止と再開を持つWorkflow (Legacy)](/examples/workflows_legacy/suspend-and-resume)
+- [シンプルなワークフローの作成（レガシー）](/examples/workflows_legacy/creating-a-workflow)
+- [順次ステップのワークフロー（レガシー）](/examples/workflows_legacy/sequential-steps)
+- [ステップによる並列実行（レガシー）](/examples/workflows_legacy/parallel-steps)
+- [条件分岐付きワークフロー（レガシー・実験的）](/examples/workflows_legacy/conditional-branching)
+- [ワークフロー（レガシー）からエージェントを呼び出す](/examples/workflows_legacy/calling-agent)
+- [ツールをワークフローのステップとして使用（レガシー）](/examples/workflows_legacy/using-a-tool-as-a-step)
+- [循環依存のあるワークフロー（レガシー）](/examples/workflows_legacy/cyclical-dependencies)
+- [ワークフロー変数によるデータマッピング（レガシー）](/examples/workflows_legacy/workflow-variables)
+- [Human-in-the-Loop ワークフロー（レガシー）](/examples/workflows_legacy/human-in-the-loop)
+- [一時停止と再開が可能なワークフロー（レガシー）](/examples/workflows_legacy/suspend-and-resume)

@@ -1,32 +1,27 @@
 ---
-title: "例: AI SDK v5 との統合 | エージェント | Mastra ドキュメント"
-description: メモリとツール連携を備えたストリーミングチャットインターフェースに向けて、Mastra のエージェントを AI SDK v5 と統合する例。
+title: "例: AI SDK v5 との統合 | Agents | Mastra Docs"
+description: メモリとツール統合に対応したストリーミング型チャットインターフェースで、Mastra のエージェントを AI SDK v5 と統合する例。
 ---
 
 import { Callout } from "nextra/components";
 import { GithubLink } from "@/components/github-link";
 
 
+# 例: AI SDK v5 連携
 
-# 例: AI SDK v5 との統合
-
-この例では、Mastra エージェントを [AI SDK v5](https://sdk.vercel.ai/) と統合し、最新のストリーミング対応チャットインターフェースを構築する方法を紹介します。リアルタイムの会話機能、永続メモリ、さらに実験的な `streamVNext` メソッドによる AI SDK v5 形式対応のツール連携を備えた、完成度の高い Next.js アプリケーションを実装しています。
-
-
+この例では、Mastra エージェントを [AI SDK v5](https://sdk.vercel.ai/) と統合し、モダンなストリーミング型チャットインターフェースを構築する方法を紹介します。リアルタイムな会話機能、永続的なメモリ、そして AI SDK v5 のフォーマットに対応した `stream` メソッドによるツール統合を備えた、完成度の高い Next.js アプリケーションを実装しています。
 
 ## 主な機能
 
 - **ストリーミングチャットインターフェース**: AI SDK v5 の `useChat` フックによるリアルタイム対話
-- **Mastra エージェントの統合**: カスタムツールと OpenAI GPT-4o を活用した天気エージェント
-- **永続メモリ**: 会話履歴を LibSQL に永続化
+- **Mastra エージェント統合**: カスタムツールと OpenAI GPT-4o を活用した天気エージェント
+- **永続的メモリ**: 会話履歴を LibSQL に保存
 - **互換レイヤー**: Mastra と AI SDK v5 のストリームをシームレスに連携
-- **ツール統合**: リアルタイムなデータ取得に対応するカスタム天気ツール
+- **ツール統合**: リアルタイムのデータ取得に対応するカスタム天気ツール
 
+## Mastra の構成
 
-
-## Mastra の設定
-
-まず、メモリとツールを使って Mastra エージェントをセットアップします。
+まず、メモリとツールを備えた Mastra エージェントをセットアップします。
 
 ```typescript showLineNumbers copy filename="src/mastra/index.ts"
 import { ConsoleLogger } from "@mastra/core/logger";
@@ -36,7 +31,7 @@ import { weatherAgent } from "./agents";
 export const mastra = new Mastra({
   agents: { weatherAgent },
   logger: new ConsoleLogger(),
-  // aiSdkCompat: "v4", // オプション: 追加の互換性のため
+  // aiSdkCompat: "v4", // 任意：追加の互換性のため
 });
 ```
 
@@ -63,14 +58,14 @@ export const memory = new Memory({
 export const weatherAgent = new Agent({
   name: "Weather Agent",
   instructions: `
-    あなたは正確な気象情報を提供する、頼れる天気アシスタントです。
+    あなたは正確な気象情報を提供する、頼りになる天気アシスタントです。
 
-    主な役割は、特定の場所の天気情報をユーザーが取得できるように支援することです。回答する際は次を守ってください:
-    - 場所が指定されていない場合は、必ず場所を尋ねる
-    - 湿度、風の状況、降水量などの関連情報を含める
-    - 簡潔でありながら要点を押さえた回答にする
+    主な役割は、特定の場所の天気情報をユーザーが取得できるよう支援することです。応答する際は次を守ってください：
+    - 場所が指定されていない場合は、必ず場所を確認する
+    - 湿度、風の状況、降水などの関連情報を含める
+    - 簡潔でありつつ、有益な回答にする
 
-    現在の天気データを取得するには weatherTool を使用してください。
+    現在の天気データを取得するには、weatherTool を使用してください。
   `,
   model: openai("gpt-4o-mini"),
   tools: {
@@ -81,10 +76,9 @@ export const weatherAgent = new Agent({
 ```
 
 
-
 ## カスタム天気ツール
 
-リアルタイムの天気データを取得するツールを作成します：
+リアルタイムの天気データを取得するツールを作成しましょう:
 
 ```typescript showLineNumbers copy filename="src/mastra/tools/index.ts"
 import { createTool } from '@mastra/core/tools';
@@ -92,7 +86,7 @@ import { z } from 'zod';
 
 export const weatherTool = createTool({
   id: 'get-weather',
-  description: '指定した場所の現在の天気を取得します',
+  description: '指定した地点の現在の天気を取得',
   inputSchema: z.object({
     location: z.string().describe('都市名'),
   }),
@@ -117,7 +111,7 @@ const getWeather = async (location: string) => {
   const geocodingData = await geocodingResponse.json();
 
   if (!geocodingData.results?.[0]) {
-    throw new Error(`Location '${location}' not found`);
+    throw new Error(`場所「${location}」が見つかりませんでした`)
   }
 
   const { latitude, longitude, name } = geocodingData.results[0];
@@ -140,12 +134,11 @@ const getWeather = async (location: string) => {
 ```
 
 
+## Next.js の API ルート
 
-## Next.js API ルート
+### ストリーミングチャットエンドポイント
 
-### ストリーミング チャット エンドポイント
-
-実験的な `streamVNext` を使い、AI SDK v5 形式で Mastra エージェントのレスポンスをストリーミングする API ルートを作成します:
+`stream` メソッドを使い、AI SDK v5 の形式で Mastra エージェントの応答をストリーミング配信する API ルートを作成します:
 
 ```typescript showLineNumbers copy filename="app/api/chat/route.ts"
 import { mastra } from "@/src/mastra";
@@ -155,23 +148,24 @@ const myAgent = mastra.getAgent("weatherAgent");
 export async function POST(req: Request) {
   const { messages } = await req.json();
 
-  // Use streamVNext with AI SDK v5 format (experimental)
-  const stream = await myAgent.streamVNext(messages, {
-    format: 'aisdk',  // Enable AI SDK v5 compatibility
+  // AI SDK v5形式でストリームを使用（実験的）
+  const stream = await myAgent.stream(messages, {
+    format: 'aisdk',  // AI SDK v5互換性を有効にする
     memory: {
-      thread: "user-session", // 実際のユーザー/セッション ID を使用
+      thread: "user-session", // 実際のユーザー/セッションIDを使用
       resource: "weather-chat",
     },
   });
 
-  // すでに AI SDK v5 形式のストリームです
+  // ストリームは既にAI SDK v5形式になっている
   return stream.toUIMessageStreamResponse();
 }
 ```
 
+
 ### 初期チャット履歴
 
-Mastra Memory から会話履歴を読み込みます:
+Mastra Memory から会話履歴を読み込む：
 
 ```typescript showLineNumbers copy filename="app/api/initial-chat/route.ts"
 import { mastra } from "@/src/mastra";
@@ -191,7 +185,6 @@ export async function GET() {
 ```
 
 
-
 ## React チャットインターフェース
 
 AI SDK v5 の `useChat` フックを使ってフロントエンドを構築します：
@@ -205,7 +198,7 @@ import useSWR from "swr";
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function Chat() {
-  // 初期の会話履歴を読み込む
+  // 会話の初期履歴を読み込む
   const { data: initialMessages = [] } = useSWR<Message[]>(
     "/api/initial-chat",
     fetcher,
@@ -230,7 +223,7 @@ export default function Chat() {
               color: m.role === "user" ? "green" : "yellow",
             }}
           >
-            {m.role === "user" ? "User: " : "AI: "}
+            {m.role === "user" ? "ユーザー: " : "AI: "}
           </h3>
           {m.parts.map((p) => p.type === "text" && p.text).join("\n")}
         </div>
@@ -240,7 +233,7 @@ export default function Chat() {
         <input
           className="fixed dark:bg-zinc-900 bottom-0 w-full max-w-md p-2 mb-8 border border-zinc-300 dark:border-zinc-800 rounded shadow-xl"
           value={input}
-          placeholder="天気について質問してみてください..."
+          placeholder="天気について聞いてみましょう…"
           onChange={handleInputChange}
         />
       </form>
@@ -250,12 +243,11 @@ export default function Chat() {
 ```
 
 
-
-## パッケージ設定
+## パッケージ構成
 
 必要な依存関係をインストールします:
 
-注意: ai-sdk v5 はまだベータ版です。ベータ期間中は、ai-sdk のベータ版と mastra のベータ版をインストールする必要があります。詳しくは[こちら](https://github.com/mastra-ai/mastra/issues/5470)をご覧ください。
+注: ai-sdk v5 はまだベータ版です。ベータ期間中は、ai-sdk のベータ版と mastra のベータ版をインストールする必要があります。詳しくは[こちら](https://github.com/mastra-ai/mastra/issues/5470)をご覧ください。
 
 ```json showLineNumbers copy filename="package.json"
 {
@@ -275,67 +267,67 @@ export default function Chat() {
 ```
 
 
+## 主要な連携ポイント
 
-## 主要な統合ポイント
+### 実験的な stream フォーマット対応
 
-### 実験的な streamVNext 形式のサポート
-
-実験的な `streamVNext` メソッドに `format: 'aisdk'` を指定すると、AI SDK v5 とネイティブに互換性があります：
+`format: 'aisdk'` を用いる実験的な `stream` メソッドは、AI SDK v5 とネイティブに互換性があります。
 
 ```typescript
-// AI SDK v5 の形式で streamVNext を使用
-const stream = await agent.streamVNext(messages, {
-  format: 'aisdk'  // AISDKV5OutputStream を返す
+// AI SDK v5形式でstreamを使用
+const stream = await agent.stream(messages, {
+  format: 'aisdk'  // AISDKV5OutputStreamを返す
 });
 
-// AI SDK v5 のインターフェースと直接互換
+// AI SDK v5インターフェースと直接互換
 return stream.toUIMessageStreamResponse();
 ```
 
-<Callout type="info">
-  **Note**: フォーマット対応のある `streamVNext` メソッドは実験的であり、フィードバックに基づく機能改善の過程で変更される可能性があります。詳細は [Agent Streaming のドキュメント](/docs/agents/streaming) を参照してください。
-</Callout>
 
 ### メモリの永続化
 
-会話は Mastra Memory により自動的に永続化されます：
+会話は Mastra Memory によって自動的に保存されます:
 
-- 各会話は固有の `threadId` を使用
-- ページのリロード時に `/api/initial-chat` 経由で履歴を読み込み
-- 新しいメッセージはエージェントが自動的に保存
+- 各会話には固有の `threadId` が割り当てられます
+- ページを再読み込みすると、履歴は `/api/initial-chat` を通じて読み込まれます
+- 新規メッセージはエージェントによって自動保存されます
 
 ### ツール統合
 
 天気ツールはシームレスに統合されています：
 
-- 天気情報が必要な際はエージェントが自動でツールを呼び出す
-- リアルタイムのデータを外部 API から取得
-- 構造化された出力により一貫した応答を実現
+- 天気情報が必要なとき、エージェントが自動でツールを呼び出す
+- 外部APIからリアルタイムのデータを取得する
+- 構造化された出力により、応答の一貫性が保たれる
 
+## サンプルを実行する
 
+1. OpenAI API キーを設定します：
 
-## 例を実行する
-
-1. OpenAI APIキーを設定します:
 ```bash
-echo "OPENAI_API_KEY=your_key_here" > .env.local
+echo "OPENAI_API_KEY=あなたのキーをここに入力してください" > .env.local
 ```
 
-2. 開発サーバーを起動します:
+2. 開発用サーバーを起動する：
+
 ```bash
 pnpm dev
 ```
 
-3. `http://localhost:3000` にアクセスして、さまざまな都市の天気を尋ねてみましょう！
+3. `http://localhost:3000` にアクセスして、各都市の天気を尋ねてみましょう！
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
 
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/tree/main/examples/ai-sdk-v5"
-  }
+"https://github.com/mastra-ai/mastra/tree/main/examples/ai-sdk-v5"
+}
 />

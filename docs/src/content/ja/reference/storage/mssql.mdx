@@ -1,15 +1,11 @@
 ---
-title: "MSSQL Storage | Storage System | Mastra Core"
-description: MastraのMSSQLストレージ実装に関するドキュメント。
+title: "MSSQL ストレージ | ストレージシステム | Mastra Core"
+description: Mastra における MSSQL ストレージ実装のドキュメントです。
 ---
 
+# MSSQL ストレージ
 
-
-# MSSQL Storage
-
-MSSQL ストレージ実装は、Microsoft SQL Server データベースを使用した本番環境対応のストレージソリューションを提供します。
-
-
+MSSQL ストレージ実装は、Microsoft SQL Server データベースを用いた本番運用レベルのストレージソリューションを提供します。
 
 ## インストール
 
@@ -18,8 +14,7 @@ npm install @mastra/mssql@latest
 ```
 
 
-
-## 使用方法
+## 使い方
 
 ```typescript copy showLineNumbers
 import { MSSQLStore } from "@mastra/mssql";
@@ -30,7 +25,6 @@ const storage = new MSSQLStore({
 ```
 
 
-
 ## パラメータ
 
 <PropertiesTable
@@ -39,40 +33,38 @@ const storage = new MSSQLStore({
       name: "connectionString",
       type: "string",
       description:
-        "MSSQL接続文字列（例：mssql://user:pass@host:1433/dbname）",
+        "MSSQL の接続文字列（例：mssql://user:pass@host:1433/dbname）",
       isOptional: false,
     },
     {
       name: "schemaName",
       type: "string",
       description:
-        "ストレージが使用するスキーマの名前。指定されない場合はデフォルトスキーマが使用されます。",
+        "ストレージで使用するスキーマ名。未指定の場合は既定のスキーマが使用されます。",
       isOptional: true,
     },
   ]}
 />
 
+## コンストラクターの例
 
-
-## コンストラクタの例
-
-以下の方法で `MSSQLStore` をインスタンス化できます：
+`MSSQLStore` は次の方法でインスタンス化できます：
 
 ```ts
 import { MSSQLStore } from "@mastra/mssql";
 
-// Using a connection string only
+// 接続文字列のみを使用
 const store1 = new MSSQLStore({
   connectionString: "mssql://user:password@localhost:1433/mydb",
 });
 
-// Using a connection string with a custom schema name
+// カスタムスキーマ名付きの接続文字列を使用
 const store2 = new MSSQLStore({
   connectionString: "mssql://user:password@localhost:1433/mydb",
-  schemaName: "custom_schema", // optional
+  schemaName: "custom_schema", // 省略可
 });
 
-// Using individual connection parameters
+// 個別の接続パラメータを使用
 const store4 = new MSSQLStore({
   server: "localhost",
   port: 1433,
@@ -81,44 +73,44 @@ const store4 = new MSSQLStore({
   password: "password",
 });
 
-// Individual parameters with schemaName
+// schemaName を含む個別パラメータ
 const store5 = new MSSQLStore({
   server: "localhost",
   port: 1433,
   database: "mydb",
   user: "user",
   password: "password",
-  schemaName: "custom_schema", // optional
+  schemaName: "custom_schema", // 省略可
 });
 ```
 
 
-
-## 追加の注意事項
+## 追記
 
 ### スキーマ管理
 
-ストレージ実装は、スキーマの作成と更新を自動的に処理します。以下のテーブルを作成します：
+ストレージ実装はスキーマの作成と更新を自動で処理します。次のテーブルを作成します:
 
 - `mastra_workflow_snapshot`: ワークフローの状態と実行データを保存
 - `mastra_evals`: 評価結果とメタデータを保存  
 - `mastra_threads`: 会話スレッドを保存
-- `mastra_messages`: 個別のメッセージを保存
-- `mastra_traces`: テレメトリとトレースデータを保存
-- `mastra_scorers`: スコアリングと評価データを保存
-- `mastra_resources`: リソースワーキングメモリデータを保存
+- `mastra_messages`: 個々のメッセージを保存
+- `mastra_traces`: テレメトリおよびトレースデータを保存
+- `mastra_scorers`: スコアリングおよび評価データを保存
+- `mastra_resources`: リソースのワーキングメモリデータを保存
 
-### データベースとプールへの直接アクセス
+### データベースおよびプールへの直接アクセス
 
-`MSSQLStore`は、mssql接続プールをパブリックフィールドとして公開します：
+`MSSQLStore` は、mssql の接続プールを公開フィールドとして提供します:
 
 ```typescript
-store.pool // mssql接続プールインスタンス
+store.pool // mssql の接続プールインスタンス
 ```
 
-これにより、直接クエリとカスタムトランザクション管理が可能になります。これらのフィールドを使用する場合：
-- 適切な接続とトランザクション処理はあなたの責任です。
-- ストアを閉じる（`store.close()`）と、関連する接続プールが破棄されます。
-- 直接アクセスは、MSSQLStoreメソッドによって提供される追加のロジックや検証をバイパスします。
+これにより、直接クエリやカスタムのトランザクション管理が可能になります。これらのフィールドを使用する場合:
 
-このアプローチは、低レベルアクセスが必要な高度なシナリオを対象としています。 
+* 接続およびトランザクションの適切な処理は利用者の責任です。
+* ストアを閉じる（`store.close()`）と、関連する接続プールが破棄されます。
+* 直接アクセスは、MSSQLStore のメソッドが提供する追加のロジックや検証を迂回します。
+
+このアプローチは、低レベルのアクセスが必要となる高度なユースケースを想定しています。

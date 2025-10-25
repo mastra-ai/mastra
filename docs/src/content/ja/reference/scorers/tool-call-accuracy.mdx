@@ -1,24 +1,36 @@
 ---
-title: "リファレンス: ツール呼び出し精度 | スコアラー | Mastra ドキュメント"
-description: Mastra の「ツール呼び出し精度」スコアラーに関するドキュメント。利用可能な選択肢の中から、LLM の出力が正しいツールを呼び出しているかを評価します。
+title: "リファレンス：ツール呼び出し精度 | Scorers | Mastra ドキュメント"
+description: Mastra におけるツール呼び出し精度向け Scorer のドキュメント。利用可能な選択肢の中から、LLM の出力が適切なツールを呼び出しているかを評価します。
 ---
-
-
 
 # ツール呼び出し精度スコアラー
 
-Mastra は、LLM が利用可能な候補から適切なツールを選択できているかを評価するために、2 種類のツール呼び出し精度スコアラーを提供しています。
+Mastra は、LLM が利用可能な選択肢の中から適切なツールを選べているかを評価するために、次の 2 種類のツール呼び出し精度スコアラーを提供します:
 
-1. **コードベースのスコアラー** - ツールの完全一致に基づく決定的評価
-2. **LLM ベースのスコアラー** - AI が適切性を判断するセマンティック評価
+1. **コードベースのスコアラー** - 厳密なツール一致に基づく決定的評価
+2. **LLM ベースのスコアラー** - AI による適合性のセマンティック評価
 
-使用例は [Tool Call Accuracy Examples](/examples/scorers/tool-call-accuracy) を参照してください。
+## スコアリング手法の選び方
 
+### 次のような場合は Code-Based Scorer を使用:
 
+- **決定的で再現性のある**結果が必要なとき
+- **ツールの完全一致**を検証したいとき
+- **特定のツールの実行順序**を検証する必要があるとき
+- 速度とコストを重視する（LLM 呼び出しなし）とき
+- 自動テストを実行しているとき
+
+### 次のような場合は LLM ベースのスコアラーを使用してください:
+
+- 適切性を**意味レベルで理解**する必要がある
+- ツールの選択が**文脈や意図**に左右される
+- **確認・明確化の要求**といった**例外的なケース**を扱いたい
+- スコアリングの判断についての**説明**が必要
+- **本番環境でのエージェントの挙動**を評価している
 
 ## コードベースのツール呼び出し精度スコアラー
 
-`@mastra/evals/scorers/code` の `createToolCallAccuracyScorerCode()` 関数は、ツールの完全一致に基づく決定論的な二値スコアリングを提供し、厳格モードと寛容モードの両方に対応するとともに、ツール呼び出し順序の検証もサポートします。
+`@mastra/evals/scorers/code` の `createToolCallAccuracyScorerCode()` 関数は、ツールの完全一致に基づく決定的な二値スコアリングを提供し、厳密モードと寛容モードの両方に対応するほか、ツール呼び出し順序の検証もサポートします。
 
 ### パラメータ
 
@@ -27,20 +39,20 @@ Mastra は、LLM が利用可能な候補から適切なツールを選択でき
     {
       name: "expectedTool",
       type: "string",
-      description: "与えられたタスクで呼び出すべきツール名。expectedToolOrder が指定されている場合は無視されます。",
+      description: "対象のタスクで呼び出すべきツール名。expectedToolOrder が指定されている場合は無視されます。",
       required: false,
     },
     {
       name: "strictMode",
       type: "boolean",
-      description: "評価の厳格さを制御します。単一ツールモード: 完全一致の単一ツール呼び出しのみ許可。順序チェックモード: 余分なツールを含めず、正確に一致する必要があります。",
+      description: "評価の厳密さを制御します。単一ツールモード: 単一ツールの厳密一致のみを許可します。順序チェックモード: 余分なツールは認めず、ツールが完全一致している必要があります。",
       required: false,
       default: "false",
     },
     {
       name: "expectedToolOrder",
       type: "string[]",
-      description: "期待される呼び出し順のツール名配列。指定されている場合は順序チェックモードが有効になり、expectedTool パラメータは無視されます。",
+      description: "期待する呼び出し順に並んだツール名の配列。指定された場合は順序チェックモードが有効になり、expectedTool パラメータは無視されます。",
       required: false,
     },
   ]}
@@ -50,175 +62,518 @@ Mastra は、LLM が利用可能な候補から適切なツールを選択でき
 
 ### 評価モード
 
-コードベースのスコアラーは、2つの異なるモードで動作します。
+コードベースのスコアラーは、2つの明確に異なるモードで動作します。
 
 #### 単一ツールモード
 
-`expectedToolOrder` が指定されていない場合、スコアラーは単一ツールの選択を評価します。
+`expectedToolOrder` が指定されていない場合、スコアラーは単一ツールの選択を評価します:
 
 - **標準モード (strictMode: false)**: 他のツールが呼び出されていても、期待されるツールが呼び出されていれば `1` を返します
-- **厳格モード (strictMode: true)**: 呼び出しがちょうど1つで、かつ期待されるツールと一致する場合にのみ `1` を返します
+- **厳格モード (strictMode: true)**: 正確に1つのツールのみが呼び出され、そのツールが期待されるツールと一致する場合にのみ `1` を返します
 
-#### 順序チェックモード
+#### 呼び出し順チェックモード
 
-`expectedToolOrder` が指定されている場合、スコアラーはツール呼び出しの順序を検証します。
+`expectedToolOrder` が指定されている場合、スコアラーはツールの呼び出し順序を検証します:
 
-- **厳密な順序 (strictMode: true)**: 余分なツールなしで、指定された順序どおりに呼び出す必要があります
-- **柔軟な順序 (strictMode: false)**: 期待されるツールが相対的に正しい順序で現れていればよく（余分なツールは許可）
+- **厳密な順序（strictMode: true）**: 追加のツールなしで、指定された順序どおりに呼び出す必要があります
+- **柔軟な順序（strictMode: false）**: 期待されるツールが相対的な順序を保っていればよい（追加のツールは許可）
 
-### 例
+## コードベースのスコアリング詳細
 
-```typescript
-import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
+- **バイナリスコア**: 常に 0 または 1 を返す
+- **決定的**: 同じ入力なら常に同じ出力になる
+- **高速**: 外部 API への呼び出しなし
 
-// 単一ツールの検証
-const scorer = createToolCallAccuracyScorerCode({
-  expectedTool: 'weather-tool'
+### コードベースのスコアラー設定
+
+```typescript showLineNumbers copy
+// 標準モード - 期待されるツールが呼び出されれば合格
+const lenientScorer = createCodeScorer({ 
+  expectedTool: 'search-tool',
+  strictMode: false
 });
 
-// 厳格な単一ツール（他のツールは不可）
-const strictScorer = createToolCallAccuracyScorerCode({
-  expectedTool: 'calculator-tool',
+// 厳密モード - ツールが1つだけ呼び出された場合のみ合格
+const strictScorer = createCodeScorer({ 
+  expectedTool: 'search-tool',
   strictMode: true
 });
 
-// ツール順序の検証
-const orderScorer = createToolCallAccuracyScorerCode({
-  expectedTool: 'search-tool', // 順序が指定されている場合は無視
-  expectedToolOrder: ['search-tool', 'weather-tool'],
-  strictMode: true // 完全一致が必要
+// 厳密モードでの順序チェック
+const strictOrderScorer = createCodeScorer({
+  expectedTool: 'step1-tool',
+  expectedToolOrder: ['step1-tool', 'step2-tool', 'step3-tool'],
+  strictMode: true // 追加のツールは許可されない
 });
 ```
 
 
+### コードベースのスコアリング結果
 
-## LLMベースのツール呼び出し適合度スコアラー
+```typescript
+{
+  runId: string,
+  preprocessStepResult: {
+    expectedTool: string,
+    actualTools: string[],
+    strictMode: boolean,
+    expectedToolOrder?: string[],
+    hasToolCalls: boolean,
+    correctToolCalled: boolean,
+    correctOrderCalled: boolean | null,
+    toolCallInfos: ToolCallInfo[]
+  },
+  score: number // 常に0または1
+}
+```
 
-`@mastra/evals/scorers/llm` の `createToolCallAccuracyScorerLLM()` 関数は、LLM を用いてエージェントが呼び出したツールがユーザーのリクエストに対して適切かどうかを評価し、厳密な一致ではなく意味的な評価を行います。
 
-### Parameters
+## コードベースのスコアラーの例
+
+コードベースのスコアラーは、ツールの完全一致に基づいて、決定的な二値スコア（0または1）を付与します。
+
+### 適切なツール選び
+
+```typescript filename="src/example-correct-tool.ts" showLineNumbers copy
+const scorer = createToolCallAccuracyScorerCode({ 
+  expectedTool: 'weather-tool' 
+});
+
+// ツール呼び出しを含むLLMの入力と出力をシミュレート
+const inputMessages = [
+  createUIMessage({ 
+    content: '今日のニューヨークの天気はどうですか?', 
+    role: 'user', 
+    id: 'input-1' 
+  })
+];
+
+const output = [
+  createUIMessage({
+    content: '天気を確認します。',
+    role: 'assistant',
+    id: 'output-1',
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: 'call-123',
+        toolName: 'weather-tool',
+        args: { location: 'New York' },
+        result: { temperature: '72°F', condition: 'sunny' },
+        state: 'result'
+      })
+    ]
+  })
+];
+
+const run = createAgentTestRun({ inputMessages, output });
+const result = await scorer.run(run);
+
+console.log(result.score); // 1
+console.log(result.preprocessStepResult?.correctToolCalled); // true
+```
+
+
+### ストリクトモードでの評価
+
+ちょうど1つのツールだけが呼び出された場合にのみ合格します:
+
+```typescript filename="src/example-strict-mode.ts" showLineNumbers copy
+const strictScorer = createToolCallAccuracyScorerCode({ 
+  expectedTool: 'weather-tool',
+  strictMode: true
+});
+
+// 複数のツールが呼び出された - strictモードでは失敗
+const output = [
+  createUIMessage({
+    content: 'お手伝いします。',
+    role: 'assistant',
+    id: 'output-1',
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: 'call-1',
+        toolName: 'search-tool',
+        args: {},
+        result: {},
+        state: 'result',
+      }),
+      createToolInvocation({
+        toolCallId: 'call-2',
+        toolName: 'weather-tool',
+        args: { location: 'New York' },
+        result: { temperature: '20°C' },
+        state: 'result',
+      })
+    ]
+  })
+];
+
+const result = await strictScorer.run(run);
+console.log(result.score); // 0 - 複数のツールが呼び出されたため失敗
+```
+
+
+### ツールの順序検証
+
+ツールが所定の順序で呼び出されているかを検証します：
+
+```typescript filename="src/example-order-validation.ts" showLineNumbers copy
+const orderScorer = createToolCallAccuracyScorerCode({
+  expectedTool: 'auth-tool', // orderが指定されている場合は無視されます
+  expectedToolOrder: ['auth-tool', 'fetch-tool'],
+  strictMode: true // 追加のツールは許可されません
+});
+
+const output = [
+  createUIMessage({
+    content: '認証してデータを取得します。',
+    role: 'assistant',
+    id: 'output-1',
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: 'call-1',
+        toolName: 'auth-tool',
+        args: { token: 'abc123' },
+        result: { authenticated: true },
+        state: 'result'
+      }),
+      createToolInvocation({
+        toolCallId: 'call-2',
+        toolName: 'fetch-tool',
+        args: { endpoint: '/data' },
+        result: { data: ['item1'] },
+        state: 'result'
+      })
+    ]
+  })
+];
+
+const result = await orderScorer.run(run);
+console.log(result.score); // 1 - 正しい順序
+```
+
+
+### 柔軟な順序モード
+
+想定されたツールの相対的な順序が保たれている限り、追加のツールを許可します。
+
+```typescript filename="src/example-flexible-order.ts" showLineNumbers copy
+const flexibleOrderScorer = createToolCallAccuracyScorerCode({
+  expectedTool: 'auth-tool',
+  expectedToolOrder: ['auth-tool', 'fetch-tool'],
+  strictMode: false // 追加のツールを許可
+});
+
+const output = [
+  createUIMessage({
+    content: '包括的な操作を実行中です。',
+    role: 'assistant',
+    id: 'output-1',
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: 'call-1',
+        toolName: 'auth-tool',
+        args: { token: 'abc123' },
+        result: { authenticated: true },
+        state: 'result'
+      }),
+      createToolInvocation({
+        toolCallId: 'call-2',
+        toolName: 'log-tool', // 追加のツール - フレキシブルモードでは問題なし
+        args: { message: 'フェッチを開始' },
+        result: { logged: true },
+        state: 'result'
+      }),
+      createToolInvocation({
+        toolCallId: 'call-3',
+        toolName: 'fetch-tool',
+        args: { endpoint: '/data' },
+        result: { data: ['item1'] },
+        state: 'result'
+      })
+    ]
+  })
+];
+
+const result = await flexibleOrderScorer.run(run);
+console.log(result.score); // 1 - auth-toolがfetch-toolより前に来る
+```
+
+
+## LLM ベースのツール呼び出し適合性スコアラー
+
+`@mastra/evals/scorers/llm` の `createToolCallAccuracyScorerLLM()` 関数は、LLM を用いて、エージェントが呼び出したツールがユーザーのリクエストに適しているかを評価し、厳密な一致ではなく意味的な評価を行います。
+
+### パラメータ
 
 <PropertiesTable
   content={[
     {
       name: "model",
-      type: "MastraLanguageModel",
-      description: "ツールの適切性を評価するために使用する LLM モデル",
+      type: "MastraModelConfig",
+      description: "ツール適合性の評価に使用する LLM モデル",
       required: true,
     },
     {
       name: "availableTools",
       type: "Array<{name: string, description: string}>",
-      description: "コンテキストのための説明付き・利用可能なツール一覧",
+      description: "文脈把握のための説明付き利用可能ツール一覧",
       required: true,
     },
   ]}
 />
 
-### Features
+### 機能
 
-この LLM ベースのスコアラーは次を提供します:
+LLM ベースのスコアラーは次の機能を提供します:
 
-- **セマンティック評価**: 文脈とユーザー意図を理解
-- **適切性の判定**: 「役に立つ」ツールと「適切な」ツールを区別
-- **確認依頼への対応**: エージェントが適切に確認を求めている場合を認識
-- **不足ツールの検出**: 本来呼び出すべきだったツールを特定
-- **理由生成**: スコアリング判断の説明を提示
+- **セマンティック評価**: 文脈とユーザー意図を理解する
+- **妥当性の評価**: 「役に立つ」と「適切」の観点でツールを区別する
+- **確認要求の扱い**: エージェントが適切に確認（明確化）を求めている状況を認識する
+- **未使用ツールの検出**: 本来呼び出すべきだったツールを特定する
+- **推論の提示**: スコアリング判断の根拠を説明する
 
-### Evaluation Process
+### 評価プロセス
 
-1. **ツール呼び出しの抽出**: エージェント出力で言及されたツールを特定
-2. **適切性の分析**: 各ツールをユーザーリクエストに照らして評価
-3. **スコアの算出**: 適切なツール呼び出し数と総呼び出し数に基づいてスコアを計算
-4. **理由の生成**: 人が読める形の説明を提供
+1. **ツール呼び出しの抽出**: エージェントの出力で言及されたツールを特定する
+2. **適切性の分析**: 各ツールがユーザーのリクエストに適合しているか評価する
+3. **スコアの生成**: 適切な呼び出し数と総呼び出し数に基づいてスコアを算出する
+4. **根拠の生成**: 人間が読みやすい説明を提示する
 
-### Examples
+## LLMベースのスコアリングの詳細
+
+- **小数スコア**: 0.0〜1.0の値を返します
+- **コンテキスト対応**: ユーザーの意図や妥当性を考慮します
+- **説明可能**: スコアの理由を提示します
+
+### LLM ベースのスコアリングのオプション
+
+```typescript showLineNumbers copy
+// 基本設定
+const basicLLMScorer = createLLMScorer({
+  model: 'openai/gpt-4o-mini',
+  availableTools: [
+    { name: 'tool1', description: '説明 1' },
+    { name: 'tool2', description: '説明 2' }
+  ]
+});
+
+// 別のモデルを使用する場合
+const customModelScorer = createLLMScorer({
+  model: openai('gpt-4'), // 複雑な評価に適したより強力なモデル
+  availableTools: [...]
+});
+```
+
+
+### LLMベースのスコアラー結果
 
 ```typescript
-import { createToolCallAccuracyScorerLLM } from '@mastra/evals/scorers/llm';
+{
+  runId: string,
+  score: number,  // 0.0から1.0
+  reason: string, // 人間が読める形式の説明
+  analyzeStepResult: {
+    evaluations: Array<{
+      toolCalled: string,
+      wasAppropriate: boolean,
+      reasoning: string
+    }>,
+    missingTools?: string[]
+  }
+}
+```
 
+
+## LLMベースのスコアリング例
+
+LLMベースのスコアラーは、ユーザーのリクエストに対して選択されたツールが適切かどうかをAIで評価します。
+
+### 基本的なLLMの評価
+
+```typescript filename="src/example-llm-basic.ts" showLineNumbers copy
 const llmScorer = createToolCallAccuracyScorerLLM({
   model: 'openai/gpt-4o-mini',
   availableTools: [
-    {
-      name: 'weather-tool',
-      description: '任意の場所の現在の天気情報を取得する'
+    { 
+      name: 'weather-tool', 
+      description: '任意の場所の現在の天気情報を取得' 
     },
-    {
-      name: 'search-tool',
-      description: 'ウェブ上の情報を検索する'
+    { 
+      name: 'calendar-tool', 
+      description: 'カレンダーのイベントとスケジュールを確認' 
     },
-    {
-      name: 'calendar-tool',
-      description: 'カレンダーの予定やスケジュールを確認する'
+    { 
+      name: 'search-tool', 
+      description: 'ウェブで一般情報を検索' 
     }
   ]
 });
 
-const result = await llmScorer.run(agentRun);
-console.log(result.score); // 0.0 〜 1.0
-console.log(result.reason); // スコアの説明
+const inputMessages = [
+  createUIMessage({ 
+    content: '今日のサンフランシスコの天気はどうですか?', 
+    role: 'user', 
+    id: 'input-1' 
+  })
+];
+
+const output = [
+  createUIMessage({
+    content: '現在の天気を確認します。',
+    role: 'assistant',
+    id: 'output-1',
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: 'call-123',
+        toolName: 'weather-tool',
+        args: { location: 'San Francisco', date: 'today' },
+        result: { temperature: '68°F', condition: 'foggy' },
+        state: 'result'
+      })
+    ]
+  })
+];
+
+const run = createAgentTestRun({ inputMessages, output });
+const result = await llmScorer.run(run);
+
+console.log(result.score); // 1.0 - 適切なツール使用
+console.log(result.reason); // "エージェントはユーザーの天気情報リクエストに対応するため、weather-tool を正しく使用しました。"
 ```
 
 
+### 不適切なツールの使用への対処
 
-## スコアラーの選び方
+```typescript filename="src/example-llm-inappropriate.ts" showLineNumbers copy
+const inputMessages = [
+  createUIMessage({ 
+    content: '東京の天気はどうですか?', 
+    role: 'user', 
+    id: 'input-1' 
+  })
+];
 
-### コードベースのスコアラーを使うとよい場合:
+const inappropriateOutput = [
+  createUIMessage({
+    content: 'その情報を検索します。',
+    role: 'assistant', 
+    id: 'output-1',
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: 'call-456',
+        toolName: 'search-tool', // weather-toolより適切性が低い
+        args: { query: 'Tokyo weather' },
+        result: { results: ['Tokyo weather data...'] },
+        state: 'result'
+      })
+    ]
+  })
+];
 
-- **決定的で再現可能な**結果が必要なとき
-- **ツールの完全一致**をテストしたいとき
-- **特定のツール実行順序**を検証する必要があるとき
-- 速度とコストを重視する（LLM 呼び出しなし）
-- 自動テストを実行しているとき
+const run = createAgentTestRun({ inputMessages, output: inappropriateOutput });
+const result = await llmScorer.run(run);
 
-### LLM ベースのスコアラーを使うとよい場合:
-
-- 適切さについての**意味的な理解**が必要なとき
-- ツール選択が**文脈や意図**に依存する場合
-- 確認要求のような**例外的ケース**を扱いたいとき
-- スコアリング判断に対する**説明**が必要なとき
-- **本番環境のエージェント挙動**を評価しているとき
-
-
-
-## スコアリングの詳細
-
-### コードベースのスコアリング
-
-- **二値スコア**: 常に 0 または 1 を返す
-- **決定的**: 同じ入力なら常に同じ出力になる
-- **高速**: 外部 API 呼び出し不要
-
-### LLM ベースのスコアリング
-
-- **小数スコア**: 0.0 から 1.0 の値を返す
-- **コンテキスト対応**: ユーザーの意図や妥当性を考慮する
-- **説明的**: スコアの根拠を提示する
-
+console.log(result.score); // 0.5 - 部分的に適切
+console.log(result.reason); // "直接的な天気の問い合わせに対してはweather-toolの方が適切であるにもかかわらず、エージェントはsearch-toolを使用しました。"
+```
 
 
-## ユースケース
+### 確認（明確化）リクエストの評価
 
-### コードベースのスコアラーのユースケース
+LLM スコアラーは、エージェントが適切に明確化を求めた場合、それを認識します。
 
-- **単体テスト**: 特定のツール選択の動作を検証
-- **回帰テスト**: ツール選択が変わらないことを保証
-- **ワークフロー検証**: 複数ステップのプロセスにおけるツールのシーケンスを確認
-- **CI/CD パイプライン**: 高速かつ決定論的な検証
+```typescript filename="src/example-llm-clarification.ts" showLineNumbers copy
+const vagueInput = [
+  createUIMessage({ 
+    content: '何か手伝ってほしいことがあります', 
+    role: 'user', 
+    id: 'input-1' 
+  })
+];
 
-### LLM ベースのスコアラーのユースケース
+const clarificationOutput = [
+  createUIMessage({
+    content: '喜んでお手伝いします!どのようなことでお困りか、もう少し詳しく教えていただけますか?',
+    role: 'assistant',
+    id: 'output-1',
+    // ツールは呼び出されていません - 代わりに詳細を確認しています
+  })
+];
 
-- **品質保証**: 本番運用中のエージェントの動作を評価
-- **A/B テスト**: 異なるエージェント実装を比較
-- **ユーザー意図との整合**: ツールがユーザーのニーズに合致していることを確認
-- **エッジケース対応**: 確認やエラーに関するシナリオを評価
+const run = createAgentTestRun({ 
+  inputMessages: vagueInput, 
+  output: clarificationOutput 
+});
+const result = await llmScorer.run(run);
 
+console.log(result.score); // 1.0 - 詳細確認を求めるのが適切
+console.log(result.reason); // "エージェントは不十分な情報でツールを呼び出すのではなく、適切に詳細確認を求めました。"
+```
+
+
+## 両方のスコアラーを比較する
+
+同じデータに対して両方のスコアラーを使う例を次に示します：
+
+```typescript filename="src/example-comparison.ts" showLineNumbers copy
+import { createToolCallAccuracyScorerCode as createCodeScorer } from '@mastra/evals/scorers/code';
+import { createToolCallAccuracyScorerLLM as createLLMScorer } from '@mastra/evals/scorers/llm';
+
+// 両方のスコアラーをセットアップ
+const codeScorer = createCodeScorer({
+  expectedTool: 'weather-tool',
+  strictMode: false
+});
+
+const llmScorer = createLLMScorer({
+  model: 'openai/gpt-4o-mini',
+  availableTools: [
+    { name: 'weather-tool', description: '天気情報を取得' },
+    { name: 'search-tool', description: 'ウェブを検索' }
+  ]
+});
+
+// テストデータ
+const run = createAgentTestRun({
+  inputMessages: [
+    createUIMessage({ 
+      content: '天気はどうですか?', 
+      role: 'user', 
+      id: 'input-1' 
+    })
+  ],
+  output: [
+    createUIMessage({
+      content: 'その情報を調べます。',
+      role: 'assistant',
+      id: 'output-1',
+      toolInvocations: [
+        createToolInvocation({
+          toolCallId: 'call-1',
+          toolName: 'search-tool',
+          args: { query: 'weather' },
+          result: { results: ['weather data'] },
+          state: 'result'
+        })
+      ]
+    })
+  ]
+});
+
+// 両方のスコアラーを実行
+const codeResult = await codeScorer.run(run);
+const llmResult = await llmScorer.run(run);
+
+console.log('Code Scorer:', codeResult.score); // 0 - 間違ったツール
+console.log('LLM Scorer:', llmResult.score);   // 0.3 - 部分的に適切
+console.log('LLM Reason:', llmResult.reason);   // search-toolがあまり適切でない理由を説明
+```
 
 
 ## 関連項目
 
-- [回答関連度スコアラー](./answer-relevancy)
-- [網羅性スコアラー](./completeness)
-- [忠実性スコアラー](./faithfulness)
-- [カスタムスコアラー](/docs/scorers/custom-scorers)
+- [Answer Relevancy Scorer](./answer-relevancy)
+- [Completeness Scorer](./completeness)
+- [Faithfulness Scorer](./faithfulness)
+- [Custom Scorers](/docs/scorers/custom-scorers)

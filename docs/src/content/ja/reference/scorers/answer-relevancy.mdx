@@ -1,17 +1,11 @@
 ---
-title: "リファレンス: Answer Relevancy | Scorers | Mastra Docs"
-description: "入力クエリに対してLLM出力がどの程度適切に対応しているかを評価するMastraのAnswer Relevancy Scorerのドキュメント。"
+title: "リファレンス: Answer Relevancy | スコアラー | Mastra ドキュメント"
+description: Mastra の Answer Relevancy スコアラーに関するドキュメント。LLM の出力が入力クエリにどの程度関連しているかを評価します。
 ---
 
+# 回答の関連性スコアラー
 
-
-# Answer Relevancy Scorer
-
-`createAnswerRelevancyScorer()`関数は、以下のプロパティを持つ単一のオプションオブジェクトを受け取ります：
-
-使用例については、[Answer Relevancy Examples](/examples/scorers/answer-relevancy)を参照してください。
-
-
+`createAnswerRelevancyScorer()` 関数は、以下のプロパティを持つ単一のオプションオブジェクトを受け取ります。
 
 ## パラメータ
 
@@ -21,28 +15,26 @@ description: "入力クエリに対してLLM出力がどの程度適切に対応
       name: "model",
       type: "LanguageModel",
       required: true,
-      description: "関連性を評価するために使用されるモデルの設定。",
+      description: "関連性の評価に使用するモデルの設定。",
     },
     {
       name: "uncertaintyWeight",
       type: "number",
       required: false,
       defaultValue: "0.3",
-      description: "スコアリングにおける「不確実」な判定に与えられる重み（0-1）。",
+      description: "スコアリングにおける「不確か」判定の重み（0〜1）。",
     },
     {
       name: "scale",
       type: "number",
       required: false,
       defaultValue: "1",
-      description: "最大スコア値。",
+      description: "スコアの最大値。",
     },
   ]}
 />
 
-この関数はMastraScorerクラスのインスタンスを返します。`.run()`メソッドは他のスコアラーと同じ入力を受け取りますが（[MastraScorerリファレンス](./mastra-scorer)を参照）、戻り値には以下に記載されているLLM固有のフィールドが含まれます。
-
-
+この関数は MastraScorer クラスのインスタンスを返します。`.run()` メソッドは他のスコアラーと同じ入力を受け付けます（[MastraScorer リファレンス](./mastra-scorer)を参照）が、戻り値には以下に記載の LLM 固有のフィールドが含まれます。
 
 ## .run() の戻り値
 
@@ -56,12 +48,12 @@ description: "入力クエリに対してLLM出力がどの程度適切に対応
     {
       name: "score",
       type: "number",
-      description: "関連性スコア（0からスケール、デフォルト0-1）",
+      description: "関連度スコア（0からのスケール、デフォルトは0〜1）。",
     },
     {
       name: "preprocessPrompt",
       type: "string",
-      description: "前処理ステップでLLMに送信されるプロンプト（任意）。",
+      description: "前処理ステップで LLM に送信されたプロンプト（任意）。",
     },
     {
       name: "preprocessStepResult",
@@ -71,7 +63,7 @@ description: "入力クエリに対してLLM出力がどの程度適切に対応
     {
       name: "analyzePrompt",
       type: "string",
-      description: "分析ステップでLLMに送信されるプロンプト（任意）。",
+      description: "分析ステップで LLM に送信されたプロンプト（任意）。",
     },
     {
       name: "analyzeStepResult",
@@ -81,42 +73,141 @@ description: "入力クエリに対してLLM出力がどの程度適切に対応
     {
       name: "generateReasonPrompt",
       type: "string",
-      description: "理由生成ステップでLLMに送信されるプロンプト（任意）。",
+      description: "理由生成ステップで LLM に送信されたプロンプト（任意）。",
     },
     {
       name: "reason",
       type: "string",
-      description: "スコアの説明。",
+      description: "スコアの根拠の説明。",
     },
   ]}
 />
 
+## 採点の詳細
 
+スコアラーは、事実の正確性ではなく、完全性と詳細度を考慮しつつ、クエリと回答の整合性に基づいて関連性を評価します。
 
-## スコアリング詳細
+### スコアリング手順
 
-スコアラーは、完全性と詳細レベルを考慮してクエリと回答の整合性を通じて関連性を評価しますが、事実の正確性は評価しません。
-
-### スコアリングプロセス
-
-1. **ステートメント前処理:**
-   - コンテキストを保持しながら出力を意味のあるステートメントに分割します。
-2. **関連性分析:**
-   - 各ステートメントは以下のように評価されます：
-     - "yes"：直接一致に対する完全な重み
-     - "unsure"：近似一致に対する部分的重み（デフォルト：0.3）
-     - "no"：無関係なコンテンツに対するゼロ重み
-3. **スコア計算:**
+1. **文の前処理:**
+   - 文脈を保ちつつ、出力を意味のある文に分割します。
+2. **関連性の分析:**
+   - 各文を次のいずれかとして判定します:
+     - "yes": 直接一致に対して満額の重み
+     - "unsure": おおよその一致に対して部分的な重み（既定値: 0.3）
+     - "no": 無関係な内容に対して重みゼロ
+3. **スコアの算出:**
    - `((direct + uncertainty * partial) / total_statements) * scale`
 
-### スコア解釈
+### スコアの解釈
 
-- 1.0：完璧な関連性 - 完全かつ正確
-- 0.7-0.9：高い関連性 - 軽微なギャップや不正確さ
-- 0.4-0.6：中程度の関連性 - 重要なギャップ
-- 0.1-0.3：低い関連性 - 重大な問題
-- 0.0：関連性なし - 不正確またはトピック外
+0～1 の関連度スコア:
 
+- **1.0**: 応答は問い合わせに完全に答えており、関連性が高く要点を押さえた情報を提供している。
+- **0.7–0.9**: 応答はおおむね問い合わせに答えているが、わずかに無関係な内容を含む場合がある。
+- **0.4–0.6**: 応答は部分的に問い合わせに答えており、関連情報と無関係な情報が混在している。
+- **0.1–0.3**: 応答は関連する内容がごくわずかで、問い合わせの意図を大きく外している。
+- **0.0**: 応答は完全に無関係で、問い合わせにまったく答えていない。
+
+## 例
+
+### 関連性が高い例
+
+この例では、応答が入力クエリに対し、具体的で適切な情報を用いて正確に対応しています。
+
+```typescript filename="src/example-high-answer-relevancy.ts" showLineNumbers copy
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createAnswerRelevancyScorer({ model: 'openai/gpt-4o-mini' });
+
+const inputMessages = [{ role: 'user', content: "定期的な運動による健康効果は何ですか?" }];
+const outputMessage = { text: "定期的な運動は心血管系の健康を改善し、筋肉を強化し、代謝を高め、エンドルフィンの分泌により精神的な健康を向上させます。" };
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+
+#### 関連性の高い出力
+
+無関係な情報を含めずにクエリに正確に答えているため、この出力は高いスコアを受け取ります。
+
+```typescript
+{
+  score: 1,
+  reason: 'スコアが1である理由は、出力が質問に直接答えており、心血管系の健康、筋力、代謝、メンタルヘルスの改善など、定期的な運動による複数の明確な健康効果を示しているためです。各ポイントは関連性が高く、健康効果の包括的な理解に寄与しています。'
+}
+```
+
+
+### 部分的な関連性の例
+
+この例では、回答は問い合わせの一部には対応しているものの、直接関係のない情報も含まれています。
+
+```typescript filename="src/example-partial-answer-relevancy.ts" showLineNumbers copy
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createAnswerRelevancyScorer({ model: 'openai/gpt-4o-mini' });
+
+const inputMessages = [{ role: 'user', content: "健康的な朝食には何を含めるべきですか?" }];
+const outputMessage = { text: "栄養バランスの良い朝食には、全粒穀物とタンパク質を含めるべきです。ただし、朝食を摂るタイミングも同じくらい重要です。研究によると、起床後2時間以内に食事をすることで、一日を通して代謝とエネルギーレベルが最適化されることが示されています。" };
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+
+#### 部分的に関連する出力
+
+この出力はクエリに部分的にしか答えていないため、スコアが低くなります。関連情報は含まれているものの、無関係な内容が全体の関連性を下げています。
+
+```typescript
+{
+  score: 0.25,
+  reason: 'スコアが0.25なのは、出力が全粒穀物とタンパク質を健康的な朝食の構成要素として挙げており、直接的な回答を提供しているため関連性があるからです。しかし、朝食のタイミングや代謝・エネルギーレベルへの影響に関する追加情報は質問と直接関係がないため、全体的な関連性スコアが低くなっています。'
+}
+```
+
+
+## 関連性が低い例
+
+この例では、回答が問い合わせに対応しておらず、完全に無関係な情報が含まれています。
+
+```typescript filename="src/example-low-answer-relevancy.ts" showLineNumbers copy
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createAnswerRelevancyScorer({ model: 'openai/gpt-4o-mini' });
+
+const inputMessages = [{ role: 'user', content: "瞑想の効果は何ですか?" }];
+const outputMessage = { text: "万里の長城は全長13,000マイル以上で、明朝時代に侵略を防ぐために建設されました。" };
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+
+#### 関連性の低い出力
+
+クエリに答えておらず、関連する情報も提供していないため、出力のスコアは0になります。
+
+```typescript
+{
+  score: 0,
+  reason: 'スコアが0なのは、万里の長城に関する出力が瞑想の効果とは全く関係がなく、入力された質問に答える関連情報や文脈が一切提供されていないためです。'
+}
+```
 
 
 ## 関連項目

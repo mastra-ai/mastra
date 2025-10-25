@@ -1,0 +1,297 @@
+---
+title: "モデル"
+description: "Mastra のモデルルーターを通じて、47 社以上の AI プロバイダーと 808 種以上のモデルにアクセスできます。"
+---
+
+{/* このファイルは generate-model-docs.ts によって自動生成されています。手動で編集しないでください */}
+
+import { CardGrid, CardGridItem } from "@/components/cards/card-grid";
+import { Tab, Tabs } from "@/components/tabs";
+import { Callout } from "nextra/components";
+import { NetlifyLogo } from "@/components/logos/NetlifyLogo";
+
+
+# モデルプロバイダー
+
+Mastra は複数のプロバイダーに対応した LLM を扱うための統一インターフェースを提供しており、単一の API を通じて 47 のプロバイダーが提供する 808 のモデルにアクセスできます。
+
+## 機能
+
+- **あらゆるモデルに対応する単一の API** - 追加のプロバイダー依存関係をインストール・管理することなく、どのモデルにもアクセスできます。
+
+- **最新の AI に即アクセス** - どのプロバイダー発でも、新モデルを公開直後から利用可能。Mastra のプロバイダー非依存インターフェースでベンダーロックインを回避。  
+
+- [**モデルを組み合わせて使う**](#mix-and-match-models) - タスクごとに最適なモデルを使い分け可能。たとえば、大規模コンテキストの処理には GPT-4o-mini を用い、推論タスクには Claude Opus 4.1 に切り替えます。  
+
+- [**モデルのフォールバック**](#model-fallbacks) - プロバイダーに障害が発生した場合、Mastra はアプリケーションレベルで別プロバイダーへ自動的に切り替え、API ゲートウェイと比べてレイテンシを抑えます。
+
+## 基本的な使い方
+
+OpenAI、Anthropic、Google、あるいは OpenRouter のようなゲートウェイを使う場合は、モデルを "provider/model-name" の形式で指定すれば、あとは Mastra が処理します。
+
+Mastra は関連する環境変数（例: `ANTHROPIC_API_KEY`）を読み取り、リクエストを各プロバイダーにルーティングします。API キーが設定されていない場合は、どの変数を設定すべきかを明確に示す実行時エラーが表示されます。
+
+<Tabs items={["OpenAI", "Anthropic", "Google Gemini", "xAI", "OpenRouter"]}>
+  <Tab>
+    ```typescript copy showLineNumbers
+    import { Agent } from "@mastra/core";
+
+    const agent = new Agent({
+      name: "my-agent",
+      instructions: "You are a helpful assistant",
+      model: "openai/gpt-5"
+    })
+    ```
+  </Tab>
+  <Tab>
+    ```typescript copy showLineNumbers
+    import { Agent } from "@mastra/core";
+
+    const agent = new Agent({
+      name: "my-agent", 
+      instructions: "You are a helpful assistant",
+      model: "anthropic/claude-4-5-sonnet"
+    })
+    ```
+  </Tab>
+  <Tab>
+    ```typescript copy showLineNumbers
+    import { Agent } from "@mastra/core";
+
+    const agent = new Agent({
+      name: "my-agent",
+      instructions: "You are a helpful assistant",
+      model: "google/gemini-2.5-flash"
+    })
+    ```
+  </Tab>
+  <Tab>
+    ```typescript copy showLineNumbers
+    import { Agent } from "@mastra/core";
+
+    const agent = new Agent({
+      name: "my-agent",
+      instructions: "You are a helpful assistant",
+      model: "xai/grok-4"
+    })
+    ```
+  </Tab>
+  <Tab>
+    ```typescript copy showLineNumbers
+    import { Agent } from "@mastra/core";
+
+    const agent = new Agent({
+      name: "my-agent",
+      instructions: "You are a helpful assistant", 
+      model: "openrouter/anthropic/claude-haiku-4-5"
+    })
+    ```
+  </Tab>
+</Tabs>
+
+## モデルディレクトリ
+
+左のナビゲーションで利用可能なモデル一覧を参照するか、以下から探索してください。
+
+<CardGrid>
+    <CardGridItem
+      title="Gateways"
+      href="./models/gateways"
+    >
+      <div className="space-y-3">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>OpenRouter</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <NetlifyLogo className="w-4 h-4" />
+            <span>Netlify</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/vercel.svg" alt="Vercel" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>Vercel</span>
+          </div>
+        </div>
+
+      </div>
+    </CardGridItem>
+    <CardGridItem
+      title="Providers"
+      href="./models/providers"
+    >
+      <div className="space-y-3">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/openai.svg" alt="OpenAI" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>OpenAI</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/anthropic.svg" alt="Anthropic" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>Anthropic</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/google.svg" alt="Google" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>Google</span>
+          </div>
+        </div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 41 以上</div>
+      </div>
+    </CardGridItem>
+</CardGrid>
+
+エディタ内で直接モデルを見つけることもできます。Mastra は `model` フィールドに対して完全なオートコンプリートを提供します。入力を始めるだけで、IDE に利用可能な選択肢が表示されます。
+
+あるいは、[Playground](/docs/server-db/local-dev-playground) の UI でモデルを参照・テストできます。
+
+<Callout type="info">
+開発環境では、ローカルのモデル一覧を毎時自動更新し、TypeScript のオートコンプリートと Playground が常に最新のモデルに追随するようにします。無効化するには `MASTRA_AUTO_REFRESH_PROVIDERS=false` を設定してください。本番環境では自動更新はデフォルトで無効です。
+</Callout>
+
+## モデルを組み合わせて活用する
+
+一部のモデルは高速だが能力は控えめで、別のモデルはより大きなコンテキストウィンドウや優れた推論力を備えています。タスクに応じて、同一プロバイダー内でモデルを使い分けたり、プロバイダーをまたいで組み合わせたりしましょう。
+
+```typescript showLineNumbers
+import { Agent } from "@mastra/core";
+
+// ドキュメント処理にはコスト効率の良いモデルを使用
+const documentProcessor = new Agent({
+  name: "document-processor",
+  instructions: "ドキュメントから重要な情報を抽出して要約",
+  model: "openai/gpt-4o-mini" 
+})
+
+// 複雑な分析には強力な推論モデルを使用
+const reasoningAgent = new Agent({
+  name: "reasoning-agent", 
+  instructions: "データを分析し、戦略的な推奨事項を提供",
+  model: "anthropic/claude-opus-4-1"
+})
+```
+
+
+## 動的なモデル選択
+
+モデルは単なる文字列にすぎないため、[ランタイムコンテキスト](/docs/server-db/runtime-context)や変数、その他のロジックに応じて動的に選択できます。
+
+```typescript showLineNumbers
+const agent = new Agent({
+  name: "dynamic-assistant",
+  model: ({ runtimeContext }) => {
+    const provider = runtimeContext.get("provider-id");
+    const model = runtimeContext.get("model-id");
+    return `${provider}/${model}`;
+  },
+});
+```
+
+これは強力な活用パターンを可能にします：
+
+* A/Bテスト - 本番環境でモデルの性能を比較。
+* ユーザー選択式モデル - アプリ内でユーザーが好みのモデルを選択可能。
+* マルチテナントアプリケーション - 顧客ごとに独自のAPIキーとモデル設定を利用可能。
+
+
+## プロバイダー固有のオプション
+
+各モデルプロバイダーは独自の設定オプションを提供しています。OpenAI では `reasoningEffort` を調整できます。Anthropic では `cacheControl` を調整できます。Mastra では、これらの特定の `providerOptions` をエージェント単位またはメッセージ単位で設定できます。
+
+```typescript showLineNumbers
+// エージェントレベル(以降のすべてのメッセージに適用)
+const planner = new Agent({
+  instructions: {
+    role: "system",
+    content: "あなたは役立つアシスタントです。",
+    providerOptions: {
+      openai: { reasoningEffort: "low" }
+    }
+  },
+  model: "openai/o3-pro",
+});
+
+const lowEffort = 
+  await planner.generate("シンプルな3品のディナーメニューを考えて");
+
+// メッセージレベル(このメッセージのみに適用)
+const highEffort = await planner.generate([
+  {
+    role: "user",
+    content: "セリアック病の人向けのシンプルな3品のディナーメニューを考えて",
+    providerOptions: {
+      openai: { reasoningEffort: "high" }
+    }
+  }
+]);
+```
+
+
+## カスタムヘッダー
+
+組織IDやその他のプロバイダー固有のフィールドなど、カスタムヘッダーを指定する必要がある場合は、この構文を使用します。
+
+```typescript showLineNumbers
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    id: "openai/gpt-4-turbo",
+    apiKey: process.env.OPENAI_API_KEY,
+    headers: {
+      "OpenAI-Organization": "org-abc123"
+    }
+  }
+});
+```
+
+<Callout type="info">
+  設定はプロバイダーによって異なります。カスタムヘッダーの詳細は、左側のナビゲーションにある各プロバイダーのページをご確認ください。
+</Callout>
+
+
+## モデルのフォールバック
+
+単一のモデルに依存すると、アプリケーションに単一障害点が生まれます。モデルのフォールバックは、モデルやプロバイダー間での自動フェイルオーバーを提供します。プライマリモデルが利用不能になった場合、いずれかが成功するまで、設定された次のフォールバックに対してリクエストが再試行されます。
+
+```typescript showLineNumbers
+import { Agent } from '@mastra/core';
+
+const agent = new Agent({
+  name: 'resilient-assistant',
+  instructions: 'あなたは親切なアシスタントです。',
+  model: [
+    {
+      model: "openai/gpt-5",
+      maxRetries: 3,
+    },
+    {
+      model: "anthropic/claude-4-5-sonnet",
+      maxRetries: 2,
+    },
+    {
+      model: "google/gemini-2.5-pro",
+      maxRetries: 2,
+    },
+  ],
+});
+```
+
+Mastra はまずプライマリモデルを試します。500 エラー、レート制限、またはタイムアウトが発生した場合は、自動的に最初のフォールバックへ切り替えます。そこでもダメなら、次へ進みます。各モデルには、次へ移る前に実行される独自のリトライ回数が設定されています。
+
+ユーザーが中断を感じることはありません。レスポンスは同じ形式のまま、単に別のモデルから返されます。システムがフォールバックチェーンをたどる間、エラーのコンテキストは保持され、ストリーミング互換性を維持しつつ、クリーンなエラー伝播を実現します。
+
+
+## Mastra で AI SDK を使う
+
+必要に応じて、Mastra は AI SDK のプロバイダー用モジュールを直接利用できます。
+
+```typescript showLineNumbers
+import { groq } from '@ai-sdk/groq';
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  model: groq('gemma2-9b-it')
+})
+```
+
+AI SDK のモデル（例: `groq('gemma2-9b-it')`）は、モデルルーターのフォールバックや[scorers](/docs/scorers/overview)など、`"provider/model"` という文字列を受け付けるあらゆる場所で使用できます。

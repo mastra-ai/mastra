@@ -1,7 +1,7 @@
 import { Meta } from "nextra";
 const meta: Meta = {
   "contributing-templates": {
-    title: "テンプレートへの貢献",
+    title: "貢献用テンプレート",
   },
   licensing: {
     title: "ライセンス",

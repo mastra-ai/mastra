@@ -1,84 +1,81 @@
 ---
-title: "研究論文アシスタントの作成 | Mastra RAG ガイド"
-description: RAG を用いて学術論文を分析し、質問に回答する AI リサーチアシスタントの構築方法を解説するガイド。
+title: "研究論文アシスタントの構築 | Mastra RAG ガイド"
+description: RAG を用いて学術論文を分析し、質問に答えられる AI 研究アシスタントを作成するためのガイド。
 ---
 
 import { Steps, Callout } from "nextra/components";
 
 
+# RAG を用いた研究論文アシスタントの構築
 
-# RAG を用いたリサーチペーパーアシスタントの構築
+このガイドでは、Retrieval Augmented Generation (RAG) を用いて、学術論文を分析し、その内容に関する特定の質問に答えられる AI 研究アシスタントを作成します。
 
-このガイドでは、学術論文を分析し、その内容に関する特定の質問に Retrieval Augmented Generation（RAG）を用いて回答できる AI リサーチアシスタントを作成します。
+例として、基礎的な Transformer の論文「Attention Is All You Need」(https://arxiv.org/html/1706.03762) を使用します。データベースにはローカルの LibSQL を用います。
 
-例として、基盤となる Transformer 論文[「Attention Is All You Need」](https://arxiv.org/html/1706.03762)を使用します。データベースには、ローカルの LibSQL データベースを使用します。
-
-
+例として、基礎的な Transformer の論文[「Attention Is All You Need」](https://arxiv.org/html/1706.03762) を使用します。データベースにはローカルの LibSQL を用います。
 
 ## 前提条件
 
 - Node.js `v20.0` 以降がインストールされていること
-- 対応する [モデルプロバイダー](/docs/getting-started/model-providers) から取得した API キー
-- 既存の Mastra プロジェクト（新規プロジェクトをセットアップする場合は、[インストールガイド](/docs/getting-started/installation) に従ってください）
-
-
+- 対応する[モデルプロバイダー](/models)の API キー
+- 既存の Mastra プロジェクト（新規プロジェクトのセットアップは[インストールガイド](/docs/getting-started/installation)を参照）
 
 ## RAG の仕組み
 
-RAG がどのように機能し、各コンポーネントをどのように実装するかを見ていきましょう。
+RAG がどのように動作するか、そして各コンポーネントをどのように実装するかを見ていきましょう。
 
-### Knowledge Store/Index
+### ナレッジストア／インデックス
 
 - テキストをベクトル表現に変換する
 - コンテンツを数値ベクトルとして表現する
-- **実装**: OpenAI の `text-embedding-3-small` を使って埋め込みを作成し、LibSQLVector に保存します
+- **実装**: OpenAI の `text-embedding-3-small` で埋め込みを生成し、LibSQLVector に保存する
 
 ### Retriever
 
-- 類似度検索で関連コンテンツを見つける
+- 類似検索によって関連するコンテンツを見つける
 - クエリの埋め込みを保存済みベクトルと照合する
-- **実装**: LibSQLVector を使って保存済み埋め込みに対する類似度検索を実行します
+- **実装**: 保存済みの埋め込みに対して類似検索を行うために LibSQLVector を使用します
 
-### Generator
+### ジェネレーター
 
 - 取得したコンテンツを LLM で処理する
-- 文脈に即した応答を生成する
-- **実装**: 取得したコンテンツに基づいて GPT-4o-mini で回答を生成します
+- 文脈に基づく応答を生成する
+- **実装**: 取得コンテンツに基づいて回答を生成するために GPT-4o-mini を使用します
 
-この実装では次のことを行います:
+この実装では以下を行います:
 
-1. Transformer 論文を埋め込みに変換する
-2. 高速な検索のために LibSQLVector に保存する
-3. 類似度検索で関連セクションを見つける
-4. 取得した文脈に基づいて正確な応答を生成する
-
-
+1. Transformer 論文を埋め込みベクトルに変換する
+2. 高速な検索のためにそれらを LibSQLVector に保存する
+3. 類似度検索で関連するセクションを特定する
+4. 取得したコンテキストに基づき正確な応答を生成する
 
 ## エージェントの作成
 
-エージェントの挙動を定義し、Mastra プロジェクトに接続して、ベクターストアを作成します。
+エージェントの振る舞いを定義し、Mastra プロジェクトに接続して、ベクターストアを作成します。
 
 <Steps>
 
 ### 追加の依存関係をインストールする
 
-[インストールガイド](/docs/getting-started/installation)の実行後、追加の依存関係をインストールします:
+[インストールガイド](/docs/getting-started/installation)を完了したら、次の追加依存関係をインストールします:
 
 ```bash copy
 npm install @mastra/rag@latest ai@^4.0.0
 ```
 
 <Callout type="info">
-  Mastra は現在、AI SDK の v5 をサポートしていません（[サポートスレッド](https://github.com/mastra-ai/mastra/issues/5470)を参照）。このガイドでは v4 を使用してください。
+  Mastra は現在 AI SDK の v5 をサポートしていません（[サポート
+  スレッド](https://github.com/mastra-ai/mastra/issues/5470)を参照）。このガイドでは
+  v4 を使用してください。
 </Callout>
 
 ### エージェントを定義する
 
 ここでは RAG 対応のリサーチアシスタントを作成します。エージェントは次を使用します:
 
-- 論文中の関連コンテンツを見つけるためにベクターストア上でセマンティック検索を行う [Vector Query Tool](/reference/tools/vector-query-tool)
-- クエリの理解と回答生成のための GPT-4o-mini
-- 論文の分析方法、取得コンテンツの効果的な活用、限界の認識を指示するカスタムインストラクション
+- 論文内の関連コンテンツを見つけるために、ベクターストア上でセマンティック検索を行う [Vector Query Tool](/reference/tools/vector-query-tool)
+- クエリの理解と応答生成のための GPT-4o-mini
+- 論文の分析方法、取得したコンテンツの効果的な活用方法、制約への言及を促すカスタム手順
 
 新しいファイル `src/mastra/agents/researchAgent.ts` を作成し、エージェントを定義します:
 
@@ -132,15 +129,16 @@ export const mastra = new Mastra({
 });
 ```
 
-`connectionUrl` には `pwd` コマンドで取得した絶対パスを使用してください。これにより、`vector.db` ファイルがプロジェクトのルートに作成されます。
+`connectionUrl` には `pwd` コマンドで取得した絶対パスを使用します。こうすることで `vector.db` ファイルがプロジェクトのルートに作成されます。
 
 <Callout>
-  このガイドではローカルの LibSQL ファイルへのハードコードされた絶対パスを使用していますが、本番環境では適しません。リモートの永続データベースを使用してください。
+  このガイドではローカルの LibSQL ファイルへの絶対パスをハードコードしていますが、
+  本番環境ではこれは機能しません。代わりにリモートの永続的なデータベースを使用してください。
 </Callout>
 
-### Mastra にエージェントを登録する
+### エージェントを Mastra に登録する
 
-`src/mastra/index.ts` ファイルで、Mastra にエージェントを追加します:
+`src/mastra/index.ts` ファイルで、エージェントを Mastra に追加します:
 
 ```ts copy filename="src/mastra/index.ts" {3, 10}
 import { Mastra } from "@mastra/core/mastra";
@@ -159,17 +157,15 @@ export const mastra = new Mastra({
 
 </Steps>
 
-
-
 ## ドキュメントの処理
 
-このセクションでは、論文を取得して小さなチャンクに分割し、各チャンクに対して埋め込みを生成し、それらの情報をベクターデータベースに保存します。
+以下の手順では、論文を取得して小さなチャンクに分割し、各チャンクに対して埋め込みを生成し、それらの情報をベクターデータベースに保存します。
 
 <Steps>
 
-### 論文の読み込みと処理
+### 論文を読み込み、処理する
 
-このステップでは、URL を指定して論文を取得し、ドキュメントオブジェクトに変換したうえで、扱いやすい小さなチャンクに分割します。チャンクに分割することで、処理がより高速かつ効率的になります。
+この手順では、URL を指定して論文を取得し、ドキュメントオブジェクトに変換したうえで、小さく扱いやすいチャンクに分割します。チャンクに分割することで、処理がより高速かつ効率的になります。
 
 新しいファイル `src/store.ts` を作成し、次を追加します:
 
@@ -205,19 +201,19 @@ npx bun src/store.ts
 Number of chunks: 892
 ```
 
-### 埋め込みの作成と保存
+### 埋め込みを作成して保存する
 
-最後に、RAG 用に次の準備を行います。
+最後に、次の手順で RAG 用のコンテンツを準備します:
 
 1. 各テキストチャンクの埋め込みを生成する
 2. 埋め込みを保持するベクターストアのインデックスを作成する
 3. 埋め込みとメタデータ（元のテキストとソース情報）の両方をベクターデータベースに保存する
 
 <Callout>
-  このメタデータは、ベクターストアが関連する一致を見つけたときに、実際のコンテンツを返すために不可欠です。
+  このメタデータは、ベクターストアが関連する一致を見つけた際に実際のコンテンツを返すために不可欠です。
 </Callout>
 
-これにより、エージェントは関連情報を効率よく検索・取得できます。
+これにより、エージェントは関連情報を効率的に検索・取得できます。
 
 `src/store.ts` ファイルを開き、次を追加します:
 
@@ -267,108 +263,106 @@ await vectorStore.upsert({
 });
 ```
 
-最後に、スクリプトをもう一度実行して埋め込みを保存します:
+最後に、スクリプトを再度実行して埋め込みを保存します:
 
 ```bash copy
 npx bun src/store.ts
 ```
 
-操作が成功すれば、ターミナルには出力やエラーは表示されません。
+操作が成功すると、ターミナルには出力やエラーは表示されません。
 
 </Steps>
 
-
-
 ## アシスタントをテストする
 
-ベクターデータベースに埋め込みが一通り揃ったので、リサーチアシスタントをさまざまな種類のクエリでテストできます。
+ベクトルデータベースにすべての埋め込みが用意できたので、リサーチアシスタントをさまざまな種類のクエリでテストできます。
 
-新しいファイル `src/ask-agent.ts` を作成し、いくつかの種類のクエリを追加します:
+新しいファイル `src/ask-agent.ts` を作成し、いくつかの異なるタイプのクエリを追加します。
 
 ```ts filename="src/ask-agent.ts" copy
 import { mastra } from "./mastra";
 const agent = mastra.getAgent("researchAgent");
 
-// 基本的な概念に関するクエリ
+// 概念に関する基本的な問い合わせ
 const query1 =
-  "What problems does sequence modeling face with neural networks?";
+  "ニューラルネットワークによるシーケンスモデリングはどのような課題に直面していますか？";
 const response1 = await agent.generate(query1);
-console.log("\nQuery:", query1);
-console.log("Response:", response1.text);
+console.log("\n問い合わせ:", query1);
+console.log("回答:", response1.text);
 ```
 
-スクリプトを実行します:
+スクリプトを実行する：
 
 ```bash copy
 npx bun src/ask-agent.ts
 ```
 
-次のような出力が表示されます:
+次のような出力が表示されます：
 
 ```bash
-Query: What problems does sequence modeling face with neural networks?
-Response: Sequence modeling with neural networks faces several key challenges:
-1. Vanishing and exploding gradients during training, especially with long sequences
-2. Difficulty handling long-term dependencies in the input
-3. Limited computational efficiency due to sequential processing
-4. Challenges in parallelizing computations, resulting in longer training times
+Query: ニューラルネットワークによる系列モデリングはどのような問題に直面しますか？
+Response: ニューラルネットワークによる系列モデリングには、いくつかの重要な課題があります：
+1. とくに長い系列の学習時に生じる勾配消失や勾配爆発
+2. 入力の長期依存関係を扱うことの困難さ
+3. 逐次処理ゆえの計算効率の低さ
+4. 計算の並列化が難しく、その結果として学習に時間がかかること
 ```
 
-別の質問も試してみましょう:
+別の質問を試してみましょう：
 
 ```ts filename="src/ask-agent.ts" copy
 import { mastra } from "./mastra";
 const agent = mastra.getAgent("researchAgent");
 
-// 具体的な知見に関するクエリ
-const query2 = "What improvements were achieved in translation quality?";
+// Query about specific findings
+const query2 = "翻訳品質にはどのような改善が見られましたか？";
 const response2 = await agent.generate(query2);
-console.log("\nQuery:", query2);
-console.log("Response:", response2.text);
+console.log("\n問い合わせ:", query2);
+console.log("応答:", response2.text);
 ```
 
-出力:
+出力：
 
 ```
-Query: What improvements were achieved in translation quality?
-Response: The model showed significant improvements in translation quality, achieving more than 2.0
-BLEU points improvement over previously reported models on the WMT 2014 English-to-German translation
-task, while also reducing training costs.
+Query: 翻訳品質にはどのような改善がありましたか？
+Response: このモデルは翻訳品質で大幅な改善を示し、WMT 2014の英独翻訳タスクにおいて、
+従来報告されているモデルを上回るBLEUスコアで2.0ポイント超の向上を達成し、
+同時に学習コストも削減しました。
 ```
+
 
 ### アプリケーションを提供する
 
-Mastra サーバーを起動して、API 経由でリサーチアシスタントを公開します:
+API 経由でリサーチアシスタントを公開するため、Mastra サーバーを起動します:
 
 ```bash
 mastra dev
 ```
 
-リサーチアシスタントは次のエンドポイントで利用できます:
+リサーチアシスタントの利用可能時間:
 
 ```
 http://localhost:4111/api/agents/researchAgent/generate
 ```
 
-curl でテストします:
+curl でテストする：
 
 ```bash
 curl -X POST http://localhost:4111/api/agents/researchAgent/generate \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
-      { "role": "user", "content": "What were the main findings about model parallelization?" }
+      { "role": "user", "content": "モデルの並列化についての主な知見は何ですか？" }
     ]
   }'
 ```
 
 
+## 高度な RAG の例
 
-## 高度なRAGの例
+より高度な RAG 手法について、以下の例をご覧ください:
 
-より高度なRAG手法の例をご覧ください:
-
-- [Filter RAG](/examples/rag/usage/filter-rag): メタデータによる結果のフィルタリング
-- [Cleanup RAG](/examples/rag/usage/cleanup-rag): 情報密度の最適化
-- [Chain of Thought RAG](/examples/rag/usage/cot-rag): ワークフローを用いた複雑な推論クエリの処理
-- [Rerank RAG](/examples/rag/usage/rerank-rag): 結果の関連性の向上
+- [Filter RAG](/examples/rag/usage/filter-rag) メタデータを用いた結果のフィルタリング
+- [Cleanup RAG](/examples/rag/usage/cleanup-rag) 情報密度の最適化
+- [Chain of Thought RAG](/examples/rag/usage/cot-rag) ワークフローを活用した複雑な推論クエリ
+- [Rerank RAG](/examples/rag/usage/rerank-rag) 結果の関連性の向上

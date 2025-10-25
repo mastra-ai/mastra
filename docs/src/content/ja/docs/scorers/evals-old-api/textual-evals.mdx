@@ -1,0 +1,59 @@
+---
+title: "テキスト評価"
+description: "Mastra がテキストの品質を評価するために、LLM-as-judge 手法をどのように活用するかを理解する。"
+---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
+# テキスト評価
+
+<ScorerCallout />
+
+テキスト評価は、LLM-as-judge という手法でエージェントの出力を評価します。この手法は、ティーチングアシスタントがルーブリックで課題を採点するのに近く、言語モデルを用いてテキスト品質のさまざまな側面を判定します。
+
+各評価は特定の品質側面に焦点を当て、0〜1 のスコアを返し、非決定的な AI 出力に対して定量的な指標を提供します。
+
+Mastra はエージェントの出力を評価するための複数の評価指標を提供しています。Mastra はこれらの指標に限定されず、[独自の評価を定義](/docs/evals/custom-eval)することもできます。
+
+## なぜ Textual Evals を使うのか？
+
+Textual Evals は、エージェントが次の点を満たすことを確実にするのに役立ちます：
+
+- 正確で信頼性の高い応答を生成する
+- 文脈を効果的に活用する
+- 出力要件に従う
+- 時間の経過とともに品質を一貫して維持する
+
+## 利用可能なメトリクス
+
+### 正確性と信頼性
+
+これらの指標は、エージェントの回答がどれだけ正確・真実性があり、かつ網羅的かを評価します:
+
+- [`hallucination`](/reference/evals/hallucination): 提示されたコンテキストにない事実や主張を検出
+- [`faithfulness`](/reference/evals/faithfulness): 応答が提示コンテキストをどれほど正確に反映しているかを測定
+- [`content-similarity`](/reference/evals/content-similarity): 表現が異なる場合でも情報の一貫性を評価
+- [`completeness`](/reference/evals/completeness): 応答に必要な情報がすべて含まれているかを確認
+- [`answer-relevancy`](/reference/evals/answer-relevancy): 応答が元の問い合わせにどれだけ適切に答えているかを評価
+- [`textual-difference`](/reference/evals/textual-difference): 文字列同士のテキスト差分を測定
+
+### コンテキストの理解
+
+これらのメトリクスは、エージェントが提供されたコンテキストをどれだけ適切に活用しているかを評価します:
+
+- [`context-position`](/reference/evals/context-position): コンテキストが応答内のどの位置に現れるかを分析
+- [`context-precision`](/reference/evals/context-precision): コンテキストのチャンクが論理的に整理されているかを評価
+- [`context-relevancy`](/reference/evals/context-relevancy): 適切なコンテキストの採用状況を測定
+- [`contextual-recall`](/reference/evals/contextual-recall): コンテキスト活用の網羅性を評価
+
+### 出力品質
+
+これらの指標は、形式およびスタイル要件への適合性を評価します：
+
+- [`tone`](/reference/evals/tone-consistency): 丁寧さ、複雑さ、スタイルの一貫性を測定
+- [`toxicity`](/reference/evals/toxicity): 有害または不適切なコンテンツを検出
+- [`bias`](/reference/evals/bias): 出力に潜在する偏りを検出
+- [`prompt-alignment`](/reference/evals/prompt-alignment): 文字数制限や書式要件など、明示的な指示への遵守を確認
+- [`summarization`](/reference/evals/summarization): 情報の保持と簡潔さを評価
+- [`keyword-coverage`](/reference/evals/keyword-coverage): 専門用語の網羅状況を評価

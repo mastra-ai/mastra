@@ -1,19 +1,16 @@
 ---
-title: "リファレンス: テキスト差分 | Evals | Mastra Docs"
-description: シーケンスマッチングを使用して文字列間のテキスト差分を測定するMastraのテキスト差分メトリックのドキュメント。
+title: "リファレンス: Textual Difference | Evals | Mastra ドキュメント"
+description: Mastra における Textual Difference 指標のドキュメント。シーケンスマッチングを用いて、文字列間のテキスト差を測定します。
 ---
 
 import { ScorerCallout } from '@/components/scorer-callout'
-
 
 
 # TextualDifferenceMetric
 
 <ScorerCallout />
 
-`TextualDifferenceMetric`クラスは、シーケンスマッチングを使用して2つの文字列間のテキストの違いを測定します。このクラスは、あるテキストを別のテキストに変換するために必要な操作数を含む、変更に関する詳細な情報を提供します。
-
-
+`TextualDifferenceMetric` クラスは、シーケンスマッチングを用いて2つの文字列間の差分を測定します。あるテキストを別のテキストへ変換するのに必要な操作数など、変更内容の詳細な情報を提供します。
 
 ## 基本的な使い方
 
@@ -23,17 +20,16 @@ import { TextualDifferenceMetric } from "@mastra/evals/nlp";
 const metric = new TextualDifferenceMetric();
 
 const result = await metric.measure(
-  "The quick brown fox",
-  "The fast brown fox",
+  "素早い茶色のキツネ",
+  "速い茶色のキツネ",
 );
 
-console.log(result.score); // 0〜1の類似度比率
-console.log(result.info); // 詳細な変更メトリクス
+console.log(result.score); // 0〜1 の類似度
+console.log(result.info); // 変更点の詳細な指標
 ```
 
 
-
-## measure() のパラメーター
+## measure() のパラメータ
 
 <PropertiesTable
   content={[
@@ -52,8 +48,6 @@ console.log(result.info); // 詳細な変更メトリクス
   ]}
 />
 
-
-
 ## 戻り値
 
 <PropertiesTable
@@ -61,7 +55,7 @@ console.log(result.info); // 詳細な変更メトリクス
     {
       name: "score",
       type: "number",
-      description: "類似度比率（0～1）。1はテキストが完全に一致していることを示します",
+      description: "類似度スコア (0〜1)。1 はテキストが同一であることを示します",
     },
     {
       name: "info",
@@ -74,7 +68,7 @@ console.log(result.info); // 詳細な変更メトリクス
               name: "confidence",
               type: "number",
               description:
-                "テキスト間の長さの違いに基づく信頼度スコア（0～1）",
+                "テキスト間の長さの差に基づく信頼度スコア (0〜1)",
             },
           ],
         },
@@ -84,7 +78,7 @@ console.log(result.info); // 詳細な変更メトリクス
             {
               name: "ratio",
               type: "number",
-              description: "テキスト間の生の類似度比率",
+              description: "テキスト間の素の類似度比",
             },
           ],
         },
@@ -95,7 +89,7 @@ console.log(result.info); // 詳細な変更メトリクス
               name: "changes",
               type: "number",
               description:
-                "変更操作の回数（挿入、削除、置換）",
+                "変更操作の回数（挿入・削除・置換）",
             },
           ],
         },
@@ -106,7 +100,7 @@ console.log(result.info); // 詳細な変更メトリクス
               name: "lengthDiff",
               type: "number",
               description:
-                "入力と出力の長さの正規化された差分（0～1）",
+                "入力と出力の長さの正規化差 (0〜1)",
             },
           ],
         },
@@ -115,43 +109,39 @@ console.log(result.info); // 詳細な変更メトリクス
   ]}
 />
 
-
-
 ## スコアリングの詳細
 
-このメトリックは、いくつかの指標を計算します：
+このメトリックは次の指標を計算します:
 
-- **類似度比**：テキスト間のシーケンスマッチングに基づく（0-1）
-- **変更数**：一致しない操作の回数
-- **長さの差**：テキスト長の正規化された差
-- **信頼度**：長さの差に反比例
+- **類似度比**: テキスト間のシーケンス一致に基づく（0～1）
+- **変更数**: 不一致を解消するために必要な非一致操作の回数
+- **長さ差**: テキスト長の正規化差
+- **信頼度**: 長さ差に反比例
 
 ### スコアリングプロセス
 
-1. テキストの違いを分析します：
+1. テキスト差分の分析:
 
-   - 入力と出力の間でシーケンスマッチングを実行
-   - 必要な変更操作の数をカウント
-   - 長さの違いを測定
+   - 入力と出力のシーケンスを照合
+   - 必要な変更操作の回数をカウント
+   - 長さの差分を測定
 
-2. 指標を計算します：
+2. 指標の計算:
    - 類似度比を算出
-   - 信頼度スコアを決定
-   - 重み付けされたスコアに統合
+   - 信頼度スコアを算出
+   - 重み付きスコアに統合
 
-最終スコア：`(similarity_ratio * confidence) * scale`
+最終スコア: `(similarity_ratio * confidence) * scale`
 
 ### スコアの解釈
 
-（0 から scale、デフォルトは 0-1）
+（範囲は0、デフォルトは0〜1）
 
-- 1.0：完全に同一のテキスト - 違いなし
-- 0.7-0.9：わずかな違い - 少しの変更のみ必要
-- 0.4-0.6：中程度の違い - かなりの変更が必要
-- 0.1-0.3：大きな違い - 大幅な変更が必要
-- 0.0：全く異なるテキスト
-
-
+- 1.0: テキストが完全一致 — 相違なし
+- 0.7〜0.9: 軽微な相違 — わずかな修正が必要
+- 0.4〜0.6: 中程度の相違 — ある程度の修正が必要
+- 0.1〜0.3: 大きな相違 — 大幅な修正が必要
+- 0.0: 完全に異なるテキスト
 
 ## 分析付きの例
 
@@ -161,11 +151,11 @@ import { TextualDifferenceMetric } from "@mastra/evals/nlp";
 const metric = new TextualDifferenceMetric();
 
 const result = await metric.measure(
-  "Hello world! How are you?",
-  "Hello there! How is it going?",
+  "こんにちは、世界！ お元気ですか？",
+  "こんにちは！ 調子はどう？",
 );
 
-// Example output:
+// 出力例:
 // {
 //   score: 0.65,
 //   info: {
@@ -178,9 +168,8 @@ const result = await metric.measure(
 ```
 
 
+## 関連項目
 
-## 関連
-
-- [コンテンツ類似度メトリック](./content-similarity)
-- [完全性メトリック](./completeness)
-- [キーワードカバレッジメトリック](./keyword-coverage)
+- [コンテンツ類似度メトリクス](./content-similarity)
+- [完全性メトリクス](./completeness)
+- [キーワード網羅率メトリクス](./keyword-coverage)

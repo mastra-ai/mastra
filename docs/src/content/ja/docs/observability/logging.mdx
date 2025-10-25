@@ -1,21 +1,17 @@
 ---
-title: "ログ記録 | Mastra 可観測性ドキュメント"
-description: Mastraでログ記録を使用して実行を監視し、アプリケーションの動作をキャプチャし、AIアプリケーションの精度を向上させる方法を学びます。
+title: "ログ記録 | Mastra Observability ドキュメント"
+description: Mastra のログ記録を使って実行を監視し、アプリケーションの動作を記録し、AI アプリケーションの精度を向上させる方法を学びましょう。
 ---
-
-
 
 # ログ記録
 
-Mastraのログ記録システムは、関数の実行、入力データ、出力レスポンスを構造化された形式でキャプチャします。
+Mastra のログ記録システムは、関数の実行、入力データ、出力レスポンスを構造化された形式で記録します。
 
-Mastra Cloudにデプロイする際、ログは[ログ](../mastra-cloud/observability.mdx)ページに表示されます。セルフホストまたはカスタム環境では、設定されたトランスポートに応じて、ログをファイルや外部サービスに送信できます。
-
-
+Mastra Cloud にデプロイした場合、ログは [Logs](../mastra-cloud/observability.mdx) ページに表示されます。セルフホストやカスタム環境では、設定したトランスポートに応じて、ログをファイルや外部サービスに出力できます。
 
 ## PinoLogger
 
-CLIを使用して[新しいMastraプロジェクトを初期化](../getting-started/installation.mdx)する際、`PinoLogger`はデフォルトで含まれています。
+CLI を使って[新しい Mastra プロジェクトを初期化](../getting-started/installation.mdx)すると、`PinoLogger` はデフォルトで含まれます。
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from '@mastra/core/mastra';
@@ -30,18 +26,16 @@ export const mastra = new Mastra({
 });
 ```
 
-> 利用可能なすべての設定オプションについては、[PinoLogger](../../reference/observability/logger.mdx) APIリファレンスを参照してください。
+> すべての設定オプションについては、[PinoLogger](../../reference/observability/logger.mdx) の API リファレンスを参照してください。
 
 
+## ワークフローやツールからのロギング
 
-## ワークフローとツールからのログ出力
+Mastra では、ワークフローの各ステップやツール内で利用できる `mastra.getLogger()` メソッドを通じて、ロガーインスタンスにアクセスできます。ロガーは標準的な重要度レベルである `debug`、`info`、`warn`、`error` をサポートします。
 
-Mastraは、ワークフローステップとツールの両方で利用可能な`mastra.getLogger()`メソッドを通じてロガーインスタンスへのアクセスを提供します。ロガーは標準的な重要度レベル：`debug`、`info`、`warn`、`error`をサポートしています。
+### ワークフローのステップからのロギング
 
-### ワークフローステップからのログ出力
-
-ワークフローステップ内では、`execute`関数内の`mastra`パラメータを通じてロガーにアクセスします。これにより、ステップの実行に関連するメッセージをログ出力できます。
-
+ワークフローのステップ内では、`execute` 関数の `mastra` パラメーターを通じてロガーにアクセスできます。これにより、そのステップの実行に関するメッセージを記録できます。
 
 ```typescript {8-9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -52,7 +46,7 @@ const step1 = createStep({
   execute: async ({ mastra }) => {
 
     const logger = mastra.getLogger();
-    logger.info("ワークフロー情報ログ");
+    logger.info("ワークフローの情報ログ");
 
     return {
       output: ""
@@ -65,9 +59,10 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-### ツールからのログ出力
 
-同様に、ツールも`mastra`パラメータを通じてロガーインスタンスにアクセスできます。これを使用して、実行中のツール固有のアクティビティをログ出力します。
+### ツールからのロギング
+
+同様に、ツールは `mastra` パラメータ経由でロガーインスタンスにアクセスできます。これを使って、実行中のツール固有の処理をログに記録します。
 
 ```typescript {8-9} filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
@@ -78,7 +73,7 @@ export const testTool = createTool({
   execute: async ({ mastra }) => {
 
     const logger = mastra?.getLogger();
-    logger?.info("ツール情報ログ");
+    logger?.info("ツール情報のログ");
 
     return {
       output: ""
@@ -88,13 +83,11 @@ export const testTool = createTool({
 ```
 
 
+## 追加データを含むログ出力
 
+Logger の各メソッドは、追加データ用の任意の第2引数を受け取ります。これはオブジェクト、文字列、数値など、あらゆる値を指定できます。
 
-## 追加データを使用したログ記録
-
-ログメソッドは、追加データのためのオプションの第二引数を受け取ります。これは、オブジェクト、文字列、数値など、任意の値を指定できます。
-
-この例では、ログメッセージに`agent`キーと`testAgent`インスタンスの値を持つオブジェクトが含まれています。
+この例では、ログメッセージに、キーが `agent`、値が `testAgent` インスタンスのオブジェクトが含まれます。
 
 ```typescript {11} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -107,7 +100,7 @@ const step1 = createStep({
     const testAgent = mastra.getAgent("testAgent");
 
     const logger = mastra.getLogger();
-    logger.info("workflow info log", { agent: testAgent });
+    logger.info("ワークフローの情報ログ", { agent: testAgent });
 
     return {
       output: ""

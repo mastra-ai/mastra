@@ -1,0 +1,306 @@
+---
+title: "例: 応答長制限 | プロセッサー | Mastra ドキュメント"
+description: ストリーミング中のAIの応答長を制限して、不要に長い出力を防ぐカスタム出力プロセッサーを作成する例。
+---
+
+# レスポンス長制限機能
+
+この例では、ストリーミング中のAIレスポンスの長さを監視し、制限するカスタム出力プロセッサの作成方法を示します。このプロセッサは累積のレスポンス長を追跡し、指定した文字数上限に達した時点で生成を中断することで、コストとレスポンス品質の管理に役立ちます。
+
+## カスタム出力プロセッサを作成する
+
+Mastra のカスタム出力プロセッサは、ストリーミング応答用の `processOutputStream` メソッドを備えた `Processor` インターフェースを実装します。このプロセッサはテキスト差分の累積長を追跡し、上限を超えた時点でストリームを終了します。
+
+```typescript filename="src/mastra/processors/response-length-limiter.ts" showLineNumbers copy
+import type { Processor } from "@mastra/core/processors";
+import type { ChunkType } from "@mastra/core/stream";
+
+type ResponseLengthLimiterOptions = {
+  maxLength?: number;
+  strategy?: 'block' | 'warn' | 'truncate';
+};
+
+export class ResponseLengthLimiter implements Processor {
+  readonly name = 'response-length-limiter';
+  private maxLength: number;
+  private strategy: 'block' | 'warn' | 'truncate';
+  
+  constructor(options: ResponseLengthLimiterOptions | number = {}) {
+    if (typeof options === 'number') {
+      this.maxLength = options;
+      this.strategy = 'block';
+    } else {
+      this.maxLength = options.maxLength ?? 1000;
+      this.strategy = options.strategy ?? 'block';
+    }
+  }
+
+  async processOutputStream({ part, streamParts, state, abort }: {
+    part: ChunkType;
+    streamParts: ChunkType[];
+    state: Record<string, any>;
+    abort: (reason?: string) => never;
+  }): Promise<ChunkType | null | undefined> {
+    if (!state.cumulativeLength) {
+      state.cumulativeLength = 0;
+    }
+
+    if (part.type === 'text-delta') {
+      const newLength = state.cumulativeLength + part.payload.text.length;
+      
+      if (newLength > this.maxLength) {
+        switch (this.strategy) {
+          case 'block':
+            abort(`レスポンスが長すぎます: ${newLength}文字(最大: ${this.maxLength})`);
+            break;
+          case 'warn':
+            console.warn(`警告: レスポンスの長さ${newLength}が推奨制限${this.maxLength}文字を超えています`);
+            state.cumulativeLength = newLength;
+            return part;
+          case 'truncate':
+            const remainingChars = this.maxLength - state.cumulativeLength;
+            if (remainingChars > 0) {
+              const truncatedText = part.payload.text.substring(0, remainingChars);
+              state.cumulativeLength = this.maxLength;
+              return {
+                ...part,
+                payload: { ...part.payload, text: truncatedText }
+              };
+            }
+            return null;
+        }
+      }
+      
+      state.cumulativeLength = newLength;
+    }
+
+    return part;
+  }
+}
+```
+
+
+### 主要コンポーネント
+
+- **コンストラクタ**: options オブジェクトまたは数値を受け取る
+- **戦略オプション**: 長さ超過時の扱い方を選択:
+  - `'block'`: 生成を停止してストリームを中断（デフォルト）
+  - `'warn'`: 警告を記録してストリーミングを継続
+  - `'truncate'`: ちょうど制限値でテキストを切り詰める
+- **状態トラッキング**: プロセッサの状態を用いて、ストリーム各パートにわたる累積テキスト長を追跡
+- **テキストデルタのフィルタリング**: 文字数制限の算定には `text-delta` パートのみをカウント
+- **動的処理**: 制限を超えた際に選択した戦略を適用
+
+### プロセッサの使用
+
+明示的なストラテジー設定を行う options オブジェクト方式の利用:
+
+```typescript filename="src/mastra/agents/blocking-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { ResponseLengthLimiter } from "../processors/response-length-limiter";
+
+export const blockingAgent = new Agent({
+  name: 'blocking-agent',
+  instructions: '応答の長さに制限がある親切なアシスタントです',
+  model: "openai/gpt-4o",
+  outputProcessors: [
+    new ResponseLengthLimiter({ maxLength: 1000, strategy: 'block' }),
+  ],
+});
+```
+
+シンプルな数値方式を使用する（デフォルトは「block」戦略）:
+
+```typescript filename="src/mastra/agents/simple-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { ResponseLengthLimiter } from "../processors/response-length-limiter";
+
+export const simpleAgent = new Agent({
+  name: 'simple-agent',
+  instructions: 'あなたは役に立つアシスタントです',
+  model: "openai/gpt-4o",
+  outputProcessors: [
+    new ResponseLengthLimiter(300),
+  ],
+});
+```
+
+
+## 高い例（制限内）
+
+この例は、設定された文字数制限を守り、ストリーミングが最後まで正常に完了するレスポンスを示しています。
+
+```typescript filename="src/example-high-response-length.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { ResponseLengthLimiter } from "./mastra/processors/response-length-limiter";
+
+// レスポンス制限を設定してエージェントを作成
+export const agent = new Agent({
+  name: 'response-limited-agent',
+  instructions: 'あなたは親切なアシスタントです。回答は簡潔にしてください。',
+  model: "openai/gpt-4o",
+  outputProcessors: [
+    new ResponseLengthLimiter(300), // 300文字まで
+  ],
+});
+
+const result = await agent.generate("フランスの首都は何ですか?");
+console.log(result.text);
+console.log("文字数:", result.text.length);
+```
+
+
+### 優れた出力例
+
+この応答は300文字の上限内に収まっているため、正常に完了します。
+
+```typescript
+「フランスの首都はパリです。国の中北部に位置し、フランスの政治、経済、文化の中心地として機能しています。」
+
+文字数: 156
+```
+
+
+## 部分的な例（制限に到達）
+
+この例では、生成中に応答がちょうど文字数制限に達した場合に何が起きるかを示します。
+
+```typescript filename="src/example-partial-response-length.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { ResponseLengthLimiter } from "./mastra/processors/response-length-limiter";
+
+// 同じエージェントをより厳格なレスポンス制限で再利用
+export const agent = new Agent({
+  name: 'response-limited-agent',
+  instructions: 'あなたは親切なアシスタントです。',
+  model: "openai/gpt-4o",
+  outputProcessors: [
+    new ResponseLengthLimiter(200), // 厳格な200文字制限
+  ],
+});
+
+const result = await agent.generate("機械学習について詳しく説明してください。");
+
+if (result.tripwire) {
+  console.log("レスポンスがブロックされました:", result.tripwireReason);
+  console.log("部分的なレスポンスを受信しました:", result.text);
+} else {
+  console.log(result.text);
+}
+console.log("文字数:", result.text.length);
+```
+
+
+### 部分的な出力例
+
+レスポンスは200文字の上限に達すると途中で切り捨てられます:
+
+```typescript
+応答がブロックされました: 応答が長すぎます: 201文字 (上限: 200)
+部分的な応答を受信しました: "Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed. It uses algori"
+文字数: 200
+```
+
+
+## 低レベルの例（ストリーミングで制限超過）
+
+この例では、応答の制限を超えた場合のストリーミング時の挙動を示します。
+
+```typescript filename="src/example-low-response-length.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { ResponseLengthLimiter } from "./mastra/processors/response-length-limiter";
+
+// 同じエージェントを再利用するが、非常に厳格なレスポンス制限を適用
+export const agent = new Agent({
+  name: 'response-limited-agent',
+  instructions: '詳細な説明を提供する饒舌なアシスタントです。',
+  model: "openai/gpt-4o",
+  outputProcessors: [
+    new ResponseLengthLimiter(100), // 非常に厳格な100文字制限
+  ],
+});
+
+const stream = await agent.stream("人工知能に関する包括的なエッセイを書いてください。");
+
+let responseText = "";
+let wasBlocked = false;
+let blockReason = "";
+
+for await (const part of stream.fullStream) {
+  if (part.type === 'text-delta') {
+    responseText += part.payload.text;
+    process.stdout.write(part.payload.text);
+  } else if (part.type === 'tripwire') {
+    wasBlocked = true;
+    blockReason = part.payload.tripwireReason;
+    console.log("\n\nストリームがブロックされました:", blockReason);
+    break;
+  }
+}
+
+if (wasBlocked) {
+  console.log("最終レスポンスの長さ:", responseText.length);
+  console.log("理由:", blockReason);
+}
+```
+
+
+### 低い出力例
+
+レスポンスが100文字の上限を超えると、ストリームはブロックされます：
+
+```typescript
+人工知能は、現代における最も革新的な技術の一つです。それは
+
+ストリームがブロックされました:応答が長すぎます:101文字(最大:100)
+最終応答長:100
+理由:応答が長すぎます:101文字(最大:100)
+```
+
+
+## 結果の理解
+
+`ResponseLengthLimiter` を使用すると、プロセッサは次の処理を行います：
+
+### 正常に処理される場合
+
+- **制限内**: 文字数制限未満の応答は、最後まで問題なくストリーミングされます
+- **リアルタイム追跡**: テキストの差分が生成されるたびに、長さを逐次監視します
+- **状態の永続性**: すべてのストリーム区間にわたって累積カウントを保持します
+
+### 処理のブロック
+
+- **制限超過**: 制限に達した時点で生成は即座に停止
+- **トリップワイヤーフラグ**: `result.tripwire = true`、またはストリームが `tripwire` チャンクを出力
+- **部分的なコンテンツ**: ブロック時点までに生成されたコンテンツがユーザーに返される
+- **例外なし**: `result.tripwire` を確認するか、ストリームで `tripwire` チャンクを処理する
+
+### ストリームの挙動
+
+- **テキストデルタのカウント**: テキスト内容のみが上限にカウントされます
+- **その他の部分は無視**: 非テキスト部分（関数呼び出しなど）はカウントに影響しません
+- **即時終了**: 中断後は追加の内容は生成されません
+
+### 設定オプション
+
+- **maxLength**: 文字数上限を設定（既定値: 1000）
+- **エージェントごとの上限**: エージェントごとに応答上限を個別に設定可能
+- **実行時の上書き**: 必要に応じて呼び出し単位で上書き可能
+
+### ベストプラクティス
+
+- ユースケース（要約か詳細説明か）に応じて上限を設定する
+- 応答が途中で切れる場合のユーザー体験を考慮する
+- 入力処理と組み合わせて、長さを一貫して管理する
+- 中断率を監視し、適切に上限を調整する
+- UIで中断された応答を丁寧に扱う
+
+### ユースケース
+
+- **コスト管理**: 想定外に高額になる長文のレスポンスを防ぐ
+- **UI の制約**: レスポンスを特定の表示領域に収める
+- **品質管理**: 簡潔で要点を押さえた回答を促す
+- **パフォーマンス**: 迅速な応答が求められるアプリでレイテンシを削減する
+- **レート制限**: 複数の同時リクエスト間でのリソース使用を制御する
+
+このプロセッサは、コスト管理やユーザーインターフェースの制約、一貫した応答品質の維持など、応答の長さを予測可能にする必要があるアプリケーションに特に有用です。

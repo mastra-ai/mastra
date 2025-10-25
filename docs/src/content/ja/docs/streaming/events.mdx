@@ -1,42 +1,54 @@
 ---
-title: "Streaming Events | Streaming | Mastra"
-description: "Mastra における各種ストリーミングイベント（テキストの差分、ツール呼び出し、ステップイベントなど）と、それらをアプリケーションでの扱い方について学びます。"
+title: "ストリーミングイベント | ストリーミング | Mastra"
+description: "Mastra におけるストリーミングイベントの種類（テキストデルタ、ツール呼び出し、ステップイベントなど）と、それらをアプリケーションでの扱い方について学びます。"
 ---
-
-
 
 # ストリーミングイベント
 
-エージェントやワークフローからのストリーミングにより、LLMの出力やワークフロー実行の状態をリアルタイムで可視化できます。このフィードバックはユーザーに直接提示することも、アプリケーション内でワークフローの状態をより効果的に扱うために活用することもでき、よりスムーズで応答性の高い体験を実現します。
+エージェントやワークフローからのストリーミングは、LLMの出力やワークフロー実行の状態をリアルタイムに可視化します。このフィードバックはユーザーに直接提示したり、アプリケーション内でワークフローの状態をより効果的に扱うために活用したりでき、よりスムーズで応答性の高い体験につながります。
 
-エージェントやワークフローから送出されるイベントは、実行開始、テキスト生成、ツール呼び出しなど、生成や実行のさまざまな段階を表します。
-
-
+エージェントやワークフローが発行するイベントは、実行開始、テキスト生成、ツールの呼び出しといった、生成や実行のさまざまな段階を表します。
 
 ## イベントの種類
 
-以下は、`.streamVNext()` から送出されるイベントの全一覧です。
-**agent** と **workflow** のどちらからストリーミングしているかにより、発生するイベントは一部に限られます。
+以下は、`.stream()` から発生するイベントの全リストです。
+ストリーミング対象が **agent** か **workflow** かによって、発生するのはこのうちの一部のみです。
 
 - **start**: agent または workflow の実行が開始されたことを示します。
-- **step-start**: workflow のステップの実行が始まったことを示します。
-- **text-delta**: LLM によって逐次生成されるテキストの増分チャンク。
+- **step-start**: workflow のステップの実行が開始されたことを示します。
+- **text-delta**: LLM によって逐次生成されるテキストの差分チャンク。
 - **tool-call**: agent がツールの使用を決定したとき。ツール名と引数を含みます。
 - **tool-result**: ツール実行の結果。
 - **step-finish**: 特定のステップが完全に終了したことを示し、そのステップの終了理由などのメタデータを含む場合があります。
-- **finish**: agent または workflow の実行が完了したとき。使用量の統計を含みます。
+- **finish**: agent または workflow の処理が完了したとき。使用量の統計を含みます。
 
+## ネットワークイベントの種類
 
+`agent.network()` を用いてマルチエージェント協調を行う場合、オーケストレーションのフローを追跡するために、次の追加イベントが発行されます:
 
-## エージェントのストリームを検査する
+- **routing-agent-start**: ルーティングエージェントがタスクの分析を開始し、どのプリミティブ（agent/workflow/tool）に委譲するかを判断します。
+- **routing-agent-text-delta**: ルーティングエージェントが選択したプリミティブからの応答を処理する際の逐次テキスト。
+- **routing-agent-end**: ルーティングエージェントが選択を完了し、選択したプリミティブとその理由を含みます。
+- **agent-execution-start**: 委譲先のエージェントが実行を開始。
+- **agent-execution-end**: 委譲先のエージェントが実行を完了。
+- **agent-execution-event-\***: 委譲先のエージェント実行からのイベント（例: `agent-execution-event-text-delta`）。
+- **workflow-execution-start**: 委譲先のワークフローが実行を開始。
+- **workflow-execution-end**: 委譲先のワークフローが実行を完了。
+- **workflow-execution-event-\***: 委譲先のワークフロー実行からのイベント。
+- **tool-execution-start**: 委譲先のツールが実行を開始。
+- **tool-execution-end**: 委譲先のツールが実行を完了。
+- **network-execution-event-step-finish**: ネットワークの反復ステップが完了。
+- **network-execution-event-finish**: ネットワーク全体の実行が完了。
 
-`for await` ループで `stream` を反復処理し、送信されるすべてのイベントチャンクを確認します。
+## エージェントのストリームを確認する
+
+`for await` ループで `stream` を反復処理し、発生したすべてのイベントチャンクを検査します。
 
 ```typescript {3,7} showLineNumbers copy
 const testAgent = mastra.getAgent("testAgent");
 
-const stream = await testAgent.streamVNext([
-  { role: "user", content: "Help me organize my day" },
+const stream = await testAgent.stream([
+  { role: "user", content: "一日のスケジュールを整理するのを手伝って" },
 ]);
 
 for await (const chunk of stream) {
@@ -44,17 +56,18 @@ for await (const chunk of stream) {
 }
 ```
 
-> 詳細は [Agent.streamVNext()](../../reference/agents/streamVNext.mdx) をご覧ください。
+> 詳細は [Agent.stream()](../../reference/agents/stream.mdx) をご覧ください。
 
-### エージェント出力例
 
-以下は発行され得るイベントの例です。各イベントには必ず `type` が含まれ、`from` や `payload` などの追加フィールドが含まれる場合があります。
+### エージェント出力の例
+
+以下は、発行される可能性のあるイベントの例です。各イベントには必ず `type` が含まれ、`from` や `payload` といった追加フィールドが含まれる場合があります。
 
 ```typescript {2,7,15}
 {
   type: 'start',
   from: 'AGENT',
-  // ..
+  // ...
 }
 {
   type: 'step-start',
@@ -70,25 +83,24 @@ for await (const chunk of stream) {
   payload: {
     toolCallId: 'call_jbhi3s1qvR6Aqt9axCfTBMsA',
     toolName: 'testTool'
-    // ..
+    // ...
   }
 }
 ```
 
 
+## ワークフローのストリームを確認する
 
-## ワークフローストリームの確認
-
-発行されたすべてのイベントチャンクを確認するには、`for await` ループで `stream` を反復処理します。
+`for await` ループで `stream` を反復し、出力されるすべてのイベントチャンクを確認します。
 
 ```typescript {5,11} showLineNumbers copy
 const testWorkflow = mastra.getWorkflow("testWorkflow");
 
 const run = await testWorkflow.createRunAsync();
 
-const stream = await run.streamVNext({
+const stream = await run.stream({
   inputData: {
-    value: "initial data"
+    value: "初期データ"
   }
 });
 
@@ -97,16 +109,17 @@ for await (const chunk of stream) {
 }
 ```
 
-### ワークフロー出力例
 
-以下は発行される可能性のあるイベントの例です。各イベントには常に `type` が含まれ、`from` や `payload` などの追加フィールドが含まれる場合があります。
+### ワークフロー出力の例
+
+以下は、発行される可能性があるイベントの例です。各イベントには必ず `type` が含まれ、`from` や `payload` などの追加フィールドが含まれる場合があります。
 
 ```typescript {2,8,11}
 {
   type: 'workflow-start',
   runId: '221333ed-d9ee-4737-922b-4ab4d9de73e6',
   from: 'WORKFLOW',
-  // ...
+  // …
 }
 {
   type: 'workflow-step-start',
@@ -114,10 +127,103 @@ for await (const chunk of stream) {
   from: 'WORKFLOW',
   payload: {
     stepName: 'step-1',
-    args: { value: 'initial data' },
+    args: { value: '初期データ' },
     stepCallId: '9e8c5217-490b-4fe7-8c31-6e2353a3fc98',
     startedAt: 1755269732792,
-    status: 'running'
+    status: '実行中'
+  }
+}
+```
+
+
+## エージェントネットワークの確認
+
+`agent.network()` を用いたマルチエージェント協調では、ストリームを順に処理して、タスクがエージェント、ワークフロー、ツール間でどのように委任・実行されるかを追跡します。
+
+```typescript {3,5} showLineNumbers copy
+const networkAgent = mastra.getAgent("networkAgent");
+
+const networkStream = await networkAgent.network("イルカについて調査し、レポートを作成する");
+
+for await (const chunk of networkStream) {
+  console.log(chunk);
+}
+```
+
+> 詳細は [Agent.network()](../../reference/agents/network.mdx) を参照してください。
+
+
+### ネットワーク出力の例
+
+ネットワークストリームは、オーケストレーションのフローを追跡するイベントを発行します。各イテレーションはルーティングから始まり、選択されたプリミティブの実行へと続きます。
+
+```typescript {3,13,22,31}
+// ルーティングエージェントが何をするかを決定
+{
+  type: 'routing-agent-start',
+  from: 'NETWORK',
+  runId: '7a3b9c2d-1e4f-5a6b-8c9d-0e1f2a3b4c5d',
+  payload: {
+    agentId: 'routing-agent',
+    // ...
+  }
+}
+// ルーティングエージェントが選択を実行
+{
+  type: 'routing-agent-end',
+  from: 'NETWORK',
+  runId: '7a3b9c2d-1e4f-5a6b-8c9d-0e1f2a3b4c5d',
+  payload: {
+    // ...
+  }
+}
+// 委譲されたエージェントの実行を開始
+{
+  type: 'agent-execution-start',
+  from: 'NETWORK',
+  runId: '8b4c0d3e-2f5a-6b7c-9d0e-1f2a3b4c5d6e',
+  payload: {
+    // ...
+  }
+}
+// 委譲されたエージェントの実行イベント
+{
+  type: 'agent-execution-event-text-delta',
+  from: 'NETWORK',
+  runId: '8b4c0d3e-2f5a-6b7c-9d0e-1f2a3b4c5d6e',
+  payload: {
+    type: 'text-delta',
+    payload: {
+      // ...
+    }
+  }
+}
+// ...その他のイベント
+```
+
+
+### ネットワークイベントのフィルタリング
+
+ネットワーク実行の特定の側面を追跡するために、イベントを種類ごとにフィルターできます。
+
+```typescript {5-8,11-13,16-18} showLineNumbers copy
+const networkStream = await networkAgent.network("データを分析して可視化を作成");
+
+for await (const chunk of networkStream) {
+  // ルーティング決定を追跡
+  if (chunk.type === 'routing-agent-end') {
+    console.log('選択:', chunk.payload.resourceType, chunk.payload.resourceId);
+    console.log('理由:', chunk.payload.selectionReason);
+  }
+  
+  // エージェント委譲を追跡
+  if (chunk.type === 'agent-execution-start') {
+    console.log('エージェントに委譲:', chunk.payload.agentId);
+  }
+  
+  // ワークフロー委譲を追跡
+  if (chunk.type === 'workflow-execution-start') {
+    console.log('ワークフローを実行:', chunk.payload.name);
   }
 }
 ```

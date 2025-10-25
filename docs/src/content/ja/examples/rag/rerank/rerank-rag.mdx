@@ -1,45 +1,41 @@
 ---
-title: "例: ツールを使った再ランキング結果 | 検索 | RAG | Mastra ドキュメント"
-description: OpenAI の埋め込みと PGVector を使って、Mastra で再ランキングを実装した RAG システムの例。
+title: "例: ツールを使った再ランキング | Retrieval | RAG | Mastra Docs"
+description: OpenAI の埋め込みと PGVector を使ったベクトル格納で、Mastra に再ランキング対応の RAG システムを実装する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
-
 # ツールを使った再ランキング結果
 
-この例では、Mastra のベクトルクエリツールを使用して、OpenAI の埋め込みと PGVector をベクトルストレージとして活用し、再ランキングを行う Retrieval-Augmented Generation（RAG）システムを実装する方法を示します。
-
-
+この例では、Mastra のベクタークエリツールを使い、OpenAI の埋め込みと PGVector（ベクター保存）を組み合わせて、再ランキング対応の Retrieval-Augmented Generation（RAG）システムを実装する方法を示します。
 
 ## 概要
 
-このシステムは、Mastra と OpenAI を用いた再ランク付き RAG を実装しています。主な機能は以下の通りです。
+このシステムは、Mastra と OpenAI を用いて再ランキング付きの RAG を実装しています。主な処理は次のとおりです:
 
-1. 応答生成のために gpt-4o-mini を使った Mastra エージェントをセットアップします
-2. 再ランク機能を備えたベクトルクエリツールを作成します
-3. テキストドキュメントを小さなセグメントに分割し、それらから埋め込みを作成します
-4. それらを PostgreSQL ベクトルデータベースに保存します
-5. クエリに基づいて関連するチャンクを取得し、再ランクします
-6. Mastra エージェントを使ってコンテキストに応じた応答を生成します
-
-
+1. 応答生成のために gpt-4o-mini を使った Mastra エージェントをセットアップする
+2. 再ランキング機能を備えたベクター検索ツールを作成する
+3. テキストドキュメントを小さなチャンクに分割し、埋め込みを生成する
+4. それらを PostgreSQL のベクターデータベースに保存する
+5. クエリに基づいて関連チャンクを取得し、再ランキングする
+6. Mastra エージェントで文脈に応じた応答を生成する
 
 ## セットアップ
 
-### 環境設定
+### 環境のセットアップ
 
-環境変数を設定してください：
+環境変数を必ず設定してください:
 
 ```bash filename=".env"
-OPENAI_API_KEY=your_openai_api_key_here
-POSTGRES_CONNECTION_STRING=your_connection_string_here
+OPENAI_API_KEY=あなたのOpenAIのAPIキーをここに入力
+POSTGRES_CONNECTION_STRING=あなたの接続文字列をここに入力
 ```
+
 
 ### 依存関係
 
-次に、必要な依存関係をインポートします：
+次に、必要な依存パッケージをインポートします。
 
 ```typescript copy showLineNumbers filename="index.ts"
 import { openai } from "@ai-sdk/openai";
@@ -55,10 +51,9 @@ import { embedMany } from "ai";
 ```
 
 
+## 再ランキング対応のベクタークエリツールの作成
 
-## リランキング機能付きベクトルクエリツールの作成
-
-@mastra/ragからインポートしたcreateVectorQueryToolを使用して、ベクトルデータベースにクエリを実行し、結果をリランキングできるツールを作成できます：
+@mastra/rag からインポートした createVectorQueryTool を使用すると、ベクターデータベースに対してクエリを実行し、結果を再ランキングするツールを作成できます。
 
 ```typescript copy showLineNumbers{8} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
@@ -66,23 +61,22 @@ const vectorQueryTool = createVectorQueryTool({
   indexName: "embeddings",
   model: openai.embedding("text-embedding-3-small"),
   reranker: {
-    model: new MastraAgentRelevanceScorer('relevance-scorer', openai("gpt-4o-mini")),
+    model: new MastraAgentRelevanceScorer('関連度スコアラー', openai("gpt-4o-mini")),
   },
 });
 ```
 
 
-
 ## エージェント設定
 
-応答を処理するMastraエージェントを設定します：
+応答を処理する Mastra エージェントを設定します：
 
 ```typescript copy showLineNumbers{17} filename="index.ts"
 export const ragAgent = new Agent({
   name: "RAG Agent",
-  instructions: `You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
-    Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
-    If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
+  instructions: `あなたは、提供されたコンテキストに基づいて質問に回答する有用なアシスタントです。回答は簡潔かつ関連性の高いものにしてください。
+    重要: 質問に回答する際は、ツールで提供されたコンテキストのみに基づいて回答してください。 
+    コンテキストに質問に十分に答えるための情報が含まれていない場合は、その旨を明確に述べてください。`,
   model: openai("gpt-4o-mini"),
   tools: {
     vectorQueryTool,
@@ -91,10 +85,9 @@ export const ragAgent = new Agent({
 ```
 
 
+## PgVector と Mastra のインスタンス化
 
-## PgVectorとMastraのインスタンス化
-
-コンポーネントを使用してPgVectorとMastraをインスタンス化します：
+次のコンポーネントを使って PgVector と Mastra をインスタンス化します:
 
 ```typescript copy showLineNumbers{29} filename="index.ts"
 const pgVector = new PgVector({
@@ -110,31 +103,30 @@ const agent = mastra.getAgent("ragAgent");
 ```
 
 
-
 ## ドキュメント処理
 
-ドキュメントを作成し、チャンクに分割します：
+ドキュメントを作成し、チャンクに分割して処理します：
 
 ```typescript copy showLineNumbers{38} filename="index.ts"
 const doc1 = MDocument.fromText(`
-market data shows price resistance levels.
-technical charts display moving averages.
-support levels guide trading decisions.
-breakout patterns signal entry points.
-price action determines trade timing.
+市場データは価格のレジスタンス（上値抵抗）水準を示す。
+テクニカルチャートは移動平均を表示する。
+サポート（下値支持）水準が取引判断を導く。
+ブレイクアウトのパターンがエントリーポイントを示唆する。
+プライスアクションがトレードのタイミングを決定する。
 
-baseball cards show gradual value increase.
-rookie cards command premium prices.
-card condition affects resale value.
-authentication prevents fake trading.
-grading services verify card quality.
+野球カードは価値が徐々に上昇する傾向を示す。
+ルーキーカードはプレミアム価格で取引される。
+カードの状態が再販価値に影響する。
+真正鑑定が偽造取引を防ぐ。
+グレーディングサービスがカードの品質を検証する。
 
-volume analysis confirms price trends.
-sports cards track seasonal demand.
-chart patterns predict movements.
-mint condition doubles card worth.
-resistance breaks trigger orders.
-rare cards appreciate yearly.
+出来高分析が価格トレンドを裏づける。
+スポーツカードは季節的な需要を反映する。
+チャートパターンが値動きを予測する。
+ミントコンディションでカードの価値が倍増する。
+レジスタンス突破で注文が発動する。
+希少カードは毎年値上がりする。
 `);
 
 const chunks = await doc1.chunk({
@@ -146,10 +138,9 @@ const chunks = await doc1.chunk({
 ```
 
 
-
 ## 埋め込みの作成と保存
 
-チャンクの埋め込みを生成し、ベクターデータベースに保存します。
+チャンクの埋め込みを生成し、ベクトルデータベースに保存します。
 
 ```typescript copy showLineNumbers{66} filename="index.ts"
 const { embeddings } = await embedMany({
@@ -171,35 +162,39 @@ await vectorStore.upsert({
 ```
 
 
+## リランキングを使った検索クエリ
 
-## リランキングによるクエリ
-
-リランキングが結果にどのように影響するか、さまざまなクエリを試してみましょう。
+リランキングで結果がどう変わるか、いくつかのクエリを試してみましょう：
 
 ```typescript copy showLineNumbers{82} filename="index.ts"
-const queryOne = "explain technical trading analysis";
+const queryOne = "テクニカル分析について説明して";
 const answerOne = await agent.generate(queryOne);
-console.log("\nQuery:", queryOne);
-console.log("Response:", answerOne.text);
+console.log("\nクエリ:", queryOne);
+console.log("レスポンス:", answerOne.text);
 
-const queryTwo = "explain trading card valuation";
+const queryTwo = "トレーディングカードの査定（評価）について説明して";
 const answerTwo = await agent.generate(queryTwo);
-console.log("\nQuery:", queryTwo);
-console.log("Response:", answerTwo.text);
+console.log("\nクエリ:", queryTwo);
+console.log("レスポンス:", answerTwo.text);
 
-const queryThree = "how do you analyze market resistance";
+const queryThree = "市場のレジスタンスはどう分析しますか？";
 const answerThree = await agent.generate(queryThree);
-console.log("\nQuery:", queryThree);
-console.log("Response:", answerThree.text);
+console.log("\nクエリ:", queryThree);
+console.log("レスポンス:", answerThree.text);
 ```
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank-rag"
-  }
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank-rag"
+}
 />

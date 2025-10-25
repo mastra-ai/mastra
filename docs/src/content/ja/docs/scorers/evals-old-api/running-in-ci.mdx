@@ -1,0 +1,88 @@
+---
+title: "CI での実行"
+description: "CI/CD パイプラインで Mastra の評価を実行し、時間の経過に伴うエージェント品質を継続的に監視する方法を学びます。"
+---
+
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
+# CI で Evals を実行する
+
+<ScorerCallout />
+
+CI パイプラインで Evals を実行すると、時間の経過とともにエージェントの品質を測定するための定量的な指標が得られ、このギャップを埋めるのに役立ちます。
+
+## CI 連携のセットアップ
+
+ESM モジュールに対応したあらゆるテストフレームワークを利用できます。たとえば、CI/CD パイプラインで eval を実行する際は [Vitest](https://vitest.dev/)、[Jest](https://jestjs.io/)、[Mocha](https://mochajs.org/) などを使用できます。
+
+```typescript copy showLineNumbers filename="src/mastra/agents/index.test.ts"
+import { describe, it, expect } from "vitest";
+import { evaluate } from "@mastra/evals";
+import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+import { myAgent } from "./index";
+
+describe("My Agent", () => {
+  it("トーンの一貫性を検証すること", async () => {
+    const metric = new ToneConsistencyMetric();
+    const result = await evaluate(myAgent, "Hello, world!", metric);
+
+    expect(result.score).toBe(1);
+  });
+});
+```
+
+テストフレームワークで eval の結果を取得するには、testSetup と globalSetup のスクリプトを設定する必要があります。これにより、これらの結果を mastra ダッシュボードに表示できるようになります。
+
+
+## フレームワーク構成
+
+### Vitest のセットアップ
+
+CI/CD パイプラインで評価を実行するために、次のファイルをプロジェクトに追加してください:
+
+```typescript copy showLineNumbers filename="globalSetup.ts"
+import { globalSetup } from "@mastra/evals";
+
+export default function setup() {
+  globalSetup();
+}
+```
+
+```typescript copy showLineNumbers filename="testSetup.ts"
+import { beforeAll } from "vitest";
+import { attachListeners } from "@mastra/evals";
+
+beforeAll(async () => {
+  await attachListeners();
+});
+```
+
+```typescript copy showLineNumbers filename="vitest.config.ts"
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: {
+    globalSetup: "./globalSetup.ts",
+    setupFiles: ["./testSetup.ts"],
+  },
+});
+```
+
+
+## ストレージ設定
+
+Mastra Storage に評価結果を保存し、Mastra ダッシュボードで結果を記録するには：
+
+```typescript copy showLineNumbers filename="testSetup.ts"
+import { beforeAll } from "vitest";
+import { attachListeners } from "@mastra/evals";
+import { mastra } from "./your-mastra-setup";
+
+beforeAll(async () => {
+  // Mastra Storageに評価を保存(ストレージの有効化が必要)
+  await attachListeners(mastra);
+});
+```
+
+ファイルストレージを使用すると、evalは永続化され、後で参照・照会できます。メモリストレージを使用すると、evalはテストプロセス内だけに限定されます。

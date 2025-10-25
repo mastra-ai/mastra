@@ -1,0 +1,50 @@
+---
+title: "リファレンス: Run.observeStream() | Workflows | Mastra ドキュメント"
+description: ワークフローで使用する `Run.observeStream()` メソッドのドキュメント。実行中のワークフローのストリームを再接続して再び監視できます。
+---
+
+# Run.observeStream()
+
+`.observeStream()` メソッドは、現在実行中のワークフロー実行に対して新たに `ReadableStream` を開き、元のストリームが利用できない場合でもイベントのストリームを観測できるようにします。
+
+## 使い方の例
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+run.stream({
+  inputData: {
+    value: "初期データ",
+  },
+});
+
+const { stream } = await run.observeStream();
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+
+## 返戻値
+
+`ReadableStream<ChunkType>`
+
+## ストリームイベント
+
+ストリームはワークフローの実行中にさまざまなイベントタイプを発行します。各イベントには `type` フィールドと、関連データを含む `payload` が含まれます:
+
+- **`start`**: ワークフローの実行が開始される
+- **`step-start`**: ステップの実行が開始される
+- **`tool-call`**: ツール呼び出しが開始される
+- **`tool-call-streaming-start`**: ツール呼び出しのストリーミングが開始される
+- **`tool-call-delta`**: ツール出力の差分更新
+- **`step-result`**: ステップが結果とともに完了する
+- **`step-finish`**: ステップの実行が終了する
+- **`finish`**: ワークフローの実行が完了する
+
+## 関連情報
+
+- [Workflows の概要](../../../docs/workflows/overview.mdx#run-workflow)
+- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run.mdx)
+- [Run.stream()](./stream.mdx)

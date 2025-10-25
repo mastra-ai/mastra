@@ -1,15 +1,11 @@
 ---
-title: "Inngest Workflow | ワークフロー | Mastra ドキュメント"
-description: Mastra を使用して Inngest のワークフローを構築する例
+title: "Inngest ワークフロー | ワークフロー | Mastra ドキュメント"
+description: Mastra で Inngest ワークフローを構築する例
 ---
 
+# Inngest ワークフロー
 
-
-# Inngest Workflow
-
-この例では、Mastra を用いて Inngest のワークフローを構築する方法を紹介します。
-
-
+この例では、Mastra を使って Inngest のワークフローを構築する方法を紹介します。
 
 ## セットアップ
 
@@ -21,62 +17,61 @@ docker run --rm -p 8288:8288 \
   inngest dev -u http://host.docker.internal:3000/inngest/api
 ```
 
-または、公式の [Inngest Dev Server ガイド](https://www.inngest.com/docs/dev-server)に従って、ローカル開発で Inngest CLI を使用できます。
+また、公式の [Inngest Dev Server ガイド](https://www.inngest.com/docs/dev-server) に従って、ローカル開発に Inngest CLI を使用することもできます。
 
 
+## 計画エージェントを定義する
 
-## プランニングエージェントを定義する
-
-場所とそれに対応する天候条件に基づいてアクティビティを計画するため、LLM 呼び出しを活用するプランニングエージェントを定義します。
+場所とその天候条件に基づいて活動を計画するために、LLM の呼び出しを活用する計画エージェントを定義します。
 
 ```ts showLineNumbers copy filename="agents/planning-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
-// OpenAI モデルを使用する新しいプランニングエージェントを作成
+// OpenAI モデルを使う新しいプランニングエージェントを作成します
 const planningAgent = new Agent({
   name: "planningAgent",
   model: openai("gpt-4o"),
   instructions: `
-        You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
+        あなたは天候に基づく計画を得意とする、地域アクティビティと旅行のエキスパートです。天気データを分析し、実用的なアクティビティを提案してください。
 
-        📅 [Day, Month Date, Year]
+        📅 [曜日, 月 日, 年]
         ═══════════════════════════
 
-        🌡️ WEATHER SUMMARY
-        • Conditions: [brief description]
-        • Temperature: [X°C/Y°F to A°C/B°F]
-        • Precipitation: [X% chance]
+        🌡️ 天気概要
+        • コンディション: [簡単な説明]
+        • 気温: [X°C/Y°F 〜 A°C/B°F]
+        • 降水確率: [X%]
 
-        🌅 MORNING ACTIVITIES
-        Outdoor:
-        • [Activity Name] - [Brief description including specific location/route]
-          Best timing: [specific time range]
-          Note: [relevant weather consideration]
+        🌅 午前のアクティビティ
+        屋外:
+        • [アクティビティ名] - [具体的な場所/ルートを含む簡潔な説明]
+          最適時間帯: [具体的な時間帯]
+          メモ: [関連する天候上の注意点]
 
-        🌞 AFTERNOON ACTIVITIES
-        Outdoor:
-        • [Activity Name] - [Brief description including specific location/route]
-          Best timing: [specific time range]
-          Note: [relevant weather consideration]
+        🌞 午後のアクティビティ
+        屋外:
+        • [アクティビティ名] - [具体的な場所/ルートを含む簡潔な説明]
+          最適時間帯: [具体的な時間帯]
+          メモ: [関連する天候上の注意点]
 
-        🏠 INDOOR ALTERNATIVES
-        • [Activity Name] - [Brief description including specific venue]
-          Ideal for: [weather condition that would trigger this alternative]
+        🏠 屋内の代替案
+        • [アクティビティ名] - [具体的な会場を含む簡潔な説明]
+          最適条件: [この代替案が適する天候条件]
 
-        ⚠️ SPECIAL CONSIDERATIONS
-        • [Any relevant weather warnings, UV index, wind conditions, etc.]
+        ⚠️ 特記事項
+        • [関連する気象警報、UV 指数、風の状況など]
 
-        Guidelines:
-        - Suggest 2-3 time-specific outdoor activities per day
-        - Include 1-2 indoor backup options
-        - For precipitation >50%, lead with indoor activities
-        - All activities must be specific to the location
-        - Include specific venues, trails, or locations
-        - Consider activity intensity based on temperature
-        - Keep descriptions concise but informative
+        ガイドライン:
+        - 1 日あたり、時間を指定した屋外アクティビティを 2〜3 件提案する
+        - 屋内のバックアップ案を 1〜2 件含める
+        - 降水確率が 50% を超える場合は屋内アクティビティを優先する
+        - すべてのアクティビティは場所に特化したものにする
+        - 具体的な会場、トレイル、または場所を含める
+        - 気温に応じてアクティビティの強度を考慮する
+        - 説明は簡潔かつ有益に保つ
 
-        Maintain this exact formatting for consistency, using the emoji and section headers as shown.
+        表示されている絵文字とセクション見出しを使用し、統一のためこの書式を正確に維持してください。
       `,
 });
 
@@ -84,10 +79,9 @@ export { planningAgent };
 ```
 
 
-
 ## アクティビティプランナーのワークフローを定義する
 
-ネットワーク経由で天気を取得するステップ、アクティビティを計画するステップ、屋内アクティビティのみを計画するステップの3つで、アクティビティプランナーのワークフローを定義します。
+アクティビティプランナーのワークフローを3つのステップで定義します。1つ目はネットワークコールで天気を取得するステップ、2つ目はアクティビティを計画するステップ、3つ目は屋内アクティビティのみを計画するステップです。
 
 ```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
 import { init } from "@mastra/inngest";
@@ -101,27 +95,27 @@ const { createWorkflow, createStep } = init(
   }),
 );
 
-// Helper function to convert weather codes to human-readable descriptions
+// 天気コードを人が読みやすい説明に変換するヘルパー関数
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {
-    0: "Clear sky",
-    1: "Mainly clear",
-    2: "Partly cloudy",
-    3: "Overcast",
-    45: "Foggy",
-    48: "Depositing rime fog",
-    51: "Light drizzle",
-    53: "Moderate drizzle",
-    55: "Dense drizzle",
-    61: "Slight rain",
-    63: "Moderate rain",
-    65: "Heavy rain",
-    71: "Slight snow fall",
-    73: "Moderate snow fall",
-    75: "Heavy snow fall",
-    95: "Thunderstorm",
+    0: "快晴",
+    1: "晴れ時々くもり",
+    2: "一部くもり",
+    3: "くもり",
+    45→ "霧",
+    48→ "樹氷性の霧",
+    51→ "弱い霧雨",
+    53→ "やや強い霧雨",
+    55→ "強い霧雨",
+    61→ "弱い雨",
+    63→ "やや強い雨",
+    65→ "激しい雨",
+    71→ "弱い降雪",
+    73→ "やや強い降雪",
+    75→ "大雪",
+    95→ "雷雨",
   };
-  return conditions[code] || "Unknown";
+  return conditions[code] || "不明";
 }
 
 const forecastSchema = z.object({
@@ -134,22 +128,23 @@ const forecastSchema = z.object({
 });
 ```
 
-#### ステップ 1: 指定した都市の天気データを取得する
+
+#### 手順 1: 指定した都市の天気データを取得する
 
 ```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
 const fetchWeather = createStep({
   id: "fetch-weather",
-  description: "Fetches weather forecast for a given city",
+  description: "指定した都市の天気予報を取得する",
   inputSchema: z.object({
     city: z.string(),
   }),
   outputSchema: forecastSchema,
   execute: async ({ inputData }) => {
     if (!inputData) {
-      throw new Error("Trigger data not found");
+      throw new Error("トリガー用データが見つかりません"),
     }
 
-    // Get latitude and longitude for the city
+    // 都市の緯度・経度を取得
     const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`;
     const geocodingResponse = await fetch(geocodingUrl);
     const geocodingData = (await geocodingResponse.json()) as {
@@ -157,12 +152,12 @@ const fetchWeather = createStep({
     };
 
     if (!geocodingData.results?.[0]) {
-      throw new Error(`Location '${inputData.city}' not found`);
+      throw new Error(`場所「${inputData.city}」が見つかりません`),
     }
 
     const { latitude, longitude, name } = geocodingData.results[0];
 
-    // Fetch weather data using the coordinates
+    // 座標を使って天気データを取得
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m`;
     const response = await fetch(weatherUrl);
     const data = (await response.json()) as {
@@ -194,14 +189,13 @@ const fetchWeather = createStep({
 });
 ```
 
+
 #### ステップ 2: 天気に応じて（屋内または屋外の）アクティビティを提案する
-
-
 
 ```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
 const planActivities = createStep({
   id: "plan-activities",
-  description: "天候に応じてアクティビティを提案します",
+  description: "天候に応じて適切なアクティビティを提案します",
   inputSchema: forecastSchema,
   outputSchema: z.object({
     activities: z.string(),
@@ -210,16 +204,16 @@ const planActivities = createStep({
     const forecast = inputData;
 
     if (!forecast) {
-      throw new Error("予報データが見つかりません");
+      throw new Error("天気予報データが見つかりません"),
     }
 
-    const prompt = `${forecast.location} の次の天気予報に基づいて、適切なアクティビティを提案してください:
+    const prompt = `以下の${forecast.location}の天気予報に基づいて、適切なアクティビティを提案してください:
       ${JSON.stringify(forecast, null, 2)}
       `;
 
     const agent = mastra?.getAgent("planningAgent");
     if (!agent) {
-      throw new Error("プランニングエージェントが見つかりません");
+      throw new Error("プランニングエージェントが見つかりません"),
     }
 
     const response = await agent.stream([
@@ -243,12 +237,13 @@ const planActivities = createStep({
 });
 ```
 
-#### ステップ 3: 屋内アクティビティのみを提案する（雨天時）
+
+#### ステップ3：雨天時は屋内のアクティビティのみを提案する
 
 ```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
 const planIndoorActivities = createStep({
   id: "plan-indoor-activities",
-  description: "天候に応じて屋内アクティビティを提案します",
+  description: "天候に応じて屋内向けのアクティビティを提案します",
   inputSchema: forecastSchema,
   outputSchema: z.object({
     activities: z.string(),
@@ -257,14 +252,14 @@ const planIndoorActivities = createStep({
     const forecast = inputData;
 
     if (!forecast) {
-      throw new Error("予報データが見つかりません");
+      throw new Error("天気予報データが見つかりません"),
     }
 
-    const prompt = `雨が予想される場合、${forecast.date} の ${forecast.location} 向けに屋内アクティビティを計画してください`;
+    const prompt = `雨の場合、${forecast.location}の${forecast.date}に行える屋内アクティビティを計画してください`,
 
     const agent = mastra?.getAgent("planningAgent");
     if (!agent) {
-      throw new Error("プランニングエージェントが見つかりません");
+      throw new Error("計画用エージェントが見つかりません"),
     }
 
     const response = await agent.stream([
@@ -287,7 +282,6 @@ const planIndoorActivities = createStep({
   },
 });
 ```
-
 
 
 ## アクティビティプランナーのワークフローを定義する
@@ -296,7 +290,7 @@ const planIndoorActivities = createStep({
 const activityPlanningWorkflow = createWorkflow({
   id: "activity-planning-workflow-step2-if-else",
   inputSchema: z.object({
-    city: z.string().describe("天気を取得する対象の都市"),
+    city: z.string().describe("天気を取得したい都市"),
   }),
   outputSchema: z.object({
     activities: z.string(),
@@ -305,14 +299,14 @@ const activityPlanningWorkflow = createWorkflow({
   .then(fetchWeather)
   .branch([
     [
-      // 降水確率が50%を超える場合は屋内アクティビティを提案する
+      // 降水確率が50%を超える場合は屋内アクティビティを提案
       async ({ inputData }) => {
         return inputData?.precipitationChance > 50;
       },
       planIndoorActivities,
     ],
     [
-      // それ以外の場合は屋内外を組み合わせた提案を行う
+      // それ以外の場合は屋内外を組み合わせたアクティビティを提案
       async ({ inputData }) => {
         return inputData?.precipitationChance <= 50;
       },
@@ -326,10 +320,9 @@ export { activityPlanningWorkflow };
 ```
 
 
+## Mastra クラスにエージェントとワークフローのインスタンスを登録する
 
-## Mastra クラスに Agent と Workflow のインスタンスを登録する
-
-`mastra` インスタンスに Agent と Workflow を登録します。これにより、Workflow 内から Agent にアクセスできるようになります。
+Mastra のインスタンスにエージェントとワークフローを登録します。これにより、ワークフロー内からエージェントにアクセスできるようになります。
 
 ```ts showLineNumbers copy filename="index.ts"
 import { Mastra } from "@mastra/core/mastra";
@@ -340,15 +333,15 @@ import { activityPlanningWorkflow } from "./workflows/inngest-workflow";
 import { planningAgent } from "./agents/planning-agent";
 import { realtimeMiddleware } from "@inngest/realtime";
 
-// ワークフローのオーケストレーションとイベント処理のための Inngest インスタンスを作成
+// ワークフローのオーケストレーションとイベント処理用に Inngest インスタンスを作成
 const inngest = new Inngest({
   id: "mastra",
-  baseUrl: `http://localhost:8288`, // ローカル Inngest サーバーの URL
+  baseUrl: `http://localhost:8288`, // ローカル Inngest サーバーのURL
   isDev: true,
-  middleware: [realtimeMiddleware()], // Inngest ダッシュボードでリアルタイム更新を有効化
+  middleware: [realtimeMiddleware()], // Inngest ダッシュボードでのリアルタイム更新を有効化
 });
 
-// メインの Mastra インスタンスを作成・構成
+// メインの Mastra インスタンスを作成して構成
 export const mastra = new Mastra({
   workflows: {
     activityPlanningWorkflow,
@@ -360,7 +353,7 @@ export const mastra = new Mastra({
     host: "0.0.0.0",
     apiRoutes: [
       {
-        path: "/api/inngest", // Inngest がイベントを送信するための API エンドポイント
+        path: "/api/inngest", // Inngest がイベントを送信するためのAPIエンドポイント
         method: "ALL",
         createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
       },
@@ -374,10 +367,9 @@ export const mastra = new Mastra({
 ```
 
 
-
 ## アクティビティプランナーのワークフローを実行する
 
-ここでは、mastra インスタンスからアクティビティプランナーのワークフローを取得し、`run` を作成して、必要な `inputData` とともにその `run` を実行します。
+ここでは、mastra インスタンスからアクティビティプランナーのワークフローを取得し、実行（run）を作成して、必要な inputData を使ってその実行を実行します。
 
 ```ts showLineNumbers copy filename="exec.ts"
 import { mastra } from "./";
@@ -392,7 +384,7 @@ const app = await createHonoServer(mastra, {
   tools: getToolExports(tools),
 });
 
-// Inngest がイベントを送信できるよう、サーバーをポート 3000 で起動する
+// Inngest がイベントを送信できるよう、ポート 3000 でサーバーを起動します
 const srv = serve({
   fetch: app.fetch,
   port: 3000,
@@ -401,26 +393,25 @@ const srv = serve({
 const workflow = mastra.getWorkflow("activityPlanningWorkflow");
 const run = await workflow.createRunAsync();
 
-// 必要な入力データ（都市名）でワークフローを開始する
-// これによりワークフローの各ステップがトリガーされ、結果がコンソールにストリーミングされる
+// 必要な入力データ（都市名）でワークフローを開始します
+// これによりワークフローの各ステップが実行され、結果がコンソールにストリーミングされます
 const result = await run.start({ inputData: { city: "New York" } });
 console.dir(result, { depth: null });
 
-// ワークフローの実行完了後にサーバーを閉じる
+// ワークフローの実行が完了したら、サーバーを停止します
 srv.close();
 ```
 
-ワークフローを実行した後は、Inngest ダッシュボード [http://localhost:8288](http://localhost:8288) で、ワークフロー実行をリアルタイムに表示・監視できます。
-
+ワークフローを実行した後は、Inngest ダッシュボードの [http://localhost:8288](http://localhost:8288) で、ワークフローの実行状況をリアルタイムに表示・監視できます。
 
 
 ## Inngest フロー制御の設定
 
-Inngest のワークフローは、同時実行数の制限、レート制限、スロットリング、デバウンス、優先度キューイングなどの高度なフロー制御機能をサポートしています。これらの機能は、大規模なワークフロー実行の管理やリソースの過負荷防止に役立ちます。
+Inngest のワークフローは、同時実行数の上限、レート制限、スロットリング、デバウンス、優先度付きキューなどの高度なフロー制御機能をサポートします。これらの機能により、大規模なワークフローの実行を適切に管理し、リソースの過負荷を防止できます。
 
 ### 同時実行制御
 
-同時に実行できるワークフローインスタンス数を制御します:
+同時に実行できるワークフローインスタンスの数を制御します：
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
@@ -428,17 +419,18 @@ const workflow = createWorkflow({
   inputSchema: z.object({ userId: z.string() }),
   outputSchema: z.object({ result: z.string() }),
   steps: [processUserStep],
-  // ユーザー ID ごとに同時実行を 10 に制限
+  // 同時実行数を10に制限（ユーザーIDごとにスコープ）
   concurrency: { 
     limit: 10, 
-    key: 'event.data.userId' // ユーザー単位の同時実行制御
+    key: 'event.data.userId' // ユーザーごとの同時実行制御
   },
 });
 ```
 
+
 ### レート制限
 
-一定期間内のワークフロー実行回数を制限します:
+一定期間内に実行されるワークフローの回数を制限します：
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
@@ -446,7 +438,7 @@ const workflow = createWorkflow({
   inputSchema: z.object({ endpoint: z.string() }),
   outputSchema: z.object({ status: z.string() }),
   steps: [apiSyncStep],
-  // 1 時間あたり最大 1000 回実行
+  // 1時間あたりの最大実行回数は1000回
   rateLimit: { 
     period: '1h', 
     limit: 1000
@@ -454,9 +446,10 @@ const workflow = createWorkflow({
 });
 ```
 
+
 ### スロットリング
 
-ワークフロー実行間の最小間隔を確保します:
+ワークフローの実行間隔の下限を確保します:
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
@@ -464,7 +457,7 @@ const workflow = createWorkflow({
   inputSchema: z.object({ organizationId: z.string(), message: z.string() }),
   outputSchema: z.object({ sent: z.boolean() }),
   steps: [sendEmailStep],
-  // 組織ごとに 10 秒あたり 1 回のみ実行
+  // 組織ごとに10秒に1回のみ実行
   throttle: { 
     period: '10s', 
     limit: 1,
@@ -473,9 +466,10 @@ const workflow = createWorkflow({
 });
 ```
 
+
 ### デバウンス
 
-一定時間新しいイベントが来ない場合にのみ実行します:
+一定の時間内に新たなイベントが発生しなくなるまで実行を遅らせます:
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
@@ -483,17 +477,18 @@ const workflow = createWorkflow({
   inputSchema: z.object({ documentId: z.string() }),
   outputSchema: z.object({ indexed: z.boolean() }),
   steps: [indexDocumentStep],
-  // 更新が途絶えてから 5 秒待ってインデックス作成
+  // 更新が5秒間途絶えてからインデックス化を実行します
   debounce: { 
-    period: '5s', 
+    period: '5s',
     key: 'event.data.documentId'
   },
 });
 ```
 
-### 優先度キューイング
 
-ワークフローの実行優先度を設定します:
+### 優先度キュー
+
+ワークフローの実行優先度を設定します：
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
@@ -501,16 +496,17 @@ const workflow = createWorkflow({
   inputSchema: z.object({ orderId: z.string(), priority: z.number().optional() }),
   outputSchema: z.object({ processed: z.boolean() }),
   steps: [processOrderStep],
-  // 優先度の高い注文から先に実行
+  // 優先度の高い注文から処理されます
   priority: { 
-    run: 'event.data.priority ?? 50' // 動的な優先度。デフォルトは 50
+    run: 'event.data.priority ?? 50' // 優先度を動的に設定（既定値は50）
   },
 });
 ```
 
-### 複合フロー制御
 
-複数のフロー制御機能を組み合わせられます:
+### フロー制御の組み合わせ
+
+複数のフロー制御機能を組み合わせて使用できます。
 
 ```ts showLineNumbers copy
 const workflow = createWorkflow({
@@ -542,14 +538,13 @@ const workflow = createWorkflow({
 });
 ```
 
-すべてのフロー制御機能は任意です。指定がない場合、ワークフローは Inngest のデフォルト動作で実行されます。フロー制御の設定は Inngest のネイティブ実装によって検証され、互換性と正確性が保証されます。
+フロー制御機能はすべて任意です。特に指定がない場合、ワークフローは Inngest のデフォルト動作で実行されます。フロー制御の設定は Inngest のネイティブ実装で検証され、互換性と正確性が担保されます。
 
-フロー制御オプションとその動作の詳細については、[Inngest Flow Control のドキュメント](https://www.inngest.com/docs/guides/flow-control)を参照してください。
-
+フロー制御オプションとその挙動の詳細については、[Inngest Flow Control のドキュメント](https://www.inngest.com/docs/guides/flow-control)をご参照ください。
 
 
 ## ワークフロー（レガシー）
 
-以下のリンクは、レガシー版ワークフローのサンプルドキュメントです。
+以下のリンクは、レガシー版ワークフローの例のドキュメントです：
 
 - [シンプルなワークフローの作成（レガシー）](/examples/workflows_legacy/creating-a-workflow)

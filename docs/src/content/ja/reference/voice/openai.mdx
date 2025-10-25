@@ -1,25 +1,21 @@
 ---
 title: "リファレンス: OpenAI Voice | 音声プロバイダー | Mastra ドキュメント"
-description: "テキスト読み上げと音声認識機能を提供するOpenAIVoiceクラスのドキュメント。"
+description: "OpenAIVoice クラスのドキュメント。テキスト読み上げと音声からテキストへの変換（音声認識）機能を提供します。"
 ---
-
-
 
 # OpenAI
 
-Mastraの中のOpenAIVoiceクラスは、OpenAIのモデルを使用してテキスト読み上げと音声認識の機能を提供します。
-
-
+Mastra の OpenAIVoice クラスは、OpenAI のモデルを用いて、テキスト読み上げ（Text-to-Speech）と音声テキスト化（Speech-to-Text）の機能を提供します。
 
 ## 使用例
 
 ```typescript
 import { OpenAIVoice } from "@mastra/voice-openai";
 
-// Initialize with default configuration using environment variables
+// 環境変数によるデフォルト設定で初期化
 const voice = new OpenAIVoice();
 
-// Or initialize with specific configuration
+// または、特定の設定で初期化
 const voiceWithConfig = new OpenAIVoice({
   speechModel: {
     name: "tts-1-hd",
@@ -29,40 +25,39 @@ const voiceWithConfig = new OpenAIVoice({
     name: "whisper-1",
     apiKey: "your-openai-api-key",
   },
-  speaker: "alloy", // Default voice
+  speaker: "alloy", // 既定の音声
 });
 
-// Convert text to speech
-const audioStream = await voice.speak("Hello, how can I help you?", {
-  speaker: "nova", // Override default voice
-  speed: 1.2, // Adjust speech speed
+// テキストから音声へ変換
+const audioStream = await voice.speak("こんにちは。どのようにお手伝いできますか？", {
+  speaker: "nova", // 既定の音声を上書き
+  speed: 1.2, // 再生速度を調整
 });
 
-// Convert speech to text
+// 音声からテキストへ変換
 const text = await voice.listen(audioStream, {
   filetype: "mp3",
 });
 ```
 
 
-
 ## 設定
 
-### コンストラクタオプション
+### コンストラクターのオプション
 
 <PropertiesTable
   content={[
     {
       name: "speechModel",
       type: "OpenAIConfig",
-      description: "テキスト読み上げ合成の設定。",
+      description: "テキスト読み上げ（TTS）用の設定。",
       isOptional: true,
       defaultValue: "{ name: 'tts-1' }",
     },
     {
       name: "listeningModel",
       type: "OpenAIConfig",
-      description: "音声からテキストへの認識の設定。",
+      description: "音声からテキスト（STT）への変換用の設定。",
       isOptional: true,
       defaultValue: "{ name: 'whisper-1' }",
     },
@@ -83,46 +78,44 @@ const text = await voice.listen(audioStream, {
     {
       name: "name",
       type: "'tts-1' | 'tts-1-hd' | 'whisper-1'",
-      description: "モデル名。より高品質な音声には'tts-1-hd'を使用してください。",
+      description: "モデル名。より高品質な音声には 'tts-1-hd' を使用してください。",
       isOptional: true,
     },
     {
       name: "apiKey",
       type: "string",
       description:
-        "OpenAI APIキー。設定されていない場合はOPENAI_API_KEY環境変数を使用します。",
+        "OpenAI の API キー。未指定の場合は環境変数 OPENAI_API_KEY が使用されます。",
       isOptional: true,
     },
   ]}
 />
 
-
-
 ## メソッド
 
 ### speak()
 
-OpenAIのテキスト読み上げモデルを使用してテキストを音声に変換します。
+OpenAI のテキスト読み上げ（text-to-speech）モデルを使用して、テキストを音声に変換します。
 
 <PropertiesTable
   content={[
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "音声に変換するテキストまたはテキストストリーム。",
+      description: "音声に変換するテキストまたはテキストのストリーム。",
       isOptional: false,
     },
     {
       name: "options.speaker",
       type: "OpenAIVoiceId",
-      description: "音声合成に使用する音声ID。",
+      description: "音声合成に使用する音声 ID。",
       isOptional: true,
-      defaultValue: "Constructor's speaker value",
+      defaultValue: "コンストラクターの speaker 値",
     },
     {
       name: "options.speed",
       type: "number",
-      description: "音声速度の倍率。",
+      description: "発話速度の倍率。",
       isOptional: true,
       defaultValue: "1.0",
     },
@@ -133,20 +126,20 @@ OpenAIのテキスト読み上げモデルを使用してテキストを音声�
 
 ### listen()
 
-OpenAIのWhisperモデルを使用して音声を文字起こしします。
+OpenAI の Whisper モデルで音声をテキスト化します。
 
 <PropertiesTable
   content={[
     {
       name: "audioStream",
       type: "NodeJS.ReadableStream",
-      description: "文字起こしする音声ストリーム。",
+      description: "テキスト化する音声ストリーム。",
       isOptional: false,
     },
     {
       name: "options.filetype",
       type: "string",
-      description: "入力ストリームの音声フォーマット。",
+      description: "入力ストリームの音声形式。",
       isOptional: true,
       defaultValue: "'mp3'",
     },
@@ -157,23 +150,21 @@ OpenAIのWhisperモデルを使用して音声を文字起こしします。
 
 ### getSpeakers()
 
-利用可能な音声オプションの配列を返します。各ノードには以下が含まれます：
+利用可能な音声オプションの配列を返します。各ノードには次が含まれます：
 
 <PropertiesTable
   content={[
     {
       name: "voiceId",
       type: "string",
-      description: "音声の一意識別子",
+      description: "音声の一意の識別子",
       isOptional: false,
     },
   ]}
 />
 
+## 注意事項
 
-
-## メモ
-
-- APIキーはコンストラクタオプションまたは`OPENAI_API_KEY`環境変数を通じて提供できます
-- `tts-1-hd`モデルはより高品質の音声を提供しますが、処理時間が長くなる場合があります
-- 音声認識はmp3、wav、webmなど複数の音声フォーマットをサポートしています
+- APIキーはコンストラクターのオプション、または `OPENAI_API_KEY` 環境変数で指定できます
+- `tts-1-hd` モデルはより高品質な音声を生成しますが、処理時間が長くなる場合があります
+- 音声認識は mp3、wav、webm を含む複数の音声形式に対応しています

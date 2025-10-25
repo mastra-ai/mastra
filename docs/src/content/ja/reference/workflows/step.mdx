@@ -1,18 +1,14 @@
 ---
 title: "リファレンス: Step クラス | ワークフロー | Mastra ドキュメント"
-description: ワークフロー内の個々の作業単位を定義するMastraのStepクラスに関するドキュメント。
+description: Mastra の Step クラスに関するドキュメント。ワークフロー内の個々の作業単位を定義します。
 ---
 
+# Step クラス
 
+Step クラスは、ワークフロー内の個々の作業単位を定義し、実行ロジック、データ検証、入出力処理をまとめて扱います。
+ツールまたはエージェントをパラメーターとして受け取り、そこから自動的にステップを生成できます。
 
-# Step Class
-
-Stepクラスは、ワークフロー内の個々の作業単位を定義し、実行ロジック、データ検証、入出力処理をカプセル化します。
-ツールまたはエージェントをパラメータとして受け取り、それらから自動的にステップを作成できます。
-
-
-
-## 使用例
+## 使い方の例
 
 ```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -20,7 +16,7 @@ import { z } from "zod";
 
 const step1 = createStep({
   id: "step-1",
-  description: "入力値を出力に渡す",
+  description: "入力の値をそのまま出力に渡します",
   inputSchema: z.object({
     value: z.number()
   }),
@@ -37,51 +33,56 @@ const step1 = createStep({
 ```
 
 
-
-## コンストラクタパラメータ
+## コンストラクターのパラメーター
 
 <PropertiesTable
   content={[
     {
       name: "id",
       type: "string",
-      description: "ステップの一意識別子",
+      description: "ステップの一意の識別子",
       required: true,
     },
     {
       name: "description",
       type: "string",
-      description: "ステップが何を行うかのオプション説明",
+      description: "ステップの役割・処理内容に関する任意の説明",
       required: false,
     },
     {
       name: "inputSchema",
       type: "z.ZodType<any>",
-      description: "入力構造を定義するZodスキーマ",
+      description: "入力構造を定義する Zod スキーマ",
       required: true,
     },
     {
       name: "outputSchema",
       type: "z.ZodType<any>",
-      description: "出力構造を定義するZodスキーマ",
+      description: "出力構造を定義する Zod スキーマ",
       required: true,
     },
     {
       name: "resumeSchema",
       type: "z.ZodType<any>",
-      description: "ステップを再開するためのオプションZodスキーマ",
+      description: "ステップ再開時に使用する任意の Zod スキーマ",
       required: false,
     },
     {
       name: "suspendSchema",
       type: "z.ZodType<any>",
-      description: "ステップを一時停止するためのオプションZodスキーマ",
+      description: "ステップ一時停止時に使用する任意の Zod スキーマ",
+      required: false,
+    },
+    {
+      name: "stateSchema",
+      type: "z.ZodObject<any>",
+      description: "ステップの状態用の任意の Zod スキーマ。Mastra の状態システムを使用する場合は自動注入されます。stateSchema はワークフローの stateSchema のサブセットである必要があります。指定しない場合、型は「any」です。",
       required: false,
     },
     {
       name: "execute",
       type: "(params: ExecuteParams) => Promise<any>",
-      description: "ステップロジックを含む非同期関数",
+      description: "ステップのロジックを実装する非同期関数",
       required: true,
     }
   ]}
@@ -94,59 +95,62 @@ const step1 = createStep({
     {
       name: "inputData",
       type: "z.infer<TStepInput>",
-      description: "inputSchemaに一致する入力データ",
+      description: "inputSchema に適合する入力データ",
     },
     {
       name: "resumeData",
       type: "z.infer<TResumeSchema>",
       description:
-        "一時停止状態からステップを再開する際のresumeSchemaに一致する再開データ。ステップが再開される場合のみ存在します。",
+        "中断状態からステップを再開する際の、resumeSchema に適合する再開用データ。ステップが再開される場合にのみ存在します。",
     },
     {
       name: "mastra",
       type: "Mastra",
-      description: "Mastraサービス（エージェント、ツールなど）へのアクセス",
+      description: "Mastra のサービス（エージェント、ツールなど）へのアクセス",
     },
     {
       name: "getStepResult",
-      type: "(stepId: string) => any",
+      type: "(step: Step | string) => any",
       description: "他のステップの結果にアクセスする関数",
     },
     {
       name: "getInitData",
       type: "() => any",
       description:
-        "任意のステップでワークフローの初期入力データにアクセスする関数",
+        "任意のステップからワークフローの初期入力データにアクセスする関数",
     },
     {
       name: "suspend",
-      type: "() => Promise<void>",
-      description: "ワークフロー実行を一時停止する関数",
+      type: "(suspendPayload: any, suspendOptions?: { resumeLabel?: string }) => Promise<void>",
+      description: "ワークフローの実行を一時停止する関数",
+    },
+    {
+      name: "setState",
+      type: "(state: z.infer<TState>) => void",
+      description: "ワークフローの状態を設定する関数。リデューサー風のパターンで適用します（例: \"setState({ ...state, ...newState })\"）",
     },
     {
       name: "runId",
       type: "string",
-      description: "現在の実行ID",
+      description: "現在の実行 ID",
     },
     {
       name: "runtimeContext",
       type: "RuntimeContext",
       isOptional: true,
       description:
-        "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
+        "依存性注入やコンテキスト情報のためのランタイムコンテキスト。",
     },
     {
       name: "runCount",
       type: "number",
-      description: "この特定のステップの実行回数。ステップが実行されるたびに自動的に増加します",
+      description: "このステップの実行回数。ステップが実行されるたびに自動的に増加します",
       isOptional: true,
     }
   ]}
 />
 
-
-
 ## 関連項目
 
-- [フロー制御](../../docs/workflows/control-flow.mdx)
-- [エージェントとツールの利用](../../docs/workflows/using-with-agents-and-tools.mdx)
+- [制御フロー](../../docs/workflows/control-flow.mdx)
+- [エージェントとツールの使い方](../../docs/workflows/agents-and-tools.mdx)

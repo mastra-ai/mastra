@@ -1,55 +1,54 @@
 ---
-title: "OpenRouterとの使用"
-description: "OpenRouterをMastraと統合する方法を学ぶ"
+title: "OpenRouter を利用する"
+description: "Mastra と OpenRouter の連携方法を学ぶ"
 ---
 
 import { Steps } from 'nextra/components'
 
 
+# Mastra で OpenRouter を使う
 
-# MastraでOpenRouterを使用する
-
-OpenRouterをMastraと統合して、OpenRouterで利用可能な多数のモデルを活用しましょう。
+OpenRouter で利用可能な多数のモデルを活用するため、Mastra と OpenRouter を統合します。
 
 <Steps>
-## Mastraプロジェクトを初期化する
+## Mastra プロジェクトを初期化する
 
-Mastraを始める最も簡単な方法は、`mastra` CLIを使用して新しいプロジェクトを初期化することです：
+Mastra を始める最も簡単な方法は、`mastra` CLI を使って新しいプロジェクトを初期化することです:
 
 ```bash copy
 npx create-mastra@latest
 ```
 
-プロジェクトをセットアップするためのプロンプトが表示されます。この例では、以下を選択してください：
-- プロジェクト名：my-mastra-openrouter-app
-- コンポーネント：Agents（推奨）
-- デフォルトプロバイダーには、OpenAI（推奨）を選択 - 後でOpenRouterを手動で設定します
-- オプションでサンプルコードを含める
+プロジェクトのセットアップ用のプロンプトが表示されます。この例では次を選択します:
+- プロジェクト名: my-mastra-openrouter-app
+- コンポーネント: Agents（推奨）
+- 既定のプロバイダーは OpenAI（推奨）を選択 — OpenRouter は後で手動で設定します
+- サンプルコードを任意で含める
 
-## OpenRouterを設定する
+## OpenRouter を設定する
 
-`create-mastra`でプロジェクトを作成した後、プロジェクトルートに`.env`ファイルが見つかります。
-セットアップ時にOpenAIを選択したので、OpenRouterを手動で設定します：
+`create-mastra` でプロジェクトを作成した後、プロジェクトのルートに `.env` ファイルが作成されています。
+セットアップ時に OpenAI を選択したため、OpenRouter は手動で設定します:
 
 ```bash filename=".env" copy
 OPENROUTER_API_KEY=
 ```
 
-プロジェクトから`@ai-sdk/openai`パッケージを削除します：
+プロジェクトから `@ai-sdk/openai` パッケージを削除します:
 
 ```bash copy
 npm uninstall @ai-sdk/openai
 ```
 
-次に、`@openrouter/ai-sdk-provider`パッケージをインストールします：
+続いて、`@openrouter/ai-sdk-provider` パッケージをインストールします:
 
 ```bash copy
 npm install @openrouter/ai-sdk-provider
 ```
 
-## AgentでOpenRouterを使用するように設定する
+## エージェントを OpenRouter 利用に設定する
 
-エージェントがOpenRouterを使用するように設定します。
+エージェントが OpenRouter を使うように設定します。
 
 ```typescript filename="src/mastra/agents/assistant.ts" copy showLineNumbers {4-6,11}
 import { Agent } from "@mastra/core/agent";
@@ -66,7 +65,7 @@ export const assistant = new Agent({
 })
 ```
 
-エージェントをMastraインスタンスに登録することを忘れずに：
+エージェントを Mastra インスタンスに登録することを忘れないでください:
 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers {4}
 import { assistant } from "./agents/assistant";
@@ -82,21 +81,19 @@ export const mastra = new Mastra({
 npm run dev
 ```
 
-これによりMastra開発サーバーが起動します。
+Mastra の開発サーバーが起動します。
 
-プレイグラウンドの場合は[http://localhost:4111](http://localhost:4111)にアクセスするか、Mastra APIの[http://localhost:4111/api/agents/assistant/stream](http://localhost:4111/api/agents/assistant/stream)経由でエージェントをテストできます。
+プレイグラウンドは [http://localhost:4111](http://localhost:4111)、Mastra API は [http://localhost:4111/api/agents/assistant/stream](http://localhost:4111/api/agents/assistant/stream) からエージェントをテストできます。
 
 </Steps>
 
-
-
 ## 高度な設定
 
-OpenRouterリクエストをより詳細に制御するために、追加の設定オプションを渡すことができます。
+OpenRouter へのリクエストをより柔軟に制御するために、追加の設定オプションを指定できます。
 
-### プロバイダー全体のオプション:
+### プロバイダー共通のオプション:
 
-OpenRouterプロバイダーにプロバイダー全体のオプションを渡すことができます:
+OpenRouter プロバイダーには、プロバイダー共通のオプションを渡せます:
 
 ```typescript filename="src/mastra/agents/assistant.ts" {6-10} copy showLineNumbers
 import { Agent } from "@mastra/core/agent";
@@ -113,14 +110,15 @@ const openrouter = createOpenRouter({
 
 export const assistant = new Agent({
     name: "assistant",
-    instructions: "You are a helpful assistant.",
+    instructions: "あなたは頼りになるアシスタントです。",
     model: openrouter("anthropic/claude-sonnet-4"),
 })
 ```
 
-### モデル固有のオプション:
 
-OpenRouterプロバイダーにモデル固有のオプションを渡すことができます:
+### モデル固有のオプション：
+
+OpenRouter プロバイダーにモデル固有のオプションを渡せます。
 
 ```typescript filename="src/mastra/agents/assistant.ts" {11-17} copy showLineNumbers
 import { Agent } from "@mastra/core/agent";
@@ -132,7 +130,7 @@ const openrouter = createOpenRouter({
 
 export const assistant = new Agent({
     name: "assistant",
-    instructions: "You are a helpful assistant.",
+    instructions: "あなたは頼りになるアシスタントです。",
     model: openrouter("anthropic/claude-sonnet-4", {
         extraBody: {
             reasoning: {
@@ -143,19 +141,20 @@ export const assistant = new Agent({
 })
 ```
 
+
 ### プロバイダー固有のオプション:
 
-OpenRouterプロバイダーにプロバイダー固有のオプションを渡すことができます:
+OpenRouter のプロバイダーに固有のオプションを渡すことができます。
 
 ```typescript copy showLineNumbers {7-12}
-// プロバイダー固有のオプションでレスポンスを取得
+// プロバイダー固有のオプションで応答を取得する
 const response = await assistant.generate([
   {
     role: 'system',
     content:
-      'You are Chef Michel, a culinary expert specializing in ketogenic (keto) diet...',
+      'あなたはシェフのミシェルで、ケトジェニック（ケト）ダイエットを専門とする料理のエキスパートです...',
     providerOptions: {
-      // プロバイダー固有のオプション - キーは 'anthropic' または 'openrouter' を指定可能
+      // プロバイダー固有のオプション - キーは「anthropic」または「openrouter」にできます
       anthropic: {
         cacheControl: { type: 'ephemeral' },
       },
@@ -163,7 +162,7 @@ const response = await assistant.generate([
   },
   {
     role: 'user',
-    content: 'Can you suggest a keto breakfast?',
+    content: 'ケト向けの朝食を提案してもらえますか？',
   },
 ]);
 ```

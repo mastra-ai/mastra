@@ -1,0 +1,302 @@
+---
+title: "例: メッセージ長の制限 | プロセッサー | Mastra ドキュメント"
+description: 言語モデルに送信する前にメッセージの長さを制限するカスタム入力プロセッサーを作成する例。
+---
+
+# メッセージ長リミッター
+
+この例では、言語モデルに送信する前にメッセージ全体の長さを検証して制限するカスタム入力プロセッサの作成方法を紹介します。これにより、コストの高いAPI呼び出しを防ぎ、アプリケーション全体で一貫した入力制約を維持できます。
+
+## カスタム入力プロセッサーを作成する
+
+Mastra のカスタム入力プロセッサーは、`processInput` メソッドを備えた `Processor` インターフェースを実装します。このプロセッサーは、メッセージスレッド内のすべてのテキストコンテンツの総文字数を検証し、設定された上限を超えるリクエストをブロックします。
+
+```typescript filename="src/mastra/processors/message-length-limiter.ts" showLineNumbers copy
+import type { Processor } from "@mastra/core/processors";
+import type { MastraMessageV2 } from "@mastra/core/agent/message-list";
+import { TripWire } from "@mastra/core/agent";
+
+type MessageLengthLimiterOptions = {
+  maxLength?: number;
+  strategy?: 'block' | 'warn' | 'truncate';
+};
+
+export class MessageLengthLimiter implements Processor {
+  readonly name = 'message-length-limiter';
+  private maxLength: number;
+  private strategy: 'block' | 'warn' | 'truncate';
+
+  constructor(options: MessageLengthLimiterOptions | number = {}) {
+    if (typeof options === 'number') {
+      this.maxLength = options;
+      this.strategy = 'block';
+    } else {
+      this.maxLength = options.maxLength ?? 1000;
+      this.strategy = options.strategy ?? 'block';
+    }
+  }
+
+  processInput({ messages, abort }: {
+    messages: MastraMessageV2[];
+    abort: (reason?: string) => never
+  }): MastraMessageV2[] {
+    try {
+      const totalLength = messages.reduce((sum, msg) => {
+        return sum + msg.content.parts
+          .filter(part => part.type === 'text')
+          .reduce((partSum, part) => partSum + (part as any).text.length, 0);
+      }, 0);
+
+      if (totalLength > this.maxLength) {
+        switch (this.strategy) {
+          case 'block':
+            abort(`メッセージが長すぎます: ${totalLength}文字（最大: ${this.maxLength}）`);
+            break;
+          case 'warn':
+            console.warn(`警告: メッセージ長${totalLength}が推奨制限${this.maxLength}文字を超えています`);
+            break;
+          case 'truncate':
+            return this.truncateMessages(messages, this.maxLength);
+        }
+      }
+    } catch (error) {
+      if (error instanceof TripWire) {
+        throw error;
+      }
+      throw new Error(`長さの検証に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
+    }
+
+    return messages;
+  }
+
+  private truncateMessages(messages: MastraMessageV2[], maxLength: number): MastraMessageV2[] {
+    const truncatedMessages = [...messages];
+    let currentLength = 0;
+
+    for (let i = 0; i < truncatedMessages.length; i++) {
+      const message = truncatedMessages[i];
+      const parts = [...message.content.parts];
+      
+      for (let j = 0; j < parts.length; j++) {
+        const part = parts[j];
+        if (part.type === 'text') {
+          const textPart = part as any;
+          const partLength = textPart.text.length;
+          
+          if (currentLength + partLength > maxLength) {
+            const remainingChars = maxLength - currentLength;
+            if (remainingChars > 0) {
+              textPart.text = textPart.text.substring(0, remainingChars) + '...';
+            } else {
+              parts.splice(j);
+              break;
+            }
+            currentLength = maxLength;
+            break;
+          }
+          currentLength += partLength;
+        }
+      }
+      
+      truncatedMessages[i] = { ...message, content: { ...message.content, parts } };
+      
+      if (currentLength >= maxLength) {
+        truncatedMessages.splice(i + 1);
+        break;
+      }
+    }
+
+    return truncatedMessages;
+  }
+}
+```
+
+
+### 主要コンポーネント
+
+- **Constructor**: options オブジェクトまたは数値を受け取る
+- **Strategy options**: 文字数超過時の処理方法を選択:
+  - `'block'`: エラーとして入力全体を拒否（既定）
+  - `'warn'`: 警告を記録して内容は通す
+  - `'truncate'`: 制限に収まるようメッセージを切り詰める
+- **processInput**: メッセージ総文字数を検証し、選択した戦略を適用
+- **Error handling**: TripWire エラー（検証失敗）とアプリケーションエラーを区別
+
+### プロセッサの使用
+
+明示的な戦略設定を行う、options オブジェクト方式の利用:
+
+```typescript filename="src/mastra/agents/blocking-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { MessageLengthLimiter } from "../processors/message-length-limiter";
+
+export const blockingAgent = new Agent({
+  name: 'blocking-agent',
+  instructions: '入力長に制限がある親切なアシスタントです',
+  model: "openai/gpt-4o",
+  inputProcessors: [
+    new MessageLengthLimiter({ maxLength: 2000, strategy: 'block' }),
+  ],
+});
+```
+
+シンプルな数値方式（デフォルトは「block」戦略）を使用する場合：
+
+```typescript filename="src/mastra/agents/simple-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { MessageLengthLimiter } from "../processors/message-length-limiter";
+
+export const simpleAgent = new Agent({
+  name: 'simple-agent',
+  instructions: 'あなたは親切なアシスタントです',
+  model: "openai/gpt-4o",
+  inputProcessors: [
+    new MessageLengthLimiter(500),
+  ],
+});
+```
+
+
+## 上限内の例
+
+この例では、設定された文字数の上限内に収まり、問題なく処理されるメッセージを示しています。
+
+```typescript filename="src/example-high-message-length.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter";
+
+// 余裕のある文字数制限でエージェントを作成
+export const agent = new Agent({
+  name: 'length-limited-agent',
+  instructions: 'あなたは親切なアシスタントです',
+  model: "openai/gpt-4o",
+  inputProcessors: [
+    new MessageLengthLimiter(500), // 500文字制限
+  ],
+});
+
+const shortMessage = "フランスの首都は何ですか?"; // 31文字
+
+const result = await agent.generate(shortMessage);
+console.log(result.text);
+```
+
+
+### 出力例（良い例）
+
+このメッセージは500文字の上限を大きく下回っているため、正常に処理されます。
+
+```typescript
+"フランスの首都はパリです。国の北中部に位置しています..."
+```
+
+
+## 一部の例（上限に近い）
+
+この例は、文字数制限に近いものの、まだ上限内に収まっているメッセージを示しています。
+
+```typescript filename="src/example-partial-message-length.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter";
+
+// より厳しい文字数制限で同じエージェントを再利用
+export const agent = new Agent({
+  name: 'length-limited-agent',
+  instructions: 'あなたは親切なアシスタントです',
+  model: "openai/gpt-4o",
+  inputProcessors: [
+    new MessageLengthLimiter(300), // 300文字制限
+  ],
+});
+
+const mediumMessage = "機械学習と人工知能の違いを説明してもらえますか?特に、それらがどのように関連しているか、そしてコンピュータサイエンスの分野で何が異なるのかを理解したいです。"; // ~250文字
+
+const result = await agent.generate(mediumMessage);
+console.log(result.text);
+```
+
+
+### 出力例（抜粋）
+
+このメッセージは300文字の上限内のため、正常に処理されます:
+
+```typescript
+"機械学習は人工知能の一部です。AIは、機械が賢く作業を実行するという、より広範な概念です..."
+```
+
+
+## 低例（上限超過）
+
+この例は、メッセージが設定された文字数上限を超えた場合に何が起こるかを示しています。
+
+```typescript filename="src/example-low-message-length.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter";
+
+// 同じエージェントを非常に厳しい文字数制限で再利用
+export const agent = new Agent({
+  name: 'length-limited-agent',
+  instructions: 'あなたは親切なアシスタントです',
+  model: "openai/gpt-4o",
+  inputProcessors: [
+    new MessageLengthLimiter(100), // 非常に厳しい100文字制限
+  ],
+});
+
+const longMessage = "グローバル市場における人工知能の経済的影響について、AI導入が雇用率、生産性指標、消費者行動パターン、および政府や企業が戦略的計画目的で使用する長期経済予測モデルにどのように影響するかの詳細な検証を含む、包括的な分析を提供してください。"; // 400文字以上
+
+const result = await agent.generate(longMessage);
+
+if (result.tripwire) {
+  console.log("リクエストがブロックされました:", result.tripwireReason);
+} else {
+  console.log(result.text);
+}
+```
+
+
+### 低品質な出力例
+
+このリクエストは、メッセージが100文字の上限を超えているためにブロックされました：
+
+```typescript
+リクエストがブロックされました：メッセージが長すぎます：412文字（上限：100）
+```
+
+
+## 結果の理解
+
+`MessageLengthLimiter` を使用すると、プロセッサは次のことを行います：
+
+### 正常に処理される場合
+
+- **制限内**: 文字数制限未満のメッセージは通常どおり処理されます
+- **文字数カウント**: メッセージのテキスト内容のみをカウントします
+- **複数メッセージ対応**: スレッド内のすべてのメッセージの合計文字数をカウントします
+
+### 処理のブロック
+
+- **制限超過**: 設定された上限を超えるメッセージでは `result.tripwire = true` になる
+- **エラー詳細**: `result.tripwireReason` に実際の長さと設定された最大値が含まれる
+- **即時ブロック**: 処理は言語モデルに到達する前に停止する
+- **例外なし**: try/catch ブロックを使うのではなく `result.tripwire` を確認する
+
+### 設定オプション
+
+- **maxLength**: 文字数上限を設定します（既定値: 1000）
+- **カスタム上限**: エージェントごとに異なる文字数要件を設定できます
+- **実行時の上書き**: 必要に応じて呼び出し単位で上書きできます
+
+### ベストプラクティス
+
+- モデルのコンテキストウィンドウに合わせて現実的な上限を設定する
+- 会話履歴の累積長を考慮する
+- コスト重視のアプリケーションでは、より短い上限を用いる
+- 本番環境では、ブロックされたメッセージに対するユーザー向けフィードバックを実装する
+
+このプロセッサは次の用途に特に有用です:
+
+- 過大なリクエストを防いで API コストを抑制する
+- アプリケーション全体で一貫した入力検証を実現する
+- タイムアウトを招きかねない誤って大きすぎる入力から保護する
+- ユーザー権限に基づく段階的なアクセス制御を実装する

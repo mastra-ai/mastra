@@ -1,21 +1,18 @@
 ---
-title: "例: 音声からテキストへ | Voice | Mastra ドキュメント"
-description: Mastra を使って音声からテキストへのアプリケーションを作成する例。
+title: "例: 音声認識（音声→テキスト） | Voice | Mastra ドキュメント"
+description: Mastra を使って音声認識（音声をテキスト化）アプリを作成する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
+# スマート音声メモアプリ
 
-# Smart Voice Memo App
+以下のコードスニペットは、Mastra を Next.js に直接統合し、音声メモアプリで Speech-to-Text（STT）機能を実装する例です。Next.js への Mastra の統合方法の詳細は、[Next.js との統合](/docs/frameworks/next-js)をご覧ください。
 
-以下のコードスニペットは、Next.js に Mastra を直接統合してスマートボイスメモアプリケーションで音声認識（STT）機能を実装する例を示しています。Mastra を Next.js と統合する方法の詳細については、[Integrate with Next.js](/docs/frameworks/next-js) のドキュメントをご参照ください。
+## STT 機能を備えたエージェントの作成
 
-
-
-## STT機能を持つエージェントの作成
-
-次の例は、OpenAIのSTT機能を備えた音声対応エージェントを初期化する方法を示しています。
+次の例では、OpenAI の STT 機能を用いて音声対応エージェントを初期化する方法を示します。
 
 ```typescript filename="src/mastra/agents/index.ts"
 import { openai } from "@ai-sdk/openai";
@@ -23,22 +20,21 @@ import { Agent } from "@mastra/core/agent";
 import { OpenAIVoice } from "@mastra/voice-openai";
 
 const instructions = `
-You are an AI note assistant tasked with providing concise, structured summaries of their content... // omitted for brevity
+あなたはAIのメモ支援アシスタントです。コンテンツの簡潔で構造化された要約を提供してください... // 省略
 `;
 
 export const noteTakerAgent = new Agent({
-  name: "Note Taker Agent",
+  name: "ノートテイカーエージェント",
   instructions: instructions,
   model: openai("gpt-4o"),
-  voice: new OpenAIVoice(), // Add OpenAI voice provider with default configuration
+  voice: new OpenAIVoice(), // 既定の設定で OpenAI の音声プロバイダーを追加
 });
 ```
 
 
+## Mastra へのエージェント登録
 
-## Mastraでエージェントを登録する
-
-このスニペットは、STT対応エージェントをMastraインスタンスに登録する方法を示しています：
+このスニペットは、STT 対応のエージェントを Mastra インスタンスに登録する方法を示しています。
 
 ```typescript filename="src/mastra/index.ts"
 import { PinoLogger } from "@mastra/loggers";
@@ -47,7 +43,7 @@ import { Mastra } from "@mastra/core/mastra";
 import { noteTakerAgent } from "./agents";
 
 export const mastra = new Mastra({
-  agents: { noteTakerAgent }, // Register the note taker agent
+  agents: { noteTakerAgent }, // メモ取りエージェントを登録
   logger: new PinoLogger({
     name: "Mastra",
     level: "info",
@@ -56,27 +52,26 @@ export const mastra = new Mastra({
 ```
 
 
+## 文字起こしのための音声処理
 
-## 音声の文字起こし処理
-
-以下のコードは、ウェブリクエストから音声を受け取り、エージェントのSTT機能を使って文字起こしを行う方法を示しています。
+次のコードは、Web リクエストから音声を受け取り、エージェントの STT 機能を使って文字起こしする方法を示しています。
 
 ```typescript filename="app/api/audio/route.ts"
-import { mastra } from "@/src/mastra"; // Import the Mastra instance
+import { mastra } from "@/src/mastra"; // Mastra のインスタンスをインポート
 import { Readable } from "node:stream";
 
 export async function POST(req: Request) {
-  // Get the audio file from the request
+  // リクエストから音声ファイルを取得する
   const formData = await req.formData();
   const audioFile = formData.get("audio") as File;
   const arrayBuffer = await audioFile.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
   const readable = Readable.from(buffer);
 
-  // Get the note taker agent from the Mastra instance
+  // Mastra のインスタンスからメモ取りエージェントを取得する
   const noteTakerAgent = mastra.getAgent("noteTakerAgent");
 
-  // Transcribe the audio file
+  // 音声ファイルを文字起こしする
   const text = await noteTakerAgent.voice?.listen(readable);
 
   return new Response(JSON.stringify({ text }), {
@@ -88,12 +83,17 @@ export async function POST(req: Request) {
 Smart Voice Memo App の完全な実装は、私たちの GitHub リポジトリでご覧いただけます。
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
+
 <GithubLink
   link={
-    "https://github.com/mastra-ai/voice-examples/tree/main/speech-to-text/voice-memo-app"
-  }
+"https://github.com/mastra-ai/voice-examples/tree/main/speech-to-text/voice-memo-app"
+}
 />

@@ -8,45 +8,47 @@ import { Tabs, Tab } from "@/components/tabs";
 
 # MastraAuthFirebase クラス
 
-`MastraAuthFirebase` クラスは、Firebase Authentication を利用して Mastra の認証を提供します。Firebase の ID トークンで受信リクエストを検証し、`experimental_auth` オプションを介して Mastra サーバーと統合します。
+`MastraAuthFirebase` クラスは、Firebase Authentication を用いて Mastra の認証を提供します。Firebase の ID トークンで受信リクエストを検証し、`experimental_auth` オプションを通じて Mastra サーバーと統合します。
 
 ## 前提条件
 
-この例では Firebase Authentication を使用します。次の点を確認してください:
+この例では Firebase Authentication を使用します。次の点を確認してください：
 
 1. [Firebase Console](https://console.firebase.google.com/) で Firebase プロジェクトを作成する
-2. Authentication を有効にし、希望するサインイン方法（Google、Email/Password など）を設定する
-3. Project Settings > Service Accounts からサービスアカウントキーを生成する
-4. サービスアカウントの JSON ファイルをダウンロードする
+2. 認証を有効にし、希望のサインイン方法（Google、メール/パスワード など）を設定する
+3. プロジェクト設定 &gt; サービスアカウント からサービス アカウント キーを生成する
+4. サービス アカウントの JSON ファイルをダウンロードする
 
 ```env filename=".env" copy
 FIREBASE_SERVICE_ACCOUNT=/path/to/your/service-account-key.json
 FIRESTORE_DATABASE_ID=(default)
-# Alternative environment variable names:
+# 代替の環境変数名：
 # FIREBASE_DATABASE_ID=(default)
 ```
 
-> 注意: サービスアカウントの JSON ファイルは安全に保管し、バージョン管理にコミットしないでください。
+> **注意:** サービス アカウントの JSON ファイルは安全に保管し、バージョン管理にコミットしないでください。
+
 
 ## インストール
 
-`MastraAuthFirebase` クラスを使用する前に、`@mastra/auth-firebase` パッケージをインストールしてください。
+`MastraAuthFirebase` クラスを使用する前に、`@mastra/auth-firebase` パッケージをインストールする必要があります。
 
 ```bash copy
 npm install @mastra/auth-firebase@latest
 ```
 
-## 使用例
 
-### 環境変数を使った基本的な利用方法
+## 使い方の例
 
-必要な環境変数（`FIREBASE_SERVICE_ACCOUNT` と `FIRESTORE_DATABASE_ID`）を設定すれば、`MastraAuthFirebase` はコンストラクタ引数なしで初期化できます。クラスはこれらの環境変数を設定として自動的に読み込みます。
+### 環境変数を使った基本的な使い方
+
+必須の環境変数（`FIREBASE_SERVICE_ACCOUNT` と `FIRESTORE_DATABASE_ID`）を設定しておけば、`MastraAuthFirebase` はコンストラクタ引数なしで初期化できます。クラスはこれらの環境変数を設定値として自動的に読み込みます。
 
 ```typescript {2,7} filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { MastraAuthFirebase } from '@mastra/auth-firebase';
 
-// FIREBASE_SERVICE_ACCOUNT と FIRESTORE_DATABASE_ID の環境変数を自動的に利用します
+// 環境変数 FIREBASE_SERVICE_ACCOUNT と FIRESTORE_DATABASE_ID を自動的に使用します
 export const mastra = new Mastra({
   // ..
   server: {
@@ -54,6 +56,7 @@ export const mastra = new Mastra({
   },
 });
 ```
+
 
 ### カスタム設定
 
@@ -72,47 +75,49 @@ export const mastra = new Mastra({
 });
 ```
 
+
 ## 設定
 
-`MastraAuthFirebase` クラスは、コンストラクターのオプションまたは環境変数で構成できます。
+`MastraAuthFirebase` クラスは、コンストラクタのオプションまたは環境変数で構成できます。
 
 ### 環境変数
 
 - `FIREBASE_SERVICE_ACCOUNT`: Firebase サービス アカウントの JSON ファイルへのパス
 - `FIRESTORE_DATABASE_ID` または `FIREBASE_DATABASE_ID`: Firestore のデータベース ID
 
-> 注意: コンストラクターのオプションが指定されていない場合、クラスは自動的にこれらの環境変数を参照します。つまり、環境変数が適切に設定されていれば、引数なしで `new MastraAuthFirebase()` を呼び出すだけで問題ありません。
+> **注:** コンストラクターのオプションが指定されていない場合、クラスはこれらの環境変数を自動的に読み込みます。つまり、環境変数が適切に設定されていれば、引数なしで `new MastraAuthFirebase()` を呼び出すだけで構いません。
 
 ### ユーザー認可
 
-デフォルトでは、`MastraAuthFirebase` は Firestore を使用してユーザーのアクセスを管理します。`user_access` というコレクションがあり、各ドキュメントのキーはユーザーの UID であることを前提としています。このコレクションに該当ユーザーのドキュメントが存在するかどうかで、そのユーザーが認可済みかが判定されます。
+デフォルトでは、`MastraAuthFirebase` は Firestore を用いてユーザーのアクセスを管理します。`user_access` というコレクションが存在し、各ドキュメントのキーはユーザーの UID であることを想定しています。このコレクションに該当ユーザーのドキュメントが存在するかどうかで、ユーザーが認可されているかが判定されます。
 
 ```typescript filename="firestore-structure.txt" copy
 user_access/
-  {user_uid_1}/     // Document exists = user authorized
-  {user_uid_2}/     // Document exists = user authorized
+  {user_uid_1}/     // ドキュメントが存在する = ユーザーは認可済み
+  {user_uid_2}/     // ドキュメントが存在する = ユーザーは認可済み
 ```
 
-ユーザー認可をカスタマイズするには、独自の `authorizeUser` 関数を指定します:
+ユーザー認可をカスタマイズするには、独自の `authorizeUser` 関数を用意します。
 
 ```typescript filename="src/mastra/auth.ts" showLineNumbers copy
 import { MastraAuthFirebase } from '@mastra/auth-firebase';
 
 const firebaseAuth = new MastraAuthFirebase({
   authorizeUser: async (user) => {
-    // カスタム認可ロジック
+    // カスタムの認可ロジック
     return user.email?.endsWith('@yourcompany.com') || false;
   }
 });
 ```
 
-> 利用可能な設定オプションの詳細は、[MastraAuthFirebase](/reference/auth/firebase.mdx) の API リファレンスをご覧ください。
+> 利用可能なすべての設定オプションについては、[MastraAuthFirebase](/reference/auth/firebase.mdx) の API リファレンスをご覧ください。
+
 
 ## クライアント側のセットアップ
 
-Firebase 認証を利用する場合は、クライアント側で Firebase を初期化し、ユーザーを認証して、Mastra に送るリクエストに添えるための ID トークンを取得する必要があります。
+Firebase Authentication を使う場合は、クライアント側で Firebase を初期化し、ユーザーを認証して、Mastra へのリクエストに渡すための ID トークンを取得する必要があります。
 
-### クライアントでの Firebase のセットアップ
+### クライアントでの Firebase の設定
 
 まず、クライアントアプリケーションで Firebase を初期化します。
 
@@ -131,9 +136,10 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 ```
 
+
 ### ユーザーの認証とトークンの取得
 
-Firebase Authentication を使用してユーザーにサインインし、ID トークンを取得します。
+Firebase 認証を使用してユーザーにサインインし、ID トークンを取得します。
 
 ```typescript filename="lib/auth.ts" showLineNumbers copy
 import { signInWithPopup, signOut, User } from 'firebase/auth';
@@ -144,7 +150,7 @@ export const signInWithGoogle = async () => {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error) {
-    console.error('Error signing in:', error);
+    console.error('サインイン時にエラーが発生しました:', error);
     throw error;
   }
 };
@@ -154,7 +160,7 @@ export const getIdToken = async (user: User) => {
     const idToken = await user.getIdToken();
     return idToken;
   } catch (error) {
-    console.error('Error getting ID token:', error);
+    console.error('IDトークン取得時にエラーが発生しました:', error);
     throw error;
   }
 };
@@ -163,17 +169,18 @@ export const signOutUser = async () => {
   try {
     await signOut(auth);
   } catch (error) {
-    console.error('Error signing out:', error);
+    console.error('サインアウト時にエラーが発生しました:', error);
     throw error;
   }
 };
 ```
 
-> メール/パスワード認証、電話認証など、その他の認証方法については [Firebase ドキュメント](https://firebase.google.com/docs/auth)を参照してください。
+> メール/パスワードや電話認証など、その他の認証方法については [Firebase のドキュメント](https://firebase.google.com/docs/auth)を参照してください。
+
 
 ## `MastraClient` の設定
 
-`experimental_auth` が有効な場合、`MastraClient` で行うすべてのリクエストには、`Authorization` ヘッダーに有効な Firebase ID トークンを含める必要があります。
+`experimental_auth` を有効にすると、`MastraClient` で行うすべてのリクエストは、`Authorization` ヘッダーに有効な Firebase ID トークンを含める必要があります。
 
 ```typescript {6} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -188,13 +195,14 @@ export const createMastraClient = (idToken: string) => {
 };
 ```
 
-> 注: ID トークンは `Authorization` ヘッダーで `Bearer` を付与して指定する必要があります。
+> **注記:** Authorization ヘッダーでは ID トークンの前に `Bearer` を付ける必要があります。
 
-> そのほかの設定項目については、[Mastra Client SDK](/docs/server-db/mastra-client.mdx) を参照してください。
+> さらに詳細な設定オプションについては、[Mastra Client SDK](/docs/server-db/mastra-client.mdx) を参照してください。
 
-### 認証済みリクエストの送信
 
-`MastraClient` に Firebase の ID トークンを設定したら、認証済みリクエストを送信できます。
+### 認証リクエストの送信
+
+`MastraClient` に Firebase ID トークンを設定すると、認証リクエストを送信できます:
 
 <Tabs items={["React Component", "Node.js Server", "curl"]}>
   <Tab>
@@ -237,10 +245,10 @@ export const createMastraClient = (idToken: string) => {
     const admin = require('firebase-admin');
     const { MastraClient } = require('@mastra/client-js');
 
-    // Initialize Firebase Admin
+    // Firebase Admin を初期化
     admin.initializeApp({
       credential: admin.credential.cert({
-        // Your service account credentials
+        // サービス アカウントの認証情報
       })
     });
 
@@ -251,7 +259,7 @@ export const createMastraClient = (idToken: string) => {
       try {
         const { idToken } = req.body;
         
-        // Verify the token
+        // トークンを検証
         await admin.auth().verifyIdToken(idToken);
 
         const mastra = new MastraClient({

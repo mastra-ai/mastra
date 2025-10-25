@@ -1,10 +1,9 @@
 ---
 title: "Amazon EC2"
-description: "MastraアプリケーションをAmazon EC2にデプロイします。"
+description: "Mastra アプリケーションを Amazon EC2 へデプロイする。"
 ---
 
 import { Callout, Steps, Tabs } from "nextra/components";
-
 
 
 # Amazon EC2
@@ -12,24 +11,20 @@ import { Callout, Steps, Tabs } from "nextra/components";
 Mastra アプリケーションを Amazon EC2（Elastic Compute Cloud）にデプロイします。
 
 <Callout>
-  このガイドは、Mastra アプリケーションが既定の
-  `npx create-mastra@latest` コマンドで作成されていることを前提としています。
+  このガイドは、デフォルトの
+  `npx create-mastra@latest` コマンドで Mastra アプリケーションを作成していることを前提としています。
   新しい Mastra アプリケーションの作成方法については、
-  [クイックスタートガイド](/docs/getting-started/installation)をご覧ください。
+  [クイックスタートガイド](/docs/getting-started/installation)を参照してください。
 </Callout>
-
-
 
 ## 前提条件
 
-- [EC2](https://aws.amazon.com/ec2/) にアクセスできる AWS アカウント
-- Ubuntu 24+ または Amazon Linux を実行している EC2 インスタンス
+- [EC2](https://aws.amazon.com/ec2/) にアクセス可能な AWS アカウント
+- Ubuntu 24 以降または Amazon Linux を実行している EC2 インスタンス
 - インスタンスを指す A レコードを設定したドメイン名
-- リバースプロキシの設定（例: [nginx](https://nginx.org/)）
-- SSL 証明書の設定（例: [Let's Encrypt](https://letsencrypt.org/)）
-- インスタンスに Node.js 18+ がインストール済みであること
-
-
+- リバースプロキシの設定（例: [nginx](https://nginx.org/) の利用）
+- SSL 証明書の設定（例: [Let's Encrypt](https://letsencrypt.org/) の利用）
+- インスタンスに Node.js 18 以降がインストール済み
 
 ## デプロイ手順
 
@@ -63,13 +58,13 @@ git clone https://<your-username>:<your-personal-access-token>@github.com/<your-
 cd "<your-repository>"
 ```
 
-### 依存関係をインストール
+### 依存関係をインストールする
 
 ```bash copy
 npm install
 ```
 
-### 環境変数を設定
+### 環境変数を設定する
 
 `.env` ファイルを作成し、環境変数を追加します:
 
@@ -84,29 +79,27 @@ OPENAI_API_KEY=<your-openai-api-key>
 # 必要な他の環境変数を追加
 ```
 
-### アプリケーションをビルド
+### アプリケーションをビルドする
 
 ```bash copy
 npm run build
 ```
 
-### アプリケーションを実行
+### アプリケーションを実行する
 
 ```bash copy
 node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
 ```
 
 <Callout>
-Mastra アプリケーションは既定でポート 4111 で動作します。リバースプロキシがこのポートへリクエストを転送するように設定されていることを確認してください。
+Mastra アプリケーションはデフォルトでポート 4111 で動作します。リバースプロキシがこのポートへリクエストを転送するよう設定されていることを確認してください。
 </Callout>
 
 </Steps>
 
-
-
 ## Mastra サーバーに接続する
 
-`@mastra/client-js` パッケージの `MastraClient` を使って、クライアントアプリケーションから Mastra サーバーに接続できます。
+クライアントアプリケーションから `@mastra/client-js` パッケージの `MastraClient` を使って Mastra サーバーに接続できます。
 
 詳しくは [`MastraClient` のドキュメント](/docs/client-js/overview)をご覧ください。
 
@@ -114,12 +107,11 @@ Mastra アプリケーションは既定でポート 4111 で動作します。�
 import { MastraClient } from "@mastra/client-js";
 
 const mastraClient = new MastraClient({
-  baseUrl: "https://<your-domain-name>",
+  baseUrl: "https://<あなたのドメイン>",
 });
 ```
 
 
+## 次の手順
 
-## 次のステップ
-
-- [Mastra Client SDK](/docs/client-js/overview)
+- [Mastra クライアント SDK](/docs/client-js/overview)

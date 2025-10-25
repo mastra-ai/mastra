@@ -1,17 +1,18 @@
 ---
-title: "リファレンス: Workflow.dountil() | Workflows | Mastra Docs"
-description: ワークフローの `Workflow.dountil()` メソッドに関するドキュメント。条件が満たされるまでステップを実行するループを作成します。
+title: "リファレンス: Workflow.dountil() | Workflows | Mastra ドキュメント"
+description: ワークフローで使用する `Workflow.dountil()` メソッドのリファレンス。条件が満たされるまでステップを繰り返し実行するループを作成します。
 ---
 
 # Workflow.dountil()
 
-`.dountil()` メソッドは、条件が満たされるまでステップを実行し続けるループを作成します。
+`.dountil()` メソッドは、条件が満たされるまでステップを実行します。条件を評価する前に、必ずステップを少なくとも一度実行します。条件が初めて評価されるとき、`iterationCount` は `1` です。
 
 ## 使い方の例
 
 ```typescript copy
-workflow.dountil(step1, async ({ inputData }) => true);
+workflow.doUntil(step1, async ({ inputData }) => true);
 ```
+
 
 ## パラメータ
 
@@ -20,14 +21,14 @@ workflow.dountil(step1, async ({ inputData }) => true);
     {
       name: "step",
       type: "Step",
-      description: "ループで実行する Step インスタンス",
+      description: "ループ内で実行する Step インスタンス",
       isOptional: false,
     },
     {
       name: "condition",
-      type: "(params : { inputData: any}) => Promise<boolean>",
+      type: "(params : ExecuteParams & { iterationCount: number }) => Promise<boolean>",
       description:
-        "ループを継続すべきかを示す boolean を返す関数",
+        "ループを継続すべきかを示す boolean を返す関数。実行時パラメータと反復回数を受け取ります。",
       isOptional: false,
     },
   ]}
@@ -40,11 +41,13 @@ workflow.dountil(step1, async ({ inputData }) => true);
     {
       name: "workflow",
       type: "Workflow",
-      description: "メソッドチェーンのためのワークフローインスタンス",
+      description: "メソッドチェーン用の Workflow インスタンス",
     },
   ]}
 />
 
 ## 関連項目
 
-- [制御フロー](../../../docs/workflows/control-flow.mdx)
+- [Control Flow](../../../docs/workflows/control-flow.mdx)
+
+- [ExecuteParams](../step.mdx#ExecuteParams)

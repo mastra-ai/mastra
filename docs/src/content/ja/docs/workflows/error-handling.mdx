@@ -1,19 +1,15 @@
 ---
-title: "ワークフローのエラー処理 | Workflows | Mastra Docs"
-description: "Mastra のワークフローで、ステップの再試行・条件分岐・監視を用いたエラー処理の方法を学びます。"
+title: "ワークフローのエラー処理 | Workflows | Mastra ドキュメント"
+description: "Mastra のワークフローにおけるステップの再試行や条件分岐、監視を活用したエラー処理について学びます。"
 ---
-
-
 
 # エラーハンドリング
 
-Mastra には、一時的なエラーで失敗したワークフローやステップを再試行するための組み込みリトライ機能があります。これは、一時的に利用できなくなる可能性のある外部サービスやリソースとやり取りするステップに特に有用です。
+Mastra には、一時的なエラーで失敗したワークフローやステップを対象にした再試行機構が組み込まれています。これは、外部サービスや一時的に利用不能となる可能性のあるリソースとやり取りするステップで特に有用です。
 
+## ワークフロー単位での `retryConfig` の使用
 
-
-## ワークフロー全体での `retryConfig` の使用
-
-ワークフロー内のすべてのステップに適用されるよう、ワークフロー単位でリトライ設定を行えます:
+ワークフロー単位でリトライ設定を行うことができ、ワークフロー内のすべてのステップに適用されます。
 
 ```typescript {8-11} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -22,7 +18,7 @@ import { z } from "zod";
 const step1 = createStep({...});
 
 export const testWorkflow = createWorkflow({
-  // ...
+  // 省略
   retryConfig: {
     attempts: 5,
     delay: 2000
@@ -33,10 +29,9 @@ export const testWorkflow = createWorkflow({
 ```
 
 
+## `retries` を使ったステップ単位の設定
 
-## `retries` を用いたステップ単位の設定
-
-各ステップごとに `retries` プロパティでリトライ回数を設定できます。これにより、そのステップについてはワークフローレベルのリトライ設定が上書きされます。
+各ステップでは、`retries` プロパティを使ってリトライ回数を設定できます。これにより、そのステップに限りワークフロー全体のリトライ設定が上書きされます。
 
 ```typescript {17} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -48,7 +43,7 @@ const step1 = createStep({
     const response = await // ...
 
     if (!response.ok) {
-      throw new Error('Error');
+      throw new Error('エラーが発生しました');
     }
 
     return {
@@ -60,10 +55,9 @@ const step1 = createStep({
 ```
 
 
-
 ## 条件分岐
 
-条件ロジックを用いて、前のステップの成否に応じて代替のワークフロー経路を作成できます：
+条件ロジックを使って、前のステップの成否に応じて代替のワークフロー経路を作成できます。
 
 ```typescript {15,19,33-34} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -105,10 +99,9 @@ export const testWorkflow = createWorkflow({
 ```
 
 
+## 前のステップの結果を確認する
 
-## 直前のステップ結果を確認する
-
-`getStepResult()` を使って、以前のステップの結果を参照します。
+`getStepResult()` を使用して、前のステップの結果を確認します。
 
 ```typescript {10} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createStep } from "@mastra/core/workflows";
@@ -130,10 +123,9 @@ const step2 = createStep({
 ```
 
 
-
 ## `bail()` で早期終了する
 
-ステップ内で `bail()` を使うと、成功として早期に終了できます。指定したペイロードがステップの出力として返され、ワークフローの実行が終了します。
+ステップ内で `bail()` を使用すると、成功として早期終了できます。これにより、指定したペイロードがステップの出力として返され、ワークフローの実行が終了します。
 
 ```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -142,7 +134,7 @@ import { z } from "zod";
 const step1 = createStep({
   id: 'step1',
   execute: async ({ bail }) => {
-    return bail({ result: 'bailed' });
+    return bail({ result: '中断' });
   },
   inputSchema: z.object({ value: z.string() }),
   outputSchema: z.object({ result: z.string() }),
@@ -154,10 +146,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-
 ## `Error()` で早期終了する
 
-エラーで処理を終了するには、ステップ内で `throw new Error()` を使用します。
+エラーで終了するには、ステップ内で `throw new Error()` を使用します。
 
 ```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -178,10 +169,9 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 
-
 ## `watch()` でエラーを監視する
 
-`watch` メソッドを使って、ワークフローのエラーを監視できます：
+`watch` メソッドを使って、ワークフローのエラーを監視できます。
 
 ```typescript {11} filename="src/test-workflow.ts" showLineNumbers copy
 import { mastra } from "../src/mastra";
@@ -199,9 +189,7 @@ run.watch((event) => {
 
 ```
 
-## `stream()` でエラーを監視する
-
-`stream` を使って、ワークフローのエラーを監視できます：
+You can monitor workflows for errors using `stream`:
 
 ```typescript {11} filename="src/test-workflow.ts" showLineNumbers copy
 import { mastra } from "../src/mastra";
@@ -212,7 +200,7 @@ const run = await workflow.createRunAsync();
 
 const stream = await run.stream({
   inputData: {
-    value: "initial data"
+    value: "初期データ"
   }
 });
 
@@ -223,8 +211,7 @@ for await (const chunk of stream.stream) {
 ```
 
 
-
-## 関連
+## 関連項目
 
 - [制御フロー](./control-flow.mdx)
 - [条件分岐](./control-flow.mdx#conditional-logic-with-branch)

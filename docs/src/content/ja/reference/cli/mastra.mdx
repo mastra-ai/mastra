@@ -1,0 +1,264 @@
+---
+title: "リファレンス: CLI コマンド"
+description: Mastra CLI を使ってプロジェクトを開発・ビルド・起動するためのドキュメント。
+---
+
+import { Callout } from "nextra/components";
+
+
+# CLI コマンド
+
+Mastra が提供するコマンドラインインターフェース（CLI）を使って、Mastra プロジェクトの開発、ビルド、起動を行えます。
+
+## `mastra dev`
+
+[ローカル開発用プレイグラウンド](/docs/server-db/local-dev-playground)と、エージェント・ツール・ワークフロー向けの REST エンドポイントを公開するサーバーを起動します。`mastra dev` の実行中は、[http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) にアクセスすると、利用可能なすべてのエンドポイントの概要を確認できます。
+
+[サーバーの設定](/docs/server-db/local-dev-playground#configuration)も行えます。
+
+### フラグ
+
+このコマンドは[共通フラグ][common-flags]に加えて、以下の追加フラグを受け付けます。
+
+#### `--https`
+
+ローカルの HTTPS サポートを有効にします。 [詳しくはこちら](/docs/server-db/local-dev-playground#local-https)。
+
+#### `--inspect`
+
+開発サーバーをインスペクトモードで起動します。デバッグに便利です。`--inspect-brk` と同時には使用できません。
+
+#### `--inspect-brk`
+
+開発サーバーをインスペクトモードで起動し、スクリプトの先頭で一時停止します。これは `--inspect` と同時には使用できません。
+
+#### `--custom-args`
+
+開発サーバーに渡すカスタム引数をカンマ区切りで指定します。例えば Node.js プロセスに引数（`--experimental-transform-types` など）を渡せます。
+
+### 設定
+
+`mastra dev` の動作を変更するために、特定の環境変数を設定できます。
+
+#### ビルドキャッシュを無効にする
+
+`.mastra/` 配下のキャッシュ済みアセットを使用せず、完全な再ビルドを強制するには `MASTRA_DEV_NO_CACHE=1` を設定します。
+
+```bash copy
+MASTRA_DEV_NO_CACHE=1 mastra dev
+```
+
+これは、バンドラのプラグインをデバッグしているときや、出力が古くなっている（キャッシュが残っている）可能性を疑う場合に役立ちます。
+
+
+#### 並列実行の制限
+
+`MASTRA_CONCURRENCY` は、並列で実行される高コストな処理（主にビルドと評価の各ステップ）の数の上限を設定します。例えば：
+
+```bash copy
+MASTRA_CONCURRENCY=4 mastra dev
+```
+
+未設定のままにすると、CLI がそのマシンに適した妥当なデフォルトを選択します。
+
+
+#### カスタムプロバイダーのエンドポイント
+
+Vercel AI SDK がサポートするプロバイダーを利用する場合、ベース URL を設定すると、リクエストをプロキシや社内ゲートウェイ経由にリダイレクトできます。OpenAI の場合：
+
+```bash copy
+OPENAI_API_KEY=<your-api-key> \
+OPENAI_BASE_URL=https://openrouter.example/v1 \
+mastra dev
+```
+
+Anthropicの場合：
+
+```bash copy
+ANTHROPIC_API_KEY=<your-api-key> \
+ANTHROPIC_BASE_URL=https://anthropic.internal \
+mastra dev
+```
+
+これらは AI SDK によって引き継がれ、`openai()` や `anthropic()` のどの呼び出しでも利用できます。
+
+
+## `mastra build`
+
+`mastra build` コマンドは、Mastra プロジェクトを本番運用向けの Hono サーバーにバンドルします。[Hono](https://hono.dev/) は軽量で型安全な Web フレームワークで、ミドルウェアに対応しつつ、Mastra エージェントを HTTP エンドポイントとして簡単にデプロイできます。
+
+内部的には Mastra の Rollup サーバーがエントリーファイルを特定し、本番運用向けの Hono サーバーにバンドルします。その際、コードのツリーシェイキングを行い、デバッグ用のソースマップを生成します。
+
+`.mastra` に出力された成果物は、[`mastra start`](#mastra-start) を使って任意のクラウドサーバーにデプロイできます。
+
+[serverless platform](/docs/deployment/serverless-platforms) にデプロイする場合は、`.mastra` で適切な出力を得るために、対応するデプロイヤーをインストールする必要があります。
+
+[common flags][common-flags] を受け付けます。
+
+### 設定
+
+`mastra build` の動作を変更するために、特定の環境変数を設定できます。
+
+#### 並列実行数を制限する
+
+CI やリソースに制約のある環境で実行する場合は、`MASTRA_CONCURRENCY` を設定して、一度に実行する高負荷タスクの数に上限を設けられます。
+
+```bash copy
+MASTRA_CONCURRENCY=2 mastra build
+```
+
+
+## `mastra start`
+
+<Callout type="info">
+`mastra start` を使用する前に、`mastra build` を実行する必要があります。
+</Callout>
+
+本番モードでビルド済みの Mastra アプリケーションを配信するローカルサーバーを起動します。既定で [OTEL Tracing](/docs/observability/otel-tracing) が有効です。
+
+### フラグ
+
+このコマンドは[共通フラグ][common-flags]に加え、次の追加フラグを受け付けます:
+
+#### `--dir`
+
+ビルド済みの Mastra の出力ディレクトリへのパス。既定値は `.mastra/output` です。
+
+#### `--no-telemetry`
+
+[OTEL トレーシング](/docs/observability/otel-tracing)を無効にします。
+
+## `mastra lint`
+
+`mastra lint` コマンドは、Mastra プロジェクトの構成とコードを検証し、ベストプラクティスに準拠し、エラーがないことを確認します。
+
+[共通フラグ][common-flags] を受け付けます。
+
+## `mastra scorers`
+
+`mastra scorers` コマンドは、AI 生成出力の品質・正確性・パフォーマンスを測定する評価用スコアラーの管理機能を提供します。
+
+詳しくは [Scorers overview](/docs/scorers/overview) をご覧ください。
+
+### `add`
+
+プロジェクトに新しいスコアラーを追加します。対話型のプロンプトを使用できます:
+
+```bash copy
+mastra scorers add
+```
+
+またはスコアラー名を直接指定します：
+
+```bash copy
+mastra scorers add answer-relevancy
+```
+
+[`list`](#list) コマンドで正しい ID を取得します。
+
+
+### `list`
+
+利用可能なスコアラーのテンプレートをすべて一覧表示します。`add` コマンドではその ID を使用します。
+
+## `mastra init`
+
+`mastra init` コマンドは、既存のプロジェクトに Mastra を初期設定します。新規プロジェクトを一から作成することなく、必要なフォルダや設定を自動生成（スキャフォールディング）するために使用します。
+
+### フラグ
+
+このコマンドでは、以下の追加フラグを使用できます:
+
+#### `--default`
+
+OpenAI を使用して `src` 配下にファイルを作成します。さらに `src/mastra` フォルダにサンプルコードを配置します。
+
+#### `--dir`
+
+Mastra のファイルを保存するディレクトリ。既定値は `src`。
+
+#### `--components`
+
+追加するコンポーネントをカンマで区切ったリスト。各コンポーネントごとに新しいフォルダが作成されます。選択肢: `"agents" | "tools" | "workflows" | "scorers"`。既定値は `['agents', 'tools', 'workflows']` です。
+
+#### `--llm`
+
+デフォルトのモデルプロバイダー。選択可能: `"openai" | "anthropic" | "groq" | "google" | "cerebras" | "mistral"`。
+
+#### `--llm-api-key`
+
+選択したモデルプロバイダーの API キー。環境変数ファイル（`.env`）に書き込まれます。
+
+#### `--example`
+
+有効にすると、サンプルコードがコンポーネントの一覧に出力されます（例: エージェントのサンプルコード）。
+
+#### `--no-example`
+
+サンプルコードを含めません。`--default` フラグ使用時に便利です。
+
+#### `--mcp`
+
+Mastra の MCP サーバーを使用してコードエディタを設定します。選択肢: `"cursor" | "cursor-global" | "windsurf" | "vscode"`。
+
+## 共通のフラグ
+
+### `--dir`
+
+**使用可能な環境:** `dev`, `build`, `lint`
+
+Mastra フォルダーへのパス。既定値は `src/mastra` です。
+
+### `--debug`
+
+**利用可能:** `dev`, `build`
+
+Mastra の内部処理に関する詳細ログを有効にします。既定値は `false` です。
+
+### `--env`
+
+**利用可能:** `dev`, `start`
+
+含めるカスタム環境変数ファイル。既定では `.env.development`、`.env.local`、`.env` を読み込みます。
+
+### `--root`
+
+**利用可能なモード:** `dev`, `build`, `lint`
+
+ルートディレクトリへのパス。既定値は `process.cwd()` です。
+
+### `--tools`
+
+**利用可能:** `dev`, `build`, `lint`
+
+含めるツールのパスをカンマ区切りで指定します。既定値は `src/mastra/tools` です。
+
+## グローバルフラグ
+
+これらのフラグを使用して、`mastra` CLI の情報を確認できます。
+
+### `--version`
+
+Mastra CLI のバージョンを表示して終了します。
+
+### `--help`
+
+ヘルプメッセージを表示して終了します。
+
+## テレメトリー
+
+デフォルトでは、Mastra は OS、Mastra のバージョン、Node.js のバージョンなど、プロジェクトに関する匿名の情報を収集します。何が収集されるかは、[ソースコード](https://github.com/mastra-ai/mastra/blob/main/packages/cli/src/analytics/index.ts)をご覧ください。
+
+環境変数を設定することで、CLI のテレメトリー収集を無効化（オプトアウト）できます。
+
+```bash copy
+MASTRA_TELEMETRY_DISABLED=1
+```
+
+他の `mastra` コマンドの実行中でも、これを設定できます:
+
+```bash copy
+MASTRA_TELEMETRY_DISABLED=1 mastra dev
+```
+
+[common-flags]: #common-flags

@@ -3,15 +3,11 @@ title: MastraClient
 description: client-js SDK を使って Mastra と連携する方法を学びましょう。
 ---
 
-
-
 # Mastra Client SDK
 
 Mastra Client SDK は、クライアント環境から [Mastra Server](/docs/deployment/server-deployment.mdx) とやり取りするための、シンプルで型安全なインターフェースを提供します。
 
-
-
-## 使用例
+## 使い方の例
 
 ```typescript filename="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -20,7 +16,6 @@ export const mastraClient = new MastraClient({
   baseUrl: "http://localhost:4111/",
 });
 ```
-
 
 
 ## パラメータ
@@ -36,40 +31,38 @@ export const mastraClient = new MastraClient({
     {
       name: "retries",
       type: "number",
-      description: "エラーをスローする前に失敗したリクエストを再試行する回数。",
+      description: "エラーを投げる前に、失敗時にリクエストを再試行する回数。",
       isOptional: true,
       defaultValue: "3",
     },
     {
       name: "backoffMs",
       type: "number",
-      description: "失敗したリクエストを再試行する前の初期遅延時間（ミリ秒）。この値は再試行のたびに倍増します（指数バックオフ）。",
+      description: "失敗したリクエストを再試行する前の初期待機時間（ミリ秒）。この値は再試行のたびに倍増します（指数バックオフ）。",
       isOptional: true,
       defaultValue: "300",
     },
     {
       name: "maxBackoffMs",
       type: "number",
-      description: "最大バックオフ時間（ミリ秒）。再試行間の待機が長くなりすぎるのを防ぎます。",
+      description: "最大バックオフ時間（ミリ秒）。再試行の待機が過度に長くなるのを防ぎます。",
       isOptional: true,
       defaultValue: "5000",
     },
     {
       name: "headers",
       type: "Record<string, string>",
-      description: "すべてのリクエストに付与するカスタム HTTP ヘッダーを含むオブジェクト。",
+      description: "すべてのリクエストに含めるカスタム HTTP ヘッダーを格納するオブジェクト。",
       isOptional: true,
     },
     {
       name: "credentials",
-      type: "\"omit\" | \"same-origin\" | \"include\"",
-      description: "リクエストのクレデンシャルモード。詳細は https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials を参照してください。",
+      type: '"omit" | "same-origin" | "include"',
+      description: "リクエストの credentials モード。詳細は https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials を参照してください。",
       isOptional: true,
     },
   ]}
 />
-
-
 
 ## メソッド
 
@@ -83,7 +76,7 @@ export const mastraClient = new MastraClient({
     {
       name: "getAgent(agentId)",
       type: "Agent",
-      description: "ID を指定して特定のエージェントインスタンスを取得します。",
+      description: "IDで特定のエージェントインスタンスを取得します。",
     },
     {
       name: "getMemoryThreads(params)",
@@ -93,17 +86,17 @@ export const mastraClient = new MastraClient({
     {
       name: "createMemoryThread(params)",
       type: "Promise<MemoryThread>",
-      description: "指定したパラメータで新規メモリスレッドを作成します。",
+      description: "指定したパラメータで新しいメモリスレッドを作成します。",
     },
     {
       name: "getMemoryThread(threadId)",
       type: "Promise<MemoryThread>",
-      description: "ID を指定して特定のメモリスレッドを取得します。",
+      description: "IDで特定のメモリスレッドを取得します。",
     },
     {
       name: "saveMessageToMemory(params)",
       type: "Promise<void>",
-      description: "1 件以上のメッセージをメモリシステムに保存します。",
+      description: "1件以上のメッセージをメモリシステムに保存します。",
     },
     {
       name: "getMemoryStatus()",
@@ -118,7 +111,7 @@ export const mastraClient = new MastraClient({
     {
       name: "getTool(toolId)",
       type: "Tool",
-      description: "ID を指定して特定のツールインスタンスを取得します。",
+      description: "IDで特定のツールインスタンスを取得します。",
     },
     {
       name: "getWorkflows()",
@@ -128,7 +121,7 @@ export const mastraClient = new MastraClient({
     {
       name: "getWorkflow(workflowId)",
       type: "Workflow",
-      description: "ID を指定して特定のワークフローインスタンスを取得します。",
+      description: "IDで特定のワークフローインスタンスを取得します。",
     },
     {
       name: "getVector(vectorName)",
@@ -143,13 +136,22 @@ export const mastraClient = new MastraClient({
     {
       name: "getLog(params)",
       type: "Promise<LogEntry>",
-      description: "ID またはフィルタで特定のログエントリを取得します。",
+      description: "IDまたはフィルタで特定のログエントリを取得します。",
     },
     {
       name: "getLogTransports()",
       type: "string[]",
-      description: "設定済みのログトランスポート種別の一覧を返します。",
+      description: "設定済みのログ転送方式の一覧を返します。",
+    },
+    {
+      name: "getAITrace(traceId)",
+      type: "Promise<AITraceRecord>",
+      description: "IDで特定のAIトレースを取得します。すべてのスパンと詳細を含みます。",
+    },
+    {
+      name: "getAITraces(params)",
+      type: "Promise<GetAITracesResponse>",
+      description: "オプションのフィルタ付きで、AIトレースのルートスパンをページネーションして取得します。すべてのスパンを含む完全なトレースは getAITrace() を使用してください。",
     },
   ]}
 />
-

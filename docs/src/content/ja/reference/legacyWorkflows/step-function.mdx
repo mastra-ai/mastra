@@ -1,15 +1,11 @@
 ---
-title: "リファレンス: Workflow.step() | Workflows (レガシー) | Mastra Docs"
-description: ワークフロー内の `.step()` メソッドのドキュメント。ワークフローに新しいステップを追加します。
+title: "リファレンス: Workflow.step() | Workflows（レガシー） | Mastra ドキュメント"
+description: ワークフローに新しいステップを追加する `.step()` メソッドのドキュメント。
 ---
-
-
 
 # Workflow.step()
 
-`.step()` メソッドは、ワークフローに新しいステップを追加し、オプションでその変数や実行条件を設定します。
-
-
+`.step()` メソッドは、ワークフローに新たなステップを追加し、必要に応じてその変数や実行条件を設定します。
 
 ## 使い方
 
@@ -26,8 +22,7 @@ workflow.step({
 ```
 
 
-
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
@@ -35,13 +30,13 @@ workflow.step({
       name: "stepConfig",
       type: "Step | StepDefinition | string",
       description:
-        "ワークフローに追加する Step インスタンス、設定オブジェクト、またはステップID",
+        "ワークフローに追加する Step インスタンス、設定オブジェクト、またはステップ ID",
       isOptional: false,
     },
     {
       name: "options",
       type: "StepOptions",
-      description: "ステップ実行のためのオプション設定",
+      description: "ステップ実行に関する任意の設定",
       isOptional: true,
     },
   ]}
@@ -54,7 +49,7 @@ workflow.step({
     {
       name: "id",
       type: "string",
-      description: "ステップの一意な識別子",
+      description: "ステップの固有識別子",
       isOptional: false,
     },
     {
@@ -66,7 +61,7 @@ workflow.step({
     {
       name: "execute",
       type: "(params: ExecuteParams) => Promise<any>",
-      description: "ステップのロジックを含む関数",
+      description: "ステップのロジックを実装する関数",
       isOptional: false,
     },
   ]}
@@ -79,23 +74,21 @@ workflow.step({
     {
       name: "variables",
       type: "Record<string, VariableRef>",
-      description: "変数名とその参照元のマッピング",
+      description: "変数名からその参照元へのマッピング",
       isOptional: true,
     },
     {
       name: "when",
       type: "StepCondition",
-      description: "ステップを実行するために満たす必要がある条件",
+      description: "ステップを実行するために満たすべき条件",
       isOptional: true,
     },
   ]}
 />
 
-
-
-## 関連
+## 関連情報
 
 - [ステップインスタンスの基本的な使い方](../../docs/workflows-legacy/steps.mdx)
-- [Step クラスリファレンス](./step-class.mdx)
-- [Workflow クラスリファレンス](./workflow.mdx)
-- [制御フローガイド](../../docs/workflows-legacy/control-flow.mdx)
+- [Step クラス リファレンス](./step-class.mdx)
+- [Workflow クラス リファレンス](./workflow.mdx)
+- [制御フロー ガイド](../../docs/workflows-legacy/control-flow.mdx)

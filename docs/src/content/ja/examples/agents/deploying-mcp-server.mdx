@@ -1,19 +1,16 @@
 ---
-title: "例: MCPServer のデプロイ | Agents | Mastra ドキュメント"
-description: stdio トランスポートを使用して Mastra MCPServer をセットアップ、ビルド、デプロイし、NPM に公開する例です。
+title: "例: MCPServer のデプロイ | Agents | Mastra Docs"
+description: stdio トランスポートを用いた Mastra MCPServer のセットアップ、ビルド、デプロイから NPM への公開までの例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 
-
 # 例: MCPServer のデプロイ
 
-この例では、stdio トランスポートを使用した基本的な Mastra MCPServer のセットアップ方法、ビルド方法、そして NPM への公開などのデプロイ準備について説明します。
+この例では、stdio トランスポートを使って基本的な Mastra MCPServer をセットアップし、ビルドして、NPM への公開などのデプロイ準備を行う方法を説明します。
 
-
-
-## 依存関係のインストール
+## 依存関係をインストール
 
 必要なパッケージをインストールします：
 
@@ -22,31 +19,30 @@ pnpm add @mastra/mcp @mastra/core tsup
 ```
 
 
+## MCP サーバーをセットアップする
 
-## MCP Server のセットアップ
+1. `/src/mastra/stdio.ts` など、stdio サーバー用のファイルを作成します。
 
-1.  stdio サーバー用のファイルを作成します。例えば、`/src/mastra/stdio.ts` です。
+2. 次のコードをファイルに追加します。実際の Mastra のツールをインポートし、サーバーに適切な名前を付けてください。
 
-2.  次のコードをファイルに追加します。実際の Mastra ツールをインポートし、サーバー名を適切に設定することを忘れないでください。
+   ```typescript filename="src/mastra/stdio.ts" copy
+   #!/usr/bin/env node
+   import { MCPServer } from "@mastra/mcp";
+   import { weatherTool } from "./tools";
 
-    ```typescript filename="src/mastra/stdio.ts" copy
-    #!/usr/bin/env node
-    import { MCPServer } from "@mastra/mcp";
-    import { weatherTool } from "./tools";
+   const server = new MCPServer({
+     name: "my-mcp-server",
+     version: "1.0.0",
+     tools: { weatherTool },
+   });
 
-    const server = new MCPServer({
-      name: "my-mcp-server",
-      version: "1.0.0",
-      tools: { weatherTool },
-    });
+   server.startStdio().catch((error) => {
+     console.error("Error running MCP server:", error);
+     process.exit(1);
+   });
+   ```
 
-    server.startStdio().catch((error) => {
-      console.error("Error running MCP server:", error);
-      process.exit(1);
-    });
-    ```
-
-3.  `package.json` を更新し、`bin` エントリでビルド済みサーバーファイルを指定し、サーバーをビルドするスクリプトを追加します。
+3. `package.json` を更新し、ビルド済みのサーバーファイルを指す `bin` エントリと、サーバーをビルドするスクリプトを追加します。
 
 ```json filename="package.json" copy
 {
@@ -57,58 +53,59 @@ pnpm add @mastra/mcp @mastra/core tsup
 }
 ```
 
-4.  ビルドコマンドを実行します。
+4. ビルドコマンドを実行します：
 
-    ```bash
-    pnpm run build:mcp
-    ```
+   ```bash
+   pnpm run build:mcp
+   ```
 
-    これにより、サーバーコードがコンパイルされ、出力ファイルが実行可能になります。
-
+   これによりサーバーのコードがコンパイルされ、出力ファイルが実行可能になります。
 
 
 ## NPM へのデプロイ
 
-自分や他の人が `npx` や依存関係として MCP サーバーを利用できるようにするには、NPM に公開することができます。
+`npx` 経由または依存関係として、他の人（や自分自身）が MCP サーバーを利用できるようにするには、NPM に公開します。
 
-1.  NPM アカウントを持ち、ログインしていることを確認します（`npm login`）。
-2.  `package.json` のパッケージ名がユニークで利用可能であることを確認します。
-3.  プロジェクトのルートディレクトリでビルド後、以下のコマンドを実行して公開します：
+1. NPM アカウントを作成し、ログインしていることを確認します（`npm login`）。
+2. `package.json` のパッケージ名が一意で、利用可能であることを確認します。
+3. ビルド後、プロジェクトのルートで公開コマンドを実行します：
 
     ```bash
     npm publish --access public
     ```
 
-    パッケージの公開に関する詳細は、[NPM のドキュメント](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages)を参照してください。
+    パッケージの公開に関する詳細は、[NPM ドキュメント](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages)を参照してください。
 
+## デプロイ済みの MCP サーバーを使用する
 
-
-## デプロイ済みのMCPサーバーを利用する
-
-公開が完了すると、`MCPClient` でコマンドを指定してあなたのパッケージを実行することで、MCPサーバーを利用できます。また、Claude desktop、Cursor、Windsurfなど、他のMCPクライアントも使用可能です。
+公開が完了すると、`MCPClient` はパッケージを実行するコマンドを指定して、あなたの MCP サーバーを利用できます。Claude Desktop、Cursor、Windsurf など、他の MCP クライアントを使うことも可能です。
 
 ```typescript
 import { MCPClient } from "@mastra/mcp";
 
 const mcp = new MCPClient({
   servers: {
-    // Give this MCP server instance a name
+    // この MCP サーバーのインスタンスに名前を付ける
     yourServerName: {
       command: "npx",
-      args: ["-y", "@your-org-name/your-package-name@latest"], // Replace with your package name
+      args: ["-y", "@your-org-name/your-package-name@latest"], // 自分のパッケージ名に置き換えてください
     },
   },
 });
 
-// You can then get tools or toolsets from this configuration to use in your agent
+// この設定からツールやツールセットを取得してエージェントで使用できます
 const tools = await mcp.getTools();
 const toolsets = await mcp.getToolsets();
 ```
 
-注意: 組織スコープなしで公開した場合、`args` は `["-y", "your-package-name@latest"]` となる場合があります。
+Note: 組織スコープを付けずに公開した場合、`args` は単に `["-y", "your-package-name@latest"]` になることがあります。
 
 <br />
+
 <br />
+
 <hr className="dark:border-[#404040] border-gray-300" />
+
 <br />
+
 <br />
