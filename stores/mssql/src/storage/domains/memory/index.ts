@@ -1009,9 +1009,7 @@ export class MemoryMSSQL extends MemoryStorage {
       },
     });
 
-    // Re-fetch to ensure proper metadata parsing
-    const saved = await this.getResourceById({ resourceId: resource.id });
-    return saved!;
+    return resource;
   }
 
   async updateResource({
@@ -1068,9 +1066,7 @@ export class MemoryMSSQL extends MemoryStorage {
 
       await req.query(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = @id`);
 
-      // Re-fetch the resource to ensure proper parsing of metadata
-      const refetchedResource = await this.getResourceById({ resourceId });
-      return refetchedResource!;
+      return updatedResource;
     } catch (error) {
       const mastraError = new MastraError(
         {
