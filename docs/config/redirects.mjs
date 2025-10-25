@@ -1289,6 +1289,11 @@ export const redirectList = [
     permanent: true,
   },
   {
+    source: "/:locale/docs/workflows/input-data-mapping",
+    destination: "/:locale/docs/workflows/control-flow",
+    permanent: true,
+  },
+  {
     source: "/:locale/examples/workflows/array-as-input",
     destination: "/:locale/docs/workflows/control-flow",
     permanent: true,
