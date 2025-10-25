@@ -9,6 +9,31 @@ import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } 
 export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 
+// Helper to detect if a type is 'any' (TypeScript any or Zod any)
+export type IsAny<T> =
+  // Check if the type that we pass in is a true 'any' value
+  0 extends 1 & T
+    ? true
+    : T extends z.ZodAny
+      ? true
+      : T extends z.ZodTypeAny
+        ? z.ZodTypeAny extends T
+          ? true
+          : false
+        : false;
+
+export type OutputMatches<TExpectedOutput, TCurrentOutput> =
+  // If either type is any (TypeScript any or Zod any), it matches everything
+  IsAny<TCurrentOutput> extends true
+    ? true
+    : IsAny<TExpectedOutput> extends true
+      ? true
+      : TCurrentOutput extends TExpectedOutput
+        ? TExpectedOutput extends TCurrentOutput
+          ? true
+          : false
+        : false;
+
 export type Emitter = {
   emit: (event: string, data: any) => Promise<void>;
   on: (event: string, callback: (data: any) => void) => void;

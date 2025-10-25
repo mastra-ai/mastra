@@ -56,8 +56,10 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
-      });
-      workflow.then(step1).then(step2).commit();
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -223,11 +225,9 @@ describe('Workflow', () => {
       const promptEvalWorkflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({}),
+        outputSchema: z.any(),
         steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
-      });
-
-      promptEvalWorkflow
+      })
         .then(getUserInput)
         .then(promptAgent)
         .then(evaluateTone)
@@ -503,11 +503,9 @@ describe('Workflow', () => {
       const promptEvalWorkflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({}),
+        outputSchema: z.any(),
         steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
-      });
-
-      promptEvalWorkflow
+      })
         .then(getUserInput)
         .then(promptAgent)
         .then(evaluateTone)
@@ -544,6 +542,7 @@ describe('Workflow', () => {
 
       for await (const data of stream) {
         if (index === 0) {
+          // @ts-ignore
           expect(data.payload).toMatchObject({
             id: 'promptAgent',
             payload: { userInput: 'test input' },
@@ -605,15 +604,6 @@ describe('Workflow', () => {
     });
 
     it('should be able to use an agent as a step', async () => {
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({
-          prompt1: z.string(),
-          prompt2: z.string(),
-        }),
-        outputSchema: z.object({}),
-      });
-
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions"',
@@ -671,16 +661,17 @@ describe('Workflow', () => {
         },
       });
 
-      new Mastra({
-        workflows: { 'test-workflow': workflow },
-        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-        idGenerator: randomUUID,
-      });
-
       const agentStep1 = createStep(agent);
       const agentStep2 = createStep(agent2);
 
-      workflow
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: agentStep2.outputSchema,
+      })
         .then(startStep)
         .map({
           prompt: {
@@ -697,6 +688,12 @@ describe('Workflow', () => {
         })
         .then(agentStep2)
         .commit();
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        idGenerator: randomUUID,
+      });
 
       const run = await workflow.createRunAsync({
         runId: 'test-run-id',
@@ -1042,8 +1039,11 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
-      });
-      workflow.then(step1).sleep(1000).then(step2).commit();
+      })
+        .then(step1)
+        .sleep(1000)
+        .then(step2)
+        .commit();
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -1203,8 +1203,7 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
-      });
-      workflow
+      })
         .then(step1)
         .sleep(async ({ inputData }) => {
           return inputData.value;
@@ -1574,8 +1573,10 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
-      });
-      workflow.then(step1).then(step2).commit();
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -1818,11 +1819,9 @@ describe('Workflow', () => {
       const promptEvalWorkflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({}),
+        outputSchema: z.any(),
         steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
-      });
-
-      promptEvalWorkflow
+      })
         .then(getUserInput)
         .then(promptAgent)
         .then(evaluateTone)
@@ -1962,11 +1961,9 @@ describe('Workflow', () => {
       const promptEvalWorkflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({}),
+        outputSchema: z.any(),
         steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
-      });
-
-      promptEvalWorkflow
+      })
         .then(getUserInput)
         .then(promptAgent)
         .then(evaluateTone)
@@ -2153,15 +2150,6 @@ describe('Workflow', () => {
     });
 
     it('should be able to use an agent as a step', async () => {
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({
-          prompt1: z.string(),
-          prompt2: z.string(),
-        }),
-        outputSchema: z.object({}),
-      });
-
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions"',
@@ -2226,16 +2214,17 @@ describe('Workflow', () => {
         },
       });
 
-      new Mastra({
-        workflows: { 'test-workflow': workflow },
-        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-        idGenerator: randomUUID,
-      });
-
       const agentStep1 = createStep(agent);
       const agentStep2 = createStep(agent2);
 
-      workflow
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: agentStep2.outputSchema,
+      })
         .then(startStep)
         .map({
           prompt: {
@@ -2252,6 +2241,12 @@ describe('Workflow', () => {
         })
         .then(agentStep2)
         .commit();
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        idGenerator: randomUUID,
+      });
 
       const run = await workflow.createRunAsync({
         runId: 'test-run-id',
@@ -2460,15 +2455,6 @@ describe('Workflow', () => {
     });
 
     it('should be able to use an agent with v1 model as a step', async () => {
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({
-          prompt1: z.string(),
-          prompt2: z.string(),
-        }),
-        outputSchema: z.object({}),
-      });
-
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions"',
@@ -2528,16 +2514,17 @@ describe('Workflow', () => {
         },
       });
 
-      new Mastra({
-        workflows: { 'test-workflow': workflow },
-        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-        idGenerator: randomUUID,
-      });
-
       const agentStep1 = createStep(agent);
       const agentStep2 = createStep(agent2);
 
-      workflow
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: agentStep2.outputSchema,
+      })
         .then(startStep)
         .map({
           prompt: {
@@ -2554,6 +2541,12 @@ describe('Workflow', () => {
         })
         .then(agentStep2)
         .commit();
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        idGenerator: randomUUID,
+      });
 
       const run = await workflow.createRunAsync({
         runId: 'test-run-id',
@@ -2870,8 +2863,11 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
-      });
-      workflow.then(step1).sleep(1000).then(step2).commit();
+      })
+        .then(step1)
+        .sleep(1000)
+        .then(step2)
+        .commit();
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -3034,8 +3030,7 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
-      });
-      workflow
+      })
         .then(step1)
         .sleep(async ({ inputData }) => {
           return inputData.value;
@@ -3810,11 +3805,14 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
-        outputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({
+          step1: z.object({ value: z.string() }),
+          step2: z.object({ value: z.string() }),
+        }),
         steps: [step1, step2],
-      });
-
-      workflow.parallel([step1, step2]).commit();
+      })
+        .parallel([step1, step2])
+        .commit();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -3868,12 +3866,15 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
-        outputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({
+          step1: z.object({ value: z.string() }),
+          step2: z.object({ value: z.string() }),
+        }),
         stateSchema: z.object({ value: z.string() }),
         steps: [step1, step2],
-      });
-
-      workflow.parallel([step1, step2]).commit();
+      })
+        .parallel([step1, step2])
+        .commit();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {}, initialState: { value: 'test-state' } });
@@ -3958,10 +3959,11 @@ describe('Workflow', () => {
         const workflow = createWorkflow({
           id: 'test-workflow',
           inputSchema: z.object({ inputData: z.string() }),
-          outputSchema: z.object({}),
-        });
-
-        workflow.then(step1).then(step2).commit();
+          outputSchema: z.object({ result: z.string() }),
+        })
+          .then(step1)
+          .then(step2)
+          .commit();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { inputData: 'test-input' } });
@@ -4119,11 +4121,12 @@ describe('Workflow', () => {
         const workflow = createWorkflow({
           id: 'test-workflow',
           inputSchema: triggerSchema,
-          outputSchema: z.object({ result: z.string() }),
+          outputSchema: z.object({ result: z.object({ cool: z.string() }) }),
           steps: [step1, step2],
-        });
-
-        workflow.then(step1).then(step2).commit();
+        })
+          .then(step1)
+          .then(step2)
+          .commit();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -4172,10 +4175,11 @@ describe('Workflow', () => {
         const workflow = createWorkflow({
           id: 'test-workflow',
           inputSchema: triggerSchema,
-          outputSchema: z.object({ result: z.string() }),
-        });
-
-        workflow.then(step1).then(step2).commit();
+          outputSchema: z.object({ result: z.object({ cool: z.string() }) }),
+        })
+          .then(step1)
+          .then(step2)
+          .commit();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -4513,10 +4517,11 @@ describe('Workflow', () => {
         const workflow = createWorkflow({
           id: 'test-workflow',
           inputSchema: z.object({}),
-          outputSchema: z.object({ result: z.string() }),
-        });
-
-        workflow.then(step1).then(step2).commit();
+          outputSchema: step2.outputSchema,
+        })
+          .then(step1)
+          .then(step2)
+          .commit();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -4563,10 +4568,11 @@ describe('Workflow', () => {
         const workflow = createWorkflow({
           id: 'test-workflow',
           inputSchema: z.object({}),
-          outputSchema: z.object({ result: z.string() }),
-        });
-
-        workflow.then(step1).then(step2).commit();
+          outputSchema: step2.outputSchema,
+        })
+          .then(step1)
+          .then(step2)
+          .commit();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -4613,10 +4619,8 @@ describe('Workflow', () => {
         const workflow = createWorkflow({
           id: 'test-workflow',
           inputSchema: z.object({}),
-          outputSchema: z.object({ result: z.string() }),
-        });
-
-        workflow
+          outputSchema: step2.outputSchema,
+        })
           .then(step1)
           .map({
             ary: mapVariable({
@@ -5027,8 +5031,7 @@ describe('Workflow', () => {
           inputSchema: z.object({}),
           outputSchema: z.object({}),
           steps: [step1, step2, step3],
-        });
-        workflow
+        })
           .then(step1)
           .branch([
             [
@@ -5052,6 +5055,7 @@ describe('Workflow', () => {
               step3,
             ],
           ])
+          .map({})
           .commit();
 
         const run = await workflow.createRunAsync();
@@ -5102,10 +5106,10 @@ describe('Workflow', () => {
         const workflow = createWorkflow({
           id: 'test-workflow',
           inputSchema: z.object({}),
-          outputSchema: z.object({}),
-        });
-
-        workflow
+          outputSchema: z.object({
+            step2: step2.outputSchema,
+          }),
+        })
           .then(step1)
           .branch([
             [
@@ -5216,13 +5220,9 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
-        outputSchema: z.object({
-          result: z.string(),
-        }),
+        outputSchema: step2.outputSchema,
         steps: [step1, step2],
-      });
-
-      workflow
+      })
         .then(step1)
         .sleep(async ({ inputData }) => {
           return inputData.value;
@@ -5279,9 +5279,7 @@ describe('Workflow', () => {
           result: z.string(),
         }),
         steps: [step1, step2],
-      });
-
-      workflow
+      })
         .then(step1)
         .sleepUntil(new Date(Date.now() + 1000))
         .then(step2)
@@ -5332,13 +5330,9 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
-        outputSchema: z.object({
-          result: z.string(),
-        }),
+        outputSchema: step2.outputSchema,
         steps: [step1, step2],
-      });
-
-      workflow
+      })
         .then(step1)
         .sleepUntil(async ({ inputData }) => {
           return new Date(Date.now() + inputData.value);
@@ -5892,9 +5886,7 @@ describe('Workflow', () => {
         id: 'test-workflow',
         inputSchema: z.object({}),
         outputSchema: z.object({}),
-      });
-
-      workflow
+      })
         .then(step1)
         .map({
           data: { step: step1, path: 'data' },
@@ -6093,9 +6085,7 @@ describe('Workflow', () => {
         id: 'test-workflow',
         inputSchema: z.object({}),
         outputSchema: z.object({}),
-      });
-
-      workflow
+      })
         .then(step1)
         .branch([
           [
@@ -7130,17 +7120,6 @@ describe('Workflow', () => {
         execute: final,
       });
 
-      const counterWorkflow = createWorkflow({
-        id: 'counter-workflow',
-        inputSchema: z.object({
-          startValue: z.number(),
-        }),
-        outputSchema: z.object({
-          finalValue: z.number(),
-        }),
-        steps: [startStep, finalIf],
-      });
-
       const elseBranch = createWorkflow({
         id: 'else-branch',
         inputSchema: z.object({ newValue: z.number() }),
@@ -7153,7 +7132,21 @@ describe('Workflow', () => {
         .then(finalElse)
         .commit();
 
-      counterWorkflow
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          startValue: z.number(),
+        }),
+        outputSchema: z.object({
+          finalIf: z.object({
+            finalValue: z.number(),
+          }),
+          'else-branch': z.object({
+            finalValue: z.number(),
+          }),
+        }),
+        steps: [startStep, finalIf],
+      })
         .then(startStep)
         .branch([
           [
@@ -7244,17 +7237,6 @@ describe('Workflow', () => {
         execute: final,
       });
 
-      const counterWorkflow = createWorkflow({
-        id: 'counter-workflow',
-        inputSchema: z.object({
-          startValue: z.number(),
-        }),
-        outputSchema: z.object({
-          finalValue: z.number(),
-        }),
-        steps: [startStep, finalIf],
-      });
-
       const elseBranch = createWorkflow({
         id: 'else-branch',
         inputSchema: z.object({ newValue: z.number() }),
@@ -7267,7 +7249,21 @@ describe('Workflow', () => {
         .then(finalElse)
         .commit();
 
-      counterWorkflow
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          startValue: z.number(),
+        }),
+        outputSchema: z.object({
+          finalIf: z.object({
+            finalValue: z.number(),
+          }),
+          'else-branch': z.object({
+            finalValue: z.number(),
+          }),
+        }),
+        steps: [startStep, finalIf],
+      })
         .then(startStep)
         .branch([
           [
@@ -7370,13 +7366,21 @@ describe('Workflow', () => {
           }),
         }),
         outputSchema: z.object({
-          result: z.string(),
+          step1: z.object({
+            result: z.string(),
+          }),
+          step2: z.object({
+            result: z.string(),
+          }),
+          step3: z.object({
+            result: z.string(),
+          }),
         }),
         steps: [step1, step2, step3],
         options: { validateInputs: true },
-      });
-
-      parallelWorkflow.parallel([step1, step2, step3]).commit();
+      })
+        .parallel([step1, step2, step3])
+        .commit();
 
       workflow.then(step1).commit();
 
@@ -7584,9 +7588,7 @@ describe('Workflow', () => {
           result: z.string(),
         }),
         options: { validateInputs: true },
-      });
-
-      workflow
+      })
         .then(step1)
         .map({
           start: mapVariable({
@@ -7666,9 +7668,7 @@ describe('Workflow', () => {
           result: z.string(),
         }),
         options: { validateInputs: true },
-      });
-
-      workflow
+      })
         .then(step1)
         .map(async ({ inputData }) => {
           return {
@@ -7943,7 +7943,7 @@ describe('Workflow', () => {
       const wfA = createWorkflow({
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
-        outputSchema: z.object({ finalValue: z.number() }),
+        outputSchema: finalStep.outputSchema,
       })
         .then(startStep)
         .then(otherStep)
@@ -7952,7 +7952,7 @@ describe('Workflow', () => {
       const wfB = createWorkflow({
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
-        outputSchema: z.object({ finalValue: z.number() }),
+        outputSchema: finalStep.outputSchema,
       })
         .then(startStep)
         .map({
@@ -8038,34 +8038,34 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
+      const nestedA = createWorkflow({
+        id: 'nested-a',
+        inputSchema: z.object({}),
+        outputSchema: step3.outputSchema,
+      })
+        .then(step1)
+        .then(step2)
+        .then(step3)
+        .commit();
+
+      const nestedB = createWorkflow({
+        id: 'nested-b',
+        inputSchema: z.object({}),
+        outputSchema: step5.outputSchema,
+      })
+        .then(step4)
+        .then(step5)
+        .commit();
+
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        steps: [step1, step2, step3, step4, step5],
-      });
-      workflow
-        .parallel([
-          createWorkflow({
-            id: 'nested-a',
-            inputSchema: z.object({}),
-            outputSchema: z.object({}),
-            steps: [step1, step2, step3],
-          })
-            .then(step1)
-            .then(step2)
-            .then(step3)
-            .commit(),
-          createWorkflow({
-            id: 'nested-b',
-            inputSchema: z.object({}),
-            outputSchema: z.object({}),
-            steps: [step4, step5],
-          })
-            .then(step4)
-            .then(step5)
-            .commit(),
-        ])
+        outputSchema: z.object({
+          'nested-a': nestedA.outputSchema,
+          'nested-b': nestedB.outputSchema,
+        }),
+      })
+        .parallel([nestedA, nestedB])
         .commit();
 
       const run = await workflow.createRunAsync();
@@ -8295,8 +8295,10 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
-      });
-      workflow.then(step1).then(step2).commit();
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
 
       let watchData: WatchEvent[] = [];
       const onTransition = data => {
@@ -8410,8 +8412,10 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
-      });
-      workflow.then(step1).then(step2).commit();
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
 
       let watchData: WatchEvent[] = [];
       const onTransition = data => {
@@ -8525,8 +8529,10 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1, step2],
-      });
-      workflow.then(step1).then(step2).commit();
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
 
       const onTransition = vi.fn();
       const onTransition2 = vi.fn();
@@ -8708,7 +8714,7 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
-        outputSchema: z.object({}),
+        outputSchema: step1.outputSchema,
         steps: [step1],
       })
         .then(step1)
@@ -8779,11 +8785,9 @@ describe('Workflow', () => {
       const promptEvalWorkflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({}),
+        outputSchema: evaluateImproved.outputSchema,
         steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
-      });
-
-      promptEvalWorkflow
+      })
         .then(getUserInput)
         .then(promptAgent)
         .then(evaluateTone)
@@ -8928,10 +8932,7 @@ describe('Workflow', () => {
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({}),
-        steps: [getUserInput, promptAgent, evaluateTone, humanIntervention, explainResponse],
-      });
-
-      workflow
+      })
         .then(getUserInput)
         .then(promptAgent)
         .then(evaluateTone)
@@ -9107,7 +9108,10 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({}),
+        outputSchema: z.object({
+          humanIntervention: humanIntervention.outputSchema,
+          explainResponse: explainResponse.outputSchema,
+        }),
         steps: [
           getUserInput,
           promptAgent,
@@ -9117,9 +9121,7 @@ describe('Workflow', () => {
           humanIntervention,
           explainResponse,
         ],
-      });
-
-      workflow
+      })
         .then(getUserInput)
         .then(promptAgent)
         .then(evaluateTone)
@@ -9296,10 +9298,8 @@ describe('Workflow', () => {
       const promptEvalWorkflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({}),
-      });
-
-      promptEvalWorkflow
+        outputSchema: evaluateImproved.outputSchema,
+      })
         .then(getUserInput)
         .then(promptAgent)
         .then(evaluateTone)
@@ -9531,10 +9531,8 @@ describe('Workflow', () => {
       const promptEvalWorkflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({}),
-      });
-
-      promptEvalWorkflow
+        outputSchema: evaluateImproved.outputSchema,
+      })
         .then(getUserInput)
         .then(promptAgent)
         .then(evaluateTone)
@@ -9734,10 +9732,12 @@ describe('Workflow', () => {
       const promptEvalWorkflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({}),
-      });
-
-      promptEvalWorkflow.then(getUserInput).then(promptAgent).then(runtimeContextStep).commit();
+        outputSchema: runtimeContextStep.outputSchema,
+      })
+        .then(getUserInput)
+        .then(promptAgent)
+        .then(runtimeContextStep)
+        .commit();
 
       new Mastra({
         logger: false,
@@ -9802,10 +9802,12 @@ describe('Workflow', () => {
       const promptEvalWorkflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({}),
-      });
-
-      promptEvalWorkflow.then(getUserInput).then(promptAgent).then(runtimeContextStep).commit();
+        outputSchema: runtimeContextStep.outputSchema,
+      })
+        .then(getUserInput)
+        .then(promptAgent)
+        .then(runtimeContextStep)
+        .commit();
 
       new Mastra({
         logger: false,
@@ -10444,7 +10446,7 @@ describe('Workflow', () => {
     const multiSuspendWorkflow = createWorkflow({
       id: 'multi-suspend-workflow',
       inputSchema: z.object({ value: z.number() }),
-      outputSchema: z.object({}),
+      outputSchema: z.any(),
       mastra: new Mastra({ logger: false, storage: testStorage }),
     })
       .branch([
@@ -10742,8 +10744,7 @@ describe('Workflow', () => {
         id: 'suspendingStep',
         execute: async ({ suspend, resumeData }) => {
           if (!resumeData) {
-            await suspend({});
-            return undefined;
+            return suspend({});
           }
           return { resumed: true, data: resumeData };
         },
@@ -10762,9 +10763,11 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow-with-suspend',
         inputSchema: z.object({}),
-        outputSchema: z.object({}),
-      });
-      workflow.then(suspendingStep).then(finalStep).commit();
+        outputSchema: finalStep.outputSchema,
+      })
+        .then(suspendingStep)
+        .then(finalStep)
+        .commit();
 
       new Mastra({
         logger: false,
@@ -10830,15 +10833,6 @@ describe('Workflow', () => {
 
   describe('Agent as step', () => {
     it('should be able to use an agent as a step', async () => {
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({
-          prompt1: z.string(),
-          prompt2: z.string(),
-        }),
-        outputSchema: z.object({}),
-      });
-
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
@@ -10898,16 +10892,17 @@ describe('Workflow', () => {
         },
       });
 
-      new Mastra({
-        workflows: { 'test-workflow': workflow },
-        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-        logger: false,
-        storage: testStorage,
-      });
       const agentStep1 = createStep(agent);
       const agentStep2 = createStep(agent2);
 
-      workflow
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: agentStep2.outputSchema,
+      })
         .then(startStep)
         .map({
           prompt: {
@@ -10924,6 +10919,13 @@ describe('Workflow', () => {
         })
         .then(agentStep2)
         .commit();
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        logger: false,
+        storage: testStorage,
+      });
 
       const run = await workflow.createRunAsync();
       const result = await run.start({
@@ -10970,18 +10972,6 @@ describe('Workflow', () => {
           result: z.string(),
         }),
         execute,
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({
-          prompt1: z.string(),
-          prompt2: z.string(),
-        }),
-        outputSchema: z.object({
-          'nested-workflow': z.object({ text: z.string() }),
-          'nested-workflow-2': z.object({ text: z.string() }),
-        }),
       });
 
       const agent = new Agent({
@@ -11041,17 +11031,13 @@ describe('Workflow', () => {
         },
       });
 
-      new Mastra({
-        logger: false,
-        storage: testStorage,
-        workflows: { 'test-workflow': workflow },
-        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-      });
+      const agentStep1 = createStep(agent);
+      const agentStep2 = createStep(agent2);
 
       const nestedWorkflow1 = createWorkflow({
         id: 'nested-workflow',
         inputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
-        outputSchema: z.object({ text: z.string() }),
+        outputSchema: agentStep1.outputSchema,
       })
         .then(startStep)
         .map({
@@ -11060,13 +11046,13 @@ describe('Workflow', () => {
             path: 'prompt1',
           },
         })
-        .then(createStep(agent))
+        .then(agentStep1)
         .commit();
 
       const nestedWorkflow2 = createWorkflow({
         id: 'nested-workflow-2',
         inputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
-        outputSchema: z.object({ text: z.string() }),
+        outputSchema: agentStep2.outputSchema,
       })
         .then(startStep)
         .map({
@@ -11075,10 +11061,27 @@ describe('Workflow', () => {
             path: 'prompt2',
           },
         })
-        .then(createStep(agent2))
+        .then(agentStep2)
         .commit();
 
-      workflow.parallel([nestedWorkflow1, nestedWorkflow2]).then(finalStep).commit();
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: finalStep.outputSchema,
+      })
+        .parallel([nestedWorkflow1, nestedWorkflow2])
+        .then(finalStep)
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+      });
 
       const run = await workflow.createRunAsync();
       const result = await run.start({
@@ -11125,15 +11128,6 @@ describe('Workflow', () => {
     });
 
     it('should be able to use an agent as a step via mastra instance', async () => {
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({
-          prompt1: z.string(),
-          prompt2: z.string(),
-        }),
-        outputSchema: z.object({}),
-      });
-
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
@@ -11175,13 +11169,25 @@ describe('Workflow', () => {
         },
       });
 
-      new Mastra({
-        logger: false,
-        storage: testStorage,
-        workflows: { 'test-workflow': workflow },
-        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+      const agentStep2 = createStep({
+        id: 'agent-step-2',
+        inputSchema: z.object({ prompt: z.string() }),
+        outputSchema: z.object({ text: z.string() }),
+        execute: async ({ inputData, mastra }) => {
+          const agent = mastra.getAgent('test-agent-2');
+          const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
+          return { text: result.text };
+        },
       });
-      workflow
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: agentStep2.outputSchema,
+      })
         .then(startStep)
         .map({
           prompt: {
@@ -11207,20 +11213,15 @@ describe('Workflow', () => {
             path: 'prompt2',
           },
         })
-        .then(
-          createStep({
-            id: 'agent-step-2',
-            inputSchema: z.object({ prompt: z.string() }),
-            outputSchema: z.object({ text: z.string() }),
-            execute: async ({ inputData, mastra }) => {
-              const agent = mastra.getAgent('test-agent-2');
-              const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
-              return { text: result.text };
-            },
-          }),
-        )
-
+        .then(agentStep2)
         .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+      });
 
       const run = await workflow.createRunAsync();
       const result = await run.start({
@@ -11249,15 +11250,6 @@ describe('Workflow', () => {
     });
 
     it('should be able to use an agent as a step in nested workflow via mastra instance', async () => {
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({
-          prompt1: z.string(),
-          prompt2: z.string(),
-        }),
-        outputSchema: z.object({}),
-      });
-
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
@@ -11282,12 +11274,6 @@ describe('Workflow', () => {
           }),
         }),
       });
-      new Mastra({
-        logger: false,
-        storage: testStorage,
-        workflows: { 'test-workflow': workflow },
-        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-      });
 
       const agentStep = createStep({
         id: 'agent-step',
@@ -11302,48 +11288,62 @@ describe('Workflow', () => {
 
       const agentStep2 = cloneStep(agentStep, { id: 'agent-step-2' });
 
-      workflow
-        .then(
-          createWorkflow({
-            id: 'nested-workflow',
-            inputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
-            outputSchema: z.object({ text: z.string() }),
-          })
-            .map({
-              agentName: {
-                value: 'test-agent-1',
-                schema: z.string(),
-              },
-              prompt: {
-                initData: workflow,
-                path: 'prompt1',
-              },
-            })
-            .then(agentStep)
-            .map({
-              agentName: {
-                value: 'test-agent-2',
-                schema: z.string(),
-              },
-              prompt: {
-                initData: workflow,
-                path: 'prompt2',
-              },
-            })
-            .then(agentStep2)
-            .then(
-              createStep({
-                id: 'final-step',
-                inputSchema: z.object({ text: z.string() }),
-                outputSchema: z.object({ text: z.string() }),
-                execute: async ({ getStepResult }) => {
-                  return { text: `${getStepResult(agentStep)?.text} ${getStepResult(agentStep2)?.text}` };
-                },
-              }),
-            )
-            .commit(),
-        )
+      const finalStep = createStep({
+        id: 'final-step',
+        inputSchema: z.object({ text: z.string() }),
+        outputSchema: z.object({ text: z.string() }),
+        execute: async ({ getStepResult }) => {
+          return { text: `${getStepResult(agentStep)?.text} ${getStepResult(agentStep2)?.text}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: finalStep.outputSchema,
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'nested-workflow',
+        inputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
+        outputSchema: finalStep.outputSchema,
+      })
+        .map({
+          agentName: {
+            value: 'test-agent-1',
+            schema: z.string(),
+          },
+          prompt: {
+            initData: workflow,
+            path: 'prompt1',
+          },
+        })
+        .then(agentStep)
+        .map({
+          agentName: {
+            value: 'test-agent-2',
+            schema: z.string(),
+          },
+          prompt: {
+            initData: workflow,
+            path: 'prompt2',
+          },
+        })
+        .then(agentStep2)
+        .then(finalStep)
         .commit();
+
+      workflow.then(nestedWorkflow).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+      });
 
       const run = await workflow.createRunAsync();
       const result = await run.start({
@@ -12261,19 +12261,11 @@ describe('Workflow', () => {
           execute: final,
         });
 
-        const counterWorkflow = createWorkflow({
-          id: 'counter-workflow',
+        const wfA = createWorkflow({
+          id: 'nested-workflow-a',
           inputSchema: z.object({
             startValue: z.number(),
           }),
-          outputSchema: z.object({
-            finalValue: z.number(),
-          }),
-        });
-
-        const wfA = createWorkflow({
-          id: 'nested-workflow-a',
-          inputSchema: counterWorkflow.inputSchema,
           outputSchema: finalStep.outputSchema,
         })
           .then(startStep)
@@ -12281,24 +12273,34 @@ describe('Workflow', () => {
           .then(finalStep)
           .commit();
 
-        counterWorkflow
+        const lastStep = createStep({
+          id: 'last-step',
+          inputSchema: wfA.outputSchema,
+          outputSchema: z.object({ success: z.boolean() }),
+          execute: last,
+        });
+
+        const counterWorkflow = createWorkflow({
+          id: 'counter-workflow',
+          inputSchema: z.object({
+            startValue: z.number(),
+          }),
+          outputSchema: lastStep.outputSchema,
+        })
           .then(
             createStep({
               id: 'begin-step',
-              inputSchema: counterWorkflow.inputSchema,
-              outputSchema: counterWorkflow.inputSchema,
+              inputSchema: z.object({
+                startValue: z.number(),
+              }),
+              outputSchema: z.object({
+                startValue: z.number(),
+              }),
               execute: begin,
             }),
           )
           .then(wfA)
-          .then(
-            createStep({
-              id: 'last-step',
-              inputSchema: wfA.outputSchema,
-              outputSchema: z.object({ success: z.boolean() }),
-              execute: last,
-            }),
-          )
+          .then(lastStep)
           .commit();
 
         new Mastra({
@@ -12623,26 +12625,22 @@ describe('Workflow', () => {
           .then(finalStep)
           .commit();
 
+        const lastStep = createStep({
+          id: 'last-step',
+          inputSchema: wfA.outputSchema,
+          outputSchema: z.object({ success: z.boolean() }),
+          execute: last,
+        });
+
         const counterWorkflow = createWorkflow({
           id: 'counter-workflow',
           inputSchema: z.object({
             startValue: z.number(),
           }),
-          outputSchema: z.object({
-            finalValue: z.number(),
-          }),
-        });
-
-        counterWorkflow
+          outputSchema: lastStep.outputSchema,
+        })
           .then(wfA)
-          .then(
-            createStep({
-              id: 'last-step',
-              inputSchema: wfA.outputSchema,
-              outputSchema: z.object({ success: z.boolean() }),
-              execute: last,
-            }),
-          )
+          .then(lastStep)
           .commit();
 
         const run = await counterWorkflow.createRunAsync();
@@ -12770,31 +12768,28 @@ describe('Workflow', () => {
         .then(wfB)
         .commit();
 
+      const lastStep = createStep({
+        id: 'last-step',
+        inputSchema: wfA.outputSchema,
+        outputSchema: z.object({ success: z.boolean() }),
+        execute: last,
+      });
+
       const counterWorkflow = createWorkflow({
         id: 'counter-workflow',
         inputSchema: counterInputSchema,
-        outputSchema: counterOutputSchema,
-        steps: [wfC, passthroughStep],
-      });
-
-      counterWorkflow
+        outputSchema: lastStep.outputSchema,
+      })
         .then(
           createStep({
             id: 'begin-step',
-            inputSchema: counterWorkflow.inputSchema,
-            outputSchema: counterWorkflow.inputSchema,
+            inputSchema: counterInputSchema,
+            outputSchema: counterInputSchema,
             execute: begin,
           }),
         )
         .then(wfC)
-        .then(
-          createStep({
-            id: 'last-step',
-            inputSchema: wfA.outputSchema,
-            outputSchema: z.object({ success: z.boolean() }),
-            execute: last,
-          }),
-        )
+        .then(lastStep)
         .commit();
 
       new Mastra({
@@ -13420,14 +13415,13 @@ describe('Workflow', () => {
           input: z.string(),
         }),
         outputSchema: z.object({
-          result3: z.string(),
-          result4: z.string(),
+          step3: step3.outputSchema,
+          step4: step4.outputSchema,
         }),
-        steps: [step1, step2, step3, step4],
-      });
-
-      // This tests the fix: consecutive parallel calls should work with proper type inference
-      workflow.parallel([step1, step2]).parallel([step3, step4]).commit();
+      })
+        .parallel([step1, step2])
+        .parallel([step3, step4])
+        .commit();
 
       const run = await workflow.createRunAsync();
       const step1Spy = vi.spyOn(step1, 'execute');
@@ -13573,7 +13567,7 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
-        outputSchema: z.object({}),
+        outputSchema: step2.outputSchema,
       })
         .dowhile(step1, async ({ inputData }) => inputData.count < 3)
         .dountil(step2, async ({ inputData }) => inputData.count === 10)
@@ -13614,7 +13608,7 @@ describe('Workflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
-        outputSchema: z.object({}),
+        outputSchema: step.outputSchema,
       })
         .then(step)
         .then(step2)
