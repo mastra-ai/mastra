@@ -13,19 +13,29 @@ export function zodToJsonSchema(
   const fn = 'toJSONSchema';
 
   if (fn in z) {
-    // Use dynamic property access to avoid import errors in Zod v3
-    return (z as any)[fn](zodSchema, {
-      unrepresentable: 'any',
-      override: (ctx: any) => {
-        // Safe access to handle cases where _zod might be undefined
-        const def = ctx.zodSchema?._zod?.def;
-        if (def && def.type === 'date') {
-          ctx.jsonSchema.type = 'string';
-          ctx.jsonSchema.format = 'date-time';
-        }
-      },
-    }) as JSONSchema7;
+    // Wrap in try-catch and fall back to v3 converter when it fails
+    try {
+      return (z as any)[fn](zodSchema, {
+        unrepresentable: 'any',
+        override: (ctx: any) => {
+          // Handle both Zod v4 structures: _def directly or nested in _zod
+          const def = ctx.zodSchema?._def || ctx.zodSchema?._zod?.def;
+          // Check for date type using both possible property names
+          if (def && (def.typeName === 'ZodDate' || def.type === 'date')) {
+            ctx.jsonSchema.type = 'string';
+            ctx.jsonSchema.format = 'date-time';
+          }
+        },
+      }) as JSONSchema7;
+    } catch (error) {
+      // Fall back to v3 converter if v4 fails
+      return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
+        $refStrategy: strategy,
+        target,
+      }) as JSONSchema7;
+    }
   } else {
+    // Zod v3 path - use the original converter
     return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
       $refStrategy: strategy,
       target,
