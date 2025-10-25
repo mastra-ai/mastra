@@ -51,7 +51,7 @@
     "@mastra/core": "workspace:*",
     "@types/node": "^20.19.0",
     "@types/semver": "^7.7.1",
-    "eslint": "^9.37.0",
+    "eslint": "^9.38.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
