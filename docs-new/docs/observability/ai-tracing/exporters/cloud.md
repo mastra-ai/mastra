@@ -1,5 +1,5 @@
 ---
-title: "Cloud Exporter "
+title: "Cloud"
 description: "Send traces to Mastra Cloud for production monitoring"
 ---
 

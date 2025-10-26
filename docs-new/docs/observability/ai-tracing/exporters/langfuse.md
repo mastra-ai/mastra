@@ -1,5 +1,5 @@
 ---
-title: "Langfuse Exporter "
+title: "Langfuse"
 description: "Send AI traces to Langfuse for LLM observability and analytics"
 ---
 
