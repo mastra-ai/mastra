@@ -406,6 +406,12 @@ span[class*='categoryLinkLabel'] {
     scrollbar-color: #dedede transparent;
   }
 
+
+  .table-of-contents__left-border{
+    border-color: var(--border);
+  }
+
+
   [data-theme='dark'] {
     .menu,
     pre,
