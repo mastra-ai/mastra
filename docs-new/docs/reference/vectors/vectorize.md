@@ -1,6 +1,7 @@
 ---
-title: 'Cloudflare Vector Store'
+title: 'CloudflareVector'
 description: Documentation for the CloudflareVector class in Mastra, which provides vector search using Cloudflare Vectorize.
+sidebar_position: 3
 ---
 
 # Cloudflare Vector Store

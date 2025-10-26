@@ -1,6 +1,7 @@
 ---
-title: 'Lance Vector Store'
+title: 'LanceVector'
 description: 'Documentation for the LanceVectorStore class in Mastra, which provides vector search using LanceDB, an embedded vector database based on the Lance columnar format.'
+sidebar_position: 5
 ---
 
 # Lance Vector Store

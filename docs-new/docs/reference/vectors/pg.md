@@ -1,6 +1,7 @@
 ---
-title: 'PG Vector Store'
+title: 'PgVector'
 description: Documentation for the PgVector class in Mastra, which provides vector search using PostgreSQL with pgvector extension.
+sidebar_position: 9
 ---
 
 # PG Vector Store

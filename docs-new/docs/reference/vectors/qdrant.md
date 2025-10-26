@@ -1,6 +1,7 @@
 ---
-title: 'Qdrant Vector Store'
+title: 'QdrantVector'
 description: Documentation for integrating Qdrant with Mastra, a vector similarity search engine for managing vectors and payloads.
+sidebar_position: 11
 ---
 
 # Qdrant Vector Store

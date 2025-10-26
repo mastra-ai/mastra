@@ -1,6 +1,7 @@
 ---
-title: 'Astra Vector Store'
+title: 'AstraVector'
 description: Documentation for the AstraVector class in Mastra, which provides vector search using DataStax Astra DB.
+sidebar_position: 1
 ---
 
 # Astra Vector Store

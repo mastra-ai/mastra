@@ -1,6 +1,7 @@
 ---
-title: 'Couchbase Vector Store'
+title: 'CouchbaseVector'
 description: Documentation for the CouchbaseVector class in Mastra, which provides vector search using Couchbase Vector Search.
+sidebar_position: 4
 ---
 
 # Couchbase Vector Store

@@ -1,6 +1,7 @@
 ---
-title: 'Amazon S3 Vectors Store'
+title: 'S3Vectors'
 description: Documentation for the S3Vectors class in Mastra, which provides vector search using Amazon S3 Vectors (Preview).
+sidebar_position: 12
 ---
 
 # Amazon S3 Vectors Store
