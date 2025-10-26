@@ -1,5 +1,5 @@
 ---
-title: 'Reference: MDocument '
+title: 'MDocument'
 description: Documentation for the MDocument class in Mastra, which handles document processing and chunking.
 ---
 

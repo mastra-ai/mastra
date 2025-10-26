@@ -1,5 +1,5 @@
 ---
-title: 'Reference: embed() '
+title: 'embed()'
 description: Documentation for embedding functionality in Mastra using the AI SDK.
 ---
 

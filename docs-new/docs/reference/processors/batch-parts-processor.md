@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Batch Parts Processor '
+title: 'Batch Parts Processor'
 description: 'Documentation for the BatchPartsProcessor in Mastra, which batches multiple stream parts together to reduce frequency of emissions.'
 ---
 

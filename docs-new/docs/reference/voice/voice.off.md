@@ -1,5 +1,5 @@
 ---
-title: 'Reference: voice.off() '
+title: 'voice.off()'
 description: 'Documentation for the off() method available in voice providers, which removes event listeners for voice events.'
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Answer Similarity '
+title: 'Answer Similarity'
 description: Documentation for the Answer Similarity Scorer in Mastra, which compares agent outputs against ground truth answers for CI/CD testing.
 ---
 

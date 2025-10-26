@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Traceloop Integration '
+title: 'Traceloop Integration'
 description: Documentation for integrating Traceloop with Mastra, an OpenTelemetry-native observability platform for LLM applications.
 ---
 

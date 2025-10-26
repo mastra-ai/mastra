@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Google Voice '
+title: 'Google Voice'
 description: 'Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities.'
 ---
 

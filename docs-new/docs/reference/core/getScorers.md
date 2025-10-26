@@ -1,5 +1,5 @@
 ---
-title: 'Reference: getScorers() '
+title: 'getScorers()'
 description: 'Documentation for the `getScorers()` method in Mastra, which returns all registered scorers for evaluating AI outputs.'
 ---
 

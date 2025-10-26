@@ -1,5 +1,5 @@
 ---
-title: 'Reference: OpenSearch Vector Store '
+title: 'OpenSearch Vector Store'
 description: Documentation for the OpenSearchVector class in Mastra, which provides vector search using OpenSearch.
 ---
 

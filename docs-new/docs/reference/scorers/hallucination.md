@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Hallucination '
+title: 'Hallucination'
 description: Documentation for the Hallucination Scorer in Mastra, which evaluates the factual correctness of LLM outputs by identifying contradictions with provided context.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: MCPClient '
+title: 'MCPClient'
 description: API Reference for MCPClient - A class for managing multiple Model Context Protocol servers and their tools.
 ---
 

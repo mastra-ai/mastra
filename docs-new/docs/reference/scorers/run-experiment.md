@@ -1,5 +1,5 @@
 ---
-title: 'Reference: runExperiment '
+title: 'runExperiment'
 description: 'Documentation for the runExperiment function in Mastra, which enables batch evaluation of agents and workflows using multiple scorers.'
 ---
 

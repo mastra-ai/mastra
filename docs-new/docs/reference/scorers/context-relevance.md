@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Context Relevance Scorer '
+title: 'Context Relevance Scorer'
 description: Documentation for the Context Relevance Scorer in Mastra. Evaluates the relevance and utility of provided context for generating agent responses using weighted relevance scoring.
 ---
 

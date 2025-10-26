@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Turbopuffer Vector Store '
+title: 'Turbopuffer Vector Store'
 description: Documentation for integrating Turbopuffer with Mastra, a high-performance vector database for efficient similarity search.
 ---
 

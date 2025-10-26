@@ -1,5 +1,5 @@
 ---
-title: 'Reference: voice.close() '
+title: 'voice.close()'
 description: 'Documentation for the close() method available in voice providers, which disconnects from real-time voice services.'
 ---
 

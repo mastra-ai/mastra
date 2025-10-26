@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Arize Phoenix Integration '
+title: 'Arize Phoenix Integration'
 description: Documentation for integrating Arize Phoenix with Mastra, an open-source AI observability platform for monitoring and evaluating LLM applications.
 ---
 

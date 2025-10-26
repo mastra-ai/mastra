@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Voice Events '
+title: 'Voice Events'
 description: 'Documentation for events emitted by voice providers, particularly for real-time voice interactions.'
 ---
 

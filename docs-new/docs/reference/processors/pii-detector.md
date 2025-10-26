@@ -1,5 +1,5 @@
 ---
-title: 'Reference: PII Detector '
+title: 'PII Detector'
 description: 'Documentation for the PIIDetector in Mastra, which detects and redacts personally identifiable information (PII) from AI responses.'
 ---
 

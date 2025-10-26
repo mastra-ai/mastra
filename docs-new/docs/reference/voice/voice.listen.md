@@ -1,5 +1,5 @@
 ---
-title: 'Reference: voice.listen() '
+title: 'voice.listen()'
 description: 'Documentation for the listen() method available in all Mastra voice providers, which converts speech to text.'
 ---
 

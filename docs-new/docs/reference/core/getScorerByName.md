@@ -1,5 +1,5 @@
 ---
-title: 'Reference: getScorerByName() '
+title: 'getScorerByName()'
 description: 'Documentation for the `getScorerByName()` method in Mastra, which retrieves a scorer by its name property rather than registration key.'
 ---
 

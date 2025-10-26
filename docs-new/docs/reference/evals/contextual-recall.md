@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Contextual Recall '
+title: 'Contextual Recall'
 description: Documentation for the Contextual Recall Metric, which evaluates the completeness of LLM responses in incorporating relevant context.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: voice.addTools() '
+title: 'voice.addTools()'
 description: 'Documentation for the addTools() method available in voice providers, which equips voice models with function calling capabilities.'
 ---
 

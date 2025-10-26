@@ -1,5 +1,5 @@
 ---
-title: 'Reference: System Prompt Scrubber '
+title: 'System Prompt Scrubber'
 description: 'Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses.'
 ---
 

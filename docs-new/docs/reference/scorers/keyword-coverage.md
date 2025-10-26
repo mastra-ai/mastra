@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Keyword Coverage '
+title: 'Keyword Coverage'
 description: Documentation for the Keyword Coverage Scorer in Mastra, which evaluates how well LLM outputs cover important keywords from the input.
 ---
 

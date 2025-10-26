@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Speechify Voice '
+title: 'Speechify Voice'
 description: 'Documentation for the Speechify voice implementation, providing text-to-speech capabilities.'
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Moderation Processor '
+title: 'Moderation Processor'
 description: 'Documentation for the ModerationProcessor in Mastra, which provides content moderation using LLM to detect inappropriate content across multiple categories.'
 ---
 

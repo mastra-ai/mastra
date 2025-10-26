@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Lance Vector Store '
+title: 'Lance Vector Store'
 description: 'Documentation for the LanceVectorStore class in Mastra, which provides vector search using LanceDB, an embedded vector database based on the Lance columnar format.'
 ---
 

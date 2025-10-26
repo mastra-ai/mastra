@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Token Limiter Processor '
+title: 'Token Limiter Processor'
 description: 'Documentation for the TokenLimiterProcessor in Mastra, which limits the number of tokens in AI responses.'
 ---
 

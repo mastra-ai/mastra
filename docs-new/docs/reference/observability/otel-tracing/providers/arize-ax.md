@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Arize AX Integration '
+title: 'Arize AX Integration'
 description: Documentation for integrating Arize AX with Mastra, a comprehensive AI observability platform for monitoring and evaluating LLM applications.
 ---
 

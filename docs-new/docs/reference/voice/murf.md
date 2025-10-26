@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Murf Voice '
+title: 'Murf Voice'
 description: 'Documentation for the Murf voice implementation, providing text-to-speech capabilities.'
 ---
 
