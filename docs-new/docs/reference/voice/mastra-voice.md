@@ -1,5 +1,5 @@
 ---
-title: 'Reference: MastraVoice '
+title: 'MastraVoice'
 description: 'Documentation for the MastraVoice abstract base class, which defines the core interface for all voice services in Mastra, including speech-to-speech capabilities.'
 ---
 

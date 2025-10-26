@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Noise Sensitivity Scorer (CI/Testing) '
+title: 'Noise Sensitivity Scorer (CI/Testing)'
 description: Documentation for the Noise Sensitivity Scorer in Mastra. A CI/testing scorer that evaluates agent robustness by comparing responses between clean and noisy inputs in controlled test environments.
 ---
 

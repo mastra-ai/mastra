@@ -1,5 +1,5 @@
 ---
-title: 'Reference: MastraMCPClient '
+title: 'MastraMCPClient'
 description: API Reference for MastraMCPClient - A client implementation for the Model Context Protocol.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Context Position '
+title: 'Context Position'
 description: Documentation for the Context Position Metric in Mastra, which evaluates the ordering of context nodes based on their relevance to the query and output.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: voice.send() '
+title: 'voice.send()'
 description: 'Documentation for the send() method available in real-time voice providers, which streams audio data for continuous processing.'
 ---
 

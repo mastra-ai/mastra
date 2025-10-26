@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Rerank '
+title: 'Rerank'
 description: Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: GraphRAG '
+title: 'GraphRAG'
 description: Documentation for the GraphRAG class in Mastra, which implements a graph-based approach to retrieval augmented generation.
 ---
 

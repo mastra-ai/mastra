@@ -1,5 +1,5 @@
 ---
-title: 'Reference: OpenAI Voice '
+title: 'OpenAI Voice'
 description: 'Documentation for the OpenAIVoice class, providing text-to-speech and speech-to-text capabilities.'
 ---
 

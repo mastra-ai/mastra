@@ -1,5 +1,5 @@
 ---
-title: 'Reference: SigNoz Integration '
+title: 'SigNoz Integration'
 description: Documentation for integrating SigNoz with Mastra, an open-source APM and observability platform providing full-stack monitoring through OpenTelemetry.
 ---
 

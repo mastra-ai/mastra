@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Context Precision Scorer '
+title: 'Context Precision Scorer'
 description: Documentation for the Context Precision Scorer in Mastra. Evaluates the relevance and precision of retrieved context for generating expected outputs using Mean Average Precision.
 ---
 

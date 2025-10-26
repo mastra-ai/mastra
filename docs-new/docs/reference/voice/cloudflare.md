@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Cloudflare Voice '
+title: 'Cloudflare Voice'
 description: 'Documentation for the CloudflareVoice class, providing text-to-speech capabilities using Cloudflare Workers AI.'
 ---
 

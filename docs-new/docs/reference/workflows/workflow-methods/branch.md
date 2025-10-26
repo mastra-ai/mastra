@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Workflow.branch() '
+title: 'Workflow.branch()'
 description: Documentation for the `Workflow.branch()` method in workflows, which creates conditional branches between steps.
 ---
 

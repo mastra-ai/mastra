@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Langfuse Integration '
+title: 'Langfuse Integration'
 description: Documentation for integrating Langfuse with Mastra, an open-source observability platform for LLM applications.
 ---
 

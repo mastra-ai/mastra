@@ -1,5 +1,5 @@
 ---
-title: 'Reference: voice.addInstructions() '
+title: 'voice.addInstructions()'
 description: "Documentation for the addInstructions() method available in voice providers, which adds instructions to guide the voice model's behavior."
 ---
 

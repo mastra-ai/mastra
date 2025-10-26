@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Answer Relevancy '
+title: 'Answer Relevancy'
 description: Documentation for the Answer Relevancy Metric in Mastra, which evaluates how well LLM outputs address the input query.
 ---
 

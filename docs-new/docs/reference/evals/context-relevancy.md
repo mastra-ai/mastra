@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Context Relevancy '
+title: 'Context Relevancy'
 description: Documentation for the Context Relevancy Metric, which evaluates the relevance of retrieved context in RAG pipelines.
 ---
 

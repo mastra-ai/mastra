@@ -1,6 +1,7 @@
 ---
-title: 'Reference: Pinecone Vector Store '
+title: 'PineconeVector'
 description: Documentation for the PineconeVector class in Mastra, which provides an interface to Pinecone's vector database.
+sidebar_position: 10
 ---
 
 # Pinecone Vector Store
