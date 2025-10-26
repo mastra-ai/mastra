@@ -641,9 +641,12 @@ ol {
 
 pre {
   --prism-background-color: var(--mastra-surface-2);
+  background: var(--mastra-surface-2);
   border: 0.5px solid var(--border);
   border-radius: 12px;
 }
+
+
 
 pre * {
   font-size: 13px;
