@@ -433,7 +433,7 @@ pre,
   }
 }
 
-@media(min-width: 1366px) {
+@media (min-width: 1366px) {
   [class*="docMainContainer"][class*="docMainContainer"] {
     min-width: 69rem;
   }
