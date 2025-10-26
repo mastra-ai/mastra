@@ -1,6 +1,7 @@
 import { useNavbarMobileSidebar } from '@docusaurus/theme-common/internal';
 import { translate } from '@docusaurus/Translate';
 import { ThemeSwitcher } from '@site/src/components/theme-switcher';
+import { MobileDocsDropdown } from '@site/src/components/mobile-docs-dropdown';
 import { Button } from '@site/src/components/ui/button';
 import { cn } from '@site/src/css/utils';
 import { type ReactNode } from 'react';
@@ -50,12 +51,17 @@ function CloseButton() {
 
 export default function NavbarMobileSidebarHeader(): ReactNode {
   return (
-    <div className="navbar-sidebar__brand">
-      <div className="flex items-center gap-2">
-        <Logo />
-        <ThemeSwitcher />
+    <div className="flex flex-col gap-3 pb-3">
+      <div className="navbar-sidebar__brand">
+        <div className="flex items-center gap-2">
+          <Logo />
+          <ThemeSwitcher />
+        </div>
+        <CloseButton />
       </div>
-      <CloseButton />
+      <div className="px-4">
+        <MobileDocsDropdown />
+      </div>
     </div>
   );
 }

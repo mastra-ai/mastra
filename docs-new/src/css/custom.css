@@ -312,7 +312,8 @@ html {
 
 .navbar-sidebar__brand{
   height: calc(var(--ifm-navbar-height) - 50px);
-  border-bottom-color: var(--border)
+  border: none;
+  box-shadow: none;
 }
 
 .dialog-panel__content {
@@ -590,8 +591,9 @@ h2 code {
 }
 
 iframe,
-img {
+img, video {
   border-radius: 12px;
+  max-width: 100%;
 }
 
 ul {
@@ -1048,38 +1050,74 @@ input[type='search']::-webkit-search-cancel-button {
 }
 
 /* ==================== DROPDOWN ANIMATIONS ==================== */
-@keyframes fadeIn {
+@keyframes slideDownAndFade {
   from {
     opacity: 0;
+    transform: translateY(-2px);
   }
 
   to {
     opacity: 1;
+    transform: translateY(0);
   }
 }
 
-@keyframes zoomIn {
+@keyframes slideUpAndFade {
   from {
-    transform: scale(0.95);
+    opacity: 0;
+    transform: translateY(2px);
   }
 
   to {
-    transform: scale(1);
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-.animate-in {
-  animation:
-    fadeIn 0.15s ease-out,
-    zoomIn 0.15s ease-out;
+@keyframes slideLeftAndFade {
+  from {
+    opacity: 0;
+    transform: translateX(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-.fade-in-0 {
-  animation: fadeIn 0.15s ease-out;
+@keyframes slideRightAndFade {
+  from {
+    opacity: 0;
+    transform: translateX(-2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-.zoom-in-95 {
-  animation: zoomIn 0.15s ease-out;
+/* Data attribute animation triggers */
+[data-side='bottom'][data-slot='dropdown-menu-content'] {
+  animation: slideDownAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-side='top'][data-slot='dropdown-menu-content'] {
+  animation: slideUpAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-side='left'][data-slot='dropdown-menu-content'] {
+  animation: slideLeftAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-side='right'][data-slot='dropdown-menu-content'] {
+  animation: slideRightAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Fallback for when side is not specified */
+[data-state='open'][data-slot='dropdown-menu-content']:not([data-side]) {
+  animation: slideDownAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 input:-webkit-autofill,
@@ -1104,3 +1142,20 @@ textarea:-webkit-autofill:focus {
 [data-theme='dark'] .card__grid a {
   color: white;
 }
+
+.navbar-sidebar__item {
+  padding-inline: 0.5rem!important;
+}
+
+.theme-doc-toc-mobile{
+  ul{
+    border-color: var(--border) !important;
+  }
+  button{
+   &:after {
+    background: var(--ifm-menu-link-sublist-icon) center;
+    transform-origin: center;
+  } 
+  }
+}
+
