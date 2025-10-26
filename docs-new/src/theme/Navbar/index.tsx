@@ -1,20 +1,17 @@
-import React, { type ReactNode } from 'react';
-import NavbarLayout from '@theme/Navbar/Layout';
-import NavbarContent from '@theme/Navbar/Content';
-import { TabSwitcher } from './tab-switcher';
-import { ThemeSwitcher } from '@site/src/components/theme-switcher';
-import { GithubStarCount } from '@site/src/components/github-star-count';
-import Link from '@docusaurus/Link';
-import SearchContainer from './Search';
-import { Logo } from './logo';
-import { useNavbarMobileSidebar } from '@docusaurus/theme-common/internal';
-import NavbarMobileSidebarToggle from '@theme/Navbar/MobileSidebar/Toggle';
+import Link from "@docusaurus/Link";
+import { GithubStarCount } from "@site/src/components/github-star-count";
+import { ThemeSwitcher } from "@site/src/components/theme-switcher";
+import NavbarLayout from "@theme/Navbar/Layout";
+import NavbarMobileSidebarToggle from "@theme/Navbar/MobileSidebar/Toggle";
+import { type ReactNode } from "react";
+import SearchContainer from "./Search";
+import { Logo } from "./logo";
+import { TabSwitcher } from "./tab-switcher";
 
 function NavbarContentDesktop() {
-  const mobileSidebar = useNavbarMobileSidebar();
   return (
     <>
-      <div className="flex px-4 lg:px-0 border-b-[0.5px] h-[60px] border-(--border-subtle) max-w-(--ifm-container-width) mx-auto w-full items-center justify-between">
+      <div className="flex px-4 xl:px-0 border-b-[0.5px] h-[60px] border-(--border-subtle) max-w-(--ifm-container-width) mx-auto w-full items-center justify-between">
         <Link href="/docs">
           <div className="flex items-center gap-2">
             <Logo />

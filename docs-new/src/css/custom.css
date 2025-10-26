@@ -83,6 +83,8 @@
 
 @custom-variant dark (&:is([data-theme="dark"] *));
 
+
+
 /* ==================== LIGHT MODE ==================== */
 :root {
   /* Primary colors - Light mode uses darker green to match Nextra */
@@ -575,7 +577,6 @@ pre,
 }
 
 [data-theme='dark'] {
-
   .markdown h2,
   .markdown h3 {
     border-bottom-color: var(--border);
@@ -651,6 +652,9 @@ pre {
   background: var(--mastra-surface-2);
   border: 0.5px solid var(--border);
   border-radius: 12px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 pre * {
@@ -658,7 +662,7 @@ pre * {
   font-weight: 500;
 }
 
-code {
+ code {
   --bg-color: : var(--mastra-surface-5);
   font-family: var(--ifm-font-family-monospace);
   border-radius: 0.375rem;
@@ -726,7 +730,6 @@ div[class*='codeBlockTitle']+div[class*='codeBlockContent'] pre {
     position: absolute;
     z-index: -1;
   }
-
   position: relative;
   background: transparent;
 }
@@ -764,13 +767,13 @@ button[class*='copyButton']:hover {
   background: var(--mastra-surface-4);
 }
 
-/* Preserve whitespace in code blocks */
+
 pre code>span,
 .prism-code>span {
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-x: auto;
 }
 
-/* Article inline code - smaller, with border */
 article p code,
 article li code,
 article td code {
@@ -850,12 +853,12 @@ article a:hover {
 }
 
 [data-theme='dark'] .markdown a {
-  text-decoration-color: var(--mastra-green-accent-2);
-  color: var(--mastra-green-accent-2);
+  text-decoration-color: var(--mastra-green-accent);
+  color: var(--mastra-green-accent);
 }
 
 [data-theme='dark'] article a:hover {
-  color: var(--mastra-green-accent);
+  color: var(--mastra-green-accent-2);
 }
 
 /* ==================== TYPOGRAPHY ==================== */
@@ -1161,5 +1164,15 @@ textarea:-webkit-autofill:focus {
       background: var(--ifm-menu-link-sublist-icon) center;
       transform-origin: center;
     }
+  }
+}
+
+.docusaurus-mt-lg{
+  overflow-x:hidden;
+}
+
+@media (min-width: 997px) {
+  .docusaurus-mt-lg{
+    overflow-x: revert;
   }
 }
