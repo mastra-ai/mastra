@@ -1,6 +1,6 @@
 ---
-title: 'Unicode Normalizer '
-description: 'Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters.'
+title: "Unicode Normalizer "
+description: "Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters."
 ---
 
 # UnicodeNormalizer
@@ -10,7 +10,7 @@ The `UnicodeNormalizer` is an **input processor** that normalizes Unicode text t
 ## Usage example
 
 ```typescript copy
-import { UnicodeNormalizer } from '@mastra/core/processors';
+import { UnicodeNormalizer } from "@mastra/core/processors";
 
 const processor = new UnicodeNormalizer({
   stripControlChars: true,
@@ -88,14 +88,14 @@ isOptional: false,
 ## Extended usage example
 
 ```typescript filename="src/mastra/agents/normalized-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { UnicodeNormalizer } from '@mastra/core/processors';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { UnicodeNormalizer } from "@mastra/core/processors";
 
 export const agent = new Agent({
-  name: 'normalized-agent',
-  instructions: 'You are a helpful assistant',
-  model: openai('gpt-4o-mini'),
+  name: "normalized-agent",
+  instructions: "You are a helpful assistant",
+  model: openai("gpt-4o-mini"),
   inputProcessors: [
     new UnicodeNormalizer({
       stripControlChars: true,

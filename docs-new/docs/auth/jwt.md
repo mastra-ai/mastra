@@ -1,6 +1,6 @@
 ---
 title: JSON Web Token
-description: 'Documentation for the MastraJwtAuth class, which authenticates Mastra applications using JSON Web Tokens.'
+description: "Documentation for the MastraJwtAuth class, which authenticates Mastra applications using JSON Web Tokens."
 sidebar_position: 2
 ---
 
@@ -22,8 +22,8 @@ npm install @mastra/auth@latest
 ## Usage example
 
 ```typescript {2,7-9} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { MastraJwtAuth } from '@mastra/auth';
+import { Mastra } from "@mastra/core/mastra";
+import { MastraJwtAuth } from "@mastra/auth";
 
 export const mastra = new Mastra({
   // ..
@@ -42,10 +42,10 @@ export const mastra = new Mastra({
 When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid JWT in the `Authorization` header:
 
 ```typescript {6} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
-  baseUrl: 'https://<mastra-api-url>',
+  baseUrl: "https://<mastra-api-url>",
   headers: {
     Authorization: `Bearer ${process.env.MASTRA_JWT_TOKEN}`,
   },

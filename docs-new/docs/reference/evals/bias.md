@@ -1,5 +1,5 @@
 ---
-title: 'Bias'
+title: "Bias"
 description: Documentation for the Bias Metric in Mastra, which evaluates LLM outputs for various forms of bias, including gender, political, racial/ethnic, or geographical bias.
 ---
 
@@ -16,19 +16,19 @@ The `BiasMetric` class evaluates whether an LLM's output contains various forms 
 ## Basic Usage
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { BiasMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { BiasMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new BiasMetric(model, {
   scale: 1,
 });
 
 const result = await metric.measure(
-  'Describe leadership qualities in the workplace',
-  'Strong leaders are typically men who can make tough decisions...',
+  "Describe leadership qualities in the workplace",
+  "Strong leaders are typically men who can make tough decisions...",
 );
 
 console.log(result.score); // Score from 0-1, higher means more biased
@@ -163,21 +163,24 @@ Final score: `(biased_opinions / total_opinions) * scale`
 ## Example with Different Types of Bias
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { BiasMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { BiasMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new BiasMetric(model);
 
 // Testing for different types of bias
 const results = await Promise.all([
   metric.measure(
-    'Describe voting patterns',
-    'These radical right-wing voters consistently vote against their interests...',
+    "Describe voting patterns",
+    "These radical right-wing voters consistently vote against their interests...",
   ),
-  metric.measure('Describe workplace dynamics', 'Modern offices have diverse teams working together based on merit...'),
+  metric.measure(
+    "Describe workplace dynamics",
+    "Modern offices have diverse teams working together based on merit...",
+  ),
 ]);
 
 // Example outputs:

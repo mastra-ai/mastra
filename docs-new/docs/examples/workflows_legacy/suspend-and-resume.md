@@ -1,5 +1,5 @@
 ---
-title: 'Suspend and Resume '
+title: "Suspend and Resume "
 description: Example of using Mastra to suspend and resume legacy workflow steps during execution.
 ---
 
@@ -10,12 +10,12 @@ Workflow steps can be suspended and resumed at any point in the workflow executi
 ## Basic Example
 
 ```ts showLineNumbers copy
-import { Mastra } from '@mastra/core';
-import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
-import { z } from 'zod';
+import { Mastra } from "@mastra/core";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
 
 const stepOne = new LegacyStep({
-  id: 'stepOne',
+  id: "stepOne",
   outputSchema: z.object({
     doubledValue: z.number(),
   }),
@@ -28,7 +28,7 @@ const stepOne = new LegacyStep({
 
 ```ts showLineNumbers copy
 const stepTwo = new LegacyStep({
-  id: 'stepTwo',
+  id: "stepTwo",
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
@@ -48,7 +48,7 @@ const stepTwo = new LegacyStep({
 
 // Build the workflow
 const myWorkflow = new LegacyWorkflow({
-  name: 'my-workflow',
+  name: "my-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
@@ -65,20 +65,20 @@ export const mastra = new Mastra({
 });
 
 // Get registered workflow from Mastra
-const registeredWorkflow = mastra.legacy_getWorkflow('registeredWorkflow');
+const registeredWorkflow = mastra.legacy_getWorkflow("registeredWorkflow");
 const { runId, start } = registeredWorkflow.createRun();
 
 // Start watching the workflow before executing it
 myWorkflow.watch(async ({ context, activePaths }) => {
   for (const _path of activePaths) {
     const stepTwoStatus = context.steps?.stepTwo?.status;
-    if (stepTwoStatus === 'suspended') {
-      console.log('Workflow suspended, resuming with new value');
+    if (stepTwoStatus === "suspended") {
+      console.log("Workflow suspended, resuming with new value");
 
       // Resume the workflow with new context
       await myWorkflow.resume({
         runId,
-        stepId: 'stepTwo',
+        stepId: "stepTwo",
         context: { secondValue: 100 },
       });
     }
@@ -94,13 +94,13 @@ await start({ triggerData: { inputValue: 45 } });
 This example demonstrates a more complex workflow with multiple suspension points using the async/await pattern. It simulates a content generation workflow that requires human intervention at different stages.
 
 ```ts showLineNumbers copy
-import { Mastra } from '@mastra/core';
-import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
-import { z } from 'zod';
+import { Mastra } from "@mastra/core";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
 
 // Step 1: Get user input
 const getUserInput = new LegacyStep({
-  id: 'getUserInput',
+  id: "getUserInput",
   execute: async ({ context }) => {
     // In a real application, this might come from a form or API
     return { userInput: context.triggerData.input };
@@ -112,7 +112,7 @@ const getUserInput = new LegacyStep({
 ```ts showLineNumbers copy
 // Step 2: Generate content with AI (may suspend for human guidance)
 const promptAgent = new LegacyStep({
-  id: 'promptAgent',
+  id: "promptAgent",
   inputSchema: z.object({
     guidance: z.string(),
   }),
@@ -130,7 +130,10 @@ const promptAgent = new LegacyStep({
       return { modelOutput: initialDraft.content };
     }
 
-    console.log('Low confidence in generated content, suspending for human guidance', { guidance });
+    console.log(
+      "Low confidence in generated content, suspending for human guidance",
+      { guidance },
+    );
 
     // If confidence is low, suspend for human guidance
     if (!guidance) {
@@ -140,7 +143,7 @@ const promptAgent = new LegacyStep({
     }
 
     // This code runs after resume with human guidance
-    console.log('Resumed with human guidance');
+    console.log("Resumed with human guidance");
 
     // Use the human guidance to improve the output
     return {
@@ -154,7 +157,7 @@ const promptAgent = new LegacyStep({
 ```ts showLineNumbers copy
 // Step 3: Evaluate the content quality
 const evaluateTone = new LegacyStep({
-  id: 'evaluateToneConsistency',
+  id: "evaluateToneConsistency",
   execute: async ({ context }) => {
     const content = context.getStepResult(promptAgent)?.modelOutput;
 
@@ -174,7 +177,7 @@ const evaluateTone = new LegacyStep({
 ```ts showLineNumbers copy
 // Step 4: Improve response if needed (may suspend)
 const improveResponse = new LegacyStep({
-  id: 'improveResponse',
+  id: "improveResponse",
   inputSchema: z.object({
     improvedContent: z.string(),
     resumeAttempts: z.number(),
@@ -182,7 +185,8 @@ const improveResponse = new LegacyStep({
   execute: async ({ context, suspend }) => {
     const content = context.getStepResult(promptAgent)?.modelOutput;
     const toneScore = context.getStepResult(evaluateTone)?.toneScore.score ?? 0;
-    const completenessScore = context.getStepResult(evaluateTone)?.completenessScore.score ?? 0;
+    const completenessScore =
+      context.getStepResult(evaluateTone)?.completenessScore.score ?? 0;
 
     const improvedContent = context.inputData.improvedContent;
     const resumeAttempts = context.inputData.resumeAttempts ?? 0;
@@ -192,24 +196,27 @@ const improveResponse = new LegacyStep({
       return { improvedOutput: makeMinorImprovements(content) };
     }
 
-    console.log('Content quality below threshold, suspending for human intervention', {
-      improvedContent,
-      resumeAttempts,
-    });
+    console.log(
+      "Content quality below threshold, suspending for human intervention",
+      {
+        improvedContent,
+        resumeAttempts,
+      },
+    );
 
     if (!improvedContent) {
       // Suspend with payload containing content and resume attempts
       await suspend({
         content,
         scores: { tone: toneScore, completeness: completenessScore },
-        needsImprovement: toneScore < 0.8 ? 'tone' : 'completeness',
+        needsImprovement: toneScore < 0.8 ? "tone" : "completeness",
         resumeAttempts: resumeAttempts + 1,
       });
-      return { improvedOutput: content ?? '' };
+      return { improvedOutput: content ?? "" };
     }
 
-    console.log('Resumed with human improvements', improvedContent);
-    return { improvedOutput: improvedContent ?? content ?? '' };
+    console.log("Resumed with human improvements", improvedContent);
+    return { improvedOutput: improvedContent ?? content ?? "" };
   },
   outputSchema: z.object({ improvedOutput: z.string() }).optional(),
 });
@@ -218,9 +225,10 @@ const improveResponse = new LegacyStep({
 ```ts showLineNumbers copy
 // Step 5: Final evaluation
 const evaluateImproved = new LegacyStep({
-  id: 'evaluateImprovedResponse',
+  id: "evaluateImprovedResponse",
   execute: async ({ context }) => {
-    const improvedContent = context.getStepResult(improveResponse)?.improvedOutput;
+    const improvedContent =
+      context.getStepResult(improveResponse)?.improvedOutput;
 
     // Simulate final evaluation
     return {
@@ -236,7 +244,7 @@ const evaluateImproved = new LegacyStep({
 
 // Build the workflow
 const contentWorkflow = new LegacyWorkflow({
-  name: 'content-generation-workflow',
+  name: "content-generation-workflow",
   triggerSchema: z.object({ input: z.string() }),
 });
 
@@ -256,7 +264,7 @@ const mastra = new Mastra({
 });
 
 // Helper functions (simulated)
-function generateInitialDraft(input: string = '') {
+function generateInitialDraft(input: string = "") {
   // Simulate AI generating content
   return {
     content: `Generated content based on: ${input}`,
@@ -264,71 +272,75 @@ function generateInitialDraft(input: string = '') {
   };
 }
 
-function enhanceWithGuidance(content: string = '', guidance: string = '') {
+function enhanceWithGuidance(content: string = "", guidance: string = "") {
   return `${content} (Enhanced with guidance: ${guidance})`;
 }
 
-function makeMinorImprovements(content: string = '') {
+function makeMinorImprovements(content: string = "") {
   return `${content} (with minor improvements)`;
 }
 
-function calculateToneScore(_: string = '') {
+function calculateToneScore(_: string = "") {
   return 0.7; // Simulate a score that will trigger suspension
 }
 
-function calculateCompletenessScore(_: string = '') {
+function calculateCompletenessScore(_: string = "") {
   return 0.9;
 }
 
 // Usage example
 async function runWorkflow() {
-  const workflow = mastra.legacy_getWorkflow('contentWorkflow');
+  const workflow = mastra.legacy_getWorkflow("contentWorkflow");
   const { runId, start } = workflow.createRun();
 
   let finalResult: any;
 
   // Start the workflow
   const initialResult = await start({
-    triggerData: { input: 'Create content about sustainable energy' },
+    triggerData: { input: "Create content about sustainable energy" },
   });
 
-  console.log('Initial workflow state:', initialResult.results);
+  console.log("Initial workflow state:", initialResult.results);
 
-  const promptAgentStepResult = initialResult.activePaths.get('promptAgent');
+  const promptAgentStepResult = initialResult.activePaths.get("promptAgent");
 
   // Check if promptAgent step is suspended
-  if (promptAgentStepResult?.status === 'suspended') {
-    console.log('Workflow suspended at promptAgent step');
-    console.log('Suspension payload:', promptAgentStepResult?.suspendPayload);
+  if (promptAgentStepResult?.status === "suspended") {
+    console.log("Workflow suspended at promptAgent step");
+    console.log("Suspension payload:", promptAgentStepResult?.suspendPayload);
 
     // Resume with human guidance
     const resumeResult1 = await workflow.resume({
       runId,
-      stepId: 'promptAgent',
+      stepId: "promptAgent",
       context: {
-        guidance: 'Focus more on solar and wind energy technologies',
+        guidance: "Focus more on solar and wind energy technologies",
       },
     });
 
-    console.log('Workflow resumed and continued to next steps');
+    console.log("Workflow resumed and continued to next steps");
 
     let improveResponseResumeAttempts = 0;
-    let improveResponseStatus = resumeResult1?.activePaths.get('improveResponse')?.status;
+    let improveResponseStatus =
+      resumeResult1?.activePaths.get("improveResponse")?.status;
 
     // Check if improveResponse step is suspended
-    while (improveResponseStatus === 'suspended') {
-      console.log('Workflow suspended at improveResponse step');
-      console.log('Suspension payload:', resumeResult1?.activePaths.get('improveResponse')?.suspendPayload);
+    while (improveResponseStatus === "suspended") {
+      console.log("Workflow suspended at improveResponse step");
+      console.log(
+        "Suspension payload:",
+        resumeResult1?.activePaths.get("improveResponse")?.suspendPayload,
+      );
 
       const improvedContent =
         improveResponseResumeAttempts < 3
           ? undefined
-          : 'Completely revised content about sustainable energy focusing on solar and wind technologies';
+          : "Completely revised content about sustainable energy focusing on solar and wind technologies";
 
       // Resume with human improvements
       finalResult = await workflow.resume({
         runId,
-        stepId: 'improveResponse',
+        stepId: "improveResponse",
         context: {
           improvedContent,
           resumeAttempts: improveResponseResumeAttempts,
@@ -336,10 +348,12 @@ async function runWorkflow() {
       });
 
       improveResponseResumeAttempts =
-        finalResult?.activePaths.get('improveResponse')?.suspendPayload?.resumeAttempts ?? 0;
-      improveResponseStatus = finalResult?.activePaths.get('improveResponse')?.status;
+        finalResult?.activePaths.get("improveResponse")?.suspendPayload
+          ?.resumeAttempts ?? 0;
+      improveResponseStatus =
+        finalResult?.activePaths.get("improveResponse")?.status;
 
-      console.log('Improved response result:', finalResult?.results);
+      console.log("Improved response result:", finalResult?.results);
     }
   }
   return finalResult;
@@ -347,8 +361,8 @@ async function runWorkflow() {
 
 // Run the workflow
 const result = await runWorkflow();
-console.log('Workflow completed');
-console.log('Final workflow result:', result);
+console.log("Workflow completed");
+console.log("Final workflow result:", result);
 ```
 
 ## Workflows (Legacy)

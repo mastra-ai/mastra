@@ -1,6 +1,6 @@
 ---
-title: 'voice.off()'
-description: 'Documentation for the off() method available in voice providers, which removes event listeners for voice events.'
+title: "voice.off()"
+description: "Documentation for the off() method available in voice providers, which removes event listeners for voice events."
 ---
 
 # voice.off()
@@ -10,13 +10,13 @@ The `off()` method removes event listeners previously registered with the `on()`
 ## Usage Example
 
 ```typescript
-import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
-import chalk from 'chalk';
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import chalk from "chalk";
 
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: 'gpt-4o-mini-realtime',
+    model: "gpt-4o-mini-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });
@@ -26,7 +26,7 @@ await voice.connect();
 
 // Define the callback function
 const writingCallback = ({ text, role }) => {
-  if (role === 'user') {
+  if (role === "user") {
     process.stdout.write(chalk.green(text));
   } else {
     process.stdout.write(chalk.blue(text));
@@ -34,10 +34,10 @@ const writingCallback = ({ text, role }) => {
 };
 
 // Register event listener
-voice.on('writing', writingCallback);
+voice.on("writing", writingCallback);
 
 // Later, when you want to remove the listener
-voice.off('writing', writingCallback);
+voice.off("writing", writingCallback);
 ```
 
 ## Parameters

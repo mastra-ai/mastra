@@ -3,8 +3,8 @@
 Make sure to update your `src/mastra/index.ts` file to include your new comprehensive memory agent:
 
 ```typescript
-import { Mastra } from '@mastra/core';
-import { memoryMasterAgent } from './agents/memory-agent';
+import { Mastra } from "@mastra/core";
+import { memoryMasterAgent } from "./agents/memory-agent";
 
 export const mastra: Mastra = new Mastra({
   agents: {

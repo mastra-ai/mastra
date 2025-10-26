@@ -10,15 +10,15 @@ Add this step to your workflow file:
 
 ```typescript
 const aiAnalysisStep = createStep({
-  id: 'ai-analysis',
-  description: 'AI-powered content analysis',
+  id: "ai-analysis",
+  description: "AI-powered content analysis",
   inputSchema: z.object({
     content: z.string(),
     type: z.string(),
     wordCount: z.number(),
     metadata: z.object({
       readingTime: z.number(),
-      difficulty: z.enum(['easy', 'medium', 'hard']),
+      difficulty: z.enum(["easy", "medium", "hard"]),
       processedAt: z.string(),
     }),
     summary: z.string(),
@@ -29,7 +29,7 @@ const aiAnalysisStep = createStep({
     wordCount: z.number(),
     metadata: z.object({
       readingTime: z.number(),
-      difficulty: z.enum(['easy', 'medium', 'hard']),
+      difficulty: z.enum(["easy", "medium", "hard"]),
       processedAt: z.string(),
     }),
     summary: z.string(),
@@ -58,8 +58,10 @@ Format as JSON: {"score": number, "feedback": "your feedback here"}
     `;
 
     // Get the contentAgent from the mastra instance.
-    const contentAgent = mastra.getAgent('contentAgent');
-    const { text } = await contentAgent.generate([{ role: 'user', content: prompt }]);
+    const contentAgent = mastra.getAgent("contentAgent");
+    const { text } = await contentAgent.generate([
+      { role: "user", content: prompt },
+    ]);
 
     // Parse AI response (with fallback)
     let aiAnalysis;
@@ -68,7 +70,7 @@ Format as JSON: {"score": number, "feedback": "your feedback here"}
     } catch {
       aiAnalysis = {
         score: 7,
-        feedback: 'AI analysis completed. ' + text,
+        feedback: "AI analysis completed. " + text,
       };
     }
 

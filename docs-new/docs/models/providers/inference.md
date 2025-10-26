@@ -1,6 +1,6 @@
 ---
-title: 'Inference '
-description: 'Use Inference models with Mastra. 9 models available.'
+title: "Inference "
+description: "Use Inference models with Mastra. 9 models available."
 ---
 
 # <img src="https://models.dev/logos/inference.svg" alt="Inference logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Inference
@@ -14,19 +14,19 @@ INFERENCE_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'inference/google/gemma-3',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "inference/google/gemma-3",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -159,13 +159,13 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    url: 'https://inference.net/v1',
-    modelId: 'google/gemma-3',
+    url: "https://inference.net/v1",
+    modelId: "google/gemma-3",
     apiKey: process.env.INFERENCE_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -175,10 +175,12 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'inference/qwen/qwen3-embedding-4b' : 'inference/google/gemma-3';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "inference/qwen/qwen3-embedding-4b"
+      : "inference/google/gemma-3";
   },
 });
 ```

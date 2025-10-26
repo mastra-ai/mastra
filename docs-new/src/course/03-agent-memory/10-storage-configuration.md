@@ -3,14 +3,14 @@
 Conversation history relies on a storage adapter to persist messages. By default, Mastra uses a LibSQL store that saves messages to a local database. You can configure this or use other storage options:
 
 ```typescript
-import { Memory } from '@mastra/memory';
-import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
 
 const memory = new Memory({
   // Configure storage
   storage: new LibSQLStore({
     config: {
-      url: 'file:../../memory.db', // Local database. Relative to the output folder
+      url: "file:../../memory.db", // Local database. Relative to the output folder
     },
   }),
   options: {

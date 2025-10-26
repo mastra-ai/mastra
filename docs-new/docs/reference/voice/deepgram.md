@@ -1,6 +1,6 @@
 ---
-title: 'Deepgram Voice'
-description: 'Documentation for the Deepgram voice implementation, providing text-to-speech and speech-to-text capabilities with multiple voice models and languages.'
+title: "Deepgram Voice"
+description: "Documentation for the Deepgram voice implementation, providing text-to-speech and speech-to-text capabilities with multiple voice models and languages."
 ---
 
 # Deepgram
@@ -10,7 +10,7 @@ The Deepgram voice implementation in Mastra provides text-to-speech (TTS) and sp
 ## Usage Example
 
 ```typescript
-import { DeepgramVoice } from '@mastra/voice-deepgram';
+import { DeepgramVoice } from "@mastra/voice-deepgram";
 
 // Initialize with default configuration (uses DEEPGRAM_API_KEY environment variable)
 const voice = new DeepgramVoice();
@@ -18,18 +18,18 @@ const voice = new DeepgramVoice();
 // Initialize with custom configuration
 const voice = new DeepgramVoice({
   speechModel: {
-    name: 'aura',
-    apiKey: 'your-api-key',
+    name: "aura",
+    apiKey: "your-api-key",
   },
   listeningModel: {
-    name: 'nova-2',
-    apiKey: 'your-api-key',
+    name: "nova-2",
+    apiKey: "your-api-key",
   },
-  speaker: 'asteria-en',
+  speaker: "asteria-en",
 });
 
 // Text-to-Speech
-const audioStream = await voice.speak('Hello, world!');
+const audioStream = await voice.speak("Hello, world!");
 
 // Speech-to-Text
 const transcript = await voice.listen(audioStream);

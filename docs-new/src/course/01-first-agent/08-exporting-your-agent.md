@@ -5,21 +5,21 @@ To make your agent available to the playground, you need to export it through th
 First, import the necessary dependencies and your agent:
 
 ```typescript
-import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
-import { LibSQLStore } from '@mastra/libsql';
-import { financialAgent } from './agents/financial-agent';
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
+import { financialAgent } from "./agents/financial-agent";
 
 export const mastra = new Mastra({
   agents: {
     financialAgent,
   },
   storage: new LibSQLStore({
-    url: ':memory:',
+    url: ":memory:",
   }),
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
 });
 ```

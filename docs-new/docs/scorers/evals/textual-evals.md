@@ -1,6 +1,6 @@
 ---
-title: 'Textual Evals'
-description: 'Understand how Mastra uses LLM-as-judge methodology to evaluate text quality.'
+title: "Textual Evals"
+description: "Understand how Mastra uses LLM-as-judge methodology to evaluate text quality."
 sidebar_position: 2
 ---
 

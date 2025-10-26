@@ -1,5 +1,5 @@
 ---
-title: 'CouchbaseVector'
+title: "CouchbaseVector"
 description: Documentation for the CouchbaseVector class in Mastra, which provides vector search using Couchbase Vector Search.
 sidebar_position: 4
 ---
@@ -22,7 +22,7 @@ npm install @mastra/couchbase
 ## Usage Example
 
 ```typescript copy showLineNumbers
-import { CouchbaseVector } from '@mastra/couchbase';
+import { CouchbaseVector } from "@mastra/couchbase";
 
 const store = new CouchbaseVector({
   connectionString: process.env.COUCHBASE_CONNECTION_STRING,
@@ -208,7 +208,7 @@ Returns:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
+  metric: "cosine" | "euclidean" | "dotproduct";
 }
 ```
 
@@ -311,17 +311,19 @@ The store throws typed errors that can be caught:
 ```typescript copy
 try {
   await store.query({
-    indexName: 'my_index',
+    indexName: "my_index",
     queryVector: queryVector,
   });
 } catch (error) {
   // Handle specific error cases
-  if (error.message.includes('Invalid index name')) {
-    console.error('Index name must start with a letter or underscore and contain only valid characters.');
-  } else if (error.message.includes('Index not found')) {
-    console.error('The specified index does not exist');
+  if (error.message.includes("Invalid index name")) {
+    console.error(
+      "Index name must start with a letter or underscore and contain only valid characters.",
+    );
+  } else if (error.message.includes("Index not found")) {
+    console.error("The specified index does not exist");
   } else {
-    console.error('Vector store error:', error.message);
+    console.error("Vector store error:", error.message);
   }
 }
 ```

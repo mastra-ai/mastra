@@ -1,6 +1,6 @@
 ---
-title: 'Create a custom eval'
-description: 'Mastra allows you to create your own evals, here is how.'
+title: "Create a custom eval"
+description: "Mastra allows you to create your own evals, here is how."
 sidebar_position: 3
 ---
 

@@ -20,7 +20,7 @@ const workflows = await mastraClient.getLegacyWorkflows();
 Get an instance of a specific legacy workflow:
 
 ```typescript
-const workflow = mastraClient.getLegacyWorkflow('workflow-id');
+const workflow = mastraClient.getLegacyWorkflow("workflow-id");
 ```
 
 ## Legacy Workflow Methods
@@ -43,8 +43,8 @@ const { runId } = workflow.createRun();
 const result = await workflow.startAsync({
   runId,
   triggerData: {
-    param1: 'value1',
-    param2: 'value2',
+    param1: "value1",
+    param2: "value2",
   },
 });
 ```
@@ -58,8 +58,8 @@ const { runId } = createRun({ runId: prevRunId });
 
 const result = await workflow.resumeAsync({
   runId,
-  stepId: 'step-id',
-  contextData: { key: 'value' },
+  stepId: "step-id",
+  contextData: { key: "value" },
 });
 ```
 
@@ -70,13 +70,13 @@ Watch legacy workflow transitions
 ```typescript
 try {
   // Get workflow instance
-  const workflow = mastraClient.getLegacyWorkflow('workflow-id');
+  const workflow = mastraClient.getLegacyWorkflow("workflow-id");
 
   // Create a workflow run
   const { runId } = workflow.createRun();
 
   // Watch workflow run
-  workflow.watch({ runId }, record => {
+  workflow.watch({ runId }, (record) => {
     // Every new record is the latest transition state of the workflow run
 
     console.log({
@@ -91,7 +91,7 @@ try {
   workflow.start({
     runId,
     triggerData: {
-      city: 'New York',
+      city: "New York",
     },
   });
 } catch (e) {
@@ -109,7 +109,7 @@ try {
   const { run } = createRun({ runId: prevRunId });
 
   //Watch run
-  workflow.watch({ runId }, record => {
+  workflow.watch({ runId }, (record) => {
     // Every new record is the latest transition state of the workflow run
 
     console.log({
@@ -123,8 +123,8 @@ try {
   //resume run
   workflow.resume({
     runId,
-    stepId: 'step-id',
-    contextData: { key: 'value' },
+    stepId: "step-id",
+    contextData: { key: "value" },
   });
 } catch (e) {
   console.error(e);

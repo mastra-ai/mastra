@@ -1,6 +1,6 @@
 ---
-title: 'Memory.getThreadsByResourceIdPaginated() '
-description: 'Documentation for the `Memory.getThreadsByResourceIdPaginated()` method in Mastra, which retrieves threads associated with a specific resource ID with pagination support.'
+title: "Memory.getThreadsByResourceIdPaginated() "
+description: "Documentation for the `Memory.getThreadsByResourceIdPaginated()` method in Mastra, which retrieves threads associated with a specific resource ID with pagination support."
 ---
 
 # Memory.getThreadsByResourceIdPaginated()
@@ -11,7 +11,7 @@ The `.getThreadsByResourceIdPaginated()` method retrieves threads associated wit
 
 ```typescript copy
 await memory.getThreadsByResourceIdPaginated({
-  resourceId: 'user-123',
+  resourceId: "user-123",
   page: 0,
   perPage: 10,
 });
@@ -69,9 +69,9 @@ description: "A promise that resolves to paginated thread results with metadata"
 ## Extended usage example
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
-const agent = mastra.getAgent('agent');
+const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
 let currentPage = 0;
@@ -79,19 +79,19 @@ let hasMorePages = true;
 
 while (hasMorePages) {
   const threads = await memory?.getThreadsByResourceIdPaginated({
-    resourceId: 'user-123',
+    resourceId: "user-123",
     page: currentPage,
     perPage: 25,
-    orderBy: 'createdAt',
-    sortDirection: 'ASC',
+    orderBy: "createdAt",
+    sortDirection: "ASC",
   });
 
   if (!threads) {
-    console.log('No threads');
+    console.log("No threads");
     break;
   }
 
-  threads.threads.forEach(thread => {
+  threads.threads.forEach((thread) => {
     console.log(`Thread: ${thread.id}, Created: ${thread.createdAt}`);
   });
 

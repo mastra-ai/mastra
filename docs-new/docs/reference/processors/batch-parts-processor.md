@@ -1,6 +1,6 @@
 ---
-title: 'Batch Parts Processor'
-description: 'Documentation for the BatchPartsProcessor in Mastra, which batches multiple stream parts together to reduce frequency of emissions.'
+title: "Batch Parts Processor"
+description: "Documentation for the BatchPartsProcessor in Mastra, which batches multiple stream parts together to reduce frequency of emissions."
 ---
 
 # BatchPartsProcessor
@@ -10,7 +10,7 @@ The `BatchPartsProcessor` is an **output processor** that batches multiple strea
 ## Usage example
 
 ```typescript copy
-import { BatchPartsProcessor } from '@mastra/core/processors';
+import { BatchPartsProcessor } from "@mastra/core/processors";
 
 const processor = new BatchPartsProcessor({
   batchSize: 5,
@@ -88,14 +88,14 @@ isOptional: false,
 ## Extended usage example
 
 ```typescript filename="src/mastra/agents/batched-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { BatchPartsProcessor } from '@mastra/core/processors';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { BatchPartsProcessor } from "@mastra/core/processors";
 
 export const agent = new Agent({
-  name: 'batched-agent',
-  instructions: 'You are a helpful assistant',
-  model: openai('gpt-4o-mini'),
+  name: "batched-agent",
+  instructions: "You are a helpful assistant",
+  model: openai("gpt-4o-mini"),
   outputProcessors: [
     new BatchPartsProcessor({
       batchSize: 5,

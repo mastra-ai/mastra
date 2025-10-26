@@ -1,5 +1,5 @@
 ---
-title: 'Answer Relevancy'
+title: "Answer Relevancy"
 description: Documentation for the Answer Relevancy Scorer in Mastra, which evaluates how well LLM outputs address the input query.
 ---
 

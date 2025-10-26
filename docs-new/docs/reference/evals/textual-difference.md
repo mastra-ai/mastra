@@ -1,5 +1,5 @@
 ---
-title: 'Textual Difference'
+title: "Textual Difference"
 description: Documentation for the Textual Difference Metric in Mastra, which measures textual differences between strings using sequence matching.
 ---
 
@@ -16,11 +16,14 @@ The `TextualDifferenceMetric` class uses sequence matching to measure the textua
 ## Basic Usage
 
 ```typescript
-import { TextualDifferenceMetric } from '@mastra/evals/nlp';
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
 
 const metric = new TextualDifferenceMetric();
 
-const result = await metric.measure('The quick brown fox', 'The fast brown fox');
+const result = await metric.measure(
+  "The quick brown fox",
+  "The fast brown fox",
+);
 
 console.log(result.score); // Similarity ratio from 0-1
 console.log(result.info); // Detailed change metrics
@@ -142,11 +145,14 @@ Final score: `(similarity_ratio * confidence) * scale`
 ## Example with Analysis
 
 ```typescript
-import { TextualDifferenceMetric } from '@mastra/evals/nlp';
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
 
 const metric = new TextualDifferenceMetric();
 
-const result = await metric.measure('Hello world! How are you?', 'Hello there! How is it going?');
+const result = await metric.measure(
+  "Hello world! How are you?",
+  "Hello there! How is it going?",
+);
 
 // Example output:
 // {

@@ -1,5 +1,5 @@
 ---
-title: 'QdrantVector'
+title: "QdrantVector"
 description: Documentation for integrating Qdrant with Mastra, a vector similarity search engine for managing vectors and payloads.
 sidebar_position: 11
 ---
@@ -142,7 +142,7 @@ Returns:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
+  metric: "cosine" | "euclidean" | "dotproduct";
 }
 ```
 
@@ -221,7 +221,7 @@ The store throws typed errors that can be caught:
 ```typescript copy
 try {
   await store.query({
-    indexName: 'index_name',
+    indexName: "index_name",
     queryVector: queryVector,
   });
 } catch (error) {

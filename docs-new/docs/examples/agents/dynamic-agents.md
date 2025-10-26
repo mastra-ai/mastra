@@ -20,27 +20,28 @@ OPENAI_API_KEY=<your-api-key>
 Create an agent that returns technical support for mastra cloud using dynamic values provided via `runtimeContext`.
 
 ```typescript filename="src/mastra/agents/example-support-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
 export const supportAgent = new Agent({
-  name: 'support-agent',
-  description: 'Returns technical support for mastra cloud based on runtime context',
+  name: "support-agent",
+  description:
+    "Returns technical support for mastra cloud based on runtime context",
   instructions: async ({ runtimeContext }) => {
-    const userTier = runtimeContext.get('user-tier');
-    const language = runtimeContext.get('language');
+    const userTier = runtimeContext.get("user-tier");
+    const language = runtimeContext.get("language");
 
     return `You are a customer support agent for [Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/overview).
     The current user is on the ${userTier} tier.
 
     Support guidance:
-    ${userTier === 'free' ? '- Give basic help and link to documentation.' : ''}
-    ${userTier === 'pro' ? '- Offer detailed technical support and best practices.' : ''}
-    ${userTier === 'enterprise' ? '- Provide priority assistance with tailored solutions.' : ''}
+    ${userTier === "free" ? "- Give basic help and link to documentation." : ""}
+    ${userTier === "pro" ? "- Offer detailed technical support and best practices." : ""}
+    ${userTier === "enterprise" ? "- Provide priority assistance with tailored solutions." : ""}
 
     Always respond in ${language}.`;
   },
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
 });
 ```
 
@@ -51,9 +52,9 @@ export const supportAgent = new Agent({
 To use an agent, register it in your main Mastra instance.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from "@mastra/core/mastra";
 
-import { supportAgent } from './agents/example-support-agent';
+import { supportAgent } from "./agents/example-support-agent";
 
 export const mastra = new Mastra({
   // ...
@@ -66,25 +67,28 @@ export const mastra = new Mastra({
 Set `RuntimeContext` using `set()`, then use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt passing in the `runtimeContext`.
 
 ```typescript filename="src/test-support-agent.ts" showLineNumbers copy
-import 'dotenv/config';
+import "dotenv/config";
 
-import { mastra } from './mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { mastra } from "./mastra";
+import { RuntimeContext } from "@mastra/core/runtime-context";
 
 type SupportRuntimeContext = {
-  'user-tier': 'free' | 'pro' | 'enterprise';
-  language: 'en' | 'es' | 'ja';
+  "user-tier": "free" | "pro" | "enterprise";
+  language: "en" | "es" | "ja";
 };
 
 const runtimeContext = new RuntimeContext<SupportRuntimeContext>();
-runtimeContext.set('user-tier', 'free');
-runtimeContext.set('language', 'ja');
+runtimeContext.set("user-tier", "free");
+runtimeContext.set("language", "ja");
 
-const agent = mastra.getAgent('supportAgent');
+const agent = mastra.getAgent("supportAgent");
 
-const response = await agent.generate('Can Mastra Cloud handle long-running requests?', {
-  runtimeContext,
-});
+const response = await agent.generate(
+  "Can Mastra Cloud handle long-running requests?",
+  {
+    runtimeContext,
+  },
+);
 
 console.log(response.text);
 ```

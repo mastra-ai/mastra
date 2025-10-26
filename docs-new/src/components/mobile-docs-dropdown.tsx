@@ -1,47 +1,52 @@
-import React from 'react';
-import { useLocation } from '@docusaurus/router';
-import Link from '@docusaurus/Link';
-import { ChevronDown, Check } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown';
-import { Button } from './ui/button';
-import { cn } from '@site/src/css/utils';
+import React from "react";
+import { useLocation } from "@docusaurus/router";
+import Link from "@docusaurus/Link";
+import { ChevronDown, Check } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown";
+import { Button } from "./ui/button";
+import { cn } from "@site/src/css/utils";
 
 const docsTabs = [
   {
-    id: 'Docs',
-    label: 'Docs',
-    href: '/docs',
-    basePath: '/docs',
+    id: "Docs",
+    label: "Docs",
+    href: "/docs",
+    basePath: "/docs",
   },
   {
-    id: 'Models',
-    label: 'Models',
-    href: '/docs/models',
-    basePath: '/docs/models',
+    id: "Models",
+    label: "Models",
+    href: "/docs/models",
+    basePath: "/docs/models",
   },
   {
-    id: 'Examples',
-    label: 'Examples',
-    href: '/docs/examples',
-    basePath: '/docs/examples',
+    id: "Examples",
+    label: "Examples",
+    href: "/docs/examples",
+    basePath: "/docs/examples",
   },
   {
-    id: 'Guides',
-    label: 'Guides & Migrations',
-    href: '/docs/guides',
-    basePath: '/docs/guides',
+    id: "Guides",
+    label: "Guides & Migrations",
+    href: "/docs/guides",
+    basePath: "/docs/guides",
   },
   {
-    id: 'Reference',
-    label: 'Reference',
-    href: '/docs/reference',
-    basePath: '/docs/reference',
+    id: "Reference",
+    label: "Reference",
+    href: "/docs/reference",
+    basePath: "/docs/reference",
   },
   {
-    id: 'Showcase',
-    label: 'Showcase',
-    href: '/showcase',
-    basePath: '/showcase',
+    id: "Showcase",
+    label: "Showcase",
+    href: "/showcase",
+    basePath: "/showcase",
   },
 ];
 
@@ -51,11 +56,18 @@ export function MobileDocsDropdown() {
   const [open, setOpen] = React.useState(false);
 
   const activeTab =
-    docsTabs.find(tab => {
-      if (pathname.startsWith(tab.basePath + '/') || pathname === tab.basePath) {
-        if (tab.basePath === '/docs') {
-          const otherTabPaths = docsTabs.filter(t => t.id !== 'Docs').map(t => t.basePath);
-          return !otherTabPaths.some(path => pathname.startsWith(path + '/') || pathname === path);
+    docsTabs.find((tab) => {
+      if (
+        pathname.startsWith(tab.basePath + "/") ||
+        pathname === tab.basePath
+      ) {
+        if (tab.basePath === "/docs") {
+          const otherTabPaths = docsTabs
+            .filter((t) => t.id !== "Docs")
+            .map((t) => t.basePath);
+          return !otherTabPaths.some(
+            (path) => pathname.startsWith(path + "/") || pathname === path,
+          );
         }
         return true;
       }
@@ -72,8 +84,8 @@ export function MobileDocsDropdown() {
           <span>{activeTab.label}</span>
           <ChevronDown
             className={cn(
-              'size-4 text-(--mastra-text-quaternary) transition-transform duration-200',
-              open ? 'rotate-180' : 'rotate-0',
+              "size-4 text-(--mastra-text-quaternary) transition-transform duration-200",
+              open ? "rotate-180" : "rotate-0",
             )}
           />
         </Button>
@@ -81,21 +93,23 @@ export function MobileDocsDropdown() {
       <DropdownMenuContent
         align="start"
         className="z-200"
-        style={{ width: 'var(--radix-dropdown-menu-trigger-width)' }}
+        style={{ width: "var(--radix-dropdown-menu-trigger-width)" }}
       >
-        {docsTabs.map(tab => {
+        {docsTabs.map((tab) => {
           const isActive = tab.id === activeTab.id;
           return (
             <DropdownMenuItem key={tab.id} asChild>
               <Link
                 to={tab.href}
                 className={cn(
-                  'flex items-center justify-between w-full no-underline',
-                  isActive && 'text-(--mastra-text-primary) font-medium',
+                  "flex items-center justify-between w-full no-underline",
+                  isActive && "text-(--mastra-text-primary) font-medium",
                 )}
               >
                 <span>{tab.label}</span>
-                {isActive && <Check className="size-4 text-(--mastra-green-accent-2)" />}
+                {isActive && (
+                  <Check className="size-4 text-(--mastra-green-accent-2)" />
+                )}
               </Link>
             </DropdownMenuItem>
           );

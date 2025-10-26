@@ -5,26 +5,26 @@ When building a frontend application that uses Mastra memory, it's important to 
 Here's a simplified example of how to handle this in a React application:
 
 ```tsx
-import { useState } from 'react';
-import { memoryAgent } from './agents';
+import { useState } from "react";
+import { memoryAgent } from "./agents";
 
 function ChatApp() {
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
 
   const handleSendMessage = async () => {
     // Add user message to UI
-    setMessages([...messages, { role: 'user', content: input }]);
+    setMessages([...messages, { role: "user", content: input }]);
 
     // Only send the newest message to the agent
     const response = await memoryAgent.stream(input, {
-      resourceId: 'user_123',
-      threadId: 'conversation_456',
+      resourceId: "user_123",
+      threadId: "conversation_456",
     });
 
     // Add agent response to UI
-    setMessages([...messages, { role: 'assistant', content: response }]);
-    setInput('');
+    setMessages([...messages, { role: "assistant", content: response }]);
+    setInput("");
   };
 
   return (
@@ -41,8 +41,8 @@ function ChatApp() {
       {/* Input for new messages */}
       <input
         value={input}
-        onChange={e => setInput(e.target.value)}
-        onKeyPress={e => e.key === 'Enter' && handleSendMessage()}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
       />
       <button onClick={handleSendMessage}>Send</button>
     </div>

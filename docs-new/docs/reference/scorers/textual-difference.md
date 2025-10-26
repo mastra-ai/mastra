@@ -1,5 +1,5 @@
 ---
-title: 'Textual Difference'
+title: "Textual Difference"
 description: Documentation for the Textual Difference Scorer in Mastra, which measures textual differences between strings using sequence matching.
 ---
 

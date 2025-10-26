@@ -6,7 +6,7 @@ Now, let's update your MCP configuration in `src/mastra/agents/index.ts` to incl
 const mcp = new MCPClient({
   servers: {
     zapier: {
-      url: new URL(process.env.ZAPIER_MCP_URL || ''),
+      url: new URL(process.env.ZAPIER_MCP_URL || ""),
     },
   },
 });

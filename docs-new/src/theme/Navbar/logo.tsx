@@ -8,7 +8,13 @@ export const Logo = () => {
       xmlns="http://www.w3.org/2000/svg"
       className="w-[5.5rem] shrink-0 md:w-[7.5rem] md:h-[2rem]"
     >
-      <circle cx="16.6532" cy="16.9999" r="14.0966" stroke="currentColor" strokeWidth="1.16026" />
+      <circle
+        cx="16.6532"
+        cy="16.9999"
+        r="14.0966"
+        stroke="currentColor"
+        strokeWidth="1.16026"
+      />
       <ellipse
         cx="16.6533"
         cy="17"
@@ -18,9 +24,21 @@ export const Logo = () => {
         stroke="currentColor"
         strokeWidth="1.16026"
       />
-      <path d="M10.8984 17.0508H22.483" stroke="currentColor" strokeWidth="1.16026" />
-      <path d="M13.748 19.9932L19.6339 14.1074" stroke="currentColor" strokeWidth="1.16026" />
-      <path d="M19.6328 19.9932L13.747 14.1074" stroke="currentColor" strokeWidth="1.16026" />
+      <path
+        d="M10.8984 17.0508H22.483"
+        stroke="currentColor"
+        strokeWidth="1.16026"
+      />
+      <path
+        d="M13.748 19.9932L19.6339 14.1074"
+        stroke="currentColor"
+        strokeWidth="1.16026"
+      />
+      <path
+        d="M19.6328 19.9932L13.747 14.1074"
+        stroke="currentColor"
+        strokeWidth="1.16026"
+      />
       <path
         fillRule="evenodd"
         clipRule="evenodd"

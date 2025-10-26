@@ -20,26 +20,26 @@ Mastra's RAG system provides:
 To implement RAG, you process your documents into chunks, create embeddings, store them in a vector database, and then retrieve relevant context at query time.
 
 ```ts showLineNumbers copy
-import { embedMany } from 'ai';
-import { openai } from '@ai-sdk/openai';
-import { PgVector } from '@mastra/pg';
-import { MDocument } from '@mastra/rag';
-import { z } from 'zod';
+import { embedMany } from "ai";
+import { openai } from "@ai-sdk/openai";
+import { PgVector } from "@mastra/pg";
+import { MDocument } from "@mastra/rag";
+import { z } from "zod";
 
 // 1. Initialize document
 const doc = MDocument.fromText(`Your document text here...`);
 
 // 2. Create chunks
 const chunks = await doc.chunk({
-  strategy: 'recursive',
+  strategy: "recursive",
   size: 512,
   overlap: 50,
 });
 
 // 3. Generate embeddings; we need to pass the text of each chunk
 const { embeddings } = await embedMany({
-  values: chunks.map(chunk => chunk.text),
-  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map((chunk) => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
 });
 
 // 4. Store in vector database
@@ -47,18 +47,18 @@ const pgVector = new PgVector({
   connectionString: process.env.POSTGRES_CONNECTION_STRING,
 });
 await pgVector.upsert({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   vectors: embeddings,
 }); // using an index name of 'embeddings'
 
 // 5. Query similar chunks
 const results = await pgVector.query({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   queryVector: queryVector,
   topK: 3,
 }); // queryVector is the embedding of the query
 
-console.log('Similar chunks:', results);
+console.log("Similar chunks:", results);
 ```
 
 This example shows the essentials: initialize a document, create chunks, generate embeddings, store them, and query for similar content.

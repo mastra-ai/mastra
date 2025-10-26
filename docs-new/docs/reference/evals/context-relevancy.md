@@ -1,5 +1,5 @@
 ---
-title: 'Context Relevancy'
+title: "Context Relevancy"
 description: Documentation for the Context Relevancy Metric, which evaluates the relevance of retrieved context in RAG pipelines.
 ---
 
@@ -16,24 +16,24 @@ The `ContextRelevancyMetric` class evaluates the quality of your RAG (Retrieval-
 ## Basic Usage
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { ContextRelevancyMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ContextRelevancyMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new ContextRelevancyMetric(model, {
   context: [
-    'All data is encrypted at rest and in transit',
-    'Two-factor authentication is mandatory',
-    'The platform supports multiple languages',
-    'Our offices are located in San Francisco',
+    "All data is encrypted at rest and in transit",
+    "Two-factor authentication is mandatory",
+    "The platform supports multiple languages",
+    "Our offices are located in San Francisco",
   ],
 });
 
 const result = await metric.measure(
   "What are our product's security features?",
-  'Our product uses encryption and requires 2FA.',
+  "Our product uses encryption and requires 2FA.",
 );
 
 console.log(result.score); // Score from 0-1
@@ -159,24 +159,27 @@ Final score: `(relevant_statements / total_statements) * scale`
 ## Example with Custom Configuration
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { ContextRelevancyMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ContextRelevancyMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new ContextRelevancyMetric(model, {
   scale: 100, // Use 0-100 scale instead of 0-1
   context: [
-    'Basic plan costs $10/month',
-    'Pro plan includes advanced features at $30/month',
-    'Enterprise plan has custom pricing',
-    'Our company was founded in 2020',
-    'We have offices worldwide',
+    "Basic plan costs $10/month",
+    "Pro plan includes advanced features at $30/month",
+    "Enterprise plan has custom pricing",
+    "Our company was founded in 2020",
+    "We have offices worldwide",
   ],
 });
 
-const result = await metric.measure('What are our pricing plans?', 'We offer Basic, Pro, and Enterprise plans.');
+const result = await metric.measure(
+  "What are our pricing plans?",
+  "We offer Basic, Pro, and Enterprise plans.",
+);
 
 // Example output:
 // {

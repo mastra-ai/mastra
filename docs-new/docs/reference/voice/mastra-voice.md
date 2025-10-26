@@ -1,6 +1,6 @@
 ---
-title: 'MastraVoice'
-description: 'Documentation for the MastraVoice abstract base class, which defines the core interface for all voice services in Mastra, including speech-to-speech capabilities.'
+title: "MastraVoice"
+description: "Documentation for the MastraVoice abstract base class, which defines the core interface for all voice services in Mastra, including speech-to-speech capabilities."
 ---
 
 # MastraVoice
@@ -10,7 +10,7 @@ The MastraVoice class is an abstract base class that defines the core interface 
 ## Usage Example
 
 ```typescript
-import { MastraVoice } from '@mastra/core/voice';
+import { MastraVoice } from "@mastra/core/voice";
 
 // Create a voice provider implementation
 class MyVoiceProvider extends MastraVoice {
@@ -40,11 +40,16 @@ class MyVoiceProvider extends MastraVoice {
     // Implement text-to-speech conversion
   }
 
-  async listen(audioStream: NodeJS.ReadableStream, options?: unknown): Promise<string | NodeJS.ReadableStream | void> {
+  async listen(
+    audioStream: NodeJS.ReadableStream,
+    options?: unknown,
+  ): Promise<string | NodeJS.ReadableStream | void> {
     // Implement speech-to-text conversion
   }
 
-  async getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: unknown }>> {
+  async getSpeakers(): Promise<
+    Array<{ voiceId: string; [key: string]: unknown }>
+  > {
     // Return list of available voices
   }
 

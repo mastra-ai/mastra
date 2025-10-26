@@ -1,6 +1,6 @@
 ---
-title: 'Agent.getWorkflows() '
-description: 'Documentation for the `Agent.getWorkflows()` method in Mastra agents, which retrieves the workflows that the agent can execute.'
+title: "Agent.getWorkflows() "
+description: "Documentation for the `Agent.getWorkflows()` method in Mastra agents, which retrieves the workflows that the agent can execute."
 ---
 
 # Agent.getWorkflows()

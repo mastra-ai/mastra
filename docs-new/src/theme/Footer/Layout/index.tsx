@@ -1,6 +1,6 @@
-import type { Props } from '@theme/Footer/Layout';
-import { type ReactNode } from 'react';
-import { Logo } from '../../Navbar/logo';
+import type { Props } from "@theme/Footer/Layout";
+import { type ReactNode } from "react";
+import { Logo } from "../../Navbar/logo";
 
 export default function FooterLayout({ links, copyright }: Props): ReactNode {
   return (

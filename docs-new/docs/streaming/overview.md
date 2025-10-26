@@ -1,6 +1,6 @@
 ---
-title: 'Streaming Overview '
-description: 'Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced.'
+title: "Streaming Overview "
+description: "Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced."
 ---
 
 # Streaming Overview
@@ -23,9 +23,11 @@ You can pass a single string for simple prompts, an array of strings when provid
 A `textStream` breaks the response into chunks as it's generated, allowing output to stream progressively instead of arriving all at once. Iterate over the `textStream` using a `for await` loop to inspect each stream chunk.
 
 ```typescript {3,7} showLineNumbers copy
-const testAgent = mastra.getAgent('testAgent');
+const testAgent = mastra.getAgent("testAgent");
 
-const stream = await testAgent.stream([{ role: 'user', content: 'Help me organize my day' }]);
+const stream = await testAgent.stream([
+  { role: "user", content: "Help me organize my day" },
+]);
 
 for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
@@ -61,9 +63,12 @@ AI SDK v5 uses `LanguageModelV2` for the model providers. If you are getting an 
 For integration with AI SDK v5, use `format` 'aisdk' to get an `AISDKV5OutputStream`:
 
 ```typescript {5} showLineNumbers copy
-const testAgent = mastra.getAgent('testAgent');
+const testAgent = mastra.getAgent("testAgent");
 
-const stream = await testAgent.stream([{ role: 'user', content: 'Help me organize my day' }], { format: 'aisdk' });
+const stream = await testAgent.stream(
+  [{ role: "user", content: "Help me organize my day" }],
+  { format: "aisdk" },
+);
 
 for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
@@ -83,7 +88,7 @@ const run = await testWorkflow.createRunAsync();
 
 const stream = await run.streamVNext({
   inputData: {
-    value: 'initial data',
+    value: "initial data",
   },
 });
 

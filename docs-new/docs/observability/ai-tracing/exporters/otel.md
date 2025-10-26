@@ -1,6 +1,6 @@
 ---
-title: 'OpenTelemetry Exporter '
-description: 'Send AI traces to any OpenTelemetry-compatible observability platform'
+title: "OpenTelemetry Exporter "
+description: "Send AI traces to any OpenTelemetry-compatible observability platform"
 ---
 
 # OpenTelemetry Exporter
@@ -52,21 +52,21 @@ npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-http
 [Dash0](https://www.dash0.com/) provides real-time observability with automatic insights.
 
 ```typescript filename="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { OtelExporter } from '@mastra/otel-exporter';
+import { Mastra } from "@mastra/core";
+import { OtelExporter } from "@mastra/otel-exporter";
 
 export const mastra = new Mastra({
   observability: {
     configs: {
       otel: {
-        serviceName: 'my-service',
+        serviceName: "my-service",
         exporters: [
           new OtelExporter({
             provider: {
               dash0: {
                 apiKey: process.env.DASH0_API_KEY,
                 endpoint: process.env.DASH0_ENDPOINT, // e.g., 'ingress.us-west-2.aws.dash0.com:4317'
-                dataset: 'production', // Optional dataset name
+                dataset: "production", // Optional dataset name
               },
             },
           }),
@@ -92,7 +92,7 @@ new OtelExporter({
   provider: {
     signoz: {
       apiKey: process.env.SIGNOZ_API_KEY,
-      region: 'us', // 'us' | 'eu' | 'in'
+      region: "us", // 'us' | 'eu' | 'in'
       // endpoint: 'https://my-signoz.example.com', // For self-hosted
     },
   },
@@ -123,7 +123,7 @@ new OtelExporter({
   provider: {
     traceloop: {
       apiKey: process.env.TRACELOOP_API_KEY,
-      destinationId: 'my-destination', // Optional
+      destinationId: "my-destination", // Optional
     },
   },
 });
@@ -152,10 +152,10 @@ For other OTEL-compatible platforms or custom collectors:
 new OtelExporter({
   provider: {
     custom: {
-      endpoint: 'https://your-collector.example.com/v1/traces',
-      protocol: 'http/protobuf', // 'http/json' | 'http/protobuf' | 'grpc'
+      endpoint: "https://your-collector.example.com/v1/traces",
+      protocol: "http/protobuf", // 'http/json' | 'http/protobuf' | 'grpc'
       headers: {
-        'x-api-key': process.env.API_KEY,
+        "x-api-key": process.env.API_KEY,
       },
     },
   },
@@ -178,7 +178,7 @@ new OtelExporter({
   batchSize: 100, // Number of spans per batch
 
   // Debug options
-  logLevel: 'info', // 'debug' | 'info' | 'warn' | 'error'
+  logLevel: "info", // 'debug' | 'info' | 'warn' | 'error'
 });
 ```
 

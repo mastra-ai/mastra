@@ -4,9 +4,9 @@ When using memory in your own application (outside the playground), you need to 
 
 ```typescript
 // Example of using memory in your application
-const response = await memoryAgent.stream('Hello, my name is Alice.', {
-  resourceId: 'user_alice',
-  threadId: 'conversation_123',
+const response = await memoryAgent.stream("Hello, my name is Alice.", {
+  resourceId: "user_alice",
+  threadId: "conversation_123",
 });
 ```
 

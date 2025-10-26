@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.getTelemetry() '
-description: 'Documentation for the `Mastra.getTelemetry()` method in Mastra, which retrieves the configured telemetry instance.'
+title: "Mastra.getTelemetry() "
+description: "Documentation for the `Mastra.getTelemetry()` method in Mastra, which retrieves the configured telemetry instance."
 ---
 
 # Mastra.getTelemetry()

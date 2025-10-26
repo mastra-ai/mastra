@@ -1,7 +1,7 @@
 // Temporarily disables all CSS transitions on the page.
 // Based on: https://paco.me/writing/disable-theme-transitions
 export function disableTransitions(): () => void {
-  const css = document.createElement('style');
+  const css = document.createElement("style");
   css.appendChild(
     document.createTextNode(
       `* {

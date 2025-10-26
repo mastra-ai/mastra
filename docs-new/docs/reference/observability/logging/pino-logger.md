@@ -1,5 +1,5 @@
 ---
-title: 'PinoLogger '
+title: "PinoLogger "
 description: Documentation for PinoLogger, which provides methods to record events at various severity levels.
 ---
 
@@ -12,14 +12,14 @@ When deploying to Mastra Cloud, logs are displayed on the [Logs](/docs/mastra-cl
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
 
 export const mastra = new Mastra({
   // ...
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
 });
 ```
@@ -63,22 +63,22 @@ description: "Custom Pino formatters for log serialization.",
 Writes structured logs to a file using the `FileTransport`. The logger accepts a plain message as the first argument and structured metadata as the second argument. These are internally converted to a `BaseLogMessage` and persisted to the configured file path.
 
 ```typescript filename="src/mastra/loggers/file-transport.ts" showLineNumbers copy
-import { FileTransport } from '@mastra/loggers/file';
-import { PinoLogger } from '@mastra/loggers/pino';
+import { FileTransport } from "@mastra/loggers/file";
+import { PinoLogger } from "@mastra/loggers/pino";
 
 export const fileLogger = new PinoLogger({
-  name: 'Mastra',
-  transports: { file: new FileTransport({ path: 'test-dir/test.log' }) },
-  level: 'warn',
+  name: "Mastra",
+  transports: { file: new FileTransport({ path: "test-dir/test.log" }) },
+  level: "warn",
 });
 ```
 
 ### File transport usage
 
 ```typescript showLineNumbers copy
-fileLogger.warn('Low disk space', {
-  destinationPath: 'system',
-  type: 'WORKFLOW',
+fileLogger.warn("Low disk space", {
+  destinationPath: "system",
+  type: "WORKFLOW",
 });
 ```
 
@@ -87,29 +87,29 @@ fileLogger.warn('Low disk space', {
 Streams structured logs to a remote Redis list using the `UpstashTransport`. The logger accepts a string message and a structured metadata object. This enables centralized logging for distributed environments, supporting filtering by `destinationPath`, `type`, and `runId`.
 
 ```typescript filename="src/mastra/loggers/upstash-transport.ts" showLineNumbers copy
-import { UpstashTransport } from '@mastra/loggers/upstash';
-import { PinoLogger } from '@mastra/loggers/pino';
+import { UpstashTransport } from "@mastra/loggers/upstash";
+import { PinoLogger } from "@mastra/loggers/pino";
 
 export const upstashLogger = new PinoLogger({
-  name: 'Mastra',
+  name: "Mastra",
   transports: {
     upstash: new UpstashTransport({
-      listName: 'production-logs',
+      listName: "production-logs",
       upstashUrl: process.env.UPSTASH_URL!,
       upstashToken: process.env.UPSTASH_TOKEN!,
     }),
   },
-  level: 'info',
+  level: "info",
 });
 ```
 
 ### Upstash transport usage
 
 ```typescript showLineNumbers copy
-upstashLogger.info('User signed in', {
-  destinationPath: 'auth',
-  type: 'AGENT',
-  runId: 'run_123',
+upstashLogger.info("User signed in", {
+  destinationPath: "auth",
+  type: "AGENT",
+  runId: "run_123",
 });
 ```
 
@@ -122,13 +122,13 @@ You can create custom transports using the `createCustomTransport` utility to in
 Creates a custom transport using `createCustomTransport` and integrates it with a third-party logging stream such as `pino-sentry-transport`. This allows forwarding logs to an external system like Sentry for advanced monitoring and observability.
 
 ```typescript filename="src/mastra/loggers/sentry-transport.ts" showLineNumbers copy
-import { createCustomTransport } from '@mastra/core/loggers';
-import { PinoLogger } from '@mastra/loggers/pino';
-import pinoSentry from 'pino-sentry-transport';
+import { createCustomTransport } from "@mastra/core/loggers";
+import { PinoLogger } from "@mastra/loggers/pino";
+import pinoSentry from "pino-sentry-transport";
 
 const sentryStream = await pinoSentry({
   sentry: {
-    dsn: 'YOUR_SENTRY_DSN',
+    dsn: "YOUR_SENTRY_DSN",
     _experiments: {
       enableLogs: true,
     },
@@ -138,8 +138,8 @@ const sentryStream = await pinoSentry({
 const customTransport = createCustomTransport(sentryStream);
 
 export const sentryLogger = new PinoLogger({
-  name: 'Mastra',
-  level: 'info',
+  name: "Mastra",
+  level: "info",
   transports: { sentry: customTransport },
 });
 ```

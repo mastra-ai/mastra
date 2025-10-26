@@ -1,20 +1,22 @@
-import React from 'react';
-import { useColorMode } from '@docusaurus/theme-common';
-import { disableTransitions } from '../utils/disableTransitions';
+import React from "react";
+import { useColorMode } from "@docusaurus/theme-common";
+import { disableTransitions } from "../utils/disableTransitions";
 
 export const ThemeSwitcher = () => {
   const { colorMode, setColorMode } = useColorMode();
 
   const toggleTheme = () => {
     const enableTransitions = disableTransitions();
-    setColorMode(colorMode === 'light' ? 'dark' : 'light');
+    setColorMode(colorMode === "light" ? "dark" : "light");
     setTimeout(() => {
       enableTransitions();
     }, 0);
   };
 
   const getAriaLabel = () => {
-    return colorMode === 'light' ? 'Switch to dark theme' : 'Switch to light theme';
+    return colorMode === "light"
+      ? "Switch to dark theme"
+      : "Switch to light theme";
   };
 
   return (

@@ -1,8 +1,8 @@
-import { useNavbarMobileSidebar } from '@docusaurus/theme-common/internal';
-import { translate } from '@docusaurus/Translate';
-import { Button } from '@site/src/components/ui/button';
-import { cn } from '@site/src/css/utils';
-import { type ReactNode } from 'react';
+import { useNavbarMobileSidebar } from "@docusaurus/theme-common/internal";
+import { translate } from "@docusaurus/Translate";
+import { Button } from "@site/src/components/ui/button";
+import { cn } from "@site/src/css/utils";
+import { type ReactNode } from "react";
 
 export default function MobileSidebarToggle(): ReactNode {
   const { toggle, shown } = useNavbarMobileSidebar();
@@ -11,9 +11,10 @@ export default function MobileSidebarToggle(): ReactNode {
       variant="ghost"
       onClick={toggle}
       aria-label={translate({
-        id: 'theme.docs.sidebar.toggleSidebarButtonAriaLabel',
-        message: 'Toggle navigation bar',
-        description: 'The ARIA label for hamburger menu button of mobile navigation',
+        id: "theme.docs.sidebar.toggleSidebarButtonAriaLabel",
+        message: "Toggle navigation bar",
+        description:
+          "The ARIA label for hamburger menu button of mobile navigation",
       })}
       type="button"
       aria-expanded={shown}
@@ -27,7 +28,13 @@ export default function MobileSidebarToggle(): ReactNode {
 
 function HamburgerDefault() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <rect
         x="1"
         y="7.5"
@@ -35,9 +42,12 @@ function HamburgerDefault() {
         height="1"
         rx="0.5"
         style={{
-          transformOrigin: 'center',
+          transformOrigin: "center",
         }}
-        className={cn('transition-transform duration-150 ease-ease-out-quad', ' translate-y-[-3.5px]')}
+        className={cn(
+          "transition-transform duration-150 ease-ease-out-quad",
+          " translate-y-[-3.5px]",
+        )}
       ></rect>
       <rect
         x="1"
@@ -46,9 +56,12 @@ function HamburgerDefault() {
         height="1"
         rx="0.5"
         style={{
-          transformOrigin: 'center',
+          transformOrigin: "center",
         }}
-        className={cn('transition-transform duration-150 ease-ease-out-quad ', 'translate-y-[3.5px]')}
+        className={cn(
+          "transition-transform duration-150 ease-ease-out-quad ",
+          "translate-y-[3.5px]",
+        )}
       ></rect>
     </svg>
   );

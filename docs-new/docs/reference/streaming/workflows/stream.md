@@ -1,5 +1,5 @@
 ---
-title: 'Run.stream() '
+title: "Run.stream() "
 description: Documentation for the `Run.stream()` method in workflows, which allows you to monitor the execution of a workflow run as a stream.
 ---
 
@@ -14,7 +14,7 @@ const run = await workflow.createRunAsync();
 
 const { stream } = await run.stream({
   inputData: {
-    value: 'initial data',
+    value: "initial data",
   },
 });
 ```
@@ -98,7 +98,7 @@ description: "The trace ID associated with this execution when AI tracing is ena
 ```typescript showLineNumbers copy
 const { getWorkflowState } = await run.stream({
   inputData: {
-    value: 'initial data',
+    value: "initial data",
   },
 });
 

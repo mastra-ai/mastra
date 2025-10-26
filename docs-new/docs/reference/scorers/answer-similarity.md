@@ -1,5 +1,5 @@
 ---
-title: 'Answer Similarity'
+title: "Answer Similarity"
 description: Documentation for the Answer Similarity Scorer in Mastra, which compares agent outputs against ground truth answers for CI/CD testing.
 ---
 
@@ -138,23 +138,25 @@ description: "The prompt used for generating the explanation.",
 This scorer is designed for use with `runExperiment` for CI/CD testing:
 
 ```typescript
-import { runExperiment } from '@mastra/core/scores';
-import { createAnswerSimilarityScorer } from '@mastra/evals/scorers/llm';
+import { runExperiment } from "@mastra/core/scores";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/llm";
 
 const scorer = createAnswerSimilarityScorer({ model });
 
 await runExperiment({
   data: [
     {
-      input: 'What is the capital of France?',
-      groundTruth: 'Paris is the capital of France',
+      input: "What is the capital of France?",
+      groundTruth: "Paris is the capital of France",
     },
   ],
   scorers: [scorer],
   target: myAgent,
   onItemComplete: ({ scorerResults }) => {
     // Assert similarity score meets threshold
-    expect(scorerResults['Answer Similarity Scorer'].score).toBeGreaterThan(0.8);
+    expect(scorerResults["Answer Similarity Scorer"].score).toBeGreaterThan(
+      0.8,
+    );
   },
 });
 ```

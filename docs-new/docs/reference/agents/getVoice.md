@@ -1,6 +1,6 @@
 ---
-title: 'Agent.getVoice() '
-description: 'Documentation for the `Agent.getVoice()` method in Mastra agents, which retrieves the voice provider for speech capabilities.'
+title: "Agent.getVoice() "
+description: "Documentation for the `Agent.getVoice()` method in Mastra agents, which retrieves the voice provider for speech capabilities."
 ---
 
 # Agent.getVoice()

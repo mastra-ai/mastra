@@ -1,5 +1,5 @@
 ---
-title: 'Content Similarity'
+title: "Content Similarity"
 description: Documentation for the Content Similarity Metric in Mastra, which measures textual similarity between strings and provides a matching score.
 ---
 
@@ -16,14 +16,14 @@ The `ContentSimilarityMetric` class measures the textual similarity between two 
 ## Basic Usage
 
 ```typescript
-import { ContentSimilarityMetric } from '@mastra/evals/nlp';
+import { ContentSimilarityMetric } from "@mastra/evals/nlp";
 
 const metric = new ContentSimilarityMetric({
   ignoreCase: true,
   ignoreWhitespace: true,
 });
 
-const result = await metric.measure('Hello, world!', 'hello world');
+const result = await metric.measure("Hello, world!", "hello world");
 
 console.log(result.score); // Similarity score from 0-1
 console.log(result.info); // Detailed similarity metrics
@@ -144,7 +144,7 @@ Final score: `similarity_value * scale`
 ## Example with Different Options
 
 ```typescript
-import { ContentSimilarityMetric } from '@mastra/evals/nlp';
+import { ContentSimilarityMetric } from "@mastra/evals/nlp";
 
 // Case-sensitive comparison
 const caseSensitiveMetric = new ContentSimilarityMetric({
@@ -152,7 +152,7 @@ const caseSensitiveMetric = new ContentSimilarityMetric({
   ignoreWhitespace: true,
 });
 
-const result1 = await caseSensitiveMetric.measure('Hello World', 'hello world'); // Lower score due to case difference
+const result1 = await caseSensitiveMetric.measure("Hello World", "hello world"); // Lower score due to case difference
 
 // Example output:
 // {
@@ -166,7 +166,10 @@ const strictWhitespaceMetric = new ContentSimilarityMetric({
   ignoreWhitespace: false,
 });
 
-const result2 = await strictWhitespaceMetric.measure('Hello   World', 'Hello World'); // Lower score due to whitespace difference
+const result2 = await strictWhitespaceMetric.measure(
+  "Hello   World",
+  "Hello World",
+); // Lower score due to whitespace difference
 
 // Example output:
 // {

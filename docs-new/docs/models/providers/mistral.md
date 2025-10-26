@@ -1,6 +1,6 @@
 ---
-title: 'Mistral '
-description: 'Use Mistral models with Mastra. 19 models available.'
+title: "Mistral "
+description: "Use Mistral models with Mastra. 19 models available."
 ---
 
 import Tabs from '@theme/Tabs';
@@ -17,19 +17,19 @@ MISTRAL_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'mistral/codestral-latest',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "mistral/codestral-latest",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -282,13 +282,13 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    url: 'https://api.mistral.ai/v1',
-    modelId: 'codestral-latest',
+    url: "https://api.mistral.ai/v1",
+    modelId: "codestral-latest",
     apiKey: process.env.MISTRAL_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -298,10 +298,12 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'mistral/pixtral-large-latest' : 'mistral/codestral-latest';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "mistral/pixtral-large-latest"
+      : "mistral/codestral-latest";
   },
 });
 ```

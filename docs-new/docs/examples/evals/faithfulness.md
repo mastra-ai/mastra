@@ -1,5 +1,5 @@
 ---
-title: 'Faithfulness '
+title: "Faithfulness "
 description: Example of using the Faithfulness metric to evaluate how factually accurate responses are compared to context.
 ---
 
@@ -24,20 +24,20 @@ npm install @mastra/evals
 In this example, the response closely aligns with the context. Each statement in the output is verifiable and supported by the provided context entries, resulting in a high score.
 
 ```typescript filename="src/example-high-faithfulness.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { FaithfulnessMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
 
-const metric = new FaithfulnessMetric(openai('gpt-4o-mini'), {
+const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
   context: [
-    'The Tesla Model 3 was launched in 2017.',
-    'It has a range of up to 358 miles.',
-    'The base model accelerates 0-60 mph in 5.8 seconds.',
+    "The Tesla Model 3 was launched in 2017.",
+    "It has a range of up to 358 miles.",
+    "The base model accelerates 0-60 mph in 5.8 seconds.",
   ],
 });
 
-const query = 'Tell me about the Tesla Model 3.';
+const query = "Tell me about the Tesla Model 3.";
 const response =
-  'The Tesla Model 3 was introduced in 2017. It can travel up to 358 miles on a single charge and the base version goes from 0 to 60 mph in 5.8 seconds.';
+  "The Tesla Model 3 was introduced in 2017. It can travel up to 358 miles on a single charge and the base version goes from 0 to 60 mph in 5.8 seconds.";
 
 const result = await metric.measure(query, response);
 
@@ -62,20 +62,20 @@ The output receives a score of 1 because all the information it provides can be 
 In this example, there are a mix of supported and unsupported claims. Some parts of the response are backed by the context, while others introduce new information not found in the source material.
 
 ```typescript filename="src/example-mixed-faithfulness.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { FaithfulnessMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
 
-const metric = new FaithfulnessMetric(openai('gpt-4o-mini'), {
+const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
   context: [
-    'Python was created by Guido van Rossum.',
-    'The first version was released in 1991.',
-    'Python emphasizes code readability.',
+    "Python was created by Guido van Rossum.",
+    "The first version was released in 1991.",
+    "Python emphasizes code readability.",
   ],
 });
 
-const query = 'What can you tell me about Python?';
+const query = "What can you tell me about Python?";
 const response =
-  'Python was created by Guido van Rossum and released in 1991. It is the most popular programming language today and is used by millions of developers worldwide.';
+  "Python was created by Guido van Rossum and released in 1991. It is the most popular programming language today and is used by millions of developers worldwide.";
 
 const result = await metric.measure(query, response);
 
@@ -100,20 +100,20 @@ The score is lower because only a portion of the response is verifiable. While s
 In this example, the response directly contradicts the context. None of the claims are supported, and several conflict with the facts provided.
 
 ```typescript filename="src/example-low-faithfulness.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { FaithfulnessMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
 
-const metric = new FaithfulnessMetric(openai('gpt-4o-mini'), {
+const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
   context: [
-    'Mars is the fourth planet from the Sun.',
-    'It has a thin atmosphere of mostly carbon dioxide.',
-    'Two small moons orbit Mars: Phobos and Deimos.',
+    "Mars is the fourth planet from the Sun.",
+    "It has a thin atmosphere of mostly carbon dioxide.",
+    "Two small moons orbit Mars: Phobos and Deimos.",
   ],
 });
 
-const query = 'What do we know about Mars?';
+const query = "What do we know about Mars?";
 const response =
-  'Mars is the third planet from the Sun. It has a thick atmosphere rich in oxygen and nitrogen, and is orbited by three large moons.';
+  "Mars is the third planet from the Sun. It has a thick atmosphere rich in oxygen and nitrogen, and is orbited by three large moons.";
 
 const result = await metric.measure(query, response);
 
@@ -138,8 +138,8 @@ Each claim is inaccurate or conflicts with the context, resulting in a score of 
 You can create a `FaithfulnessMetric` instance by providing a `context` array that defines the factual source material for the evaluation. You can also configure optional parameters such as `scale` to control the maximum score.
 
 ```typescript showLineNumbers copy
-const metric = new FaithfulnessMetric(openai('gpt-4o-mini'), {
-  context: [''],
+const metric = new FaithfulnessMetric(openai("gpt-4o-mini"), {
+  context: [""],
   scale: 1,
 });
 ```

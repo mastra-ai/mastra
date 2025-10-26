@@ -1,6 +1,6 @@
 ---
-title: 'Mastra Class'
-description: 'Documentation for the `Mastra` class in Mastra, the core entry point for managing agents, workflows, MCP servers, and server endpoints.'
+title: "Mastra Class"
+description: "Documentation for the `Mastra` class in Mastra, the core entry point for managing agents, workflows, MCP servers, and server endpoints."
 ---
 
 # Mastra Class
@@ -15,21 +15,21 @@ Think of `Mastra` as a top-level registry:
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
-import { LibSQLStore } from '@mastra/libsql';
-import { weatherWorkflow } from './workflows/weather-workflow';
-import { weatherAgent } from './agents/weather-agent';
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
+import { weatherWorkflow } from "./workflows/weather-workflow";
+import { weatherAgent } from "./agents/weather-agent";
 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow },
   agents: { weatherAgent },
   storage: new LibSQLStore({
-    url: ':memory:',
+    url: ":memory:",
   }),
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
 });
 ```
