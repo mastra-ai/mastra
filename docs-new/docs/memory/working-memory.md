@@ -8,7 +8,7 @@ import YouTube from '@site/src/components/YouTube';
 
 # Working Memory
 
-While [conversation history](/docs/memory/overview) and [semantic recall](./semantic-recall) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
+While [conversation history](./conversation-history) and [semantic recall](./semantic-recall.md) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
 
 Think of it as the agent's active thoughts or scratchpad – the key information they keep available about the user or task. It's similar to how a person would naturally remember someone's name, preferences, or important details during a conversation.
 
@@ -16,8 +16,8 @@ This is useful for maintaining ongoing state that's always relevant and should a
 
 Working memory can persist at two different scopes:
 
-- **Thread-scoped** (default): Memory is isolated per conversation thread
-- **Resource-scoped**: Memory persists across all conversation threads for the same user
+- **Resource-scoped** (default): Memory persists across all conversation threads for the same user
+- **Thread-scoped**: Memory is isolated per conversation thread
 
 **Important:** Switching between scopes means the agent won't see memory from the other scope - thread-scoped memory is completely separate from resource-scoped memory.
 
@@ -55,36 +55,9 @@ Working memory is a block of Markdown text that the agent is able to update over
 
 Working memory can operate in two different scopes, allowing you to choose how memory persists across conversations:
 
-### Thread-Scoped Memory (Default)
+### Resource-Scoped Memory (Default)
 
-By default, working memory is scoped to individual conversation threads. Each thread maintains its own isolated memory:
-
-```typescript
-const memory = new Memory({
-  storage,
-  options: {
-    workingMemory: {
-      enabled: true,
-      scope: "thread", // Default - memory is isolated per thread
-      template: `# User Profile
-- **Name**:
-- **Interests**:
-- **Current Goal**:
-`,
-    },
-  },
-});
-```
-
-**Use cases:**
-
-- Different conversations about separate topics
-- Temporary or session-specific information
-- Workflows where each thread needs working memory but threads are ephemeral and not related to each other
-
-### Resource-Scoped Memory
-
-Resource-scoped memory persists across all conversation threads for the same user (resourceId), enabling persistent user memory:
+By default, working memory persists across all conversation threads for the same user (resourceId), enabling persistent user memory:
 
 ```typescript
 const memory = new Memory({
@@ -123,11 +96,38 @@ const response = await agent.generate("Hello!", {
 });
 ```
 
+### Thread-Scoped Memory
+
+Thread-scoped memory isolates working memory to individual conversation threads. Each thread maintains its own isolated memory:
+
+```typescript
+const memory = new Memory({
+  storage,
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: "thread", // Memory is isolated per thread
+      template: `# User Profile
+- **Name**:
+- **Interests**:
+- **Current Goal**:
+`,
+    },
+  },
+});
+```
+
+**Use cases:**
+
+- Different conversations about separate topics
+- Temporary or session-specific information
+- Workflows where each thread needs working memory but threads are ephemeral and not related to each other
+
 ## Storage Adapter Support
 
 Resource-scoped working memory requires specific storage adapters that support the `mastra_resources` table:
 
-### Supported Storage Adapters
+### ✅ Supported Storage Adapters
 
 - **LibSQL** (`@mastra/libsql`)
 - **PostgreSQL** (`@mastra/pg`)

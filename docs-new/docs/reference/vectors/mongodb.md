@@ -1,7 +1,6 @@
 ---
-title: "MongoDBVector"
+title: "MongoDB Vector Store"
 description: Documentation for the MongoDBVector class in Mastra, which provides vector search using MongoDB Atlas and Atlas Vector Search.
-sidebar_position: 7
 ---
 
 # MongoDB Vector Store

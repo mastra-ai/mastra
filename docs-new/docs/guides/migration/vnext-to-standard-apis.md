@@ -1,6 +1,7 @@
 ---
 title: "VNext to Standard APIs"
 description: "Learn how to migrate from VNext methods to the new standard agent APIs in Mastra."
+sidebar_position: 2
 ---
 
 ## Overview

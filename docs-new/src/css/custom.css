@@ -432,12 +432,13 @@ pre,
   }
 }
 
-@media (min-width: 997px) {
+@media (min-width: 1366px) {
   [class*="docMainContainer"][class*="docMainContainer"] {
     min-width: 69rem;
   }
+}
 
-  /* Custom Scrollbars*/
+@media (min-width: 997px) {
   li:has(ul.menu__list) .menu__list {
     margin-bottom: 0.25rem;
     position: relative;
@@ -461,17 +462,6 @@ pre,
     width: 1.5px;
     background: var(--mastra-text-primary);
     border-radius: 8px;
-  }
-
-  .theme-doc-sidebar-item-link-level-3,
-  .theme-doc-sidebar-item-link-level-4 {
-    .menu__link--active::before {
-      inset-inline-start: 0px;
-    }
-  }
-
-  .menu__list-item:not(:first-child) {
-    margin-top: 0.5rem;
   }
 
   .menu__list-item-collapsible:hover {
@@ -661,7 +651,6 @@ pre {
 
 pre * {
   font-size: 13px;
-  font-weight: 500;
 }
 
 code {
@@ -953,7 +942,6 @@ table code {
   font-weight: 500;
   padding: 0.5rem;
   padding-inline: 0.75rem;
-  flex-shrink: 0;
 }
 
 .tabs__item:hover {
@@ -1032,6 +1020,7 @@ table code {
 header h1 {
   text-wrap: balance;
 }
+
 kbd {
   all: unset;
   background: var(--ifm-background-color);

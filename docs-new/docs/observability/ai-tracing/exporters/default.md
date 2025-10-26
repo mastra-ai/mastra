@@ -1,5 +1,5 @@
 ---
-title: "Default Exporter "
+title: "Default"
 description: "Store traces locally for development and debugging"
 ---
 
