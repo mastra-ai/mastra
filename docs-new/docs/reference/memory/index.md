@@ -1,5 +1,5 @@
 ---
-title: "Memory Class "
+title: "Memory Class"
 description: "Documentation for the `Memory` class in Mastra, which provides a robust system for managing conversation history and thread-based message storage."
 ---
 
@@ -28,7 +28,7 @@ export const agent = new Agent({
 });
 ```
 
-> To enable `workingMemory` on an agent, you’ll need a storage provider configured on your main Mastra instance. See [Mastra class](../core/mastra-class) for more information.
+> To enable `workingMemory` on an agent, you'll need a storage provider configured on your main Mastra instance. See [Mastra class](../core/mastra-class.md) for more information.
 
 ## Constructor parameters
 
@@ -81,7 +81,7 @@ defaultValue: "10",
 {
 name: "semanticRecall",
 type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
-description: "Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured.",
+description: "Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured. Default topK is 4, default messageRange is {before: 1, after: 1}.",
 isOptional: true,
 defaultValue: "false",
 },
