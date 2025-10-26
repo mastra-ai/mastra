@@ -3,7 +3,6 @@ import clsx from 'clsx';
 import { useNavbarSecondaryMenu } from '@docusaurus/theme-common/internal';
 import { ThemeClassNames } from '@docusaurus/theme-common';
 import type { Props } from '@theme/Navbar/MobileSidebar/Layout';
-import { cn } from '@site/src/css/utils';
 
 // TODO Docusaurus v4: remove temporary inert workaround
 //  See https://github.com/facebook/react/issues/17157
@@ -17,9 +16,11 @@ function inertProps(inert: boolean) {
 }
 
 function NavbarMobileSidebarPanel({ children, inert }: { children: ReactNode; inert: boolean }) {
-  const props = typeof inertProps(inert) === 'string' ? inertProps(inert) : {};
   return (
-    <div className={cn(ThemeClassNames.layout.navbar.mobileSidebar.panel, 'navbar-sidebar__item menu')} {...props}>
+    <div
+      className={clsx(ThemeClassNames.layout.navbar.mobileSidebar.panel, 'navbar-sidebar__item menu')}
+      {...inertProps(inert)}
+    >
       {children}
     </div>
   );
@@ -28,10 +29,10 @@ function NavbarMobileSidebarPanel({ children, inert }: { children: ReactNode; in
 export default function NavbarMobileSidebarLayout({ header, primaryMenu, secondaryMenu }: Props): ReactNode {
   const { shown: secondaryMenuShown } = useNavbarSecondaryMenu();
   return (
-    <div className={cn(ThemeClassNames.layout.navbar.mobileSidebar.container, 'navbar-sidebar')}>
+    <div className={clsx(ThemeClassNames.layout.navbar.mobileSidebar.container, 'navbar-sidebar')}>
       {header}
       <div
-        className={cn('navbar-sidebar__items', {
+        className={clsx('navbar-sidebar__items', {
           'navbar-sidebar__items--show-secondary': secondaryMenuShown,
         })}
       >

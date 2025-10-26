@@ -35,7 +35,7 @@ export default function DocItemContent({ children }: Props): ReactNode {
   return (
     <div className={cn(ThemeClassNames.docs.docMarkdown, 'markdown')}>
       {shouldShowCopyButton && (
-        <div className="relative">
+        <div className="relative hidden md:block">
           <div className="absolute top-0 right-0">
             <BrowserOnly fallback={<div />}>{() => <CopyPageButton />}</BrowserOnly>
           </div>

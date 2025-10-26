@@ -47,7 +47,7 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
   return (
     <div
       className={cn(
-        ' border-b-[0.5px] dark:border-b-[var(--border)] bg-[var(--light-color-surface-15)] dark:bg-[var(--primary-bg)] border-b-(--border-subtle)',
+        ' border-b-[0.5px] px-4 lg:px-0 dark:border-b-[var(--border)] bg-[var(--light-color-surface-15)] dark:bg-[var(--primary-bg)] border-b-(--border-subtle)',
         className,
       )}
     >
