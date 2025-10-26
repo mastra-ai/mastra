@@ -1,5 +1,5 @@
 ---
-title: 'Arize Phoenix Integration'
+title: "Arize Phoenix Integration"
 description: Documentation for integrating Arize Phoenix with Mastra, an open-source AI observability platform for monitoring and evaluating LLM applications.
 ---
 
@@ -49,16 +49,19 @@ Here's how to configure Mastra to use Phoenix with OpenTelemetry:
 ### Phoenix Cloud Configuration
 
 ```typescript
-import { Mastra } from '@mastra/core';
-import { OpenInferenceOTLPTraceExporter, isOpenInferenceSpan } from '@arizeai/openinference-mastra';
+import { Mastra } from "@mastra/core";
+import {
+  OpenInferenceOTLPTraceExporter,
+  isOpenInferenceSpan,
+} from "@arizeai/openinference-mastra";
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: 'my-mastra-app',
+    serviceName: "my-mastra-app",
     enabled: true,
     export: {
-      type: 'custom',
+      type: "custom",
       exporter: new OpenInferenceOTLPTraceExporter({
         url: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
         headers: {
@@ -74,16 +77,19 @@ export const mastra = new Mastra({
 ### Self-Hosted Phoenix Configuration
 
 ```typescript
-import { Mastra } from '@mastra/core';
-import { OpenInferenceOTLPTraceExporter, isOpenInferenceSpan } from '@arizeai/openinference-mastra';
+import { Mastra } from "@mastra/core";
+import {
+  OpenInferenceOTLPTraceExporter,
+  isOpenInferenceSpan,
+} from "@arizeai/openinference-mastra";
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: 'my-mastra-app',
+    serviceName: "my-mastra-app",
     enabled: true,
     export: {
-      type: 'custom',
+      type: "custom",
       exporter: new OpenInferenceOTLPTraceExporter({
         url: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
         spanFilter: isOpenInferenceSpan,

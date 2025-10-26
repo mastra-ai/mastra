@@ -1,5 +1,5 @@
 ---
-title: 'Agent.getInstructions() '
+title: "Agent.getInstructions() "
 description: "Documentation for the `Agent.getInstructions()` method in Mastra agents, which retrieves the instructions that guide the agent's behavior."
 ---
 

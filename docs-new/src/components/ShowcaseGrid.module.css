@@ -72,7 +72,7 @@
   color: var(--mastra-green-accent-2);
 }
 
-[data-theme='dark'] .showcaseItem:hover .title {
+[data-theme="dark"] .showcaseItem:hover .title {
   color: var(--mastra-green-accent);
 }
 
@@ -97,10 +97,10 @@
   color: var(--mastra-text-tertiary);
 }
 
-[data-theme='dark'] .showcaseItem {
+[data-theme="dark"] .showcaseItem {
   background: var(--ifm-code-background);
 }
 
-[data-theme='dark'] .showcaseItem:hover {
+[data-theme="dark"] .showcaseItem:hover {
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
 }

@@ -1,25 +1,32 @@
-import { Dialog, DialogContent, DialogOverlay, DialogPortal, DialogTitle, DialogTrigger } from '@radix-ui/react-dialog';
-import { CustomSearch } from '@site/src/components/custom-search';
-import { Button } from '@site/src/components/ui/button';
-import { useEffect, useState } from 'react';
-import { useHotkeys } from 'react-hotkeys-hook';
+import {
+  Dialog,
+  DialogContent,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+  DialogTrigger,
+} from "@radix-ui/react-dialog";
+import { CustomSearch } from "@site/src/components/custom-search";
+import { Button } from "@site/src/components/ui/button";
+import { useEffect, useState } from "react";
+import { useHotkeys } from "react-hotkeys-hook";
 
 export function Shortcut() {
   const [isMac, setIsMac] = useState(false);
 
   useEffect(() => {
-    setIsMac(navigator.userAgent.includes('Mac'));
+    setIsMac(navigator.userAgent.includes("Mac"));
   }, []);
 
   return (
     <kbd className="flex items-center py-2 gap-1 text-xs font-medium text-(--mastra-icons-3)">
-      {isMac ? (
+      {!isMac ? (
+        "CTRL K"
+      ) : (
         <span className="inline-flex text-sm gap-1 items-center">
           <span className="text-xs">⌘</span>
           <span className="text-xs">K</span>
         </span>
-      ) : (
-        'CTRL K'
       )}
     </kbd>
   );
@@ -28,7 +35,7 @@ export function Shortcut() {
 export default function SearchContainer({ locale }: { locale: string }) {
   const [isOpen, setIsOpen] = useState(false);
 
-  useHotkeys('meta+k', () => setIsOpen(open => !open));
+  useHotkeys("meta+k", () => setIsOpen((open) => !open));
 
   function open() {
     setIsOpen(true);
@@ -39,24 +46,29 @@ export default function SearchContainer({ locale }: { locale: string }) {
   }
   // Configure Algolia search options
   const searchOptions = {
-    indexName: 'docs_crawler',
+    indexName: "docs_crawler",
     hitsPerPage: 20,
     attributesToRetrieve: [
-      'hierarchy',
-      'content',
-      'anchor',
-      'url',
-      'url_without_anchor',
-      'type',
-      'section',
-      'lang',
-      'priority',
-      'depth',
+      "hierarchy",
+      "content",
+      "anchor",
+      "url",
+      "url_without_anchor",
+      "type",
+      "section",
+      "lang",
+      "priority",
+      "depth",
     ],
-    attributesToHighlight: ['hierarchy.lvl1', 'hierarchy.lvl2', 'hierarchy.lvl3', 'content'],
-    attributesToSnippet: ['content:30'],
+    attributesToHighlight: [
+      "hierarchy.lvl1",
+      "hierarchy.lvl2",
+      "hierarchy.lvl3",
+      "content",
+    ],
+    attributesToSnippet: ["content:30"],
     filters: `lang:${locale}`,
-    snippetEllipsisText: '…',
+    snippetEllipsisText: "…",
   };
 
   return (
@@ -79,7 +91,10 @@ export default function SearchContainer({ locale }: { locale: string }) {
             <div className="w-full ring ring-neutral-200 dark:ring-(--border) shadow-2xl duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0 dark:border-(--border) h-fit max-w-[660px] mx-auto rounded-xl bg-(--ifm-background-color) dark:bg-(--mastra-surface-2) transition-all">
               <DialogTitle className="sr-only">Search docs...</DialogTitle>
               <div className="w-full">
-                <CustomSearch searchOptions={searchOptions} closeModal={close} />
+                <CustomSearch
+                  searchOptions={searchOptions}
+                  closeModal={close}
+                />
               </div>
             </div>
           </div>

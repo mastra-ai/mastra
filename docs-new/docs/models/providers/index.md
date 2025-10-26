@@ -1,6 +1,6 @@
 ---
-title: 'Providers'
-description: 'Direct access to AI model providers.'
+title: "Providers"
+description: "Direct access to AI model providers."
 ---
 
 import { CardGrid, CardGridItem } from '@site/src/components/CardGrid';

@@ -11,15 +11,15 @@ First, create a new file for your workflow in the `src/mastra/workflows` directo
 Add this code to your workflow file:
 
 ```typescript
-import { createStep } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
 const validateContentStep = createStep({
-  id: 'validate-content',
-  description: 'Validates incoming text content',
+  id: "validate-content",
+  description: "Validates incoming text content",
   inputSchema: z.object({
-    content: z.string().min(1, 'Content cannot be empty'),
-    type: z.enum(['article', 'blog', 'social']).default('article'),
+    content: z.string().min(1, "Content cannot be empty"),
+    type: z.enum(["article", "blog", "social"]).default("article"),
   }),
   outputSchema: z.object({
     content: z.string(),

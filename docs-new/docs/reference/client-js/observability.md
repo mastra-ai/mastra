@@ -12,7 +12,7 @@ The Observability API provides methods to retrieve AI traces, monitor your appli
 Retrieve a specific AI trace by its ID, including all its spans and details:
 
 ```typescript
-const trace = await mastraClient.getAITrace('trace-id-123');
+const trace = await mastraClient.getAITrace("trace-id-123");
 ```
 
 ## Getting AI Traces with Filtering
@@ -25,15 +25,15 @@ const traces = await mastraClient.getAITraces({
     page: 1,
     perPage: 20,
     dateRange: {
-      start: new Date('2024-01-01'),
-      end: new Date('2024-01-31'),
+      start: new Date("2024-01-01"),
+      end: new Date("2024-01-31"),
     },
   },
   filters: {
-    name: 'weather-agent', // Filter by trace name
-    spanType: 'agent', // Filter by span type
-    entityId: 'weather-agent-id', // Filter by entity ID
-    entityType: 'agent', // Filter by entity type
+    name: "weather-agent", // Filter by trace name
+    spanType: "agent", // Filter by span type
+    entityId: "weather-agent-id", // Filter by entity ID
+    entityType: "agent", // Filter by entity type
   },
 });
 
@@ -50,10 +50,10 @@ Score specific traces using registered scorers for evaluation:
 
 ```typescript
 const result = await mastraClient.score({
-  scorerName: 'answer-relevancy',
+  scorerName: "answer-relevancy",
   targets: [
-    { traceId: 'trace-1', spanId: 'span-1' }, // Score specific span
-    { traceId: 'trace-2' }, // Score specific span which defaults to the parent span
+    { traceId: "trace-1", spanId: "span-1" }, // Score specific span
+    { traceId: "trace-2" }, // Score specific span which defaults to the parent span
   ],
 });
 ```
@@ -64,8 +64,8 @@ Retrieve scores for a specific span within a trace:
 
 ```typescript
 const scores = await mastraClient.getScoresBySpan({
-  traceId: 'trace-123',
-  spanId: 'span-456',
+  traceId: "trace-123",
+  spanId: "span-456",
   page: 1,
   perPage: 20,
 });

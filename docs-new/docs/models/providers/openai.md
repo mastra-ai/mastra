@@ -1,6 +1,6 @@
 ---
-title: 'OpenAI '
-description: 'Use OpenAI models with Mastra. 27 models available.'
+title: "OpenAI "
+description: "Use OpenAI models with Mastra. 27 models available."
 ---
 
 import Tabs from '@theme/Tabs';
@@ -17,19 +17,19 @@ OPENAI_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'openai/codex-mini-latest',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "openai/codex-mini-latest",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -372,12 +372,12 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    modelId: 'codex-mini-latest',
+    modelId: "codex-mini-latest",
     apiKey: process.env.OPENAI_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -387,10 +387,12 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'openai/o4-mini-deep-research' : 'openai/codex-mini-latest';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "openai/o4-mini-deep-research"
+      : "openai/codex-mini-latest";
   },
 });
 ```

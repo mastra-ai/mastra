@@ -1,5 +1,5 @@
 ---
-title: 'With Express'
+title: "With Express"
 description: A step-by-step guide to integrating Mastra with an Express backend.
 ---
 
@@ -44,7 +44,7 @@ Each LLM provider uses a different env var. See [Model Capabilities](/docs/model
 Create a Mastra configuration file at `src/mastra/index.ts`:
 
 ```ts filename="src/mastra/index.ts" copy
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from "@mastra/core/mastra";
 
 export const mastra = new Mastra({});
 ```
@@ -52,21 +52,21 @@ export const mastra = new Mastra({});
 Create a `weatherTool` that the `weatherAgent` will use at `src/mastra/tools/weather-tool.ts`. It returns a placeholder value inside the `execute()` function (you'd put your API calls in here).
 
 ```ts filename="src/mastra/tools/weather-tool.ts" copy
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
 export const weatherTool = createTool({
-  id: 'get-weather',
-  description: 'Get current weather for a location',
+  id: "get-weather",
+  description: "Get current weather for a location",
   inputSchema: z.object({
-    location: z.string().describe('City name'),
+    location: z.string().describe("City name"),
   }),
   outputSchema: z.object({
     output: z.string(),
   }),
   execute: async () => {
     return {
-      output: 'The weather is sunny',
+      output: "The weather is sunny",
     };
   },
 });
@@ -75,12 +75,12 @@ export const weatherTool = createTool({
 Add a `weatherAgent` at `src/mastra/agents/weather-agent.ts`:
 
 ```ts filename="src/mastra/agents/weather-agent.ts" copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { weatherTool } from '../tools/weather-tool';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { weatherTool } from "../tools/weather-tool";
 
 export const weatherAgent = new Agent({
-  name: 'Weather Agent',
+  name: "Weather Agent",
   instructions: `
       You are a helpful weather assistant that provides accurate weather information.
  
@@ -93,7 +93,7 @@ export const weatherAgent = new Agent({
  
       Use the weatherTool to fetch current weather data.
 `,
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   tools: { weatherTool },
 });
 ```
@@ -101,8 +101,8 @@ export const weatherAgent = new Agent({
 Lastly, add the `weatherAgent` to `src/mastra/index.ts`:
 
 ```ts filename="src/mastra/index.ts" copy {2, 5}
-import { Mastra } from '@mastra/core/mastra';
-import { weatherAgent } from './agents/weather-agent';
+import { Mastra } from "@mastra/core/mastra";
+import { weatherAgent } from "./agents/weather-agent";
 
 export const mastra = new Mastra({
   agents: { weatherAgent },
@@ -118,13 +118,13 @@ Create an `/api/weather` endpoint that expects a `city` query parameter. The `ci
 You might have a file like this in your existing project:
 
 ```ts filename="src/server.ts" copy
-import express, { Request, Response } from 'express';
+import express, { Request, Response } from "express";
 
 const app = express();
 const port = 3456;
 
-app.get('/', (req: Request, res: Response) => {
-  res.send('Hello, world!');
+app.get("/", (req: Request, res: Response) => {
+  res.send("Hello, world!");
 });
 
 app.listen(port, () => {
@@ -135,31 +135,31 @@ app.listen(port, () => {
 Adding the `/api/weather` endpoint looks like this:
 
 ```ts filename="src/server.ts" copy {2, 11-27}
-import express, { Request, Response } from 'express';
-import { mastra } from './mastra';
+import express, { Request, Response } from "express";
+import { mastra } from "./mastra";
 
 const app = express();
 const port = 3456;
 
-app.get('/', (req: Request, res: Response) => {
-  res.send('Hello, world!');
+app.get("/", (req: Request, res: Response) => {
+  res.send("Hello, world!");
 });
 
-app.get('/api/weather', async (req: Request, res: Response) => {
+app.get("/api/weather", async (req: Request, res: Response) => {
   const { city } = req.query as { city?: string };
 
   if (!city) {
     return res.status(400).send("Missing 'city' query parameter");
   }
 
-  const agent = mastra.getAgent('weatherAgent');
+  const agent = mastra.getAgent("weatherAgent");
 
   try {
     const result = await agent.generate(`What's the weather like in ${city}?`);
     res.send(result.text);
   } catch (error) {
-    console.error('Agent error:', error);
-    res.status(500).send('An error occurred while processing your request');
+    console.error("Agent error:", error);
+    res.status(500).send("An error occurred while processing your request");
   }
 });
 

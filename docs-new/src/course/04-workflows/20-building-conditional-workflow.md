@@ -8,11 +8,11 @@ Add this workflow to your file:
 
 ```typescript
 export const conditionalWorkflow = createWorkflow({
-  id: 'conditional-workflow',
-  description: 'Content processing with conditional branching',
+  id: "conditional-workflow",
+  description: "Content processing with conditional branching",
   inputSchema: z.object({
     content: z.string(),
-    type: z.enum(['article', 'blog', 'social']).default('article'),
+    type: z.enum(["article", "blog", "social"]).default("article"),
   }),
   outputSchema: z.object({
     processedContent: z.string(),
@@ -23,10 +23,15 @@ export const conditionalWorkflow = createWorkflow({
   .then(assessContentStep)
   .branch([
     // Branch 1: Short and simple content
-    [async ({ inputData }) => inputData.category === 'short' && inputData.complexity === 'simple', quickProcessingStep],
+    [
+      async ({ inputData }) =>
+        inputData.category === "short" && inputData.complexity === "simple",
+      quickProcessingStep,
+    ],
     // Branch 2: Everything else
     [
-      async ({ inputData }) => !(inputData.category === 'short' && inputData.complexity === 'simple'),
+      async ({ inputData }) =>
+        !(inputData.category === "short" && inputData.complexity === "simple"),
       generalProcessingStep,
     ],
   ])

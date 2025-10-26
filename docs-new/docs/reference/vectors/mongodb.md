@@ -1,5 +1,5 @@
 ---
-title: 'MongoDBVector'
+title: "MongoDBVector"
 description: Documentation for the MongoDBVector class in Mastra, which provides vector search using MongoDB Atlas and Atlas Vector Search.
 sidebar_position: 7
 ---
@@ -17,7 +17,7 @@ npm install @mastra/mongodb
 ## Usage Example
 
 ```typescript copy showLineNumbers
-import { MongoDBVector } from '@mastra/mongodb';
+import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
   url: process.env.MONGODB_URL,
@@ -179,7 +179,7 @@ Returns:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
+  metric: "cosine" | "euclidean" | "dotproduct";
 }
 ```
 
@@ -282,17 +282,19 @@ The store throws typed errors that can be caught:
 ```typescript copy
 try {
   await store.query({
-    indexName: 'my_collection',
+    indexName: "my_collection",
     queryVector: queryVector,
   });
 } catch (error) {
   // Handle specific error cases
-  if (error.message.includes('Invalid collection name')) {
-    console.error('Collection name must start with a letter or underscore and contain only valid characters.');
-  } else if (error.message.includes('Collection not found')) {
-    console.error('The specified collection does not exist');
+  if (error.message.includes("Invalid collection name")) {
+    console.error(
+      "Collection name must start with a letter or underscore and contain only valid characters.",
+    );
+  } else if (error.message.includes("Collection not found")) {
+    console.error("The specified collection does not exist");
   } else {
-    console.error('Vector store error:', error.message);
+    console.error("Vector store error:", error.message);
   }
 }
 ```

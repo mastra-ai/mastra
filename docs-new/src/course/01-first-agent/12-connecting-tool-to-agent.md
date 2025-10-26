@@ -5,21 +5,21 @@ Now that we've created our tool, we need to connect it to our agent. Go back to 
 1. Import the tool:
 
 ```typescript
-import { getTransactionsTool } from '../tools/get-transactions-tool';
+import { getTransactionsTool } from "../tools/get-transactions-tool";
 ```
 
 2. Add the tool to your agent:
 
 ```typescript
 export const financialAgent = new Agent({
-  name: 'Financial Assistant Agent',
+  name: "Financial Assistant Agent",
   instructions: `ROLE DEFINITION
   // ... existing instructions ...
   
   TOOLS
   - Use the getTransactions tool to fetch financial transaction data.
   - Analyze the transaction data to answer user questions about their spending.`,
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   tools: { getTransactionsTool }, // Add our tool here
 });
 ```

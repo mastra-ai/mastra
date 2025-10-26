@@ -1,6 +1,6 @@
 ---
-title: 'DynamoDB Storage '
-description: 'Documentation for the DynamoDB storage implementation in Mastra, using a single-table design with ElectroDB.'
+title: "DynamoDB Storage "
+description: "Documentation for the DynamoDB storage implementation in Mastra, using a single-table design with ElectroDB."
 ---
 
 # DynamoDB Storage
@@ -37,15 +37,15 @@ Detailed instructions for setting up the table using AWS CloudFormation or AWS C
 ### Basic Usage
 
 ```typescript copy showLineNumbers
-import { Memory } from '@mastra/memory';
-import { DynamoDBStore } from '@mastra/dynamodb';
+import { Memory } from "@mastra/memory";
+import { DynamoDBStore } from "@mastra/dynamodb";
 
 // Initialize the DynamoDB storage
 const storage = new DynamoDBStore({
-  name: 'dynamodb', // A name for this storage instance
+  name: "dynamodb", // A name for this storage instance
   config: {
-    tableName: 'mastra-single-table', // Name of your DynamoDB table
-    region: 'us-east-1', // Optional: AWS region, defaults to 'us-east-1'
+    tableName: "mastra-single-table", // Name of your DynamoDB table
+    region: "us-east-1", // Optional: AWS region, defaults to 'us-east-1'
     // endpoint: "http://localhost:8000", // Optional: For local DynamoDB
     // credentials: { accessKeyId: "YOUR_ACCESS_KEY", secretAccessKey: "YOUR_SECRET_KEY" } // Optional
   },
@@ -73,14 +73,14 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
 2.  **Configure `DynamoDBStore` to use the local endpoint:**
 
     ```typescript copy showLineNumbers
-    import { DynamoDBStore } from '@mastra/dynamodb';
+    import { DynamoDBStore } from "@mastra/dynamodb";
 
     const storage = new DynamoDBStore({
-      name: 'dynamodb-local',
+      name: "dynamodb-local",
       config: {
-        tableName: 'mastra-single-table', // Ensure this table is created in your local DynamoDB
-        region: 'localhost', // Can be any string for local, 'localhost' is common
-        endpoint: 'http://localhost:8000',
+        tableName: "mastra-single-table", // Ensure this table is created in your local DynamoDB
+        region: "localhost", // Can be any string for local, 'localhost' is common
+        endpoint: "http://localhost:8000",
         // For DynamoDB Local, credentials are not typically required unless configured.
         // If you've configured local credentials:
         // credentials: { accessKeyId: "fakeMyKeyId", secretAccessKey: "fakeSecretAccessKey" }

@@ -1,6 +1,6 @@
 ---
-title: 'Speechify Voice'
-description: 'Documentation for the Speechify voice implementation, providing text-to-speech capabilities.'
+title: "Speechify Voice"
+description: "Documentation for the Speechify voice implementation, providing text-to-speech capabilities."
 ---
 
 # Speechify
@@ -10,7 +10,7 @@ The Speechify voice implementation in Mastra provides text-to-speech capabilitie
 ## Usage Example
 
 ```typescript
-import { SpeechifyVoice } from '@mastra/voice-speechify';
+import { SpeechifyVoice } from "@mastra/voice-speechify";
 
 // Initialize with default configuration (uses SPEECHIFY_API_KEY environment variable)
 const voice = new SpeechifyVoice();
@@ -18,15 +18,15 @@ const voice = new SpeechifyVoice();
 // Initialize with custom configuration
 const voice = new SpeechifyVoice({
   speechModel: {
-    name: 'simba-english',
-    apiKey: 'your-api-key',
+    name: "simba-english",
+    apiKey: "your-api-key",
   },
-  speaker: 'george', // Default voice
+  speaker: "george", // Default voice
 });
 
 // Convert text to speech
-const audioStream = await voice.speak('Hello, world!', {
-  speaker: 'henry', // Override default voice
+const audioStream = await voice.speak("Hello, world!", {
+  speaker: "henry", // Override default voice
 });
 ```
 

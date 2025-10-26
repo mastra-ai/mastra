@@ -1,6 +1,6 @@
 ---
-title: 'Hugging Face '
-description: 'Use AI models through Hugging Face.'
+title: "Hugging Face "
+description: "Use AI models through Hugging Face."
 ---
 
 # <img src="https://models.dev/logos/huggingface.svg" alt="Hugging Face logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Hugging Face
@@ -12,12 +12,12 @@ Learn more in the [Hugging Face documentation](https://huggingface.co).
 ## Usage
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'huggingface/Qwen/Qwen3-235B-A22B-Thinking-2507',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "huggingface/Qwen/Qwen3-235B-A22B-Thinking-2507",
 });
 ```
 

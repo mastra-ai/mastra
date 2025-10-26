@@ -1,5 +1,5 @@
 ---
-title: 'Overview '
+title: "Overview "
 description: Understand what tools are in Mastra, how to add them to agents, and best practices for designing effective tools.
 sidebar_position: 1
 ---
@@ -20,28 +20,28 @@ Each tool typically defines:
 In Mastra, you create tools using the [`createTool`](/docs/reference/tools/create-tool) function from the `@mastra/core/tools` package.
 
 ```typescript filename="src/mastra/tools/weatherInfo.ts" copy
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
 const getWeatherInfo = async (city: string) => {
   // Replace with an actual API call to a weather service
   console.log(`Fetching weather for ${city}...`);
   // Example data structure
-  return { temperature: 20, conditions: 'Sunny' };
+  return { temperature: 20, conditions: "Sunny" };
 };
 
 export const weatherTool = createTool({
-  id: 'Get Weather Information',
+  id: "Get Weather Information",
   description: `Fetches the current weather information for a given city`,
   inputSchema: z.object({
-    city: z.string().describe('City name'),
+    city: z.string().describe("City name"),
   }),
   outputSchema: z.object({
     temperature: z.number(),
     conditions: z.string(),
   }),
   execute: async ({ context: { city } }) => {
-    console.log('Using tool to fetch weather information for', city);
+    console.log("Using tool to fetch weather information for", city);
     return await getWeatherInfo(city);
   },
 });
@@ -82,14 +82,14 @@ With the Mastra Dev Server running you can test a tool from the Mastra Playgroun
 Invoke a tool using `.execute()`.
 
 ```typescript filename="src/test-tool.ts" showLineNumbers copy
-import { RuntimeContext } from '@mastra/core/runtime-context';
-import { testTool } from './mastra/tools/test-tool';
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { testTool } from "./mastra/tools/test-tool";
 
 const runtimeContext = new RuntimeContext();
 
 const result = await testTool.execute({
   context: {
-    value: 'foo',
+    value: "foo",
   },
   runtimeContext,
 });

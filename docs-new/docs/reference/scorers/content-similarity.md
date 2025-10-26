@@ -1,5 +1,5 @@
 ---
-title: 'Content Similarity'
+title: "Content Similarity"
 description: Documentation for the Content Similarity Scorer in Mastra, which measures textual similarity between strings and provides a matching score.
 ---
 

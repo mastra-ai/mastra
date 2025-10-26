@@ -1,5 +1,5 @@
 ---
-title: 'Overview'
+title: "Overview"
 description: "Learn how Mastra's memory system works with working memory, conversation history, and semantic recall."
 sidebar_position: 1
 ---
@@ -23,13 +23,13 @@ npm install @mastra/core @mastra/memory @mastra/libsql
 Then add a storage adapter to the main Mastra instance. Any agent with memory enabled will use this shared storage to store and recall interactions.
 
 ```typescript {6-8} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { LibSQLStore } from '@mastra/libsql';
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({
-    url: ':memory:',
+    url: ":memory:",
   }),
 });
 ```
@@ -37,8 +37,8 @@ export const mastra = new Mastra({
 Now, enable memory by passing a `Memory` instance to the agent's `memory` parameter:
 
 ```typescript {3-5} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
   // ...
@@ -81,16 +81,16 @@ Agents can be configured with their own dedicated storage, keeping tasks, conver
 To assign dedicated storage to an agent, install and import the required dependency and pass a `storage` instance to the `Memory` constructor:
 
 ```typescript {3, 9-11} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
-import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore } from "@mastra/libsql";
 
 export const testAgent = new Agent({
   // ...
   memory: new Memory({
     // ...
     storage: new LibSQLStore({
-      url: 'file:agent-memory.db',
+      url: "file:agent-memory.db",
     }),
     // ...
   }),

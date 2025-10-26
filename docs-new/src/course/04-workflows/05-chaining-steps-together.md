@@ -7,14 +7,14 @@ Now you'll learn how to chain your steps together to create a complete workflow.
 Add this workflow definition to your file:
 
 ```typescript
-import { createWorkflow } from '@mastra/core/workflows';
+import { createWorkflow } from "@mastra/core/workflows";
 
 export const contentWorkflow = createWorkflow({
-  id: 'content-processing-workflow',
-  description: 'Validates and enhances content',
+  id: "content-processing-workflow",
+  description: "Validates and enhances content",
   inputSchema: z.object({
     content: z.string(),
-    type: z.enum(['article', 'blog', 'social']).default('article'),
+    type: z.enum(["article", "blog", "social"]).default("article"),
   }),
   outputSchema: z.object({
     content: z.string(),
@@ -22,7 +22,7 @@ export const contentWorkflow = createWorkflow({
     wordCount: z.number(),
     metadata: z.object({
       readingTime: z.number(),
-      difficulty: z.enum(['easy', 'medium', 'hard']),
+      difficulty: z.enum(["easy", "medium", "hard"]),
       processedAt: z.string(),
     }),
   }),

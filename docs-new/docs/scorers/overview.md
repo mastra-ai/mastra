@@ -1,5 +1,5 @@
 ---
-title: 'Overview'
+title: "Overview"
 description: Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
 sidebar_position: 1
 ---
@@ -70,20 +70,23 @@ npm install @mastra/evals@latest
 You can add built-in scorers to your agents to automatically evaluate their outputs. See the [full list of built-in scorers](/docs/scorers/off-the-shelf-scorers) for all available options.
 
 ```typescript filename="src/mastra/agents/evaluated-agent.ts" showLineNumbers copy
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { createAnswerRelevancyScorer, createToxicityScorer } from '@mastra/evals/scorers/llm';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import {
+  createAnswerRelevancyScorer,
+  createToxicityScorer,
+} from "@mastra/evals/scorers/llm";
 
 export const evaluatedAgent = new Agent({
   // ...
   scorers: {
     relevancy: {
-      scorer: createAnswerRelevancyScorer({ model: openai('gpt-4o-mini') }),
-      sampling: { type: 'ratio', rate: 0.5 },
+      scorer: createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") }),
+      sampling: { type: "ratio", rate: 0.5 },
     },
     safety: {
-      scorer: createToxicityScorer({ model: openai('gpt-4o-mini') }),
-      sampling: { type: 'ratio', rate: 1 },
+      scorer: createToxicityScorer({ model: openai("gpt-4o-mini") }),
+      sampling: { type: "ratio", rate: 1 },
     },
   },
 });

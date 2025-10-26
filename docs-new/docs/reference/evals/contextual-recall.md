@@ -1,5 +1,5 @@
 ---
-title: 'Contextual Recall'
+title: "Contextual Recall"
 description: Documentation for the Contextual Recall Metric, which evaluates the completeness of LLM responses in incorporating relevant context.
 ---
 
@@ -16,24 +16,24 @@ The `ContextualRecallMetric` class evaluates how effectively an LLM's response i
 ## Basic Usage
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { ContextualRecallMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ContextualRecallMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new ContextualRecallMetric(model, {
   context: [
-    'Product features: cloud synchronization capability',
-    'Offline mode available for all users',
-    'Supports multiple devices simultaneously',
-    'End-to-end encryption for all data',
+    "Product features: cloud synchronization capability",
+    "Offline mode available for all users",
+    "Supports multiple devices simultaneously",
+    "End-to-end encryption for all data",
   ],
 });
 
 const result = await metric.measure(
-  'What are the key features of the product?',
-  'The product includes cloud sync, offline mode, and multi-device support.',
+  "What are the key features of the product?",
+  "The product includes cloud sync, offline mode, and multi-device support.",
 );
 
 console.log(result.score); // Score from 0-1
@@ -159,25 +159,25 @@ Final score: `(correctly_recalled_items / total_relevant_items) * scale`
 ## Example with Custom Configuration
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { ContextualRecallMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ContextualRecallMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new ContextualRecallMetric(model, {
   scale: 100, // Use 0-100 scale instead of 0-1
   context: [
-    'All data is encrypted at rest and in transit',
-    'Two-factor authentication (2FA) is mandatory',
-    'Regular security audits are performed',
-    'Incident response team available 24/7',
+    "All data is encrypted at rest and in transit",
+    "Two-factor authentication (2FA) is mandatory",
+    "Regular security audits are performed",
+    "Incident response team available 24/7",
   ],
 });
 
 const result = await metric.measure(
   "Summarize the company's security measures",
-  'The company implements encryption for data protection and requires 2FA for all users.',
+  "The company implements encryption for data protection and requires 2FA for all users.",
 );
 
 // Example output:

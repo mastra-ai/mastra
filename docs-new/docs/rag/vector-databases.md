@@ -332,7 +332,7 @@ Before storing embeddings, you need to create an index with the appropriate dime
 ```ts filename="store-embeddings.ts" showLineNumbers copy
 // Create an index with dimension 1536 (for text-embedding-3-small)
 await store.createIndex({
-  indexName: 'myCollection',
+  indexName: "myCollection",
   dimension: 1536,
 });
 ```
@@ -462,9 +462,9 @@ After creating an index, you can store embeddings along with their basic metadat
 ```ts filename="store-embeddings.ts" showLineNumbers copy
 // Store embeddings with their corresponding metadata
 await store.upsert({
-  indexName: 'myCollection', // index name
+  indexName: "myCollection", // index name
   vectors: embeddings, // array of embedding vectors
-  metadata: chunks.map(chunk => ({
+  metadata: chunks.map((chunk) => ({
     text: chunk.text, // The original text content
     id: chunk.id, // Optional unique identifier
   })),
@@ -489,9 +489,9 @@ Vector stores support rich metadata (any JSON-serializable fields) for filtering
 ```ts showLineNumbers copy
 // Store embeddings with rich metadata for better organization and filtering
 await store.upsert({
-  indexName: 'myCollection',
+  indexName: "myCollection",
   vectors: embeddings,
-  metadata: chunks.map(chunk => ({
+  metadata: chunks.map((chunk) => ({
     // Basic content
     text: chunk.text,
     id: chunk.id,
@@ -502,7 +502,7 @@ await store.upsert({
 
     // Temporal metadata
     createdAt: new Date().toISOString(),
-    version: '1.0',
+    version: "1.0",
 
     // Custom fields
     language: chunk.language,

@@ -1,6 +1,6 @@
 ---
-title: 'Agent.getMemory() '
-description: 'Documentation for the `Agent.getMemory()` method in Mastra agents, which retrieves the memory system associated with the agent.'
+title: "Agent.getMemory() "
+description: "Documentation for the `Agent.getMemory()` method in Mastra agents, which retrieves the memory system associated with the agent."
 ---
 
 # Agent.getMemory()

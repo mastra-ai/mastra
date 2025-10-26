@@ -1,6 +1,6 @@
 ---
-title: 'ElevenLabs Voice'
-description: 'Documentation for the ElevenLabs voice implementation, offering high-quality text-to-speech capabilities with multiple voice models and natural-sounding synthesis.'
+title: "ElevenLabs Voice"
+description: "Documentation for the ElevenLabs voice implementation, offering high-quality text-to-speech capabilities with multiple voice models and natural-sounding synthesis."
 ---
 
 # ElevenLabs
@@ -10,7 +10,7 @@ The ElevenLabs voice implementation in Mastra provides high-quality text-to-spee
 ## Usage Example
 
 ```typescript
-import { ElevenLabsVoice } from '@mastra/voice-elevenlabs';
+import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 
 // Initialize with default configuration (uses ELEVENLABS_API_KEY environment variable)
 const voice = new ElevenLabsVoice();
@@ -18,14 +18,14 @@ const voice = new ElevenLabsVoice();
 // Initialize with custom configuration
 const voice = new ElevenLabsVoice({
   speechModel: {
-    name: 'eleven_multilingual_v2',
-    apiKey: 'your-api-key',
+    name: "eleven_multilingual_v2",
+    apiKey: "your-api-key",
   },
-  speaker: 'custom-speaker-id',
+  speaker: "custom-speaker-id",
 });
 
 // Text-to-Speech
-const audioStream = await voice.speak('Hello, world!');
+const audioStream = await voice.speak("Hello, world!");
 
 // Get available speakers
 const speakers = await voice.getSpeakers();

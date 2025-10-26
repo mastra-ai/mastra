@@ -1,6 +1,6 @@
 ---
-title: 'Cloudflare Voice'
-description: 'Documentation for the CloudflareVoice class, providing text-to-speech capabilities using Cloudflare Workers AI.'
+title: "Cloudflare Voice"
+description: "Documentation for the CloudflareVoice class, providing text-to-speech capabilities using Cloudflare Workers AI."
 ---
 
 # Cloudflare
@@ -10,21 +10,21 @@ The CloudflareVoice class in Mastra provides text-to-speech capabilities using C
 ## Usage Example
 
 ```typescript
-import { CloudflareVoice } from '@mastra/voice-cloudflare';
+import { CloudflareVoice } from "@mastra/voice-cloudflare";
 
 // Initialize with configuration
 const voice = new CloudflareVoice({
   speechModel: {
-    name: '@cf/meta/m2m100-1.2b',
-    apiKey: 'your-cloudflare-api-token',
-    accountId: 'your-cloudflare-account-id',
+    name: "@cf/meta/m2m100-1.2b",
+    apiKey: "your-cloudflare-api-token",
+    accountId: "your-cloudflare-account-id",
   },
-  speaker: 'en-US-1', // Default voice
+  speaker: "en-US-1", // Default voice
 });
 
 // Convert text to speech
-const audioStream = await voice.speak('Hello, how can I help you?', {
-  speaker: 'en-US-2', // Override default voice
+const audioStream = await voice.speak("Hello, how can I help you?", {
+  speaker: "en-US-2", // Override default voice
 });
 
 // Get available voices

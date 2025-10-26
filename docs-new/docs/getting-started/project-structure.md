@@ -1,5 +1,5 @@
 ---
-title: 'Project Structure '
+title: "Project Structure "
 description: Guide on organizing folders and files in Mastra, including best practices and recommended structures.
 sidebar_position: 2
 ---

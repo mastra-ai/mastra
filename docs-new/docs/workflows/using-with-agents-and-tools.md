@@ -1,6 +1,6 @@
 ---
-title: 'Agents & Tools'
-description: 'Steps in Mastra workflows provide a structured way to manage operations by defining inputs, outputs, and execution logic.'
+title: "Agents & Tools"
+description: "Steps in Mastra workflows provide a structured way to manage operations by defining inputs, outputs, and execution logic."
 sidebar_position: 3
 ---
 
@@ -23,14 +23,14 @@ To include an agent in a workflow, define it in the usual way, then either add i
 This agent uses OpenAI to generate a fact about a city, country, and timezone.
 
 ```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
-  name: 'test-agent',
-  description: 'Create facts for a country based on the city',
+  name: "test-agent",
+  description: "Create facts for a country based on the city",
   instructions: `Return an interesting fact about the country based on the city provided`,
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
 });
 ```
 
@@ -45,13 +45,13 @@ The step is composed into the workflow using `.then()`, allowing it to receive t
 ![Agent as step](/img/workflows/workflows-agent-tools-agent-step.jpg)
 
 ```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { testAgent } from '../agents/test-agent';
+import { testAgent } from "../agents/test-agent";
 
 const step1 = createStep(testAgent);
 
 export const testWorkflow = createWorkflow({
-  id: 'test-workflow',
-  description: 'Test workflow',
+  id: "test-workflow",
+  description: "Test workflow",
   inputSchema: z.object({
     input: z.string(),
   }),
@@ -117,12 +117,12 @@ To use a tool within a workflow, define it in the usual way, then either add it 
 The example below uses the Open Meteo API to retrieve geolocation details for a city, returning its name, country, and timezone.
 
 ```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
-import { createTool } from '@mastra/core';
-import { z } from 'zod';
+import { createTool } from "@mastra/core";
+import { z } from "zod";
 
 export const testTool = createTool({
-  id: 'test-tool',
-  description: 'Gets country for a city',
+  id: "test-tool",
+  description: "Gets country for a city",
   inputSchema: z.object({
     input: z.string(),
   }),
@@ -131,7 +131,9 @@ export const testTool = createTool({
   }),
   execute: async ({ context }) => {
     const { input } = context;
-    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${input}`);
+    const geocodingResponse = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${input}`,
+    );
     const geocodingData = await geocodingResponse.json();
 
     const { country } = geocodingData.results[0];
@@ -222,8 +224,8 @@ Once a workflow has been registered it can be referenced using `getWorkflow` fro
 
 ```typescript {10,17-27} filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
 export const cityCoordinatesTool = createTool({
-  id: 'city-tool',
-  description: 'Convert city details',
+  id: "city-tool",
+  description: "Convert city details",
   inputSchema: z.object({
     city: z.string(),
   }),
@@ -232,12 +234,14 @@ export const cityCoordinatesTool = createTool({
   }),
   execute: async ({ context, mastra }) => {
     const { city } = context;
-    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
+    const geocodingResponse = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${city}`,
+    );
     const geocodingData = await geocodingResponse.json();
 
     const { name, country, timezone } = geocodingData.results[0];
 
-    const workflow = mastra?.getWorkflow('cityStringWorkflow');
+    const workflow = mastra?.getWorkflow("cityStringWorkflow");
 
     const run = await workflow?.createRunAsync();
 
@@ -261,16 +265,16 @@ export const cityCoordinatesTool = createTool({
 You can also use Workflows in Agents. This agent is able to choose between using the test tool or the test workflow.
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { testTool } from '../tools/test-tool';
-import { testWorkflow } from '../workflows/test-workflow';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { testTool } from "../tools/test-tool";
+import { testWorkflow } from "../workflows/test-workflow";
 
 export const testAgent = new Agent({
-  name: 'test-agent',
-  description: 'Create facts for a country based on the city',
+  name: "test-agent",
+  description: "Create facts for a country based on the city",
   instructions: `Return an interesting fact about the country based on the city provided`,
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   workflows: {
     test_workflow: testWorkflow,
   },
@@ -291,23 +295,23 @@ When you provide workflows to the server, each workflow is automatically exposed
 - `run_testWorkflow`.
 
 ```typescript filename="src/test-mcp-server.ts" showLineNumbers copy
-import { MCPServer } from '@mastra/mcp';
+import { MCPServer } from "@mastra/mcp";
 
-import { testAgent } from './mastra/agents/test-agent';
-import { testTool } from './mastra/tools/test-tool';
-import { testWorkflow } from './mastra/workflows/test-workflow';
+import { testAgent } from "./mastra/agents/test-agent";
+import { testTool } from "./mastra/tools/test-tool";
+import { testWorkflow } from "./mastra/workflows/test-workflow";
 
 async function startServer() {
   const server = new MCPServer({
-    name: 'test-mcp-server',
-    version: '1.0.0',
+    name: "test-mcp-server",
+    version: "1.0.0",
     workflows: {
       testWorkflow,
     },
   });
 
   await server.startStdio();
-  console.log('MCPServer started on stdio');
+  console.log("MCPServer started on stdio");
 }
 
 startServer().catch(console.error);
@@ -316,14 +320,14 @@ startServer().catch(console.error);
 To verify that your workflow is available on the server, you can connect with an MCPClient.
 
 ```typescript filename="src/test-mcp-client.ts" showLineNumbers copy
-import { MCPClient } from '@mastra/mcp';
+import { MCPClient } from "@mastra/mcp";
 
 async function main() {
   const mcp = new MCPClient({
     servers: {
       local: {
-        command: 'npx',
-        args: ['tsx', 'src/test-mcp-server.ts'],
+        command: "npx",
+        args: ["tsx", "src/test-mcp-server.ts"],
       },
     },
   });

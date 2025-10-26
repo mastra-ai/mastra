@@ -1,6 +1,6 @@
 ---
-title: 'LangSmith Exporter '
-description: 'Send AI traces to LangSmith for LLM observability and evaluation'
+title: "LangSmith Exporter "
+description: "Send AI traces to LangSmith for LLM observability and evaluation"
 ---
 
 # LangSmith Exporter
@@ -39,14 +39,14 @@ LANGSMITH_BASE_URL=https://api.smith.langchain.com  # Optional for self-hosted
 ### Basic Setup
 
 ```typescript filename="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { LangSmithExporter } from '@mastra/langsmith';
+import { Mastra } from "@mastra/core";
+import { LangSmithExporter } from "@mastra/langsmith";
 
 export const mastra = new Mastra({
   observability: {
     configs: {
       langsmith: {
-        serviceName: 'my-service',
+        serviceName: "my-service",
         exporters: [
           new LangSmithExporter({
             apiKey: process.env.LANGSMITH_API_KEY,
@@ -74,7 +74,7 @@ new LangSmithExporter({
     timeout: 30000, // Request timeout in ms
     maxRetries: 3, // Retry attempts
   },
-  logLevel: 'info', // Diagnostic logging: debug | info | warn | error
+  logLevel: "info", // Diagnostic logging: debug | info | warn | error
 
   // LangSmith-specific options
   hideInputs: false, // Hide input data in UI

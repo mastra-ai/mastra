@@ -3,20 +3,20 @@
 Let's update our agent with working memory capabilities:
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-import { openai } from '@ai-sdk/openai';
-import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 // Create a memory instance with working memory configuration
 const memory = new Memory({
   storage: new LibSQLStore({
-    url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
+    url: "file:../../memory.db", // relative path from the `.mastra/output` directory
   }), // Storage for message history
   vector: new LibSQLVector({
-    connectionUrl: 'file:../../vector.db', // relative path from the `.mastra/output` directory
+    connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
   }), // Vector database for semantic search
-  embedder: openai.embedding('text-embedding-3-small'), // Embedder for message embeddings
+  embedder: openai.embedding("text-embedding-3-small"), // Embedder for message embeddings
   options: {
     semanticRecall: {
       topK: 3,
@@ -33,7 +33,7 @@ const memory = new Memory({
 
 // Create an agent with the configured memory
 export const memoryAgent = new Agent({
-  name: 'MemoryAgent',
+  name: "MemoryAgent",
   instructions: `
     You are a helpful assistant with advanced memory capabilities.
     You can remember previous conversations and user preferences.
@@ -50,7 +50,7 @@ export const memoryAgent = new Agent({
     Always refer to your working memory before asking for information the user has already provided.
     Use the information in your working memory to provide personalized responses.
   `,
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   memory: memory,
 });
 ```

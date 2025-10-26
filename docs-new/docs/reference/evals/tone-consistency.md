@@ -1,5 +1,5 @@
 ---
-title: 'Tone Consistency'
+title: "Tone Consistency"
 description: Documentation for the Tone Consistency Metric in Mastra, which evaluates emotional tone and sentiment consistency in text.
 ---
 
@@ -16,17 +16,20 @@ The `ToneConsistencyMetric` class evaluates the text's emotional tone and sentim
 ## Basic Usage
 
 ```typescript
-import { ToneConsistencyMetric } from '@mastra/evals/nlp';
+import { ToneConsistencyMetric } from "@mastra/evals/nlp";
 
 const metric = new ToneConsistencyMetric();
 
 // Compare tone between input and output
-const result1 = await metric.measure('I love this amazing product!', 'This product is wonderful and fantastic!');
+const result1 = await metric.measure(
+  "I love this amazing product!",
+  "This product is wonderful and fantastic!",
+);
 
 // Analyze tone stability in a single text
 const result2 = await metric.measure(
-  'The service is excellent. The staff is friendly. The atmosphere is perfect.',
-  '', // Empty string for single-text analysis
+  "The service is excellent. The staff is friendly. The atmosphere is perfect.",
+  "", // Empty string for single-text analysis
 );
 
 console.log(result1.score); // Tone consistency score from 0-1
@@ -146,14 +149,14 @@ Final score: `mode_specific_score * scale`
 ## Example with Both Modes
 
 ```typescript
-import { ToneConsistencyMetric } from '@mastra/evals/nlp';
+import { ToneConsistencyMetric } from "@mastra/evals/nlp";
 
 const metric = new ToneConsistencyMetric();
 
 // Tone Consistency Mode
 const consistencyResult = await metric.measure(
-  'This product is fantastic and amazing!',
-  'The product is excellent and wonderful!',
+  "This product is fantastic and amazing!",
+  "The product is excellent and wonderful!",
 );
 // Example output:
 // {
@@ -166,7 +169,10 @@ const consistencyResult = await metric.measure(
 // }
 
 // Tone Stability Mode
-const stabilityResult = await metric.measure('Great service! Friendly staff. Perfect atmosphere.', '');
+const stabilityResult = await metric.measure(
+  "Great service! Friendly staff. Perfect atmosphere.",
+  "",
+);
 // Example output:
 // {
 //   score: 0.9,

@@ -1,6 +1,6 @@
 ---
-title: 'voice.listen()'
-description: 'Documentation for the listen() method available in all Mastra voice providers, which converts speech to text.'
+title: "voice.listen()"
+description: "Documentation for the listen() method available in all Mastra voice providers, which converts speech to text."
 ---
 
 # voice.listen()
@@ -10,26 +10,26 @@ The `listen()` method is a core function available in all Mastra voice providers
 ## Usage Example
 
 ```typescript
-import { OpenAIVoice } from '@mastra/voice-openai';
-import { getMicrophoneStream } from '@mastra/node-audio';
-import { createReadStream } from 'fs';
-import path from 'path';
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { getMicrophoneStream } from "@mastra/node-audio";
+import { createReadStream } from "fs";
+import path from "path";
 
 // Initialize a voice provider
 const voice = new OpenAIVoice({
   listeningModel: {
-    name: 'whisper-1',
+    name: "whisper-1",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });
 
 // Basic usage with a file stream
-const audioFilePath = path.join(process.cwd(), 'audio.mp3');
+const audioFilePath = path.join(process.cwd(), "audio.mp3");
 const audioStream = createReadStream(audioFilePath);
 const transcript = await voice.listen(audioStream, {
-  filetype: 'mp3',
+  filetype: "mp3",
 });
-console.log('Transcribed text:', transcript);
+console.log("Transcribed text:", transcript);
 
 // Using a microphone stream
 const microphoneStream = getMicrophoneStream(); // Assume this function gets audio input
@@ -37,8 +37,8 @@ const transcription = await voice.listen(microphoneStream);
 
 // With provider-specific options
 const transcriptWithOptions = await voice.listen(audioStream, {
-  language: 'en',
-  prompt: 'This is a conversation about artificial intelligence.',
+  language: "en",
+  prompt: "This is a conversation about artificial intelligence.",
 });
 ```
 
@@ -151,14 +151,14 @@ When using realtime voice providers like `OpenAIRealtimeVoice`, the `listen()` m
 - You need to register an event listener to receive the transcription
 
 ```typescript
-import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
-import { getMicrophoneStream } from '@mastra/node-audio';
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { getMicrophoneStream } from "@mastra/node-audio";
 
 const voice = new OpenAIRealtimeVoice();
 await voice.connect();
 
 // Register event listener for transcription
-voice.on('writing', ({ text, role }) => {
+voice.on("writing", ({ text, role }) => {
   console.log(`${role}: ${text}`);
 });
 
@@ -172,9 +172,9 @@ await voice.listen(microphoneStream);
 When using `CompositeVoice`, the `listen()` method delegates to the configured listening provider:
 
 ```typescript
-import { CompositeVoice } from '@mastra/core/voice';
-import { OpenAIVoice } from '@mastra/voice-openai';
-import { PlayAIVoice } from '@mastra/voice-playai';
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
 
 const voice = new CompositeVoice({
   listenProvider: new OpenAIVoice(),

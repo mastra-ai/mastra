@@ -1,5 +1,5 @@
 ---
-title: 'Upstash Storage '
+title: "Upstash Storage "
 description: Documentation for the Upstash storage implementation in Mastra.
 ---
 
@@ -22,7 +22,7 @@ npm install @mastra/upstash@latest
 ## Usage
 
 ```typescript copy showLineNumbers
-import { UpstashStore } from '@mastra/upstash';
+import { UpstashStore } from "@mastra/upstash";
 
 const storage = new UpstashStore({
   url: process.env.UPSTASH_URL,

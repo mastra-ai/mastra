@@ -1,5 +1,5 @@
 ---
-title: 'Workflow.map() '
+title: "Workflow.map() "
 description: Documentation for the `Workflow.map()` method in workflows, which maps output data from a previous step to the input of a subsequent step.
 ---
 
