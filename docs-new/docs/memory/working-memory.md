@@ -8,7 +8,7 @@ import YouTube from '@site/src/components/YouTube';
 
 # Working Memory
 
-While [conversation history](/docs/memory/overview#conversation-history) and [semantic recall](./semantic-recall.mdx) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
+While [conversation history](./conversation-history) and [semantic recall](./semantic-recall.md) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
 
 Think of it as the agent's active thoughts or scratchpad – the key information they keep available about the user or task. It's similar to how a person would naturally remember someone's name, preferences, or important details during a conversation.
 
@@ -378,7 +378,7 @@ await memory.updateWorkingMemory({
 
 ## Examples
 
-- [Basic working memory](/examples/memory/working-memory-basic)
-- [Working memory with template](/examples/memory/working-memory-template)
-- [Working memory with schema](/examples/memory/working-memory-schema)
+- [Basic working memory](/docs/examples/memory/working-memory-basic)
+- [Working memory with template](/docs/examples/memory/working-memory-template)
+- [Working memory with schema](/docs/examples/memory/working-memory-schema)
 - [Per-resource working memory](https://github.com/mastra-ai/mastra/tree/main/examples/memory-per-resource-example) - Complete example showing resource-scoped memory persistence

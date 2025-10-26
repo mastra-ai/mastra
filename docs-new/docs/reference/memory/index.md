@@ -28,7 +28,7 @@ export const agent = new Agent({
 });
 ```
 
-> To enable `workingMemory` on an agent, you’ll need a storage provider configured on your main Mastra instance. See [Mastra class](../core/mastra-class.mdx) for more information.
+> To enable `workingMemory` on an agent, you'll need a storage provider configured on your main Mastra instance. See [Mastra class](../core/mastra-class.md) for more information.
 
 ## Constructor parameters
 
@@ -198,8 +198,8 @@ export const agent = new Agent({
 - [Semantic Recall](/docs/memory/semantic-recall)
 - [Working Memory](/docs/memory/working-memory)
 - [Memory Processors](/docs/memory/memory-processors)
-- [createThread](/reference/memory/createThread)
-- [query](/reference/memory/query)
-- [getThreadById](/reference/memory/getThreadById)
-- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId)
-- [deleteMessages](/reference/memory/deleteMessages)
+- [createThread](/docs/reference/memory/createThread)
+- [query](/docs/reference/memory/query)
+- [getThreadById](/docs/reference/memory/getThreadById)
+- [getThreadsByResourceId](/docs/reference/memory/getThreadsByResourceId)
+- [deleteMessages](/docs/reference/memory/deleteMessages)

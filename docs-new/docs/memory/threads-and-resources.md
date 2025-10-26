@@ -11,7 +11,7 @@ Mastra organizes memory into threads, which are records that group related inter
 1. **`thread`**: A globally unique ID representing the conversation (e.g., `support_123`). Must be unique across all resources.
 2. **`resource`**: The user or entity that owns the thread (e.g., `user_123`, `org_456`).
 
-The `resource` is especially important for [resource-scoped memory](./working-memory#resource-scoped-memory), which allows memory to persist across all threads associated with the same user or entity.
+The `resource` is especially important for [resource-scoped memory](./working-memory#resource-scoped-memory-default), which allows memory to persist across all threads associated with the same user or entity.
 
 ```typescript {4} showLineNumbers
 const stream = await agent.stream("message for agent", {

@@ -51,23 +51,23 @@ That memory instance has options you can configure for working memory, conversat
 
 Mastra supports three types of memory: working memory, conversation history, and semantic recall.
 
-[**Working memory**](./working-memory.mdx) stores persistent user-specific details such as names, preferences, goals, and other structured data. (Compare this to ChatGPT where you can ask it to tell you about yourself). This is implemented as a block of Markdown text that the agent is able to update over time (or alternately, as a Zod schema)
+[**Working memory**](./working-memory) stores persistent user-specific details such as names, preferences, goals, and other structured data. (Compare this to ChatGPT where you can ask it to tell you about yourself). This is implemented as a block of Markdown text that the agent is able to update over time (or alternately, as a Zod schema)
 
-[**Conversation history**](./conversation-history.mdx) captures recent messages from the current conversation, providing short-term continuity and maintaining dialogue flow.
+[**Conversation history**](./conversation-history) captures recent messages from the current conversation, providing short-term continuity and maintaining dialogue flow.
 
-[**Semantic recall**](./semantic-recall.mdx) retrieves older messages from past conversations based on semantic relevance. Matches are retrieved using vector search and can include surrounding context for better comprehension.
+[**Semantic recall**](./semantic-recall) retrieves older messages from past conversations based on semantic relevance. Matches are retrieved using vector search and can include surrounding context for better comprehension.
 
-Mastra combines all memory types into a single context window. If the total exceeds the model’s token limit, use [memory processors](./memory-processors.mdx) to trim or filter messages before sending them to the model.
+Mastra combines all memory types into a single context window. If the total exceeds the model’s token limit, use [memory processors](./memory-processors) to trim or filter messages before sending them to the model.
 
 ## Scoping memory with threads and resources
 
-All memory types are [resource-scoped](./working-memory.mdx#resource-scoped-memory-default) by default, meaning they persist across all conversations for the same user or entity. [Thread-scoped](./working-memory.mdx#thread-scoped-memory) configuration isolates memory to a single conversation thread.
+All memory types are [resource-scoped](./working-memory#resource-scoped-memory-default) by default, meaning they persist across all conversations for the same user or entity. [Thread-scoped](./working-memory#thread-scoped-memory) configuration isolates memory to a single conversation thread.
 
 ## Memory Storage Adapters
 
 To persist and recall information between conversations, memory requires a storage adapter.
 
-Supported options include [LibSQL](/docs/memory/storage/memory-with-libsql), [MongoDB](/docs/memory/storage/memory-with-mongodb), [Postgres](/docs/memory/storage/memory-with-pg), and [Upstash](/docs/memory/storage/memory-with-upstash)
+Supported options include [LibSQL](/docs/examples/memory/memory-with-libsql), [MongoDB](/docs/examples/memory/memory-with-mongodb), [Postgres](/docs/examples/memory/memory-with-pg), and [Upstash](/docs/examples/memory/memory-with-upstash)
 
 We use LibSQL out of the box because it is file-based or in-memory, so it is easy to install and works well with the playground.
 
@@ -102,16 +102,16 @@ If tracing is enabled in your Mastra deployment and memory is configured either 
 
 This is helpful for debugging, understanding agent decisions, and verifying that the agent is retrieving the right information for each request.
 
-For more details on enabling and configuring tracing, see [Tracing](../observability/tracing).
+For more details on enabling and configuring tracing, see [Tracing](../observability/overview).
 
 ## Local development with LibSQL
 
 For local development with `LibSQLStore`, you can inspect stored memory using the [SQLite Viewer](https://marketplace.visualstudio.com/items?itemName=qwtel.sqlite-viewer) extension in VS Code.
 
-![SQLite Viewer](/image/memory/memory-sqlite-viewer.jpg)
+![SQLite Viewer](/img/memory/memory-sqlite-viewer.jpg)
 
 ## Next Steps
 
-Now that you understand the core concepts, continue to [semantic recall](./semantic-recall.mdx) to learn how to add RAG memory to your Mastra agents.
+Now that you understand the core concepts, continue to [semantic recall](./semantic-recall) to learn how to add RAG memory to your Mastra agents.
 
-Alternatively you can visit the [configuration reference](../../reference/memory/Memory.mdx) for available options.
+Alternatively you can visit the [configuration reference](/docs/reference/client-js/memory) for available options.

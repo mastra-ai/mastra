@@ -16,7 +16,7 @@ When building a web search agent, you have two main strategies to consider:
 ## Prerequisites
 
 - Node.js `v20.0` or later installed
-- An API key from a supported [Model Provider](/models)
+- An API key from a supported [Model Provider](/docs/models)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
 ## Using native search tools
@@ -125,7 +125,7 @@ export const mastra = new Mastra({
 
 ### Test your agent
 
-You can test your agent inside Mastra's [Playground](../../docs/getting-started/studio.mdx) using the `mastra dev` command:
+You can test your agent inside Mastra's [Playground](../../getting-started/studio.md) using the `mastra dev` command:
 
 ```bash
 mastra dev
@@ -228,7 +228,7 @@ export const mastra = new Mastra({
 
 ### Test your agent
 
-You can test your agent inside Mastra's [Playground](../../docs/getting-started/studio.mdx) using the `mastra dev` command:
+You can test your agent inside Mastra's [Playground](../../getting-started/studio.md) using the `mastra dev` command:
 
 ```bash
 mastra dev
