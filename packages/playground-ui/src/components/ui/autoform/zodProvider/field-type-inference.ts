@@ -25,6 +25,7 @@ export function inferFieldType(schema: z.ZodTypeAny, fieldConfig?: FieldConfig):
   if (schema instanceof zV3.ZodNativeEnum) return 'select';
   if (schema instanceof z.ZodArray) return 'array';
   if (schema instanceof z.ZodRecord) return 'record';
+  if (schema instanceof z.ZodUnion) return 'union';
 
   return 'string'; // Default to string for unknown types
 }

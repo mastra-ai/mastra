@@ -1,16 +1,31 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
+const personSchema = z.object({
+  name: z.string().default('John Doe'),
+  number: z
+    .union([z.number(), z.object({ prefix: z.string(), value: z.number() })])
+    .default({ prefix: 'tel', value: 0 }),
+  // profession: z.intersection(z.object({ title: z.string() }), z.object({ tools: z.array(z.string()) })),
+  // profession: z.discriminatedUnion('type', [
+  //   z.object({ type: z.literal('developer'), languages: z.array(z.string()) }),
+  //   z.object({ type: z.literal('designer'), tools: z.array(z.string()) }),
+  // ]),
+});
+// .default({ name: 'John Doe', number: { prefix: 'tel', value: 0 } });
+
 const stepOne = createStep({
   id: 'stepOne',
   inputSchema: z.object({
     inputValue: z.number(),
+    person: personSchema.optional(),
   }),
   outputSchema: z.object({
     doubledValue: z.number(),
   }),
   execute: async ({ inputData }) => {
-    await new Promise(resolve => setTimeout(resolve, 10_000));
+    console.log('inputData', inputData);
+    // await new Promise(resolve => setTimeout(resolve, 10_000));
     const doubledValue = inputData.inputValue * 2;
     return { doubledValue };
   },
@@ -71,6 +86,7 @@ export const nestedWorkflow = createWorkflow({
   id: 'data-processing',
   inputSchema: z.object({
     inputValue: z.number(),
+    person: personSchema.optional(),
   }),
   outputSchema: z.object({
     isEven: z.boolean(),
@@ -86,6 +102,7 @@ export const myWorkflowX = createWorkflow({
   id: 'my-workflow',
   inputSchema: z.object({
     inputValue: z.number(),
+    person: personSchema.optional(),
   }),
   outputSchema: z.object({
     isEven: z.boolean(),

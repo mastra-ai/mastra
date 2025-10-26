@@ -61,7 +61,12 @@ export function DynamicForm<T extends z.ZodSchema>({
     return schema;
   };
 
+  console.log('schema===', schema);
+
   const schemaProvider = new CustomZodProvider(normalizedSchema(schema) as any);
+
+  console.log('schemaProvider==', schemaProvider);
+  console.log('schemaProvider.getDefaultValues()===', schemaProvider.getDefaultValues());
 
   const formProps: ExtendableAutoFormProps<any> = {
     schema: schemaProvider,

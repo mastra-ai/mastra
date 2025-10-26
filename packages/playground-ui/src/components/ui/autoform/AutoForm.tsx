@@ -14,6 +14,7 @@ import { ObjectWrapper } from './components/ObjectWrapper';
 import { ArrayWrapper } from './components/ArrayWrapper';
 import { ArrayElementWrapper } from './components/ArrayElementWrapper';
 import { RecordField } from './components/RecordField';
+import { UnionField } from './components/UnionField';
 
 const ShadcnUIComponents: AutoFormUIComponents = {
   Form,
@@ -52,6 +53,7 @@ export function AutoForm<T extends Record<string, any>>({
         date: props => <DateField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
         select: props => <SelectField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
         record: props => <RecordField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
+        union: props => <UnionField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
         ...formComponents,
       }}
     />
