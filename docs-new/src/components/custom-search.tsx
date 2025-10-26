@@ -295,7 +295,7 @@ export const CustomSearch: FC<SearchProps> = ({
           spellCheck={false}
           className={cn(
             'x:[&::-webkit-search-cancel-button]:appearance-none',
-            'outline-none caret-(--mastra-green-accent-3) dark:caret-(--mastra-green-accent-2) dark:text-icons-6 text-(--mastra-text-tertiary) focus:outline-none w-full placeholder:text-icons-4 dark:placeholder:text-icons-2 placeholder:text-small md:placeholder:text-base placeholder:font-medium',
+            'outline-none caret-(--mastra-green-accent-3) dark:caret-(--mastra-green-accent-2) dark:text-white text-(--mastra-text-tertiary) focus:outline-none w-full placeholder:text-icons-4 dark:placeholder:text-icons-2 placeholder:text-small md:placeholder:text-base placeholder:font-medium',
           )}
           autoComplete="off"
           type="search"
@@ -311,7 +311,7 @@ export const CustomSearch: FC<SearchProps> = ({
           onClick={closeModal}
           className="p-0 h-7 w-8 hover:bg-(--mastra-surface-2)  rounded-full flex items-center justify-center hover:text-(--mastra-icons-8)"
         >
-          <CancelIcon className="w-4 h-4 text-(--mastra-icons-7)" />
+          <CancelIcon className="w-4 h-4 dark:text-white text-(--mastra-icons-7)" />
         </Button>
       </div>
 
@@ -377,7 +377,7 @@ export const CustomSearch: FC<SearchProps> = ({
                         <div className="flex gap-2 items-center">
                           <IconComponent className="w-4 h-4 text-(--mastra-icons-3) shrink-0" />
                           <span
-                            className="text-sm font-medium truncate text-(--mastra-text-tertiary) [&_mark]:!text-(--mastra-green-accent-3) [&_mark]:bg-transparent"
+                            className="text-sm font-medium truncate dark:text-white text-(--mastra-text-tertiary) [&_mark]:text-(--mastra-green-accent-3)! [&_mark]:bg-transparent"
                             dangerouslySetInnerHTML={{
                               __html: subResult.title,
                             }}

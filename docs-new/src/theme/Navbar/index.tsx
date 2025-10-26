@@ -14,7 +14,7 @@ export const Logo = () => {
       viewBox="0 0 114 34"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className="w-[5.5rem] shrink-0 md:w-[7.5rem] md:h-[2rem]"
+      className="w-22 shrink-0 md:w-30 md:h-8"
     >
       <circle cx="16.6532" cy="16.9999" r="14.0966" stroke="currentColor" strokeWidth="1.16026" />
       <ellipse
@@ -50,7 +50,7 @@ export default function Navbar(): ReactNode {
         <Link href="/docs">
           <div className="flex items-center gap-2">
             <Logo />
-            <span className="px-1.5 mb-0 w-[3.2rem] grid place-items-center h-[1.6rem] font-medium tracking-wider py-0.5 text-xs rounded-[0.44rem] border border-(--border) uppercase">
+            <span className="px-1.5 dark:text-(--mastra-green-accent) mb-0 w-[3.2rem] grid place-items-center h-[1.6rem] font-medium tracking-wider py-0.5 text-xs rounded-[0.44rem] border border-(--border) uppercase">
               Docs
             </span>
           </div>

@@ -1,26 +1,3 @@
-.showcaseContainer {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 3rem 1rem;
-}
-
-.showcaseHeader {
-  text-align: center;
-  margin-bottom: 3rem;
-}
-
-.showcaseHeading {
-  font-size: 2.5rem;
-  font-weight: 700;
-  margin-bottom: 1rem;
-  color: var(--mastra-text-primary);
-}
-
-.showcaseSubheading {
-  font-size: 1.125rem;
-  color: var(--mastra-text-tertiary);
-}
-
 .showcaseGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

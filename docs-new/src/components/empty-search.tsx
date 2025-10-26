@@ -94,16 +94,16 @@ export function EmptySearch({
               'flex flex-col gap-1 p-2 rounded-md cursor-pointer',
               isSelected
                 ? 'dark:bg-(--mastra-surface-5) bg-(--mastra-surface-2)'
-                : 'bg-(--ifm-background-color) dark:bg-(--mastra-surface-4)',
+                : 'bg-(--ifm-background-color) dark:bg-transparent',
             )}
             onClick={() => onSelect(index)}
             onMouseEnter={() => onHover(index)}
           >
-            <p className="text-sm !mb-0 font-medium truncate dark:text-(--mastra-text-quaternary) text-(--mastra-text-tertiary)">
+            <p className="text-sm mb-0! font-medium truncate dark:text-white text-(--mastra-text-tertiary)">
               {search.label}
             </p>
 
-            <p className="text-sm font-normal !mb-0 truncate text-(--mastra-text-muted)">{search.description}</p>
+            <p className="text-sm font-normal mb-0! truncate text-(--mastra-text-muted)">{search.description}</p>
           </div>
         );
       })}
