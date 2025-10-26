@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Laminar Integration '
+title: 'Laminar Integration'
 description: Documentation for integrating Laminar with Mastra, a specialized observability platform for LLM applications.
 ---
 

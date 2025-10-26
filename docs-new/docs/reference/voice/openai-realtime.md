@@ -1,5 +1,5 @@
 ---
-title: 'Reference: OpenAI Realtime Voice '
+title: 'OpenAI Realtime Voice'
 description: 'Documentation for the OpenAIRealtimeVoice class, providing real-time text-to-speech and speech-to-text capabilities via WebSockets.'
 ---
 

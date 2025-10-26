@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Prompt Injection Detector '
+title: 'Prompt Injection Detector'
 description: 'Documentation for the PromptInjectionDetector in Mastra, which detects prompt injection attempts in user input.'
 ---
 

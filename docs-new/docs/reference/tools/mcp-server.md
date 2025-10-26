@@ -1,5 +1,5 @@
 ---
-title: 'Reference: MCPServer '
+title: 'MCPServer'
 description: API Reference for MCPServer - A class for exposing Mastra tools and capabilities as a Model Context Protocol server.
 ---
 

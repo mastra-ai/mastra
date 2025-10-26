@@ -1,6 +1,7 @@
 ---
-title: 'Chroma Vector Store '
+title: 'ChromaVector'
 description: Documentation for the ChromaVector class in Mastra, which provides vector search using ChromaDB.
+sidebar_position: 2
 ---
 
 # Chroma Vector Store

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: LangWatch Integration '
+title: 'LangWatch Integration'
 description: Documentation for integrating LangWatch with Mastra, a specialized observability platform for LLM applications.
 ---
 

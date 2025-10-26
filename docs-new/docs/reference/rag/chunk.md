@@ -3,7 +3,7 @@ title: '.chunk() '
 description: Documentation for the chunk function in Mastra, which splits documents into smaller segments using various strategies.
 ---
 
-# Reference: .chunk()
+# .chunk()
 
 The `.chunk()` function splits documents into smaller segments using various strategies and options.
 

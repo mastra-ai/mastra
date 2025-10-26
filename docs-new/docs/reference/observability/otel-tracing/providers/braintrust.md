@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Braintrust '
+title: 'Braintrust'
 description: Documentation for integrating Braintrust with Mastra, an evaluation and monitoring platform for LLM applications.
 ---
 

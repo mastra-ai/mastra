@@ -1,5 +1,5 @@
 ---
-title: 'Reference: voice.speak() '
+title: 'voice.speak()'
 description: 'Documentation for the speak() method available in all Mastra voice providers, which converts text to speech.'
 ---
 

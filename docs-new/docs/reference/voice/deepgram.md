@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Deepgram Voice '
+title: 'Deepgram Voice'
 description: 'Documentation for the Deepgram voice implementation, providing text-to-speech and speech-to-text capabilities with multiple voice models and languages.'
 ---
 

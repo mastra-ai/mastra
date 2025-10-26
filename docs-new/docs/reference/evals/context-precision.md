@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Context Precision '
+title: 'Context Precision'
 description: Documentation for the Context Precision Metric in Mastra, which evaluates the relevance and precision of retrieved context nodes for generating expected outputs.
 ---
 

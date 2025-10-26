@@ -1,5 +1,5 @@
 ---
-title: 'Reference: voice.answer() '
+title: 'voice.answer()'
 description: 'Documentation for the answer() method available in real-time voice providers, which triggers the voice provider to generate a response.'
 ---
 

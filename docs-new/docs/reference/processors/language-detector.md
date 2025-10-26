@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Language Detector '
+title: 'Language Detector'
 description: 'Documentation for the LanguageDetector in Mastra, which detects language and can translate content in AI responses.'
 ---
 

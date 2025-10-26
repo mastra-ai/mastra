@@ -41,6 +41,8 @@
   height: 100%;
   object-fit: cover;
   transition: transform 0.3s ease;
+  border-bottom-right-radius: 0px;
+  border-bottom-left-radius: 0px;
 }
 
 .showcaseItem:hover .image {

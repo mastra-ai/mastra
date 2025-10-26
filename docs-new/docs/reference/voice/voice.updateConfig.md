@@ -1,5 +1,5 @@
 ---
-title: 'Reference: voice.updateConfig() '
+title: 'voice.updateConfig()'
 description: 'Documentation for the updateConfig() method available in voice providers, which updates the configuration of a voice provider at runtime.'
 ---
 
