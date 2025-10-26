@@ -128,6 +128,7 @@
   --border-subtle: hsla(0, 0%, 80%, 1);
   --border-code: #b8b8b8;
   --border-secondary: hsla(0, 0%, 72%, 1);
+  --sidebar-border: oklch(92.8% 0.006 264.531);
 
   /* Border width */
   --border-sm: 0.5px;
@@ -229,9 +230,10 @@
   --mastra-surface-5: hsla(0, 0%, 18%, 0.9);
 
   /* Nextra border colors - Dark mode */
-  --mastra-border: #343434;
-  --mastra-border-subtle: hsla(0, 0%, 19%, 1);
-  --mastra-border-code: hsla(0, 0%, 26%, 1);
+  --border: #343434;
+  --border-subtle: hsla(0, 0%, 19%, 1);
+  --border-code: hsla(0, 0%, 26%, 1);
+  --sidebar-border: oklch(26.9% 0 0);
 
   /* Code blocks */
   --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.1);
@@ -267,6 +269,11 @@
 [data-theme='dark'] ::selection {
   background: #2a2a2a;
   color: #46f488;
+}
+
+[data-theme='dark'] body,
+html {
+  background-color: var(--ifm-navbar-background-color);
 }
 
 /* ==================== NAVBAR ==================== */
@@ -388,22 +395,37 @@ span[class*='categoryLinkLabel'] {
   position: relative;
 }
 
+.menu,
+pre,
+[class*='tableOfContents'],
+.tabs,
+.toc-wrapper {
+  padding-inline: 0 !important;
+  scrollbar-width: thin;
+  scrollbar-color: #dedede transparent;
+}
+
+.table-of-contents__left-border {
+  border-color: var(--border);
+}
+
+[data-theme='dark'] {
+  .menu,
+  pre,
+  [class*='tableOfContents'],
+  .tabs,
+  .toc-wrapper {
+    scrollbar-color: #2a2a2a transparent;
+    scrollbar-width: thin;
+  }
+}
+
 @media (min-width: 997px) {
   [class*='docMainContainer'][class*='docMainContainer'] {
     min-width: 69rem;
   }
 
   /* Custom Scrollbars*/
-  .menu,
-  pre,
-  [class*='tableOfContents'],
-  .tabs,
-  .toc-wrapper {
-    padding-inline: 0 !important;
-    scrollbar-width: thin;
-    scrollbar-color: #dedede transparent;
-  }
-
   li:has(ul.menu__list) .menu__list {
     margin-bottom: 0.25rem;
     position: relative;
@@ -414,7 +436,7 @@ span[class*='categoryLinkLabel'] {
       width: 1px;
       inset-inline-start: calc(0.25rem * 3);
       inset-block: calc(0.25rem * 1);
-      background-color: oklch(92.8% 0.006 264.531);
+      background-color: var(--sidebar-border);
     }
   }
 
@@ -426,6 +448,7 @@ span[class*='categoryLinkLabel'] {
     bottom: 0;
     width: 1.5px;
     background: var(--mastra-text-primary);
+    border-radius: 8px;
   }
 
   .theme-doc-sidebar-item-link-level-3,
@@ -542,6 +565,13 @@ span[class*='categoryLinkLabel'] {
   }
 }
 
+[data-theme='dark'] {
+  .markdown h2,
+  .markdown h3 {
+    border-bottom-color: var(--border);
+  }
+}
+
 h2:has(code) {
   display: flex;
   align-items: center;
@@ -604,9 +634,10 @@ ol {
 }
 
 pre {
-  unset: all;
   --prism-background-color: var(--mastra-surface-2);
+  background: var(--mastra-surface-2);
   border: 0.5px solid var(--border);
+  border-radius: 12px;
 }
 
 pre * {
@@ -624,6 +655,11 @@ code {
   padding: 0.12em 0.25em;
 }
 
+[data-theme='dark'] code {
+  background: color-mix(in oklab, #fff 10%, transparent);
+  border-color: color-mix(in oklab, #fff 10%, transparent);
+}
+
 pre code {
   font-size: 13px;
   line-height: 1.6;
@@ -631,6 +667,10 @@ pre code {
   border: none;
   padding: 0;
   color: var(--mastra-text-muted);
+}
+
+[data-theme='dark'] pre code {
+  background: transparent;
 }
 
 /* Code block title bar */
@@ -648,7 +688,7 @@ div[class*='codeBlockTitle'] {
 }
 
 [data-theme='dark'] div[class*='codeBlockTitle'] {
-  border-color: var(--mastra-border);
+  border-color: var(--border);
   background: #171717;
   color: var(--mastra-text-tertiary);
 }
@@ -732,7 +772,7 @@ article td code {
 [data-theme='dark'] article p code,
 [data-theme='dark'] article li code,
 [data-theme='dark'] article td code {
-  border-color: var(--mastra-border-code);
+  border-color: var(--border-code);
 }
 
 /* Language label in code blocks */
@@ -751,11 +791,11 @@ div[class*='codeBlockLines'] {
 
 /* ==================== SIDEBAR ==================== */
 .theme-doc-sidebar-container {
-  border-right: 0.5px solid var(--mastra-border);
+  border-right: 0.5px solid var(--border);
 }
 
 [data-theme='dark'] .theme-doc-sidebar-container {
-  border-right-color: var(--mastra-border);
+  border-right-color: var(--border);
 }
 
 /* ==================== FOOTER ==================== */
@@ -796,9 +836,9 @@ article a:hover {
   text-decoration-color: var(--mastra-green-accent-2);
 }
 
-[data-theme='dark'] article a {
-  text-decoration-color: var(--mastra-green-accent);
-  color: var(--mastra-text-primary);
+[data-theme='dark'] .markdown a {
+  text-decoration-color: var(--mastra-green-accent-2);
+  color: var(--mastra-green-accent-2);
 }
 
 [data-theme='dark'] article a:hover {
@@ -831,11 +871,11 @@ table {
 }
 
 table thead tr {
-  border-bottom: 1px solid var(--mastra-border);
+  border-bottom: 1px solid var(--border);
 }
 
 table tbody tr {
-  border-bottom: 1px solid var(--mastra-border);
+  border-bottom: 1px solid var(--border);
 }
 
 table tbody tr:last-child {
@@ -855,7 +895,7 @@ tbody td {
 }
 
 table code {
-  border: 1px solid var(--mastra-border-secondary);
+  border: 1px solid var(--border-secondary);
   border-radius: var(--ifm-global-radius);
   background: transparent;
   padding-inline: 0.62rem;
@@ -869,7 +909,7 @@ table code {
 }
 
 [data-theme='dark'] table code {
-  border-color: var(--mastra-border-code);
+  border-color: var(--border-code);
 }
 
 /* ==================== ADMONITIONS ==================== */
@@ -883,7 +923,7 @@ table code {
 }
 
 [data-theme='dark'] .alert {
-  border-color: var(--mastra-border);
+  border-color: var(--border);
 }
 
 /* ==================== TABS ==================== */
@@ -925,7 +965,7 @@ table code {
 
 /* ==================== PAGINATION ==================== */
 .pagination-nav__link {
-  border: var(--border-sm) solid var(--mastra-border);
+  border: var(--border-sm) solid var(--border);
 }
 
 .pagination-nav__link:hover {
@@ -980,6 +1020,10 @@ kbd {
   padding-inline: 0.38rem;
   padding-block: 0.2rem;
   display: flex;
+}
+
+[data-theme='dark'] kbd {
+  background: var(--ifm-navbar-background-color);
 }
 
 /* Hide in Safari */
@@ -1041,4 +1085,12 @@ textarea:-webkit-autofill:focus {
 
 #docs-search-results {
   scrollbar-width: none;
+}
+
+.card__grid a {
+  color: var(--mastra-text-secondary);
+}
+
+[data-theme='dark'] .card__grid a {
+  color: white;
 }

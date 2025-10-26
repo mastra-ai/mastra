@@ -73,10 +73,10 @@ export default function SearchContainer({ locale }: { locale: string }) {
         </Button>
       </DialogTrigger>
       <DialogPortal>
-        <DialogOverlay className="fixed inset-0 transition-opacity z-[250] bg-black/40" />
-        <DialogContent className="dialog-panel z-[260] fixed left-1/2 top-[100px] -translate-x-1/2  w-full">
+        <DialogOverlay className="fixed inset-0 transition-opacity z-250 bg-black/40" />
+        <DialogContent className="dialog-panel z-260 fixed left-1/2 top-[100px] -translate-x-1/2  w-full">
           <div className="flex items-start relative top-1/2 justify-center min-h-full p-4">
-            <div className="dialog-panel__content w-full ring ring-neutral-200 shadow-2xl duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0 dark:border-pink-200 h-fit max-w-[660px] mx-auto rounded-xl bg-(--ifm-background-color) dark:bg-surface-4 transition-all">
+            <div className="w-full ring ring-neutral-200 dark:ring-(--border) shadow-2xl duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0 dark:border-(--border) h-fit max-w-[660px] mx-auto rounded-xl bg-(--ifm-background-color) dark:bg-(--mastra-surface-2) transition-all">
               <DialogTitle className="sr-only">Search docs...</DialogTitle>
               <div className="w-full">
                 <CustomSearch searchOptions={searchOptions} closeModal={close} />

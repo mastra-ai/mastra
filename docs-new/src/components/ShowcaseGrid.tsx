@@ -112,10 +112,12 @@ const showcaseItems: ShowcaseCardProps[] = [
 
 export const ShowcaseGrid = () => {
   return (
-    <div className={styles.showcaseContainer}>
-      <div className={styles.showcaseHeader}>
-        <h1 className={styles.showcaseHeading}>Showcase</h1>
-        <p className={styles.showcaseSubheading}>Check out these applications built with Mastra.</p>
+    <div className="showcase__grid max-w-[1440px] mx-auto py-12 px-12">
+      <div className="text-center mb-12">
+        <h1 className="text-4xl font-bold tracking-tight mb-4 text-(--mastra-text-primary) dark:text-white">
+          Showcase
+        </h1>
+        <p className="text-lg text-(--mastra-text-tertiary)">Check out these applications built with Mastra.</p>
       </div>
       <div className={styles.showcaseGrid}>
         {showcaseItems.map(item => (
