@@ -62,7 +62,7 @@ export const ThemeSwitcher = () => {
   return (
     <button
       onClick={toggleTheme}
-      className="w-fit hidden hover:bg-(--mastra-surface-3) hover:dark:bg-[#121212] lg:block text-(--mastra-text-quaternary) hover:text-black dark:hover:text-white transition-colors ease-linear p-2 rounded-[10px] cursor-pointer border-0 bg-transparent"
+      className="w-fit hover:bg-(--mastra-surface-3) hover:dark:bg-[#121212] text-(--mastra-text-quaternary) hover:text-black dark:hover:text-white transition-colors ease-linear p-2 rounded-[10px] cursor-pointer border-0 bg-transparent"
       aria-label={getAriaLabel()}
       title={getAriaLabel()}
     >

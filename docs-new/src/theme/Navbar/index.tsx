@@ -27,12 +27,16 @@ function NavbarContentDesktop() {
         <div className="flex gap-2 items-center">
           <div className="flex gap-4 items-center">
             <GithubStarCount />
-            <ThemeSwitcher />
+            <div className="hidden lg:block">
+              <ThemeSwitcher />
+            </div>
           </div>
           <NavbarMobileSidebarToggle />
         </div>
       </div>
-      <TabSwitcher />
+      <div className="hidden lg:block">
+        <TabSwitcher />
+      </div>
     </>
   );
 }

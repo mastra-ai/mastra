@@ -310,6 +310,11 @@ html {
   }
 }
 
+.navbar-sidebar__brand{
+  height: calc(var(--ifm-navbar-height) - 50px);
+  border-bottom-color: var(--border)
+}
+
 .dialog-panel__content {
   box-shadow:
     0 0 0 1px #00000014,

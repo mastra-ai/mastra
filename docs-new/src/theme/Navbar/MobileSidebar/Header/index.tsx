@@ -1,10 +1,10 @@
 import { useNavbarMobileSidebar } from '@docusaurus/theme-common/internal';
 import { translate } from '@docusaurus/Translate';
+import { ThemeSwitcher } from '@site/src/components/theme-switcher';
+import { Button } from '@site/src/components/ui/button';
 import { cn } from '@site/src/css/utils';
-import NavbarColorModeToggle from '@theme/Navbar/ColorModeToggle';
 import { type ReactNode } from 'react';
 import { Logo } from '../../logo';
-import { Button } from '@site/src/components/ui/button';
 
 function CloseButton() {
   const mobileSidebar = useNavbarMobileSidebar();
@@ -51,9 +51,9 @@ function CloseButton() {
 export default function NavbarMobileSidebarHeader(): ReactNode {
   return (
     <div className="navbar-sidebar__brand">
-      <div>
+      <div className="flex items-center gap-2">
         <Logo />
-        <NavbarColorModeToggle />
+        <ThemeSwitcher />
       </div>
       <CloseButton />
     </div>
