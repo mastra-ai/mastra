@@ -967,8 +967,10 @@ table code {
   padding-bottom: 5rem !important;
 }
 
-[class*='docItemContainer'] {
-  padding-inline: 3rem;
+@media (min-width: 997px) {
+  [class*='docItemContainer'] {
+    padding-inline: 3rem;
+  }
 }
 
 header h1 {
