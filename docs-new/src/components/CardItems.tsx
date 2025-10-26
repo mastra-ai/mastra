@@ -34,7 +34,7 @@ export function CardItems({ titles, items }: CardItemsProps) {
   const currentItems = items[titles.find(tab => sluggify(tab) === activeTab) ?? ''] ?? [];
 
   return (
-    <div>
+    <div className="card__grid">
       <div className="flex flex-wrap mt-6 items-center gap-2">
         {titles.map(title => (
           <button

@@ -1094,6 +1094,10 @@ textarea:-webkit-autofill:focus {
   scrollbar-width: none;
 }
 
-* {
-  transition:none!important;
+.card__grid a{
+  color: var(--mastra-text-secondary);
+}
+
+[data-theme='dark'] .card__grid a{
+  color: white;
 }
