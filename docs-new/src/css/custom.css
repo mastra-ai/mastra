@@ -1093,3 +1093,7 @@ textarea:-webkit-autofill:focus {
 #docs-search-results {
   scrollbar-width: none;
 }
+
+* {
+  transition:none!important;
+}
