@@ -1,5 +1,5 @@
 ---
-title: 'MastraMCPClient'
+title: "MastraMCPClient"
 description: API Reference for MastraMCPClient - A client implementation for the Model Context Protocol.
 ---
 
@@ -228,18 +228,18 @@ Returns an object mapping tool names to their corresponding Mastra tool implemen
 #### Example with Stdio Server
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { MastraMCPClient } from '@mastra/mcp';
-import { openai } from '@ai-sdk/openai';
+import { Agent } from "@mastra/core/agent";
+import { MastraMCPClient } from "@mastra/mcp";
+import { openai } from "@ai-sdk/openai";
 
 // Initialize the MCP client using mcp/fetch as an example https://hub.docker.com/r/mcp/fetch
 // Visit https://github.com/docker/mcp-servers for other reference docker mcp servers
 const fetchClient = new MastraMCPClient({
-  name: 'fetch',
+  name: "fetch",
   server: {
-    command: 'docker',
-    args: ['run', '-i', '--rm', 'mcp/fetch'],
-    logger: logMessage => {
+    command: "docker",
+    args: ["run", "-i", "--rm", "mcp/fetch"],
+    logger: (logMessage) => {
       console.log(`[${logMessage.level}] ${logMessage.message}`);
     },
   },
@@ -247,9 +247,10 @@ const fetchClient = new MastraMCPClient({
 
 // Create a Mastra Agent
 const agent = new Agent({
-  name: 'Fetch agent',
-  instructions: 'You are able to fetch data from URLs on demand and discuss the response data with the user.',
-  model: openai('gpt-4o-mini'),
+  name: "Fetch agent",
+  instructions:
+    "You are able to fetch data from URLs on demand and discuss the response data with the user.",
+  model: openai("gpt-4o-mini"),
 });
 
 try {
@@ -257,7 +258,7 @@ try {
   await fetchClient.connect();
 
   // Gracefully handle process exits so the docker subprocess is cleaned up
-  process.on('exit', () => {
+  process.on("exit", () => {
     fetchClient.disconnect();
   });
 
@@ -266,7 +267,7 @@ try {
 
   // Use the agent with the MCP tools
   const response = await agent.generate(
-    'Tell me about mastra.ai/docs. Tell me generally what this page is and the content it includes.',
+    "Tell me about mastra.ai/docs. Tell me generally what this page is and the content it includes.",
     {
       toolsets: {
         fetch: tools,
@@ -274,9 +275,9 @@ try {
     },
   );
 
-  console.log('\n\n' + response.text);
+  console.log("\n\n" + response.text);
 } catch (error) {
-  console.error('Error:', error);
+  console.error("Error:", error);
 } finally {
   // Always disconnect when done
   await fetchClient.disconnect();
@@ -288,20 +289,20 @@ try {
 ```typescript
 // Initialize the MCP client using an SSE server
 const sseClient = new MastraMCPClient({
-  name: 'sse-client',
+  name: "sse-client",
   server: {
-    url: new URL('https://your-mcp-server.com/sse'),
+    url: new URL("https://your-mcp-server.com/sse"),
     // Optional fetch request configuration - Note: requestInit alone isn't enough for SSE
     requestInit: {
       headers: {
-        Authorization: 'Bearer your-token',
+        Authorization: "Bearer your-token",
       },
     },
     // Required for SSE connections with custom headers
     eventSourceInit: {
       fetch(input: Request | URL | string, init?: RequestInit) {
         const headers = new Headers(init?.headers || {});
-        headers.set('Authorization', 'Bearer your-token');
+        headers.set("Authorization", "Bearer your-token");
         return fetch(input, {
           ...init,
           headers,
@@ -309,8 +310,10 @@ const sseClient = new MastraMCPClient({
       },
     },
     // Optional additional logging configuration
-    logger: logMessage => {
-      console.log(`[${logMessage.level}] ${logMessage.serverName}: ${logMessage.message}`);
+    logger: (logMessage) => {
+      console.log(
+        `[${logMessage.level}] ${logMessage.serverName}: ${logMessage.message}`,
+      );
     },
     // Disable server logs
     enableServerLogs: false,

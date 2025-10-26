@@ -1,6 +1,6 @@
 ---
-title: 'Adding Voice Capabilities '
-description: 'Example of adding voice capabilities to Mastra agents, enabling them to speak and listen using different voice providers.'
+title: "Adding Voice Capabilities "
+description: "Example of adding voice capabilities to Mastra agents, enabling them to speak and listen using different voice providers."
 ---
 
 # Giving your Agent a Voice
@@ -31,15 +31,15 @@ npm install @mastra/voice-openai
 This agent uses a composite voice setup that separates speech-to-text and text-to-speech functionality. The `CompositeVoice` allows you to configure different providers for listening (input) and speaking (output). However, in this example, both are handled by the same provider: `OpenAIVoice`.
 
 ```typescript filename="src/mastra/agents/example-hybrid-voice-agent.ts" showLineNumbers copy
-import { Agent } from '@mastra/core/agent';
-import { CompositeVoice } from '@mastra/core/voice';
-import { OpenAIVoice } from '@mastra/voice-openai';
-import { openai } from '@ai-sdk/openai';
+import { Agent } from "@mastra/core/agent";
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { openai } from "@ai-sdk/openai";
 
 export const hybridVoiceAgent = new Agent({
-  name: 'hybrid-voice-agent',
-  model: openai('gpt-4o'),
-  instructions: 'You can speak and listen using different providers.',
+  name: "hybrid-voice-agent",
+  model: openai("gpt-4o"),
+  instructions: "You can speak and listen using different providers.",
   voice: new CompositeVoice({
     input: new OpenAIVoice(),
     output: new OpenAIVoice(),
@@ -54,14 +54,14 @@ export const hybridVoiceAgent = new Agent({
 This agent uses a single voice provider for both speech-to-text and text-to-speech. If you plan to use the same provider for both listening and speaking, this is a simpler setup. In this example, the `OpenAIVoice` provider handles both functions.
 
 ```typescript filename="src/mastra/agents/example-unified-voice-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { OpenAIVoice } from '@mastra/voice-openai';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { OpenAIVoice } from "@mastra/voice-openai";
 
 export const unifiedVoiceAgent = new Agent({
-  name: 'unified-voice-agent',
-  instructions: 'You are an agent with both STT and TTS capabilities.',
-  model: openai('gpt-4o'),
+  name: "unified-voice-agent",
+  instructions: "You are an agent with both STT and TTS capabilities.",
+  model: openai("gpt-4o"),
   voice: new OpenAIVoice(),
 });
 ```
@@ -73,10 +73,10 @@ export const unifiedVoiceAgent = new Agent({
 To use these agents, register them in your main Mastra instance.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from "@mastra/core/mastra";
 
-import { hybridVoiceAgent } from './agents/example-hybrid-voice-agent';
-import { unifiedVoiceAgent } from './agents/example-unified-voice-agent';
+import { hybridVoiceAgent } from "./agents/example-hybrid-voice-agent";
+import { unifiedVoiceAgent } from "./agents/example-unified-voice-agent";
 
 export const mastra = new Mastra({
   // ...
@@ -93,11 +93,14 @@ These helper functions handle audio file operations and text conversion for the 
 This function saves an audio stream to a file in the audio directory, creating the directory if it doesn't exist.
 
 ```typescript filename="src/mastra/utils/save-audio-to-file.ts" showLineNumbers copy
-import fs, { createWriteStream } from 'fs';
-import path from 'path';
+import fs, { createWriteStream } from "fs";
+import path from "path";
 
-export const saveAudioToFile = async (audio: NodeJS.ReadableStream, filename: string): Promise<void> => {
-  const audioDir = path.join(process.cwd(), 'audio');
+export const saveAudioToFile = async (
+  audio: NodeJS.ReadableStream,
+  filename: string,
+): Promise<void> => {
+  const audioDir = path.join(process.cwd(), "audio");
   const filePath = path.join(audioDir, filename);
 
   await fs.promises.mkdir(audioDir, { recursive: true });
@@ -105,8 +108,8 @@ export const saveAudioToFile = async (audio: NodeJS.ReadableStream, filename: st
   const writer = createWriteStream(filePath);
   audio.pipe(writer);
   return new Promise((resolve, reject) => {
-    writer.on('finish', resolve);
-    writer.on('error', reject);
+    writer.on("finish", resolve);
+    writer.on("error", reject);
   });
 };
 ```
@@ -116,16 +119,18 @@ export const saveAudioToFile = async (audio: NodeJS.ReadableStream, filename: st
 This function converts either a string or a readable stream to text, handling both input types for voice processing.
 
 ```typescript filename="src/mastra/utils/convert-to-text.ts" showLineNumbers copy
-export const convertToText = async (input: string | NodeJS.ReadableStream): Promise<string> => {
-  if (typeof input === 'string') {
+export const convertToText = async (
+  input: string | NodeJS.ReadableStream,
+): Promise<string> => {
+  if (typeof input === "string") {
     return input;
   }
 
   const chunks: Buffer[] = [];
   return new Promise((resolve, reject) => {
-    input.on('data', chunk => chunks.push(Buffer.from(chunk)));
-    input.on('error', reject);
-    input.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+    input.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    input.on("error", reject);
+    input.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
   });
 };
 ```
@@ -140,25 +145,27 @@ The following files are created:
 - **unified-response.mp3** – Unified agent's spoken response.
 
 ```typescript filename="src/test-voice-agents.ts" showLineNumbers copy
-import 'dotenv/config';
+import "dotenv/config";
 
-import path from 'path';
-import { createReadStream } from 'fs';
-import { mastra } from './mastra';
+import path from "path";
+import { createReadStream } from "fs";
+import { mastra } from "./mastra";
 
-import { saveAudioToFile } from './mastra/utils/save-audio-to-file';
-import { convertToText } from './mastra/utils/convert-to-text';
+import { saveAudioToFile } from "./mastra/utils/save-audio-to-file";
+import { convertToText } from "./mastra/utils/convert-to-text";
 
-const hybridVoiceAgent = mastra.getAgent('hybridVoiceAgent');
-const unifiedVoiceAgent = mastra.getAgent('unifiedVoiceAgent');
+const hybridVoiceAgent = mastra.getAgent("hybridVoiceAgent");
+const unifiedVoiceAgent = mastra.getAgent("unifiedVoiceAgent");
 
-const question = 'What is the meaning of life in one sentence?';
+const question = "What is the meaning of life in one sentence?";
 
 const hybridSpoken = await hybridVoiceAgent.voice.speak(question);
 
-await saveAudioToFile(hybridSpoken!, 'hybrid-question.mp3');
+await saveAudioToFile(hybridSpoken!, "hybrid-question.mp3");
 
-const audioStream = createReadStream(path.join(process.cwd(), 'audio', 'hybrid-question.mp3'));
+const audioStream = createReadStream(
+  path.join(process.cwd(), "audio", "hybrid-question.mp3"),
+);
 const unifiedHeard = await unifiedVoiceAgent.voice.listen(audioStream);
 
 const inputText = await convertToText(unifiedHeard!);
@@ -166,7 +173,7 @@ const inputText = await convertToText(unifiedHeard!);
 const unifiedResponse = await unifiedVoiceAgent.generate(inputText);
 const unifiedSpoken = await unifiedVoiceAgent.voice.speak(unifiedResponse.text);
 
-await saveAudioToFile(unifiedSpoken!, 'unified-response.mp3');
+await saveAudioToFile(unifiedSpoken!, "unified-response.mp3");
 ```
 
 <GithubLink

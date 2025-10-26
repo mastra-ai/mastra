@@ -1,6 +1,6 @@
 ---
-title: 'Moderation Processor'
-description: 'Documentation for the ModerationProcessor in Mastra, which provides content moderation using LLM to detect inappropriate content across multiple categories.'
+title: "Moderation Processor"
+description: "Documentation for the ModerationProcessor in Mastra, which provides content moderation using LLM to detect inappropriate content across multiple categories."
 ---
 
 # ModerationProcessor
@@ -10,14 +10,14 @@ The `ModerationProcessor` is a **hybrid processor** that can be used for both in
 ## Usage example
 
 ```typescript copy
-import { openai } from '@ai-sdk/openai';
-import { ModerationProcessor } from '@mastra/core/processors';
+import { openai } from "@ai-sdk/openai";
+import { ModerationProcessor } from "@mastra/core/processors";
 
 const processor = new ModerationProcessor({
-  model: openai('gpt-4.1-nano'),
+  model: openai("gpt-4.1-nano"),
   threshold: 0.7,
-  strategy: 'block',
-  categories: ['hate', 'harassment', 'violence'],
+  strategy: "block",
+  categories: ["hate", "harassment", "violence"],
 });
 ```
 
@@ -117,21 +117,21 @@ isOptional: false,
 ## Extended usage example
 
 ```typescript filename="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { ModerationProcessor } from '@mastra/core/processors';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { ModerationProcessor } from "@mastra/core/processors";
 
 export const agent = new Agent({
-  name: 'moderated-agent',
-  instructions: 'You are a helpful assistant',
-  model: openai('gpt-4o-mini'),
+  name: "moderated-agent",
+  instructions: "You are a helpful assistant",
+  model: openai("gpt-4o-mini"),
   inputProcessors: [
     new ModerationProcessor({
-      model: openai('gpt-4.1-nano'),
-      categories: ['hate', 'harassment', 'violence'],
+      model: openai("gpt-4.1-nano"),
+      categories: ["hate", "harassment", "violence"],
       threshold: 0.7,
-      strategy: 'block',
-      instructions: 'Detect and flag inappropriate content in user messages',
+      strategy: "block",
+      instructions: "Detect and flag inappropriate content in user messages",
       includeScores: true,
       chunkWindow: 1,
     }),

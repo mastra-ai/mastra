@@ -1,5 +1,5 @@
 ---
-title: 'Toxicity'
+title: "Toxicity"
 description: Documentation for the Toxicity Scorer in Mastra, which evaluates LLM outputs for racist, biased, or toxic elements.
 ---
 

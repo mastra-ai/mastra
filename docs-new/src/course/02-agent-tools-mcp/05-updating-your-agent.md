@@ -4,13 +4,13 @@ Let's update your agent to use the MCP tools. Modify your agent definition to in
 
 ```typescript
 export const personalAssistantAgent = new Agent({
-  name: 'Personal Assistant',
+  name: "Personal Assistant",
   instructions: `
     You are a helpful personal assistant that can help with various tasks.
     
     Keep your responses concise and friendly.
   `,
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   tools: { ...mcpTools }, // Add MCP tools to your agent
 });
 ```

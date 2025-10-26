@@ -16,8 +16,8 @@ Every step follows this pattern:
 
 ```typescript
 const myStep = createStep({
-  id: 'unique-step-name',
-  description: 'What this step does',
+  id: "unique-step-name",
+  description: "What this step does",
   inputSchema: z.object({
     // Define expected input structure
   }),

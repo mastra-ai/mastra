@@ -8,12 +8,12 @@ Create a new file for your agent in the `src/mastra/agents` directory. Use `cont
 
 ```typescript
 // src/mastra/agents/content-agent.ts
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
 export const contentAgent = new Agent({
-  name: 'Content Agent',
-  description: 'AI agent for analyzing and improving content',
+  name: "Content Agent",
+  description: "AI agent for analyzing and improving content",
   instructions: `
     You are a professional content analyst. Your role is to:
     1. Analyze content for clarity and engagement
@@ -23,7 +23,7 @@ export const contentAgent = new Agent({
     
     Always provide constructive, actionable feedback.
   `,
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
 });
 ```
 
@@ -40,7 +40,7 @@ Open your `src/mastra/index.ts` file and add your agent (you may need to append 
 
 ```typescript
 // Import your workflow
-import { contentAgent } from './agents/content-agent';
+import { contentAgent } from "./agents/content-agent";
 
 export const mastra = new Mastra({
   // Register your agent here

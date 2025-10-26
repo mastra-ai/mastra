@@ -1,5 +1,5 @@
 ---
-title: 'S3Vectors'
+title: "S3Vectors"
 description: Documentation for the S3Vectors class in Mastra, which provides vector search using Amazon S3 Vectors (Preview).
 sidebar_position: 12
 ---
@@ -22,7 +22,7 @@ npm install @mastra/s3vectors
 ## Usage Example
 
 ```typescript copy showLineNumbers
-import { S3Vectors } from '@mastra/s3vectors';
+import { S3Vectors } from "@mastra/s3vectors";
 
 const store = new S3Vectors({
   vectorBucketName: process.env.S3_VECTORS_BUCKET_NAME!, // e.g. "my-vector-bucket"
@@ -30,35 +30,40 @@ const store = new S3Vectors({
     region: process.env.AWS_REGION!, // credentials use the default AWS provider chain
   },
   // Optional: mark large/long-text fields as non-filterable at index creation time
-  nonFilterableMetadataKeys: ['content'],
+  nonFilterableMetadataKeys: ["content"],
 });
 
 // Create an index (names are normalized: "_" → "-" and lowercased)
 await store.createIndex({
-  indexName: 'my_index',
+  indexName: "my_index",
   dimension: 1536,
-  metric: 'cosine', // "euclidean" also supported; "dotproduct" is NOT supported
+  metric: "cosine", // "euclidean" also supported; "dotproduct" is NOT supported
 });
 
 // Upsert vectors (ids auto-generated if omitted). Date values in metadata are serialized to epoch ms.
 const ids = await store.upsert({
-  indexName: 'my_index',
+  indexName: "my_index",
   vectors: [
     [0.1, 0.2 /* … */],
     [0.3, 0.4 /* … */],
   ],
   metadata: [
-    { text: 'doc1', genre: 'documentary', year: 2023, createdAt: new Date('2024-01-01') },
-    { text: 'doc2', genre: 'comedy', year: 2021 },
+    {
+      text: "doc1",
+      genre: "documentary",
+      year: 2023,
+      createdAt: new Date("2024-01-01"),
+    },
+    { text: "doc2", genre: "comedy", year: 2021 },
   ],
 });
 
 // Query with metadata filters (implicit AND is canonicalized)
 const results = await store.query({
-  indexName: 'my-index',
+  indexName: "my-index",
   queryVector: [0.1, 0.2 /* … */],
   topK: 10, // Service-side limits may apply (commonly 30)
-  filter: { genre: { $in: ['documentary', 'comedy'] }, year: { $gte: 2020 } },
+  filter: { genre: { $in: ["documentary", "comedy"] }, year: { $gte: 2020 } },
   includeVector: false, // set true to include raw vectors (may trigger a secondary fetch)
 });
 
@@ -210,7 +215,7 @@ Returns:
 interface IndexStats {
   dimension: number;
   count: number; // computed via ListVectors pagination (O(n))
-  metric: 'cosine' | 'euclidean';
+  metric: "cosine" | "euclidean";
 }
 ```
 
@@ -354,7 +359,7 @@ The store throws typed errors that can be caught:
 ```typescript copy
 try {
   await store.query({
-    indexName: 'index-name',
+    indexName: "index-name",
     queryVector: queryVector,
   });
 } catch (error) {

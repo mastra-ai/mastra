@@ -1,6 +1,6 @@
 ---
-title: 'CompositeVoice'
-description: 'Documentation for the CompositeVoice class, which enables combining multiple voice providers for flexible text-to-speech and speech-to-text operations.'
+title: "CompositeVoice"
+description: "Documentation for the CompositeVoice class, which enables combining multiple voice providers for flexible text-to-speech and speech-to-text operations."
 ---
 
 # CompositeVoice
@@ -12,9 +12,9 @@ CompositeVoice is used internally by the Agent class to provide flexible voice c
 ## Usage Example
 
 ```typescript
-import { CompositeVoice } from '@mastra/core/voice';
-import { OpenAIVoice } from '@mastra/voice-openai';
-import { PlayAIVoice } from '@mastra/voice-playai';
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
 
 // Create voice providers
 const openai = new OpenAIVoice();
@@ -30,7 +30,7 @@ const voice = new CompositeVoice({
 const text = await voice.listen(audioStream);
 
 // Convert text to speech using PlayAI
-const audio = await voice.speak('Hello, world!');
+const audio = await voice.speak("Hello, world!");
 ```
 
 ## Constructor Parameters

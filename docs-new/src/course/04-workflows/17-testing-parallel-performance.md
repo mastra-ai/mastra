@@ -8,7 +8,11 @@ Update your Mastra configuration to include your new workflow workflows:
 
 ```typescript
 // In src/mastra/index.ts
-import { contentWorkflow, aiContentWorkflow, parallelAnalysisWorkflow } from './workflows/content-workflow';
+import {
+  contentWorkflow,
+  aiContentWorkflow,
+  parallelAnalysisWorkflow,
+} from "./workflows/content-workflow";
 
 export const mastra = new Mastra({
   workflows: {

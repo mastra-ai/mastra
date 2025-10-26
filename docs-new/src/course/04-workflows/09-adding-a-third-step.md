@@ -8,15 +8,15 @@ Add this new step to your workflow file:
 
 ```typescript
 const generateSummaryStep = createStep({
-  id: 'generate-summary',
-  description: 'Creates a summary of the content',
+  id: "generate-summary",
+  description: "Creates a summary of the content",
   inputSchema: z.object({
     content: z.string(),
     type: z.string(),
     wordCount: z.number(),
     metadata: z.object({
       readingTime: z.number(),
-      difficulty: z.enum(['easy', 'medium', 'hard']),
+      difficulty: z.enum(["easy", "medium", "hard"]),
       processedAt: z.string(),
     }),
   }),
@@ -26,7 +26,7 @@ const generateSummaryStep = createStep({
     wordCount: z.number(),
     metadata: z.object({
       readingTime: z.number(),
-      difficulty: z.enum(['easy', 'medium', 'hard']),
+      difficulty: z.enum(["easy", "medium", "hard"]),
       processedAt: z.string(),
     }),
     summary: z.string(),
@@ -35,8 +35,10 @@ const generateSummaryStep = createStep({
     const { content, type, wordCount, metadata } = inputData;
 
     // Create a simple summary from first sentence
-    const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
-    const firstSentence = sentences[0]?.trim() + '.';
+    const sentences = content
+      .split(/[.!?]+/)
+      .filter((s) => s.trim().length > 0);
+    const firstSentence = sentences[0]?.trim() + ".";
 
     // Generate summary based on content length
     let summary = firstSentence;

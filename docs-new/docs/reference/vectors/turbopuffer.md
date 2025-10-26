@@ -1,5 +1,5 @@
 ---
-title: 'TurboPuffer'
+title: "TurboPuffer"
 description: Documentation for integrating Turbopuffer with Mastra, a high-performance vector database for efficient similarity search.
 sidebar_position: 13
 ---
@@ -175,7 +175,7 @@ Returns:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
+  metric: "cosine" | "euclidean" | "dotproduct";
 }
 ```
 
@@ -211,12 +211,12 @@ The `schemaConfigForIndex` option allows you to define explicit schemas for diff
 ```typescript copy
 schemaConfigForIndex: (indexName: string) => {
   // Mastra's default embedding model and index for memory messages:
-  if (indexName === 'memory_messages_384') {
+  if (indexName === "memory_messages_384") {
     return {
       dimensions: 384,
       schema: {
         thread_id: {
-          type: 'string',
+          type: "string",
           filterable: true,
         },
       },
@@ -234,7 +234,7 @@ The store throws typed errors that can be caught:
 ```typescript copy
 try {
   await store.query({
-    indexName: 'index_name',
+    indexName: "index_name",
     queryVector: queryVector,
   });
 } catch (error) {

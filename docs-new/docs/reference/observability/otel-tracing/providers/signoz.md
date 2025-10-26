@@ -1,5 +1,5 @@
 ---
-title: 'SigNoz Integration'
+title: "SigNoz Integration"
 description: Documentation for integrating SigNoz with Mastra, an open-source APM and observability platform providing full-stack monitoring through OpenTelemetry.
 ---
 
@@ -21,15 +21,15 @@ OTEL_EXPORTER_OTLP_HEADERS=signoz-ingestion-key=your_signoz_token
 Here's how to configure Mastra to use SigNoz:
 
 ```typescript
-import { Mastra } from '@mastra/core';
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: 'your-service-name',
+    serviceName: "your-service-name",
     enabled: true,
     export: {
-      type: 'otlp',
+      type: "otlp",
     },
   },
 });

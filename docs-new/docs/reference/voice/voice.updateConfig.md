@@ -1,6 +1,6 @@
 ---
-title: 'voice.updateConfig()'
-description: 'Documentation for the updateConfig() method available in voice providers, which updates the configuration of a voice provider at runtime.'
+title: "voice.updateConfig()"
+description: "Documentation for the updateConfig() method available in voice providers, which updates the configuration of a voice provider at runtime."
 ---
 
 # voice.updateConfig()
@@ -10,15 +10,15 @@ The `updateConfig()` method allows you to update the configuration of a voice pr
 ## Usage Example
 
 ```typescript
-import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: 'gpt-4o-mini-realtime',
+    model: "gpt-4o-mini-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
-  speaker: 'alloy',
+  speaker: "alloy",
 });
 
 // Connect to the real-time service
@@ -26,16 +26,16 @@ await voice.connect();
 
 // Later, update the configuration
 voice.updateConfig({
-  voice: 'nova', // Change the default voice
+  voice: "nova", // Change the default voice
   turn_detection: {
-    type: 'server_vad',
+    type: "server_vad",
     threshold: 0.5,
     silence_duration_ms: 1000,
   },
 });
 
 // The next speak() call will use the new configuration
-await voice.speak('Hello with my new voice!');
+await voice.speak("Hello with my new voice!");
 ```
 
 ## Parameters

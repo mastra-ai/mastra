@@ -1,14 +1,18 @@
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { cn } from '../css/utils';
-import { BookOpen, Code2, FileText, Lightbulb, Search } from 'lucide-react';
-import type { FC, SyntheticEvent } from 'react';
-import { useEffect, useRef, useState } from 'react';
-import { AlgoliaResult, AlgoliaSearchOptions, useAlgoliaSearch } from '../hooks/use-algolia-search';
-import { EmptySearch } from './empty-search';
-import { BurgerIcon } from './search-icons';
-import { useHistory } from '@docusaurus/router';
-import { CancelIcon } from './copy-page-icons';
-import { Button } from './ui/button';
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { cn } from "../css/utils";
+import { BookOpen, Code2, FileText, Lightbulb, Search } from "lucide-react";
+import type { FC, SyntheticEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  AlgoliaResult,
+  AlgoliaSearchOptions,
+  useAlgoliaSearch,
+} from "../hooks/use-algolia-search";
+import { EmptySearch } from "./empty-search";
+import { BurgerIcon } from "./search-icons";
+import { useHistory } from "@docusaurus/router";
+import { CancelIcon } from "./copy-page-icons";
+import { Button } from "./ui/button";
 
 // Custom hook for responsive design
 const useMediaQuery = (query: string): boolean => {
@@ -21,8 +25,8 @@ const useMediaQuery = (query: string): boolean => {
     }
 
     const listener = () => setMatches(media.matches);
-    media.addEventListener('change', listener);
-    return () => media.removeEventListener('change', listener);
+    media.addEventListener("change", listener);
+    return () => media.removeEventListener("change", listener);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
@@ -56,13 +60,13 @@ type SearchResult = AlgoliaResult | FlattenedResult;
 // Helper function to get icon based on section
 const getSectionIcon = (section?: string) => {
   switch (section?.toLowerCase()) {
-    case 'docs':
+    case "docs":
       return BookOpen;
-    case 'guides':
+    case "guides":
       return Lightbulb;
-    case 'reference':
+    case "reference":
       return Code2;
-    case 'examples':
+    case "examples":
       return FileText;
     default:
       return BookOpen; // Default fallback
@@ -71,14 +75,19 @@ const getSectionIcon = (section?: string) => {
 
 export const CustomSearch: FC<SearchProps> = ({
   className,
-  placeholder = 'Search docs...',
+  placeholder = "Search docs...",
   searchOptions,
   closeModal,
 }) => {
-  const { isSearchLoading, results, search, setSearch, hasMore, loadMore, isLoadingMore } = useAlgoliaSearch(
-    300,
-    searchOptions,
-  );
+  const {
+    isSearchLoading,
+    results,
+    search,
+    setSearch,
+    hasMore,
+    loadMore,
+    isLoadingMore,
+  } = useAlgoliaSearch(300, searchOptions);
 
   const history = useHistory();
   const inputRef = useRef<HTMLInputElement>(null!);
@@ -94,11 +103,11 @@ export const CustomSearch: FC<SearchProps> = ({
   }, []);
 
   // Check if screen is mobile size
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isMobile = useMediaQuery("(max-width: 768px)");
 
   // Virtual list for search results
   const virtualizer = useVirtualizer({
-    count: results.length ? results.flatMap(r => r.sub_results).length : 0,
+    count: results.length ? results.flatMap((r) => r.sub_results).length : 0,
     getScrollElement: () => resultsContainerRef.current,
     estimateSize: () => (isMobile ? 80 : 85), // Smaller size for mobile screens
     overscan: 5,
@@ -106,13 +115,13 @@ export const CustomSearch: FC<SearchProps> = ({
 
   // Flatten sub_results for virtualization
   const flattenedResults = results.length
-    ? results.flatMap(result =>
-      result.sub_results.map(sub => ({
-        parentUrl: result.url,
-        section: result.section,
-        ...sub,
-      })),
-    )
+    ? results.flatMap((result) =>
+        result.sub_results.map((sub) => ({
+          parentUrl: result.url,
+          section: result.section,
+          ...sub,
+        })),
+      )
     : [];
 
   const totalItems = flattenedResults.length;
@@ -148,7 +157,7 @@ export const CustomSearch: FC<SearchProps> = ({
     // Calling before navigation so selector `html:not(:has(*:focus))` in styles.css will work,
     // and we'll have padding top since input is not focused
     inputRef.current.blur();
-    const [url, hash] = searchResult.url.split('#');
+    const [url, hash] = searchResult.url.split("#");
     const isSamePathname = location.pathname === url;
     // Handle same-page navigation by scrolling to hash
     if (isSamePathname) {
@@ -157,7 +166,7 @@ export const CustomSearch: FC<SearchProps> = ({
       history.push(searchResult.url);
     }
     closeModal();
-    setSearch('');
+    setSearch("");
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -165,18 +174,20 @@ export const CustomSearch: FC<SearchProps> = ({
     const emptyStateItemCount = 11; // Number of items in EmptyState
 
     switch (event.key) {
-      case 'Tab':
-      case 'ArrowRight':
-      case 'ArrowDown':
+      case "Tab":
+      case "ArrowRight":
+      case "ArrowDown":
         event.preventDefault();
-        setSelectedIndex(prev => {
-          const maxIndex = isEmptyState ? emptyStateItemCount - 1 : totalItems - 1;
+        setSelectedIndex((prev) => {
+          const maxIndex = isEmptyState
+            ? emptyStateItemCount - 1
+            : totalItems - 1;
           const newIndex = prev < maxIndex ? prev + 1 : prev;
 
           // Scroll to the selected item (only for search results with virtualizer)
           if (!isEmptyState) {
             requestAnimationFrame(() => {
-              virtualizer.scrollToIndex(newIndex, { align: 'auto' });
+              virtualizer.scrollToIndex(newIndex, { align: "auto" });
             });
 
             // Check if we're approaching the end and should load more
@@ -189,22 +200,22 @@ export const CustomSearch: FC<SearchProps> = ({
           return newIndex;
         });
         break;
-      case 'ArrowLeft':
-      case 'ArrowUp':
+      case "ArrowLeft":
+      case "ArrowUp":
         event.preventDefault();
-        setSelectedIndex(prev => {
+        setSelectedIndex((prev) => {
           const newIndex = prev > 0 ? prev - 1 : prev;
 
           // Scroll to the selected item (only for search results with virtualizer)
           if (!isEmptyState) {
             requestAnimationFrame(() => {
-              virtualizer.scrollToIndex(newIndex, { align: 'auto' });
+              virtualizer.scrollToIndex(newIndex, { align: "auto" });
             });
           }
           return newIndex;
         });
         break;
-      case 'Enter':
+      case "Enter":
         event.preventDefault();
         if (event.nativeEvent.isComposing) {
           return;
@@ -221,7 +232,7 @@ export const CustomSearch: FC<SearchProps> = ({
           }
         }
         break;
-      case 'Escape':
+      case "Escape":
         event.preventDefault();
         closeModal();
         break;
@@ -231,17 +242,17 @@ export const CustomSearch: FC<SearchProps> = ({
   // Handler for empty state item selection
   const handleEmptyStateSelect = (index: number) => {
     const emptyStateLinks = [
-      '/docs/getting-started/installation',
-      '/docs/agents/overview',
-      '/docs/workflows/overview',
-      '/docs/server-db/local-dev-playground',
-      '/docs/streaming/overview',
-      '/docs/tools-mcp/mcp-overview',
-      '/docs/memory/overview',
-      '/docs/scorers/overview',
-      '/docs/rag/overview',
-      '/docs/observability/overview',
-      '/docs/deployment/overview',
+      "/docs/getting-started/installation",
+      "/docs/agents/overview",
+      "/docs/workflows/overview",
+      "/docs/server-db/local-dev-playground",
+      "/docs/streaming/overview",
+      "/docs/tools-mcp/mcp-overview",
+      "/docs/memory/overview",
+      "/docs/scorers/overview",
+      "/docs/rag/overview",
+      "/docs/observability/overview",
+      "/docs/deployment/overview",
     ];
 
     const link = emptyStateLinks[index];
@@ -259,7 +270,7 @@ export const CustomSearch: FC<SearchProps> = ({
     if (!loadMoreTriggerRef.current || !hasMore || isLoadingMore) return;
 
     const observer = new IntersectionObserver(
-      entries => {
+      (entries) => {
         // When the trigger element is visible and we have more results, load them
         if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
           loadMore();
@@ -267,7 +278,7 @@ export const CustomSearch: FC<SearchProps> = ({
       },
       {
         root: resultsContainerRef.current,
-        rootMargin: '100px', // Start loading 100px before reaching the bottom
+        rootMargin: "100px", // Start loading 100px before reaching the bottom
         threshold: 0.1,
       },
     );
@@ -280,11 +291,11 @@ export const CustomSearch: FC<SearchProps> = ({
   }, [hasMore, isLoadingMore, loadMore]);
 
   return (
-    <div className={cn('overflow-hidden w-full max-h-[600px]')}>
+    <div className={cn("overflow-hidden w-full max-h-[600px]")}>
       <div
         className={cn(
           className,
-          'flex items-center p-2 w-full border-b border-(--border)/50 dark:border-(--border) md:p-4 gap-[14px]',
+          "flex items-center p-2 w-full border-b border-(--border)/50 dark:border-(--border) md:p-4 gap-[14px]",
         )}
       >
         <span className="relative" onClick={() => inputRef.current.focus()}>
@@ -294,8 +305,8 @@ export const CustomSearch: FC<SearchProps> = ({
           ref={inputRef}
           spellCheck={false}
           className={cn(
-            'x:[&::-webkit-search-cancel-button]:appearance-none',
-            'outline-none caret-(--mastra-green-accent-3) dark:caret-(--mastra-green-accent-2) dark:text-white text-(--mastra-text-tertiary) focus:outline-none w-full placeholder:text-icons-4 dark:placeholder:text-icons-2 placeholder:text-small md:placeholder:text-base placeholder:font-medium',
+            "x:[&::-webkit-search-cancel-button]:appearance-none",
+            "outline-none caret-(--mastra-green-accent-3) dark:caret-(--mastra-green-accent-2) dark:text-white text-(--mastra-text-tertiary) focus:outline-none w-full placeholder:text-icons-4 dark:placeholder:text-icons-2 placeholder:text-small md:placeholder:text-base placeholder:font-medium",
           )}
           autoComplete="off"
           type="search"
@@ -315,26 +326,34 @@ export const CustomSearch: FC<SearchProps> = ({
         </Button>
       </div>
 
-      <div className={cn('relative overflow-hidden p-1.5 h-[400px]')}>
-        <div ref={resultsContainerRef} className="overflow-auto h-full" id="docs-search-results">
+      <div className={cn("relative overflow-hidden p-1.5 h-[400px]")}>
+        <div
+          ref={resultsContainerRef}
+          className="overflow-auto h-full"
+          id="docs-search-results"
+        >
           {!search || !results.length || showLoader ? (
-            <EmptySearch selectedIndex={selectedIndex} onSelect={handleEmptyStateSelect} onHover={setSelectedIndex} />
+            <EmptySearch
+              selectedIndex={selectedIndex}
+              onSelect={handleEmptyStateSelect}
+              onHover={setSelectedIndex}
+            />
           ) : (
             <div
               className={cn(
-                'x:motion-reduce:transition-none',
-                'x:origin-top x:transition x:duration-200 x:ease-out x:data-closed:scale-95 x:data-closed:opacity-0 x:empty:invisible',
-                'x:w-full',
+                "x:motion-reduce:transition-none",
+                "x:origin-top x:transition x:duration-200 x:ease-out x:data-closed:scale-95 x:data-closed:opacity-0 x:empty:invisible",
+                "x:w-full",
               )}
             >
               <div
                 style={{
                   height: `${virtualizer.getTotalSize()}px`,
-                  width: '100%',
-                  position: 'relative',
+                  width: "100%",
+                  position: "relative",
                 }}
               >
-                {virtualizer.getVirtualItems().map(virtualItem => {
+                {virtualizer.getVirtualItems().map((virtualItem) => {
                   if (showLoader) {
                     return;
                   }
@@ -353,20 +372,20 @@ export const CustomSearch: FC<SearchProps> = ({
                     <div
                       key={subResult.url}
                       style={{
-                        position: 'absolute',
+                        position: "absolute",
                         top: 0,
                         left: 0,
-                        width: '100%',
+                        width: "100%",
                         height: `${virtualItem.size}px`,
                         transform: `translateY(${virtualItem.start}px)`,
                       }}
                     >
                       <div
                         className={cn(
-                          'flex flex-col gap-1 p-2 rounded-md cursor-pointer',
+                          "flex flex-col gap-1 p-2 rounded-md cursor-pointer",
                           isSelected
-                            ? 'dark:bg-surface-5 bg-(--mastra-surface-2)'
-                            : 'bg-(--ifm-background-color) dark:bg-surface-4',
+                            ? "dark:bg-surface-5 bg-(--mastra-surface-2)"
+                            : "bg-(--ifm-background-color) dark:bg-surface-4",
                         )}
                         onClick={() => handleSelect(subResult)}
                         onMouseEnter={() => setSelectedIndex(virtualItem.index)}
@@ -386,7 +405,7 @@ export const CustomSearch: FC<SearchProps> = ({
                         <div className="ml-2 flex items-center gap-2 truncate border-l-2 dark:border-borders-2 border-(--border-code) pl-4">
                           <BurgerIcon className="w-3 h-3 md:w-3.5 md:h-3.5 shrink-0 text-(--mastra-icons-3)" />
                           <div
-                            className="text-sm font-normal truncate text-(--mastra-icons-3) [&_mark]:text-accent-green-2 dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
+                            className="text-sm font-normal truncate text-(--mastra-icons-3) [&_mark]:text-(--mastra-green-accent-3) dark:[&_mark]:text-(--mastra-green-accent-2) [&_mark]:bg-transparent"
                             dangerouslySetInnerHTML={{
                               __html: subResult.excerpt,
                             }}
@@ -400,7 +419,10 @@ export const CustomSearch: FC<SearchProps> = ({
 
               {/* Intersection observer trigger for infinite scroll */}
               {hasMore && results.length > 0 && (
-                <div ref={loadMoreTriggerRef} className="p-4 text-sm text-center text-icons-3">
+                <div
+                  ref={loadMoreTriggerRef}
+                  className="p-4 text-sm text-center text-icons-3"
+                >
                   {isLoadingMore && (
                     <div className="flex gap-2 justify-center items-center">
                       <div className="w-4 h-4 rounded-full border-2 animate-spin border-accent-green border-t-transparent" />

@@ -1,6 +1,6 @@
 ---
-title: 'MastraAuthWorkos Class'
-description: 'API reference for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication.'
+title: "MastraAuthWorkos Class"
+description: "API reference for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication."
 ---
 
 # MastraAuthWorkos Class
@@ -10,8 +10,8 @@ The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { MastraAuthWorkos } from '@mastra/auth-workos';
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
   // ..

@@ -1,5 +1,5 @@
 ---
-title: 'With Vite/React '
+title: "With Vite/React "
 description: A step-by-step guide to integrating Mastra with Vite and React.
 sidebar_position: 1
 ---
@@ -165,10 +165,10 @@ touch lib/mastra.ts
 ```
 
 ```typescript filename="lib/mastra.ts" showLineNumbers copy
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
-  baseUrl: import.meta.env.VITE_MASTRA_API_URL || 'http://localhost:4111',
+  baseUrl: import.meta.env.VITE_MASTRA_API_URL || "http://localhost:4111",
 });
 ```
 
@@ -177,9 +177,12 @@ export const mastraClient = new MastraClient({
 Add new `route` to the config:
 
 ```typescript filename="app/routes.ts" showLineNumbers copy
-import { type RouteConfig, index, route } from '@react-router/dev/routes';
+import { type RouteConfig, index, route } from "@react-router/dev/routes";
 
-export default [index('routes/home.tsx'), route('test', 'routes/test.tsx')] satisfies RouteConfig;
+export default [
+  index("routes/home.tsx"),
+  route("test", "routes/test.tsx"),
+] satisfies RouteConfig;
 ```
 
 ## Create Test Route

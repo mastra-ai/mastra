@@ -1,6 +1,6 @@
 ---
-title: 'Google Voice'
-description: 'Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities.'
+title: "Google Voice"
+description: "Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities."
 ---
 
 # Google
@@ -10,7 +10,7 @@ The Google Voice implementation in Mastra provides both text-to-speech (TTS) and
 ## Usage Example
 
 ```typescript
-import { GoogleVoice } from '@mastra/voice-google';
+import { GoogleVoice } from "@mastra/voice-google";
 
 // Initialize with default configuration (uses GOOGLE_API_KEY environment variable)
 const voice = new GoogleVoice();
@@ -18,32 +18,32 @@ const voice = new GoogleVoice();
 // Initialize with custom configuration
 const voice = new GoogleVoice({
   speechModel: {
-    apiKey: 'your-speech-api-key',
+    apiKey: "your-speech-api-key",
   },
   listeningModel: {
-    apiKey: 'your-listening-api-key',
+    apiKey: "your-listening-api-key",
   },
-  speaker: 'en-US-Casual-K',
+  speaker: "en-US-Casual-K",
 });
 
 // Text-to-Speech
-const audioStream = await voice.speak('Hello, world!', {
-  languageCode: 'en-US',
+const audioStream = await voice.speak("Hello, world!", {
+  languageCode: "en-US",
   audioConfig: {
-    audioEncoding: 'LINEAR16',
+    audioEncoding: "LINEAR16",
   },
 });
 
 // Speech-to-Text
 const transcript = await voice.listen(audioStream, {
   config: {
-    encoding: 'LINEAR16',
-    languageCode: 'en-US',
+    encoding: "LINEAR16",
+    languageCode: "en-US",
   },
 });
 
 // Get available voices for a specific language
-const voices = await voice.getSpeakers({ languageCode: 'en-US' });
+const voices = await voice.getSpeakers({ languageCode: "en-US" });
 ```
 
 ## Constructor Parameters

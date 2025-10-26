@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.getLogsByRunId() '
-description: 'Documentation for the `Mastra.getLogsByRunId()` method in Mastra, which retrieves logs for a specific run ID and transport ID.'
+title: "Mastra.getLogsByRunId() "
+description: "Documentation for the `Mastra.getLogsByRunId()` method in Mastra, which retrieves logs for a specific run ID and transport ID."
 ---
 
 # Mastra.getLogsByRunId()
@@ -10,7 +10,7 @@ The `.getLogsByRunId()` method is used to retrieve logs for a specific run ID an
 ## Usage example
 
 ```typescript copy
-mastra.getLogsByRunId({ runId: '123', transportId: '456' });
+mastra.getLogsByRunId({ runId: "123", transportId: "456" });
 ```
 
 ## Parameters

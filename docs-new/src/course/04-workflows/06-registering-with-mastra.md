@@ -8,7 +8,7 @@ Open your `src/mastra/index.ts` file and add your workflow:
 
 ```typescript
 // Import your workflow
-import { contentWorkflow } from './workflows/content-workflow';
+import { contentWorkflow } from "./workflows/content-workflow";
 
 export const mastra = new Mastra({
   // Register your workflow here

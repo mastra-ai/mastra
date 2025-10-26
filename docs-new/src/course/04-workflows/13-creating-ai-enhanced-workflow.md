@@ -8,11 +8,11 @@ Add this new workflow to your file:
 
 ```typescript
 export const aiContentWorkflow = createWorkflow({
-  id: 'ai-content-workflow',
-  description: 'AI-enhanced content processing with analysis',
+  id: "ai-content-workflow",
+  description: "AI-enhanced content processing with analysis",
   inputSchema: z.object({
     content: z.string(),
-    type: z.enum(['article', 'blog', 'social']).default('article'),
+    type: z.enum(["article", "blog", "social"]).default("article"),
   }),
   outputSchema: z.object({
     content: z.string(),
@@ -20,7 +20,7 @@ export const aiContentWorkflow = createWorkflow({
     wordCount: z.number(),
     metadata: z.object({
       readingTime: z.number(),
-      difficulty: z.enum(['easy', 'medium', 'hard']),
+      difficulty: z.enum(["easy", "medium", "hard"]),
       processedAt: z.string(),
     }),
     summary: z.string(),
@@ -43,8 +43,11 @@ Update your Mastra configuration to include both workflows and ensure the conten
 
 ```typescript
 // In src/mastra/index.ts
-import { contentWorkflow, aiContentWorkflow } from './workflows/content-workflow';
-import { contentAgent } from './agents/content-agent';
+import {
+  contentWorkflow,
+  aiContentWorkflow,
+} from "./workflows/content-workflow";
+import { contentAgent } from "./agents/content-agent";
 
 export const mastra = new Mastra({
   workflows: {

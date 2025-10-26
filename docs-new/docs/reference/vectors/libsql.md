@@ -1,5 +1,5 @@
 ---
-title: 'LibSQLVector'
+title: "LibSQLVector"
 description: Documentation for the LibSQLVector class in Mastra, which provides vector search using LibSQL with vector extensions.
 sidebar_position: 6
 ---
@@ -213,7 +213,7 @@ Returns:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
+  metric: "cosine" | "euclidean" | "dotproduct";
 }
 ```
 
@@ -326,17 +326,19 @@ The store throws specific errors for different failure cases:
 ```typescript copy
 try {
   await store.query({
-    indexName: 'my-collection',
+    indexName: "my-collection",
     queryVector: queryVector,
   });
 } catch (error) {
   // Handle specific error cases
-  if (error.message.includes('Invalid index name format')) {
-    console.error('Index name must start with a letter/underscore and contain only alphanumeric characters');
-  } else if (error.message.includes('Table not found')) {
-    console.error('The specified index does not exist');
+  if (error.message.includes("Invalid index name format")) {
+    console.error(
+      "Index name must start with a letter/underscore and contain only alphanumeric characters",
+    );
+  } else if (error.message.includes("Table not found")) {
+    console.error("The specified index does not exist");
   } else {
-    console.error('Vector store error:', error.message);
+    console.error("Vector store error:", error.message);
   }
 }
 ```

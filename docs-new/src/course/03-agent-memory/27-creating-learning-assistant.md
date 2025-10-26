@@ -4,20 +4,20 @@ Let's create a practical example of a memory-enhanced agent: a Personal Learning
 
 ```typescript
 // src/mastra/agents/learning-assistant.ts
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-import { openai } from '@ai-sdk/openai';
-import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 // Create a specialized memory configuration for the learning assistant
 const learningMemory = new Memory({
   storage: new LibSQLStore({
-    url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
+    url: "file:../../memory.db", // relative path from the `.mastra/output` directory
   }),
   vector: new LibSQLVector({
-    connectionUrl: 'file:../../vector.db', // relative path from the `.mastra/output` directory
+    connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
   }),
-  embedder: openai.embedding('text-embedding-3-small'),
+  embedder: openai.embedding("text-embedding-3-small"),
   options: {
     lastMessages: 20,
     semanticRecall: {
@@ -62,7 +62,7 @@ const learningMemory = new Memory({
 
 // Create the learning assistant agent
 export const learningAssistantAgent = new Agent({
-  name: 'Learning Assistant',
+  name: "Learning Assistant",
   instructions: `
     You are a personal learning assistant that helps users learn new skills and tracks their progress.
     
@@ -87,7 +87,7 @@ export const learningAssistantAgent = new Agent({
     Always be encouraging and supportive. Focus on building the user's confidence
     and celebrating their progress.
   `,
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   memory: learningMemory,
 });
 

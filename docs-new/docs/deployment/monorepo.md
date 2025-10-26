@@ -44,13 +44,13 @@ Common issues to watch for when deploying Mastra in a monorepo:
 Use `transpilePackages` to compile TypeScript workspace packages or libraries. List package names exactly as they appear in each `package.json`. Use `externals` to exclude dependencies resolved at runtime, and `sourcemap` to emit readable stack traces.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from "@mastra/core/mastra";
 
 export const mastra = new Mastra({
   // ...
   bundler: {
-    transpilePackages: ['utils'],
-    externals: ['ui'],
+    transpilePackages: ["utils"],
+    externals: ["ui"],
     sourcemap: true,
   },
 });

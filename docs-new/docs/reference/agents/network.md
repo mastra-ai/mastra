@@ -1,6 +1,6 @@
 ---
-title: 'Agent.network() (Experimental) '
-description: 'Documentation for the `Agent.network()` method in Mastra agents, which enables multi-agent collaboration and routing.'
+title: "Agent.network() (Experimental) "
+description: "Documentation for the `Agent.network()` method in Mastra agents, which enables multi-agent collaboration and routing."
 ---
 
 # Agent.network()
@@ -16,16 +16,17 @@ The `.network()` method enables multi-agent collaboration and routing. This meth
 ## Usage example
 
 ```typescript copy
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { agent1, agent2 } from './agents';
-import { workflow1 } from './workflows';
-import { tool1, tool2 } from './tools';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { agent1, agent2 } from "./agents";
+import { workflow1 } from "./workflows";
+import { tool1, tool2 } from "./tools";
 
 const agent = new Agent({
-  name: 'network-agent',
-  instructions: 'You are a network agent that can help users with a variety of tasks.',
-  model: openai('gpt-4o'),
+  name: "network-agent",
+  instructions:
+    "You are a network agent that can help users with a variety of tasks.",
+  model: openai("gpt-4o"),
   agents: {
     agent1,
     agent2,

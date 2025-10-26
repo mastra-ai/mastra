@@ -13,7 +13,7 @@ import {
   aiContentWorkflow,
   parallelAnalysisWorkflow,
   conditionalWorkflow,
-} from './workflows/content-workflow';
+} from "./workflows/content-workflow";
 
 export const mastra = new Mastra({
   workflows: {

@@ -1,6 +1,6 @@
 ---
-title: 'OpenCode Zen '
-description: 'Use OpenCode Zen models with Mastra. 12 models available.'
+title: "OpenCode Zen "
+description: "Use OpenCode Zen models with Mastra. 12 models available."
 ---
 
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode Zen logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Zen
@@ -14,19 +14,19 @@ OPENCODE_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'opencode/claude-3-5-haiku',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "opencode/claude-3-5-haiku",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -195,13 +195,13 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    url: 'https://opencode.ai/zen/v1',
-    modelId: 'claude-3-5-haiku',
+    url: "https://opencode.ai/zen/v1",
+    modelId: "claude-3-5-haiku",
     apiKey: process.env.OPENCODE_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -211,10 +211,10 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'opencode/qwen3-max' : 'opencode/claude-3-5-haiku';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced ? "opencode/qwen3-max" : "opencode/claude-3-5-haiku";
   },
 });
 ```

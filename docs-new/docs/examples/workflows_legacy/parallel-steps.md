@@ -1,5 +1,5 @@
 ---
-title: 'Parallel Execution '
+title: "Parallel Execution "
 description: Example of using Mastra to execute multiple independent tasks in parallel within a workflow.
 ---
 
@@ -24,20 +24,20 @@ Here's the control flow diagram:
 Let's start by creating the steps and initializing the workflow.
 
 ```ts showLineNumbers copy
-import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
-import { z } from 'zod';
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
 
 const stepOne = new LegacyStep({
-  id: 'stepOne',
+  id: "stepOne",
   execute: async ({ context }) => ({
     doubledValue: context.triggerData.inputValue * 2,
   }),
 });
 
 const stepTwo = new LegacyStep({
-  id: 'stepTwo',
+  id: "stepTwo",
   execute: async ({ context }) => {
-    if (context.steps.stepOne.status !== 'success') {
+    if (context.steps.stepOne.status !== "success") {
       return { incrementedValue: 0 };
     }
 
@@ -46,16 +46,16 @@ const stepTwo = new LegacyStep({
 });
 
 const stepThree = new LegacyStep({
-  id: 'stepThree',
+  id: "stepThree",
   execute: async ({ context }) => ({
     tripledValue: context.triggerData.inputValue * 3,
   }),
 });
 
 const stepFour = new LegacyStep({
-  id: 'stepFour',
+  id: "stepFour",
   execute: async ({ context }) => {
-    if (context.steps.stepThree.status !== 'success') {
+    if (context.steps.stepThree.status !== "success") {
       return { isEven: false };
     }
 
@@ -64,7 +64,7 @@ const stepFour = new LegacyStep({
 });
 
 const myWorkflow = new LegacyWorkflow({
-  name: 'my-workflow',
+  name: "my-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
   }),

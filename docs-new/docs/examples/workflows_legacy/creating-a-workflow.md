@@ -1,5 +1,5 @@
 ---
-title: 'Creating a Workflow '
+title: "Creating a Workflow "
 description: Example of using Mastra to define and execute a simple workflow with a single step.
 ---
 
@@ -8,18 +8,18 @@ description: Example of using Mastra to define and execute a simple workflow wit
 A workflow allows you to define and execute sequences of operations in a structured path. This example shows a legacy workflow with a single step.
 
 ```ts showLineNumbers copy
-import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
-import { z } from 'zod';
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
 
 const myWorkflow = new LegacyWorkflow({
-  name: 'my-workflow',
+  name: "my-workflow",
   triggerSchema: z.object({
     input: z.number(),
   }),
 });
 
 const stepOne = new LegacyStep({
-  id: 'stepOne',
+  id: "stepOne",
   inputSchema: z.object({
     value: z.number(),
   }),

@@ -8,11 +8,11 @@ Replace your existing workflow with this updated version:
 
 ```typescript
 export const contentWorkflow = createWorkflow({
-  id: 'content-processing-workflow',
-  description: 'Validates, enhances, and summarizes content',
+  id: "content-processing-workflow",
+  description: "Validates, enhances, and summarizes content",
   inputSchema: z.object({
     content: z.string(),
-    type: z.enum(['article', 'blog', 'social']).default('article'),
+    type: z.enum(["article", "blog", "social"]).default("article"),
   }),
   outputSchema: z.object({
     content: z.string(),
@@ -20,7 +20,7 @@ export const contentWorkflow = createWorkflow({
     wordCount: z.number(),
     metadata: z.object({
       readingTime: z.number(),
-      difficulty: z.enum(['easy', 'medium', 'hard']),
+      difficulty: z.enum(["easy", "medium", "hard"]),
       processedAt: z.string(),
     }),
     summary: z.string(),

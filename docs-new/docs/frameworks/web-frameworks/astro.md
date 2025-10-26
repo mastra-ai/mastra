@@ -1,5 +1,5 @@
 ---
-title: 'With Astro'
+title: "With Astro"
 description: A step-by-step guide to integrating Mastra with Astro.
 ---
 
@@ -166,21 +166,23 @@ touch src/actions/index.ts
 ```
 
 ```typescript filename="src/actions/index.ts" showLineNumbers copy
-import { defineAction } from 'astro:actions';
-import { z } from 'astro:schema';
+import { defineAction } from "astro:actions";
+import { z } from "astro:schema";
 
-import { mastra } from '../mastra';
+import { mastra } from "../mastra";
 
 export const server = {
   getWeatherInfo: defineAction({
     input: z.object({
       city: z.string(),
     }),
-    handler: async input => {
+    handler: async (input) => {
       const city = input.city;
-      const agent = mastra.getAgent('weatherAgent');
+      const agent = mastra.getAgent("weatherAgent");
 
-      const result = await agent.generate(`What's the weather like in ${city}?`);
+      const result = await agent.generate(
+        `What's the weather like in ${city}?`,
+      );
 
       return result.text;
     },
@@ -414,13 +416,13 @@ touch src/pages/api/test.ts
 ```
 
 ```typescript filename="src/pages/api/test.ts" showLineNumbers copy
-import type { APIRoute } from 'astro';
+import type { APIRoute } from "astro";
 
-import { mastra } from '../../mastra';
+import { mastra } from "../../mastra";
 
 export const POST: APIRoute = async ({ request }) => {
   const { city } = await new Response(request.body).json();
-  const agent = mastra.getAgent('weatherAgent');
+  const agent = mastra.getAgent("weatherAgent");
 
   const result = await agent.generate(`What's the weather like in ${city}?`);
 

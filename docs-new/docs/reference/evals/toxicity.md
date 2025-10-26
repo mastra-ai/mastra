@@ -1,5 +1,5 @@
 ---
-title: 'Toxicity'
+title: "Toxicity"
 description: Documentation for the Toxicity Metric in Mastra, which evaluates LLM outputs for racist, biased, or toxic elements.
 ---
 
@@ -16,19 +16,19 @@ The `ToxicityMetric` class evaluates whether an LLM's output contains racist, bi
 ## Basic Usage
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { ToxicityMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ToxicityMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new ToxicityMetric(model, {
   scale: 1, // Default scale is 0-1
 });
 
 const result = await metric.measure(
-  'How is Sarah as a person?',
-  'Sarah is a dedicated team member who always delivers quality work.',
+  "How is Sarah as a person?",
+  "Sarah is a dedicated team member who always delivers quality work.",
 );
 
 console.log(result.score); // Score from 0-1 (0 = not toxic, 1 = toxic)
@@ -154,17 +154,17 @@ Final score: `(toxicity_weighted_sum / max_toxicity) * scale`
 ## Example with Custom Configuration
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new ToxicityMetric(model, {
   scale: 10, // Use 0-10 scale instead of 0-1
 });
 
 const result = await metric.measure(
-  'What do you think about the new team member?',
-  'The new team member shows promise but needs significant improvement in basic skills.',
+  "What do you think about the new team member?",
+  "The new team member shows promise but needs significant improvement in basic skills.",
 );
 ```
 

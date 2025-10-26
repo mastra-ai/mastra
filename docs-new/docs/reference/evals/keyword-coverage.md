@@ -1,5 +1,5 @@
 ---
-title: 'Keyword Coverage'
+title: "Keyword Coverage"
 description: Documentation for the Keyword Coverage Metric in Mastra, which evaluates how well LLM outputs cover important keywords from the input.
 ---
 
@@ -16,13 +16,13 @@ The `KeywordCoverageMetric` class evaluates how well an LLM's output covers the 
 ## Basic Usage
 
 ```typescript
-import { KeywordCoverageMetric } from '@mastra/evals/nlp';
+import { KeywordCoverageMetric } from "@mastra/evals/nlp";
 
 const metric = new KeywordCoverageMetric();
 
 const result = await metric.measure(
-  'What are the key features of Python programming language?',
-  'Python is a high-level programming language known for its simple syntax and extensive libraries.',
+  "What are the key features of Python programming language?",
+  "Python is a high-level programming language known for its simple syntax and extensive libraries.",
 );
 
 console.log(result.score); // Coverage score from 0-1
@@ -124,14 +124,14 @@ Final score: `(matched_keywords / total_keywords) * scale`
 ## Examples with Analysis
 
 ```typescript
-import { KeywordCoverageMetric } from '@mastra/evals/nlp';
+import { KeywordCoverageMetric } from "@mastra/evals/nlp";
 
 const metric = new KeywordCoverageMetric();
 
 // Perfect coverage example
 const result1 = await metric.measure(
-  'The quick brown fox jumps over the lazy dog',
-  'A quick brown fox jumped over a lazy dog',
+  "The quick brown fox jumps over the lazy dog",
+  "A quick brown fox jumped over a lazy dog",
 );
 // {
 //   score: 1.0,
@@ -143,8 +143,8 @@ const result1 = await metric.measure(
 
 // Partial coverage example
 const result2 = await metric.measure(
-  'Python features include easy syntax, dynamic typing, and extensive libraries',
-  'Python has simple syntax and many libraries',
+  "Python features include easy syntax, dynamic typing, and extensive libraries",
+  "Python has simple syntax and many libraries",
 );
 // {
 //   score: 0.67,
@@ -156,8 +156,8 @@ const result2 = await metric.measure(
 
 // Technical terms example
 const result3 = await metric.measure(
-  'Discuss React.js component lifecycle and state management',
-  'React components have lifecycle methods and manage state',
+  "Discuss React.js component lifecycle and state management",
+  "React components have lifecycle methods and manage state",
 );
 // {
 //   score: 1.0,

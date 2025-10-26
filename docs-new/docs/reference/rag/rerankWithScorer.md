@@ -1,5 +1,5 @@
 ---
-title: 'Rerank'
+title: "Rerank"
 description: Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
 ---
 
@@ -19,14 +19,14 @@ function rerankWithScorer({
 ## Usage Example
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { rerankWithScorer as rerank, CohereRelevanceScorer } from '@mastra/rag';
+import { openai } from "@ai-sdk/openai";
+import { rerankWithScorer as rerank, CohereRelevanceScorer } from "@mastra/rag";
 
-const scorer = new CohereRelevanceScorer('rerank-v3.5');
+const scorer = new CohereRelevanceScorer("rerank-v3.5");
 
 const rerankedResults = await rerank({
   results: vectorSearchResults,
-  query: 'How do I deploy to production?',
+  query: "How do I deploy to production?",
   scorer,
   options: {
     weights: {

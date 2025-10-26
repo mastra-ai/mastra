@@ -1,5 +1,5 @@
 ---
-title: 'LangSmithExporter '
+title: "LangSmithExporter "
 description: LangSmith exporter for AI tracing
 ---
 
@@ -17,7 +17,7 @@ new LangSmithExporter(config: LangSmithExporterConfig)
 
 ```typescript
 interface LangSmithExporterConfig extends ClientConfig {
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  logLevel?: "debug" | "info" | "warn" | "error";
   client?: Client;
 }
 ```
@@ -90,12 +90,12 @@ Ends all active spans and clears the trace map.
 ## Usage
 
 ```typescript
-import { LangSmithExporter } from '@mastra/langsmith';
+import { LangSmithExporter } from "@mastra/langsmith";
 
 const exporter = new LangSmithExporter({
   apiKey: process.env.LANGSMITH_API_KEY,
-  apiUrl: 'https://api.smith.langchain.com',
-  logLevel: 'info',
+  apiUrl: "https://api.smith.langchain.com",
+  logLevel: "info",
 });
 ```
 
