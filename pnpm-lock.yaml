@@ -771,6 +771,12 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@20.19.23)(@vitest/ui@3.2.4(vitest@3.2.4))(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))
 
+  observability/_test-utils:
+    devDependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+
   observability/arize:
     dependencies:
       '@arizeai/openinference-genai':
