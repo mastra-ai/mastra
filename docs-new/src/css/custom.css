@@ -654,6 +654,11 @@ code {
   padding: 0.12em 0.25em;
 }
 
+[data-theme='dark'] code {
+  background: color-mix(in oklab, #fff 10%, transparent);
+  border-color: color-mix(in oklab, #fff 10%, transparent);
+}
+
 pre code {
   font-size: 13px;
   line-height: 1.6;
@@ -662,6 +667,11 @@ pre code {
   padding: 0;
   color: var(--mastra-text-muted);
 }
+
+[data-theme='dark'] pre code {
+  background: transparent;
+}
+
 
 /* Code block title bar */
 div[class*='codeBlockTitle'] {
