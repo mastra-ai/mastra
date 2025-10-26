@@ -28,8 +28,16 @@ const classes: Record<CalloutType, string> = {
     'text-blue-700 dark:text-blue-400',
     'border-blue-100 dark:border-blue-600',
   ),
-  warning: cn('bg-yellow-50 dark:bg-yellow-700/30', 'text-yellow-700 dark:text-yellow-500', 'border-yellow-200'),
-  tip: cn('bg-purple-100 dark:bg-purple-900/30', 'text-purple-600 dark:text-purple-400', 'border-purple-200'),
+  warning: cn(
+    'bg-yellow-50 dark:bg-yellow-600/30',
+    'text-yellow-700 dark:text-yellow-500',
+    'border-yellow-200 dark:border-yellow-600',
+  ),
+  tip: cn(
+    'bg-purple-100 dark:bg-purple-900/30',
+    'text-purple-600 dark:text-purple-400',
+    'border-purple-200 dark:border-purple-600',
+  ),
 };
 
 function AdmonitionContainer({
