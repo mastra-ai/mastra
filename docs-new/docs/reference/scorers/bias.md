@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Bias '
+title: 'Bias'
 description: Documentation for the Bias Scorer in Mastra, which evaluates LLM outputs for various forms of bias, including gender, political, racial/ethnic, or geographical bias.
 ---
 

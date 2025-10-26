@@ -1,5 +1,5 @@
 ---
-title: 'Reference: CompositeVoice '
+title: 'CompositeVoice'
 description: 'Documentation for the CompositeVoice class, which enables combining multiple voice providers for flexible text-to-speech and speech-to-text operations.'
 ---
 

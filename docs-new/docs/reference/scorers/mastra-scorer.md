@@ -1,5 +1,5 @@
 ---
-title: 'Reference: MastraScorer '
+title: 'MastraScorer'
 description: Documentation for the MastraScorer base class in Mastra, which provides the foundation for all custom and built-in scorers.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Summarization '
+title: 'Summarization'
 description: Documentation for the Summarization Metric in Mastra, which evaluates the quality of LLM-generated summaries for content and factual accuracy.
 ---
 

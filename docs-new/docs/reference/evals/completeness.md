@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Completeness '
+title: 'Completeness'
 description: Documentation for the Completeness Metric in Mastra, which evaluates how thoroughly LLM outputs cover key elements present in the input.
 ---
 

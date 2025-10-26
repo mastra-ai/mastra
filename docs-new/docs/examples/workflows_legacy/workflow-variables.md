@@ -204,8 +204,6 @@ This example demonstrates several important concepts about workflow variables:
 
 5. **Explicit Data Dependencies**: By defining input schemas and using variable mappings, the data dependencies between steps are made explicit and clear.
 
-For more information on workflow variables, see the [StepOptions reference](/docs/reference/legacyWorkflows/step-options).
-
 ## Workflows (Legacy)
 
 The following links provide example documentation for legacy workflows:

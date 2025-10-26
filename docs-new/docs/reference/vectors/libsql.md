@@ -1,6 +1,7 @@
 ---
-title: 'Default Vector Store '
+title: 'LibSQLVector'
 description: Documentation for the LibSQLVector class in Mastra, which provides vector search using LibSQL with vector extensions.
+sidebar_position: 6
 ---
 
 # LibSQLVector Store

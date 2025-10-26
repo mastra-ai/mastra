@@ -14,12 +14,11 @@ function NavbarContentDesktop() {
   const mobileSidebar = useNavbarMobileSidebar();
   return (
     <>
-      {' '}
       <div className="flex px-4 lg:px-0 border-b-[0.5px] h-[60px] border-(--border-subtle) max-w-(--ifm-container-width) mx-auto w-full items-center justify-between">
         <Link href="/docs">
           <div className="flex items-center gap-2">
             <Logo />
-            <span className="px-1.5 mb-0 w-[3.2rem] grid place-items-center h-[1.6rem] font-medium tracking-wider py-0.5 text-xs rounded-[0.44rem] border border-(--border) uppercase">
+            <span className="px-1.5 dark:text-(--mastra-green-accent) mb-0 w-[3.2rem] grid place-items-center h-[1.6rem] font-medium tracking-wider py-0.5 text-xs rounded-[0.44rem] border border-(--border) uppercase">
               Docs
             </span>
           </div>

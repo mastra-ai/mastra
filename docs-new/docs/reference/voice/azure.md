@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Azure Voice '
+title: 'Azure Voice'
 description: 'Documentation for the AzureVoice class, providing text-to-speech and speech-to-text capabilities using Azure Cognitive Services.'
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Prompt Alignment '
+title: 'Prompt Alignment'
 description: Documentation for the Prompt Alignment Metric in Mastra, which evaluates how well LLM outputs adhere to given prompt instructions.
 ---
 

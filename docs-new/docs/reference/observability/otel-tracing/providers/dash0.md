@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Dash0 Integration '
+title: 'Dash0 Integration'
 description: Documentation for integrating Mastra with Dash0, an Open Telemetry native observability solution.
 ---
 

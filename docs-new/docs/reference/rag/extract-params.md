@@ -1,5 +1,5 @@
 ---
-title: 'Reference: ExtractParams '
+title: 'ExtractParams'
 description: Documentation for metadata extraction configuration in Mastra.
 ---
 

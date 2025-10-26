@@ -1,5 +1,5 @@
 ---
-title: 'API Reference'
+title: 'Overview'
 description: 'Mastra API Reference'
 sidebar_position: 1
 ---

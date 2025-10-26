@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Google Gemini Live Voice '
+title: 'Google Gemini Live Voice'
 description: "Documentation for the GeminiLiveVoice class, providing real-time multimodal voice interactions using Google's Gemini Live API with support for both Gemini API and Vertex AI."
 ---
 

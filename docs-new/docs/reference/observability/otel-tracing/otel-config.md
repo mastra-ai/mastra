@@ -1,5 +1,5 @@
 ---
-title: 'Reference: OtelConfig '
+title: 'OtelConfig'
 description: Documentation for the OtelConfig object, which configures OpenTelemetry instrumentation, tracing, and exporting behavior.
 ---
 

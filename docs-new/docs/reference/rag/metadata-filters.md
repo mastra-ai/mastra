@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Metadata Filters '
+title: 'Metadata Filters'
 description: Documentation for metadata filtering capabilities in Mastra, which allow for precise querying of vector search results across different vector stores.
 ---
 

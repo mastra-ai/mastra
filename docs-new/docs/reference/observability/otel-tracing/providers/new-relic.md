@@ -1,5 +1,5 @@
 ---
-title: 'Reference: New Relic Integration '
+title: 'New Relic Integration'
 description: Documentation for integrating New Relic with Mastra, a comprehensive observability platform supporting OpenTelemetry for full-stack monitoring.
 ---
 

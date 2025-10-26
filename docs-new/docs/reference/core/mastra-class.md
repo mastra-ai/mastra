@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Mastra Class '
+title: 'Mastra Class'
 description: 'Documentation for the `Mastra` class in Mastra, the core entry point for managing agents, workflows, MCP servers, and server endpoints.'
 ---
 

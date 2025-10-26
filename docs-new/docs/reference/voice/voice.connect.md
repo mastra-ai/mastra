@@ -1,5 +1,5 @@
 ---
-title: 'Reference: voice.connect() '
+title: 'voice.connect()'
 description: 'Documentation for the connect() method available in real-time voice providers, which establishes a connection for speech-to-speech communication.'
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Tone Consistency '
+title: 'Tone Consistency'
 description: Documentation for the Tone Consistency Metric in Mastra, which evaluates emotional tone and sentiment consistency in text.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Create Custom Scorer '
+title: 'Create Custom Scorer'
 description: Documentation for creating custom scorers in Mastra, allowing users to define their own evaluation logic using either JavaScript functions or LLM-based prompts.
 ---
 

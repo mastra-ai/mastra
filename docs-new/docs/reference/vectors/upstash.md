@@ -1,6 +1,7 @@
 ---
-title: 'Reference: Upstash Vector Store '
+title: 'UpstashVector'
 description: Documentation for the UpstashVector class in Mastra, which provides vector search using Upstash Vector.
+sidebar_position: 14
 ---
 
 # Upstash Vector Store

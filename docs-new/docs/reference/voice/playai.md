@@ -1,5 +1,5 @@
 ---
-title: 'Reference: PlayAI Voice '
+title: 'PlayAI Voice'
 description: 'Documentation for the PlayAI voice implementation, providing text-to-speech capabilities.'
 ---
 

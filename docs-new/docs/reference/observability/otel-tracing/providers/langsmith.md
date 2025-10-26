@@ -1,5 +1,5 @@
 ---
-title: 'Reference: LangSmith Integration '
+title: 'LangSmith Integration'
 description: Documentation for integrating LangSmith with Mastra, a platform for debugging, testing, evaluating, and monitoring LLM applications.
 ---
 
