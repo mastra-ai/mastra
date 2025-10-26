@@ -310,7 +310,7 @@ html {
   }
 }
 
-.navbar-sidebar__brand{
+.navbar-sidebar__brand {
   height: calc(var(--ifm-navbar-height) - 50px);
   border: none;
   box-shadow: none;
@@ -591,7 +591,8 @@ h2 code {
 }
 
 iframe,
-img, video {
+img,
+video {
   border-radius: 12px;
   max-width: 100%;
 }
@@ -1144,18 +1145,17 @@ textarea:-webkit-autofill:focus {
 }
 
 .navbar-sidebar__item {
-  padding-inline: 0.5rem!important;
+  padding-inline: 0.5rem !important;
 }
 
-.theme-doc-toc-mobile{
-  ul{
+.theme-doc-toc-mobile {
+  ul {
     border-color: var(--border) !important;
   }
-  button{
-   &:after {
-    background: var(--ifm-menu-link-sublist-icon) center;
-    transform-origin: center;
-  } 
+  button {
+    &:after {
+      background: var(--ifm-menu-link-sublist-icon) center;
+      transform-origin: center;
+    }
   }
 }
-
