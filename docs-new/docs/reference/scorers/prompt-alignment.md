@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Prompt Alignment Scorer '
+title: "Prompt Alignment Scorer"
 description: Documentation for the Prompt Alignment Scorer in Mastra. Evaluates how well agent responses align with user prompt intent, requirements, completeness, and appropriateness using multi-dimensional analysis.
 ---
 
@@ -168,23 +168,24 @@ Final Score = Weighted Score × scale
 ### Basic Configuration
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { createPromptAlignmentScorerLLM } from '@mastra/evals';
+import { openai } from "@ai-sdk/openai";
+import { createPromptAlignmentScorerLLM } from "@mastra/evals";
 
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
 });
 
 // Evaluate a code generation task
 const result = await scorer.run({
   input: [
     {
-      role: 'user',
-      content: 'Write a Python function to calculate factorial with error handling',
+      role: "user",
+      content:
+        "Write a Python function to calculate factorial with error handling",
     },
   ],
   output: {
-    role: 'assistant',
+    role: "assistant",
     text: `def factorial(n):
     if n < 0:
         raise ValueError("Factorial not defined for negative numbers")
@@ -201,23 +202,23 @@ const result = await scorer.run({
 ```typescript
 // Configure scale and evaluation mode
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   options: {
     scale: 10, // Score from 0-10 instead of 0-1
-    evaluationMode: 'both', // 'user', 'system', or 'both' (default)
+    evaluationMode: "both", // 'user', 'system', or 'both' (default)
   },
 });
 
 // User-only evaluation - focus on user satisfaction
 const userScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o'),
-  options: { evaluationMode: 'user' },
+  model: openai("gpt-4o"),
+  options: { evaluationMode: "user" },
 });
 
 // System-only evaluation - focus on compliance
 const systemScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o'),
-  options: { evaluationMode: 'system' },
+  model: openai("gpt-4o"),
+  options: { evaluationMode: "system" },
 });
 
 const result = await scorer.run(testRun);
@@ -231,13 +232,13 @@ const result = await scorer.run(testRun);
 const result = await scorer.run({
   input: [
     {
-      role: 'user',
-      content: 'List the benefits of TypeScript in bullet points',
+      role: "user",
+      content: "List the benefits of TypeScript in bullet points",
     },
   ],
   output: {
-    role: 'assistant',
-    text: 'TypeScript provides static typing, better IDE support, and enhanced code reliability.',
+    role: "assistant",
+    text: "TypeScript provides static typing, better IDE support, and enhanced code reliability.",
   },
 });
 // Result: Lower appropriateness score due to format mismatch (paragraph vs bullet points)
@@ -256,7 +257,8 @@ Ideal for evaluating:
 
 ```typescript
 // Example: API endpoint creation
-const codePrompt = 'Create a REST API endpoint with authentication and rate limiting';
+const codePrompt =
+  "Create a REST API endpoint with authentication and rate limiting";
 // Scorer evaluates: intent (API creation), requirements (auth + rate limiting),
 // completeness (full implementation), format (code structure)
 ```
@@ -272,7 +274,8 @@ Perfect for:
 
 ```typescript
 // Example: Multi-requirement task
-const taskPrompt = 'Write a Python class with initialization, validation, error handling, and documentation';
+const taskPrompt =
+  "Write a Python class with initialization, validation, error handling, and documentation";
 // Scorer tracks each requirement individually and provides detailed breakdown
 ```
 
@@ -287,7 +290,8 @@ Useful for:
 
 ```typescript
 // Example: Structured output
-const formatPrompt = 'Explain the differences between let and const in JavaScript using bullet points';
+const formatPrompt =
+  "Explain the differences between let and const in JavaScript using bullet points";
 // Scorer evaluates content accuracy AND format compliance
 ```
 
@@ -299,27 +303,28 @@ Measure how well your AI agents follow user instructions:
 
 ```typescript
 const agent = new Agent({
-  name: 'CodingAssistant',
-  instructions: 'You are a helpful coding assistant. Always provide working code examples.',
-  model: openai('gpt-4o'),
+  name: "CodingAssistant",
+  instructions:
+    "You are a helpful coding assistant. Always provide working code examples.",
+  model: openai("gpt-4o"),
 });
 
 // Evaluate comprehensive alignment (default)
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
-  options: { evaluationMode: 'both' }, // Evaluates both user intent and system guidelines
+  model: openai("gpt-4o-mini"),
+  options: { evaluationMode: "both" }, // Evaluates both user intent and system guidelines
 });
 
 // Evaluate just user satisfaction
 const userScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
-  options: { evaluationMode: 'user' }, // Focus only on user request fulfillment
+  model: openai("gpt-4o-mini"),
+  options: { evaluationMode: "user" }, // Focus only on user request fulfillment
 });
 
 // Evaluate system compliance
 const systemScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
-  options: { evaluationMode: 'system' }, // Check adherence to system instructions
+  model: openai("gpt-4o-mini"),
+  options: { evaluationMode: "system" }, // Check adherence to system instructions
 });
 
 const result = await scorer.run(agentRun);
@@ -331,9 +336,9 @@ Test different prompts to improve alignment:
 
 ```typescript
 const prompts = [
-  'Write a function to calculate factorial',
-  'Create a Python function that calculates factorial with error handling for negative inputs',
-  'Implement a factorial calculator in Python with: input validation, error handling, and docstring',
+  "Write a function to calculate factorial",
+  "Create a Python function that calculates factorial with error handling for negative inputs",
+  "Implement a factorial calculator in Python with: input validation, error handling, and docstring",
 ];
 
 // Compare alignment scores to find the best prompt
@@ -377,7 +382,7 @@ try {
 // Empty response
 const result = await scorer.run({
   input: [userMessage],
-  output: { role: 'assistant', text: '' },
+  output: { role: "assistant", text: "" },
 });
 // Returns low scores with detailed reasoning about incompleteness
 ```

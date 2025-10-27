@@ -1,14 +1,19 @@
-import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
-import { useState } from 'react';
-import { CustomSearchWithoutAI } from './custom-search';
-import { Button } from './ui/button';
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogPanel,
+  DialogTitle,
+} from "@headlessui/react";
+import { useState } from "react";
+import { CustomSearchWithoutAI } from "./custom-search";
+import { Button } from "./ui/button";
 
-export function getSearchPlaceholder(locale = 'en') {
+export function getSearchPlaceholder(locale = "en") {
   switch (locale) {
-    case 'ja':
-      return '検索するかAIに尋ねる...';
+    case "ja":
+      return "検索するかAIに尋ねる...";
     default:
-      return 'Search or ask AI...';
+      return "Search or ask AI...";
   }
 }
 
@@ -35,7 +40,7 @@ function SearchIcon() {
 export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAgentMode, setIsAgentMode] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
 
   function open() {
     setIsOpen(true);
@@ -53,18 +58,23 @@ export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
 
   // Configure Algolia search options
   const searchOptions = {
-    indexName: 'crawler_mastra crawler',
+    indexName: "crawler_mastra crawler",
     hitsPerPage: 20,
-    attributesToRetrieve: ['title', 'content', 'url', 'hierarchy'],
-    attributesToHighlight: ['title', 'content'],
-    attributesToSnippet: ['content:15'],
+    attributesToRetrieve: ["title", "content", "url", "hierarchy"],
+    attributesToHighlight: ["title", "content"],
+    attributesToSnippet: ["content:15"],
     filters: `locale:${locale}`,
-    snippetEllipsisText: '…',
+    snippetEllipsisText: "…",
   };
 
   return (
     <>
-      <Button onClick={open} size="sm" variant="ghost" className="block cursor-pointer md:hidden w-fit text-icons-3">
+      <Button
+        onClick={open}
+        size="sm"
+        variant="ghost"
+        className="block cursor-pointer md:hidden w-fit text-icons-3"
+      >
         <SearchIcon />
       </Button>
       <Dialog
@@ -87,7 +97,10 @@ export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
               <div className="w-full">
                 {isAgentMode ? null : (
                   <div className="p-2.5">
-                    <CustomSearchWithoutAI searchOptions={searchOptions} closeModal={close} />
+                    <CustomSearchWithoutAI
+                      searchOptions={searchOptions}
+                      closeModal={close}
+                    />
                   </div>
                 )}
               </div>

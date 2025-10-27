@@ -1,5 +1,5 @@
-import path from 'path';
-import fs from 'fs/promises';
+import path from "path";
+import fs from "fs/promises";
 
 function extractFrontMatter(content: string) {
   const frontMatterRegex = /^---\n([\s\S]*?)\n---/;
@@ -9,11 +9,11 @@ function extractFrontMatter(content: string) {
   const frontMatterStr = match[1];
   const result: Record<string, string> = {};
 
-  const fields = ['title', 'description'];
-  fields.forEach(field => {
+  const fields = ["title", "description"];
+  fields.forEach((field) => {
     const match = frontMatterStr.match(new RegExp(`${field}:\\s*([^\n]+)`));
     if (match) {
-      result[field] = match[1].trim().replace(/['"]|\\'/g, '');
+      result[field] = match[1].trim().replace(/['"]|\\'/g, "");
     }
   });
 
@@ -23,9 +23,9 @@ function extractFrontMatter(content: string) {
 function pathToUrl(filePath: string): string {
   // Convert docs file path to URL
   const cleanPath = filePath
-    .replaceAll('\\', '/')
-    .replace(/^docs\//, '')
-    .replace(/\/index\.md$|\.md$/, '');
+    .replaceAll("\\", "/")
+    .replace(/^docs\//, "")
+    .replace(/\/index\.md$|\.md$/, "");
   return `https://mastra.ai/${cleanPath}`;
 }
 
@@ -39,16 +39,20 @@ async function concatenateMDDocs(sourceDir: string) {
       throw new Error(`Source path ${sourceDir} is not a directory`);
     }
   } catch (error) {
-    console.error(`Error accessing source directory: ${error instanceof Error ? error?.message : error}`);
+    console.error(
+      `Error accessing source directory: ${error instanceof Error ? error?.message : error}`,
+    );
     process.exit(1);
   }
 
-  const outputDir = path.join(process.cwd(), 'static');
+  const outputDir = path.join(process.cwd(), "static");
   // Ensure output directory exists
   try {
     await fs.mkdir(outputDir, { recursive: true });
   } catch (error) {
-    console.error(`Error creating output directory: ${error instanceof Error ? error?.message : error}`);
+    console.error(
+      `Error creating output directory: ${error instanceof Error ? error?.message : error}`,
+    );
     process.exit(1);
   }
 
@@ -66,32 +70,39 @@ async function concatenateMDDocs(sourceDir: string) {
         const fullPath = path.join(dirPath, entry.name);
 
         if (entry.isDirectory()) {
-          if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
+          if (!entry.name.startsWith(".") && entry.name !== "node_modules") {
             await processDirectory(fullPath);
           }
           continue;
         }
 
-        if (!entry.name.endsWith('.md') && !entry.name.endsWith('.mdx')) continue;
+        if (!entry.name.endsWith(".md") && !entry.name.endsWith(".mdx"))
+          continue;
 
         try {
-          const content = await fs.readFile(fullPath, 'utf-8');
-          const relativePath = path.relative(sourceDir, fullPath).replaceAll('\\', '/');
+          const content = await fs.readFile(fullPath, "utf-8");
+          const relativePath = path
+            .relative(sourceDir, fullPath)
+            .replaceAll("\\", "/");
           const frontMatter = extractFrontMatter(content);
 
           mdFiles.push({
             path: relativePath,
             content,
-            title: frontMatter.title || path.basename(relativePath, '.md'),
+            title: frontMatter.title || path.basename(relativePath, ".md"),
             description: frontMatter.description,
           });
         } catch (error) {
-          console.error(`Error processing file ${fullPath}: ${error instanceof Error ? error?.message : error}`);
+          console.error(
+            `Error processing file ${fullPath}: ${error instanceof Error ? error?.message : error}`,
+          );
           // Continue processing other files
         }
       }
     } catch (error) {
-      console.error(`Error reading directory ${dirPath}: ${error instanceof Error ? error?.message : error}`);
+      console.error(
+        `Error reading directory ${dirPath}: ${error instanceof Error ? error?.message : error}`,
+      );
       throw error;
     }
   }
@@ -100,14 +111,14 @@ async function concatenateMDDocs(sourceDir: string) {
     await processDirectory(sourceDir);
 
     if (mdFiles.length === 0) {
-      console.warn('No MD files found in the specified directory');
+      console.warn("No MD files found in the specified directory");
       return;
     }
 
     // Group files by parent directory
     const groupedFiles = mdFiles.reduce(
       (groups, file) => {
-        const firstDir = file.path.split('/')[0];
+        const firstDir = file.path.split("/")[0];
 
         if (!groups[firstDir]) {
           groups[firstDir] = [];
@@ -119,16 +130,16 @@ async function concatenateMDDocs(sourceDir: string) {
     );
 
     const indexContent = [
-      '# Mastra\n',
-      '> Mastra is an open-source TypeScript agent framework designed to provide the essential primitives for building AI applications. ' +
-        'It enables developers to create AI agents with memory and tool-calling capabilities, implement deterministic LLM workflows, and leverage RAG for knowledge integration. ' +
-        'With features like model routing, workflow graphs, and automated evals, Mastra provides a complete toolkit for developing, testing, and deploying AI applications.\n\n' +
+      "# Mastra\n",
+      "> Mastra is an open-source TypeScript agent framework designed to provide the essential primitives for building AI applications. " +
+        "It enables developers to create AI agents with memory and tool-calling capabilities, implement deterministic LLM workflows, and leverage RAG for knowledge integration. " +
+        "With features like model routing, workflow graphs, and automated evals, Mastra provides a complete toolkit for developing, testing, and deploying AI applications.\n\n" +
         "This documentation covers everything from getting started to advanced features, APIs, and best practices for working with Mastra's agent-based architecture.\n\n" +
-        'The documentation is organized into key sections:\n' +
-        '- **docs**: Core documentation covering concepts, features, and implementation details\n' +
+        "The documentation is organized into key sections:\n" +
+        "- **docs**: Core documentation covering concepts, features, and implementation details\n" +
         "- **examples**: Practical examples and use cases demonstrating Mastra's capabilities\n" +
-        '- **guides**: Step-by-step tutorials for building specific applications\n' +
-        '- **reference**: API reference documentation\n\n' +
+        "- **guides**: Step-by-step tutorials for building specific applications\n" +
+        "- **reference**: API reference documentation\n\n" +
         "Each section contains detailed markdown files that provide comprehensive information about Mastra's features and how to use them effectively.\n",
     ];
 
@@ -136,26 +147,40 @@ async function concatenateMDDocs(sourceDir: string) {
       indexContent.push(`\n## ${section}`);
       for (const file of files) {
         const url = pathToUrl(file.path);
-        indexContent.push(`- [${file.title}](${url})${file.description ? ': ' + file.description : ''}`);
+        indexContent.push(
+          `- [${file.title}](${url})${file.description ? ": " + file.description : ""}`,
+        );
       }
     }
 
     try {
-      await fs.writeFile(path.join(outputDir, 'llms.txt'), indexContent.join('\n'), 'utf-8');
-      console.log('Generated llms.txt at static/llms.txt');
+      await fs.writeFile(
+        path.join(outputDir, "llms.txt"),
+        indexContent.join("\n"),
+        "utf-8",
+      );
+      console.log("Generated llms.txt at static/llms.txt");
     } catch (error) {
-      console.error(`Error writing llms.txt: ${error instanceof Error ? error?.message : error}`);
+      console.error(
+        `Error writing llms.txt: ${error instanceof Error ? error?.message : error}`,
+      );
       throw error;
     }
   } catch (error) {
-    console.error('Fatal error during documentation generation:', error instanceof Error ? error?.message : error);
+    console.error(
+      "Fatal error during documentation generation:",
+      error instanceof Error ? error?.message : error,
+    );
     process.exit(1);
   }
 }
 
-const docsDir = path.join(process.cwd(), 'docs');
+const docsDir = path.join(process.cwd(), "docs");
 
-concatenateMDDocs(docsDir).catch(error => {
-  console.error('Unhandled error:', error instanceof Error ? error?.message : error);
+concatenateMDDocs(docsDir).catch((error) => {
+  console.error(
+    "Unhandled error:",
+    error instanceof Error ? error?.message : error,
+  );
   process.exit(1);
 });

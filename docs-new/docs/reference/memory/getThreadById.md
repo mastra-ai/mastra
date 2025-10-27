@@ -1,6 +1,6 @@
 ---
-title: 'Memory.getThreadById() '
-description: 'Documentation for the `Memory.getThreadById()` method in Mastra, which retrieves a specific thread by its ID.'
+title: "Memory.getThreadById() "
+description: "Documentation for the `Memory.getThreadById()` method in Mastra, which retrieves a specific thread by its ID."
 ---
 
 # Memory.getThreadById()
@@ -10,7 +10,7 @@ The `.getThreadById()` method retrieves a specific thread by its ID.
 ## Usage Example
 
 ```typescript
-await memory?.getThreadById({ threadId: 'thread-123' });
+await memory?.getThreadById({ threadId: "thread-123" });
 ```
 
 ## Parameters

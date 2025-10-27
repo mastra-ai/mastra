@@ -1,16 +1,16 @@
 ---
-title: '.chunk() '
+title: ".chunk() "
 description: Documentation for the chunk function in Mastra, which splits documents into smaller segments using various strategies.
 ---
 
-# Reference: .chunk()
+# .chunk()
 
 The `.chunk()` function splits documents into smaller segments using various strategies and options.
 
 ## Example
 
 ```typescript
-import { MDocument } from '@mastra/rag';
+import { MDocument } from "@mastra/rag";
 
 const doc = MDocument.fromMarkdown(`
 # Introduction
@@ -28,10 +28,10 @@ const chunks = await doc.chunk();
 
 // Markdown-specific chunking with header extraction
 const chunksWithMetadata = await doc.chunk({
-  strategy: 'markdown',
+  strategy: "markdown",
   headers: [
-    ['#', 'title'],
-    ['##', 'section'],
+    ["#", "title"],
+    ["##", "section"],
   ],
   extract: {
     summary: true, // Extract summaries with default settings
@@ -120,61 +120,61 @@ Strategy-specific options are passed as top-level parameters alongside the strat
 ```typescript showLineNumbers copy
 // Character strategy example
 const chunks = await doc.chunk({
-  strategy: 'character',
-  separator: '.', // Character-specific option
+  strategy: "character",
+  separator: ".", // Character-specific option
   isSeparatorRegex: false, // Character-specific option
   maxSize: 300, // general option
 });
 
 // Recursive strategy example
 const chunks = await doc.chunk({
-  strategy: 'recursive',
-  separators: ['\n\n', '\n', ' '], // Recursive-specific option
-  language: 'markdown', // Recursive-specific option
+  strategy: "recursive",
+  separators: ["\n\n", "\n", " "], // Recursive-specific option
+  language: "markdown", // Recursive-specific option
   maxSize: 500, // general option
 });
 
 // Sentence strategy example
 const chunks = await doc.chunk({
-  strategy: 'sentence',
+  strategy: "sentence",
   maxSize: 450, // Required for sentence strategy
   minSize: 50, // Sentence-specific option
-  sentenceEnders: ['.'], // Sentence-specific option
+  sentenceEnders: ["."], // Sentence-specific option
   fallbackToCharacters: false, // Sentence-specific option
   keepSeparator: true, // general option
 });
 
 // HTML strategy example
 const chunks = await doc.chunk({
-  strategy: 'html',
+  strategy: "html",
   headers: [
-    ['h1', 'title'],
-    ['h2', 'subtitle'],
+    ["h1", "title"],
+    ["h2", "subtitle"],
   ], // HTML-specific option
 });
 
 // Markdown strategy example
 const chunks = await doc.chunk({
-  strategy: 'markdown',
+  strategy: "markdown",
   headers: [
-    ['#', 'title'],
-    ['##', 'section'],
+    ["#", "title"],
+    ["##", "section"],
   ], // Markdown-specific option
   stripHeaders: true, // Markdown-specific option
 });
 
 // Semantic Markdown strategy example
 const chunks = await doc.chunk({
-  strategy: 'semantic-markdown',
+  strategy: "semantic-markdown",
   joinThreshold: 500, // Semantic Markdown-specific option
-  modelName: 'gpt-3.5-turbo', // Semantic Markdown-specific option
+  modelName: "gpt-3.5-turbo", // Semantic Markdown-specific option
 });
 
 // Token strategy example
 const chunks = await doc.chunk({
-  strategy: 'token',
-  encodingName: 'gpt2', // Token-specific option
-  modelName: 'gpt-3.5-turbo', // Token-specific option
+  strategy: "token",
+  encodingName: "gpt2", // Token-specific option
+  modelName: "gpt-3.5-turbo", // Token-specific option
   maxSize: 1000, // general option
 });
 ```

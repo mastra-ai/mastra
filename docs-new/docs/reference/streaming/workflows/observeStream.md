@@ -1,5 +1,5 @@
 ---
-title: 'Run.observeStream() '
+title: "Run.observeStream() "
 description: Documentation for the `Run.observeStream()` method in workflows, which enables reopening the stream of an already active workflow run.
 ---
 
@@ -14,7 +14,7 @@ const run = await workflow.createRunAsync();
 
 run.stream({
   inputData: {
-    value: 'initial data',
+    value: "initial data",
   },
 });
 

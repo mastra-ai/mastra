@@ -1,5 +1,5 @@
 ---
-title: 'Array as Input (.foreach()) '
+title: "Array as Input (.foreach()) "
 description: Example of using Mastra to process an array using .foreach() in a workflow.
 ---
 
@@ -12,12 +12,12 @@ Some workflows need to perform the same operation on every item in an array. Thi
 In this example, the workflow uses `.foreach()` to apply the `mapStep` step to each string in the input array. For each item, it appends the text `" mapStep"` to the original value. After all items are processed, `step2` runs to pass the updated array to the output.
 
 ```typescript filename="src/mastra/workflows/example-looping-foreach.ts" showLineNumbers copy
-import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
 const mapStep = createStep({
-  id: 'map-step',
-  description: 'adds mapStep suffix to input value',
+  id: "map-step",
+  description: "adds mapStep suffix to input value",
   inputSchema: z.string(),
   outputSchema: z.object({
     value: z.string(),
@@ -30,8 +30,8 @@ const mapStep = createStep({
 });
 
 const step2 = createStep({
-  id: 'step-2',
-  description: 'passes value from input to output',
+  id: "step-2",
+  description: "passes value from input to output",
   inputSchema: z.array(
     z.object({
       value: z.string(),
@@ -50,7 +50,7 @@ const step2 = createStep({
 });
 
 export const loopingForeach = createWorkflow({
-  id: 'foreach-workflow',
+  id: "foreach-workflow",
   inputSchema: z.array(z.string()),
   outputSchema: z.array(
     z.object({

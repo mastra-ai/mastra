@@ -1,7 +1,7 @@
-import { useLocalPathname } from '@docusaurus/theme-common/internal';
-import { FeedbackForm } from './feedback-form';
-import { Button } from './ui/button';
-import React, { useState } from 'react';
+import { useLocalPathname } from "@docusaurus/theme-common/internal";
+import { FeedbackForm } from "./feedback-form";
+import { Button } from "./ui/button";
+import React, { useState } from "react";
 
 export const FeedbackTrigger: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -22,7 +22,11 @@ export const FeedbackTrigger: React.FC = () => {
           Question? Give us feedback
         </Button>
       ) : (
-        <FeedbackForm isOpen={isOpen} onClose={handleClose} currentPage={pathname} />
+        <FeedbackForm
+          isOpen={isOpen}
+          onClose={handleClose}
+          currentPage={pathname}
+        />
       )}
     </div>
   );

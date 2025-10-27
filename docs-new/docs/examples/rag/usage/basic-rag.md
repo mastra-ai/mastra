@@ -1,5 +1,5 @@
 ---
-title: 'Using the Vector Query Tool '
+title: "Using the Vector Query Tool "
 description: Example of implementing a basic RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
@@ -34,11 +34,11 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
-import { Agent } from '@mastra/core/agent';
-import { createVectorQueryTool } from '@mastra/rag';
-import { PgVector } from '@mastra/pg';
+import { openai } from "@ai-sdk/openai";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { createVectorQueryTool } from "@mastra/rag";
+import { PgVector } from "@mastra/pg";
 ```
 
 ## Vector Query Tool Creation
@@ -47,9 +47,9 @@ Create a tool that can query the vector database:
 
 ```typescript copy showLineNumbers{7} filename="src/index.ts"
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
 });
 ```
 
@@ -59,10 +59,10 @@ Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{13} filename="src/index.ts"
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
+  name: "RAG Agent",
   instructions:
-    'You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.',
-  model: openai('gpt-4o-mini'),
+    "You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.",
+  model: openai("gpt-4o-mini"),
   tools: {
     vectorQueryTool,
   },
@@ -83,7 +83,7 @@ export const mastra = new Mastra({
   vectors: { pgVector },
 });
 
-const agent = mastra.getAgent('ragAgent');
+const agent = mastra.getAgent("ragAgent");
 ```
 
 ## Example Usage

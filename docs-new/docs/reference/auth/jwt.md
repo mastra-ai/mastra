@@ -1,6 +1,6 @@
 ---
-title: 'MastraJwtAuth Class'
-description: 'API reference for the MastraJwtAuth class, which authenticates Mastra applications using JSON Web Tokens.'
+title: "MastraJwtAuth Class"
+description: "API reference for the MastraJwtAuth class, which authenticates Mastra applications using JSON Web Tokens."
 ---
 
 # MastraJwtAuth Class
@@ -10,14 +10,14 @@ The `MastraJwtAuth` class provides a lightweight authentication mechanism for Ma
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { MastraJwtAuth } from '@mastra/auth';
+import { Mastra } from "@mastra/core/mastra";
+import { MastraJwtAuth } from "@mastra/auth";
 
 export const mastra = new Mastra({
   // ..
   server: {
     experimental_auth: new MastraJwtAuth({
-      secret: '<your-secret>',
+      secret: "<your-secret>",
     }),
   },
 });

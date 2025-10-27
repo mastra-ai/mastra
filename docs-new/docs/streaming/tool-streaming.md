@@ -1,6 +1,6 @@
 ---
-title: 'Tool Streaming '
-description: 'Learn how to use tool streaming in Mastra, including handling tool calls, tool results, and tool execution events during streaming.'
+title: "Tool Streaming "
+description: "Learn how to use tool streaming in Mastra, including handling tool calls, tool results, and tool execution events during streaming."
 ---
 
 # Tool streaming
@@ -19,15 +19,15 @@ By combining writable tool streams with agent streaming, you gain fine grained c
 Agent streaming can be combined with tool calls, allowing tool outputs to be written directly into the agent’s streaming response. This makes it possible to surface tool activity as part of the overall interaction.
 
 ```typescript {4,10} showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
-import { testTool } from '../tools/test-tool';
+import { testTool } from "../tools/test-tool";
 
 export const testAgent = new Agent({
-  name: 'test-agent',
-  instructions: 'You are a weather agent.',
-  model: openai('gpt-4o-mini'),
+  name: "test-agent",
+  instructions: "You are a weather agent.",
+  model: openai("gpt-4o-mini"),
   tools: { testTool },
 });
 ```
@@ -74,10 +74,13 @@ export const testTool = createTool({
 Events written to the stream are included in the emitted chunks. These chunks can be inspected to access any custom fields, such as event types, intermediate values, or tool-specific data.
 
 ```typescript showLineNumbers copy
-const stream = await testAgent.stream(['What is the weather in London?', 'Use the testTool']);
+const stream = await testAgent.stream([
+  "What is the weather in London?",
+  "Use the testTool",
+]);
 
 for await (const chunk of stream) {
-  if (chunk.payload.output?.type === 'custom-event') {
+  if (chunk.payload.output?.type === "custom-event") {
     console.log(JSON.stringify(chunk, null, 2));
   }
 }
@@ -88,15 +91,15 @@ for await (const chunk of stream) {
 Pipe an agent’s `textStream` to the tool’s `writer`. This streams partial output, and Mastra automatically aggregates the agent’s usage into the tool run.
 
 ```typescript showLineNumbers copy
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
 export const testTool = createTool({
   // ...
   execute: async ({ context, mastra, writer }) => {
     const { city } = context;
 
-    const testAgent = mastra?.getAgent('testAgent');
+    const testAgent = mastra?.getAgent("testAgent");
     const stream = await testAgent?.stream(`What is the weather in ${city}?`);
 
     await stream!.textStream.pipeTo(writer!);

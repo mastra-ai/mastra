@@ -1,6 +1,6 @@
 ---
 title: Firebase
-description: 'Documentation for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication.'
+description: "Documentation for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication."
 sidebar_position: 5
 ---
 
@@ -44,8 +44,8 @@ npm install @mastra/auth-firebase@latest
 If you set the required environment variables (`FIREBASE_SERVICE_ACCOUNT` and `FIRESTORE_DATABASE_ID`), you can initialize `MastraAuthFirebase` without any constructor arguments. The class will automatically read these environment variables as configuration:
 
 ```typescript {2,7} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { MastraAuthFirebase } from '@mastra/auth-firebase';
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 // Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
 export const mastra = new Mastra({
@@ -59,15 +59,15 @@ export const mastra = new Mastra({
 ### Custom configuration
 
 ```typescript {2,7-10} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { MastraAuthFirebase } from '@mastra/auth-firebase';
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 export const mastra = new Mastra({
   // ..
   server: {
     experimental_auth: new MastraAuthFirebase({
-      serviceAccount: '/path/to/service-account.json',
-      databaseId: 'your-database-id',
+      serviceAccount: "/path/to/service-account.json",
+      databaseId: "your-database-id",
     }),
   },
 });
@@ -97,12 +97,12 @@ user_access/
 To customize user authorization, provide a custom `authorizeUser` function:
 
 ```typescript filename="src/mastra/auth.ts" showLineNumbers copy
-import { MastraAuthFirebase } from '@mastra/auth-firebase';
+import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 const firebaseAuth = new MastraAuthFirebase({
-  authorizeUser: async user => {
+  authorizeUser: async (user) => {
     // Custom authorization logic
-    return user.email?.endsWith('@yourcompany.com') || false;
+    return user.email?.endsWith("@yourcompany.com") || false;
   },
 });
 ```
@@ -118,8 +118,8 @@ When using Firebase auth, you'll need to initialize Firebase on the client side,
 First, initialize Firebase in your client application:
 
 ```typescript filename="lib/firebase.ts" showLineNumbers copy
-import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { initializeApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -137,15 +137,15 @@ export const googleProvider = new GoogleAuthProvider();
 Use Firebase authentication to sign in users and retrieve their ID tokens:
 
 ```typescript filename="lib/auth.ts" showLineNumbers copy
-import { signInWithPopup, signOut, User } from 'firebase/auth';
-import { auth, googleProvider } from './firebase';
+import { signInWithPopup, signOut, User } from "firebase/auth";
+import { auth, googleProvider } from "./firebase";
 
 export const signInWithGoogle = async () => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error) {
-    console.error('Error signing in:', error);
+    console.error("Error signing in:", error);
     throw error;
   }
 };
@@ -155,7 +155,7 @@ export const getIdToken = async (user: User) => {
     const idToken = await user.getIdToken();
     return idToken;
   } catch (error) {
-    console.error('Error getting ID token:', error);
+    console.error("Error getting ID token:", error);
     throw error;
   }
 };
@@ -164,7 +164,7 @@ export const signOutUser = async () => {
   try {
     await signOut(auth);
   } catch (error) {
-    console.error('Error signing out:', error);
+    console.error("Error signing out:", error);
     throw error;
   }
 };
@@ -177,11 +177,11 @@ export const signOutUser = async () => {
 When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Firebase ID token in the `Authorization` header:
 
 ```typescript {6} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from "@mastra/client-js";
 
 export const createMastraClient = (idToken: string) => {
   return new MastraClient({
-    baseUrl: 'https://<mastra-api-url>',
+    baseUrl: "https://<mastra-api-url>",
     headers: {
       Authorization: `Bearer ${idToken}`,
     },

@@ -1,6 +1,6 @@
 ---
-title: 'Langfuse Exporter '
-description: 'Send AI traces to Langfuse for LLM observability and analytics'
+title: "Langfuse"
+description: "Send AI traces to Langfuse for LLM observability and analytics"
 ---
 
 # Langfuse Exporter
@@ -40,14 +40,14 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com  # Or your self-hosted URL
 ### Basic Setup
 
 ```typescript filename="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { LangfuseExporter } from '@mastra/langfuse';
+import { Mastra } from "@mastra/core";
+import { LangfuseExporter } from "@mastra/langfuse";
 
 export const mastra = new Mastra({
   observability: {
     configs: {
       langfuse: {
-        serviceName: 'my-service',
+        serviceName: "my-service",
         exporters: [
           new LangfuseExporter({
             publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
@@ -104,8 +104,8 @@ new LangfuseExporter({
 
   // Optional settings
   baseUrl: process.env.LANGFUSE_BASE_URL, // Default: https://cloud.langfuse.com
-  realtime: process.env.NODE_ENV === 'development', // Dynamic mode selection
-  logLevel: 'info', // Diagnostic logging: debug | info | warn | error
+  realtime: process.env.NODE_ENV === "development", // Dynamic mode selection
+  logLevel: "info", // Diagnostic logging: debug | info | warn | error
 
   // Langfuse-specific options
   options: {

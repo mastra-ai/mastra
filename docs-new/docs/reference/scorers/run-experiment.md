@@ -1,6 +1,6 @@
 ---
-title: 'Reference: runExperiment '
-description: 'Documentation for the runExperiment function in Mastra, which enables batch evaluation of agents and workflows using multiple scorers.'
+title: "runExperiment"
+description: "Documentation for the runExperiment function in Mastra, which enables batch evaluation of agents and workflows using multiple scorers."
 ---
 
 # runExperiment
@@ -10,13 +10,17 @@ The `runExperiment` function enables batch evaluation of agents and workflows by
 ## Usage Example
 
 ```typescript
-import { runExperiment } from '@mastra/core/scores';
-import { myAgent } from './agents/my-agent';
-import { myScorer1, myScorer2 } from './scorers';
+import { runExperiment } from "@mastra/core/scores";
+import { myAgent } from "./agents/my-agent";
+import { myScorer1, myScorer2 } from "./scorers";
 
 const result = await runExperiment({
   target: myAgent,
-  data: [{ input: 'What is machine learning?' }, { input: 'Explain neural networks' }, { input: 'How does AI work?' }],
+  data: [
+    { input: "What is machine learning?" },
+    { input: "Explain neural networks" },
+    { input: "How does AI work?" },
+  ],
   scorers: [myScorer1, myScorer2],
   concurrency: 2,
   onItemComplete: ({ item, targetResult, scorerResults }) => {
@@ -146,15 +150,15 @@ description: "Total number of test cases processed.",
 ### Agent Evaluation
 
 ```typescript
-import { runExperiment } from '@mastra/core/scores';
-import { createScorer } from '@mastra/core/scores';
+import { runExperiment } from "@mastra/core/scores";
+import { createScorer } from "@mastra/core/scores";
 
 const myScorer = createScorer({
-  name: 'My Scorer',
+  name: "My Scorer",
   description: "Check if Agent's response contains ground truth",
-  type: 'agent',
+  type: "agent",
 }).generateScore(({ run }) => {
-  const response = run.output[0]?.content || '';
+  const response = run.output[0]?.content || "";
   const expectedResponse = run.groundTruth;
   return response.includes(expectedResponse) ? 1 : 0;
 });
@@ -163,12 +167,14 @@ const result = await runExperiment({
   target: chatAgent,
   data: [
     {
-      input: 'What is AI?',
-      groundTruth: 'AI is a field of computer science that creates intelligent machines.',
+      input: "What is AI?",
+      groundTruth:
+        "AI is a field of computer science that creates intelligent machines.",
     },
     {
-      input: 'How does machine learning work?',
-      groundTruth: 'Machine learning uses algorithms to learn patterns from data.',
+      input: "How does machine learning work?",
+      groundTruth:
+        "Machine learning uses algorithms to learn patterns from data.",
     },
   ],
   scorers: [relevancyScorer],
@@ -182,23 +188,23 @@ const result = await runExperiment({
 const workflowResult = await runExperiment({
   target: myWorkflow,
   data: [
-    { input: { query: 'Process this data', priority: 'high' } },
-    { input: { query: 'Another task', priority: 'low' } },
+    { input: { query: "Process this data", priority: "high" } },
+    { input: { query: "Another task", priority: "low" } },
   ],
   scorers: {
     workflow: [outputQualityScorer],
     steps: {
-      'validation-step': [validationScorer],
-      'processing-step': [processingScorer],
+      "validation-step": [validationScorer],
+      "processing-step": [processingScorer],
     },
   },
   onItemComplete: ({ item, targetResult, scorerResults }) => {
     console.log(`Workflow completed for: ${item.input.query}`);
     if (scorerResults.workflow) {
-      console.log('Workflow scores:', scorerResults.workflow);
+      console.log("Workflow scores:", scorerResults.workflow);
     }
     if (scorerResults.steps) {
-      console.log('Step scores:', scorerResults.steps);
+      console.log("Step scores:", scorerResults.steps);
     }
   },
 });

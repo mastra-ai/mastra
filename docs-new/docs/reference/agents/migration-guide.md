@@ -53,12 +53,12 @@ First bump all your model provider packages by a major version. This will ensure
 ```typescript
 // Mastra native format (default)
 const result = await agent.stream(messages, {
-  format: 'mastra',
+  format: "mastra",
 });
 
 // AI SDK v5 compatibility
 const result = await agent.stream(messages, {
-  format: 'aisdk',
+  format: "aisdk",
 });
 ```
 
@@ -70,7 +70,7 @@ The following options are available in `stream()` and `generate()` but NOT in th
 
 ```typescript
 const result = await agent.stream(messages, {
-  format: 'aisdk', // or 'mastra' (default)
+  format: "aisdk", // or 'mastra' (default)
 });
 ```
 
@@ -78,7 +78,7 @@ const result = await agent.stream(messages, {
 
 ```typescript
 const result = await agent.stream(messages, {
-  system: 'You are a helpful assistant',
+  system: "You are a helpful assistant",
 });
 ```
 
@@ -94,10 +94,10 @@ const result = await agent.generate(messages, {
       name: z.string(),
       age: z.number(),
     }),
-    model: openai('gpt-4o-mini'), // Optional model override for structuring
-    errorStrategy: 'fallback',
-    fallbackValue: { name: 'unknown', age: 0 },
-    instructions: 'Extract user information', // Override default structuring instructions
+    model: openai("gpt-4o-mini"), // Optional model override for structuring
+    errorStrategy: "fallback",
+    fallbackValue: { name: "unknown", age: 0 },
+    instructions: "Extract user information", // Override default structuring instructions
   },
 });
 ```
@@ -117,7 +117,7 @@ const result = await agent.stream(messages, {
   providerOptions: {
     openai: {
       store: true,
-      metadata: { userId: '123' },
+      metadata: { userId: "123" },
     },
   },
 });
@@ -127,8 +127,8 @@ const result = await agent.stream(messages, {
 
 ```typescript
 const result = await agent.stream(messages, {
-  onChunk: chunk => {
-    console.log('Received chunk:', chunk);
+  onChunk: (chunk) => {
+    console.log("Received chunk:", chunk);
   },
 });
 ```
@@ -137,8 +137,8 @@ const result = await agent.stream(messages, {
 
 ```typescript
 const result = await agent.stream(messages, {
-  onError: error => {
-    console.error('Stream error:', error);
+  onError: (error) => {
+    console.error("Stream error:", error);
   },
 });
 ```
@@ -148,7 +148,7 @@ const result = await agent.stream(messages, {
 ```typescript
 const result = await agent.stream(messages, {
   onAbort: () => {
-    console.log('Stream aborted');
+    console.log("Stream aborted");
   },
 });
 ```
@@ -157,7 +157,7 @@ const result = await agent.stream(messages, {
 
 ```typescript
 const result = await agent.stream(messages, {
-  activeTools: ['search', 'calculator'], // Only these tools will be available
+  activeTools: ["search", "calculator"], // Only these tools will be available
 });
 ```
 
@@ -177,7 +177,7 @@ const result = await agent.stream(messages, {
 ```typescript
 const result = await agent.stream(messages, {
   prepareStep: ({ step, state }) => {
-    console.log('About to execute step:', step);
+    console.log("About to execute step:", step);
     return {
       /* modified state */
     };
@@ -216,8 +216,8 @@ Moved to memory object.
 ```typescript
 const result = await agent.stream(messages, {
   memory: {
-    resource: 'user-123',
-    thread: 'thread-456',
+    resource: "user-123",
+    thread: "thread-456",
   },
 });
 ```
@@ -278,11 +278,11 @@ const result = await agent.generate(messages, {
 
 ```typescript
 type ToolChoice<TOOLS extends Record<string, unknown>> =
-  | 'auto'
-  | 'none'
-  | 'required'
+  | "auto"
+  | "none"
+  | "required"
   | {
-      type: 'tool';
+      type: "tool";
       toolName: Extract<keyof TOOLS, string>;
     };
 ```

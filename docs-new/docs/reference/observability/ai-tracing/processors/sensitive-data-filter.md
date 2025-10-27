@@ -1,5 +1,5 @@
 ---
-title: 'SensitiveDataFilter '
+title: "SensitiveDataFilter "
 description: API reference for the SensitiveDataFilter processor
 ---
 
@@ -69,7 +69,7 @@ required: false,
 ## RedactionStyle
 
 ```typescript
-type RedactionStyle = 'full' | 'partial';
+type RedactionStyle = "full" | "partial";
 ```
 
 ## Methods
@@ -115,21 +115,21 @@ When no custom fields are provided:
 
 ```typescript
 [
-  'password',
-  'token',
-  'secret',
-  'key',
-  'apikey',
-  'auth',
-  'authorization',
-  'bearer',
-  'bearertoken',
-  'jwt',
-  'credential',
-  'clientsecret',
-  'privatekey',
-  'refresh',
-  'ssn',
+  "password",
+  "token",
+  "secret",
+  "key",
+  "apikey",
+  "auth",
+  "authorization",
+  "bearer",
+  "bearertoken",
+  "jwt",
+  "credential",
+  "clientsecret",
+  "privatekey",
+  "refresh",
+  "ssn",
 ];
 ```
 
@@ -162,7 +162,7 @@ If filtering a field fails, the field is replaced with:
 ```typescript
 {
   error: {
-    processor: 'sensitive-data-filter';
+    processor: "sensitive-data-filter";
   }
 }
 ```

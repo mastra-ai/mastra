@@ -1,6 +1,6 @@
 ---
-title: 'Reference: getScorers() '
-description: 'Documentation for the `getScorers()` method in Mastra, which returns all registered scorers for evaluating AI outputs.'
+title: "getScorers()"
+description: "Documentation for the `getScorers()` method in Mastra, which returns all registered scorers for evaluating AI outputs."
 ---
 
 # getScorers()
@@ -10,7 +10,7 @@ The `getScorers()` method returns all scorers that have been registered with the
 ## Usage Example
 
 ```typescript
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
 // Get all registered scorers
 const allScorers = mastra.getScorers();

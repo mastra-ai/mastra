@@ -1,6 +1,6 @@
 ---
-title: 'Reference: voice.on() '
-description: 'Documentation for the on() method available in voice providers, which registers event listeners for voice events.'
+title: "voice.on()"
+description: "Documentation for the on() method available in voice providers, which registers event listeners for voice events."
 ---
 
 # voice.on()
@@ -10,14 +10,14 @@ The `on()` method registers event listeners for various voice events. This is pa
 ## Usage Example
 
 ```typescript
-import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
-import Speaker from '@mastra/node-speaker';
-import chalk from 'chalk';
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import Speaker from "@mastra/node-speaker";
+import chalk from "chalk";
 
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: 'gpt-4o-mini-realtime',
+    model: "gpt-4o-mini-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });
@@ -26,8 +26,8 @@ const voice = new OpenAIRealtimeVoice({
 await voice.connect();
 
 // Register event listener for transcribed text
-voice.on('writing', event => {
-  if (event.role === 'user') {
+voice.on("writing", (event) => {
+  if (event.role === "user") {
     process.stdout.write(chalk.green(event.text));
   } else {
     process.stdout.write(chalk.blue(event.text));
@@ -41,12 +41,12 @@ const speaker = new Speaker({
   bitDepth: 16,
 });
 
-voice.on('speaker', stream => {
+voice.on("speaker", (stream) => {
   stream.pipe(speaker);
 });
 
 // Register event listener for errors
-voice.on('error', ({ message, code, details }) => {
+voice.on("error", ({ message, code, details }) => {
   console.error(`Error ${code}: ${message}`, details);
 });
 ```
@@ -97,9 +97,9 @@ Different voice providers may support different sets of events with varying payl
 When using `CompositeVoice`, the `on()` method delegates to the configured real-time provider:
 
 ```typescript
-import { CompositeVoice } from '@mastra/core/voice';
-import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
-import Speaker from '@mastra/node-speaker';
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import Speaker from "@mastra/node-speaker";
 
 const speaker = new Speaker({
   sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
@@ -116,7 +116,7 @@ const voice = new CompositeVoice({
 await voice.connect();
 
 // This will register the event listener with the OpenAIRealtimeVoice provider
-voice.on('speaker', stream => {
+voice.on("speaker", (stream) => {
   stream.pipe(speaker);
 });
 ```

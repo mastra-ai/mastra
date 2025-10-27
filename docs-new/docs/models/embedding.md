@@ -1,5 +1,5 @@
 ---
-title: 'Embedding Models'
+title: "Embedding Models"
 description: "Use embedding models through Mastra's model router for semantic search and RAG."
 sidebar_position: 2
 ---
@@ -11,16 +11,16 @@ Mastra's model router supports embedding models using the same `provider/model` 
 ## Quick Start
 
 ```typescript
-import { ModelRouterEmbeddingModel } from '@mastra/core';
-import { embedMany } from 'ai';
+import { ModelRouterEmbeddingModel } from "@mastra/core";
+import { embedMany } from "ai";
 
 // Create an embedding model
-const embedder = new ModelRouterEmbeddingModel('openai/text-embedding-3-small');
+const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
 
 // Generate embeddings
 const { embeddings } = await embedMany({
   model: embedder,
-  values: ['Hello world', 'Semantic search is powerful'],
+  values: ["Hello world", "Semantic search is powerful"],
 });
 ```
 
@@ -33,7 +33,7 @@ const { embeddings } = await embedMany({
 - `text-embedding-ada-002` - 1536 dimensions, 8191 max tokens
 
 ```typescript
-const embedder = new ModelRouterEmbeddingModel('openai/text-embedding-3-small');
+const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
 ```
 
 ### Google
@@ -42,7 +42,7 @@ const embedder = new ModelRouterEmbeddingModel('openai/text-embedding-3-small');
 - `text-embedding-004` - 768 dimensions, 3072 max tokens
 
 ```typescript
-const embedder = new ModelRouterEmbeddingModel('google/gemini-embedding-001');
+const embedder = new ModelRouterEmbeddingModel("google/gemini-embedding-001");
 ```
 
 ## Authentication
@@ -62,13 +62,13 @@ GOOGLE_GENERATIVE_AI_API_KEY=...
 You can use any OpenAI-compatible embedding endpoint with a custom URL:
 
 ```typescript
-import { ModelRouterEmbeddingModel } from '@mastra/core';
+import { ModelRouterEmbeddingModel } from "@mastra/core";
 
 const embedder = new ModelRouterEmbeddingModel({
-  providerId: 'ollama',
-  modelId: 'nomic-embed-text',
-  url: 'http://localhost:11434/v1',
-  apiKey: 'not-needed', // Some providers don't require API keys
+  providerId: "ollama",
+  modelId: "nomic-embed-text",
+  url: "http://localhost:11434/v1",
+  apiKey: "not-needed", // Some providers don't require API keys
 });
 ```
 
@@ -77,15 +77,15 @@ const embedder = new ModelRouterEmbeddingModel({
 The embedding model router integrates seamlessly with Mastra's memory system:
 
 ```typescript
-import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core';
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-4o',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "openai/gpt-4o",
   memory: new Memory({
-    embedder: 'openai/text-embedding-3-small', // String with autocomplete
+    embedder: "openai/text-embedding-3-small", // String with autocomplete
   }),
 });
 ```
@@ -103,15 +103,15 @@ The `embedder` field accepts:
 Use embedding models for document chunking and retrieval:
 
 ```typescript
-import { ModelRouterEmbeddingModel } from '@mastra/core';
-import { embedMany } from 'ai';
+import { ModelRouterEmbeddingModel } from "@mastra/core";
+import { embedMany } from "ai";
 
-const embedder = new ModelRouterEmbeddingModel('openai/text-embedding-3-small');
+const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
 
 // Embed document chunks
 const { embeddings } = await embedMany({
   model: embedder,
-  values: chunks.map(chunk => chunk.text),
+  values: chunks.map((chunk) => chunk.text),
 });
 
 // Store embeddings in your vector database
@@ -129,10 +129,10 @@ await vectorStore.upsert(
 The model router provides full TypeScript autocomplete for embedding model IDs:
 
 ```typescript
-import type { EmbeddingModelId } from '@mastra/core';
+import type { EmbeddingModelId } from "@mastra/core";
 
 // Type-safe embedding model selection
-const modelId: EmbeddingModelId = 'openai/text-embedding-3-small';
+const modelId: EmbeddingModelId = "openai/text-embedding-3-small";
 //                                  ^ Autocomplete shows all supported models
 
 const embedder = new ModelRouterEmbeddingModel(modelId);
@@ -144,7 +144,7 @@ The model router validates provider and model IDs at construction time:
 
 ```typescript
 try {
-  const embedder = new ModelRouterEmbeddingModel('invalid/model');
+  const embedder = new ModelRouterEmbeddingModel("invalid/model");
 } catch (error) {
   console.error(error.message);
   // "Unknown provider: invalid. Available providers: openai, google"
@@ -155,7 +155,9 @@ Missing API keys are also caught early:
 
 ```typescript
 try {
-  const embedder = new ModelRouterEmbeddingModel('openai/text-embedding-3-small');
+  const embedder = new ModelRouterEmbeddingModel(
+    "openai/text-embedding-3-small",
+  );
   // Throws if OPENAI_API_KEY is not set
 } catch (error) {
   console.error(error.message);

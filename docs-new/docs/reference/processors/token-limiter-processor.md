@@ -1,6 +1,6 @@
 ---
-title: 'Reference: Token Limiter Processor '
-description: 'Documentation for the TokenLimiterProcessor in Mastra, which limits the number of tokens in AI responses.'
+title: "Token Limiter Processor"
+description: "Documentation for the TokenLimiterProcessor in Mastra, which limits the number of tokens in AI responses."
 ---
 
 # TokenLimiterProcessor
@@ -10,12 +10,12 @@ The `TokenLimiterProcessor` is an **output processor** that limits the number of
 ## Usage example
 
 ```typescript copy
-import { TokenLimiterProcessor } from '@mastra/core/processors';
+import { TokenLimiterProcessor } from "@mastra/core/processors";
 
 const processor = new TokenLimiterProcessor({
   limit: 1000,
-  strategy: 'truncate',
-  countMode: 'cumulative',
+  strategy: "truncate",
+  countMode: "cumulative",
 });
 ```
 
@@ -112,19 +112,19 @@ isOptional: false,
 ## Extended usage example
 
 ```typescript filename="src/mastra/agents/limited-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { TokenLimiterProcessor } from '@mastra/core/processors';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { TokenLimiterProcessor } from "@mastra/core/processors";
 
 export const agent = new Agent({
-  name: 'limited-agent',
-  instructions: 'You are a helpful assistant',
-  model: openai('gpt-4o-mini'),
+  name: "limited-agent",
+  instructions: "You are a helpful assistant",
+  model: openai("gpt-4o-mini"),
   outputProcessors: [
     new TokenLimiterProcessor({
       limit: 1000,
-      strategy: 'truncate',
-      countMode: 'cumulative',
+      strategy: "truncate",
+      countMode: "cumulative",
     }),
   ],
 });
