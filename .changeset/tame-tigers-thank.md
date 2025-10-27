@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Workflow valdiation zod v4 support
+Workflow validation zod v4 support
