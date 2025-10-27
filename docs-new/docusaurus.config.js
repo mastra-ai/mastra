@@ -76,15 +76,15 @@ const config = {
     // PostHog analytics (only enabled if POSTHOG_API_KEY is set)
     ...(process.env.POSTHOG_API_KEY
       ? [
-          [
-            "posthog-docusaurus",
-            {
-              apiKey: process.env.POSTHOG_API_KEY,
-              appUrl: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
-              enableInDevelopment: false,
-            },
-          ],
-        ]
+        [
+          "posthog-docusaurus",
+          {
+            apiKey: process.env.POSTHOG_API_KEY,
+            appUrl: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
+            enableInDevelopment: false,
+          },
+        ],
+      ]
       : []),
     // Vercel Analytics (automatically enabled in production on Vercel)
     [
@@ -105,7 +105,7 @@ const config = {
           sidebarPath: "./sidebars.js",
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
-          editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs/",
+          editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs-new",
         },
         blog: false,
         theme: {
