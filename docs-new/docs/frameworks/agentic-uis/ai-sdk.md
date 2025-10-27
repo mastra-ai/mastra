@@ -194,8 +194,9 @@ Here's an example: For a [nested agent stream within a tool](/docs/streaming/too
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { AgentTool } from '../ui/agent-tool';
+import { AgentTool } from "../ui/agent-tool";
 import type { AgentDataPart } from "@mastra/ai-sdk";
+import { DefaultChatTransport } from "ai"
 
 export default function Page() {
   const { messages } = useChat({
@@ -479,6 +480,7 @@ export async function POST(req: Request) {
 
 import { useChat } from "@ai-sdk/react";
 import { useState } from "react";
+import { DefaultChatTransport } from "ai"
 
 export function ChatExtra() {
   const [inputValue, setInputValue] = useState('')
