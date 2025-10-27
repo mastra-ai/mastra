@@ -688,10 +688,10 @@ export class Memory extends MastraMemory {
       // Group messages by threadId to minimize database calls
       const messagesByThread = new Map<string, (MastraMessageV1 | MastraMessageV2)[]>();
       updatedMessages.forEach(message => {
-        if (message.threadId && !messagesByThread.has(message.threadId)) {
-          messagesByThread.set(message.threadId, []);
-        }
         if (message.threadId) {
+          if (!messagesByThread.has(message.threadId)) {
+            messagesByThread.set(message.threadId, []);
+          }
           messagesByThread.get(message.threadId)!.push(message);
         }
       });
