@@ -27,7 +27,7 @@ export function zodToJsonSchema(
           }
         },
       }) as JSONSchema7;
-    } catch (error) {
+    } catch {
       // Fall back to v3 converter if v4 fails
       return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
         $refStrategy: strategy,
