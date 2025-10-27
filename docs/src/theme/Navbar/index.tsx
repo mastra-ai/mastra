@@ -15,9 +15,7 @@ function NavbarContentDesktop() {
         <Link href="/docs">
           <div className="flex gap-2 items-center">
             <Logo />
-            <span className="px-1.5 dark:text-(--mastra-green-accent) mb-0 w-[3.2rem] grid place-items-center h-[1.6rem] font-medium tracking-wider py-0.5 text-xs rounded-[0.44rem] border border-(--border) uppercase">
-              Docs
-            </span>
+            <TabSwitcher />
           </div>
         </Link>
         <SearchContainer locale="en" />

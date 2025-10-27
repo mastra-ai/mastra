@@ -384,7 +384,7 @@ span[class*="categoryLinkLabel"] {
     background: var(--ifm-menu-link-sublist-icon) center;
     transform-origin: center;
     position: absolute;
-    left: calc(0.25rem * 2.5);
+    right: 12%;
   }
 }
 
@@ -414,8 +414,8 @@ span[class*="categoryLinkLabel"] {
     width: 280px !important;
   }
 
-  .theme-doc-sidebar-container [class*="sidebar"]{
-    width: 280px!important;
+  .theme-doc-sidebar-container [class*="sidebar"] {
+    width: 280px !important;
   }
   /* [class*='docMainContainer'][class*='docMainContainer'] { */
   /* use a container query to define behaviour below this point */
@@ -432,7 +432,7 @@ span[class*="categoryLinkLabel"] {
   }
 
   .table-of-contents__left-border {
-    border:none;
+    border: none;
     padding-inline-start: 0;
   }
 
@@ -750,7 +750,7 @@ span[class*="categoryLinkLabel"] {
     border-top: var(--border-sm) solid var(--border);
     color: var(--mastra-text-secondary);
     padding: 2rem 0;
-    display: none;
+    display: none !important
   }
 
   .footer__link-item {
@@ -1161,7 +1161,6 @@ span[class*="categoryLinkLabel"] {
    Since --chatbot-sidebar-open is set on document.documentElement (:root),
    we use attribute selectors instead to check for the inline style. */
 
- 
   /* html[style*="--chatbot-sidebar-open: 1"] #toc-column {
     display: none;
   }
@@ -1170,7 +1169,7 @@ span[class*="categoryLinkLabel"] {
     max-width: 100% !important;
   } */
 
-   #doc-item-container{
+  #doc-item-container {
     max-width: 64rem;
     margin: 0 auto;
   }
@@ -1208,7 +1207,15 @@ span[class*="categoryLinkLabel"] {
   scrollbar-width: none;
 }
 
+p {
+  @apply tracking-[-0.09px] leading-[1.6];
+}
+
 @media (min-width: 997px) {
+  p {
+    @apply tracking-[-0.09px] leading-[1.6];
+  }
+
   [class*="docItemContainer"] {
     padding-inline: 3rem;
     max-width: 48rem;
@@ -1269,7 +1276,7 @@ span[class*="categoryLinkLabel"] {
   }
 
   .toc-wrapper {
-    @apply sticky overflow-y-auto; 
+    @apply sticky overflow-y-auto;
     top: calc(var(--ifm-navbar-height) + 1rem);
     max-height: calc(100vh - var(--ifm-navbar-height) - 2rem);
   }
@@ -1294,7 +1301,6 @@ span[class*="categoryLinkLabel"] {
     margin-block-end: calc(0.25rem * 1.5);
   }
 }
-
 
 .docusaurus-mt-lg {
   overflow-x: hidden;
