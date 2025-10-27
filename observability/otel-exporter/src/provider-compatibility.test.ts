@@ -6,7 +6,7 @@ import { AISpanType } from '@mastra/core/ai-tracing';
 import type {
   ExportedAISpan,
   AgentRunAttributes,
-  LLMGenerationAttributes,
+  ModelGenerationAttributes,
   ToolCallAttributes,
 } from '@mastra/core/ai-tracing';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -83,17 +83,17 @@ describe('Provider Compatibility', () => {
         attributes: { agentId: 'test' } as AgentRunAttributes,
       };
 
-      const childSpan: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const childSpan: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'child-span',
         traceId: 'trace-1',
         name: 'llm',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
         isRootSpan: false,
         parentSpanId: 'root-span',
-        attributes: { model: 'gpt-4' } as LLMGenerationAttributes,
+        attributes: { model: 'gpt-4' } as ModelGenerationAttributes,
       };
 
       const rootResult = converter.convertSpan(rootSpan);
@@ -106,11 +106,11 @@ describe('Provider Compatibility', () => {
 
   describe('Laminar Requirements', () => {
     it('should include both generic and specific input/output attributes', () => {
-      const span: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -120,7 +120,7 @@ describe('Provider Compatibility', () => {
         output: { content: 'Hi there!' },
         attributes: {
           model: 'gpt-4',
-        } as LLMGenerationAttributes,
+        } as ModelGenerationAttributes,
       };
 
       const result = converter.convertSpan(span);
@@ -182,13 +182,13 @@ describe('Provider Compatibility', () => {
           id: 'span-2',
           traceId,
           name: 'child1',
-          type: AISpanType.LLM_GENERATION,
+          type: AISpanType.MODEL_GENERATION,
           startTime: new Date(),
           endTime: new Date(),
           isEvent: false,
           isRootSpan: false,
           parentSpanId: 'span-1',
-          attributes: { model: 'gpt-4' } as LLMGenerationAttributes,
+          attributes: { model: 'gpt-4' } as ModelGenerationAttributes,
         },
         {
           id: 'span-3',
@@ -218,11 +218,11 @@ describe('Provider Compatibility', () => {
     });
 
     it('should use OTEL-compliant span names', () => {
-      const llmSpan: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const llmSpan: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'llm-1',
         traceId: 'trace-1',
         name: 'original-name',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -231,7 +231,7 @@ describe('Provider Compatibility', () => {
         attributes: {
           model: 'claude-3',
           resultType: 'response_generation',
-        } as LLMGenerationAttributes,
+        } as ModelGenerationAttributes,
       };
 
       const toolSpan: ExportedAISpan<AISpanType.TOOL_CALL> = {
@@ -260,11 +260,11 @@ describe('Provider Compatibility', () => {
 
   describe('Common Requirements', () => {
     it('should include all OTEL semantic conventions', () => {
-      const span: ExportedAISpan<AISpanType.LLM_GENERATION> = {
+      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -282,7 +282,7 @@ describe('Provider Compatibility', () => {
             temperature: 0.7,
             maxOutputTokens: 1000,
           },
-        } as LLMGenerationAttributes,
+        } as ModelGenerationAttributes,
       };
 
       const result = converter.convertSpan(span);

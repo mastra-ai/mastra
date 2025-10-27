@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "0.12.10-alpha.0",
+  "version": "0.12.12",
   "description": "",
   "type": "module",
   "files": [
@@ -58,6 +58,6 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.20.1-0 <0.22.0-0"
+    "@mastra/core": ">=0.20.1-0 <2.0.0-0"
   }
 }

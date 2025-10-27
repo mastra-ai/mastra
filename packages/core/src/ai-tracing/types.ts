@@ -19,10 +19,12 @@ export enum AISpanType {
   AGENT_RUN = 'agent_run',
   /** Generic span for custom operations */
   GENERIC = 'generic',
-  /** LLM generation with model calls, token usage, prompts, completions */
-  LLM_GENERATION = 'llm_generation',
-  /** Individual LLM streaming chunk/event */
-  LLM_CHUNK = 'llm_chunk',
+  /** Model generation with model calls, token usage, prompts, completions */
+  MODEL_GENERATION = 'model_generation',
+  /** Single model execution step within a generation (one API call) */
+  MODEL_STEP = 'model_step',
+  /** Individual model streaming chunk/event */
+  MODEL_CHUNK = 'model_chunk',
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
   /** Input or Output Processor execution */
@@ -72,10 +74,26 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   maxSteps?: number;
 }
 
+/** Token usage statistics - supports both v5 and legacy formats */
+export interface UsageStats {
+  // VNext paths
+  inputTokens?: number;
+  outputTokens?: number;
+  // Legacy format (for backward compatibility)
+  promptTokens?: number;
+  completionTokens?: number;
+  // Common fields
+  totalTokens?: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  promptCacheHitTokens?: number;
+  promptCacheMissTokens?: number;
+}
+
 /**
- * LLM Generation attributes
+ * Model Generation attributes
  */
-export interface LLMGenerationAttributes extends AIBaseAttributes {
+export interface ModelGenerationAttributes extends AIBaseAttributes {
   /** Model name (e.g., 'gpt-4', 'claude-3') */
   model?: string;
   /** Model provider (e.g., 'openai', 'anthropic') */
@@ -83,20 +101,7 @@ export interface LLMGenerationAttributes extends AIBaseAttributes {
   /** Type of result/output this LLM call produced */
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
   /** Token usage statistics - supports both v5 and legacy formats */
-  usage?: {
-    // VNext paths
-    inputTokens?: number;
-    outputTokens?: number;
-    // Legacy format (for backward compatibility)
-    promptTokens?: number;
-    completionTokens?: number;
-    // Common fields
-    totalTokens?: number;
-    reasoningTokens?: number;
-    cachedInputTokens?: number;
-    promptCacheHitTokens?: number;
-    promptCacheMissTokens?: number;
-  };
+  usage?: UsageStats;
   /** Model parameters */
   parameters?: {
     maxOutputTokens?: number;
@@ -118,9 +123,25 @@ export interface LLMGenerationAttributes extends AIBaseAttributes {
 }
 
 /**
- * LLM Chunk attributes - for individual streaming chunks/events
+ * Model Step attributes - for a single model execution within a generation
  */
-export interface LLMChunkAttributes extends AIBaseAttributes {
+export interface ModelStepAttributes extends AIBaseAttributes {
+  /** Index of this step in the generation (0, 1, 2, ...) */
+  stepIndex?: number;
+  /** Token usage statistics */
+  usage?: UsageStats;
+  /** Reason this step finished (stop, tool-calls, length, etc.) */
+  finishReason?: string;
+  /** Should execution continue */
+  isContinued?: boolean;
+  /** Result warnings */
+  warnings?: Record<string, any>;
+}
+
+/**
+ * Model Chunk attributes - for individual streaming chunks/events
+ */
+export interface ModelChunkAttributes extends AIBaseAttributes {
   /** Type of chunk (text-delta, reasoning-delta, tool-call, etc.) */
   chunkType?: string;
   /** Sequence number of this chunk in the stream */
@@ -261,8 +282,9 @@ export interface WorkflowWaitEventAttributes extends AIBaseAttributes {
 export interface AISpanTypeMap {
   [AISpanType.AGENT_RUN]: AgentRunAttributes;
   [AISpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
-  [AISpanType.LLM_GENERATION]: LLMGenerationAttributes;
-  [AISpanType.LLM_CHUNK]: LLMChunkAttributes;
+  [AISpanType.MODEL_GENERATION]: ModelGenerationAttributes;
+  [AISpanType.MODEL_STEP]: ModelStepAttributes;
+  [AISpanType.MODEL_CHUNK]: ModelChunkAttributes;
   [AISpanType.TOOL_CALL]: ToolCallAttributes;
   [AISpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
   [AISpanType.PROCESSOR_RUN]: ProcessorRunAttributes;
@@ -331,6 +353,8 @@ export interface AISpan<TType extends AISpanType> extends BaseSpan<TType> {
   parent?: AnyAISpan;
   /** Pointer to the AITracing instance */
   aiTracing: AITracing;
+  /** Trace-level state shared across all spans in this trace */
+  traceState?: TraceState;
 
   // Methods for span lifecycle
   /** End the span */
@@ -443,6 +467,8 @@ interface CreateBaseOptions<TType extends AISpanType> {
   type: TType;
   /** Policy-level tracing configuration */
   tracingPolicy?: TracingPolicy;
+  /** Runtime context for metadata extraction */
+  runtimeContext?: RuntimeContext;
 }
 
 /**
@@ -457,6 +483,18 @@ export interface CreateSpanOptions<TType extends AISpanType> extends CreateBaseO
   parent?: AnyAISpan;
   /** Is an event span? */
   isEvent?: boolean;
+  /**
+   * Trace ID to use for this span (1-32 hexadecimal characters).
+   * Only used for root spans without a parent.
+   */
+  traceId?: string;
+  /**
+   * Parent span ID to use for this span (1-16 hexadecimal characters).
+   * Only used for root spans without a parent.
+   */
+  parentSpanId?: string;
+  /** Trace-level state shared across all spans in this trace */
+  traceState?: TraceState;
 }
 
 /**
@@ -467,6 +505,8 @@ export interface StartSpanOptions<TType extends AISpanType> extends CreateSpanOp
    * Options passed when using a custom sampler strategy
    */
   customSamplerOptions?: CustomSamplerOptions;
+  /** Tracing options for this execution */
+  tracingOptions?: TracingOptions;
 }
 
 /**
@@ -529,8 +569,8 @@ export enum InternalSpans {
   AGENT = 1 << 1, // 0010
   /** Tool spans are marked internal */
   TOOL = 1 << 2, // 0100
-  /** LLM spans are marked internal */
-  LLM = 1 << 3, // 1000
+  /** Model spans are marked internal */
+  MODEL = 1 << 3, // 1000
 
   /** All spans are marked internal */
   ALL = (1 << 4) - 1, // 1111 (all bits set up to 3)
@@ -553,11 +593,40 @@ export interface TracingPolicy {
 }
 
 /**
+ * Trace-level state computed once at the start of a trace
+ * and shared by all spans within that trace.
+ */
+export interface TraceState {
+  /**
+   * RuntimeContext keys to extract as metadata for all spans in this trace.
+   * Computed by merging the tracing config's runtimeContextKeys
+   * with the per-request runtimeContextKeys.
+   */
+  runtimeContextKeys: string[];
+}
+
+/**
  * Options passed when starting a new agent or workflow execution
  */
 export interface TracingOptions {
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>;
+  /**
+   * Additional RuntimeContext keys to extract as metadata for this trace.
+   * These keys are added to the runtimeContextKeys config.
+   * Supports dot notation for nested values (e.g., 'user.id', 'session.data.experimentId').
+   */
+  runtimeContextKeys?: string[];
+  /**
+   * Trace ID to use for this execution (1-32 hexadecimal characters).
+   * If provided, this trace will be part of the specified trace rather than starting a new one.
+   */
+  traceId?: string;
+  /**
+   * Parent span ID to use for this execution (1-16 hexadecimal characters).
+   * If provided, the root span will be created as a child of this span.
+   */
+  parentSpanId?: string;
 }
 
 /**
@@ -596,6 +665,12 @@ export interface TracingConfig {
   processors?: AISpanProcessor[];
   /** Set to `true` if you want to see spans internal to the operation of mastra */
   includeInternalSpans?: boolean;
+  /**
+   * RuntimeContext keys to automatically extract as metadata for all spans
+   * created with this tracing configuration.
+   * Supports dot notation for nested values.
+   */
+  runtimeContextKeys?: string[];
 }
 
 /**
@@ -673,6 +748,9 @@ export interface AITracingExporter {
 
   /** Initialize exporter with tracing configuration */
   init?(config: TracingConfig): void;
+
+  /** Set logger (called by AITracing during initialization) */
+  __setLogger?(logger: IMastraLogger): void;
 
   /** Export tracing events */
   exportEvent(event: AITracingEvent): Promise<void>;

@@ -1,0 +1,116 @@
+---
+title: "MastraAuthAuth0 Class"
+description: "API reference for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication."
+---
+
+# MastraAuthAuth0 Class
+
+The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `experimental_auth` option.
+
+## Usage example
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthAuth0 } from "@mastra/auth-auth0";
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthAuth0({
+      domain: process.env.AUTH0_DOMAIN,
+      audience: process.env.AUTH0_AUDIENCE,
+    }),
+  },
+});
+```
+
+> **Note:** You can omit the constructor parameters if you have the appropriately named environment variables (`AUTH0_DOMAIN` and `AUTH0_AUDIENCE`) set. In that case, simply use `new MastraAuthAuth0()` without any arguments.
+
+## Constructor parameters
+
+<PropertiesTable
+content={[
+{
+name: "domain",
+type: "string",
+description: "Your Auth0 domain (e.g., your-tenant.auth0.com). This is used to verify JWT tokens issued by your Auth0 tenant.",
+isOptional: true,
+defaultValue: "process.env.AUTH0_DOMAIN"
+},
+{
+name: "audience",
+type: "string",
+description: "Your Auth0 API identifier/audience. This ensures tokens are intended for your specific API.",
+isOptional: true,
+defaultValue: "process.env.AUTH0_AUDIENCE"
+},
+{
+name: "name",
+type: "string",
+description: "Custom name for the auth provider instance.",
+isOptional: true,
+defaultValue: '"auth0"'
+},
+{
+name: "authorizeUser",
+type: "(user: Auth0User) => Promise<boolean> | boolean",
+description: "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users with valid tokens.",
+isOptional: true,
+},
+]}
+/>
+
+## Environment Variables
+
+The following environment variables are automatically used when constructor options are not provided:
+
+<PropertiesTable
+content={[
+{
+name: "AUTH0_DOMAIN",
+type: "string",
+description: "Your Auth0 domain. Can be found in your Auth0 Dashboard under Applications > Settings.",
+isOptional: true,
+},
+{
+name: "AUTH0_AUDIENCE",
+type: "string",
+description: "Your Auth0 API identifier. This is the identifier you set when creating an API in your Auth0 Dashboard.",
+isOptional: true,
+},
+]}
+/>
+
+## Default Authorization Behavior
+
+By default, `MastraAuthAuth0` validates Auth0 JWT tokens and allows access to all authenticated users:
+
+1. **Token Verification**: The JWT token is verified using Auth0's public keys (JWKS)
+2. **Signature Validation**: Ensures the token was signed by your Auth0 tenant
+3. **Expiration Check**: Verifies the token has not expired
+4. **Audience Validation**: Confirms the token was issued for your specific API (audience)
+5. **Issuer Validation**: Ensures the token was issued by your Auth0 domain
+
+If all validations pass, the user is considered authorized. To implement custom authorization logic (e.g., role-based access control), provide a custom `authorizeUser` function.
+
+## Auth0 User Type
+
+The `Auth0User` type used in the `authorizeUser` function corresponds to the decoded JWT token payload, which typically includes:
+
+- `sub`: The user's unique identifier (subject)
+- `email`: The user's email address (if included in token)
+- `email_verified`: Whether the email is verified
+- `name`: The user's display name (if available)
+- `picture`: URL to the user's profile picture (if available)
+- `iss`: Token issuer (your Auth0 domain)
+- `aud`: Token audience (your API identifier)
+- `iat`: Token issued at timestamp
+- `exp`: Token expiration timestamp
+- `scope`: Granted scopes for the token
+- Custom claims and app metadata configured in your Auth0 tenant
+
+The exact properties available depend on your Auth0 configuration, scopes requested, and any custom claims you've configured.
+
+## Related
+
+[MastraAuthAuth0 Class](/docs/auth/auth0)

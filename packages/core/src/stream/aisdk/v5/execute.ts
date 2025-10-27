@@ -1,9 +1,10 @@
 import { injectJsonInstructionIntoMessages, isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
-import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
-// import pRetry from 'p-retry';
+import { APICallError } from 'ai-v5';
+import type { TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
 import type { StructuredOutputOptions } from '../../../agent/types';
+import type { LoopOptions } from '../../../loop/types';
 import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
@@ -32,12 +33,7 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   modelStreamSpan: Span;
   telemetry_settings?: TelemetrySettings;
   includeRawChunks?: boolean;
-  modelSettings?: Omit<CallSettings, 'abortSignal'> & {
-    /**
-     * @deprecated Use top-level `abortSignal` instead.
-     */
-    abortSignal?: AbortSignal;
-  };
+  modelSettings?: LoopOptions['modelSettings'];
   onResult: OnResult;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   /**
@@ -47,8 +43,6 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   headers?: Record<string, string | undefined>;
   shouldThrowError?: boolean;
 };
-
-let hasLoggedModelSettingsAbortSignalDeprecation = false;
 
 export function execute<OUTPUT extends OutputSchema = undefined>({
   runId,
@@ -67,16 +61,6 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   headers,
   shouldThrowError,
 }: ExecutionProps<OUTPUT>) {
-  // Deprecation warning for modelSettings.abortSignal
-  if (modelSettings?.abortSignal && !hasLoggedModelSettingsAbortSignalDeprecation) {
-    console.warn(
-      '[Deprecation Warning] Using `modelSettings.abortSignal` is deprecated. ' +
-        'Please use top-level `abortSignal` instead. ' +
-        'The `modelSettings.abortSignal` option will be removed in a future version.',
-    );
-    hasLoggedModelSettingsAbortSignalDeprecation = true;
-  }
-
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
     name: model.modelId,
@@ -145,8 +129,8 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
     onResult,
     createStream: async () => {
       try {
-        const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers', 'abortSignal']);
-        const abortSignal = options?.abortSignal || modelSettings?.abortSignal;
+        const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers']);
+        const abortSignal = options?.abortSignal;
 
         const pRetry = await import('p-retry');
         return await pRetry.default(
@@ -171,11 +155,16 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
           {
             retries: modelSettings?.maxRetries ?? 2,
             signal: abortSignal,
+            shouldRetry(context) {
+              if (APICallError.isInstance(context.error)) {
+                return context.error.isRetryable;
+              }
+              return true;
+            },
           },
         );
       } catch (error) {
-        console.error('Error creating stream', error);
-        const abortSignal = options?.abortSignal || modelSettings?.abortSignal;
+        const abortSignal = options?.abortSignal;
         if (isAbortError(error) && abortSignal?.aborted) {
           console.error('Abort error', error);
         }
@@ -189,10 +178,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
             start: async controller => {
               controller.enqueue({
                 type: 'error',
-                error: {
-                  message: error instanceof Error ? error.message : JSON.stringify(error),
-                  stack: error instanceof Error ? error.stack : undefined,
-                },
+                error,
               });
               controller.close();
             },

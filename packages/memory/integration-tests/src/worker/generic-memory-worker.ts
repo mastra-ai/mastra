@@ -66,7 +66,7 @@ async function initializeAndRun() {
       storage: store,
       vector,
       embedder: mockEmbedder,
-      options: memoryOptions || { threads: { generateTitle: false } },
+      options: memoryOptions || { generateTitle: false },
     });
 
     for (const msgData of messages) {

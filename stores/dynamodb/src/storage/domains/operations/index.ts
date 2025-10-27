@@ -305,6 +305,11 @@ export class StoreOperationsDynamoDB extends StoreOperations {
             if (!item.id) throw new Error(`Missing required key 'id' for entity 'score'`);
             key.id = item.id;
             break;
+          case 'resource':
+            // Resource entity uses 'id' as its PK
+            if (!item.id) throw new Error(`Missing required key 'id' for entity 'resource'`);
+            key.id = item.id;
+            break;
           default:
             // Handle unknown entity types - log a warning or throw an error
             this.logger.warn(`Unknown entity type encountered during clearTable: ${entityName}`);

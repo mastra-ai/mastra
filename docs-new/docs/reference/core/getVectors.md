@@ -1,0 +1,35 @@
+---
+title: "Mastra.getVectors() "
+description: "Documentation for the `Mastra.getVectors()` method in Mastra, which retrieves all configured vector stores."
+---
+
+# Mastra.getVectors()
+
+The `.getVectors()` method is used to retrieve all vector stores that have been configured in the Mastra instance.
+
+## Usage example
+
+```typescript copy
+mastra.getVectors();
+```
+
+## Parameters
+
+This method does not accept any parameters.
+
+## Returns
+
+<PropertiesTable
+content={[
+{
+name: "vectors",
+type: "TVectors",
+description: "A record of all configured vector stores, where keys are vector store names and values are vector store instances.",
+},
+]}
+/>
+
+## Related
+
+- [Vector stores overview](/docs/rag/vector-databases)
+- [RAG overview](/docs/rag/overview)
