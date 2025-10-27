@@ -47,13 +47,13 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
   return (
     <div
       className={cn(
-        " border-b-[0.5px] px-4 lg:px-0 dark:border-b-[var(--border)] bg-[var(--light-color-surface-15)] dark:bg-[var(--primary-bg)] border-b-(--border-subtle)",
+        " border-b-[0.5px] px-4 dark:border-b-(--border) bg-(--light-color-surface-15) dark:bg-(--primary-bg) border-b-(--border-subtle)",
         className,
       )}
     >
-      <div className="mx-auto max-w-(--ifm-container-width)">
+      <div className="w-full">
         <div
-          className="flex tab gap-6 overflow-x-auto py-2 px-5 -ml-3"
+          className="flex overflow-x-auto gap-6 px-5 py-2 -ml-3 tab"
           aria-label="Documentation tabs"
         >
           {docsTabs.map((tab) => {
