@@ -1,5 +1,5 @@
 ---
-title: 'Agent.getInstructions() '
+title: "Agent.getInstructions() "
 description: "Documentation for the `Agent.getInstructions()` method in Mastra agents, which retrieves the instructions that guide the agent's behavior."
 ---
 
@@ -64,4 +64,4 @@ description: "Runtime context for dependency injection and contextual informatio
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Agent Runtime Context](/docs/agents/runtime-context)
+- [Agent Runtime Context](/docs/server-db/runtime-context)

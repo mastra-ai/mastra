@@ -1,6 +1,6 @@
 ---
-title: 'Reference: Murf Voice '
-description: 'Documentation for the Murf voice implementation, providing text-to-speech capabilities.'
+title: "Murf Voice"
+description: "Documentation for the Murf voice implementation, providing text-to-speech capabilities."
 ---
 
 # Murf
@@ -10,7 +10,7 @@ The Murf voice implementation in Mastra provides text-to-speech (TTS) capabiliti
 ## Usage Example
 
 ```typescript
-import { MurfVoice } from '@mastra/voice-murf';
+import { MurfVoice } from "@mastra/voice-murf";
 
 // Initialize with default configuration (uses MURF_API_KEY environment variable)
 const voice = new MurfVoice();
@@ -18,29 +18,29 @@ const voice = new MurfVoice();
 // Initialize with custom configuration
 const voice = new MurfVoice({
   speechModel: {
-    name: 'GEN2',
-    apiKey: 'your-api-key',
+    name: "GEN2",
+    apiKey: "your-api-key",
     properties: {
-      format: 'MP3',
+      format: "MP3",
       rate: 1.0,
       pitch: 1.0,
       sampleRate: 48000,
-      channelType: 'STEREO',
+      channelType: "STEREO",
     },
   },
-  speaker: 'en-US-cooper',
+  speaker: "en-US-cooper",
 });
 
 // Text-to-Speech with default settings
-const audioStream = await voice.speak('Hello, world!');
+const audioStream = await voice.speak("Hello, world!");
 
 // Text-to-Speech with custom properties
-const audioStream = await voice.speak('Hello, world!', {
-  speaker: 'en-UK-hazel',
+const audioStream = await voice.speak("Hello, world!", {
+  speaker: "en-UK-hazel",
   properties: {
-    format: 'WAV',
+    format: "WAV",
     rate: 1.2,
-    style: 'casual',
+    style: "casual",
   },
 });
 

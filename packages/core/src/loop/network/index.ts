@@ -187,7 +187,7 @@ export async function prepareMemoryStep({
       shouldGenerate,
       model: titleModel,
       instructions: titleInstructions,
-    } = routingAgent.resolveTitleGenerationConfig(config?.threads?.generateTitle);
+    } = routingAgent.resolveTitleGenerationConfig(config?.generateTitle);
 
     if (shouldGenerate && userMessage) {
       promises.push(

@@ -1,5 +1,5 @@
 ---
-title: 'Word Inclusion '
+title: "Word Inclusion "
 description: Example of creating a custom native JavaScript evaluation metric.
 ---
 
@@ -24,7 +24,7 @@ npm install @mastra/evals
 A custom eval in Mastra can use native JavaScript methods to evaluate conditions.
 
 ```typescript filename="src/mastra/evals/example-word-inclusion.ts" showLineNumbers copy
-import { Metric, type MetricResult } from '@mastra/core';
+import { Metric, type MetricResult } from "@mastra/core";
 
 export class WordInclusionMetric extends Metric {
   constructor() {
@@ -32,12 +32,15 @@ export class WordInclusionMetric extends Metric {
   }
 
   async measure(input: string, output: string): Promise<MetricResult> {
-    const tokenize = (text: string) => text.toLowerCase().match(/\b\w+\b/g) || [];
+    const tokenize = (text: string) =>
+      text.toLowerCase().match(/\b\w+\b/g) || [];
 
     const referenceWords = [...new Set(tokenize(input))];
     const outputText = output.toLowerCase();
 
-    const matchedWords = referenceWords.filter(word => outputText.includes(word));
+    const matchedWords = referenceWords.filter((word) =>
+      outputText.includes(word),
+    );
 
     const totalWords = referenceWords.length;
     const score = totalWords > 0 ? matchedWords.length / totalWords : 0;
@@ -58,12 +61,12 @@ export class WordInclusionMetric extends Metric {
 In this example, the response contains all the words listed in the input query. The metric returns a high score indicating complete word inclusion.
 
 ```typescript filename="src/example-high-word-inclusion.ts" showLineNumbers copy
-import { WordInclusionMetric } from './mastra/evals/example-word-inclusion';
+import { WordInclusionMetric } from "./mastra/evals/example-word-inclusion";
 
 const metric = new WordInclusionMetric();
 
-const query = 'apple, banana, orange';
-const response = 'My favorite fruits are: apple, banana, and orange.';
+const query = "apple, banana, orange";
+const response = "My favorite fruits are: apple, banana, and orange.";
 
 const result = await metric.measure(query, response);
 
@@ -89,12 +92,12 @@ The output receives a high score because all the unique words from the input are
 In this example, the response includes some but not all of the words from the input query. The metric returns a partial score reflecting this incomplete word coverage.
 
 ```typescript filename="src/example-partial-word-inclusion.ts" showLineNumbers copy
-import { WordInclusionMetric } from './mastra/evals/example-word-inclusion';
+import { WordInclusionMetric } from "./mastra/evals/example-word-inclusion";
 
 const metric = new WordInclusionMetric();
 
-const query = 'cats, dogs, rabbits';
-const response = 'I like dogs and rabbits';
+const query = "cats, dogs, rabbits";
+const response = "I like dogs and rabbits";
 
 const result = await metric.measure(query, response);
 
@@ -120,11 +123,11 @@ The score reflects partial success because the response contains only a subset o
 In this example, the response does not contain any of the words from the input query. The metric returns a low score indicating no word inclusion.
 
 ```typescript filename="src/example-low-word-inclusion.ts" showLineNumbers copy
-import { WordInclusionMetric } from './mastra/evals/example-word-inclusion';
+import { WordInclusionMetric } from "./mastra/evals/example-word-inclusion";
 
 const metric = new WordInclusionMetric();
 
-const query = 'Colombia, Brazil, Panama';
+const query = "Colombia, Brazil, Panama";
 const response = "Let's go to Mexico";
 
 const result = await metric.measure(query, response);

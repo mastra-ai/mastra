@@ -1,5 +1,5 @@
 ---
-title: 'Parallel Execution '
+title: "Parallel Execution "
 description: Example of using Mastra to execute multiple independent tasks in parallel within a workflow.
 ---
 
@@ -12,12 +12,12 @@ Workflows often need to run multiple operations at the same time. These examples
 In this example, the workflow runs `step1` and `step2` using `.parallel()`. Each step receives the same input and runs independently. Their outputs are namespaced by step `id` and passed together to `step3`, which combines the results and returns the final value.
 
 ```typescript filename="src/mastra/workflows/example-parallel-steps.ts" showLineNumbers copy
-import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
 const step1 = createStep({
-  id: 'step-1',
-  description: 'passes value from input to output',
+  id: "step-1",
+  description: "passes value from input to output",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -33,8 +33,8 @@ const step1 = createStep({
 });
 
 const step2 = createStep({
-  id: 'step-2',
-  description: 'passes value from input to output',
+  id: "step-2",
+  description: "passes value from input to output",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -50,25 +50,25 @@ const step2 = createStep({
 });
 
 const step3 = createStep({
-  id: 'step-3',
-  description: 'sums values from step-1 and step-2',
+  id: "step-3",
+  description: "sums values from step-1 and step-2",
   inputSchema: z.object({
-    'step-1': z.object({ value: z.number() }),
-    'step-2': z.object({ value: z.number() }),
+    "step-1": z.object({ value: z.number() }),
+    "step-2": z.object({ value: z.number() }),
   }),
   outputSchema: z.object({
     value: z.number(),
   }),
   execute: async ({ inputData }) => {
     return {
-      value: inputData['step-1'].value + inputData['step-2'].value,
+      value: inputData["step-1"].value + inputData["step-2"].value,
     };
   },
 });
 
 export const parallelSteps = createWorkflow({
-  id: 'parallel-workflow',
-  description: 'A workflow that runs steps in parallel plus a final step',
+  id: "parallel-workflow",
+  description: "A workflow that runs steps in parallel plus a final step",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -86,12 +86,12 @@ export const parallelSteps = createWorkflow({
 In this example, the workflow uses `.parallel()` to run two workflows—`workflow1` and `workflow2` at the same time. Each workflow contains a single step that returns the input value. Their outputs are namespaced by workflow `id` and passed to `step3`, which combines the results and returns the final value.
 
 ```typescript filename="src/mastra/workflows/example-parallel-workflows.ts" showLineNumbers copy
-import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
 const step1 = createStep({
-  id: 'step-1',
-  description: 'passes value from input to output',
+  id: "step-1",
+  description: "passes value from input to output",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -107,8 +107,8 @@ const step1 = createStep({
 });
 
 const step2 = createStep({
-  id: 'step-2',
-  description: 'passes value from input to output',
+  id: "step-2",
+  description: "passes value from input to output",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -124,24 +124,24 @@ const step2 = createStep({
 });
 
 const step3 = createStep({
-  id: 'step-3',
-  description: 'sums values from step-1 and step-2',
+  id: "step-3",
+  description: "sums values from step-1 and step-2",
   inputSchema: z.object({
-    'workflow-1': z.object({ value: z.number() }),
-    'workflow-2': z.object({ value: z.number() }),
+    "workflow-1": z.object({ value: z.number() }),
+    "workflow-2": z.object({ value: z.number() }),
   }),
   outputSchema: z.object({
     value: z.number(),
   }),
   execute: async ({ inputData }) => {
     return {
-      value: inputData['workflow-1'].value + inputData['workflow-2'].value,
+      value: inputData["workflow-1"].value + inputData["workflow-2"].value,
     };
   },
 });
 
 export const workflow1 = createWorkflow({
-  id: 'workflow-1',
+  id: "workflow-1",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -153,7 +153,7 @@ export const workflow1 = createWorkflow({
   .commit();
 
 export const workflow2 = createWorkflow({
-  id: 'workflow-2',
+  id: "workflow-2",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -165,7 +165,7 @@ export const workflow2 = createWorkflow({
   .commit();
 
 export const parallelWorkflows = createWorkflow({
-  id: 'parallel-workflow',
+  id: "parallel-workflow",
   inputSchema: z.object({
     value: z.number(),
   }),

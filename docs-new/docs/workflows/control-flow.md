@@ -1,6 +1,7 @@
 ---
-title: 'Branching, Merging, Conditions '
-description: 'Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements.'
+title: "Control Flow"
+description: "Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements."
+sidebar_position: 2
 ---
 
 # Control Flow
@@ -249,9 +250,9 @@ export const testWorkflow = createWorkflow({...})
 The following example demonstrates how to start a run with multiple inputs. Each input will pass through the `mapStep` sequentially.
 
 ```typescript {6} filename="src/test-workflow.ts" showLineNumbers copy
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
-const run = await mastra.getWorkflow('testWorkflow').createRunAsync();
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 const result = await run.start({
   inputData: [{ number: 10 }, { number: 100 }, { number: 200 }],

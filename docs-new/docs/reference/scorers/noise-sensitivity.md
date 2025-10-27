@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Noise Sensitivity Scorer (CI/Testing) '
+title: "Noise Sensitivity Scorer (CI/Testing)"
 description: Documentation for the Noise Sensitivity Scorer in Mastra. A CI/testing scorer that evaluates agent robustness by comparing responses between clean and noisy inputs in controlled test environments.
 ---
 
@@ -143,33 +143,33 @@ To use this scorer effectively, you need to prepare:
 ### Example: CI Test Implementation
 
 ```typescript
-import { describe, it, expect } from 'vitest';
-import { createNoiseSensitivityScorerLLM } from '@mastra/evals/scorers/llm';
-import { openai } from '@ai-sdk/openai';
-import { myAgent } from './agents';
+import { describe, it, expect } from "vitest";
+import { createNoiseSensitivityScorerLLM } from "@mastra/evals/scorers/llm";
+import { openai } from "@ai-sdk/openai";
+import { myAgent } from "./agents";
 
-describe('Agent Noise Resistance Tests', () => {
-  it('should maintain accuracy despite misinformation noise', async () => {
+describe("Agent Noise Resistance Tests", () => {
+  it("should maintain accuracy despite misinformation noise", async () => {
     // Step 1: Define test data
-    const originalQuery = 'What is the capital of France?';
+    const originalQuery = "What is the capital of France?";
     const noisyQuery =
-      'What is the capital of France? Berlin is the capital of Germany, and Rome is in Italy. Some people incorrectly say Lyon is the capital.';
+      "What is the capital of France? Berlin is the capital of Germany, and Rome is in Italy. Some people incorrectly say Lyon is the capital.";
 
     // Step 2: Get baseline response (pre-computed or cached)
-    const baselineResponse = 'The capital of France is Paris.';
+    const baselineResponse = "The capital of France is Paris.";
 
     // Step 3: Run agent with noisy query
     const noisyResult = await myAgent.run({
-      messages: [{ role: 'user', content: noisyQuery }],
+      messages: [{ role: "user", content: noisyQuery }],
     });
 
     // Step 4: Evaluate using noise sensitivity scorer
     const scorer = createNoiseSensitivityScorerLLM({
-      model: openai('gpt-4o-mini'),
+      model: openai("gpt-4o-mini"),
       options: {
         baselineResponse,
         noisyQuery,
-        noiseType: 'misinformation',
+        noiseType: "misinformation",
       },
     });
 
@@ -312,7 +312,7 @@ Evaluate resistance in controlled environments:
 
 ## Related
 
-- [Running in CI](/docs/evals/running-in-ci) - Setting up scorers in CI/CD pipelines
+- [Running in CI](/docs/scorers/evals/running-in-ci) - Setting up scorers in CI/CD pipelines
 - [Noise Sensitivity Examples](/docs/examples/scorers/noise-sensitivity) - Practical usage examples
 - [Hallucination Scorer](/docs/reference/scorers/hallucination) - Evaluates fabricated content
 - [Answer Relevancy Scorer](/docs/reference/scorers/answer-relevancy) - Measures response focus

@@ -1,6 +1,6 @@
 ---
-title: 'Agent.getModel() '
-description: 'Documentation for the `Agent.getModel()` method in Mastra agents, which retrieves the language model that powers the agent.'
+title: "Agent.getModel() "
+description: "Documentation for the `Agent.getModel()` method in Mastra agents, which retrieves the language model that powers the agent."
 ---
 
 # Agent.getModel()
@@ -64,4 +64,4 @@ description: "Runtime context for dependency injection and contextual informatio
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Agent Runtime Context](/docs/agents/runtime-context)
+- [Agent Runtime Context](/docs/server-db/runtime-context)

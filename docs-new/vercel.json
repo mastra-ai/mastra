@@ -16,11 +16,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/tools-mcp/dynamic-context",
-      "destination": "/docs/tools-mcp/runtime-context",
-      "permanent": true
-    },
-    {
       "source": "/docs/08-running-evals",
       "destination": "/docs/evals/overview",
       "permanent": true
@@ -36,18 +31,8 @@
       "permanent": true
     },
     {
-      "source": "/docs/agents/02-adding-tools",
-      "destination": "/docs/agents/adding-tools",
-      "permanent": true
-    },
-    {
       "source": "/docs/agents/adding-tools",
       "destination": "/docs/agents/using-tools-and-mcp",
-      "permanent": true
-    },
-    {
-      "source": "/docs/agents/02a-mcp-guide",
-      "destination": "/docs/agents/mcp-guide",
       "permanent": true
     },
     {
@@ -246,11 +231,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/local-dev/integrations",
-      "destination": "/docs/integrations",
-      "permanent": true
-    },
-    {
       "source": "/docs/integrations",
       "destination": "/docs/tools-mcp/mcp-overview",
       "permanent": true
@@ -258,11 +238,6 @@
     {
       "source": "/docs/evals/01-supported-evals",
       "destination": "/docs/evals/overview",
-      "permanent": true
-    },
-    {
-      "source": "/docs/agents/02b-discord-mcp-bot",
-      "destination": "/docs/agents/mcp-guide",
       "permanent": true
     },
     {
@@ -406,36 +381,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/guide",
-      "destination": "/docs/guides",
-      "permanent": true
-    },
-    {
-      "source": "/docs/guide/:path*",
-      "destination": "/docs/guides/guide/:path*",
-      "permanent": true
-    },
-    {
-      "source": "/docs/reference",
-      "destination": "/docs/reference",
-      "permanent": true
-    },
-    {
-      "source": "/docs/reference/:path*",
-      "destination": "/docs/reference/:path*",
-      "permanent": true
-    },
-    {
-      "source": "/docs/showcase",
-      "destination": "/showcase",
-      "permanent": true
-    },
-    {
-      "source": "/docs/showcase/:path*",
-      "destination": "/showcase/:path*",
-      "permanent": true
-    },
-    {
       "source": "/docs/workflows/data-flow",
       "destination": "/docs/workflows/control-flow",
       "permanent": true
@@ -458,11 +403,6 @@
     {
       "source": "/docs/local-dev/syncing-projects",
       "destination": "/docs/server-db/local-dev-playground",
-      "permanent": true
-    },
-    {
-      "source": "/docs/guides/:path*",
-      "destination": "/docs/guides/guide/:path*",
       "permanent": true
     },
     {
@@ -1191,8 +1131,8 @@
       "permanent": true
     },
     {
-      "source": "/en/docs/tools-mcp/runtime-context",
-      "destination": "/en/docs/server-db/runtime-context",
+      "source": "/docs/tools-mcp/runtime-context",
+      "destination": "/docs/server-db/runtime-context",
       "permanent": true
     },
     {

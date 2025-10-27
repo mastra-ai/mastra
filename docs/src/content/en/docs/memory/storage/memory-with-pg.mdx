@@ -41,9 +41,7 @@ export const pgAgent = new Agent({
       connectionString: process.env.DATABASE_URL!
     }),
     options: {
-      threads: {
-        generateTitle: true
-      }
+      generateTitle: true  // Explicitly enable automatic title generation
     }
   })
 });

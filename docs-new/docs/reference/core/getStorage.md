@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.getStorage() '
-description: 'Documentation for the `Mastra.getStorage()` method in Mastra, which retrieves the configured storage instance.'
+title: "Mastra.getStorage() "
+description: "Documentation for the `Mastra.getStorage()` method in Mastra, which retrieves the configured storage instance."
 ---
 
 # Mastra.getStorage()

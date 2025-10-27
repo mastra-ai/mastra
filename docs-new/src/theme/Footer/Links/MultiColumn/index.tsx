@@ -1,16 +1,16 @@
-import React, { type ReactNode } from 'react';
-import clsx from 'clsx';
-import { ThemeClassNames } from '@docusaurus/theme-common';
-import LinkItem from '@theme/Footer/LinkItem';
-import type { Props } from '@theme/Footer/Links/MultiColumn';
+import React, { type ReactNode } from "react";
+import clsx from "clsx";
+import { ThemeClassNames } from "@docusaurus/theme-common";
+import LinkItem from "@theme/Footer/LinkItem";
+import type { Props } from "@theme/Footer/Links/MultiColumn";
 
-type ColumnType = Props['columns'][number];
-type ColumnItemType = ColumnType['items'][number];
+type ColumnType = Props["columns"][number];
+type ColumnItemType = ColumnType["items"][number];
 
 function ColumnLinkItem({ item }: { item: ColumnItemType }) {
   return item.html ? (
     <li
-      className={clsx('footer__item', item.className)}
+      className={clsx("footer__item", item.className)}
       // Developer provided the HTML, so assume it's safe.
       // eslint-disable-next-line react/no-danger
       dangerouslySetInnerHTML={{ __html: item.html }}
@@ -24,8 +24,16 @@ function ColumnLinkItem({ item }: { item: ColumnItemType }) {
 
 function Column({ column }: { column: ColumnType }) {
   return (
-    <div className={clsx(ThemeClassNames.layout.footer.column, 'col footer__col', column.className)}>
-      <div className="mb-4  font-medium  text-sm capitalize">{column.title}</div>
+    <div
+      className={clsx(
+        ThemeClassNames.layout.footer.column,
+        "col footer__col",
+        column.className,
+      )}
+    >
+      <div className="mb-4  font-medium  text-sm capitalize">
+        {column.title}
+      </div>
       <ul className="footer__items clean-list">
         {column.items.map((item, i) => (
           <ColumnLinkItem key={i} item={item} />

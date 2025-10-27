@@ -1,6 +1,6 @@
 ---
-title: 'Reference: getScorerByName() '
-description: 'Documentation for the `getScorerByName()` method in Mastra, which retrieves a scorer by its name property rather than registration key.'
+title: "getScorerByName()"
+description: "Documentation for the `getScorerByName()` method in Mastra, which retrieves a scorer by its name property rather than registration key."
 ---
 
 # getScorerByName()
@@ -10,15 +10,15 @@ The `getScorerByName()` method retrieves a scorer by searching for its `name` pr
 ## Usage Example
 
 ```typescript
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
 // Get a scorer by its name property
-const relevancyScorer = mastra.getScorerByName('Answer Relevancy');
+const relevancyScorer = mastra.getScorerByName("Answer Relevancy");
 
-const weatherAgent = mastra.getAgent('weatherAgent');
+const weatherAgent = mastra.getAgent("weatherAgent");
 
 // Use the scorer to evaluate an AI output
-await weatherAgent.generate('What is the weather in Rome', {
+await weatherAgent.generate("What is the weather in Rome", {
   scorers: {
     answerRelevancy: {
       scorer: relevancyScorer,
@@ -61,10 +61,10 @@ This method throws a `MastraError` if:
 
 ```typescript
 try {
-  const scorer = mastra.getScorerByName('Non-existent Scorer');
+  const scorer = mastra.getScorerByName("Non-existent Scorer");
 } catch (error) {
-  if (error.id === 'MASTRA_GET_SCORER_BY_NAME_NOT_FOUND') {
-    console.log('Scorer with that name not found');
+  if (error.id === "MASTRA_GET_SCORER_BY_NAME_NOT_FOUND") {
+    console.log("Scorer with that name not found");
   }
 }
 ```

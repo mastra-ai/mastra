@@ -1,6 +1,6 @@
 ---
-title: 'Memory.createThread() '
-description: 'Documentation for the `Memory.createThread()` method in Mastra, which creates a new conversation thread in the memory system.'
+title: "Memory.createThread() "
+description: "Documentation for the `Memory.createThread()` method in Mastra, which creates a new conversation thread in the memory system."
 ---
 
 # Memory.createThread()
@@ -10,7 +10,7 @@ The `.createThread()` method creates a new conversation thread in the memory sys
 ## Usage Example
 
 ```typescript copy
-await memory?.createThread({ resourceId: 'user-123' });
+await memory?.createThread({ resourceId: "user-123" });
 ```
 
 ## Parameters
@@ -86,21 +86,21 @@ description: "Additional metadata associated with the thread",
 ## Extended usage example
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
-const agent = mastra.getAgent('agent');
+const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
 const thread = await memory?.createThread({
-  resourceId: 'user-123',
-  title: 'Memory Test Thread',
+  resourceId: "user-123",
+  title: "Memory Test Thread",
   metadata: {
-    source: 'test-script',
-    purpose: 'memory-testing',
+    source: "test-script",
+    purpose: "memory-testing",
   },
 });
 
-const response = await agent.generate('message for agent', {
+const response = await agent.generate("message for agent", {
   memory: {
     thread: thread!.id,
     resource: thread!.resourceId,

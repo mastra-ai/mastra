@@ -196,7 +196,9 @@ const workflowResearchStep = createStep({
       });
 
       const result = await researchAgent.generate(researchPrompt, {
-        output: WorkflowResearchResultSchema,
+        structuredOutput: {
+          schema: WorkflowResearchResultSchema,
+        },
         // stopWhen: stepCountIs(10),
       });
 

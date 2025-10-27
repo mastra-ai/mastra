@@ -1,5 +1,5 @@
 ---
-title: 'Reference: MastraScorer '
+title: "MastraScorer"
 description: Documentation for the MastraScorer base class in Mastra, which provides the foundation for all custom and built-in scorers.
 ---
 
@@ -15,8 +15,8 @@ Use the `createScorer` factory function, which returns a `MastraScorer` instance
 
 ```typescript
 const scorer = createScorer({
-  name: 'My Custom Scorer',
-  description: 'Evaluates responses based on custom criteria',
+  name: "My Custom Scorer",
+  description: "Evaluates responses based on custom criteria",
 }).generateScore(({ run, results }) => {
   // scoring logic
   return 0.85;
@@ -31,9 +31,9 @@ The `.run()` method is the primary way to execute your scorer and evaluate input
 
 ```typescript
 const result = await scorer.run({
-  input: 'What is machine learning?',
-  output: 'Machine learning is a subset of artificial intelligence...',
-  runId: 'optional-run-id',
+  input: "What is machine learning?",
+  output: "Machine learning is a subset of artificial intelligence...",
+  runId: "optional-run-id",
   runtimeContext: {
     /* optional context */
   },
@@ -144,12 +144,12 @@ Each step receives the results from previous steps, allowing you to build comple
 
 ```typescript
 const scorer = createScorer({
-  name: 'Quality Scorer',
-  description: 'Evaluates response quality',
+  name: "Quality Scorer",
+  description: "Evaluates response quality",
 })
   .preprocess(({ run }) => {
     // Extract key information
-    return { wordCount: run.output.split(' ').length };
+    return { wordCount: run.output.split(" ").length };
   })
   .analyze(({ run, results }) => {
     // Analyze the response
@@ -168,8 +168,8 @@ const scorer = createScorer({
 
 // Use the scorer
 const result = await scorer.run({
-  input: 'What is machine learning?',
-  output: 'Machine learning is a subset of artificial intelligence...',
+  input: "What is machine learning?",
+  output: "Machine learning is a subset of artificial intelligence...",
 });
 
 console.log(result.score); // 1.0

@@ -1,6 +1,6 @@
 ---
-title: 'Agent.generate() '
-description: 'Documentation for the `Agent.generate()` method in Mastra agents, which enables non-streaming generation of responses with enhanced capabilities.'
+title: "Agent.generate() "
+description: "Documentation for the `Agent.generate()` method in Mastra agents, which enables non-streaming generation of responses with enhanced capabilities."
 ---
 
 # Agent.generate()
@@ -11,11 +11,11 @@ The `.generate()` method enables non-streaming response generation from an agent
 
 ```typescript copy
 // Default Mastra format
-const mastraResult = await agent.generate('message for agent');
+const mastraResult = await agent.generate("message for agent");
 
 // AI SDK v5 compatible format
-const aiSdkResult = await agent.generate('message for agent', {
-  format: 'aisdk',
+const aiSdkResult = await agent.generate("message for agent", {
+  format: "aisdk",
 });
 ```
 

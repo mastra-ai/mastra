@@ -1,6 +1,6 @@
 ---
-title: 'Agent.getMemory() '
-description: 'Documentation for the `Agent.getMemory()` method in Mastra agents, which retrieves the memory system associated with the agent.'
+title: "Agent.getMemory() "
+description: "Documentation for the `Agent.getMemory()` method in Mastra agents, which retrieves the memory system associated with the agent."
 ---
 
 # Agent.getMemory()
@@ -64,4 +64,4 @@ description: "Runtime context for dependency injection and contextual informatio
 ## Related
 
 - [Agent memory](/docs/agents/agent-memory)
-- [Agent Runtime Context](/docs/agents/runtime-context)
+- [Agent Runtime Context](/docs/server-db/runtime-context)

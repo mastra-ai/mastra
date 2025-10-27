@@ -1,6 +1,6 @@
 ---
-title: 'Data Mapping with Workflow Variables (Legacy) '
-description: 'Learn how to use workflow variables to map data between steps in Mastra workflows.'
+title: "Data Mapping with Workflow Variables (Legacy) "
+description: "Learn how to use workflow variables to map data between steps in Mastra workflows."
 ---
 
 # Data Mapping with Workflow Variables (Legacy)
@@ -18,8 +18,8 @@ In this example, we'll build a simple user registration workflow that:
 ## Implementation
 
 ```typescript showLineNumbers filename="src/mastra/workflows/user-registration.ts" copy
-import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
-import { z } from 'zod';
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
 
 // Define our schemas for better type safety
 const userInputSchema = z.object({
@@ -58,20 +58,20 @@ const profileSchema = z.object({
 
 // Define the workflow
 const registrationWorkflow = new LegacyWorkflow({
-  name: 'user-registration',
+  name: "user-registration",
   triggerSchema: userInputSchema,
 });
 
 // Step 1: Validate user input
 const validateInput = new LegacyStep({
-  id: 'validateInput',
+  id: "validateInput",
   inputSchema: userInputSchema,
   outputSchema: validatedDataSchema,
   execute: async ({ context }) => {
     const { email, name, age } = context;
 
     // Simple validation logic
-    const isValid = email.includes('@') && name.length > 0 && age >= 18;
+    const isValid = email.includes("@") && name.length > 0 && age >= 18;
 
     return {
       isValid,
@@ -86,7 +86,7 @@ const validateInput = new LegacyStep({
 
 // Step 2: Format user data
 const formatUserData = new LegacyStep({
-  id: 'formatUserData',
+  id: "formatUserData",
   inputSchema: z.object({
     validatedData: z.object({
       email: z.string(),
@@ -102,7 +102,7 @@ const formatUserData = new LegacyStep({
     const userId = `user_${Math.floor(Math.random() * 10000)}`;
 
     // Format the data
-    const ageGroup = validatedData.age < 30 ? 'young-adult' : 'adult';
+    const ageGroup = validatedData.age < 30 ? "young-adult" : "adult";
 
     return {
       userId,
@@ -117,7 +117,7 @@ const formatUserData = new LegacyStep({
 
 // Step 3: Create user profile
 const createUserProfile = new LegacyStep({
-  id: 'createUserProfile',
+  id: "createUserProfile",
   inputSchema: z.object({
     userId: z.string(),
     formattedData: z.object({
@@ -147,26 +147,26 @@ registrationWorkflow
   // First step gets data from the trigger
   .step(validateInput, {
     variables: {
-      email: { step: 'trigger', path: 'email' },
-      name: { step: 'trigger', path: 'name' },
-      age: { step: 'trigger', path: 'age' },
+      email: { step: "trigger", path: "email" },
+      name: { step: "trigger", path: "name" },
+      age: { step: "trigger", path: "age" },
     },
   })
   // Format user data with validated data from previous step
   .then(formatUserData, {
     variables: {
-      validatedData: { step: validateInput, path: 'validatedData' },
+      validatedData: { step: validateInput, path: "validatedData" },
     },
     when: {
-      ref: { step: validateInput, path: 'isValid' },
+      ref: { step: validateInput, path: "isValid" },
       query: { $eq: true },
     },
   })
   // Create profile with data from the format step
   .then(createUserProfile, {
     variables: {
-      userId: { step: formatUserData, path: 'userId' },
-      formattedData: { step: formatUserData, path: 'formattedData' },
+      userId: { step: formatUserData, path: "userId" },
+      formattedData: { step: formatUserData, path: "formattedData" },
     },
   })
   .commit();
@@ -203,8 +203,6 @@ This example demonstrates several important concepts about workflow variables:
 4. **Type Safety**: Each step defines input and output schemas for type safety, ensuring that the data passed between steps is properly typed.
 
 5. **Explicit Data Dependencies**: By defining input schemas and using variable mappings, the data dependencies between steps are made explicit and clear.
-
-For more information on workflow variables, see the [Workflow Variables documentation](/docs/workflows-legacy/variables).
 
 ## Workflows (Legacy)
 

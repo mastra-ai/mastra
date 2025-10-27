@@ -1,6 +1,6 @@
 ---
-title: 'Memory.query() '
-description: 'Documentation for the `Memory.query()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search.'
+title: "Memory.query() "
+description: "Documentation for the `Memory.query()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search."
 ---
 
 # Memory.query()
@@ -10,7 +10,7 @@ the `.query()` method retrieves messages from a specific thread, with support fo
 ## Usage Example
 
 ```typescript copy
-await memory?.query({ threadId: 'user-123' });
+await memory?.query({ threadId: "user-123" });
 ```
 
 ## Parameters
@@ -136,22 +136,22 @@ description: "Array of messages formatted for UI display, including proper threa
 ## Extended usage example
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
-const agent = mastra.getAgent('agent');
+const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
 const { messages, uiMessages } = await memory!.query({
-  threadId: 'thread-123',
+  threadId: "thread-123",
   selectBy: {
     last: 50,
-    vectorSearchString: 'What messages are there?',
+    vectorSearchString: "What messages are there?",
     include: [
       {
-        id: 'msg-123',
+        id: "msg-123",
       },
       {
-        id: 'msg-456',
+        id: "msg-456",
         withPreviousMessages: 3,
         withNextMessages: 1,
       },

@@ -1,7 +1,9 @@
-import { toast as sonnerToast } from 'sonner';
+import { toast as sonnerToast } from "sonner";
 
-export function toast(toast: Omit<ToastProps, 'id'>) {
-  return sonnerToast.custom(id => <Toast id={id} title={toast.title} description={toast.description} />);
+export function toast(toast: Omit<ToastProps, "id">) {
+  return sonnerToast.custom((id) => (
+    <Toast id={id} title={toast.title} description={toast.description} />
+  ));
 }
 
 function Toast(props: ToastProps) {
@@ -11,8 +13,12 @@ function Toast(props: ToastProps) {
     <div className="flex rounded-md justify-between ring-1 ring-black/5 dark:ring-borders-2 w-full md:max-w-[364px] items-start p-4">
       <div className="flex items-center rounded-md">
         <div className="w-full">
-          <p className="text-sm font-medium text-gray-900 dark:text-white">{title}</p>
-          <p className="mt-1 text-sm text-gray-500 dark:text-white  ">{description}</p>
+          <p className="text-sm font-medium text-gray-900 dark:text-white">
+            {title}
+          </p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-white  ">
+            {description}
+          </p>
         </div>
       </div>
       <div>

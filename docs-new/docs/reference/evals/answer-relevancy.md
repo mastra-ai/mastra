@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Answer Relevancy '
+title: "Answer Relevancy"
 description: Documentation for the Answer Relevancy Metric in Mastra, which evaluates how well LLM outputs address the input query.
 ---
 
@@ -16,18 +16,21 @@ The `AnswerRelevancyMetric` class evaluates how well an LLM's output answers or 
 ## Basic Usage
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { AnswerRelevancyMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { AnswerRelevancyMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new AnswerRelevancyMetric(model, {
   uncertaintyWeight: 0.3,
   scale: 1,
 });
 
-const result = await metric.measure('What is the capital of France?', 'Paris is the capital of France.');
+const result = await metric.measure(
+  "What is the capital of France?",
+  "Paris is the capital of France.",
+);
 
 console.log(result.score); // Score from 0-1
 console.log(result.info.reason); // Explanation of the score
@@ -152,11 +155,11 @@ Final score: `((direct + uncertainty * partial) / total_statements) * scale`
 ## Example with Custom Configuration
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { AnswerRelevancyMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { AnswerRelevancyMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new AnswerRelevancyMetric(model, {
   uncertaintyWeight: 0.5, // Higher weight for uncertain verdicts
@@ -164,8 +167,8 @@ const metric = new AnswerRelevancyMetric(model, {
 });
 
 const result = await metric.measure(
-  'What are the benefits of exercise?',
-  'Regular exercise improves cardiovascular health, builds strength, and boosts mental wellbeing.',
+  "What are the benefits of exercise?",
+  "Regular exercise improves cardiovascular health, builds strength, and boosts mental wellbeing.",
 );
 
 // Example output:

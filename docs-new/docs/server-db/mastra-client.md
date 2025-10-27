@@ -1,6 +1,6 @@
 ---
-title: 'Mastra Client SDK '
-description: 'Learn how to set up and use the Mastra Client SDK'
+title: "Mastra Client"
+description: "Learn how to set up and use the Mastra Client SDK"
 ---
 
 import Tabs from '@theme/Tabs';
@@ -27,22 +27,22 @@ The Mastra Client SDK is designed for browser environments and uses the native `
 To use the Mastra Client SDK, install the required dependencies:
 
 <Tabs>
-  <TabItem value="install" label="install">
+  <TabItem value="npm" label="npm">
     ```bash copy
     npm install @mastra/client-js@latest
     ```
   </TabItem>
-  <TabItem value="tab-2" label="Tab 2">
+  <TabItem value="yarn" label="yarn">
     ```bash copy
     yarn add @mastra/client-js@latest
     ```
   </TabItem>
-  <TabItem value="tab-3" label="Tab 3">
+  <TabItem value="pnpm" label="pnpm">
     ```bash copy
     pnpm add @mastra/client-js@latest
     ```
   </TabItem>
-    <TabItem value="tab-4" label="Tab 4">
+    <TabItem value="bun" label="bun">
     ```bash copy
     bun add @mastra/client-js@latest
     ```
@@ -54,10 +54,10 @@ To use the Mastra Client SDK, install the required dependencies:
 Once initialized with a `baseUrl`, `MastraClient` exposes a type-safe interface for calling agents, tools, and workflows.
 
 ```typescript filename="lib/mastra-client.ts" showLineNumbers copy
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
-  baseUrl: process.env.MASTRA_API_URL || 'http://localhost:4111',
+  baseUrl: process.env.MASTRA_API_URL || "http://localhost:4111",
 });
 ```
 
@@ -78,24 +78,24 @@ The Mastra Client SDK exposes all resources served by the Mastra Server
 Call `.generate()` with an array of message objects that include `role` and `content`:
 
 ```typescript showLineNumbers copy
-import { mastraClient } from 'lib/mastra-client';
+import { mastraClient } from "lib/mastra-client";
 
 const testAgent = async () => {
   try {
-    const agent = mastraClient.getAgent('testAgent');
+    const agent = mastraClient.getAgent("testAgent");
 
     const response = await agent.generate({
       messages: [
         {
-          role: 'user',
-          content: 'Hello',
+          role: "user",
+          content: "Hello",
         },
       ],
     });
 
     console.log(response.text);
   } catch (error) {
-    return 'Error occurred while generating response';
+    return "Error occurred while generating response";
   }
 };
 ```
@@ -107,28 +107,28 @@ const testAgent = async () => {
 Use `.stream()` for real-time responses with an array of message objects that include `role` and `content`:
 
 ```typescript showLineNumbers copy
-import { mastraClient } from 'lib/mastra-client';
+import { mastraClient } from "lib/mastra-client";
 
 const testAgent = async () => {
   try {
-    const agent = mastraClient.getAgent('testAgent');
+    const agent = mastraClient.getAgent("testAgent");
 
     const stream = await agent.stream({
       messages: [
         {
-          role: 'user',
-          content: 'Hello',
+          role: "user",
+          content: "Hello",
         },
       ],
     });
 
     stream.processDataStream({
-      onTextPart: text => {
+      onTextPart: (text) => {
         console.log(text);
       },
     });
   } catch (error) {
-    return 'Error occurred while generating response';
+    return "Error occurred while generating response";
   }
 };
 ```
@@ -140,7 +140,7 @@ const testAgent = async () => {
 `MastraClient` accepts optional parameters like `retries`, `backoffMs`, and `headers` to control request behavior. These parameters are useful for controlling retry behavior and including diagnostic metadata.
 
 ```typescript filename="lib/mastra-client.ts" showLineNumbers copy
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
   // ...
@@ -148,7 +148,7 @@ export const mastraClient = new MastraClient({
   backoffMs: 300,
   maxBackoffMs: 5000,
   headers: {
-    'X-Development': 'true',
+    "X-Development": "true",
   },
 });
 ```
@@ -162,12 +162,12 @@ export const mastraClient = new MastraClient({
 Pass an `AbortSignal` to the client constructor to enable cancellation across all requests.
 
 ```typescript {3,7} filename="lib/mastra-client.ts" showLineNumbers copy
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from "@mastra/client-js";
 
 export const controller = new AbortController();
 
 export const mastraClient = new MastraClient({
-  baseUrl: process.env.MASTRA_API_URL || 'http://localhost:4111',
+  baseUrl: process.env.MASTRA_API_URL || "http://localhost:4111",
   abortSignal: controller.signal,
 });
 ```
@@ -177,7 +177,7 @@ export const mastraClient = new MastraClient({
 Calling `.abort()` will cancel any ongoing requests tied to that signal.
 
 ```typescript {4} showLineNumbers copy
-import { mastraClient, controller } from 'lib/mastra-client';
+import { mastraClient, controller } from "lib/mastra-client";
 
 const handleAbort = () => {
   controller.abort();
@@ -191,16 +191,16 @@ Define tools directly in client-side applications using the `createTool()` funct
 This lets agents trigger browser-side functionality such as DOM manipulation, local storage access, or other Web APIs, enabling tool execution in the user's environment rather than on the server.
 
 ```typescript {27} showLineNumbers copy
-import { createTool } from '@mastra/client-js';
-import { z } from 'zod';
+import { createTool } from "@mastra/client-js";
+import { z } from "zod";
 
 const handleClientTool = async () => {
   try {
-    const agent = mastraClient.getAgent('colorAgent');
+    const agent = mastraClient.getAgent("colorAgent");
 
     const colorChangeTool = createTool({
-      id: 'color-change-tool',
-      description: 'Changes the HTML background color',
+      id: "color-change-tool",
+      description: "Changes the HTML background color",
       inputSchema: z.object({
         color: z.string(),
       }),
@@ -216,7 +216,7 @@ const handleClientTool = async () => {
     });
 
     const response = await agent.generate({
-      messages: 'Change the background to blue',
+      messages: "Change the background to blue",
       clientTools: { colorChangeTool },
     });
 
@@ -232,15 +232,15 @@ const handleClientTool = async () => {
 This is a standard Mastra [agent](../agents/overview#create-an-agent) configured to return hex color codes, intended to work with the browser-based client tool defined above.
 
 ```typescript filename="src/mastra/agents/color-agent" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
 export const colorAgent = new Agent({
-  name: 'test-agent',
+  name: "test-agent",
   instructions: `You are a helpful CSS assistant.
   You can change the background color of web pages.
   Respond with a hex reference for the color requested by the user`,
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
 });
 ```
 
@@ -250,10 +250,10 @@ You can also use `MastraClient` in server-side environments such as API routes, 
 
 ```typescript {8} showLineNumbers
 export async function action() {
-  const agent = mastraClient.getAgent('testAgent');
+  const agent = mastraClient.getAgent("testAgent");
 
   const stream = await agent.stream({
-    messages: [{ role: 'user', content: 'Hello' }],
+    messages: [{ role: "user", content: "Hello" }],
   });
 
   return new Response(stream.body);

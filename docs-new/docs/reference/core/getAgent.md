@@ -1,6 +1,6 @@
 ---
-title: 'Agent.getAgent() '
-description: 'Documentation for the `Agent.getAgent()` method in Mastra, which retrieves an agent by name.'
+title: "Agent.getAgent() "
+description: "Documentation for the `Agent.getAgent()` method in Mastra, which retrieves an agent by name."
 ---
 
 # Mastra.getAgent()
@@ -10,7 +10,7 @@ The `.getAgent()` method is used to retrieve an agent. The method accepts a sing
 ## Usage example
 
 ```typescript copy
-mastra.getAgent('testAgent');
+mastra.getAgent("testAgent");
 ```
 
 ## Parameters
@@ -40,4 +40,4 @@ description: "The agent instance with the specified name. Throws an error if the
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Runtime context](/docs/agents/runtime-context)
+- [Runtime context](/docs/server-db/runtime-context)

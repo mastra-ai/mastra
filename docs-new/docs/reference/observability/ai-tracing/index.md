@@ -1,5 +1,5 @@
 ---
-title: 'AITracing '
+title: "AITracing "
 description: Core AI Tracing classes and methods
 asIndexPage: true
 ---
@@ -137,7 +137,9 @@ class CustomAITracing extends BaseAITracing {
   }
 
   // Override methods as needed
-  startSpan<TType extends AISpanType>(options: StartSpanOptions<TType>): AISpan<TType> {
+  startSpan<TType extends AISpanType>(
+    options: StartSpanOptions<TType>,
+  ): AISpan<TType> {
     // Custom span creation logic
     return super.startSpan(options);
   }

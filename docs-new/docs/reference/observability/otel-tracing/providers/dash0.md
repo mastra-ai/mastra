@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Dash0 Integration '
+title: "Dash0 Integration"
 description: Documentation for integrating Mastra with Dash0, an Open Telemetry native observability solution.
 ---
 
@@ -21,15 +21,15 @@ OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <your-auth-token>, Dash0-Dataset
 Here's how to configure Mastra to use Dash0:
 
 ```typescript
-import { Mastra } from '@mastra/core';
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: 'your-service-name',
+    serviceName: "your-service-name",
     enabled: true,
     export: {
-      type: 'otlp',
+      type: "otlp",
     },
   },
 });

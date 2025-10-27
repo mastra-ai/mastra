@@ -1,5 +1,5 @@
 ---
-title: 'Chain of Thought Prompting '
+title: "Chain of Thought Prompting "
 description: Example of implementing a RAG system in Mastra with chain-of-thought reasoning using OpenAI and PGVector.
 ---
 
@@ -35,12 +35,12 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="index.ts"
-import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
-import { Agent } from '@mastra/core/agent';
-import { PgVector } from '@mastra/pg';
-import { createVectorQueryTool, MDocument } from '@mastra/rag';
-import { embedMany } from 'ai';
+import { openai } from "@ai-sdk/openai";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { PgVector } from "@mastra/pg";
+import { createVectorQueryTool, MDocument } from "@mastra/rag";
+import { embedMany } from "ai";
 ```
 
 ## Vector Query Tool Creation
@@ -49,9 +49,9 @@ Using createVectorQueryTool imported from @mastra/rag, you can create a tool tha
 
 ```typescript copy showLineNumbers{8} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
 });
 ```
 
@@ -61,7 +61,7 @@ Set up the Mastra agent with chain-of-thought prompting instructions:
 
 ```typescript copy showLineNumbers{14} filename="index.ts"
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
+  name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context.
 Follow these steps for each response:
 
@@ -84,7 +84,7 @@ Important: When asked to answer a question, please base your answer only on the 
 If the context doesn't contain enough information to fully answer the question, please state that explicitly.
 Remember: Explain how you're using the retrieved information to reach your conclusions.
 `,
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   tools: { vectorQueryTool },
 });
 ```
@@ -102,7 +102,7 @@ export const mastra = new Mastra({
   agents: { ragAgent },
   vectors: { pgVector },
 });
-const agent = mastra.getAgent('ragAgent');
+const agent = mastra.getAgent("ragAgent");
 ```
 
 ## Document Processing
@@ -110,13 +110,15 @@ const agent = mastra.getAgent('ragAgent');
 Create a document and process it into chunks:
 
 ```typescript copy showLineNumbers{44} filename="index.ts"
-const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`);
+const doc = MDocument.fromText(
+  `The Impact of Climate Change on Global Agriculture...`,
+);
 
 const chunks = await doc.chunk({
-  strategy: 'recursive',
+  strategy: "recursive",
   size: 512,
   overlap: 50,
-  separator: '\n',
+  separator: "\n",
 });
 ```
 
@@ -126,17 +128,17 @@ Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy showLineNumbers{55} filename="index.ts"
 const { embeddings } = await embedMany({
-  values: chunks.map(chunk => chunk.text),
-  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map((chunk) => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
 });
 
-const vectorStore = mastra.getVector('pgVector');
+const vectorStore = mastra.getVector("pgVector");
 await vectorStore.createIndex({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   dimension: 1536,
 });
 await vectorStore.upsert({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   vectors: embeddings,
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
@@ -147,17 +149,26 @@ await vectorStore.upsert({
 Try different queries to see how the agent breaks down its reasoning:
 
 ```typescript copy showLineNumbers{83} filename="index.ts"
-const answerOne = await agent.generate('What are the main adaptation strategies for farmers?');
-console.log('\nQuery:', 'What are the main adaptation strategies for farmers?');
-console.log('Response:', answerOne.text);
+const answerOne = await agent.generate(
+  "What are the main adaptation strategies for farmers?",
+);
+console.log("\nQuery:", "What are the main adaptation strategies for farmers?");
+console.log("Response:", answerOne.text);
 
-const answerTwo = await agent.generate('Analyze how temperature affects crop yields.');
-console.log('\nQuery:', 'Analyze how temperature affects crop yields.');
-console.log('Response:', answerTwo.text);
+const answerTwo = await agent.generate(
+  "Analyze how temperature affects crop yields.",
+);
+console.log("\nQuery:", "Analyze how temperature affects crop yields.");
+console.log("Response:", answerTwo.text);
 
-const answerThree = await agent.generate('What connections can you draw between climate change and food security?');
-console.log('\nQuery:', 'What connections can you draw between climate change and food security?');
-console.log('Response:', answerThree.text);
+const answerThree = await agent.generate(
+  "What connections can you draw between climate change and food security?",
+);
+console.log(
+  "\nQuery:",
+  "What connections can you draw between climate change and food security?",
+);
+console.log("Response:", answerThree.text);
 ```
 
 <br />

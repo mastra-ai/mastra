@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Tool Call Accuracy '
+title: "Tool Call Accuracy"
 description: Documentation for the Tool Call Accuracy Scorers in Mastra, which evaluate whether LLM outputs call the correct tools from available options.
 ---
 
@@ -65,23 +65,23 @@ When `expectedToolOrder` is provided, the scorer validates tool calling sequence
 ### Examples
 
 ```typescript
-import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
+import { createToolCallAccuracyScorerCode } from "@mastra/evals/scorers/code";
 
 // Single tool validation
 const scorer = createToolCallAccuracyScorerCode({
-  expectedTool: 'weather-tool',
+  expectedTool: "weather-tool",
 });
 
 // Strict single tool (no other tools allowed)
 const strictScorer = createToolCallAccuracyScorerCode({
-  expectedTool: 'calculator-tool',
+  expectedTool: "calculator-tool",
   strictMode: true,
 });
 
 // Tool order validation
 const orderScorer = createToolCallAccuracyScorerCode({
-  expectedTool: 'search-tool', // ignored when order is specified
-  expectedToolOrder: ['search-tool', 'weather-tool'],
+  expectedTool: "search-tool", // ignored when order is specified
+  expectedToolOrder: ["search-tool", "weather-tool"],
   strictMode: true, // exact match required
 });
 ```
@@ -129,23 +129,23 @@ The LLM-based scorer provides:
 ### Examples
 
 ```typescript
-import { createToolCallAccuracyScorerLLM } from '@mastra/evals/scorers/llm';
-import { openai } from '@ai-sdk/openai';
+import { createToolCallAccuracyScorerLLM } from "@mastra/evals/scorers/llm";
+import { openai } from "@ai-sdk/openai";
 
 const llmScorer = createToolCallAccuracyScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   availableTools: [
     {
-      name: 'weather-tool',
-      description: 'Get current weather information for any location',
+      name: "weather-tool",
+      description: "Get current weather information for any location",
     },
     {
-      name: 'search-tool',
-      description: 'Search the web for information',
+      name: "search-tool",
+      description: "Search the web for information",
     },
     {
-      name: 'calendar-tool',
-      description: 'Check calendar events and scheduling',
+      name: "calendar-tool",
+      description: "Check calendar events and scheduling",
     },
   ],
 });

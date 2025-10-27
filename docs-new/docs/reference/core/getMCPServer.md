@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.getMCPServer() '
-description: 'Documentation for the `Mastra.getMCPServer()` method in Mastra, which retrieves a specific MCP server instance by ID and optional version.'
+title: "Mastra.getMCPServer() "
+description: "Documentation for the `Mastra.getMCPServer()` method in Mastra, which retrieves a specific MCP server instance by ID and optional version."
 ---
 
 # Mastra.getMCPServer()
@@ -10,7 +10,7 @@ The `.getMCPServer()` method is used to retrieve a specific MCP server instance 
 ## Usage example
 
 ```typescript copy
-mastra.getMCPServer('1.2.0');
+mastra.getMCPServer("1.2.0");
 ```
 
 ## Parameters

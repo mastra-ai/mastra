@@ -1,5 +1,5 @@
 ---
-title: 'Workflow.createRunAsync() '
+title: "Workflow.createRunAsync() "
 description: Documentation for the `Workflow.createRunAsync()` method in workflows, which creates a new workflow run instance.
 ---
 
@@ -9,7 +9,7 @@ The `.createRunAsync()` method creates a new workflow run instance, allowing you
 
 :::note
 
-For the legacy `createRun()` method that returns an object with methods, see the [Legacy Workflows](/docs/reference/legacyWorkflows/createRun) section.
+For the legacy `createRun()` method that returns an object with methods, see the [Legacy Workflows](/docs/reference/client-js/workflows-legacy) section.
 
 :::
 
@@ -48,7 +48,7 @@ description:
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-const workflow = mastra.getWorkflow('workflow');
+const workflow = mastra.getWorkflow("workflow");
 
 const run = await workflow.createRunAsync();
 

@@ -1,5 +1,5 @@
 ---
-title: 'Human in the Loop '
+title: "Human in the Loop "
 description: Example of using Mastra to create workflows with human intervention points.
 ---
 
@@ -12,12 +12,12 @@ Use human-in-the-loop workflows to pause execution at specific steps for human i
 In this example, the workflow pauses until user input is received. Execution is suspended at a specific step and only resumes once the required confirmation is provided.
 
 ```typescript filename="src/mastra/workflows/example-human-in-loop.ts" showLineNumbers copy
-import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
 const step1 = createStep({
-  id: 'step-1',
-  description: 'passes value from input to output',
+  id: "step-1",
+  description: "passes value from input to output",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -33,8 +33,8 @@ const step1 = createStep({
 });
 
 const step2 = createStep({
-  id: 'step-2',
-  description: 'pauses until user confirms',
+  id: "step-2",
+  description: "pauses until user confirms",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -58,7 +58,7 @@ const step2 = createStep({
 });
 
 export const humanInLoopWorkflow = createWorkflow({
-  id: 'human-in-loop-workflow',
+  id: "human-in-loop-workflow",
   inputSchema: z.object({
     value: z.number(),
   }),

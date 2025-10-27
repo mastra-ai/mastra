@@ -295,9 +295,11 @@ describe('Agent Memory Tests', () => {
       await agent.generate([{ role: 'user', content: 'Give me JSON' }], {
         threadId,
         resourceId,
-        output: z.object({
-          result: z.string(),
-        }),
+        structuredOutput: {
+          schema: z.object({
+            result: z.string(),
+          }),
+        },
         modelSettings: {
           temperature: 0,
         },
@@ -493,7 +495,7 @@ describe('Agent Memory Tests', () => {
     // Agent with generateTitle: true
     const memoryWithTitle = new Memory({
       options: {
-        threads: { generateTitle: true },
+        generateTitle: true,
         semanticRecall: true,
         lastMessages: 10,
       },
@@ -520,7 +522,7 @@ describe('Agent Memory Tests', () => {
     // Agent with generateTitle: false
     const memoryNoTitle = new Memory({
       options: {
-        threads: { generateTitle: false },
+        generateTitle: false,
         semanticRecall: true,
         lastMessages: 10,
       },
@@ -720,9 +722,7 @@ describe('Agent memory test gemini', () => {
   const memory = new Memory({
     storage: new MockStore(),
     options: {
-      threads: {
-        generateTitle: false,
-      },
+      generateTitle: false,
       lastMessages: 2,
     },
   });

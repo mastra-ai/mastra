@@ -1,5 +1,5 @@
 ---
-title: 'Agent-Driven Metadata Filtering '
+title: "Agent-Driven Metadata Filtering "
 description: Example of using a Mastra agent in a RAG system to construct and apply metadata filters for document retrieval.
 ---
 
@@ -41,12 +41,12 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="index.ts"
-import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
-import { Agent } from '@mastra/core/agent';
-import { PgVector, PGVECTOR_PROMPT } from '@mastra/pg';
-import { createVectorQueryTool, MDocument } from '@mastra/rag';
-import { embedMany } from 'ai';
+import { openai } from "@ai-sdk/openai";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { PgVector, PGVECTOR_PROMPT } from "@mastra/pg";
+import { createVectorQueryTool, MDocument } from "@mastra/rag";
+import { embedMany } from "ai";
 ```
 
 ## Vector Query Tool Creation
@@ -55,10 +55,10 @@ Using createVectorQueryTool imported from @mastra/rag, you can create a tool tha
 
 ```typescript copy showLineNumbers{9} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
-  id: 'vectorQueryTool',
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
+  id: "vectorQueryTool",
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
   enableFilter: true,
 });
 ```
@@ -75,13 +75,15 @@ Each prompt includes:
 Create a document and process it into chunks with metadata:
 
 ```typescript copy showLineNumbers{17} filename="index.ts"
-const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`);
+const doc = MDocument.fromText(
+  `The Impact of Climate Change on Global Agriculture...`,
+);
 
 const chunks = await doc.chunk({
-  strategy: 'recursive',
+  strategy: "recursive",
   size: 512,
   overlap: 50,
-  separator: '\n',
+  separator: "\n",
   extract: {
     keywords: true, // Extracts keywords from each chunk
   },
@@ -98,9 +100,9 @@ const chunkMetadata = chunks?.map((chunk: any, index: number) => ({
   ...chunk.metadata,
   nested: {
     keywords: chunk.metadata.excerptKeywords
-      .replace('KEYWORDS:', '')
-      .split(',')
-      .map(k => k.trim()),
+      .replace("KEYWORDS:", "")
+      .split(",")
+      .map((k) => k.trim()),
     id: index,
   },
 }));
@@ -117,8 +119,8 @@ The agent requires both the vector query tool and a system prompt containing:
 
 ```typescript copy showLineNumbers{43} filename="index.ts"
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
+  name: "RAG Agent",
+  model: openai("gpt-4o-mini"),
   instructions: `
   You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
 
@@ -166,7 +168,7 @@ export const mastra = new Mastra({
   agents: { ragAgent },
   vectors: { pgVector },
 });
-const agent = mastra.getAgent('ragAgent');
+const agent = mastra.getAgent("ragAgent");
 ```
 
 ## Creating and Storing Embeddings
@@ -175,19 +177,19 @@ Generate embeddings and store them with metadata:
 
 ```typescript copy showLineNumbers{78} filename="index.ts"
 const { embeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 
-const vectorStore = mastra.getVector('pgVector');
+const vectorStore = mastra.getVector("pgVector");
 await vectorStore.createIndex({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   dimension: 1536,
 });
 
 // Store both embeddings and metadata together
 await vectorStore.upsert({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   vectors: embeddings,
   metadata: chunkMetadata,
 });
@@ -200,20 +202,22 @@ The `upsert` operation stores both the vector embeddings and their associated me
 Try different queries using metadata filters:
 
 ```typescript copy showLineNumbers{96} filename="index.ts"
-const queryOne = 'What are the adaptation strategies mentioned?';
+const queryOne = "What are the adaptation strategies mentioned?";
 const answerOne = await agent.generate(queryOne);
-console.log('\nQuery:', queryOne);
-console.log('Response:', answerOne.text);
+console.log("\nQuery:", queryOne);
+console.log("Response:", answerOne.text);
 
-const queryTwo = 'Show me recent sections. Check the "nested.id" field and return values that are greater than 2.';
+const queryTwo =
+  'Show me recent sections. Check the "nested.id" field and return values that are greater than 2.';
 const answerTwo = await agent.generate(queryTwo);
-console.log('\nQuery:', queryTwo);
-console.log('Response:', answerTwo.text);
+console.log("\nQuery:", queryTwo);
+console.log("Response:", answerTwo.text);
 
-const queryThree = 'Search the "text" field using regex operator to find sections containing "temperature".';
+const queryThree =
+  'Search the "text" field using regex operator to find sections containing "temperature".';
 const answerThree = await agent.generate(queryThree);
-console.log('\nQuery:', queryThree);
-console.log('Response:', answerThree.text);
+console.log("\nQuery:", queryThree);
+console.log("Response:", answerThree.text);
 ```
 
 <br />

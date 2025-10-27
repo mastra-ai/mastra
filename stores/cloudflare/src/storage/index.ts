@@ -90,6 +90,8 @@ export class CloudflareStore extends MastraStorage {
   public get supports() {
     const supports = super.supports;
     supports.getScoresBySpan = true;
+    supports.resourceWorkingMemory = true;
+    supports.selectByIncludeResourceScope = true;
     return supports;
   }
 

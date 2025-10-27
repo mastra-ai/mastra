@@ -1,6 +1,6 @@
 ---
-title: 'MastraAuthClerk Class'
-description: 'API reference for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication.'
+title: "MastraAuthClerk Class"
+description: "API reference for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication."
 ---
 
 # MastraAuthClerk Class
@@ -10,8 +10,8 @@ The `MastraAuthClerk` class provides authentication for Mastra applications usin
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { MastraAuthClerk } from '@mastra/auth-clerk';
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthClerk } from "@mastra/auth-clerk";
 
 export const mastra = new Mastra({
   // ..
