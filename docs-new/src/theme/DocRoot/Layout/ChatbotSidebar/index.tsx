@@ -110,7 +110,7 @@ export default function ChatbotSidebar({
           </div>
           {!hiddenChatbotSidebar && (
             <>
-              <div ref={contentRef} className="flex flex-col gap-8 h-full">
+              <div ref={contentRef} className="flex flex-col flex-1 gap-8 h-full">
                 {conversation.length > 0
                   ? conversation.map(({ answer: a, question: q, id, reaction }) => {
                       return (

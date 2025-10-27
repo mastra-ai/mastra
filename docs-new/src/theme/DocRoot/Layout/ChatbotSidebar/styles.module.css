@@ -30,6 +30,8 @@
     padding-top: calc(var(--ifm-navbar-height) - 6px);
     min-height: 100vh;
     max-height: 100vh;
+    display: flex;
+    flex-direction: column;
 
     scrollbar-width: none;
   -ms-overflow-style: none;
@@ -49,6 +51,7 @@
     gap: 1rem;
     padding-inline: 10px;
     height: 100%;
+    flex: 1;
   }
 
   .chatbotTitle {
