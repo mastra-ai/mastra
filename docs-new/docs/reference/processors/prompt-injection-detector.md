@@ -10,11 +10,10 @@ The `PromptInjectionDetector` is an **input processor** that detects and prevent
 ## Usage example
 
 ```typescript copy
-import { openai } from "@ai-sdk/openai";
 import { PromptInjectionDetector } from "@mastra/core/processors";
 
 const processor = new PromptInjectionDetector({
-  model: openai("gpt-4.1-nano"),
+  model: "openai/gpt-4.1-nano",
   threshold: 0.8,
   strategy: "rewrite",
   detectionTypes: ["injection", "jailbreak", "system-override"],
@@ -40,7 +39,7 @@ isOptional: false,
 content={[
 {
 name: "model",
-type: "MastraLanguageModel",
+type: "MastraModelConfig",
 description: "Model configuration for the detection agent",
 isOptional: false,
 },
@@ -104,17 +103,16 @@ isOptional: false,
 ## Extended usage example
 
 ```typescript filename="src/mastra/agents/secure-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { PromptInjectionDetector } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "secure-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new PromptInjectionDetector({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       detectionTypes: ["injection", "jailbreak", "system-override"],
       threshold: 0.8,
       strategy: "rewrite",

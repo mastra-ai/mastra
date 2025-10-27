@@ -10,11 +10,10 @@ The `ModerationProcessor` is a **hybrid processor** that can be used for both in
 ## Usage example
 
 ```typescript copy
-import { openai } from "@ai-sdk/openai";
 import { ModerationProcessor } from "@mastra/core/processors";
 
 const processor = new ModerationProcessor({
-  model: openai("gpt-4.1-nano"),
+  model: "openai/gpt-4.1-nano",
   threshold: 0.7,
   strategy: "block",
   categories: ["hate", "harassment", "violence"],
@@ -40,7 +39,7 @@ isOptional: false,
 content={[
 {
 name: "model",
-type: "MastraLanguageModel",
+type: "MastraModelConfig",
 description: "Model configuration for the moderation agent",
 isOptional: false,
 },
@@ -116,23 +115,53 @@ isOptional: false,
 
 ## Extended usage example
 
+### Input processing
+
 ```typescript filename="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { ModerationProcessor } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "moderated-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new ModerationProcessor({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       categories: ["hate", "harassment", "violence"],
       threshold: 0.7,
       strategy: "block",
       instructions: "Detect and flag inappropriate content in user messages",
       includeScores: true,
+    }),
+  ],
+});
+```
+
+### Output processing with batching
+
+When using `ModerationProcessor` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the moderator, reducing the number of LLM calls required for moderation.
+
+```typescript filename="src/mastra/agents/output-moderated-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import {
+  BatchPartsProcessor,
+  ModerationProcessor,
+} from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "output-moderated-agent",
+  instructions: "You are a helpful assistant",
+  model: "openai/gpt-4o-mini",
+  outputProcessors: [
+    // Batch stream parts first to reduce LLM calls
+    new BatchPartsProcessor({
+      batchSize: 10,
+    }),
+    // Then apply moderation on batched content
+    new ModerationProcessor({
+      model: "openai/gpt-4.1-nano",
+      strategy: "filter",
       chunkWindow: 1,
     }),
   ],

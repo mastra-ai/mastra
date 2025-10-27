@@ -10,11 +10,10 @@ The `LanguageDetector` is an **input processor** that identifies the language of
 ## Usage example
 
 ```typescript copy
-import { openai } from "@ai-sdk/openai";
 import { LanguageDetector } from "@mastra/core/processors";
 
 const processor = new LanguageDetector({
-  model: openai("gpt-4.1-nano"),
+  model: "openai/gpt-4.1-nano",
   targetLanguages: ["English", "en"],
   threshold: 0.8,
   strategy: "translate",
@@ -40,7 +39,7 @@ isOptional: false,
 content={[
 {
 name: "model",
-type: "MastraLanguageModel",
+type: "MastraModelConfig",
 description: "Model configuration for the detection/translation agent",
 isOptional: false,
 },
@@ -125,17 +124,16 @@ isOptional: false,
 ## Extended usage example
 
 ```typescript filename="src/mastra/agents/multilingual-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { LanguageDetector } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "multilingual-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new LanguageDetector({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       targetLanguages: ["English", "en"],
       threshold: 0.8,
       strategy: "translate",
