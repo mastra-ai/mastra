@@ -1,5 +1,5 @@
 ---
-title: 'Context Position '
+title: "Context Position "
 description: Example of using the Context Position metric to evaluate sequential ordering in responses.
 ---
 
@@ -24,20 +24,20 @@ npm install @mastra/evals
 In this example, the response directly answers the query using the first statement from the provided context. The surrounding context further supports the response with consistent and reinforcing information, resulting in strong positional alignment.
 
 ```typescript filename="src/example-high-position.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { ContextPositionMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ContextPositionMetric } from "@mastra/evals/llm";
 
-const metric = new ContextPositionMetric(openai('gpt-4o-mini'), {
+const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
   context: [
-    'The capital of France is Paris.',
-    'Paris has been the capital since 508 CE.',
+    "The capital of France is Paris.",
+    "Paris has been the capital since 508 CE.",
     "Paris serves as France's political center.",
-    'The capital city hosts the French government.',
+    "The capital city hosts the French government.",
   ],
 });
 
-const query = 'What is the capital of France?';
-const response = 'The capital of France is Paris.';
+const query = "What is the capital of France?";
+const response = "The capital of France is Paris.";
 
 const result = await metric.measure(query, response);
 
@@ -62,20 +62,21 @@ The output receives a perfect score because the relevant information appears at 
 In this example, the response combines highly relevant information with additional details drawn from later in the context. While the weight-related fact answers the query, the inclusion of less relevant facts reduces the response’s positional precision.
 
 ```typescript filename="src/example-mixed-position.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { ContextPositionMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ContextPositionMetric } from "@mastra/evals/llm";
 
-const metric = new ContextPositionMetric(openai('gpt-4o-mini'), {
+const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
   context: [
-    'Elephants are herbivores.',
-    'Adult elephants can weigh up to 13,000 pounds.',
-    'Elephants are the largest land animals.',
-    'Elephants eat plants and grass.',
+    "Elephants are herbivores.",
+    "Adult elephants can weigh up to 13,000 pounds.",
+    "Elephants are the largest land animals.",
+    "Elephants eat plants and grass.",
   ],
 });
 
-const query = 'How much do elephants weigh?';
-const response = 'Adult elephants can weigh up to 13,000 pounds, making them the largest land animals.';
+const query = "How much do elephants weigh?";
+const response =
+  "Adult elephants can weigh up to 13,000 pounds, making them the largest land animals.";
 
 const result = await metric.measure(query, response);
 
@@ -100,20 +101,21 @@ The output receives a mid-range score because the relevant information is presen
 In this example, the response references relevant information located at the end of the context. The earlier parts of the context introduce unrelated descriptive details, which disrupt the expected sequence of supporting information.
 
 ```typescript filename="src/example-low-position.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { ContextPositionMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ContextPositionMetric } from "@mastra/evals/llm";
 
-const metric = new ContextPositionMetric(openai('gpt-4o-mini'), {
+const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
   context: [
-    'Rainbows appear in the sky.',
-    'Rainbows have different colors.',
-    'Rainbows are curved in shape.',
-    'Rainbows form when sunlight hits water droplets.',
+    "Rainbows appear in the sky.",
+    "Rainbows have different colors.",
+    "Rainbows are curved in shape.",
+    "Rainbows form when sunlight hits water droplets.",
   ],
 });
 
-const query = 'How do rainbows form?';
-const response = 'Rainbows are created when sunlight interacts with water droplets in the air.';
+const query = "How do rainbows form?";
+const response =
+  "Rainbows are created when sunlight interacts with water droplets in the air.";
 
 const result = await metric.measure(query, response);
 
@@ -138,8 +140,8 @@ The output receives a low score because the key supporting information appears l
 You can create a `ContextPositionMetric` instance by providing a `context` array that represents the expected sequence of information. You can also configure optional parameters such as `scale` to set the maximum possible score.
 
 ```typescript showLineNumbers copy
-const metric = new ContextPositionMetric(openai('gpt-4o-mini'), {
-  context: [''],
+const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
+  context: [""],
   scale: 1,
 });
 ```

@@ -1,6 +1,6 @@
 ---
-title: 'Reference: Language Detector '
-description: 'Documentation for the LanguageDetector in Mastra, which detects language and can translate content in AI responses.'
+title: "Language Detector"
+description: "Documentation for the LanguageDetector in Mastra, which detects language and can translate content in AI responses."
 ---
 
 # LanguageDetector
@@ -10,14 +10,14 @@ The `LanguageDetector` is an **input processor** that identifies the language of
 ## Usage example
 
 ```typescript copy
-import { openai } from '@ai-sdk/openai';
-import { LanguageDetector } from '@mastra/core/processors';
+import { openai } from "@ai-sdk/openai";
+import { LanguageDetector } from "@mastra/core/processors";
 
 const processor = new LanguageDetector({
-  model: openai('gpt-4.1-nano'),
-  targetLanguages: ['English', 'en'],
+  model: openai("gpt-4.1-nano"),
+  targetLanguages: ["English", "en"],
   threshold: 0.8,
-  strategy: 'translate',
+  strategy: "translate",
 });
 ```
 
@@ -125,25 +125,26 @@ isOptional: false,
 ## Extended usage example
 
 ```typescript filename="src/mastra/agents/multilingual-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { LanguageDetector } from '@mastra/core/processors';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { LanguageDetector } from "@mastra/core/processors";
 
 export const agent = new Agent({
-  name: 'multilingual-agent',
-  instructions: 'You are a helpful assistant',
-  model: openai('gpt-4o-mini'),
+  name: "multilingual-agent",
+  instructions: "You are a helpful assistant",
+  model: openai("gpt-4o-mini"),
   inputProcessors: [
     new LanguageDetector({
-      model: openai('gpt-4.1-nano'),
-      targetLanguages: ['English', 'en'],
+      model: openai("gpt-4.1-nano"),
+      targetLanguages: ["English", "en"],
       threshold: 0.8,
-      strategy: 'translate',
+      strategy: "translate",
       preserveOriginal: true,
-      instructions: 'Detect language and translate non-English content to English while preserving original intent',
+      instructions:
+        "Detect language and translate non-English content to English while preserving original intent",
       minTextLength: 10,
       includeDetectionDetails: true,
-      translationQuality: 'quality',
+      translationQuality: "quality",
     }),
   ],
 });

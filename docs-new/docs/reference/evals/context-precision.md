@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Context Precision '
+title: "Context Precision"
 description: Documentation for the Context Precision Metric in Mastra, which evaluates the relevance and precision of retrieved context nodes for generating expected outputs.
 ---
 
@@ -16,23 +16,23 @@ The `ContextPrecisionMetric` class evaluates how relevant and precise the retrie
 ## Basic Usage
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { ContextPrecisionMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ContextPrecisionMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new ContextPrecisionMetric(model, {
   context: [
-    'Photosynthesis is a biological process used by plants to create energy from sunlight.',
-    'Plants need water and nutrients from the soil to grow.',
-    'The process of photosynthesis produces oxygen as a byproduct.',
+    "Photosynthesis is a biological process used by plants to create energy from sunlight.",
+    "Plants need water and nutrients from the soil to grow.",
+    "The process of photosynthesis produces oxygen as a byproduct.",
   ],
 });
 
 const result = await metric.measure(
-  'What is photosynthesis?',
-  'Photosynthesis is the process by which plants convert sunlight into energy.',
+  "What is photosynthesis?",
+  "Photosynthesis is the process by which plants convert sunlight into energy.",
 );
 
 console.log(result.score); // Precision score from 0-1
@@ -157,24 +157,24 @@ Final score: `Mean Average Precision * scale`
 ## Example with Analysis
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { ContextPrecisionMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ContextPrecisionMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new ContextPrecisionMetric(model, {
   context: [
-    'Exercise strengthens the heart and improves blood circulation.',
-    'A balanced diet is important for health.',
-    'Regular physical activity reduces stress and anxiety.',
-    'Exercise equipment can be expensive.',
+    "Exercise strengthens the heart and improves blood circulation.",
+    "A balanced diet is important for health.",
+    "Regular physical activity reduces stress and anxiety.",
+    "Exercise equipment can be expensive.",
   ],
 });
 
 const result = await metric.measure(
-  'What are the benefits of exercise?',
-  'Regular exercise improves cardiovascular health and mental wellbeing.',
+  "What are the benefits of exercise?",
+  "Regular exercise improves cardiovascular health and mental wellbeing.",
 );
 
 // Example output:

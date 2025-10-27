@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Keywords AI Integration '
+title: "Keywords AI Integration"
 description: Documentation for integrating Keywords AI (an observability platform for LLM applications) with Mastra.
 ---
 

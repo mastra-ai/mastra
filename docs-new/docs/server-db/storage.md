@@ -31,12 +31,12 @@ Mastra provides different storage providers, but you can treat them as interchan
 Mastra can be configured with a default storage option:
 
 ```typescript copy
-import { Mastra } from '@mastra/core/mastra';
-import { LibSQLStore } from '@mastra/libsql';
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLStore } from "@mastra/libsql";
 
 const mastra = new Mastra({
   storage: new LibSQLStore({
-    url: 'file:./mastra.db',
+    url: "file:./mastra.db",
   }),
 });
 ```
@@ -481,18 +481,26 @@ Messages are stored in a V2 format internally, which is roughly equivalent to th
 
 ```typescript copy
 // Get messages in the default V1 format (roughly equivalent to AI SDK's CoreMessage format)
-const messagesV1 = await mastra.getStorage().getMessages({ threadId: 'your-thread-id' });
+const messagesV1 = await mastra
+  .getStorage()
+  .getMessages({ threadId: "your-thread-id" });
 
 // Get messages in the V2 format (roughly equivalent to AI SDK's UIMessage format)
-const messagesV2 = await mastra.getStorage().getMessages({ threadId: 'your-thread-id', format: 'v2' });
+const messagesV2 = await mastra
+  .getStorage()
+  .getMessages({ threadId: "your-thread-id", format: "v2" });
 ```
 
 You can also retrieve messages using an array of message IDs. Note that unlike `getMessages`, this defaults to the V2 format:
 
 ```typescript copy
-const messagesV1 = await mastra.getStorage().getMessagesById({ messageIds: messageIdArr, format: 'v1' });
+const messagesV1 = await mastra
+  .getStorage()
+  .getMessagesById({ messageIds: messageIdArr, format: "v1" });
 
-const messagesV2 = await mastra.getStorage().getMessagesById({ messageIds: messageIdArr });
+const messagesV2 = await mastra
+  .getStorage()
+  .getMessagesById({ messageIds: messageIdArr });
 ```
 
 ## Storage Providers

@@ -1,6 +1,6 @@
 ---
-title: 'Azure App Services'
-description: 'Deploy your Mastra applications to Azure App Services.'
+title: "Azure App Services"
+description: "Deploy your Mastra applications to Azure App Services."
 ---
 
 # Azure App Services
@@ -113,10 +113,10 @@ You can now connect to your Mastra server from your client application using a `
 Refer to the [`MastraClient` documentation](/docs/server-db/mastra-client) for more information.
 
 ```typescript copy showLineNumbers
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from "@mastra/client-js";
 
 const mastraClient = new MastraClient({
-  baseUrl: 'https://<your-app-name>.azurewebsites.net',
+  baseUrl: "https://<your-app-name>.azurewebsites.net",
 });
 ```
 

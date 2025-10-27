@@ -1,5 +1,5 @@
 ---
-title: 'Workflow.waitForEvent() '
+title: "Workflow.waitForEvent() "
 description: Documentation for the `Workflow.waitForEvent()` method in workflows, which pauses execution until an event is received.
 ---
 
@@ -10,7 +10,7 @@ The `.waitForEvent()` method pauses execution until an event is received.
 ## Usage example
 
 ```typescript copy
-workflow.waitForEvent('event-name', step1);
+workflow.waitForEvent("event-name", step1);
 ```
 
 ## Parameters

@@ -1,5 +1,5 @@
 ---
-title: 'With Next.js '
+title: "With Next.js "
 description: A step-by-step guide to integrating Mastra with Next.js.
 sidebar_position: 2
 ---
@@ -68,10 +68,10 @@ OPENAI_API_KEY=<your-api-key>
 Add to your `next.config.ts`:
 
 ```typescript filename="next.config.ts" showLineNumbers copy
-import type { NextConfig } from 'next';
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['@mastra/*'],
+  serverExternalPackages: ["@mastra/*"],
 };
 
 export default nextConfig;
@@ -98,13 +98,13 @@ touch app/test/action.ts
 ```
 
 ```typescript filename="app/test/action.ts" showLineNumbers copy
-'use server';
+"use server";
 
-import { mastra } from '../../mastra';
+import { mastra } from "../../mastra";
 
 export async function getWeatherInfo(formData: FormData) {
-  const city = formData.get('city')?.toString();
-  const agent = mastra.getAgent('weatherAgent');
+  const city = formData.get("city")?.toString();
+  const agent = mastra.getAgent("weatherAgent");
 
   const result = await agent.generate(`What's the weather like in ${city}?`);
 
@@ -235,10 +235,10 @@ OPENAI_API_KEY=<your-api-key>
 Add to your `next.config.ts`:
 
 ```typescript filename="next.config.ts" showLineNumbers copy
-import type { NextConfig } from 'next';
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['@mastra/*'],
+  serverExternalPackages: ["@mastra/*"],
 };
 
 export default nextConfig;
@@ -257,13 +257,16 @@ touch pages/api/test.ts
 ```
 
 ```typescript filename="pages/api/test.ts" showLineNumbers copy
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiRequest, NextApiResponse } from "next";
 
-import { mastra } from '../../mastra';
+import { mastra } from "../../mastra";
 
-export default async function getWeatherInfo(req: NextApiRequest, res: NextApiResponse) {
+export default async function getWeatherInfo(
+  req: NextApiRequest,
+  res: NextApiResponse,
+) {
   const city = req.body.city;
-  const agent = mastra.getAgent('weatherAgent');
+  const agent = mastra.getAgent("weatherAgent");
 
   const result = await agent.generate(`What's the weather like in ${city}?`);
 

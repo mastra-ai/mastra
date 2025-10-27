@@ -1,5 +1,5 @@
 ---
-title: 'Optimizing Information Density '
+title: "Optimizing Information Density "
 description: Example of implementing a RAG system in Mastra to optimize information density and deduplicate data using LLM-based processing.
 ---
 
@@ -41,12 +41,16 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="index.ts"
-import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
-import { Agent } from '@mastra/core/agent';
-import { PgVector } from '@mastra/pg';
-import { MDocument, createVectorQueryTool, createDocumentChunkerTool } from '@mastra/rag';
-import { embedMany } from 'ai';
+import { openai } from "@ai-sdk/openai";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { PgVector } from "@mastra/pg";
+import {
+  MDocument,
+  createVectorQueryTool,
+  createDocumentChunkerTool,
+} from "@mastra/rag";
+import { embedMany } from "ai";
 ```
 
 ## Tool Creation
@@ -57,9 +61,9 @@ Using createVectorQueryTool imported from @mastra/rag, you can create a tool tha
 
 ```typescript copy showLineNumbers{8} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
 });
 ```
 
@@ -73,10 +77,10 @@ const doc = MDocument.fromText(yourText);
 const documentChunkerTool = createDocumentChunkerTool({
   doc,
   params: {
-    strategy: 'recursive',
+    strategy: "recursive",
     size: 512,
     overlap: 25,
-    separator: '\n',
+    separator: "\n",
   },
 });
 ```
@@ -87,14 +91,14 @@ Set up a single Mastra agent that can handle both querying and cleaning:
 
 ```typescript copy showLineNumbers{26} filename="index.ts"
 const ragAgent = new Agent({
-  name: 'RAG Agent',
+  name: "RAG Agent",
   instructions: `You are a helpful assistant that handles both querying and cleaning documents.
     When cleaning: Process, clean, and label data, remove irrelevant information and deduplicate content while preserving key facts.
     When querying: Provide answers based on the available context. Keep your answers concise and relevant.
     
     Important: When asked to answer a question, please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `,
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   tools: {
     vectorQueryTool,
     documentChunkerTool,
@@ -115,7 +119,7 @@ export const mastra = new Mastra({
   agents: { ragAgent },
   vectors: { pgVector },
 });
-const agent = mastra.getAgent('ragAgent');
+const agent = mastra.getAgent("ragAgent");
 ```
 
 ## Document Processing
@@ -124,25 +128,25 @@ Chunk the initial document and create embeddings:
 
 ```typescript copy showLineNumbers{49} filename="index.ts"
 const chunks = await doc.chunk({
-  strategy: 'recursive',
+  strategy: "recursive",
   size: 256,
   overlap: 50,
-  separator: '\n',
+  separator: "\n",
 });
 
 const { embeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 
-const vectorStore = mastra.getVector('pgVector');
+const vectorStore = mastra.getVector("pgVector");
 await vectorStore.createIndex({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   dimension: 1536,
 });
 
 await vectorStore.upsert({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   vectors: embeddings,
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
@@ -154,10 +158,10 @@ Let's try querying the raw data to establish a baseline:
 
 ```typescript copy showLineNumbers{73} filename="index.ts"
 // Generate response using the original embeddings
-const query = 'What are all the technologies mentioned for space exploration?';
+const query = "What are all the technologies mentioned for space exploration?";
 const originalResponse = await agent.generate(query);
-console.log('\nQuery:', query);
-console.log('Response:', originalResponse.text);
+console.log("\nQuery:", query);
+console.log("Response:", originalResponse.text);
 ```
 
 ## Data Optimization
@@ -171,26 +175,26 @@ const newChunks = await agent.generate(chunkPrompt);
 const updatedDoc = MDocument.fromText(newChunks.text);
 
 const updatedChunks = await updatedDoc.chunk({
-  strategy: 'recursive',
+  strategy: "recursive",
   size: 256,
   overlap: 50,
-  separator: '\n',
+  separator: "\n",
 });
 
 const { embeddings: cleanedEmbeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: updatedChunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: updatedChunks.map((chunk) => chunk.text),
 });
 
 // Update the vector store with cleaned embeddings
-await vectorStore.deleteIndex({ indexName: 'embeddings' });
+await vectorStore.deleteIndex({ indexName: "embeddings" });
 await vectorStore.createIndex({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   dimension: 1536,
 });
 
 await vectorStore.upsert({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   vectors: cleanedEmbeddings,
   metadata: updatedChunks?.map((chunk: any) => ({ text: chunk.text })),
 });
@@ -203,8 +207,8 @@ Query the data again after cleaning to observe any differences in the response:
 ```typescript copy showLineNumbers{109} filename="index.ts"
 // Query again with cleaned embeddings
 const cleanedResponse = await agent.generate(query);
-console.log('\nQuery:', query);
-console.log('Response:', cleanedResponse.text);
+console.log("\nQuery:", query);
+console.log("Response:", cleanedResponse.text);
 ```
 
 <br />

@@ -1,6 +1,6 @@
 ---
-title: 'Licensing'
-description: 'Mastra License'
+title: "Licensing"
+description: "Mastra License"
 sidebar_position: 2
 ---
 

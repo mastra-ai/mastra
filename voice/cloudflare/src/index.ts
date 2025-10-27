@@ -66,37 +66,35 @@ export class CloudflareVoice extends MastraVoice {
   }
 
   async listen(audioStream: NodeJS.ReadableStream, options?: CloudflareListenOptions): Promise<string> {
-    return this.traced(async () => {
-      // Collect audio data into buffer
-      const chunks: Buffer[] = [];
-      for await (const chunk of audioStream) {
-        if (typeof chunk === 'string') {
-          chunks.push(Buffer.from(chunk));
-        } else {
-          chunks.push(chunk);
-        }
-      }
-      const audioBuffer = Buffer.concat(chunks);
-      const base64Audio = audioBuffer.toString('base64');
-
-      const model = options?.model || defaultListeningModel.model;
-
-      // Use native binding if available, otherwise use REST API
-      if (this.binding) {
-        // Using Workers AI binding
-        const response = (await this.binding.run(model, {
-          audio: base64Audio,
-        })) as CloudflareListenOutput;
-        return response.text;
-      } else if (this.client) {
-        // Using REST API client
-        const payload = { audio: base64Audio, account_id: options?.account_id || defaultListeningModel.account_id };
-        const response = (await this.client.ai.run(model, payload)) as any;
-        return response.text as string;
+    // Collect audio data into buffer
+    const chunks: Buffer[] = [];
+    for await (const chunk of audioStream) {
+      if (typeof chunk === 'string') {
+        chunks.push(Buffer.from(chunk));
       } else {
-        throw new Error('Neither binding nor REST client is configured');
+        chunks.push(chunk);
       }
-    }, 'voice.cloudflare.listen')();
+    }
+    const audioBuffer = Buffer.concat(chunks);
+    const base64Audio = audioBuffer.toString('base64');
+
+    const model = options?.model || defaultListeningModel.model;
+
+    // Use native binding if available, otherwise use REST API
+    if (this.binding) {
+      // Using Workers AI binding
+      const response = (await this.binding.run(model, {
+        audio: base64Audio,
+      })) as CloudflareListenOutput;
+      return response.text;
+    } else if (this.client) {
+      // Using REST API client
+      const payload = { audio: base64Audio, account_id: options?.account_id || defaultListeningModel.account_id };
+      const response = (await this.client.ai.run(model, payload)) as any;
+      return response.text as string;
+    } else {
+      throw new Error('Neither binding nor REST client is configured');
+    }
   }
   async speak(): Promise<NodeJS.ReadableStream> {
     throw new Error('This feature is not yet implemented.');

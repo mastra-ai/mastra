@@ -1,5 +1,5 @@
 ---
-title: 'Workflow Class '
+title: "Workflow Class "
 description: Documentation for the `Workflow` class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 ---
 
@@ -10,11 +10,11 @@ The `Workflow` class enables you to create state machines for complex sequences 
 ## Usage example
 
 ```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
 
 export const workflow = createWorkflow({
-  id: 'test-workflow',
+  id: "test-workflow",
   inputSchema: z.object({
     value: z.string(),
   }),

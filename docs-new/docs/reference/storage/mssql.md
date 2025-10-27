@@ -1,5 +1,5 @@
 ---
-title: 'MSSQL Storage '
+title: "MSSQL Storage "
 description: Documentation for the MSSQL storage implementation in Mastra.
 ---
 
@@ -16,7 +16,7 @@ npm install @mastra/mssql@latest
 ## Usage
 
 ```typescript copy showLineNumbers
-import { MSSQLStore } from '@mastra/mssql';
+import { MSSQLStore } from "@mastra/mssql";
 
 const storage = new MSSQLStore({
   connectionString: process.env.DATABASE_URL,
@@ -49,36 +49,36 @@ isOptional: true,
 You can instantiate `MSSQLStore` in the following ways:
 
 ```ts
-import { MSSQLStore } from '@mastra/mssql';
+import { MSSQLStore } from "@mastra/mssql";
 
 // Using a connection string only
 const store1 = new MSSQLStore({
-  connectionString: 'mssql://user:password@localhost:1433/mydb',
+  connectionString: "mssql://user:password@localhost:1433/mydb",
 });
 
 // Using a connection string with a custom schema name
 const store2 = new MSSQLStore({
-  connectionString: 'mssql://user:password@localhost:1433/mydb',
-  schemaName: 'custom_schema', // optional
+  connectionString: "mssql://user:password@localhost:1433/mydb",
+  schemaName: "custom_schema", // optional
 });
 
 // Using individual connection parameters
 const store4 = new MSSQLStore({
-  server: 'localhost',
+  server: "localhost",
   port: 1433,
-  database: 'mydb',
-  user: 'user',
-  password: 'password',
+  database: "mydb",
+  user: "user",
+  password: "password",
 });
 
 // Individual parameters with schemaName
 const store5 = new MSSQLStore({
-  server: 'localhost',
+  server: "localhost",
   port: 1433,
-  database: 'mydb',
-  user: 'user',
-  password: 'password',
-  schemaName: 'custom_schema', // optional
+  database: "mydb",
+  user: "user",
+  password: "password",
+  schemaName: "custom_schema", // optional
 });
 ```
 

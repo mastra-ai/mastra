@@ -1,6 +1,6 @@
 ---
-title: 'Memory.deleteMessages() '
-description: 'Documentation for the `Memory.deleteMessages()` method in Mastra, which deletes multiple messages by their IDs.'
+title: "Memory.deleteMessages() "
+description: "Documentation for the `Memory.deleteMessages()` method in Mastra, which deletes multiple messages by their IDs."
 ---
 
 # Memory.deleteMessages()
@@ -10,7 +10,7 @@ The `.deleteMessages()` method deletes multiple messages by their IDs.
 ## Usage Example
 
 ```typescript copy
-await memory?.deleteMessages(['671ae63f-3a91-4082-a907-fe7de78e10ec']);
+await memory?.deleteMessages(["671ae63f-3a91-4082-a907-fe7de78e10ec"]);
 ```
 
 ## Parameters
@@ -41,15 +41,17 @@ description: "A promise that resolves when all messages are deleted",
 ## Extended usage example
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
-import { mastra } from './mastra';
-import { UIMessageWithMetadata } from '@mastra/core/agent';
+import { mastra } from "./mastra";
+import { UIMessageWithMetadata } from "@mastra/core/agent";
 
-const agent = mastra.getAgent('agent');
+const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
-const { uiMessages } = await memory!.query({ threadId: 'thread-123' });
+const { uiMessages } = await memory!.query({ threadId: "thread-123" });
 
-const messageIds = uiMessages.map((message: UIMessageWithMetadata) => message.id);
+const messageIds = uiMessages.map(
+  (message: UIMessageWithMetadata) => message.id,
+);
 await memory?.deleteMessages([...messageIds]);
 ```
 

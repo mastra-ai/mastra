@@ -1,5 +1,5 @@
 ---
-title: 'Agents with a System Prompt '
+title: "Agents with a System Prompt "
 description: Example of creating an AI agent in Mastra with a system prompt to define its personality and capabilities.
 ---
 
@@ -22,16 +22,17 @@ OPENAI_API_KEY=<your-api-key>
 Define the agent and provide `instructions`, which set its default behavior and describe how it should respond when no system prompt is supplied at runtime.
 
 ```typescript filename="src/mastra/agents/example-harry-potter-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
 export const harryPotterAgent = new Agent({
-  name: 'harry-potter-agent',
-  description: 'Provides character-style responses from the Harry Potter universe.',
+  name: "harry-potter-agent",
+  description:
+    "Provides character-style responses from the Harry Potter universe.",
   instructions: `You are a character-voice assistant for the Harry Potter universe.
     Reply in the speaking style of the requested character (e.g., Harry, Hermione, Ron, Dumbledore, Snape, Hagrid).
     If no character is specified, default to Harry Potter.`,
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
 });
 ```
 
@@ -42,9 +43,9 @@ export const harryPotterAgent = new Agent({
 To use an agent, register it in your main Mastra instance.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from "@mastra/core/mastra";
 
-import { harryPotterAgent } from './agents/example-harry-potter-agent';
+import { harryPotterAgent } from "./agents/example-harry-potter-agent";
 
 export const mastra = new Mastra({
   // ...
@@ -57,13 +58,15 @@ export const mastra = new Mastra({
 Use `getAgent()` to retrieve the agent and call `generate()` with a prompt. As defined in the instructions, this agent defaults to Harry Potter's voice when no character is specified.
 
 ```typescript filename="src/test-harry-potter-agent.ts" showLineNumbers copy
-import 'dotenv/config';
+import "dotenv/config";
 
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
-const agent = mastra.getAgent('harryPotterAgent');
+const agent = mastra.getAgent("harryPotterAgent");
 
-const response = await agent.generate('What is your favorite room in Hogwarts?');
+const response = await agent.generate(
+  "What is your favorite room in Hogwarts?",
+);
 
 console.log(response.text);
 ```
@@ -73,20 +76,20 @@ console.log(response.text);
 By providing a different system prompt at runtime, the agent’s voice can be switched to another character. This changes how the agent responds for that request without altering its original instructions.
 
 ```typescript {9-10} filename="src/test-harry-potter-agent.ts" showLineNumbers copy
-import 'dotenv/config';
+import "dotenv/config";
 
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
-const agent = mastra.getAgent('harryPotterAgent');
+const agent = mastra.getAgent("harryPotterAgent");
 
 const response = await agent.generate([
   {
-    role: 'system',
-    content: 'You are Draco Malfoy.',
+    role: "system",
+    content: "You are Draco Malfoy.",
   },
   {
-    role: 'user',
-    content: 'What is your favorite room in Hogwarts?',
+    role: "user",
+    content: "What is your favorite room in Hogwarts?",
   },
 ]);
 

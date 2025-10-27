@@ -1,6 +1,6 @@
 ---
-title: 'Gateways'
-description: 'Access AI models through gateway providers with caching, rate limiting, and analytics.'
+title: "Gateways"
+description: "Access AI models through gateway providers with caching, rate limiting, and analytics."
 ---
 
 # Gateway Providers

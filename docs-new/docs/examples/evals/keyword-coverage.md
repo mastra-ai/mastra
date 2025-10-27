@@ -1,5 +1,5 @@
 ---
-title: 'Keyword Coverage '
+title: "Keyword Coverage "
 description: Example of using the Keyword Coverage metric to evaluate how well responses cover important keywords from input text.
 ---
 
@@ -24,12 +24,13 @@ npm install @mastra/evals
 In this example, the response fully reflects the key terms from the input. All required keywords are present, resulting in complete coverage with no omissions.
 
 ```typescript filename="src/example-full-keyword-coverage.ts" showLineNumbers copy
-import { KeywordCoverageMetric } from '@mastra/evals/nlp';
+import { KeywordCoverageMetric } from "@mastra/evals/nlp";
 
 const metric = new KeywordCoverageMetric();
 
-const query = 'JavaScript frameworks like React and Vue.';
-const response = 'Popular JavaScript frameworks include React and Vue for web development';
+const query = "JavaScript frameworks like React and Vue.";
+const response =
+  "Popular JavaScript frameworks include React and Vue for web development";
 
 const result = await metric.measure(query, response);
 
@@ -55,12 +56,13 @@ A score of 1 indicates that all expected keywords were found in the response. Th
 In this example, the response includes some, but not all, of the important keywords from the input. The score reflects partial coverage, with key terms either missing or only partially matched.
 
 ```typescript filename="src/example-partial-keyword-coverage.ts" showLineNumbers copy
-import { KeywordCoverageMetric } from '@mastra/evals/nlp';
+import { KeywordCoverageMetric } from "@mastra/evals/nlp";
 
 const metric = new KeywordCoverageMetric();
 
-const query = 'TypeScript offers interfaces, generics, and type inference.';
-const response = 'TypeScript provides type inference and some advanced features';
+const query = "TypeScript offers interfaces, generics, and type inference.";
+const response =
+  "TypeScript provides type inference and some advanced features";
 
 const result = await metric.measure(query, response);
 
@@ -86,12 +88,13 @@ A score of 0.5 indicates that only half of the expected keywords were found in t
 In this example, the response includes very few of the important keywords from the input. The score reflects minimal coverage, with most key terms missing or unaccounted for.
 
 ```typescript filename="src/example-minimal-keyword-coverage.ts" showLineNumbers copy
-import { KeywordCoverageMetric } from '@mastra/evals/nlp';
+import { KeywordCoverageMetric } from "@mastra/evals/nlp";
 
 const metric = new KeywordCoverageMetric();
 
-const query = 'Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning';
-const response = 'Data preparation is important for models';
+const query =
+  "Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning";
+const response = "Data preparation is important for models";
 
 const result = await metric.measure(query, response);
 
