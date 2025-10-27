@@ -20,25 +20,18 @@ function patchRecordSchemas(schema: any): any {
   if ((schema as any)[PATCHED]) return schema;
   (schema as any)[PATCHED] = true;
 
-  // Check both def locations (direct and nested in _zod)
-  const zodDef = schema._zod?.def;
-  const directDef = schema.def;
+  // Check the _zod.def location (v4 structure)
+  const def = schema._zod?.def;
 
   // Fix record schemas with missing valueType
-  if (zodDef?.type === 'record' && zodDef.keyType && !zodDef.valueType) {
+  if (def?.type === 'record' && def.keyType && !def.valueType) {
     // The bug: z.record(valueSchema) puts the value in keyType instead of valueType
     // Fix: move it to valueType and set keyType to string (the default)
-    zodDef.valueType = zodDef.keyType;
-    zodDef.keyType = (z as any).string();
-  }
-
-  if (directDef?.type === 'record' && directDef.keyType && !directDef.valueType) {
-    directDef.valueType = directDef.keyType;
-    directDef.keyType = (z as any).string();
+    def.valueType = def.keyType;
+    def.keyType = (z as any).string();
   }
 
   // Recursively patch nested schemas
-  const def = zodDef || directDef;
   if (!def) return schema;
 
   if (def.type === 'object' && def.shape) {
