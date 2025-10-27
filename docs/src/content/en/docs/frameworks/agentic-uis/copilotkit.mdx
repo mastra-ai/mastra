@@ -47,7 +47,7 @@ In your React frontend, install the required CopilotKit packages:
 
 Create a CopilotKit component in your React frontend:
 
-```tsx filename="components/copilotkit-component.tsx" showLineNumbers copy
+```tsx filename="components/copilotkit-component.tsx" copy
 import { CopilotChat } from "@copilotkit/react-ui";
 import { CopilotKit } from "@copilotkit/react-core";
 import "@copilotkit/react-ui/styles.css";
@@ -97,9 +97,9 @@ In your Mastra server, install additional packages for CopilotKit integration:
 
 Configure your Mastra instance to include CopilotKit's runtime endpoint:
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy {5-8,12-28}
+```typescript filename="src/mastra/index.ts" copy {2,5-8,12-28}
 import { Mastra } from "@mastra/core/mastra";
-import { registerCopilotKit } from "@ag-ui/mastra";
+import { registerCopilotKit } from "@ag-ui/mastra/copilotkit";
 import { weatherAgent } from "./agents/weather-agent";
 
 type WeatherRuntimeContext = {
@@ -133,7 +133,7 @@ export const mastra = new Mastra({
 
 Use the component in your React app with your Mastra server URL:
 
-```tsx filename="App.tsx" showLineNumbers copy {5}
+```tsx filename="App.tsx" copy {5}
 import { CopilotKitComponent } from "./components/copilotkit-component";
 
 function App() {
@@ -144,6 +144,8 @@ function App() {
 
 export default App;
 ```
+
+Now start both the Mastra server and your frontend.
 
   </Steps>
   </Tabs.Tab>
@@ -177,7 +179,7 @@ In your Next.js app, install the required packages:
 
 Create a CopilotKit component:
 
-```tsx filename="components/copilotkit-component.tsx" showLineNumbers copy
+```tsx filename="components/copilotkit-component.tsx" copy
 'use client';
 import { CopilotChat } from "@copilotkit/react-ui";
 import { CopilotKit } from "@copilotkit/react-core";
@@ -212,7 +214,7 @@ There are two approaches for the API route determined by how you're integrating 
 
 Create an API route that connects to local Mastra agents.
 
-```typescript filename="app/api/copilotkit/route.ts" showLineNumbers copy {1-7,11-26}
+```typescript filename="app/api/copilotkit/route.ts" copy {1-7,11-26}
 import { mastra } from "../../mastra";
 import {
   CopilotRuntime,
@@ -269,7 +271,7 @@ Install the Mastra Client SDK.
 
 Create an API route that connects to remote Mastra agents:
 
-```typescript filename="app/api/copilotkit/route.ts" showLineNumbers copy {1-7,12-26}
+```typescript filename="app/api/copilotkit/route.ts" copy {1-7,12-26}
 import { MastraClient } from "@mastra/client-js";
 import {
   CopilotRuntime,
@@ -306,7 +308,7 @@ export const POST = async (req: NextRequest) => {
 
 Use the component with the local API endpoint:
 
-```tsx filename="App.tsx" showLineNumbers copy {5}
+```tsx filename="App.tsx" copy {5}
 import { CopilotKitComponent } from "./components/copilotkit-component";
 
 function App() {

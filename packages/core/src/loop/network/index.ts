@@ -1,9 +1,10 @@
 import z from 'zod';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
-import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
+import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraMessageV2, MessageListInput } from '../../agent/message-list';
+import type { TracingContext } from '../../ai-tracing/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { RuntimeContext } from '../../runtime-context';
 import { ChunkFrom } from '../../stream';
@@ -109,6 +110,8 @@ export async function prepareMemoryStep({
   routingAgent,
   runtimeContext,
   generateId,
+  tracingContext,
+  memoryConfig,
 }: {
   threadId: string;
   resourceId: string;
@@ -116,31 +119,43 @@ export async function prepareMemoryStep({
   routingAgent: Agent;
   runtimeContext: RuntimeContext;
   generateId: () => string;
+  tracingContext?: TracingContext;
+  memoryConfig?: any;
 }) {
   const memory = await routingAgent.getMemory({ runtimeContext });
   let thread = await memory?.getThreadById({ threadId });
   if (!thread) {
     thread = await memory?.createThread({
       threadId,
-      title: '',
+      title: `New Thread ${new Date().toISOString()}`,
       resourceId,
     });
   }
+  let userMessage: string | undefined;
+
+  // Parallelize async operations
+  const promises: Promise<any>[] = [];
+
   if (typeof messages === 'string') {
-    await memory?.saveMessages({
-      messages: [
-        {
-          id: generateId(),
-          type: 'text',
-          role: 'user',
-          content: { parts: [{ type: 'text', text: messages }], format: 2 },
-          createdAt: new Date(),
-          threadId: thread?.id,
-          resourceId: thread?.resourceId,
-        },
-      ] as MastraMessageV2[],
-      format: 'v2',
-    });
+    userMessage = messages;
+    if (memory) {
+      promises.push(
+        memory.saveMessages({
+          messages: [
+            {
+              id: generateId(),
+              type: 'text',
+              role: 'user',
+              content: { parts: [{ type: 'text', text: messages }], format: 2 },
+              createdAt: new Date(),
+              threadId: thread?.id,
+              resourceId: thread?.resourceId,
+            },
+          ] as MastraMessageV2[],
+          format: 'v2',
+        }),
+      );
+    }
   } else {
     const messageList = new MessageList({
       threadId: thread?.id,
@@ -149,11 +164,57 @@ export async function prepareMemoryStep({
     messageList.add(messages, 'user');
     const messagesToSave = messageList.get.all.v2();
 
-    await memory?.saveMessages({
-      messages: messagesToSave,
-      format: 'v2',
-    });
+    if (memory) {
+      promises.push(
+        memory.saveMessages({
+          messages: messagesToSave,
+          format: 'v2',
+        }),
+      );
+    }
+
+    // Get the user message for title generation
+    const uiMessages = messageList.get.all.ui();
+    const mostRecentUserMessage = routingAgent.getMostRecentUserMessage(uiMessages);
+    userMessage = mostRecentUserMessage?.content;
   }
+
+  // Add title generation to promises if needed (non-blocking)
+  if (thread?.title?.startsWith('New Thread') && memory) {
+    const config = memory.getMergedThreadConfig(memoryConfig || {});
+
+    const {
+      shouldGenerate,
+      model: titleModel,
+      instructions: titleInstructions,
+    } = routingAgent.resolveTitleGenerationConfig(config?.generateTitle);
+
+    if (shouldGenerate && userMessage) {
+      promises.push(
+        routingAgent
+          .genTitle(
+            userMessage,
+            runtimeContext,
+            tracingContext || { currentSpan: undefined },
+            titleModel,
+            titleInstructions,
+          )
+          .then(title => {
+            if (title) {
+              return memory.createThread({
+                threadId: thread.id,
+                resourceId: thread.resourceId,
+                memoryConfig,
+                title,
+                metadata: thread.metadata,
+              });
+            }
+          }),
+      );
+    }
+  }
+
+  await Promise.all(promises);
 
   return { thread };
 }
@@ -243,7 +304,7 @@ export async function createNetworkLoop({
                           }
                       `;
 
-        completionResult = await tryGenerateWithJsonFallback(routingAgent, completionPrompt, {
+        const completionStream = await tryStreamWithJsonFallback(routingAgent, completionPrompt, {
           structuredOutput: {
             schema: completionSchema,
           },
@@ -256,6 +317,39 @@ export async function createNetworkLoop({
           },
           ...routingAgentOptions,
         });
+
+        let currentText = '';
+        let currentTextIdx = 0;
+
+        await writer.write({
+          type: 'routing-agent-text-start',
+          payload: {
+            runId: runId,
+          },
+          from: ChunkFrom.NETWORK,
+          runId,
+        });
+
+        for await (const chunk of completionStream.objectStream) {
+          if (chunk?.finalResult) {
+            currentText = chunk.finalResult;
+          }
+
+          const currentSlice = currentText.slice(currentTextIdx);
+          if (chunk?.isComplete && currentSlice.length) {
+            await writer.write({
+              type: 'routing-agent-text-delta',
+              payload: {
+                text: currentSlice,
+              },
+              from: ChunkFrom.NETWORK,
+              runId,
+            });
+            currentTextIdx = currentText.length;
+          }
+        }
+
+        completionResult = await completionStream.getFullOutput();
 
         if (completionResult?.object?.isComplete) {
           const endPayload = {
@@ -448,6 +542,7 @@ export async function createNetworkLoop({
         await writer.write({
           type: `agent-execution-event-${chunk.type}`,
           payload: chunk,
+          runId: chunk.runId,
           from: ChunkFrom.NETWORK,
         });
       }
@@ -602,6 +697,7 @@ export async function createNetworkLoop({
         await writer?.write({
           type: `workflow-execution-event-${chunk.type}`,
           payload: chunk,
+          runId: chunk.runId,
           from: ChunkFrom.NETWORK,
         });
       }
@@ -994,12 +1090,14 @@ export async function networkLoop<
     });
   }
 
+  const { memory: routingAgentMemoryOptions, ...routingAgentOptionsWithoutMemory } = routingAgentOptions || {};
+
   const { networkWorkflow } = await createNetworkLoop({
     networkName,
     runtimeContext,
     runId,
     agent: routingAgent,
-    routingAgentOptions,
+    routingAgentOptions: routingAgentOptionsWithoutMemory,
     generateId,
   });
 
@@ -1070,6 +1168,8 @@ export async function networkLoop<
     messages,
     routingAgent,
     generateId,
+    tracingContext: routingAgentOptions?.tracingContext,
+    memoryConfig: routingAgentMemoryOptions?.options,
   });
 
   const task = getLastMessage(messages);
@@ -1088,7 +1188,7 @@ export async function networkLoop<
           isOneOff: false,
           verboseIntrospection: true,
         },
-      });
+      }).fullStream;
     },
   });
 }

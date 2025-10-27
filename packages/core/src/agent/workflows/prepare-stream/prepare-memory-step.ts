@@ -44,6 +44,9 @@ interface PrepareMemoryStepOptions<
   runtimeContext: RuntimeContext;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
   methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+  /**
+   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
+   */
   format?: FORMAT;
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
@@ -160,7 +163,8 @@ export function createPrepareMemoryStep<
 
       const config = memory.getMergedThreadConfig(memoryConfig || {});
       const hasResourceScopeSemanticRecall =
-        typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === 'resource';
+        (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread') ||
+        config?.semanticRecall === true;
       let [memoryMessages, memorySystemMessage] = await Promise.all([
         existingThread || hasResourceScopeSemanticRecall
           ? capabilities.getMemoryMessages({

@@ -4,7 +4,7 @@ import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import { getValidTraceId } from '../../ai-tracing';
 import { MastraBase } from '../../base';
-import { safeParseErrorObject } from '../../error/utils.js';
+import { getErrorFromUnknown } from '../../error/utils.js';
 import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
@@ -22,19 +22,6 @@ import type {
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
-
-export class JsonToSseTransformStream extends TransformStream<unknown, string> {
-  constructor() {
-    super({
-      transform(part, controller) {
-        controller.enqueue(`data: ${JSON.stringify(part)}\n\n`);
-      },
-      flush(controller) {
-        controller.enqueue('data: [DONE]\n\n');
-      },
-    });
-  }
-}
 
 /**
  * Helper function to create a destructurable version of MastraModelOutput.
@@ -62,7 +49,7 @@ export function createDestructurableOutput<OUTPUT extends OutputSchema = undefin
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
   #status: WorkflowRunStatus = 'running';
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
-  #error: Error | string | { message: string; stack: string } | undefined;
+  #error: Error | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
   #bufferedChunks: ChunkType<OUTPUT>[] = [];
   #streamFinished = false;
@@ -168,6 +155,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     messageList,
     options,
     messageId,
+    initialState,
   }: {
     model: {
       modelId: string | undefined;
@@ -178,6 +166,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     messageList: MessageList;
     options: MastraModelOutputOptions<OUTPUT>;
     messageId: string;
+    initialState?: any;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     this.#options = options;
@@ -284,11 +273,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
     // Only apply object transformer in 'direct' mode (LLM generates JSON directly)
     // In 'processor' mode, the StructuredOutputProcessor handles object transformation
-    if (self.#structuredOutputMode === 'direct') {
+    if (self.#structuredOutputMode === 'direct' && self.#options.isLLMExecutionStep) {
       processedStream = processedStream.pipeThrough(
         createObjectStreamTransformer({
-          isLLMExecutionStep: self.#options.isLLMExecutionStep,
           structuredOutput: self.#options.structuredOutput,
+          logger: self.logger,
         }),
       );
     }
@@ -423,7 +412,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 content: messageList.get.response.aiV5.modelContent(-1),
                 text: self.#bufferedByStep.text,
                 reasoningText: self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join(''),
-                reasoning: self.#bufferedByStep.reasoning,
+                reasoning: Object.values(self.#bufferedReasoningDetails),
                 get staticToolCalls() {
                   return self.#bufferedByStep.toolCalls.filter(
                     part => part.type === 'tool-call' && part.payload?.dynamic === false,
@@ -612,7 +601,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   self.#delayedPromises.finishReason.resolve('other');
                   self.#delayedPromises.text.resolve('');
                 } else {
-                  self.#error = error instanceof Error ? error.message : String(error);
+                  self.#error = getErrorFromUnknown(error, {
+                    fallbackMessage: 'Unknown error in stream',
+                  });
                   self.#delayedPromises.finishReason.resolve('error');
                   self.#delayedPromises.text.resolve('');
                 }
@@ -762,17 +753,16 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               break;
 
             case 'error':
-              self.#error = chunk.payload.error as Error | string | { message: string; stack: string };
+              const error = getErrorFromUnknown(chunk.payload.error, {
+                fallbackMessage: 'Unknown error chunk in stream',
+              });
+              self.#error = error;
               self.#status = 'failed';
               self.#streamFinished = true; // Mark stream as finished for EventEmitter
 
-              // Reject all delayed promises on error
-              const errorMessage = (self.#error as any)?.message || safeParseErrorObject(self.#error);
-              const error = new Error(errorMessage);
-
               Object.values(self.#delayedPromises).forEach(promise => {
                 if (promise.status.type === 'pending') {
-                  promise.reject(error);
+                  promise.reject(self.#error);
                 }
               });
 
@@ -782,8 +772,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
           controller.enqueue(chunk);
         },
         flush: () => {
-          if (self.#delayedPromises.object.status.type !== 'resolved') {
-            // always resolve object promise as undefined if still hanging in flush and no output schema provided
+          if (self.#delayedPromises.object.status.type === 'pending') {
+            // always resolve pending object promise as undefined if still hanging in flush and hasn't been rejected by validation error
             self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
           }
           // If stream ends without proper finish/error chunks, reject unresolved promises
@@ -812,6 +802,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         tracingContext: options?.tracingContext,
       },
     });
+
+    if (initialState) {
+      this.deserializeState(initialState);
+    }
   }
 
   #getDelayedPromise<T>(promise: DelayedPromise<T>): Promise<T> {
@@ -924,13 +918,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   /**
    * Resolves to an error if an error occurred during streaming.
    */
-  get error(): Error | string | { message: string; stack: string } | undefined {
-    if (typeof this.#error === 'object') {
-      const error = new Error(this.#error.message);
-      error.stack = this.#error.stack;
-      return error;
-    }
-
+  get error(): Error | undefined {
     return this.#error;
   }
 
@@ -1323,6 +1311,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       usageCount: this.#usageCount,
       tripwire: this.#tripwire,
       tripwireReason: this.#tripwireReason,
+      messageList: this.messageList.serialize(),
     };
   }
 
@@ -1346,5 +1335,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#usageCount = state.usageCount;
     this.#tripwire = state.tripwire;
     this.#tripwireReason = state.tripwireReason;
+    this.messageList = this.messageList.deserialize(state.messageList);
   }
 }

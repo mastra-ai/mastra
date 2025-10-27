@@ -1,0 +1,186 @@
+---
+title: "Contextual Recall "
+description: Example of using the Contextual Recall metric to evaluate how well responses incorporate context information.
+---
+
+# Contextual Recall Evaluation
+
+:::info New Scorer API
+
+We just released a new evals API called Scorers, with a more ergonomic API and more metadata stored for error analysis, and more flexibility to evaluate data structures. It's fairly simple to migrate, but we will continue to support the existing Evals API.
+
+:::
+
+Use `ContextualRecallMetric` to evaluate how well the response incorporates relevant information from the provided context. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
+
+## Installation
+
+```bash copy
+npm install @mastra/evals
+```
+
+## High recall example
+
+In this example, the response includes all the information from the context. Every element is accurately recalled and expressed in the output, resulting in a perfect recall score.
+
+```typescript filename="src/example-high-recall.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextualRecallMetric } from "@mastra/evals/llm";
+
+const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Product features include cloud sync.",
+    "Offline mode is available.",
+    "Supports multiple devices.",
+  ],
+});
+
+const query = "What are the key features of the product?";
+const response =
+  "The product features cloud synchronization, offline mode support, and the ability to work across multiple devices.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### High recall output
+
+The output receives a perfect score because all context elements are present in the response. Each feature mentioned in the context is accurately recalled and integrated, with no missing or extraneous information.
+
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'The score is 1 because all elements of the expected output are fully supported by the corresponding nodes in retrieval context, specifically node(s) that detail cloud synchronization, offline mode support, and multi-device functionality.'
+  }
+}
+```
+
+## Mixed recall example
+
+In this example, the response includes some context elements but also introduces unrelated content. The presence of irrelevant information reduces the overall recall score.
+
+```typescript filename="src/example-mixed-recall.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextualRecallMetric } from "@mastra/evals/llm";
+
+const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Python is a high-level programming language.",
+    "Python emphasizes code readability.",
+    "Python supports multiple programming paradigms.",
+    "Python is widely used in data science.",
+  ],
+});
+
+const query = "What are Python's key characteristics?";
+const response =
+  "Python is a high-level programming language. It is also a type of snake.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Mixed recall output
+
+The output receives a mid-range score because it includes one relevant context statement but also introduces unrelated content not supported by the original context.
+
+```typescript
+{
+  score: 0.25,
+  info: {
+    reason: "The score is 0.25 because while the sentence 'Python is a high-level programming language' aligns with node 1 in the retrieval context, the lack of mention of other relevant information from nodes 2, 3, and 4 indicates significant gaps in the overall context."
+  }
+}
+```
+
+## Low recall example
+
+In this example, the response includes very little or none of the relevant context. Most of the information in the response is unsupported, resulting in a low recall score.
+
+```typescript filename="src/example-low-recall.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextualRecallMetric } from "@mastra/evals/llm";
+
+const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
+  context: [
+    "The solar system has eight planets.",
+    "Mercury is closest to the Sun.",
+    "Venus is the hottest planet.",
+    "Mars is called the Red Planet.",
+  ],
+});
+
+const query = "Tell me about the solar system.";
+const response = "Jupiter is the largest planet in the solar system.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Low recall output
+
+The output receives a low score because the response includes information that is not present in the context and ignores the details that were provided. None of the context items are incorporated into the answer.
+
+```typescript
+{
+  score: 0,
+  info: {
+    reason: "The score is 0 because the output lacks any relevant information from the node(s) in retrieval context, failing to address key aspects such as the number of planets, Mercury's position, Venus's temperature, and Mars's nickname."
+  }
+}
+```
+
+## Metric configuration
+
+You can create a `ContextualRecallMetric` instance by providing a `context` array representing background information relevant to the response. You can also configure optional parameters such as `scale` to define the scoring range.
+
+```typescript showLineNumbers copy
+const metric = new ContextualRecallMetric(openai("gpt-4o-mini"), {
+  context: [""],
+  scale: 1,
+});
+```
+
+> See [ContextualRecallMetric](/docs/reference/evals/contextual-recall) for a full list of configuration options.
+
+## Understanding the results
+
+`ContextualRecallMetric` returns a result in the following shape:
+
+```typescript
+{
+  score: number,
+  info: {
+    reason: string
+  }
+}
+```
+
+### Recall score
+
+A recall score between 0 and 1:
+
+- **1.0**: Perfect recall – all context information used.
+- **0.7–0.9**: High recall – most context information used.
+- **0.4–0.6**: Mixed recall – some context information used.
+- **0.1–0.3**: Low recall – little context information used.
+- **0.0**: No recall – no context information used.
+
+### Recall info
+
+An explanation for the score, with details including:
+
+- Information incorporation.
+- Missing context.
+- Response completeness.
+- Overall recall quality.
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/contextual-recall"
+/>

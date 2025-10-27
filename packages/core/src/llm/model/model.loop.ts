@@ -7,12 +7,12 @@ import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
-import { stepCountIs } from 'ai';
-import type { Schema, ModelMessage, ToolSet } from 'ai';
+import { stepCountIs } from 'ai-v5';
+import type { Schema, ModelMessage, ToolSet } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives } from '../../action';
-import { AISpanType } from '../../ai-tracing';
+import { AISpanType, ModelSpanTracker } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
@@ -163,8 +163,8 @@ export class MastraLLMVNext extends MastraBase {
     requireToolApproval,
     _internal,
     agentId,
-    // ...rest
-  }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
+    toolCallId,
+  }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
     if (maxSteps && typeof maxSteps === 'number') {
@@ -186,7 +186,7 @@ export class MastraLLMVNext extends MastraBase {
 
     const llmAISpan = tracingContext?.currentSpan?.createChildSpan({
       name: `llm: '${firstModel.modelId}'`,
-      type: AISpanType.LLM_GENERATION,
+      type: AISpanType.MODEL_GENERATION,
       input: {
         messages: [...messageList.getSystemMessages(), ...messages],
       },
@@ -204,11 +204,15 @@ export class MastraLLMVNext extends MastraBase {
       tracingPolicy: this.#options?.tracingPolicy,
     });
 
+    // Create model span tracker that will be shared across all LLM execution steps
+    const modelSpanTracker = new ModelSpanTracker(llmAISpan);
+
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
         mastra: this.#mastra,
         resumeContext,
         runId,
+        toolCallId,
         messageList,
         models: this.#models,
         tools: tools as Tools,
@@ -224,7 +228,7 @@ export class MastraLLMVNext extends MastraBase {
         structuredOutput,
         outputProcessors,
         returnScorerData,
-        llmAISpan,
+        modelSpanTracker,
         requireToolApproval,
         agentId,
         options: {
@@ -252,7 +256,7 @@ export class MastraLLMVNext extends MastraBase {
                 },
                 e,
               );
-              llmAISpan?.error({ error: mastraError });
+              modelSpanTracker?.reportGenerationError({ error: mastraError });
               this.logger.trackException(mastraError);
               throw mastraError;
             }
@@ -298,12 +302,12 @@ export class MastraLLMVNext extends MastraBase {
                 },
                 e,
               );
-              llmAISpan?.error({ error: mastraError });
+              modelSpanTracker?.reportGenerationError({ error: mastraError });
               this.logger.trackException(mastraError);
               throw mastraError;
             }
 
-            llmAISpan?.end({
+            modelSpanTracker?.endGeneration({
               output: {
                 files: props?.files,
                 object: props?.object,
@@ -356,7 +360,7 @@ export class MastraLLMVNext extends MastraBase {
         },
         e,
       );
-      llmAISpan?.error({ error: mastraError });
+      modelSpanTracker?.reportGenerationError({ error: mastraError });
       throw mastraError;
     }
   }

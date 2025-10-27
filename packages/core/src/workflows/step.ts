@@ -10,6 +10,10 @@ import type { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { Emitter, StepResult } from './types';
 import type { Workflow } from './workflow';
 
+export type SuspendOptions = {
+  resumeLabel?: string | string[];
+};
+
 export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = {
   runId: string;
   resourceId?: string;
@@ -20,7 +24,9 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
   state: TState;
   setState(state: TState): void;
   resumeData?: TResumeSchema;
+  /** @deprecated This parameter will be removed on November 4th, 2025. Use `retryCount` instead. */
   runCount: number;
+  retryCount: number;
   tracingContext: TracingContext;
   getInitData<T extends z.ZodType<any>>(): z.infer<T>;
   getInitData<T extends Workflow<any, any, any, any, any>>(): T extends undefined
@@ -30,8 +36,7 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
     stepId: T,
   ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
   getStepResult(stepId: string): any;
-  // TODO: should this be a schema you can define on the step?
-  suspend(suspendPayload: TSuspendSchema): Promise<any>;
+  suspend(suspendPayload: TSuspendSchema, suspendOptions?: SuspendOptions): Promise<any>;
   bail(result: any): any;
   abort(): any;
   resume?: {

@@ -8,6 +8,10 @@ export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
   transform({ chunk, conversation, metadata }: TransformerArgs<NetworkChunkType>): MastraUIMessage[] {
     const newConversation = [...conversation];
 
+    if (chunk.type === 'routing-agent-text-delta') {
+      return this.handleRoutingAgentConversation(chunk, newConversation);
+    }
+
     if (chunk.type.startsWith('agent-execution-')) {
       return this.handleAgentConversation(chunk, newConversation, metadata);
     }
@@ -21,24 +25,95 @@ export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
     }
 
     if (chunk.type === 'network-execution-event-step-finish') {
-      const newMessage: MastraUIMessage = {
-        id: `network-execution-event-step-finish-${chunk.runId}-${Date.now()}`,
-        role: 'assistant',
-        parts: [
-          {
-            type: 'text',
-            text: chunk.payload?.result || '',
-            state: 'done',
-          },
-        ],
-        metadata,
-      };
+      const lastMessage = newConversation[newConversation.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return newConversation;
 
-      return [...newConversation, newMessage];
+      const agentChunk = chunk.payload as any;
+      const parts = [...lastMessage.parts];
+      const textPartIndex = parts.findIndex(part => part.type === 'text');
+
+      if (textPartIndex === -1) {
+        parts.push({
+          type: 'text',
+          text: agentChunk.result,
+          state: 'done',
+        });
+
+        return [
+          ...newConversation.slice(0, -1),
+          {
+            ...lastMessage,
+            parts,
+          },
+        ];
+      }
+
+      const textPart = parts[textPartIndex];
+      if (textPart.type === 'text') {
+        parts[textPartIndex] = {
+          ...textPart,
+          state: 'done',
+        };
+        return [
+          ...newConversation.slice(0, -1),
+          {
+            ...lastMessage,
+            parts,
+          },
+        ];
+      }
+
+      return newConversation;
     }
 
     return newConversation;
   }
+
+  private handleRoutingAgentConversation = (
+    chunk: NetworkChunkType,
+    newConversation: MastraUIMessage[],
+  ): MastraUIMessage[] => {
+    const lastMessage = newConversation[newConversation.length - 1];
+    if (!lastMessage || lastMessage.role !== 'assistant') return newConversation;
+
+    const agentChunk = chunk.payload as any;
+    const parts = [...lastMessage.parts];
+    const textPartIndex = parts.findIndex(part => part.type === 'text');
+
+    if (textPartIndex === -1) {
+      parts.push({
+        type: 'text',
+        text: agentChunk.text,
+        state: 'streaming',
+      });
+
+      return [
+        ...newConversation.slice(0, -1),
+        {
+          ...lastMessage,
+          parts,
+        },
+      ];
+    }
+
+    const textPart = parts[textPartIndex];
+    if (textPart.type === 'text') {
+      parts[textPartIndex] = {
+        ...textPart,
+        text: textPart.text + agentChunk.text,
+        state: 'streaming',
+      };
+      return [
+        ...newConversation.slice(0, -1),
+        {
+          ...lastMessage,
+          parts,
+        },
+      ];
+    }
+
+    return newConversation;
+  };
 
   private handleAgentConversation = (
     chunk: NetworkChunkType,

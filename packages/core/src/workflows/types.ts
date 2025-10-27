@@ -1,11 +1,12 @@
-import type { TextStreamPart } from 'ai-v4';
+import type { TextStreamPart } from 'ai';
 import type { z } from 'zod';
 import type { TracingPolicy, TracingProperties } from '../ai-tracing';
 import type { Mastra } from '../mastra';
+import type { WorkflowStreamEvent } from '../stream/types';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
 
-export type { ChunkType } from '../stream/types';
+export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 
 export type Emitter = {
@@ -146,84 +147,6 @@ export type StreamEvent =
   // vnext events
   | WorkflowStreamEvent;
 
-export type WorkflowStreamEvent =
-  | {
-      type: 'workflow-start';
-      payload: {
-        workflowId: string;
-      };
-    }
-  | {
-      type: 'workflow-finish';
-      payload: {
-        workflowStatus: WorkflowRunStatus;
-        output: {
-          usage: {
-            inputTokens: number;
-            outputTokens: number;
-            totalTokens: number;
-          };
-        };
-        metadata: Record<string, any>;
-      };
-    }
-  | {
-      type: 'workflow-canceled';
-      payload: {};
-    }
-  | {
-      type: 'workflow-step-start';
-      id: string;
-      payload: {
-        id: string;
-        stepCallId: string;
-        status: WorkflowStepStatus;
-        output?: Record<string, any>;
-        payload?: Record<string, any>;
-        resumePayload?: Record<string, any>;
-        suspendPayload?: Record<string, any>;
-      };
-    }
-  | {
-      type: 'workflow-step-finish';
-      payload: {
-        id: string;
-        metadata: Record<string, any>;
-      };
-    }
-  | {
-      type: 'workflow-step-suspended';
-      payload: {
-        id: string;
-        status: WorkflowStepStatus;
-        output?: Record<string, any>;
-        payload?: Record<string, any>;
-        resumePayload?: Record<string, any>;
-        suspendPayload?: Record<string, any>;
-      };
-    }
-  | {
-      type: 'workflow-step-waiting';
-      payload: {
-        id: string;
-        payload: Record<string, any>;
-        startedAt: number;
-        status: WorkflowStepStatus;
-      };
-    }
-  | {
-      type: 'workflow-step-result';
-      payload: {
-        id: string;
-        stepCallId: string;
-        status: WorkflowStepStatus;
-        output?: Record<string, any>;
-        payload?: Record<string, any>;
-        resumePayload?: Record<string, any>;
-        suspendPayload?: Record<string, any>;
-      };
-    };
-
 export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';
 
 export type WatchEvent = {
@@ -287,6 +210,13 @@ export interface WorkflowRunState {
   serializedStepGraph: SerializedStepFlowEntry[];
   activePaths: Array<unknown>;
   suspendedPaths: Record<string, number[]>;
+  resumeLabels: Record<
+    string,
+    {
+      stepId: string;
+      foreachIndex?: number;
+    }
+  >;
   waitingPaths: Record<string, number[]>;
   timestamp: number;
 }
@@ -412,6 +342,7 @@ export type WorkflowResult<
   | ({
       status: 'success';
       state?: z.infer<TState>;
+      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       result: z.infer<TOutput>;
       input: z.infer<TInput>;
       steps: {
@@ -429,6 +360,7 @@ export type WorkflowResult<
       status: 'failed';
       input: z.infer<TInput>;
       state?: z.infer<TState>;
+      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>
@@ -445,6 +377,7 @@ export type WorkflowResult<
       status: 'suspended';
       input: z.infer<TInput>;
       state?: z.infer<TState>;
+      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
           ? StepResult<unknown, unknown, unknown, unknown>

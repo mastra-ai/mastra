@@ -173,7 +173,7 @@ The directory where Mastra files should be saved to. Defaults to `src`.
 
 #### `--components`
 
-Comma-separated list of components to add. For each component a new folder will be created. Defaults to `['agents', 'tools', 'workflows']`.
+Comma-separated list of components to add. For each component a new folder will be created. Choose from: `"agents" | "tools" | "workflows" | "scorers"`. Defaults to `['agents', 'tools', 'workflows']`.
 
 #### `--llm`
 
@@ -203,9 +203,15 @@ Configure your code editor with Mastra's MCP server. Choose from: `"cursor" | "c
 
 The path to your Mastra folder. Defaults to `src/mastra`.
 
+### `--debug`
+
+**Available in:** `dev`, `build`
+
+Enable verbose logging for Mastra's internals. Defaults to `false`.
+
 ### `--env`
 
-**Available in:** `dev`, `build`, `start`
+**Available in:** `dev`, `start`
 
 Custom environment variables file to include. By default, includes `.env.development`, `.env.local`, and `.env`.
 

@@ -1,4 +1,4 @@
-import type { StepResult, ToolSet } from 'ai';
+import type { StepResult, ToolSet } from 'ai-v5';
 import { InternalSpans } from '../../../ai-tracing';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';

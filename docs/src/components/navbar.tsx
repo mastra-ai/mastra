@@ -1,6 +1,5 @@
 import { GithubStarCount } from "@/components/github-star-count";
 
-import DocsChat from "@/chatbot/components/chat-widget";
 import {
   Dialog,
   DialogBackdrop,
@@ -13,8 +12,8 @@ import { Navbar } from "nextra-theme-docs";
 import { useState } from "react";
 import { CustomSearch } from "./custom-search";
 import { getSearchPlaceholder } from "./search-placeholder";
-import { Button } from "./ui/button";
 import { ThemeSwitcher } from "./theme-switcher";
+import { Button } from "./ui/button";
 
 export const Logo = () => {
   return (
@@ -96,8 +95,6 @@ export const Nav = ({ stars, locale }: { stars: number; locale: string }) => {
 
 export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [isAgentMode, setIsAgentMode] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
 
   function open() {
     setIsOpen(true);
@@ -105,12 +102,6 @@ export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
 
   function close() {
     setIsOpen(false);
-    setIsAgentMode(false);
-  }
-
-  function handleUseAgent({ searchQuery }: { searchQuery: string }) {
-    setIsAgentMode(true);
-    setSearchQuery(searchQuery);
   }
 
   // Configure Algolia search options
@@ -141,32 +132,24 @@ export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
         onClose={close}
         unmount={true}
       >
-        <DialogBackdrop className="fixed inset-0 transition duration-300 ease-out data-closed:opacity-0 bg-black/50 backdrop-blur-md" />
-        <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
+        <DialogBackdrop className="fixed inset-0 backdrop-blur-md transition duration-300 ease-out data-closed:opacity-0 bg-black/50" />
+        <div className="overflow-y-auto fixed inset-0 z-10 w-screen">
           <div className="flex items-center md:pt-[200px] justify-center min-h-full p-4">
             <DialogPanel
               transition
               className="w-full border-[0.5px] border-[var(--light-border-code)] dark:border-borders-2 h-fit max-w-[660px] mx-auto rounded-xl bg-[var(--light-color-surface-15)] dark:bg-surface-4 duration-300 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
             >
               <DialogTitle as="h3" className="sr-only">
-                Search
+                Search docs...
               </DialogTitle>
               <div className="w-full">
-                {isAgentMode ? (
-                  <DocsChat
-                    setIsAgentMode={setIsAgentMode}
-                    searchQuery={searchQuery}
+                <div className="p-2.5">
+                  <CustomSearch
+                    placeholder={getSearchPlaceholder(locale)}
+                    searchOptions={searchOptions}
+                    closeModal={close}
                   />
-                ) : (
-                  <div className="p-2.5">
-                    <CustomSearch
-                      placeholder={getSearchPlaceholder(locale)}
-                      searchOptions={searchOptions}
-                      onUseAgent={handleUseAgent}
-                      closeModal={close}
-                    />
-                  </div>
-                )}
+                </div>
               </div>
             </DialogPanel>
           </div>

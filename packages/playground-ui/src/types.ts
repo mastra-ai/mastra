@@ -45,6 +45,7 @@ export interface ModelSettings {
   chatWithGenerateLegacy?: boolean;
   chatWithGenerate?: boolean;
   chatWithNetwork?: boolean;
+  requireToolApproval?: boolean;
 }
 
 export interface AgentSettingsType {
@@ -117,5 +118,3 @@ export type StreamChunk = {
   runId: string;
   from: 'AGENT' | 'WORKFLOW';
 };
-
-export * from './domains/traces/types';

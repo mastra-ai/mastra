@@ -1,7 +1,7 @@
-import { openai as openai_v5 } from '@ai-sdk/openai';
-import type { LanguageModelV2 } from '@ai-sdk/provider';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
-import { MockLanguageModelV1 } from 'ai-v4/test';
+import { openai as openai_v5 } from '@ai-sdk/openai-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { MockLanguageModelV1 } from 'ai/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { Processor } from '../processors/index';
@@ -273,6 +273,72 @@ describe('Input and Output Processors', () => {
 
       expect(result.tripwire).toBe(true);
       expect(secondProcessorExecuted).toBe(false);
+    });
+  });
+
+  describe('Input Processors with non-user role messages', () => {
+    it('should handle input processors that add system messages', async () => {
+      const systemMessageProcessor = {
+        name: 'system-message-processor',
+        processInput: async ({ messages }) => {
+          // Add a system message to provide additional context
+          const systemMessage: MastraMessageV2 = {
+            id: crypto.randomUUID(),
+            role: 'system',
+            content: { content: 'You are a helpful assistant.', format: 2, parts: [] },
+            createdAt: new Date(),
+          };
+
+          // Return system message followed by user messages
+          return [systemMessage, ...messages];
+        },
+      };
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a test agent',
+        model: mockModel,
+        inputProcessors: [systemMessageProcessor],
+      });
+
+      // This should not throw an error about invalid system message format
+      const result = await agent.generate('Hello');
+
+      expect(result.text).toBeDefined();
+      expect(result.text).toContain('processed:');
+    });
+
+    it('should handle input processors that add assistant messages for context', async () => {
+      const assistantMessageProcessor = {
+        name: 'assistant-message-processor',
+        processInput: async ({ messages }) => {
+          // Add an assistant message (e.g., from previous conversation)
+          const assistantMessage: MastraMessageV2 = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Previously, I helped you with your code.' }],
+            },
+            createdAt: new Date(),
+          };
+
+          // Return assistant message followed by user messages
+          return [assistantMessage, ...messages];
+        },
+      };
+
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a test agent',
+        model: mockModel,
+        inputProcessors: [assistantMessageProcessor],
+      });
+
+      const result = await agent.generate('Continue from before');
+
+      expect(result.text).toBeDefined();
+      expect(result.text).toContain('processed:');
     });
   });
 
@@ -1060,10 +1126,12 @@ describe('Input and Output Processors', () => {
 
       async function testWithFormat(format: 'aisdk' | 'mastra') {
         const response = await agent.stream('Who won the 2012 US presidential election?', {
-          output: z.object({
-            winner: z.string(),
-            year: z.string(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              winner: z.string(),
+              year: z.string(),
+            }),
+          },
           format,
         });
 
@@ -1421,8 +1489,6 @@ describe('Input and Output Processors', () => {
 
           // Should preserve natural text but return fallback object
           expect(result.text).toBeTruthy();
-
-          expect(() => JSON.parse(result.text)).toThrow();
 
           expect(result.object).toEqual(fallbackValue);
 

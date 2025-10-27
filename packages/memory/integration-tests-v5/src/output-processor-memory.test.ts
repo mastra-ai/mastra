@@ -5,7 +5,7 @@ import { Agent } from '@mastra/core/agent';
 import type { Processor } from '@mastra/core/processors';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 describe('Output Processor Memory Persistence Integration', () => {
@@ -27,9 +27,7 @@ describe('Output Processor Memory Persistence Integration', () => {
       options: {
         lastMessages: 10,
         semanticRecall: false,
-        threads: {
-          generateTitle: false,
-        },
+        generateTitle: false,
       },
     });
   });

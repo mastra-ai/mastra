@@ -141,6 +141,7 @@ export const createConfig = async () =>
             parser: (await import('typescript-eslint')).parser,
             parserOptions: {
               projectService: true,
+              tsConfigRootDir: import.meta.dirname,
             },
           },
           plugins: {

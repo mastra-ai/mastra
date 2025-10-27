@@ -96,7 +96,7 @@ Instead of an interactive prompt you can also define these CLI flags.
       name: "--components",
       type: "string",
       description:
-        "Comma-separated list of components (agents, tools, workflows)",
+        "Comma-separated list of components (agents, tools, workflows, scorers)",
       isOptional: true,
     },
     {
@@ -159,3 +159,19 @@ Instead of an interactive prompt you can also define these CLI flags.
     },
   ]}
 />
+
+## Telemetry
+
+By default, Mastra collects anonymous information about your project like your OS, Mastra version or Node.js version. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/cli/src/analytics/index.ts) to check what's collected.
+
+You can opt out of the CLI analytics by setting an environment variable:
+
+```bash copy
+MASTRA_TELEMETRY_DISABLED=1
+```
+
+You can also set this while using other `mastra` commands:
+
+```bash copy
+MASTRA_TELEMETRY_DISABLED=1 npx create-mastra@latest
+```

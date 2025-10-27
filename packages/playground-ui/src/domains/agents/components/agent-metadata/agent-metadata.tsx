@@ -43,7 +43,7 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
     <AgentMetadataList>
       {agents.map(agent => (
         <AgentMetadataListItem key={agent.id}>
-          <Link href={paths.agentLink(agent.id)}>
+          <Link href={paths.agentLink(agent.id)} data-testid="agent-badge">
             <Badge variant="success" icon={<AgentIcon />}>
               {agent.name}
             </Badge>
@@ -66,7 +66,7 @@ export const AgentMetadata = ({
   modelVersion,
 }: AgentMetadataProps) => {
   const networkAgentsMap = agent.agents ?? {};
-  const networkAgents = Object.values(networkAgentsMap);
+  const networkAgents = Object.keys(networkAgentsMap).map(key => ({ ...networkAgentsMap[key], id: key }));
 
   const agentTools = agent.tools ?? {};
   const tools = Object.keys(agentTools).map(key => agentTools[key]);
@@ -116,7 +116,8 @@ export const AgentMetadata = ({
       >
         {hasMemoryEnabled ? (
           <Badge icon={<MemoryIcon />} variant="success" className="font-medium">
-            On
+            <span className="sr-only">Memory is enabled</span>
+            <span aria-hidden="true">On</span>
           </Badge>
         ) : (
           <Alert variant="warning">
@@ -193,7 +194,7 @@ export const AgentMetadataToolList = ({ tools, agentId }: AgentMetadataToolListP
     <AgentMetadataList>
       {tools.map(tool => (
         <AgentMetadataListItem key={tool.id}>
-          <Link href={paths.agentToolLink(agentId, tool.id)}>
+          <Link href={paths.agentToolLink(agentId, tool.id)} data-testid="tool-badge">
             <Badge icon={<ToolsIcon className="text-[#ECB047]" />}>{tool.id}</Badge>
           </Link>
         </AgentMetadataListItem>
@@ -217,7 +218,7 @@ export const AgentMetadataWorkflowList = ({ workflows }: AgentMetadataWorkflowLi
     <AgentMetadataList>
       {workflows.map(workflow => (
         <AgentMetadataListItem key={workflow.id}>
-          <Link href={paths.workflowLink(workflow.id)}>
+          <Link href={paths.workflowLink(workflow.id)} data-testid="workflow-badge">
             <Badge icon={<WorkflowIcon className="text-accent3" />}>{workflow.name}</Badge>
           </Link>
         </AgentMetadataListItem>
@@ -258,7 +259,7 @@ export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataS
     <AgentMetadataList>
       {scorerList.map(scorer => (
         <AgentMetadataListItem key={scorer.id}>
-          <Link href={paths.scorerLink(scorer.id)}>
+          <Link href={paths.scorerLink(scorer.id)} data-testid="scorer-badge">
             <Badge icon={<GaugeIcon className="text-icon3" />}>{scorer.scorer.config.name}</Badge>
           </Link>
         </AgentMetadataListItem>

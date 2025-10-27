@@ -3,17 +3,17 @@ import {
   convertArrayToReadableStream,
   convertAsyncIterableToArray,
   convertReadableStreamToArray,
-} from '@ai-sdk/provider-utils/test';
-import type { LanguageModelV2CallWarning, LanguageModelV2StreamPart } from '@ai-sdk/provider';
-import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from 'ai';
-import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from 'ai';
-import { MockLanguageModelV2 } from 'ai/test';
+} from '@ai-sdk/provider-utils-v5/test';
+import type { LanguageModelV2CallWarning, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
+import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from 'ai-v5';
+import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from 'ai-v5';
+import { MockLanguageModelV2 } from 'ai-v5/test';
 import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import { createMockServerResponse } from './mock-server-response';
-import { mockDate, testUsage } from './utils';
+import { createMessageListWithUserMessage, mockDate, testUsage } from './utils';
 
 function createTestModels({
   warnings = [],
@@ -94,7 +94,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           agentId: 'agent-id',
           models: createTestModels(),
           structuredOutput: { schema: z.object({ content: z.string() }) },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         // Test that we can await result.object directly without consuming any stream
@@ -123,7 +123,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             ]),
           }),
           structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         // Test that auto-consume works for arrays too
@@ -138,7 +138,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           agentId: 'agent-id',
           models: createTestModels(),
           structuredOutput: { schema: z.object({ content: z.string() }) },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         // Manually consume stream first (existing pattern)
@@ -157,7 +157,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.objectStream', () => {
         it('should send object deltas', async () => {
           const mockModel = createTestModels();
-          const messageList = new MessageList();
+          const messageList = createMessageListWithUserMessage();
           const result = loopFn({
             runId,
             agentId: 'agent-id',
@@ -181,25 +181,24 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             ]
           `);
 
-          // TODO: responseFormat disabled in favor of json schema in system prompt
-          // expect(mockModel[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
-          //   {
-          //     "schema": {
-          //       "$schema": "http://json-schema.org/draft-07/schema#",
-          //       "additionalProperties": false,
-          //       "properties": {
-          //         "content": {
-          //           "type": "string",
-          //         },
-          //       },
-          //       "required": [
-          //         "content",
-          //       ],
-          //       "type": "object",
-          //     },
-          //     "type": "json",
-          //   }
-          // `);
+          expect(mockModel[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+            {
+              "schema": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "additionalProperties": false,
+                "properties": {
+                  "content": {
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "content",
+                ],
+                "type": "object",
+              },
+              "type": "json",
+            }
+          `);
         });
 
         it('should use name and description', async () => {
@@ -209,7 +208,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models,
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           expect(await convertAsyncIterableToArray(result.objectStream)).toMatchInlineSnapshot(`
@@ -231,35 +230,33 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 "content": [
                   {
-                    "text": ".",
+                    "text": "test-input",
                     "type": "text",
                   },
                 ],
-                "providerOptions": undefined,
                 "role": "user",
               },
             ]
           `);
 
-          // TODO: responseFormat disabled in favor of json schema in system prompt
-          // expect(models[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
-          //   {
-          //     "schema": {
-          //       "$schema": "http://json-schema.org/draft-07/schema#",
-          //       "additionalProperties": false,
-          //       "properties": {
-          //         "content": {
-          //           "type": "string",
-          //         },
-          //       },
-          //       "required": [
-          //         "content",
-          //       ],
-          //       "type": "object",
-          //     },
-          //     "type": "json",
-          //   }
-          // `);
+          expect(models[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+            {
+              "schema": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "additionalProperties": false,
+                "properties": {
+                  "content": {
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "content",
+                ],
+                "type": "object",
+              },
+              "type": "json",
+            }
+          `);
         });
 
         it('should suppress error in partialObjectStream', async () => {
@@ -278,9 +275,12 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
             options: {
               onError: () => {},
+            },
+            modelSettings: {
+              maxRetries: 0,
             },
           });
 
@@ -305,11 +305,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
             options: {
               onError(event) {
                 errors.push(event);
               },
+            },
+            modelSettings: {
+              maxRetries: 0,
             },
           });
 
@@ -320,8 +323,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
       });
 
-      // TODO: aisdkv5 streamObject result.fullStream does not have start events, and for some reason has slightly different formats for text deltas
-      // TODO: should we support this?
       describe('result.fullStream', () => {
         it.todo('should send full stream data', async () => {
           const result = loopFn({
@@ -329,7 +330,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels(),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           const data = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
@@ -411,7 +412,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels(),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // aisdk
@@ -442,7 +443,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels(),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           const response = result.aisdk.v5.toTextStreamResponse();
@@ -471,7 +472,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels(),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           pipeTextStreamToResponse({
@@ -520,7 +521,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ]),
             }),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // consume stream (runs in parallel)
@@ -561,7 +562,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ]),
             }),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // consume stream (runs in parallel)
@@ -604,7 +605,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               response: { headers: { call: '2' } },
             }),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // consume stream (runs in parallel)
@@ -626,7 +627,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             },
             timestamp: new Date(0),
             headers: { call: '2' },
-            // TODO: result.response contains messages array but didnt in v5
             messages: [
               {
                 content: [
@@ -703,14 +703,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
-          // TODO: This shouldn't need to be awaited if result.request is a delayed promise
-          // consume stream (runs in parallel)
-          // void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          // currently not a delayed promise
           expect(await result.request).toStrictEqual({
             body: 'test body',
           });
@@ -748,7 +743,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // consume stream (runs in parallel)
@@ -789,13 +784,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // consume stream (runs in parallel)
           void convertAsyncIterableToArray(result.objectStream);
           // Expect the promise to be rejected with a validation error
-          await expect(result.object).rejects.toThrow('Type validation failed: Value: {"invalid":"Hello, world!"}.');
+          await expect(result.object).rejects.toThrow('Structured output validation failed');
         });
 
         it('should not lead to unhandled promise rejections when the streamed object does not match the schema', async () => {
@@ -828,7 +823,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // consume stream (runs in parallel)
@@ -868,7 +863,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // Now finishReason is a delayed promise that auto-consumes
@@ -921,7 +916,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             },
             _internal: { generateId: () => '1234', currentDate: () => new Date(0), now: () => 0 },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
           // consume stream
           await convertAsyncIterableToArray(objectStream);
@@ -980,7 +975,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "1234",
                     "metadata": {
                       "__originalContent": "{ "content": "Hello, world!" }",
-                      "createdAt": 2024-01-01T00:00:00.000Z,
+                      "createdAt": 2024-01-01T00:00:00.001Z,
+                      "structuredOutput": {
+                        "content": "Hello, world!",
+                      },
                     },
                     "parts": [
                       {
@@ -1041,7 +1039,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "id": "1234",
                         "metadata": {
                           "__originalContent": "{ "content": "Hello, world!" }",
-                          "createdAt": 2024-01-01T00:00:00.000Z,
+                          "createdAt": 2024-01-01T00:00:00.001Z,
+                          "structuredOutput": {
+                            "content": "Hello, world!",
+                          },
                         },
                         "parts": [
                           {
@@ -1130,7 +1131,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             },
             _internal: { generateId: () => '1234', currentDate: () => new Date(0), now: () => 0 },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           await output.consumeStream();
@@ -1138,8 +1139,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
           // consume expected error rejection
           await output.object.catch(err => {
-            expect(err).toMatchInlineSnapshot(`[Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
-Error message: Validation failed]`);
+            expect(err).toMatchInlineSnapshot(`[Error: Structured output validation failed
+✖ Required
+  → at content
+]`);
           });
 
           expect(result!).toMatchInlineSnapshot(`
@@ -1152,8 +1155,10 @@ Error message: Validation failed]`);
               ],
               "dynamicToolCalls": [],
               "dynamicToolResults": [],
-              "error": [Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
-            Error message: Validation failed],
+              "error": [Error: Structured output validation failed
+            ✖ Required
+              → at content
+            ],
               "files": [],
               "finishReason": "error",
               "model": {
@@ -1192,7 +1197,7 @@ Error message: Validation failed]`);
                     "id": "1234",
                     "metadata": {
                       "__originalContent": "{ "invalid": "Hello, world!" }",
-                      "createdAt": 2024-01-01T00:00:00.000Z,
+                      "createdAt": 2024-01-01T00:00:00.001Z,
                     },
                     "parts": [
                       {
@@ -1249,7 +1254,7 @@ Error message: Validation failed]`);
                         "id": "1234",
                         "metadata": {
                           "__originalContent": "{ "invalid": "Hello, world!" }",
-                          "createdAt": 2024-01-01T00:00:00.000Z,
+                          "createdAt": 2024-01-01T00:00:00.001Z,
                         },
                         "parts": [
                           {
@@ -1338,7 +1343,7 @@ Error message: Validation failed]`);
               },
             },
             _internal: { generateId: () => '1234', currentDate: () => new Date(0), now: () => 0 },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           await consumeStream();
@@ -1346,8 +1351,10 @@ Error message: Validation failed]`);
 
           // consume expected error rejection
           await object.catch(err => {
-            expect(err).toMatchInlineSnapshot(`[Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
-Error message: Validation failed]`);
+            expect(err).toMatchInlineSnapshot(`[Error: Structured output validation failed
+✖ Required
+  → at content
+]`);
           });
 
           expect(result!).toMatchInlineSnapshot(`
@@ -1360,8 +1367,10 @@ Error message: Validation failed]`);
               ],
               "dynamicToolCalls": [],
               "dynamicToolResults": [],
-              "error": [Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
-            Error message: Validation failed],
+              "error": [Error: Structured output validation failed
+            ✖ Required
+              → at content
+            ],
               "files": [],
               "finishReason": "error",
               "model": {
@@ -1400,7 +1409,7 @@ Error message: Validation failed]`);
                     "id": "1234",
                     "metadata": {
                       "__originalContent": "{ "invalid": "Hello, world!" }",
-                      "createdAt": 2024-01-01T00:00:00.000Z,
+                      "createdAt": 2024-01-01T00:00:00.001Z,
                     },
                     "parts": [
                       {
@@ -1457,7 +1466,7 @@ Error message: Validation failed]`);
                         "id": "1234",
                         "metadata": {
                           "__originalContent": "{ "invalid": "Hello, world!" }",
-                          "createdAt": 2024-01-01T00:00:00.000Z,
+                          "createdAt": 2024-01-01T00:00:00.001Z,
                         },
                         "parts": [
                           {
@@ -1540,7 +1549,7 @@ Error message: Validation failed]`);
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
             modelSettings: { headers: { 'custom-request-header': 'request-header-value' } },
             headers: { 'custom-request-header': 'request-header-value' },
           });
@@ -1591,7 +1600,7 @@ Error message: Validation failed]`);
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
             providerOptions: {
               aProvider: { someKey: 'someValue' },
             },
@@ -1624,7 +1633,7 @@ Error message: Validation failed]`);
                 additionalProperties: false,
               }),
             },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
           const expectedOutput = `
           [
@@ -1643,32 +1652,28 @@ Error message: Validation failed]`);
           expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(expectedOutput);
           expect(await convertAsyncIterableToArray(result.objectStream)).toMatchInlineSnapshot(expectedOutput);
 
-          // TODO: responseFormat disabled in favor of json schema in system prompt
-          //   expect(models?.[0]?.model?.doStreamCalls[0].responseFormat).toMatchInlineSnapshot(`
-          //   {
-          //     "description": undefined,
-          //     "name": undefined,
-          //     "schema": {
-          //       "additionalProperties": false,
-          //       "properties": {
-          //         "content": {
-          //           "type": "string",
-          //         },
-          //       },
-          //       "required": [
-          //         "content",
-          //       ],
-          //       "type": "object",
-          //     },
-          //     "type": "json",
-          //   }
-          // `);
+          expect(models?.[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+            {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "content": {
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "content",
+                ],
+                "type": "object",
+              },
+              "type": "json",
+            }
+          `);
         });
       });
 
-      // TODO: throw mastra error instead
-      describe.todo('error handling', () => {
-        it('should throw NoObjectGeneratedError when schema validation fails', async () => {
+      describe('error handling', () => {
+        it('should throw zod validation error when zod schema validation fails', async () => {
           const result = loopFn({
             runId,
             agentId: 'agent-id',
@@ -1699,125 +1704,25 @@ Error message: Validation failed]`);
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
+          const expectedErrorMessage = `Structured output validation failed
+✖ Expected string, received number
+  → at content
+`;
+          await expect(result.object).rejects.toThrow(expectedErrorMessage);
 
           try {
-            await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-            await result.aisdk.v5.object;
-            fail('must throw error');
+            await result.object;
           } catch (error) {
-            verifyNoObjectGeneratedError(error, {
-              message: 'No object generated: response did not match schema.',
-              response: {
-                id: 'id-1',
-                timestamp: new Date(123),
-                modelId: 'model-1',
-              },
-              usage: testUsage,
-              finishReason: 'stop',
-            });
-          }
-        });
-
-        it('should throw NoObjectGeneratedError when parsing fails', async () => {
-          const result = loopFn({
-            runId,
-            agentId: 'agent-id',
-            models: [
-              {
-                id: 'test-model',
-                maxRetries: 0,
-                model: new MockLanguageModelV2({
-                  doStream: async () => ({
-                    stream: convertArrayToReadableStream([
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ broken json' },
-                      { type: 'text-end', id: '1' },
-                      {
-                        type: 'response-metadata',
-                        id: 'id-1',
-                        timestamp: new Date(123),
-                        modelId: 'model-1',
-                      },
-                      {
-                        type: 'finish',
-                        finishReason: 'stop',
-                        usage: testUsage,
-                      },
-                    ]),
-                  }),
-                }),
-              },
-            ],
-            structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
-          });
-
-          try {
-            await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-            await result.aisdk.v5.object;
-            fail('must throw error');
-          } catch (error) {
-            verifyNoObjectGeneratedError(error, {
-              message: 'No object generated: could not parse the response.',
-              response: {
-                id: 'id-1',
-                timestamp: new Date(123),
-                modelId: 'model-1',
-              },
-              usage: testUsage,
-              finishReason: 'stop',
-            });
-          }
-        });
-
-        it('should throw NoObjectGeneratedError when no text is generated', async () => {
-          const result = loopFn({
-            runId,
-            agentId: 'agent-id',
-            models: [
-              {
-                id: 'test-model',
-                maxRetries: 0,
-                model: new MockLanguageModelV2({
-                  doStream: async () => ({
-                    stream: convertArrayToReadableStream([
-                      {
-                        type: 'response-metadata',
-                        id: 'id-1',
-                        timestamp: new Date(123),
-                        modelId: 'model-1',
-                      },
-                      {
-                        type: 'finish',
-                        finishReason: 'stop',
-                        usage: testUsage,
-                      },
-                    ]),
-                  }),
-                }),
-              },
-            ],
-            structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
-          });
-
-          try {
-            await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-            await result.aisdk.v5.object;
-            fail('must throw error');
-          } catch (error) {
-            verifyNoObjectGeneratedError(error, {
-              message: 'No object generated: could not parse the response.',
-              response: {
-                id: 'id-1',
-                timestamp: new Date(123),
-                modelId: 'model-1',
-              },
-              usage: testUsage,
-              finishReason: 'stop',
-            });
+            expect((error as Error).cause).toBeInstanceOf(Error);
+            expect(error).toMatchInlineSnapshot(`[Error: ${expectedErrorMessage}]`);
+            expect((error as Error)?.cause).toBeInstanceOf(z.ZodError);
+            expect(((error as Error)?.cause as z.ZodError)?.issues).toHaveLength(1);
+            expect(((error as Error)?.cause as z.ZodError)?.issues[0]?.message).toContain(
+              'Expected string, received number',
+            );
+            expect(((error as Error)?.cause as z.ZodError)?.issues[0]?.path).toEqual(['content']);
           }
         });
       });
@@ -1847,7 +1752,7 @@ Error message: Validation failed]`);
               ]),
             }),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           expect(await convertAsyncIterableToArray(result.objectStream)).toMatchInlineSnapshot(`
@@ -1881,7 +1786,7 @@ Error message: Validation failed]`);
               ]),
             }),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           expect(await result.object).toStrictEqual({
@@ -1914,7 +1819,7 @@ Error message: Validation failed]`);
               ]),
             }),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           const streamResults = await convertAsyncIterableToArray(result.objectStream);
@@ -1956,7 +1861,7 @@ Error message: Validation failed]`);
               ]),
             }),
             structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           expect(await result.object).toStrictEqual([{ content: 'element 1' }, { content: 'element 2' }]);
@@ -1983,7 +1888,7 @@ Error message: Validation failed]`);
               ]),
             }),
             structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           const streamResults = await convertAsyncIterableToArray(result.objectStream);
@@ -2017,7 +1922,7 @@ Error message: Validation failed]`);
               ]),
             }),
             structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           expect(await result.object).toStrictEqual('sunny');
@@ -2046,7 +1951,7 @@ Error message: Validation failed]`);
               ]),
             }),
             structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           const streamResults = await convertAsyncIterableToArray(result.objectStream);
@@ -2103,7 +2008,7 @@ Error message: Validation failed]`);
                 onFinishResult = event as unknown as typeof onFinishResult;
               },
             },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
         });
 
@@ -2130,7 +2035,13 @@ Error message: Validation failed]`);
 
         it('should have the correct object result', async () => {
           // consume stream
-          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          await result.consumeStream();
+
+          expect(await result.object).toStrictEqual([
+            { content: 'element 1' },
+            { content: 'element 2' },
+            { content: 'element 3' },
+          ]);
 
           expect(await result.aisdk.v5.object).toStrictEqual([
             { content: 'element 1' },
@@ -2139,10 +2050,10 @@ Error message: Validation failed]`);
           ]);
         });
 
-        // TODO: `object` is not passed to onFinish yet
-        it.todo('should call onFinish callback with full array', async () => {
-          console.log('onFinishResult2', onFinishResult);
-          expect(onFinishResult.object).toStrictEqual([
+        it('should call onFinish callback with full array', async () => {
+          await result.consumeStream();
+
+          expect(onFinishResult?.object).toStrictEqual([
             { content: 'element 1' },
             { content: 'element 2' },
             { content: 'element 3' },
@@ -2191,7 +2102,7 @@ Error message: Validation failed]`);
                 onFinishResult = event as unknown as typeof onFinishResult;
               },
             },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
         });
 
@@ -2214,15 +2125,16 @@ Error message: Validation failed]`);
           expect(await result.aisdk.v5.object).toStrictEqual([{ content: 'element 1' }, { content: 'element 2' }]);
         });
 
-        // TODO: `object` is not passed to onFinish yet
-        it.todo('should call onFinish callback with full array', async () => {
-          // consume stream to trigger onFinish callback
-          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-
+        it('should call onFinish callback with full array', async () => {
+          await result.consumeStream();
           expect(onFinishResult.object).toStrictEqual([{ content: 'element 1' }, { content: 'element 2' }]);
         });
 
         it('should stream elements individually in elementStream', async () => {
+          assert.deepStrictEqual(await convertAsyncIterableToArray(result.elementStream), [
+            { content: 'element 1' },
+            { content: 'element 2' },
+          ]);
           assert.deepStrictEqual(await convertAsyncIterableToArray(result.aisdk.v5.elementStream), [
             { content: 'element 1' },
             { content: 'element 2' },
@@ -2231,8 +2143,7 @@ Error message: Validation failed]`);
       });
 
       describe('error handling', () => {
-        // This started failing after a hacky fix for object output with tool calls, https://github.com/mastra-ai/mastra/pull/8097/commits/88747401da54c2c1e1c1a267770de3362e35a705
-        it.skip('should reject object promise when the streamed object does not match the schema', async () => {
+        it('should reject object promise when the streamed object does not match the schema', async () => {
           const result = loopFn({
             runId,
             agentId: 'agent-id',
@@ -2268,11 +2179,18 @@ Error message: Validation failed]`);
               ]),
             }),
             structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
-
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
-          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          await expect(result.aisdk.v5.object).rejects.toThrow('Validation failed');
+          await result.consumeStream();
+          const expectedErrorMessage = `Structured output validation failed
+✖ Required
+  → at [0].content
+✖ Required
+  → at [1].content
+✖ Required
+  → at [2].content`;
+          await expect(result.object).rejects.toThrow(expectedErrorMessage);
+          await expect(result.aisdk.v5.object).rejects.toThrow(expectedErrorMessage);
         });
       });
     });
@@ -2298,7 +2216,7 @@ Error message: Validation failed]`);
           agentId: 'agent-id',
           models: mockModels,
           structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
@@ -2365,7 +2283,7 @@ Error message: Validation failed]`);
           agentId: 'agent-id',
           models: mockModels,
           structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`[]`);
@@ -2394,7 +2312,7 @@ Error message: Validation failed]`);
           agentId: 'agent-id',
           models: mockModels,
           structuredOutput: { schema: z.enum(['foobar', 'foobar2']) },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
@@ -2429,7 +2347,7 @@ Error message: Validation failed]`);
           agentId: 'agent-id',
           models: mockModels,
           structuredOutput: { schema: z.enum(['foobar', 'barfoo']) },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
@@ -2484,7 +2402,7 @@ Error message: Validation failed]`);
           //     return text + '}';
           //   },
           // },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         // consume stream
@@ -2538,7 +2456,7 @@ Error message: Validation failed]`);
           //     return `{ "content": "provider metadata test" }`;
           //   },
           // },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         // consume stream
@@ -2594,7 +2512,7 @@ Error message: Validation failed]`);
           //     return null;
           //   },
           // },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         // consume stream
@@ -2651,7 +2569,7 @@ Error message: Validation failed]`);
           //     return cleaned;
           //   },
           // },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         // consume stream
@@ -2697,7 +2615,7 @@ Error message: Validation failed]`);
           // options: {
           //   experimental_repairText: async ({ text }) => text + '{',
           // },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         try {

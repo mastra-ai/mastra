@@ -1,8 +1,10 @@
 import type { LLMStepResult } from '@mastra/core/agent';
-import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '@mastra/core/workflows';
+import type { InferUIMessageChunk, UIMessage } from 'ai';
 import type { ZodType } from 'zod';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
+import { isDataChunkType } from './utils';
 
 type StepResult = {
   name: string;
@@ -90,6 +92,8 @@ export function AgentNetworkToAISDKTransformer() {
         type?: 'start' | 'finish';
       }
     | NetworkDataPart
+    | InferUIMessageChunk<UIMessage>
+    | DataChunkType
   >({
     start(controller) {
       controller.enqueue({
@@ -380,8 +384,18 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
         },
       } as const;
     }
-    default:
+    default: {
+      // return the chunk as is if it's not a known type
+      if (isDataChunkType(payload)) {
+        if (!('data' in payload)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
+          );
+        }
+        return payload;
+      }
       return null;
+    }
   }
 }
 
@@ -389,7 +403,7 @@ export function transformNetwork(
   payload: NetworkChunkType,
   bufferedNetworks: Map<string, { name: string; steps: StepResult[] }>,
   isNested?: boolean,
-) {
+): InferUIMessageChunk<UIMessage> | NetworkDataPart | DataChunkType | null {
   switch (payload.type) {
     case 'routing-agent-start': {
       if (!bufferedNetworks.has(payload.payload.runId)) {
@@ -407,6 +421,23 @@ export function transformNetwork(
           steps: bufferedNetworks.get(payload.payload.runId)!.steps,
           output: null,
         },
+      } as const;
+    }
+    case 'routing-agent-text-start': {
+      const current = bufferedNetworks.get(payload.runId!);
+      if (!current) return null;
+      return {
+        type: 'text-start',
+        id: payload.runId!,
+      } as const;
+    }
+    case 'routing-agent-text-delta': {
+      const current = bufferedNetworks.get(payload.runId!);
+      if (!current) return null;
+      return {
+        type: 'text-delta',
+        id: payload.runId!,
+        delta: payload.payload.text,
       } as const;
     }
     case 'agent-execution-start': {
@@ -571,7 +602,17 @@ export function transformNetwork(
         },
       } as const;
     }
-    default:
+    default: {
+      // return the chunk as is if it's not a known type
+      if (isDataChunkType(payload)) {
+        if (!('data' in payload)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
+          );
+        }
+        return payload;
+      }
       return null;
+    }
   }
 }

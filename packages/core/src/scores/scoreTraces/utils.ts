@@ -1,4 +1,4 @@
-import type { ToolInvocation } from 'ai-v4';
+import type { ToolInvocation } from 'ai';
 import type { UIMessageWithMetadata } from '../../agent';
 import { convertMessages } from '../../agent/message-list/utils/convert-messages';
 import { AISpanType } from '../../ai-tracing';
@@ -235,16 +235,16 @@ export function validateTrace(trace: AITraceRecord): void {
 }
 
 /**
- * Find the most recent LLM span that contains conversation history
+ * Find the most recent model span that contains conversation history
  */
 function findPrimaryLLMSpan(spanTree: SpanTree, rootAgentSpan: AISpanRecord): AISpanRecord {
-  const directLLMSpans = getChildrenOfType<AISpanRecord>(spanTree, rootAgentSpan.spanId, AISpanType.LLM_GENERATION);
+  const directLLMSpans = getChildrenOfType<AISpanRecord>(spanTree, rootAgentSpan.spanId, AISpanType.MODEL_GENERATION);
   if (directLLMSpans.length > 0) {
-    // There should only be one LLM generation span per agent run which is a direct child of the root agent span
+    // There should only be one model generation span per agent run which is a direct child of the root agent span
     return directLLMSpans[0]!;
   }
 
-  throw new Error('No LLM generation span found in trace');
+  throw new Error('No model generation span found in trace');
 }
 
 /**

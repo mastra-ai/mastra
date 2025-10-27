@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import z from 'zod';
 import type { Agent } from '../../agent';
 import { RuntimeContext } from '../../di';
+import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
 import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
@@ -14,6 +15,7 @@ import type {
   WorkflowResult,
   WatchEvent,
   StepWithComponent,
+  WorkflowStreamEvent,
 } from '../../workflows/types';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
@@ -356,6 +358,7 @@ export class EventedWorkflow<
           activePaths: [],
           serializedStepGraph: this.serializedStepGraph,
           suspendedPaths: {},
+          resumeLabels: {},
           waitingPaths: {},
           result: undefined,
           error: undefined,
@@ -427,6 +430,7 @@ export class EventedRun<
         runtimeContext: Object.fromEntries(runtimeContext.entries()),
         activePaths: [],
         suspendedPaths: {},
+        resumeLabels: {},
         waitingPaths: {},
         timestamp: Date.now(),
         status: 'running',
@@ -577,8 +581,13 @@ export class EventedRun<
     return executionResultPromise;
   }
 
-  watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
-    const watchCb = async (event: any, ack?: () => Promise<void>) => {
+  watch(cb: (event: WatchEvent) => void, type: 'watch'): () => void;
+  watch(cb: (event: WorkflowStreamEvent) => void, type: 'watch-v2'): () => void;
+  watch(
+    cb: ((event: WatchEvent) => void) | ((event: WorkflowStreamEvent) => void),
+    type: 'watch' | 'watch-v2' = 'watch',
+  ): () => void {
+    const watchCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId !== this.runId) {
         return;
       }
@@ -602,11 +611,13 @@ export class EventedRun<
     };
   }
 
+  async watchAsync(cb: (event: WatchEvent) => void, type: 'watch'): Promise<() => void>;
+  async watchAsync(cb: (event: WorkflowStreamEvent) => void, type: 'watch-v2'): Promise<() => void>;
   async watchAsync(
-    cb: (event: WatchEvent) => void,
+    cb: ((event: WatchEvent) => void) | ((event: WorkflowStreamEvent) => void),
     type: 'watch' | 'watch-v2' = 'watch',
-  ): Promise<() => Promise<void>> {
-    const watchCb = async (event: any, ack?: () => Promise<void>) => {
+  ): Promise<() => void> {
+    const watchCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId !== this.runId) {
         return;
       }

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloudflare-d1",
-  "version": "0.13.5-alpha.0",
+  "version": "0.13.6",
   "description": "D1 provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
@@ -39,7 +39,7 @@
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
     "dotenv": "^17.0.0",
-    "eslint": "^9.36.0",
+    "eslint": "^9.37.0",
     "miniflare": "^4.20251008.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
@@ -47,7 +47,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.22.0-0"
+    "@mastra/core": ">=0.18.1-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

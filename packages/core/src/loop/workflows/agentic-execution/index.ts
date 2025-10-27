@@ -1,4 +1,4 @@
-import type { ToolSet } from 'ai';
+import type { ToolSet } from 'ai-v5';
 import { InternalSpans } from '../../../ai-tracing';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createWorkflow } from '../../../workflows';

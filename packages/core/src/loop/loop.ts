@@ -1,5 +1,5 @@
-import { generateId } from 'ai';
-import type { ToolSet } from 'ai';
+import { generateId } from 'ai-v5';
+import type { ToolSet } from 'ai-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { ConsoleLogger } from '../logger';
 import type { ProcessorState } from '../processors';
@@ -24,7 +24,6 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   mode = 'stream',
   outputProcessors,
   returnScorerData,
-  llmAISpan,
   requireToolApproval,
   agentId,
   ...rest
@@ -120,7 +119,6 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     telemetry_settings,
     modelSettings,
     outputProcessors,
-    llmAISpan,
     messageId: messageId!,
     agentId,
     requireToolApproval,
@@ -132,7 +130,22 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     ...rest,
   };
 
-  const stream = workflowLoopStream(workflowLoopProps);
+  const existingSnapshot = resumeContext?.snapshot;
+  let initialStreamState: any;
+
+  if (existingSnapshot) {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
+        initialStreamState = step.suspendPayload?.__streamState;
+        break;
+      }
+    }
+  }
+  const baseStream = workflowLoopStream(workflowLoopProps);
+
+  // Apply chunk tracing transform to track MODEL_STEP and MODEL_CHUNK spans
+  const stream = rest.modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
 
   modelOutput = new MastraModelOutput({
     model: {
@@ -154,8 +167,9 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       structuredOutput: rest.structuredOutput,
       outputProcessors,
       returnScorerData,
-      tracingContext: { currentSpan: llmAISpan },
+      tracingContext: rest.modelSpanTracker?.getTracingContext(),
     },
+    initialState: initialStreamState,
   });
 
   return createDestructurableOutput(modelOutput);

@@ -12,7 +12,7 @@
 import type {
   AITracingEvent,
   AnyExportedAISpan,
-  LLMGenerationAttributes,
+  ModelGenerationAttributes,
   ToolCallAttributes,
 } from '@mastra/core/ai-tracing';
 import { AISpanType, AITracingEventType } from '@mastra/core/ai-tracing';
@@ -127,6 +127,9 @@ describe('BraintrustExporter', () => {
         exportedSpan: rootSpan,
       };
 
+      // Ensure traceId differs from span id
+      expect(rootSpan.traceId).not.toBe(rootSpan.id);
+
       await exporter.exportEvent(event);
 
       // Should create Braintrust logger with correct parameters
@@ -139,8 +142,13 @@ describe('BraintrustExporter', () => {
 
       // Should create Braintrust span with correct type and payload
       expect(mockLogger.startSpan).toHaveBeenCalledWith({
+        spanId: 'root-span-id',
         name: 'root-agent',
         type: 'task', // Default span type mapping for AGENT_RUN
+        parentSpanIds: {
+          spanId: rootSpan.traceId,
+          rootSpanId: rootSpan.traceId,
+        },
         input: undefined,
         metadata: {
           spanType: 'agent_run',
@@ -177,7 +185,7 @@ describe('BraintrustExporter', () => {
         isRoot: false,
         attributes: { toolId: 'calculator' },
       });
-      childSpan.traceId = 'root-span-id';
+      childSpan.traceId = rootSpan.traceId;
       childSpan.parentSpanId = 'root-span-id';
 
       await exporter.exportEvent({
@@ -190,8 +198,13 @@ describe('BraintrustExporter', () => {
 
       // Should create child span on parent span
       expect(mockSpan.startSpan).toHaveBeenCalledWith({
+        spanId: 'child-span-id',
         name: 'child-tool',
         type: 'tool', // TOOL_CALL maps to 'tool'
+        parentSpanIds: {
+          spanId: rootSpan.id,
+          rootSpanId: rootSpan.traceId,
+        },
         input: undefined,
         metadata: {
           spanType: 'tool_call',
@@ -202,11 +215,11 @@ describe('BraintrustExporter', () => {
   });
 
   describe('Span Type Mappings', () => {
-    it('should map LLM_GENERATION to "llm" type', async () => {
+    it('should map MODEL_GENERATION to "llm" type', async () => {
       const llmSpan = createMockSpan({
         id: 'llm-span',
         name: 'gpt-4-call',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         isRoot: true,
         attributes: { model: 'gpt-4' },
       });
@@ -223,11 +236,11 @@ describe('BraintrustExporter', () => {
       );
     });
 
-    it('should map LLM_CHUNK to "llm" type', async () => {
+    it('should map MODEL_CHUNK to "llm" type', async () => {
       const chunkSpan = createMockSpan({
         id: 'chunk-span',
         name: 'llm-chunk',
-        type: AISpanType.LLM_CHUNK,
+        type: AISpanType.MODEL_CHUNK,
         isRoot: true,
         attributes: { chunkType: 'text-delta' },
       });
@@ -376,7 +389,7 @@ describe('BraintrustExporter', () => {
       const llmSpan = createMockSpan({
         id: 'llm-span',
         name: 'gpt-4-call',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         isRoot: true,
         input: { messages: [{ role: 'user', content: 'Hello' }] },
         output: { content: 'Hi there!' },
@@ -402,9 +415,17 @@ describe('BraintrustExporter', () => {
         exportedSpan: llmSpan,
       });
 
+      // Ensure traceId differs from span id
+      expect(llmSpan.traceId).not.toBe(llmSpan.id);
+
       expect(mockLogger.startSpan).toHaveBeenCalledWith({
+        spanId: 'llm-span',
         name: 'gpt-4-call',
         type: 'llm',
+        parentSpanIds: {
+          spanId: llmSpan.traceId,
+          rootSpanId: llmSpan.traceId,
+        },
         input: { messages: [{ role: 'user', content: 'Hello' }] },
         output: { content: 'Hi there!' },
         metrics: {
@@ -413,7 +434,7 @@ describe('BraintrustExporter', () => {
           tokens: 15,
         },
         metadata: {
-          spanType: 'llm_generation',
+          spanType: 'model_generation',
           model: 'gpt-4',
           provider: 'openai',
           streaming: false,
@@ -430,7 +451,7 @@ describe('BraintrustExporter', () => {
       const llmSpan = createMockSpan({
         id: 'minimal-llm',
         name: 'simple-llm',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         isRoot: true,
         attributes: {
           model: 'gpt-3.5-turbo',
@@ -442,11 +463,19 @@ describe('BraintrustExporter', () => {
         exportedSpan: llmSpan,
       });
 
+      // Ensure traceId differs from span id
+      expect(llmSpan.traceId).not.toBe(llmSpan.id);
+
       expect(mockLogger.startSpan).toHaveBeenCalledWith({
+        spanId: 'minimal-llm',
         name: 'simple-llm',
         type: 'llm',
+        parentSpanIds: {
+          spanId: llmSpan.traceId,
+          rootSpanId: llmSpan.traceId,
+        },
         metadata: {
-          spanType: 'llm_generation',
+          spanType: 'model_generation',
           model: 'gpt-3.5-turbo',
         },
       });
@@ -495,7 +524,7 @@ describe('BraintrustExporter', () => {
       const llmSpan = createMockSpan({
         id: 'llm-span',
         name: 'gpt-4-call',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         isRoot: true,
         attributes: { model: 'gpt-4' },
       });
@@ -509,7 +538,7 @@ describe('BraintrustExporter', () => {
       llmSpan.attributes = {
         ...llmSpan.attributes,
         usage: { totalTokens: 150 },
-      } as LLMGenerationAttributes;
+      } as ModelGenerationAttributes;
       llmSpan.output = { content: 'Updated response' };
 
       await exporter.exportEvent({
@@ -521,7 +550,7 @@ describe('BraintrustExporter', () => {
         output: { content: 'Updated response' },
         metrics: { tokens: 150 },
         metadata: {
-          spanType: 'llm_generation',
+          spanType: 'model_generation',
           model: 'gpt-4',
         },
       });
@@ -618,7 +647,7 @@ describe('BraintrustExporter', () => {
       });
 
       // Verify trace was created
-      expect((exporter as any).traceMap.has('root-span')).toBe(true);
+      expect((exporter as any).traceMap.has(rootSpan.traceId)).toBe(true);
 
       rootSpan.endTime = new Date();
 
@@ -628,7 +657,7 @@ describe('BraintrustExporter', () => {
       });
 
       // Should clean up traceMap
-      expect((exporter as any).traceMap.has('root-span')).toBe(false);
+      expect((exporter as any).traceMap.has(rootSpan.traceId)).toBe(false);
     });
   });
 
@@ -647,6 +676,9 @@ describe('BraintrustExporter', () => {
       });
       eventSpan.isEvent = true;
 
+      // Ensure traceId differs from span id
+      expect(eventSpan.traceId).not.toBe(eventSpan.id);
+
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_STARTED,
         exportedSpan: eventSpan,
@@ -662,8 +694,13 @@ describe('BraintrustExporter', () => {
 
       // Should create span with zero duration (matching start/end times)
       expect(mockLogger.startSpan).toHaveBeenCalledWith({
+        spanId: 'event-span',
         name: 'user-feedback',
         type: 'task',
+        parentSpanIds: {
+          spanId: eventSpan.traceId,
+          rootSpanId: eventSpan.traceId,
+        },
         startTime: eventSpan.startTime.getTime() / 1000,
         output: { message: 'Great response!' },
         metadata: {
@@ -705,7 +742,7 @@ describe('BraintrustExporter', () => {
         output: { result: 42 },
       });
       childEventSpan.isEvent = true;
-      childEventSpan.traceId = 'root-span';
+      childEventSpan.traceId = rootSpan.traceId;
       childEventSpan.parentSpanId = 'root-span';
 
       await exporter.exportEvent({
@@ -715,8 +752,13 @@ describe('BraintrustExporter', () => {
 
       // Should create child span on parent
       expect(mockSpan.startSpan).toHaveBeenCalledWith({
+        spanId: 'child-event',
         name: 'tool-result',
         type: 'task',
+        parentSpanIds: {
+          spanId: rootSpan.id,
+          rootSpanId: rootSpan.traceId,
+        },
         startTime: childEventSpan.startTime.getTime() / 1000,
         output: { result: 42 },
         metadata: {
@@ -970,7 +1012,7 @@ function createMockSpan({
     errorInfo,
     startTime: new Date(),
     endTime: undefined,
-    traceId: isRoot ? id : 'parent-trace-id',
+    traceId: isRoot ? `${id}-trace` : 'parent-trace-id',
     get isRootSpan() {
       return isRoot;
     },

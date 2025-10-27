@@ -1,6 +1,6 @@
 import type { TransformStreamDefaultController } from 'stream/web';
-import { openai } from '@ai-sdk/openai';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
+import { openai } from '@ai-sdk/openai-v5';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import z from 'zod';
 import { Agent } from '../../agent';

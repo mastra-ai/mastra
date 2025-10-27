@@ -1,4 +1,3 @@
-import { useWorkflows } from '@/hooks/use-workflows';
 import {
   Header,
   HeaderTitle,
@@ -10,6 +9,7 @@ import {
   Button,
   DocsIcon,
   WorkflowIcon,
+  useWorkflows,
 } from '@mastra/playground-ui';
 
 import { Link } from 'react-router';

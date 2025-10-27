@@ -5,7 +5,7 @@ import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions, writeTelemetryConfig, getBundlerOptions } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
-import type { RollupWatcherEvent } from 'rollup';
+import type { Plugin, RollupWatcherEvent } from 'rollup';
 
 import { devLogger } from '../../utils/dev-logger.js';
 
@@ -107,9 +107,8 @@ export class DevBundler extends Bundler {
           }
         },
         plugins: [
-          // @ts-ignore - types are good
-          // eslint-disable-next-line @typescript-eslint/no-misused-promises
-          ...inputOptions.plugins,
+          // inputOptions.plugins is guaranteed to be Plugin[] by getWatcherInputOptions
+          ...((inputOptions.plugins as Plugin[]) || []),
           {
             name: 'env-watcher',
             buildStart() {

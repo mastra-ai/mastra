@@ -22,12 +22,12 @@ const docsTabs = [
   },
   {
     id: "Guides",
-    label: "Guides",
+    label: "Guides & Migrations",
     href: "guides",
   },
   {
-    id: "API Reference",
-    label: "API Reference",
+    id: "Reference",
+    label: "Reference",
     href: "reference",
   },
   {

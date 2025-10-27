@@ -1,12 +1,13 @@
-import { delay } from '@ai-sdk/provider-utils';
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils/test';
-import { tool } from 'ai';
-import { convertArrayToReadableStream, MockLanguageModelV2, mockValues, mockId } from 'ai/test';
+import { delay } from '@ai-sdk/provider-utils-v5';
+import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
+import { tool } from 'ai-v5';
+import { convertArrayToReadableStream, MockLanguageModelV2, mockValues, mockId } from 'ai-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import {
+  createMessageListWithUserMessage,
   createTestModels,
   defaultSettings,
   mockDate,
@@ -171,14 +172,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should send text deltas', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
         runId,
         agentId: 'agent-id',
@@ -300,8 +294,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should send reasoning deltas', async () => {
-      const messageList = new MessageList();
-
+      const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
         runId,
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
@@ -514,8 +507,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should send sources', async () => {
-      const messageList = new MessageList();
-
+      const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
         runId,
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
@@ -610,8 +602,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should send files', async () => {
-      const messageList = new MessageList();
-
+      const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
         runId,
         messageList,
@@ -702,14 +693,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should use fallback response metadata when response metadata is not provided', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         agentId: 'agent-id',
@@ -828,14 +812,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should send tool calls', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,
@@ -918,14 +895,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should send tool call deltas', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,
@@ -1125,14 +1095,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should send tool results', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,
@@ -1187,14 +1150,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
     it('should send delayed asynchronous tool results', async () => {
       vi.useRealTimers();
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,
@@ -1243,14 +1199,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should filter out empty text deltas', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,
