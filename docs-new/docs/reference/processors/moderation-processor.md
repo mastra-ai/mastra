@@ -159,6 +159,7 @@ export const agent = new Agent({
     new ModerationProcessor({
       model: 'openai/gpt-4.1-nano',
       strategy: 'filter',
+      chunkWindow: 1,
     }),
   ],
 });
