@@ -1,6 +1,6 @@
 ---
-title: 'Memory.getThreadsByResourceId() '
-description: 'Documentation for the `Memory.getThreadsByResourceId()` method in Mastra, which retrieves all threads that belong to a specific resource.'
+title: "Memory.getThreadsByResourceId() "
+description: "Documentation for the `Memory.getThreadsByResourceId()` method in Mastra, which retrieves all threads that belong to a specific resource."
 ---
 
 # Memory.getThreadsByResourceId()
@@ -10,7 +10,7 @@ The `.getThreadsByResourceId()` function retrieves all threads associated with a
 ## Usage Example
 
 ```typescript
-await memory?.getThreadsByResourceId({ resourceId: 'user-123' });
+await memory?.getThreadsByResourceId({ resourceId: "user-123" });
 ```
 
 ## Parameters
@@ -54,15 +54,15 @@ description:
 ## Extended usage example
 
 ```typescript filename="src/test-memory.ts" showLineNumbers copy
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
-const agent = mastra.getAgent('agent');
+const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
 const thread = await memory?.getThreadsByResourceId({
-  resourceId: 'user-123',
-  orderBy: 'updatedAt',
-  sortDirection: 'ASC',
+  resourceId: "user-123",
+  orderBy: "updatedAt",
+  sortDirection: "ASC",
 });
 
 console.log(thread);

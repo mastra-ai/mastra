@@ -1,5 +1,5 @@
 ---
-title: 'Run.resume() '
+title: "Run.resume() "
 description: Documentation for the `Run.resume()` method in workflows, which resumes a suspended workflow run with new data.
 ---
 
@@ -12,11 +12,11 @@ The `.resume()` method resumes a suspended workflow run with new data, allowing 
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
 
-const result = await run.start({ inputData: { value: 'initial data' } });
+const result = await run.start({ inputData: { value: "initial data" } });
 
-if (result.status === 'suspended') {
+if (result.status === "suspended") {
   const resumedResults = await run.resume({
-    resumeData: { value: 'resume data' },
+    resumeData: { value: "resume data" },
   });
 }
 ```
@@ -121,10 +121,10 @@ description: "The trace ID associated with this execution when AI tracing is ena
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-if (result.status === 'suspended') {
+if (result.status === "suspended") {
   const resumedResults = await run.resume({
     step: result.suspended[0],
-    resumeData: { value: 'resume data' },
+    resumeData: { value: "resume data" },
   });
 }
 ```

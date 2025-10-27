@@ -4,33 +4,33 @@
 // There are various equivalent ways to declare your Docusaurus config.
 // See: https://docusaurus.io/docs/api/docusaurus-config
 
-import prismMastraDark from './src/theme/prism-mastra-dark.js';
-import prismMastraLight from './src/theme/prism-mastra-light.js';
-import 'dotenv/config';
+import prismMastraDark from "./src/theme/prism-mastra-dark.js";
+import prismMastraLight from "./src/theme/prism-mastra-light.js";
+import "dotenv/config";
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'Mastra Documentation',
-  tagline: 'TypeScript agent framework',
-  favicon: 'favicon.ico',
+  title: "Mastra Documentation",
+  tagline: "TypeScript agent framework",
+  favicon: "favicon.ico",
 
   // Set the production url of your site here
-  url: 'https://mastra.ai',
+  url: "https://mastra.ai",
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/',
+  baseUrl: "/",
 
-  onBrokenLinks: 'throw',
+  onBrokenLinks: "throw",
 
   // Markdown configuration
   markdown: {
     hooks: {
-      onBrokenMarkdownLinks: 'warn',
+      onBrokenMarkdownLinks: "warn",
     },
   },
   // Enable v4 features in prod
 
-  ...(process.env.NODE_ENV === 'production' && {
+  ...(process.env.NODE_ENV === "production" && {
     future: {
       v4: {
         useCssCascadeLayers: false,
@@ -57,18 +57,18 @@ const config = {
   // Preconnect to Google Fonts
   headTags: [
     {
-      tagName: 'link',
+      tagName: "link",
       attributes: {
-        rel: 'preconnect',
-        href: 'https://fonts.googleapis.com',
+        rel: "preconnect",
+        href: "https://fonts.googleapis.com",
       },
     },
     {
-      tagName: 'link',
+      tagName: "link",
       attributes: {
-        rel: 'preconnect',
-        href: 'https://fonts.gstatic.com',
-        crossorigin: 'anonymous',
+        rel: "preconnect",
+        href: "https://fonts.gstatic.com",
+        crossorigin: "anonymous",
       },
     },
   ],
@@ -78,10 +78,10 @@ const config = {
     ...(process.env.POSTHOG_API_KEY
       ? [
           [
-            'posthog-docusaurus',
+            "posthog-docusaurus",
             {
               apiKey: process.env.POSTHOG_API_KEY,
-              appUrl: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+              appUrl: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
               enableInDevelopment: false,
             },
           ],
@@ -89,35 +89,35 @@ const config = {
       : []),
     // Vercel Analytics (automatically enabled in production on Vercel)
     [
-      '@docusaurus/plugin-vercel-analytics',
+      "@docusaurus/plugin-vercel-analytics",
       {
         debug: false,
-        mode: 'auto',
+        mode: "auto",
       },
     ],
   ],
 
   presets: [
     [
-      'classic',
+      "classic",
       /** @type {import('@docusaurus/preset-classic').Options} */
       ({
         docs: {
-          sidebarPath: './sidebars.js',
+          sidebarPath: "./sidebars.js",
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
-          editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs/',
+          editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs-new",
         },
         blog: false,
         theme: {
-          customCss: './src/css/custom.css',
+          customCss: "./src/css/custom.css",
         },
         sitemap: {
-          lastmod: 'date',
-          changefreq: 'weekly',
+          lastmod: "date",
+          changefreq: "weekly",
           priority: 0.5,
-          ignorePatterns: ['/tags/**'],
-          filename: 'sitemap.xml',
+          ignorePatterns: ["/tags/**"],
+          filename: "sitemap.xml",
         },
       }),
     ],
@@ -128,74 +128,74 @@ const config = {
     ({
       navbar: {
         logo: {
-          alt: 'Mastra Logo',
-          src: 'logo.svg',
+          alt: "Mastra Logo",
+          src: "logo.svg",
         },
       },
       footer: {
         links: [
           {
-            title: 'Developer',
+            title: "Developer",
             items: [
               {
-                label: 'Docs',
-                to: '/docs',
+                label: "Docs",
+                to: "/docs",
               },
 
               {
-                label: 'Templates',
+                label: "Templates",
                 href: `https://mastra.ai/templates`,
               },
               {
-                label: 'Principles of Building AI Agents',
+                label: "Principles of Building AI Agents",
                 href: `https://mastra.ai/book`,
               },
 
               {
-                label: 'llms.txt',
+                label: "llms.txt",
                 href: `https://mastra.ai/llms.txt`,
               },
 
               {
-                label: 'llms-full.txt',
+                label: "llms-full.txt",
                 href: `https://mastra.ai/llms-full.txt`,
               },
               {
-                label: 'MCP Registry Registry',
+                label: "MCP Registry Registry",
                 href: `https://mastra.ai/mcp-registry-registry`,
               },
               {
-                label: 'Mastra Cloud Status',
-                href: 'https://statuspage.incident.io/mastra-cloud',
+                label: "Mastra Cloud Status",
+                href: "https://statuspage.incident.io/mastra-cloud",
               },
             ],
           },
           {
-            title: 'Company',
+            title: "Company",
             items: [
               {
-                label: 'GitHub',
-                href: 'https://github.com/mastra-ai/mastra',
+                label: "GitHub",
+                href: "https://github.com/mastra-ai/mastra",
               },
               {
-                label: 'Discord',
-                href: 'https://discord.gg/BTYqqHKUrf',
+                label: "Discord",
+                href: "https://discord.gg/BTYqqHKUrf",
               },
               {
-                label: 'X',
-                href: 'https://x.com/mastra_ai',
+                label: "X",
+                href: "https://x.com/mastra_ai",
               },
               {
-                label: 'YouTube',
-                href: 'https://www.youtube.com/@mastra-ai',
+                label: "YouTube",
+                href: "https://www.youtube.com/@mastra-ai",
               },
             ],
           },
           {
-            title: 'Legal',
+            title: "Legal",
             items: [
               {
-                label: 'Privacy Policy',
+                label: "Privacy Policy",
                 href: `https://mastra.ai/privacy-policy`,
               },
             ],

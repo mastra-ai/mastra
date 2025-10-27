@@ -1,6 +1,6 @@
 ---
-title: 'Overview'
-description: 'Deploy your Mastra applications to popular cloud providers.'
+title: "Overview"
+description: "Deploy your Mastra applications to popular cloud providers."
 sidebar_position: 1
 ---
 
@@ -37,7 +37,7 @@ export const mastra = new Mastra({
   storage: new LibSQLStore({
     // [!code --]
     // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db // [!code --]
-    url: ':memory:', // [!code --]
+    url: ":memory:", // [!code --]
   }), //[!code --]
 });
 ```
@@ -49,7 +49,7 @@ export const weatherAgent = new Agent({
     // [!code --]
     storage: new LibSQLStore({
       // [!code --]
-      url: 'file:../mastra.db', // path is relative to the .mastra/output directory // [!code --]
+      url: "file:../mastra.db", // path is relative to the .mastra/output directory // [!code --]
     }), // [!code --]
   }), //  [!code --]
 });

@@ -1,5 +1,5 @@
 ---
-title: 'Supervisor agent '
+title: "Supervisor agent "
 description: Example of creating a supervisor agent using Mastra, where agents interact through tool functions.
 ---
 
@@ -26,13 +26,13 @@ OPENAI_API_KEY=<your-api-key>
 This `copywriterAgent` is responsible for writing the initial blog post content based on a given topic.
 
 ```typescript filename="src/mastra/agents/example-copywriter-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
 export const copywriterAgent = new Agent({
-  name: 'copywriter-agent',
-  instructions: 'You are a copywriter agent that writes blog post copy.',
-  model: openai('gpt-4o'),
+  name: "copywriter-agent",
+  instructions: "You are a copywriter agent that writes blog post copy.",
+  model: openai("gpt-4o"),
 });
 ```
 
@@ -41,12 +41,12 @@ export const copywriterAgent = new Agent({
 The `copywriterTool` provides an interface to call the `copywriterAgent` and passes in the `topic`.
 
 ```typescript filename="src/mastra/tools/example-copywriter-tool.ts"
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
 export const copywriterTool = createTool({
-  id: 'copywriter-agent',
-  description: 'Calls the copywriter agent to write blog post copy.',
+  id: "copywriter-agent",
+  description: "Calls the copywriter agent to write blog post copy.",
   inputSchema: z.object({
     topic: z.string(),
   }),
@@ -56,7 +56,7 @@ export const copywriterTool = createTool({
   execute: async ({ context, mastra }) => {
     const { topic } = context;
 
-    const agent = mastra!.getAgent('copywriterAgent');
+    const agent = mastra!.getAgent("copywriterAgent");
     const result = await agent!.generate(`Create a blog post about ${topic}`);
 
     return {
@@ -71,13 +71,13 @@ export const copywriterTool = createTool({
 This `editorAgent` takes the initial copy and refines it to improve quality and readability.
 
 ```typescript filename="src/mastra/agents/example-editor-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
 export const editorAgent = new Agent({
-  name: 'Editor',
-  instructions: 'You are an editor agent that edits blog post copy.',
-  model: openai('gpt-4o-mini'),
+  name: "Editor",
+  instructions: "You are an editor agent that edits blog post copy.",
+  model: openai("gpt-4o-mini"),
 });
 ```
 
@@ -86,12 +86,12 @@ export const editorAgent = new Agent({
 The `editorTool` provides an interface to call the `editorAgent` and passes in the `copy`.
 
 ```typescript filename="src/mastra/tools/example-editor-tool.ts" showLineNumbers copy
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
 export const editorTool = createTool({
-  id: 'editor-agent',
-  description: 'Calls the editor agent to edit blog post copy.',
+  id: "editor-agent",
+  description: "Calls the editor agent to edit blog post copy.",
   inputSchema: z.object({
     copy: z.string(),
   }),
@@ -101,8 +101,10 @@ export const editorTool = createTool({
   execute: async ({ context, mastra }) => {
     const { copy } = context;
 
-    const agent = mastra!.getAgent('editorAgent');
-    const result = await agent.generate(`Edit the following blog post only returning the edited copy: ${copy}`);
+    const agent = mastra!.getAgent("editorAgent");
+    const result = await agent.generate(
+      `Edit the following blog post only returning the edited copy: ${copy}`,
+    );
 
     return {
       copy: result.text,
@@ -116,17 +118,17 @@ export const editorTool = createTool({
 This `publisherAgent` coordinates the entire process by calling the `copywriterTool` first, then the `editorTool`.
 
 ```typescript filename="src/mastra/agents/example-publisher-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
-import { copywriterTool } from '../tools/example-copywriter-tool';
-import { editorTool } from '../tools/example-editor-tool';
+import { copywriterTool } from "../tools/example-copywriter-tool";
+import { editorTool } from "../tools/example-editor-tool";
 
 export const publisherAgent = new Agent({
-  name: 'publisherAgent',
+  name: "publisherAgent",
   instructions:
-    'You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.',
-  model: openai('gpt-4o-mini'),
+    "You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.",
+  model: openai("gpt-4o-mini"),
   tools: { copywriterTool, editorTool },
 });
 ```
@@ -136,11 +138,11 @@ export const publisherAgent = new Agent({
 All three agents are registered in the main Mastra instance so they can be accessed by each other.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from "@mastra/core/mastra";
 
-import { publisherAgent } from './agents/example-publisher-agent';
-import { copywriterAgent } from './agents/example-copywriter-agent';
-import { editorAgent } from './agents/example-editor-agent';
+import { publisherAgent } from "./agents/example-publisher-agent";
+import { copywriterAgent } from "./agents/example-copywriter-agent";
+import { editorAgent } from "./agents/example-editor-agent";
 
 export const mastra = new Mastra({
   agents: { copywriterAgent, editorAgent, publisherAgent },
@@ -152,14 +154,14 @@ export const mastra = new Mastra({
 Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt.
 
 ```typescript filename="src/test-publisher-agent.ts" showLineNumbers copy
-import 'dotenv/config';
+import "dotenv/config";
 
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
-const agent = mastra.getAgent('publisherAgent');
+const agent = mastra.getAgent("publisherAgent");
 
 const response = await agent.generate(
-  'Write a blog post about React JavaScript frameworks. Only return the final edited copy.',
+  "Write a blog post about React JavaScript frameworks. Only return the final edited copy.",
 );
 
 console.log(response.text);

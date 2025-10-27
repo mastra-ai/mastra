@@ -1,6 +1,6 @@
 ---
-title: 'Anthropic '
-description: 'Use Anthropic models with Mastra. 11 models available.'
+title: "Anthropic "
+description: "Use Anthropic models with Mastra. 11 models available."
 ---
 
 import Tabs from '@theme/Tabs';
@@ -17,19 +17,19 @@ ANTHROPIC_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'anthropic/claude-3-5-haiku-20241022',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "anthropic/claude-3-5-haiku-20241022",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -180,12 +180,12 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    modelId: 'claude-3-5-haiku-20241022',
+    modelId: "claude-3-5-haiku-20241022",
     apiKey: process.env.ANTHROPIC_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -195,10 +195,12 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'anthropic/claude-sonnet-4-5-20250929' : 'anthropic/claude-3-5-haiku-20241022';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "anthropic/claude-sonnet-4-5-20250929"
+      : "anthropic/claude-3-5-haiku-20241022";
   },
 });
 ```

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Create Custom Scorer '
+title: "Create Custom Scorer"
 description: Documentation for creating custom scorers in Mastra, allowing users to define their own evaluation logic using either JavaScript functions or LLM-based prompts.
 ---
 
@@ -13,12 +13,12 @@ Use the `createScorer` factory to define your scorer with a name, description, a
 
 ```typescript
 const scorer = createScorer({
-  name: 'My Custom Scorer',
-  description: 'Evaluates responses based on custom criteria',
-  type: 'agent', // Optional: for agent evaluation with automatic typing
+  name: "My Custom Scorer",
+  description: "Evaluates responses based on custom criteria",
+  type: "agent", // Optional: for agent evaluation with automatic typing
   judge: {
     model: myModel,
-    instructions: 'You are an expert evaluator...',
+    instructions: "You are an expert evaluator...",
   },
 })
   .preprocess({
@@ -96,13 +96,13 @@ You can specify input/output types when creating scorers for better type inferen
 For evaluating agents, use `type: 'agent'` to automatically get the correct types for agent input/output:
 
 ```typescript
-import { createScorer } from '@mastra/core/scorers';
+import { createScorer } from "@mastra/core/scorers";
 
 // Agent scorer with automatic typing
 const agentScorer = createScorer({
-  name: 'Agent Response Quality',
-  description: 'Evaluates agent responses',
-  type: 'agent', // Automatically provides ScorerRunInputForAgent/ScorerRunOutputForAgent
+  name: "Agent Response Quality",
+  description: "Evaluates agent responses",
+  type: "agent", // Automatically provides ScorerRunInputForAgent/ScorerRunOutputForAgent
 })
   .preprocess(({ run }) => {
     // run.input is automatically typed as ScorerRunInputForAgent
@@ -121,14 +121,14 @@ const agentScorer = createScorer({
 For custom input/output types, use the generic approach:
 
 ```typescript
-import { createScorer } from '@mastra/core/scorers';
+import { createScorer } from "@mastra/core/scorers";
 
 type CustomInput = { query: string; context: string[] };
 type CustomOutput = { answer: string; confidence: number };
 
 const customScorer = createScorer<CustomInput, CustomOutput>({
-  name: 'Custom Scorer',
-  description: 'Evaluates custom data',
+  name: "Custom Scorer",
+  description: "Evaluates custom data",
 }).generateScore(({ run }) => {
   // run.input is typed as CustomInput
   // run.output is typed as CustomOutput
@@ -149,9 +149,9 @@ When you use `type: 'agent'`, your scorer is compatible for both adding directly
 
 ```typescript
 const agentTraceScorer = createScorer({
-  name: 'Agent Trace Length',
-  description: 'Evaluates agent response length',
-  type: 'agent',
+  name: "Agent Trace Length",
+  description: "Evaluates agent response length",
+  type: "agent",
 }).generateScore(({ run }) => {
   // Trace data is automatically transformed to agent format
   const userMessages = run.input.inputMessages;

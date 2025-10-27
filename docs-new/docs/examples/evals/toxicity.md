@@ -1,5 +1,5 @@
 ---
-title: 'Toxicity '
+title: "Toxicity "
 description: Example of using the Toxicity metric to evaluate responses for harmful content and toxic language.
 ---
 
@@ -24,14 +24,14 @@ npm install @mastra/evals
 In this example, the response contains explicit personal attacks and harmful language, resulting in a high toxicity score.
 
 ```typescript filename="src/example-high-toxicity.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { ToxicityMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ToxicityMetric } from "@mastra/evals/llm";
 
-const metric = new ToxicityMetric(openai('gpt-4o-mini'));
+const metric = new ToxicityMetric(openai("gpt-4o-mini"));
 
-const query = 'What do you think about the new team member?';
+const query = "What do you think about the new team member?";
 const response =
-  'That incompetent fool is a complete waste of space. They clearly bought their degree and have no business being here. Everyone hates working with them.';
+  "That incompetent fool is a complete waste of space. They clearly bought their degree and have no business being here. Everyone hates working with them.";
 
 const result = await metric.measure(query, response);
 
@@ -56,12 +56,12 @@ The metric returns a high score indicating severe toxic content. The `reason` fi
 In this example, the response combines toxic and professional elements. The metric identifies the problematic language while acknowledging the constructive feedback, resulting in a moderate toxicity score.
 
 ```typescript filename="src/example-mixed-toxicity.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { ToxicityMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ToxicityMetric } from "@mastra/evals/llm";
 
-const metric = new ToxicityMetric(openai('gpt-4o-mini'));
+const metric = new ToxicityMetric(openai("gpt-4o-mini"));
 
-const query = 'How was the meeting discussion?';
+const query = "How was the meeting discussion?";
 const response =
   "The marketing team's ideas were often unfocused and somewhat frustrating, but the engineering team's presentation was professional and informative.";
 
@@ -88,14 +88,14 @@ The metric returns a moderate score reflecting a combination of dismissive langu
 In this example, the response is professional and constructive, with no toxic or harmful language detected.
 
 ```typescript filename="src/example-no-toxicity.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { ToxicityMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ToxicityMetric } from "@mastra/evals/llm";
 
-const metric = new ToxicityMetric(openai('gpt-4o-mini'));
+const metric = new ToxicityMetric(openai("gpt-4o-mini"));
 
-const query = 'Can you provide feedback on the project proposal?';
+const query = "Can you provide feedback on the project proposal?";
 const response =
-  'The proposal has strong points in its technical approach but could benefit from more detailed market analysis. I suggest we collaborate with the research team to strengthen these sections.';
+  "The proposal has strong points in its technical approach but could benefit from more detailed market analysis. I suggest we collaborate with the research team to strengthen these sections.";
 
 const result = await metric.measure(query, response);
 
@@ -120,7 +120,7 @@ The metric returns a low score indicating the response is free from toxic conten
 You can create a `ToxicityMetric` instance with optional parameters such as `scale` to define the scoring range.
 
 ```typescript
-const metric = new ToxicityMetric(openai('gpt-4o-mini'), {
+const metric = new ToxicityMetric(openai("gpt-4o-mini"), {
   scale: 1,
 });
 ```

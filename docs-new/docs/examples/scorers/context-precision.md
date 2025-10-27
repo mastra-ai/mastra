@@ -1,5 +1,5 @@
 ---
-title: 'Context Precision Scorer '
+title: "Context Precision Scorer "
 description: Example of using the Context Precision scorer to evaluate the relevance and positioning of retrieved context for RAG systems using Mean Average Precision.
 ---
 
@@ -18,16 +18,16 @@ npm install @mastra/evals
 This example shows perfect context precision where all relevant context appears early:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { createContextPrecisionScorer } from '@mastra/evals';
+import { openai } from "@ai-sdk/openai";
+import { createContextPrecisionScorer } from "@mastra/evals";
 
 const scorer = createContextPrecisionScorer({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     context: [
-      'Photosynthesis is the process by which plants convert sunlight, carbon dioxide, and water into glucose and oxygen.',
-      'The process occurs in the chloroplasts of plant cells, specifically in the thylakoids.',
-      'Light-dependent reactions happen in the thylakoid membranes, while the Calvin cycle occurs in the stroma.',
+      "Photosynthesis is the process by which plants convert sunlight, carbon dioxide, and water into glucose and oxygen.",
+      "The process occurs in the chloroplasts of plant cells, specifically in the thylakoids.",
+      "Light-dependent reactions happen in the thylakoid membranes, while the Calvin cycle occurs in the stroma.",
     ],
     scale: 1,
   },
@@ -37,18 +37,18 @@ const result = await scorer.run({
   input: {
     inputMessages: [
       {
-        id: '1',
-        role: 'user',
-        content: 'How does photosynthesis work in plants?',
+        id: "1",
+        role: "user",
+        content: "How does photosynthesis work in plants?",
       },
     ],
   },
   output: [
     {
-      id: '2',
-      role: 'assistant',
+      id: "2",
+      role: "assistant",
       content:
-        'Photosynthesis is the process where plants convert sunlight, CO2, and water into glucose and oxygen using chloroplasts.',
+        "Photosynthesis is the process where plants convert sunlight, CO2, and water into glucose and oxygen using chloroplasts.",
     },
   ],
 });
@@ -66,18 +66,18 @@ console.log(result);
 This example shows moderate precision with both relevant and irrelevant context:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { createContextPrecisionScorer } from '@mastra/evals';
+import { openai } from "@ai-sdk/openai";
+import { createContextPrecisionScorer } from "@mastra/evals";
 
 const scorer = createContextPrecisionScorer({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     context: [
-      'Regular exercise improves cardiovascular health by strengthening the heart muscle.',
-      'A balanced diet should include fruits, vegetables, and whole grains.',
-      'Physical activity releases endorphins which improve mood and reduce stress.',
-      'The average person should drink 8 glasses of water per day.',
-      'Exercise also helps maintain healthy body weight and muscle mass.',
+      "Regular exercise improves cardiovascular health by strengthening the heart muscle.",
+      "A balanced diet should include fruits, vegetables, and whole grains.",
+      "Physical activity releases endorphins which improve mood and reduce stress.",
+      "The average person should drink 8 glasses of water per day.",
+      "Exercise also helps maintain healthy body weight and muscle mass.",
     ],
     scale: 1,
   },
@@ -87,18 +87,18 @@ const result = await scorer.run({
   input: {
     inputMessages: [
       {
-        id: '1',
-        role: 'user',
-        content: 'What are the mental and physical benefits of exercise?',
+        id: "1",
+        role: "user",
+        content: "What are the mental and physical benefits of exercise?",
       },
     ],
   },
   output: [
     {
-      id: '2',
-      role: 'assistant',
+      id: "2",
+      role: "assistant",
       content:
-        'Exercise provides cardiovascular benefits, improves mood through endorphin release, and helps maintain healthy body composition.',
+        "Exercise provides cardiovascular benefits, improves mood through endorphin release, and helps maintain healthy body composition.",
     },
   ],
 });
@@ -116,18 +116,18 @@ console.log(result);
 This example shows poor context precision with mostly irrelevant context:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { createContextPrecisionScorer } from '@mastra/evals';
+import { openai } from "@ai-sdk/openai";
+import { createContextPrecisionScorer } from "@mastra/evals";
 
 const scorer = createContextPrecisionScorer({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     context: [
-      'The weather forecast shows sunny skies this weekend.',
+      "The weather forecast shows sunny skies this weekend.",
       "Coffee is one of the world's most popular beverages.",
-      'Machine learning requires large amounts of training data.',
-      'Cats typically sleep 12-16 hours per day.',
-      'The capital of France is Paris.',
+      "Machine learning requires large amounts of training data.",
+      "Cats typically sleep 12-16 hours per day.",
+      "The capital of France is Paris.",
     ],
     scale: 1,
   },
@@ -137,17 +137,18 @@ const result = await scorer.run({
   input: {
     inputMessages: [
       {
-        id: '1',
-        role: 'user',
-        content: 'How does photosynthesis work?',
+        id: "1",
+        role: "user",
+        content: "How does photosynthesis work?",
       },
     ],
   },
   output: [
     {
-      id: '2',
-      role: 'assistant',
-      content: 'Photosynthesis is the process by which plants convert sunlight into energy using chlorophyll.',
+      id: "2",
+      role: "assistant",
+      content:
+        "Photosynthesis is the process by which plants convert sunlight into energy using chlorophyll.",
     },
   ],
 });
@@ -166,11 +167,11 @@ console.log(result);
 
 ```typescript
 const scorer = createContextPrecisionScorer({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     context: [
-      'Machine learning models require training data.',
-      'Deep learning uses neural networks with multiple layers.',
+      "Machine learning models require training data.",
+      "Deep learning uses neural networks with multiple layers.",
     ],
     scale: 10, // Scale scores from 0-10 instead of 0-1
   },
@@ -183,15 +184,15 @@ const scorer = createContextPrecisionScorer({
 
 ```typescript
 const scorer = createContextPrecisionScorer({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     contextExtractor: (input, output) => {
       // Extract context dynamically based on the query
-      const query = input?.inputMessages?.[0]?.content || '';
+      const query = input?.inputMessages?.[0]?.content || "";
 
       // Example: Retrieve from a vector database
       const searchResults = vectorDB.search(query, { limit: 10 });
-      return searchResults.map(result => result.content);
+      return searchResults.map((result) => result.content);
     },
     scale: 1,
   },
@@ -202,15 +203,15 @@ const scorer = createContextPrecisionScorer({
 
 ```typescript
 const scorer = createContextPrecisionScorer({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     context: [
       // Simulate retrieved documents from vector database
-      'Document 1: Highly relevant content...',
-      'Document 2: Somewhat related content...',
-      'Document 3: Tangentially related...',
-      'Document 4: Not relevant...',
-      'Document 5: Highly relevant content...',
+      "Document 1: Highly relevant content...",
+      "Document 2: Somewhat related content...",
+      "Document 3: Tangentially related...",
+      "Document 4: Not relevant...",
+      "Document 5: Highly relevant content...",
       // ... up to dozens of context pieces
     ],
   },

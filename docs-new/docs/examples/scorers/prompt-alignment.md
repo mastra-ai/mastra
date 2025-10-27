@@ -1,5 +1,5 @@
 ---
-title: 'Prompt Alignment '
+title: "Prompt Alignment "
 description: Example of using the Prompt Alignment scorer to evaluate how well responses align with user prompt intent and requirements.
 ---
 
@@ -20,17 +20,18 @@ npm install @mastra/evals
 In this example, the response fully addresses the user's prompt with all requirements met.
 
 ```typescript filename="src/example-excellent-prompt-alignment.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { createPromptAlignmentScorerLLM } from '@mastra/evals/scorers/llm';
+import { openai } from "@ai-sdk/openai";
+import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
 
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
 });
 
 const inputMessages = [
   {
-    role: 'user',
-    content: 'Write a Python function to calculate factorial with error handling for negative numbers',
+    role: "user",
+    content:
+      "Write a Python function to calculate factorial with error handling for negative numbers",
   },
 ];
 
@@ -68,22 +69,22 @@ The output receives a high score because it perfectly addresses the intent, fulf
 In this example, the response addresses the core intent but misses some requirements or has format issues.
 
 ```typescript filename="src/example-partial-prompt-alignment.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { createPromptAlignmentScorerLLM } from '@mastra/evals/scorers/llm';
+import { openai } from "@ai-sdk/openai";
+import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
 
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
 });
 
 const inputMessages = [
   {
-    role: 'user',
-    content: 'List the benefits of TypeScript in bullet points',
+    role: "user",
+    content: "List the benefits of TypeScript in bullet points",
   },
 ];
 
 const outputMessage = {
-  text: 'TypeScript provides static typing, better IDE support, and enhanced code reliability through compile-time error checking.',
+  text: "TypeScript provides static typing, better IDE support, and enhanced code reliability through compile-time error checking.",
 };
 
 const result = await scorer.run({
@@ -110,17 +111,18 @@ The output receives a lower score because while the content is accurate, it does
 In this example, the response fails to address the user's specific requirements.
 
 ```typescript filename="src/example-poor-prompt-alignment.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { createPromptAlignmentScorerLLM } from '@mastra/evals/scorers/llm';
+import { openai } from "@ai-sdk/openai";
+import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
 
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
 });
 
 const inputMessages = [
   {
-    role: 'user',
-    content: 'Write a Python class with initialization, validation, error handling, and documentation',
+    role: "user",
+    content:
+      "Write a Python class with initialization, validation, error handling, and documentation",
   },
 ];
 
@@ -155,10 +157,10 @@ You can customize the Prompt Alignment Scorer by adjusting the scale parameter a
 
 ```typescript showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     scale: 10, // Score from 0-10 instead of 0-1
-    evaluationMode: 'both', // 'user', 'system', or 'both' (default)
+    evaluationMode: "both", // 'user', 'system', or 'both' (default)
   },
 });
 ```
@@ -171,27 +173,27 @@ Evaluates how well the response addresses the user's request, ignoring system in
 
 ```typescript filename="src/example-user-mode.ts" showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
-  options: { evaluationMode: 'user' },
+  model: openai("gpt-4o-mini"),
+  options: { evaluationMode: "user" },
 });
 
 const result = await scorer.run({
   input: {
     inputMessages: [
       {
-        role: 'user',
-        content: 'Explain recursion with an example',
+        role: "user",
+        content: "Explain recursion with an example",
       },
     ],
     systemMessages: [
       {
-        role: 'system',
-        content: 'Always provide code examples in Python',
+        role: "system",
+        content: "Always provide code examples in Python",
       },
     ],
   },
   output: {
-    text: 'Recursion is when a function calls itself. For example: factorial(5) = 5 * factorial(4)',
+    text: "Recursion is when a function calls itself. For example: factorial(5) = 5 * factorial(4)",
   },
 });
 // Scores high for addressing user request, even without Python code
@@ -203,27 +205,28 @@ Evaluates compliance with system behavioral guidelines and constraints:
 
 ```typescript filename="src/example-system-mode.ts" showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
-  options: { evaluationMode: 'system' },
+  model: openai("gpt-4o-mini"),
+  options: { evaluationMode: "system" },
 });
 
 const result = await scorer.run({
   input: {
     systemMessages: [
       {
-        role: 'system',
-        content: 'You are a helpful assistant. Always be polite, concise, and provide examples.',
+        role: "system",
+        content:
+          "You are a helpful assistant. Always be polite, concise, and provide examples.",
       },
     ],
     inputMessages: [
       {
-        role: 'user',
-        content: 'What is machine learning?',
+        role: "user",
+        content: "What is machine learning?",
       },
     ],
   },
   output: {
-    text: 'Machine learning is a subset of AI where computers learn from data. For example, spam filters learn to identify unwanted emails by analyzing patterns in previously marked spam.',
+    text: "Machine learning is a subset of AI where computers learn from data. For example, spam filters learn to identify unwanted emails by analyzing patterns in previously marked spam.",
   },
 });
 // Evaluates politeness, conciseness, and example provision
@@ -235,22 +238,23 @@ Evaluates both user intent fulfillment and system compliance with weighted scori
 
 ```typescript filename="src/example-both-mode.ts" showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
-  options: { evaluationMode: 'both' }, // This is the default
+  model: openai("gpt-4o-mini"),
+  options: { evaluationMode: "both" }, // This is the default
 });
 
 const result = await scorer.run({
   input: {
     systemMessages: [
       {
-        role: 'system',
-        content: 'Always provide code examples when explaining programming concepts',
+        role: "system",
+        content:
+          "Always provide code examples when explaining programming concepts",
       },
     ],
     inputMessages: [
       {
-        role: 'user',
-        content: 'Explain how to reverse a string',
+        role: "user",
+        content: "Explain how to reverse a string",
       },
     ],
   },

@@ -1,5 +1,5 @@
 ---
-title: 'Using a Tool as a Step '
+title: "Using a Tool as a Step "
 description: Example of using Mastra to integrate a tool as a step in a workflow.
 ---
 
@@ -12,12 +12,12 @@ Workflows can include tools as steps. This example shows how to define an tool a
 Create a simple tool that takes a string input and returns the reversed version.
 
 ```typescript filename="src/mastra/tools/example-reverse-tool.ts" showLineNumbers copy
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
 export const reverseTool = createTool({
-  id: 'reverse-tool',
-  description: 'Reverse the input string',
+  id: "reverse-tool",
+  description: "Reverse the input string",
   inputSchema: z.object({
     input: z.string(),
   }),
@@ -26,7 +26,7 @@ export const reverseTool = createTool({
   }),
   execute: async ({ context }) => {
     const { input } = context;
-    const reversed = input.split('').reverse().join('');
+    const reversed = input.split("").reverse().join("");
 
     return {
       output: reversed,
@@ -42,15 +42,15 @@ Use a tool as a step by passing it directly to `createStep()`. Using `.map()` is
 In this example, the workflow accepts a `word`, which is mapped to the tool's `input`. The tool returns an `output` string, which is passed directly to the workflow's `reversed` output without any extra transformation.
 
 ```typescript filename="src/mastra/workflows/example-tool-step.ts" showLineNumbers copy
-import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
-import { reverseTool } from '../tools/example-reverse-tool';
+import { reverseTool } from "../tools/example-reverse-tool";
 
 const step1 = createStep(reverseTool);
 
 export const toolAsStep = createWorkflow({
-  id: 'tool-step-workflow',
+  id: "tool-step-workflow",
   inputSchema: z.object({
     word: z.string(),
   }),

@@ -1,6 +1,6 @@
 ---
-title: 'MastraAuthAuth0 Class'
-description: 'API reference for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication.'
+title: "MastraAuthAuth0 Class"
+description: "API reference for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication."
 ---
 
 # MastraAuthAuth0 Class
@@ -10,8 +10,8 @@ The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It v
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
   // ..

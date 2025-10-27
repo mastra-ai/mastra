@@ -1,6 +1,6 @@
 ---
-title: 'Working Memory'
-description: 'Learn how to configure working memory in Mastra to store persistent user data, preferences.'
+title: "Working Memory"
+description: "Learn how to configure working memory in Mastra to store persistent user data, preferences."
 sidebar_position: 3
 ---
 
@@ -8,7 +8,7 @@ import YouTube from '@site/src/components/YouTube';
 
 # Working Memory
 
-While [conversation history](/docs/memory/overview) and [semantic recall](./semantic-recall) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
+While [conversation history](./conversation-history) and [semantic recall](./semantic-recall.md) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
 
 Think of it as the agent's active thoughts or scratchpad – the key information they keep available about the user or task. It's similar to how a person would naturally remember someone's name, preferences, or important details during a conversation.
 
@@ -16,8 +16,8 @@ This is useful for maintaining ongoing state that's always relevant and should a
 
 Working memory can persist at two different scopes:
 
-- **Thread-scoped** (default): Memory is isolated per conversation thread
-- **Resource-scoped**: Memory persists across all conversation threads for the same user
+- **Resource-scoped** (default): Memory persists across all conversation threads for the same user
+- **Thread-scoped**: Memory is isolated per conversation thread
 
 **Important:** Switching between scopes means the agent won't see memory from the other scope - thread-scoped memory is completely separate from resource-scoped memory.
 
@@ -26,15 +26,15 @@ Working memory can persist at two different scopes:
 Here's a minimal example of setting up an agent with working memory:
 
 ```typescript {12-15}
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-import { openai } from '@ai-sdk/openai';
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
 
 // Create agent with working memory enabled
 const agent = new Agent({
-  name: 'PersonalAssistant',
-  instructions: 'You are a helpful personal assistant.',
-  model: openai('gpt-4o'),
+  name: "PersonalAssistant",
+  instructions: "You are a helpful personal assistant.",
+  model: openai("gpt-4o"),
   memory: new Memory({
     options: {
       workingMemory: {
@@ -55,36 +55,9 @@ Working memory is a block of Markdown text that the agent is able to update over
 
 Working memory can operate in two different scopes, allowing you to choose how memory persists across conversations:
 
-### Thread-Scoped Memory (Default)
+### Resource-Scoped Memory (Default)
 
-By default, working memory is scoped to individual conversation threads. Each thread maintains its own isolated memory:
-
-```typescript
-const memory = new Memory({
-  storage,
-  options: {
-    workingMemory: {
-      enabled: true,
-      scope: 'thread', // Default - memory is isolated per thread
-      template: `# User Profile
-- **Name**:
-- **Interests**:
-- **Current Goal**:
-`,
-    },
-  },
-});
-```
-
-**Use cases:**
-
-- Different conversations about separate topics
-- Temporary or session-specific information
-- Workflows where each thread needs working memory but threads are ephemeral and not related to each other
-
-### Resource-Scoped Memory
-
-Resource-scoped memory persists across all conversation threads for the same user (resourceId), enabling persistent user memory:
+By default, working memory persists across all conversation threads for the same user (resourceId), enabling persistent user memory:
 
 ```typescript
 const memory = new Memory({
@@ -92,7 +65,7 @@ const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
-      scope: 'resource', // Memory persists across all user threads
+      scope: "resource", // Memory persists across all user threads
       template: `# User Profile
 - **Name**:
 - **Location**:
@@ -117,17 +90,44 @@ When using resource-scoped memory, make sure to pass the `resourceId` parameter:
 
 ```typescript
 // Resource-scoped memory requires resourceId
-const response = await agent.generate('Hello!', {
-  threadId: 'conversation-123',
-  resourceId: 'user-alice-456', // Same user across different threads
+const response = await agent.generate("Hello!", {
+  threadId: "conversation-123",
+  resourceId: "user-alice-456", // Same user across different threads
 });
 ```
+
+### Thread-Scoped Memory
+
+Thread-scoped memory isolates working memory to individual conversation threads. Each thread maintains its own isolated memory:
+
+```typescript
+const memory = new Memory({
+  storage,
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: "thread", // Memory is isolated per thread
+      template: `# User Profile
+- **Name**:
+- **Interests**:
+- **Current Goal**:
+`,
+    },
+  },
+});
+```
+
+**Use cases:**
+
+- Different conversations about separate topics
+- Temporary or session-specific information
+- Workflows where each thread needs working memory but threads are ephemeral and not related to each other
 
 ## Storage Adapter Support
 
 Resource-scoped working memory requires specific storage adapters that support the `mastra_resources` table:
 
-### Supported Storage Adapters
+### ✅ Supported Storage Adapters
 
 - **LibSQL** (`@mastra/libsql`)
 - **PostgreSQL** (`@mastra/pg`)
@@ -226,8 +226,8 @@ Working memory can also be defined using a structured schema instead of a Markdo
 ### Example: Schema-Based Working Memory
 
 ```typescript
-import { z } from 'zod';
-import { Memory } from '@mastra/memory';
+import { z } from "zod";
+import { Memory } from "@mastra/memory";
 
 const userProfileSchema = z.object({
   name: z.string().optional(),
@@ -320,9 +320,9 @@ When creating a thread, you can provide initial working memory through the metad
 ```typescript filename="src/app/medical-consultation.ts" showLineNumbers copy
 // Create a thread with initial working memory
 const thread = await memory.createThread({
-  threadId: 'thread-123',
-  resourceId: 'user-456',
-  title: 'Medical Consultation',
+  threadId: "thread-123",
+  resourceId: "user-456",
+  title: "Medical Consultation",
   metadata: {
     workingMemory: `# Patient Profile
 - Name: John Doe
@@ -337,7 +337,7 @@ const thread = await memory.createThread({
 // The agent will now have access to this information in all messages
 await agent.generate("What's my blood type?", {
   threadId: thread.id,
-  resourceId: 'user-456',
+  resourceId: "user-456",
 });
 // Response: "Your blood type is O+."
 ```
@@ -349,7 +349,7 @@ You can also update an existing thread's working memory:
 ```typescript filename="src/app/medical-consultation.ts" showLineNumbers copy
 // Update thread metadata to add/modify working memory
 await memory.updateThread({
-  id: 'thread-123',
+  id: "thread-123",
   title: thread.title,
   metadata: {
     ...thread.metadata,
@@ -370,9 +370,9 @@ Alternatively, use the `updateWorkingMemory` method directly:
 
 ```typescript filename="src/app/medical-consultation.ts" showLineNumbers copy
 await memory.updateWorkingMemory({
-  threadId: 'thread-123',
-  resourceId: 'user-456', // Required for resource-scoped memory
-  workingMemory: 'Updated memory content...',
+  threadId: "thread-123",
+  resourceId: "user-456", // Required for resource-scoped memory
+  workingMemory: "Updated memory content...",
 });
 ```
 

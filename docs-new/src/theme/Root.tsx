@@ -1,9 +1,9 @@
-import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
-import { KapaProvider } from '@kapaai/react-sdk';
-import { CookieConsent } from '@site/src/components/cookie/cookie-consent';
-import { Toaster } from '@site/src/components/ui/sonner';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import React from 'react';
+import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
+import { KapaProvider } from "@kapaai/react-sdk";
+import { CookieConsent } from "@site/src/components/cookie/cookie-consent";
+import { Toaster } from "@site/src/components/ui/sonner";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React from "react";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,7 +20,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
   const kapaIntegrationId = siteConfig.customFields.kapaIntegrationId as string;
   return (
     <QueryClientProvider client={queryClient}>
-      <KapaProvider integrationId={kapaIntegrationId || ''}>
+      <KapaProvider integrationId={kapaIntegrationId || ""}>
         <Toaster />
         <CookieConsent />
         {children}

@@ -1,6 +1,6 @@
 ---
-title: 'ChunkType '
-description: 'Documentation for the ChunkType type used in Mastra streaming responses, defining all possible chunk types and their payloads.'
+title: "ChunkType "
+description: "Documentation for the ChunkType type used in Mastra streaming responses, defining all possible chunk types and their payloads."
 ---
 
 # ChunkType
@@ -812,33 +812,33 @@ parameters: [
 ## Usage Example
 
 ```typescript
-const stream = await agent.stream('Hello');
+const stream = await agent.stream("Hello");
 
 for await (const chunk of stream.fullStream) {
   switch (chunk.type) {
-    case 'text-delta':
-      console.log('Text:', chunk.payload.text);
+    case "text-delta":
+      console.log("Text:", chunk.payload.text);
       break;
 
-    case 'tool-call':
-      console.log('Calling tool:', chunk.payload.toolName);
+    case "tool-call":
+      console.log("Calling tool:", chunk.payload.toolName);
       break;
 
-    case 'tool-result':
-      console.log('Tool result:', chunk.payload.result);
+    case "tool-result":
+      console.log("Tool result:", chunk.payload.result);
       break;
 
-    case 'reasoning-delta':
-      console.log('Reasoning:', chunk.payload.text);
+    case "reasoning-delta":
+      console.log("Reasoning:", chunk.payload.text);
       break;
 
-    case 'finish':
-      console.log('Finished:', chunk.payload.stepResult.reason);
-      console.log('Usage:', chunk.payload.output.usage);
+    case "finish":
+      console.log("Finished:", chunk.payload.stepResult.reason);
+      console.log("Usage:", chunk.payload.output.usage);
       break;
 
-    case 'error':
-      console.error('Error:', chunk.payload.error);
+    case "error":
+      console.error("Error:", chunk.payload.error);
       break;
   }
 }

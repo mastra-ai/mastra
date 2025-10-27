@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Summarization '
+title: "Summarization"
 description: Documentation for the Summarization Metric in Mastra, which evaluates the quality of LLM-generated summaries for content and factual accuracy.
 ---
 
@@ -16,17 +16,17 @@ The `SummarizationMetric` evaluates how well an LLM's summary captures the origi
 ## Basic Usage
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { SummarizationMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { SummarizationMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new SummarizationMetric(model);
 
 const result = await metric.measure(
-  'The company was founded in 1995 by John Smith. It started with 10 employees and grew to 500 by 2020. The company is based in Seattle.',
-  'Founded in 1995 by John Smith, the company grew from 10 to 500 employees by 2020.',
+  "The company was founded in 1995 by John Smith. It started with 10 employees and grew to 500 by 2020. The company is based in Seattle.",
+  "Founded in 1995 by John Smith, the company grew from 10 to 500 employees by 2020.",
 );
 
 console.log(result.score); // Score from 0-1
@@ -178,17 +178,17 @@ Final score: `min(alignment_score, coverage_score) * scale`
 ## Example with Analysis
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { SummarizationMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { SummarizationMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new SummarizationMetric(model);
 
 const result = await metric.measure(
   "The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car, the Roadster, was launched in 2008.",
-  'Tesla, founded by Elon Musk in 2003, revolutionized the electric car industry starting with the Roadster in 2008.',
+  "Tesla, founded by Elon Musk in 2003, revolutionized the electric car industry starting with the Roadster in 2008.",
 );
 
 // Example output:

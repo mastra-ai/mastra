@@ -1,5 +1,5 @@
 ---
-title: 'Memory with LibSQL '
+title: "Memory with LibSQL "
 description: Example for how to use Mastra's memory system with LibSQL storage and vector database backend.
 ---
 
@@ -26,18 +26,19 @@ npm install @mastra/libsql
 To add LibSQL memory to an agent use the `Memory` class and create a new `storage` key using `LibSQLStore`. The `url` can either by a remote location, or a local file system resource.
 
 ```typescript filename="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
-import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
 
 export const libsqlAgent = new Agent({
-  name: 'libsql-agent',
-  instructions: 'You are an AI agent with the ability to automatically recall memories from previous interactions.',
-  model: openai('gpt-4o'),
+  name: "libsql-agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
-      url: 'file:libsql-agent.db',
+      url: "file:libsql-agent.db",
     }),
     options: {
       threads: {
@@ -61,22 +62,23 @@ npm install @mastra/fastembed
 Add the following to your agent:
 
 ```typescript filename="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
-import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-import { fastembed } from '@mastra/fastembed';
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+import { fastembed } from "@mastra/fastembed";
 
 export const libsqlAgent = new Agent({
-  name: 'libsql-agent',
-  instructions: 'You are an AI agent with the ability to automatically recall memories from previous interactions.',
-  model: openai('gpt-4o'),
+  name: "libsql-agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
-      url: 'file:libsql-agent.db',
+      url: "file:libsql-agent.db",
     }),
     vector: new LibSQLVector({
-      connectionUrl: 'file:libsql-agent.db',
+      connectionUrl: "file:libsql-agent.db",
     }),
     embedder: fastembed,
     options: {
@@ -98,16 +100,16 @@ export const libsqlAgent = new Agent({
 Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
 
 ```typescript filename="src/test-libsql-agent.ts" showLineNumbers copy
-import 'dotenv/config';
+import "dotenv/config";
 
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
-const threadId = '123';
-const resourceId = 'user-456';
+const threadId = "123";
+const resourceId = "user-456";
 
-const agent = mastra.getAgent('libsqlAgent');
+const agent = mastra.getAgent("libsqlAgent");
 
-const message = await agent.stream('My name is Mastra', {
+const message = await agent.stream("My name is Mastra", {
   memory: {
     thread: threadId,
     resource: resourceId,
@@ -134,7 +136,3 @@ for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
 }
 ```
-
-## Related
-
-- [Calling Agents](../agents/calling-agents)

@@ -1,6 +1,7 @@
 ---
-title: 'Reference: Upstash Vector Store '
+title: "UpstashVector"
 description: Documentation for the UpstashVector class in Mastra, which provides vector search using Upstash Vector.
+sidebar_position: 14
 ---
 
 # Upstash Vector Store
@@ -164,7 +165,7 @@ Returns:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
+  metric: "cosine" | "euclidean" | "dotproduct";
 }
 ```
 
@@ -234,7 +235,7 @@ Upstash Vector supports hybrid search that combines semantic search (dense vecto
 ### Basic Hybrid Usage
 
 ```typescript copy
-import { UpstashVector } from '@mastra/upstash';
+import { UpstashVector } from "@mastra/upstash";
 
 const vectorStore = new UpstashVector({
   url: process.env.UPSTASH_VECTOR_URL,
@@ -252,15 +253,15 @@ const sparseVectors = [
 ];
 
 await vectorStore.upsert({
-  indexName: 'hybrid-index',
+  indexName: "hybrid-index",
   vectors: denseVectors,
   sparseVectors: sparseVectors,
-  metadata: [{ title: 'Document 1' }, { title: 'Document 2' }],
+  metadata: [{ title: "Document 1" }, { title: "Document 2" }],
 });
 
 // Query with hybrid search
 const results = await vectorStore.query({
-  indexName: 'hybrid-index',
+  indexName: "hybrid-index",
   queryVector: [0.1, 0.2, 0.3],
   sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
   topK: 10,
@@ -270,11 +271,11 @@ const results = await vectorStore.query({
 ### Advanced Hybrid Search Options
 
 ```typescript copy
-import { FusionAlgorithm, QueryMode } from '@upstash/vector';
+import { FusionAlgorithm, QueryMode } from "@upstash/vector";
 
 // Query with specific fusion algorithm
 const fusionResults = await vectorStore.query({
-  indexName: 'hybrid-index',
+  indexName: "hybrid-index",
   queryVector: [0.1, 0.2, 0.3],
   sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
   fusionAlgorithm: FusionAlgorithm.RRF,
@@ -283,7 +284,7 @@ const fusionResults = await vectorStore.query({
 
 // Dense-only search
 const denseResults = await vectorStore.query({
-  indexName: 'hybrid-index',
+  indexName: "hybrid-index",
   queryVector: [0.1, 0.2, 0.3],
   queryMode: QueryMode.DENSE,
   topK: 10,
@@ -291,7 +292,7 @@ const denseResults = await vectorStore.query({
 
 // Sparse-only search
 const sparseResults = await vectorStore.query({
-  indexName: 'hybrid-index',
+  indexName: "hybrid-index",
   queryVector: [0.1, 0.2, 0.3], // Still required for index structure
   sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
   queryMode: QueryMode.SPARSE,
@@ -304,12 +305,12 @@ const sparseResults = await vectorStore.query({
 ```typescript copy
 // Update both dense and sparse components
 await vectorStore.updateVector({
-  indexName: 'hybrid-index',
-  id: 'vector-id',
+  indexName: "hybrid-index",
+  id: "vector-id",
   update: {
     vector: [0.2, 0.3, 0.4],
     sparseVector: { indices: [2, 7, 12], values: [0.9, 0.8, 0.6] },
-    metadata: { title: 'Updated Document' },
+    metadata: { title: "Updated Document" },
   },
 });
 ```
@@ -334,7 +335,7 @@ The store throws typed errors that can be caught:
 ```typescript copy
 try {
   await store.query({
-    indexName: 'index_name',
+    indexName: "index_name",
     queryVector: queryVector,
   });
 } catch (error) {
