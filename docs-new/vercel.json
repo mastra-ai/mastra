@@ -6,6 +6,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/workflows/using-with-agents-and-tools",
+      "destination": "/docs/workflows/agents-and-tools",
+      "permanent": true
+    },
+    {
       "source": "/docs/getting-started/model-capability",
       "destination": "/docs/models",
       "permanent": true
@@ -1163,11 +1168,6 @@
     {
       "source": "/examples/agents/using-a-tool",
       "destination": "/docs/agents/using-tools-and-mcp#adding-tools-to-an-agent",
-      "permanent": true
-    },
-    {
-      "source": "/examples/agents/using-a-workflow",
-      "destination": "/docs/workflows/using-with-agents-and-tools#adding-an-agent-as-a-step",
       "permanent": true
     },
     {

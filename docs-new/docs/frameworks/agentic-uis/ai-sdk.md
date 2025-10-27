@@ -427,7 +427,7 @@ export async function POST(req: Request) {
 }
 ```
 
-> When using `useChat()` with agent memory, refer to the [Agent Memory section](/docs/agents/agent-memory#usechat) for key implementation details.
+> When using `useChat()` with agent memory, refer to the [Agent Memory section](/docs/agents/agent-memory#memory-in-agent-calls) for key implementation details.
 
 ### Using `useCompletion()`
 
