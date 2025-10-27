@@ -1,9 +1,9 @@
 import { ParsedField, ParsedSchema, SchemaValidation } from '@autoform/core';
-import { getDefaultValueInZodStack, getFieldConfigInZodStack, ZodProvider, getDefaultValues } from '@autoform/zod/v4';
+import { getFieldConfigInZodStack, ZodProvider } from '@autoform/zod/v4';
 import { z } from 'zod';
 import { z as zV3 } from 'zod/v3';
 import { inferFieldType } from './field-type-inference';
-import { get } from 'http';
+import { getDefaultValues, getDefaultValueInZodStack } from './default-values';
 
 function parseField(key: string, schema: z.ZodTypeAny): ParsedField {
   const baseSchema = getBaseSchema(schema);
@@ -30,26 +30,7 @@ function parseField(key: string, schema: z.ZodTypeAny): ParsedField {
   }
   if (baseSchema instanceof zV3.ZodUnion || baseSchema instanceof z.ZodUnion) {
     subSchema = Object.entries((baseSchema.def as any).options).map(([key, field]: [string, unknown]) => {
-      const parsedField = parseField(key, field as unknown as z.ZodTypeAny);
-
-      // let fallbackDefault = undefined;
-      // if (typeof defaultValue === 'object') {
-      //   if (parsedField.type === 'object') {
-      //     fallbackDefault =
-      //       typeof defaultValue === 'object' && Object.keys(defaultValue).length > 0 ? defaultValue : undefined;
-      //   } else if (parsedField.type === 'array') {
-      //     fallbackDefault = Array.isArray(defaultValue) ? defaultValue : undefined;
-      //   } else if (parsedField.type === 'date') {
-      //     fallbackDefault = defaultValue instanceof Date ? defaultValue : undefined;
-      //   }
-      // } else {
-      //   fallbackDefault = typeof defaultValue === parsedField.type ? defaultValue : undefined;
-      // }
-
-      return {
-        ...parsedField,
-        // default: parsedField.default ?? fallbackDefault,
-      };
+      return parseField(key, field as unknown as z.ZodTypeAny);
     });
   }
   if (baseSchema instanceof zV3.ZodIntersection || baseSchema instanceof z.ZodIntersection) {
@@ -93,8 +74,6 @@ export function parseSchema(schema: z.ZodObject): ParsedSchema {
 
   const fields: ParsedField[] = Object.entries(shape).map(([key, field]) => parseField(key, field as z.ZodTypeAny));
 
-  console.log('fields==', fields);
-
   return { fields };
 }
 
@@ -105,12 +84,9 @@ export class CustomZodProvider<T extends z.ZodObject> extends ZodProvider<T> {
     this._schema = schema;
   }
 
-  // getDefaultValues(): z.core.output<T> {
-  //   const defaultValues = super.getDefaultValues() as z.core.output<T>;
-  //   const parsedSchema = this.parseSchema();
-
-  //   return defaultValues;
-  // }
+  getDefaultValues(): z.core.output<T> {
+    return getDefaultValues(this._schema) as z.core.output<T>;
+  }
 
   validateSchema(values: z.core.output<T>): SchemaValidation {
     const result = super.validateSchema(values);
