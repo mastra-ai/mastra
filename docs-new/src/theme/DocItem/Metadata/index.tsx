@@ -9,7 +9,7 @@ export default function DocItemMetadata(): ReactNode {
   const ogImage =
     assets.image ??
     frontMatter.image ??
-    `https://mastra.ai/api/og/docs?title=${encodeURIComponent(metadata.title)}&date=${encodeURIComponent(metadata.lastUpdatedAt || "")}`;
+    `https://mastra.ai/api/og/docs?title=${encodeURIComponent(metadata.title)}&date=${encodeURIComponent(metadata?.lastUpdatedAt || "")}`;
 
   return (
     <PageMetadata
