@@ -7,9 +7,10 @@ import { useChat } from '@kapaai/react-sdk';
 import { PulsingDots } from '@site/src/components/loading';
 import { Button } from '@site/src/components/ui/button';
 import { Textarea } from '@site/src/components/ui/textarea';
-import { ArrowUp, PanelRightClose, Square, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { ArrowUp, PanelLeftClose, PanelRightClose, Square, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { useStickToBottom } from 'use-stick-to-bottom';
 import styles from './styles.module.css';
+import { cn } from '@site/src/lib/utils';
 
 interface ChatbotSidebarProps {
   hiddenChatbotSidebar: boolean;
@@ -99,9 +100,9 @@ export default function ChatbotSidebar({
         />
         {/* Sidebar content */}
         <div className={styles.chatbotContent} ref={scrollRef}>
-          <div className="sticky top-0 backdrop-blur-md bg-(--mastra-surface-1)/50 z-10 flex items-center gap-2 px-3 py-2 -mx-[10px] border-b border-(--border)">
+          <div className={cn("sticky top-0 backdrop-blur-md bg-(--mastra-surface-1)/50 z-10 flex items-center gap-2 px-3 py-2 -mx-[10px]", !hiddenChatbotSidebar && "border-b border-(--border)")}>
             <button className="hover:bg-(--mastra-surface-5) p-1.5 rounded-lg cursor-pointer" onClick={toggleSidebar}>
-              <PanelRightClose className="w-4 h-4" />
+              {!hiddenChatbotSidebar ? <PanelRightClose className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
             </button>
             {!hiddenChatbotSidebar && (
               <span className="text-sm font-medium text-(--mastra-text-tertiary)">Chat with Mastra docs</span>

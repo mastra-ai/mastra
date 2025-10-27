@@ -1299,3 +1299,7 @@ span[class*="categoryLinkLabel"] {
     }
   }
 }
+
+#docs-search-results {
+  scrollbar-width: none;
+}
