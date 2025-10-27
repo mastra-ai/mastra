@@ -138,41 +138,6 @@ export const agent = new Agent({
 });
 ```
 
-### Output processing with batching
-
-When using `ModerationProcessor` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the moderator, reducing the number of LLM calls required for moderation.
-
-```typescript filename="src/mastra/agents/output-moderated-agent.ts" showLineNumbers copy
-import { Agent } from "@mastra/core/agent";
-import { BatchPartsProcessor, ModerationProcessor } from "@mastra/core/processors";
-
-export const agent = new Agent({
-  name: "output-moderated-agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o-mini",
-  outputProcessors: [
-    // Batch stream parts first to reduce LLM calls
-    new BatchPartsProcessor({
-      batchSize: 5,
-      maxWaitTime: 100,
-      emitOnNonText: true,
-    }),
-    // Then apply moderation on batched content
-    new ModerationProcessor({
-      model: "openai/gpt-4.1-nano",
-      categories: ["hate", "harassment", "violence", "sexual"],
-      threshold: 0.7,
-      strategy: "filter",
-      instructions: "Detect and filter inappropriate content in responses",
-      includeScores: true,
-      chunkWindow: 1
-    })
-  ]
-});
-```
-
-> **Performance tip:** Without `BatchPartsProcessor`, the moderation processor would make an LLM call for every streaming chunk (potentially hundreds of calls per response). By batching chunks first, you significantly reduce API calls and improve response times. The `chunkWindow` parameter can still be used to provide context from previous batches.
-
 ## Related
 
 - [Input Processors](/docs/agents/input-processors)
