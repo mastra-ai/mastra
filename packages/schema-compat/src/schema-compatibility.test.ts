@@ -41,6 +41,8 @@ const mockModel = new MockLanguageModelV1({
   defaultObjectGenerationMode: 'json',
 });
 
+const constraintsPrefix = `The following constraint hints should be followed, but these constraints are not a schema shape: `;
+
 describe('SchemaCompatLayer', () => {
   let compatibility: MockSchemaCompatibility;
 
@@ -70,7 +72,7 @@ describe('SchemaCompatLayer', () => {
 
       const result = compatibility.mergeParameterDescription(description, constraints);
 
-      expect(result).toBe('Original description\n{"minLength":5,"maxLength":10}');
+      expect(result).toBe(`Original description\n${constraintsPrefix}{"minLength":5,"maxLength":10}`);
     });
 
     it('should handle undefined description with constraints', () => {
@@ -78,7 +80,7 @@ describe('SchemaCompatLayer', () => {
 
       const result = compatibility.mergeParameterDescription(undefined, constraints);
 
-      expect(result).toBe('{"email":true}');
+      expect(result).toBe(`${constraintsPrefix}{"email":true}`);
     });
 
     it('should handle empty constraints', () => {
