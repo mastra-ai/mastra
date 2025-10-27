@@ -94,11 +94,8 @@ type ModelFallbacks = {
   enabled: boolean;
 }[];
 
-function resolveMaybePromise<T, R = void>(
-  value: T | Promise<T> | PromiseLike<T>, 
-  cb: (value: T) => R
-): R | Promise<R> {
-  if (value instanceof Promise || (value != null && typeof (value as PromiseLike<T>).then === "function")) {
+function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>, cb: (value: T) => R): R | Promise<R> {
+  if (value instanceof Promise || (value != null && typeof (value as PromiseLike<T>).then === 'function')) {
     return Promise.resolve(value).then(cb);
   }
 
