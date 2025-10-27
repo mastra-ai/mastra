@@ -485,7 +485,14 @@ pre,
   }
 
   .theme-doc-sidebar-container.theme-doc-sidebar-container {
+    padding-inline-start: 1rem;
     border-right: var(--border-sm) solid var(--border);
+  }
+
+  @media (min-width: 1536px) {
+    .theme-doc-sidebar-container.theme-doc-sidebar-container {
+      padding-inline-start: 0;
+    }
   }
 
   .theme-doc-toc-desktop.theme-doc-toc-desktop {
