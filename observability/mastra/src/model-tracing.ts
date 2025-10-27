@@ -9,12 +9,15 @@
  */
 
 import { TransformStream } from 'stream/web';
-import type { ToolSet } from 'ai-v5';
-import type { MastraError } from '../error';
-import type { OutputSchema } from '../stream/base/schema';
-import type { ChunkType, StepStartPayload, StepFinishPayload } from '../stream/types';
-import { AISpanType } from './types';
-import type { AISpan, AnyAISpan, ModelGenerationAttributes } from './types';
+import { AISpanType } from '@mastra/core/observability';
+import type {
+  AISpan,
+  EndSpanOptions,
+  ErrorSpanOptions,
+  TracingContext,
+  UpdateSpanOptions,
+} from '@mastra/core/observability';
+import type { OutputSchema, ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/core/stream';
 
 /**
  * Manages MODEL_STEP and MODEL_CHUNK span tracking for streaming Model responses.
@@ -38,7 +41,7 @@ export class ModelSpanTracker {
    * Get the tracing context for creating child spans.
    * Returns the current step span if active, otherwise the model span.
    */
-  getTracingContext(): { currentSpan?: AnyAISpan } {
+  getTracingContext(): TracingContext {
     return {
       currentSpan: this.#currentStepSpan ?? this.#modelSpan,
     };
@@ -47,30 +50,21 @@ export class ModelSpanTracker {
   /**
    * Report an error on the generation span
    */
-  reportGenerationError(options: { error: MastraError | Error; endSpan?: boolean }): void {
+  reportGenerationError(options: ErrorSpanOptions<AISpanType.MODEL_GENERATION>): void {
     this.#modelSpan?.error(options);
   }
 
   /**
    * End the generation span
    */
-  endGeneration(options?: {
-    output?: any;
-    attributes?: Partial<ModelGenerationAttributes>;
-    metadata?: Record<string, any>;
-  }): void {
+  endGeneration(options?: EndSpanOptions<AISpanType.MODEL_GENERATION>): void {
     this.#modelSpan?.end(options);
   }
 
   /**
    * Update the generation span
    */
-  updateGeneration(options: {
-    input?: any;
-    output?: any;
-    attributes?: Partial<ModelGenerationAttributes>;
-    metadata?: Record<string, any>;
-  }): void {
+  updateGeneration(options: UpdateSpanOptions<AISpanType.MODEL_GENERATION>): void {
     this.#modelSpan?.update(options);
   }
 
@@ -95,7 +89,7 @@ export class ModelSpanTracker {
   /**
    * End the current Model execution step with token usage, finish reason, output, and metadata
    */
-  #endStepSpan<OUTPUT extends OutputSchema>(payload: StepFinishPayload<ToolSet, OUTPUT>) {
+  #endStepSpan<OUTPUT extends OutputSchema>(payload: StepFinishPayload<any, OUTPUT>) {
     if (!this.#currentStepSpan) return;
 
     // Extract all data from step-finish chunk

@@ -1,8 +1,8 @@
-import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
-import { LogLevel } from '../../logger';
-import { fetchWithRetry } from '../../utils';
-import { AITracingEventType } from '../types';
-import type { AITracingEvent, AnyExportedAISpan } from '../types';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { LogLevel } from '@mastra/core/logger';
+import { AITracingEventType } from '@mastra/core/observability';
+import type { AITracingEvent, AnyExportedAISpan } from '@mastra/core/observability';
+import { fetchWithRetry } from '@mastra/core/utils';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
 

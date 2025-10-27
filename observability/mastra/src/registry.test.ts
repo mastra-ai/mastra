@@ -1,5 +1,13 @@
+import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
+import { AISpanType, SamplingStrategyType, AITracingEventType } from '@mastra/core/observability';
+import type {
+  AISpan,
+  CreateSpanOptions,
+  ConfigSelector,
+  ConfigSelectorOptions,
+  TracingConfig,
+} from '@mastra/core/observability';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ConsoleLogger, LogLevel } from '../logger';
 import { CloudExporter, DefaultExporter } from './exporters';
 import {
   clearAITracingRegistry,
@@ -9,14 +17,12 @@ import {
   hasAITracing,
   getDefaultAITracing,
   getSelectedAITracing,
-  setupAITracing,
+  setupAITracingRegistry,
   shutdownAITracingRegistry,
   setSelector,
 } from './registry';
 import { SensitiveDataFilter } from './span_processors';
-import { DefaultAITracing, BaseAITracing } from './tracers';
-import type { AISpan, CreateSpanOptions, ConfigSelector, ConfigSelectorOptions, TracingConfig } from './types';
-import { AISpanType, SamplingStrategyType, AITracingEventType } from './types';
+import { BaseAITracing, DefaultAITracing } from './tracers';
 
 describe('AI Tracing Registry', () => {
   beforeEach(() => {
@@ -233,7 +239,7 @@ describe('AI Tracing Registry', () => {
         exporters: [],
       };
 
-      setupAITracing({
+      setupAITracingRegistry({
         configs: {
           test: tracingConfig,
         },
@@ -253,7 +259,7 @@ describe('AI Tracing Registry', () => {
         name: 'default-sampling-instance',
       };
 
-      setupAITracing({
+      setupAITracingRegistry({
         configs: {
           test: tracingConfig,
         },
@@ -296,7 +302,7 @@ describe('AI Tracing Registry', () => {
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      setupAITracing({
+      setupAITracingRegistry({
         configs: {
           custom: customInstance,
         },
@@ -322,7 +328,7 @@ describe('AI Tracing Registry', () => {
         sampling: { type: SamplingStrategyType.NEVER },
       });
 
-      setupAITracing({
+      setupAITracingRegistry({
         configs: {
           standard: {
             serviceName: 'standard-service',
@@ -365,7 +371,7 @@ describe('AI Tracing Registry', () => {
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      setupAITracing({
+      setupAITracingRegistry({
         configs: {
           test: testInstance,
         },
@@ -388,7 +394,7 @@ describe('AI Tracing Registry', () => {
         sampling: { type: SamplingStrategyType.ALWAYS },
       };
 
-      setupAITracing({
+      setupAITracingRegistry({
         configs: {
           duplicate: tracingConfig,
         },
@@ -396,7 +402,7 @@ describe('AI Tracing Registry', () => {
 
       // Attempting to register the same name should throw
       expect(() => {
-        setupAITracing({
+        setupAITracingRegistry({
           configs: {
             duplicate: tracingConfig,
           },
@@ -411,7 +417,7 @@ describe('AI Tracing Registry', () => {
         return undefined; // Use default
       };
 
-      setupAITracing({
+      setupAITracingRegistry({
         configs: {
           console: {
             serviceName: 'console-service',
@@ -449,10 +455,10 @@ describe('AI Tracing Registry', () => {
     });
   });
 
-  describe('setupAITracing edge cases', () => {
+  describe('setupAITracingRegistry edge cases', () => {
     it('should handle config.configs being undefined', () => {
       expect(() => {
-        setupAITracing({
+        setupAITracingRegistry({
           default: { enabled: false },
           // configs is undefined
         });
@@ -461,7 +467,7 @@ describe('AI Tracing Registry', () => {
 
     it('should handle config.configs being empty array', () => {
       expect(() => {
-        setupAITracing({
+        setupAITracingRegistry({
           default: { enabled: false },
           configs: [] as any, // Empty array instead of object
         });
@@ -470,7 +476,7 @@ describe('AI Tracing Registry', () => {
 
     it('should handle config.configs being undefined with default enabled', () => {
       expect(() => {
-        setupAITracing({
+        setupAITracingRegistry({
           default: { enabled: true },
           // configs is undefined - should not throw "Cannot read properties of undefined"
         });
@@ -483,7 +489,7 @@ describe('AI Tracing Registry', () => {
 
     it('should handle empty configs object', () => {
       expect(() => {
-        setupAITracing({
+        setupAITracingRegistry({
           default: { enabled: false },
           configs: {}, // Empty object
         });
@@ -494,7 +500,7 @@ describe('AI Tracing Registry', () => {
       const selector: ConfigSelector = () => undefined;
 
       expect(() => {
-        setupAITracing({
+        setupAITracingRegistry({
           configSelector: selector,
           // No default, no configs
         });
@@ -503,7 +509,7 @@ describe('AI Tracing Registry', () => {
 
     it('should handle config with null configs property', () => {
       expect(() => {
-        setupAITracing({
+        setupAITracingRegistry({
           default: { enabled: true },
           configs: null as any, // null instead of undefined or object
         });
@@ -516,7 +522,7 @@ describe('AI Tracing Registry', () => {
       // when config.configs is undefined but config.default is enabled
 
       expect(() => {
-        setupAITracing({
+        setupAITracingRegistry({
           default: { enabled: true },
           // configs intentionally undefined to test the original bug
         });
@@ -529,7 +535,7 @@ describe('AI Tracing Registry', () => {
       // when trying to do Object.entries(config.configs)
 
       expect(() => {
-        setupAITracing({
+        setupAITracingRegistry({
           default: { enabled: false },
           // configs intentionally undefined to test the original bug
         });
@@ -538,19 +544,19 @@ describe('AI Tracing Registry', () => {
 
     it('should handle when entire config is undefined', () => {
       expect(() => {
-        setupAITracing(undefined as any);
+        setupAITracingRegistry(undefined as any);
       }).not.toThrow();
     });
 
     it('should handle when entire config is empty object', () => {
       expect(() => {
-        setupAITracing({});
+        setupAITracingRegistry({});
       }).not.toThrow();
     });
 
     it('should handle when default property is undefined', () => {
       expect(() => {
-        setupAITracing({
+        setupAITracingRegistry({
           default: undefined,
           configs: {
             test: {
@@ -564,7 +570,7 @@ describe('AI Tracing Registry', () => {
 
     it('should handle when default property is empty object', () => {
       expect(() => {
-        setupAITracing({
+        setupAITracingRegistry({
           default: {} as any,
           configs: {
             test: {
@@ -578,7 +584,7 @@ describe('AI Tracing Registry', () => {
 
     it('should handle when default property is null', () => {
       expect(() => {
-        setupAITracing({
+        setupAITracingRegistry({
           default: null as any,
           configs: {
             test: {
@@ -592,7 +598,7 @@ describe('AI Tracing Registry', () => {
 
     it('should handle when default.enabled is undefined', () => {
       expect(() => {
-        setupAITracing({
+        setupAITracingRegistry({
           default: { enabled: undefined } as any,
           configs: {
             test: {
@@ -606,7 +612,7 @@ describe('AI Tracing Registry', () => {
 
     it('should handle completely minimal config', () => {
       expect(() => {
-        setupAITracing({
+        setupAITracingRegistry({
           default: undefined,
           configs: undefined,
           configSelector: undefined,
@@ -626,7 +632,7 @@ describe('AI Tracing Registry', () => {
     });
 
     it('should create default config when enabled', async () => {
-      setupAITracing({
+      setupAITracingRegistry({
         default: { enabled: true },
         configs: {},
       });
@@ -652,7 +658,7 @@ describe('AI Tracing Registry', () => {
     });
 
     it('should not create default config when disabled', async () => {
-      setupAITracing({
+      setupAITracingRegistry({
         default: { enabled: false },
         configs: {
           custom: {
@@ -671,7 +677,7 @@ describe('AI Tracing Registry', () => {
     });
 
     it('should not create default config when default property is not provided', async () => {
-      setupAITracing({
+      setupAITracingRegistry({
         configs: {
           custom: {
             serviceName: 'custom-service',
@@ -686,7 +692,7 @@ describe('AI Tracing Registry', () => {
 
     it('should throw error when custom config named "default" conflicts with default config', () => {
       expect(() => {
-        setupAITracing({
+        setupAITracingRegistry({
           default: { enabled: true },
           configs: {
             default: {
@@ -699,7 +705,7 @@ describe('AI Tracing Registry', () => {
     });
 
     it('should allow custom config named "default" when default config is disabled', async () => {
-      setupAITracing({
+      setupAITracingRegistry({
         default: { enabled: false },
         configs: {
           default: {
@@ -715,7 +721,7 @@ describe('AI Tracing Registry', () => {
     });
 
     it('should work with both default and custom configs', async () => {
-      setupAITracing({
+      setupAITracingRegistry({
         default: { enabled: true },
         configs: {
           custom1: {
@@ -753,7 +759,7 @@ describe('AI Tracing Registry', () => {
         return 'custom';
       };
 
-      setupAITracing({
+      setupAITracingRegistry({
         default: { enabled: true },
         configs: {
           custom: {

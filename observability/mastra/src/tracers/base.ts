@@ -2,11 +2,10 @@
  * MastraAITracing - Abstract base class for AI Tracing implementations
  */
 
-import { MastraBase } from '../../base';
-import type { IMastraLogger } from '../../logger';
-import { RegisteredLogger } from '../../logger/constants';
-import type { RequestContext } from '../../request-context';
-import { NoOpAISpan } from '../spans/no-op';
+import { MastraBase } from '@mastra/core/base';
+import type { RequestContext } from '@mastra/core/di';
+import type { IMastraLogger } from '@mastra/core/logger';
+import { RegisteredLogger } from '@mastra/core/logger';
 import type {
   TracingConfig,
   AISpan,
@@ -24,9 +23,10 @@ import type {
   AnyExportedAISpan,
   TraceState,
   TracingOptions,
-} from '../types';
-import { SamplingStrategyType, AITracingEventType } from '../types';
-import { getNestedValue, setNestedValue } from '../utils';
+} from '@mastra/core/observability';
+import { SamplingStrategyType, AITracingEventType } from '@mastra/core/observability';
+import { getNestedValue, setNestedValue } from '@mastra/core/utils';
+import { NoOpAISpan } from '../spans';
 
 // ============================================================================
 // Abstract Base Class

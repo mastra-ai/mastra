@@ -4,17 +4,17 @@
  * Provides a global registry for AI tracing instances.
  */
 
-import { CloudExporter, DefaultExporter } from './exporters';
-import { SensitiveDataFilter } from './span_processors';
-import { BaseAITracing, DefaultAITracing } from './tracers';
-import { SamplingStrategyType } from './types';
+import { SamplingStrategyType } from '@mastra/core/observability';
 import type {
   AITracing,
   ConfigSelectorOptions,
   ConfigSelector,
   TracingConfig,
   ObservabilityRegistryConfig,
-} from './types';
+} from '@mastra/core/observability';
+import { CloudExporter, DefaultExporter } from './exporters';
+import { SensitiveDataFilter } from './span_processors';
+import { BaseAITracing, DefaultAITracing } from './tracers';
 
 // ============================================================================
 // Global AI Tracing Registry
@@ -208,7 +208,7 @@ function isAITracingInstance(obj: Omit<TracingConfig, 'name'> | AITracing): obj 
 /**
  * Setup AI tracing from the ObservabilityRegistryConfig
  */
-export function setupAITracing(config: ObservabilityRegistryConfig): void {
+export function setupAITracingRegistry(config: ObservabilityRegistryConfig): void {
   // Handle undefined/null config
   if (!config) {
     return;

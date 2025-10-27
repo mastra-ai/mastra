@@ -1,9 +1,9 @@
+import type { AITracingExporter, AITracingEvent } from '@mastra/core/observability';
+import { AISpanType, SamplingStrategyType } from '@mastra/core/observability';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { clearAITracingRegistry } from '../registry';
 import { DefaultAITracing } from '../tracers';
-import type { AITracingExporter, AITracingEvent } from '../types';
-import { AISpanType, SamplingStrategyType } from '../types';
 
 // Simple test exporter for capturing events
 class TestExporter implements AITracingExporter {

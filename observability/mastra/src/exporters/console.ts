@@ -1,5 +1,5 @@
-import { AITracingEventType } from '../types';
-import type { AITracingEvent } from '../types';
+import { AITracingEventType } from '@mastra/core/observability';
+import type { AITracingEvent } from '@mastra/core/observability';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
 

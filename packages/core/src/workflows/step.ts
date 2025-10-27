@@ -1,7 +1,7 @@
 import type { z } from 'zod';
-import type { TracingContext } from '../ai-tracing';
 import type { MastraScorers } from '../evals';
 import type { Mastra } from '../mastra';
+import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { ToolStream } from '../tools/stream';

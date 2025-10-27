@@ -1,11 +1,17 @@
+import { RequestContext } from '@mastra/core/di';
+import { MastraError } from '@mastra/core/error';
+import { AISpanType, SamplingStrategyType, AITracingEventType } from '@mastra/core/observability';
+import type {
+  AITracingEvent,
+  AITracingExporter,
+  ModelGenerationAttributes,
+  AITracing,
+  ExportedAISpan,
+} from '@mastra/core/observability';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MastraError } from '../error';
-import { RequestContext } from '../request-context';
 import { clearAITracingRegistry } from './registry';
 import { DefaultAITracing } from './tracers';
-import type { AITracingEvent, AITracingExporter, ModelGenerationAttributes, AITracing, ExportedAISpan } from './types';
-import { AISpanType, SamplingStrategyType, AITracingEventType } from './types';
 
 // Custom matchers for OpenTelemetry ID validation
 expect.extend({

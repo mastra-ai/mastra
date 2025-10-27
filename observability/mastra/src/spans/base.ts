@@ -11,9 +11,12 @@ import type {
   AITracing,
   ExportedAISpan,
   TraceState,
-} from '../types';
+  IModelSpanTracker,
+  AIModelGenerationSpan,
+} from '@mastra/core/observability';
 
-import { AISpanType, InternalSpans } from '../types';
+import { AISpanType, InternalSpans } from '@mastra/core/observability';
+import { ModelSpanTracker } from '../model-tracing';
 
 /**
  * Determines if a span type should be considered internal based on flags.
@@ -115,12 +118,26 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
   /** Update span attributes */
   abstract update(options: UpdateSpanOptions<TType>): void;
 
+  createChildSpan(options: ChildSpanOptions<AISpanType.MODEL_GENERATION>): AIModelGenerationSpan;
   createChildSpan<TChildType extends AISpanType>(options: ChildSpanOptions<TChildType>): AISpan<TChildType> {
     return this.aiTracing.startSpan<TChildType>({ ...options, parent: this, isEvent: false });
   }
 
   createEventSpan<TChildType extends AISpanType>(options: ChildEventOptions<TChildType>): AISpan<TChildType> {
     return this.aiTracing.startSpan<TChildType>({ ...options, parent: this, isEvent: true });
+  }
+
+  /**
+   * Create a ModelSpanTracker for this span (only works if this is a MODEL_GENERATION span)
+   * Returns undefined for non-MODEL_GENERATION spans
+   */
+  createTracker(): IModelSpanTracker | undefined {
+    // Only create tracker for MODEL_GENERATION spans
+    if (this.type !== AISpanType.MODEL_GENERATION) {
+      return undefined;
+    }
+
+    return new ModelSpanTracker(this as AISpan<AISpanType.MODEL_GENERATION>);
   }
 
   /** Returns `TRUE` if the span is the root span of a trace */
@@ -175,6 +192,10 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
       isRootSpan: this.isRootSpan,
       parentSpanId: this.getParentSpanId(includeInternalSpans),
     };
+  }
+
+  get externalTraceId(): string | undefined {
+    return this.isValid ? this.traceId : undefined;
   }
 }
 

@@ -1,4 +1,4 @@
-import type { TracingOptions } from '@mastra/core/ai-tracing';
+import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
   ClientOptions,

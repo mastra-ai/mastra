@@ -1,24 +1,33 @@
-import { MockLanguageModelV1, simulateReadableStream } from '@internal/ai-sdk-v4/test';
+import { Agent } from '@mastra/core/agent';
+import type { StructuredOutputOptions } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { Mastra } from '@mastra/core/mastra';
+import { AISpanType, AITracingEventType } from '@mastra/core/observability';
+import type {
+  AITracingExporter,
+  AITracingEvent,
+  ExportedAISpan,
+  AnyExportedAISpan,
+  TracingContext,
+} from '@mastra/core/observability';
+
+// Core Mastra imports
+import type { Processor } from '@mastra/core/processors';
+import { MockStore } from '@mastra/core/storage';
+import type { OutputSchema } from '@mastra/core/stream';
+import type { ToolExecutionContext } from '@mastra/core/tools';
+import { createTool } from '@mastra/core/tools';
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
 import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-// Core Mastra imports
-import { Agent } from '../agent';
-import type { StructuredOutputOptions } from '../agent';
-import type { MastraDBMessage } from '../agent/message-list';
-import { Mastra } from '../mastra';
-import type { Processor } from '../processors';
-import { MockStore } from '../storage/mock';
-import type { OutputSchema } from '../stream';
-import type { ToolExecutionContext } from '../tools';
-import { createTool } from '../tools';
-import { createWorkflow, createStep } from '../workflows';
+// Import ONCE at app startup to register the plugin
+import './init';
 
 // AI Tracing imports
 import { clearAITracingRegistry, shutdownAITracingRegistry } from './registry';
-import { AISpanType, AITracingEventType } from './types';
-import type { AITracingExporter, AITracingEvent, ExportedAISpan, AnyExportedAISpan, TracingContext } from './types';
 
 /**
  * Test exporter for AI tracing events with real-time span lifecycle validation.
@@ -1464,15 +1473,15 @@ describe('AI Tracing Integration Tests', () => {
         expect(testAgentSpan?.traceId).toBe(result.traceId);
 
         // Verify span nesting
-        expect(testAgentLlmSpan?.parentSpanId).toEqual(testAgentSpan?.id);
+        expect(testAgentLlmSpan!.parentSpanId).toEqual(testAgentSpan?.id);
         expect(processorRunSpan?.parentSpanId).toEqual(testAgentSpan?.id);
         expect(processorAgentSpan?.parentSpanId).toEqual(processorRunSpan?.id);
         expect(processorAgentLlmSpan?.parentSpanId).toEqual(processorAgentSpan?.id);
 
         // Verify LLM generation spans
-        expect(testAgentLlmSpan?.name).toBe("llm: 'mock-model-id'");
-        expect(testAgentLlmSpan?.input.messages).toHaveLength(2);
-        expect(testAgentLlmSpan?.output.text).toBe('Mock V2 streaming response');
+        expect(testAgentLlmSpan!.name).toBe("llm: 'mock-model-id'");
+        expect(testAgentLlmSpan!.input.messages).toHaveLength(2);
+        expect(testAgentLlmSpan!.output.text).toBe('Mock V2 streaming response');
 
         expect(processorAgentLlmSpan?.name).toBe("llm: 'mock-model-id'");
         expect(processorAgentLlmSpan?.output.text).toBeDefined();
@@ -1485,16 +1494,16 @@ describe('AI Tracing Integration Tests', () => {
         expect(result.object).toHaveProperty('items');
         expect((result.object as any).items).toBe('test structured output');
 
-        expect(testAgentLlmSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
+        expect(testAgentLlmSpan!.attributes?.usage?.totalTokens).toBeGreaterThan(1);
         expect(processorAgentLlmSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
 
-        expect(testAgentLlmSpan?.endTime).toBeDefined();
+        expect(testAgentLlmSpan!.endTime).toBeDefined();
         expect(testAgentSpan?.endTime).toBeDefined();
-        expect(testAgentLlmSpan?.endTime!.getTime()).toBeLessThanOrEqual(testAgentSpan?.endTime!.getTime());
+        expect(testAgentLlmSpan!.endTime!.getTime()).toBeLessThanOrEqual(testAgentSpan!.endTime!.getTime());
 
         expect(processorAgentLlmSpan?.endTime).toBeDefined();
         expect(processorAgentSpan?.endTime).toBeDefined();
-        expect(processorAgentLlmSpan?.endTime!.getTime()).toBeLessThanOrEqual(processorAgentSpan?.endTime!.getTime());
+        expect(processorAgentLlmSpan?.endTime!.getTime()).toBeLessThanOrEqual(processorAgentSpan!.endTime!.getTime());
 
         testExporter.finalExpectations();
       });
@@ -1612,8 +1621,6 @@ describe('AI Tracing Integration Tests', () => {
         expect(agentRunSpans.length).toBe(3); // Test Agent + validator agent + summarizer agent
         expect(llmGenerationSpans.length).toBe(3); // Test Agent LLM + validator LLM + summarizer LLM
         expect(processorRunSpans.length).toBe(2); // validator + summarizer
-
-        console.log(agentRunSpans);
 
         // Find specific spans
         const testAgentSpan = agentRunSpans.find(s => s.name === "agent run: 'test-agent'");

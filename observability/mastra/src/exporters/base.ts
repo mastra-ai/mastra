@@ -7,9 +7,9 @@
  * - Graceful shutdown lifecycle
  */
 
-import { ConsoleLogger, LogLevel } from '../../logger';
-import type { IMastraLogger } from '../../logger';
-import type { AITracingEvent, AITracingExporter } from '../types';
+import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
+import type { IMastraLogger } from '@mastra/core/logger';
+import type { AITracingEvent, AITracingExporter, InitExporterOptions } from '@mastra/core/observability';
 
 /**
  * Base configuration that all exporters should support
@@ -137,7 +137,7 @@ export abstract class BaseExporter implements AITracingExporter {
   /**
    * Optional initialization hook called after Mastra is fully configured
    */
-  init?(_config?: any): void;
+  init?(_options: InitExporterOptions): void;
 
   /**
    * Optional method to add scores to traces

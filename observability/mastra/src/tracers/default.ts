@@ -1,5 +1,5 @@
+import type { AISpanType, AISpan, TracingConfig, CreateSpanOptions } from '@mastra/core/observability';
 import { DefaultAISpan } from '../spans';
-import type { AISpanType, AISpan, TracingConfig, CreateSpanOptions } from '../types';
 import { BaseAITracing } from './base';
 
 export class DefaultAITracing extends BaseAITracing {

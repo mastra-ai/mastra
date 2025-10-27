@@ -1,4 +1,4 @@
-import type { AISpanProcessor, AnyAISpan } from '../types';
+import type { AISpanProcessor, AnyAISpan } from '@mastra/core/observability';
 
 export type RedactionStyle = 'full' | 'partial';
 

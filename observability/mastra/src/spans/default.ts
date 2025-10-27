@@ -1,4 +1,4 @@
-import { MastraError } from '../../error';
+import { MastraError } from '@mastra/core/error';
 import type {
   AISpanType,
   AITracing,
@@ -6,7 +6,7 @@ import type {
   ErrorSpanOptions,
   UpdateSpanOptions,
   CreateSpanOptions,
-} from '../types';
+} from '@mastra/core/observability';
 import { BaseAISpan, deepClean } from './base';
 
 export class DefaultAISpan<TType extends AISpanType> extends BaseAISpan<TType> {

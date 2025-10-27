@@ -21,7 +21,7 @@ The AI Tracing system enables detailed observability for AI-driven applications 
 ### Manual Tracing
 
 ```typescript
-import { DefaultAITracing, AISpanType } from '@mastra/core/ai-tracing';
+import { DefaultAITracing, AISpanType } from '@mastra/core/observability';
 
 // Create tracing instance
 const tracing = new DefaultAITracing({

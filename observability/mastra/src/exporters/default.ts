@@ -1,10 +1,14 @@
-import { ConsoleLogger, LogLevel } from '../../logger';
-import type { IMastraLogger } from '../../logger';
-import type { Mastra } from '../../mastra';
-import type { MastraStorage } from '../../storage/base';
-import type { CreateAISpanRecord, UpdateAISpanRecord } from '../../storage/types';
-import { AITracingEventType } from '../types';
-import type { AITracingEvent, AITracingExporter, AnyExportedAISpan, TracingConfig, TracingStrategy } from '../types';
+import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
+import type { IMastraLogger } from '@mastra/core/logger';
+import type {
+  AITracingEvent,
+  AITracingExporter,
+  AnyExportedAISpan,
+  InitExporterOptions,
+  TracingStrategy,
+} from '@mastra/core/observability';
+import { AITracingEventType } from '@mastra/core/observability';
+import type { MastraStorage, CreateAISpanRecord, UpdateAISpanRecord } from '@mastra/core/storage';
 
 interface BatchingConfig {
   maxBatchSize?: number; // Default: 1000 spans
@@ -70,7 +74,7 @@ function resolveStrategy(userConfig: BatchingConfig, storage: MastraStorage, log
 export class DefaultExporter implements AITracingExporter {
   name = 'tracing-default-exporter';
   private logger: IMastraLogger;
-  private mastra: Mastra | null = null;
+  private storage?: MastraStorage;
   private config: Required<BatchingConfig>;
   private resolvedStrategy: TracingStrategy;
   private buffer: BatchBuffer;
@@ -116,27 +120,16 @@ export class DefaultExporter implements AITracingExporter {
   private strategyInitialized = false;
 
   /**
-   * Register the Mastra instance (called after Mastra construction is complete)
-   */
-  __registerMastra(mastra: Mastra): void {
-    this.mastra = mastra;
-  }
-
-  /**
    * Initialize the exporter (called after all dependencies are ready)
    */
-  init(_config?: TracingConfig): void {
-    if (!this.mastra) {
-      throw new Error('DefaultExporter: init() called before __registerMastra()');
-    }
-
-    const storage = this.mastra.getStorage();
-    if (!storage) {
+  init(options: InitExporterOptions): void {
+    this.storage = options.mastra?.getStorage();
+    if (!this.storage) {
       this.logger.warn('DefaultExporter disabled: Storage not available. Traces will not be persisted.');
       return;
     }
 
-    this.initializeStrategy(storage);
+    this.initializeStrategy(this.storage);
   }
 
   /**
@@ -498,13 +491,7 @@ export class DefaultExporter implements AITracingExporter {
    * Flushes the current buffer to storage with retry logic
    */
   private async flush(): Promise<void> {
-    if (!this.mastra) {
-      this.logger.debug('Cannot flush traces. Mastra instance not registered yet.');
-      return;
-    }
-
-    const storage = this.mastra.getStorage();
-    if (!storage) {
+    if (!this.storage) {
       this.logger.debug('Cannot flush traces. Mastra storage is not initialized');
       return;
     }
@@ -545,7 +532,7 @@ export class DefaultExporter implements AITracingExporter {
     this.resetBuffer();
 
     // Attempt to flush with retry logic
-    await this.flushWithRetries(storage, bufferCopy, 0);
+    await this.flushWithRetries(this.storage, bufferCopy, 0);
 
     const elapsed = Date.now() - startTime;
     this.logger.debug('Batch flushed', {
@@ -620,26 +607,20 @@ export class DefaultExporter implements AITracingExporter {
   }
 
   async exportEvent(event: AITracingEvent): Promise<void> {
-    if (!this.mastra) {
-      this.logger.debug('Cannot export AI tracing event. Mastra instance not registered yet.');
-      return;
-    }
-
-    const storage = this.mastra.getStorage();
-    if (!storage) {
+    if (!this.storage) {
       this.logger.debug('Cannot store traces. Mastra storage is not initialized');
       return;
     }
 
     // Initialize strategy if not already done (fallback for edge cases)
     if (!this.strategyInitialized) {
-      this.initializeStrategy(storage);
+      this.initializeStrategy(this.storage);
     }
 
     // Clear strategy routing - explicit and readable
     switch (this.resolvedStrategy) {
       case 'realtime':
-        await this.handleRealtimeEvent(event, storage);
+        await this.handleRealtimeEvent(event, this.storage);
         break;
       case 'batch-with-updates':
         this.handleBatchWithUpdatesEvent(event);

@@ -1,11 +1,11 @@
 /**
  * AI Tracing interfaces
  */
-
-import type { MastraError } from '../error';
-import type { IMastraLogger } from '../logger';
-import type { RequestContext } from '../request-context';
-import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows';
+import type { MastraError } from '../../error';
+import type { IMastraLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
+import type { RequestContext } from '../../request-context';
+import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
 
 // ============================================================================
 // Core AI-Specific Span Types
@@ -367,6 +367,7 @@ export interface AISpan<TType extends AISpanType> extends BaseSpan<TType> {
   update(options: UpdateSpanOptions<TType>): void;
 
   /** Create child span - can be any span type independent of parent */
+  createChildSpan(options: ChildSpanOptions<AISpanType.MODEL_GENERATION>): AIModelGenerationSpan;
   createChildSpan<TChildType extends AISpanType>(options: ChildSpanOptions<TChildType>): AISpan<TChildType>;
 
   /** Create event span - can be any span type independent of parent */
@@ -386,6 +387,18 @@ export interface AISpan<TType extends AISpanType> extends BaseSpan<TType> {
 
   /** Returns a lightweight span ready for export */
   exportSpan(includeInternalSpans?: boolean): ExportedAISpan<TType> | undefined;
+
+  /** Returns the traceId on span, unless NoOpSpan, then undefined */
+  get externalTraceId(): string | undefined;
+}
+
+/**
+ * Specialized span interface for MODEL_GENERATION spans
+ * Provides access to creating a ModelSpanTracker for tracking MODEL_STEP and MODEL_CHUNK spans
+ */
+export interface AIModelGenerationSpan extends AISpan<AISpanType.MODEL_GENERATION> {
+  /** Create a ModelSpanTracker for tracking model execution steps and chunks */
+  createTracker(): IModelSpanTracker | undefined;
 }
 
 /**
@@ -396,6 +409,13 @@ export interface ExportedAISpan<TType extends AISpanType> extends BaseSpan<TType
   parentSpanId?: string;
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
+}
+
+export interface IModelSpanTracker {
+  getTracingContext(): TracingContext;
+  reportGenerationError(options: ErrorSpanOptions<AISpanType.MODEL_GENERATION>): void;
+  endGeneration(options?: EndSpanOptions<AISpanType.MODEL_GENERATION>): void;
+  wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
 }
 
 /**
@@ -552,9 +572,32 @@ export interface ErrorSpanOptions<TType extends AISpanType> extends UpdateBaseOp
   endSpan?: boolean;
 }
 
+export interface GetOrCreateSpanOptions<TType extends AISpanType> {
+  type: TType;
+  name: string;
+  input?: any;
+  attributes?: AISpanTypeMap[TType];
+  metadata?: Record<string, any>;
+  tracingPolicy?: TracingPolicy;
+  tracingOptions?: TracingOptions;
+  tracingContext?: TracingContext;
+  requestContext?: RequestContext;
+  mastra?: Mastra;
+}
+
 // ============================================================================
 // Lifecycle Types
 // ============================================================================
+
+export interface ObservabilityEntrypoint {
+  shutdown(): Promise<void>;
+
+  registerMastra(options: { mastra: Mastra }): void;
+
+  setLogger(options: { logger: IMastraLogger }): void;
+
+  getSelectedObservability(options: ConfigSelectorOptions): AITracing | undefined;
+}
 
 /**
  * Bitwise options to set different types of spans as internal in
@@ -739,6 +782,18 @@ export type AITracingEvent =
   | { type: AITracingEventType.SPAN_UPDATED; exportedSpan: AnyExportedAISpan }
   | { type: AITracingEventType.SPAN_ENDED; exportedSpan: AnyExportedAISpan };
 
+export interface InitExporterOptions {
+  mastra?: Mastra;
+  config?: TracingConfig;
+}
+
+export interface InitObservabilityOptions {
+  config?: ObservabilityRegistryConfig;
+  logger?: IMastraLogger;
+}
+
+export type InitObservabilityFunction = (options: InitObservabilityOptions) => ObservabilityEntrypoint;
+
 /**
  * Interface for tracing exporters
  */
@@ -746,8 +801,8 @@ export interface AITracingExporter {
   /** Exporter name */
   name: string;
 
-  /** Initialize exporter with tracing configuration */
-  init?(config: TracingConfig): void;
+  /** Initialize exporter with tracing configuration and/or access to Mastra */
+  init?(options: InitExporterOptions): void;
 
   /** Set logger (called by AITracing during initialization) */
   __setLogger?(logger: IMastraLogger): void;

@@ -1,6 +1,11 @@
+import { AISpanType, AITracingEventType } from '@mastra/core/observability';
+import type {
+  ModelGenerationAttributes,
+  WorkflowStepAttributes,
+  AITracingEvent,
+  AnyExportedAISpan,
+} from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AISpanType, AITracingEventType } from '../types';
-import type { ModelGenerationAttributes, WorkflowStepAttributes, AITracingEvent, AnyExportedAISpan } from '../types';
 import { DefaultExporter } from './default';
 
 // Mock Mastra and logger
@@ -182,11 +187,7 @@ describe('DefaultExporter', () => {
     describe('Strategy resolution', () => {
       it('should auto-select storage preferred strategy', async () => {
         const exporter = new DefaultExporter({}, mockLogger);
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
-
-        // Strategy should be initialized when init() is called
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
 
         expect(mockLogger.debug).toHaveBeenCalledWith(
           'AI tracing exporter initialized',
@@ -200,11 +201,7 @@ describe('DefaultExporter', () => {
 
       it('should use user-specified strategy when supported', async () => {
         const exporter = new DefaultExporter({ strategy: 'realtime' }, mockLogger);
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
-
-        // Strategy should be initialized when init() is called
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
 
         expect(mockLogger.debug).toHaveBeenCalledWith(
           'AI tracing exporter initialized',
@@ -219,11 +216,7 @@ describe('DefaultExporter', () => {
         mockStorage.aiTracingStrategy.supported = ['batch-with-updates'];
 
         const exporter = new DefaultExporter({ strategy: 'realtime' }, mockLogger);
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
-
-        // Strategy should be initialized when init() is called, with warning
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
 
         expect(mockLogger.warn).toHaveBeenCalledWith(
           'User-specified AI tracing strategy not supported by storage adapter, falling back to auto-selection',
@@ -234,22 +227,14 @@ describe('DefaultExporter', () => {
         );
       });
 
-      it('should throw error if init() called before __registerMastra()', () => {
-        const exporter = new DefaultExporter({}, mockLogger);
-
-        expect(() => exporter.init()).toThrow('DefaultExporter: init() called before __registerMastra()');
-      });
-
       it('should log error if storage not available during init()', () => {
         const mockMastraWithoutStorage = {
           getStorage: vi.fn().mockReturnValue(null),
         } as any;
 
         const exporter = new DefaultExporter({}, mockLogger);
-        exporter.__registerMastra(mockMastraWithoutStorage);
-
         // Should not throw, but log error instead
-        expect(() => exporter.init()).not.toThrow();
+        expect(() => exporter.init({ mastra: mockMastraWithoutStorage })).not.toThrow();
 
         expect(mockLogger.warn).toHaveBeenCalledWith(
           'DefaultExporter disabled: Storage not available. Traces will not be persisted.',
@@ -260,8 +245,7 @@ describe('DefaultExporter', () => {
     describe('Realtime strategy', () => {
       it('should process events immediately', async () => {
         const exporter = new DefaultExporter({ strategy: 'realtime' }, mockLogger);
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
         const mockEvent = createMockEvent(AITracingEventType.SPAN_STARTED);
 
         await exporter.exportEvent(mockEvent);
@@ -284,8 +268,7 @@ describe('DefaultExporter', () => {
           },
           mockLogger,
         );
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
 
         const event1 = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
         const event2 = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-2');
@@ -316,8 +299,7 @@ describe('DefaultExporter', () => {
           },
           mockLogger,
         );
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
 
         // Add span create first
         const createEvent = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
@@ -354,8 +336,7 @@ describe('DefaultExporter', () => {
           },
           mockLogger,
         );
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
 
         // Send update without create first
         const updateEvent = createMockEvent(AITracingEventType.SPAN_UPDATED, 'trace-1', 'span-1');
@@ -379,8 +360,7 @@ describe('DefaultExporter', () => {
           },
           mockLogger,
         );
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
 
         // Event-type spans only emit SPAN_ENDED (no SPAN_STARTED)
         const eventSpan = createMockEvent(AITracingEventType.SPAN_ENDED, 'trace-1', 'event-1', true);
@@ -416,8 +396,7 @@ describe('DefaultExporter', () => {
           },
           mockLogger,
         );
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
 
         const startEvent = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
         const updateEvent = createMockEvent(AITracingEventType.SPAN_UPDATED, 'trace-1', 'span-1');
@@ -447,8 +426,7 @@ describe('DefaultExporter', () => {
           },
           mockLogger,
         );
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
 
         const mockEvent = createMockEvent(AITracingEventType.SPAN_STARTED);
         await exporter.exportEvent(mockEvent);
@@ -467,8 +445,7 @@ describe('DefaultExporter', () => {
           },
           mockLogger,
         );
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
 
         // First event should schedule timer
         const mockEvent1 = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
@@ -502,8 +479,7 @@ describe('DefaultExporter', () => {
           },
           mockLogger,
         );
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
 
         // Mock storage failure then success
         mockStorage.batchCreateAISpans
@@ -542,8 +518,7 @@ describe('DefaultExporter', () => {
           },
           mockLogger,
         );
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
 
         // Mock persistent storage failure
         mockStorage.batchCreateAISpans.mockRejectedValue(new Error('Persistent error'));
@@ -579,8 +554,7 @@ describe('DefaultExporter', () => {
           },
           mockLogger,
         );
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
 
         const mockEvent = createMockEvent(AITracingEventType.SPAN_STARTED);
         await exporter.exportEvent(mockEvent);
@@ -609,8 +583,7 @@ describe('DefaultExporter', () => {
           },
           mockLogger,
         );
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
 
         // Send span start and end events
         const span1Start = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
@@ -659,8 +632,7 @@ describe('DefaultExporter', () => {
           },
           mockLogger,
         );
-        exporter.__registerMastra(mockMastra);
-        exporter.init();
+        exporter.init({ mastra: mockMastra });
 
         // Simulate workflow with nested spans like the example
         const workflowStartEvent = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'workflow-1');

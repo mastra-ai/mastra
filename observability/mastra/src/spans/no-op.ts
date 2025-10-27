@@ -1,5 +1,5 @@
 /**
- * No Op Implementation for MastraAITracing
+ * NoOpSpan Implementation for Mastra Observability
  */
 
 import type {
@@ -9,7 +9,7 @@ import type {
   EndSpanOptions,
   UpdateSpanOptions,
   ErrorSpanOptions,
-} from '../types';
+} from '@mastra/core/observability';
 import { BaseAISpan } from './base';
 
 export class NoOpAISpan<TType extends AISpanType = any> extends BaseAISpan<TType> {

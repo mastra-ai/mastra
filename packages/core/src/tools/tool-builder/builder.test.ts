@@ -7,8 +7,8 @@ import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provi
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
-import { AISpanType } from '../../ai-tracing';
-import type { AnyAISpan } from '../../ai-tracing';
+import { AISpanType } from '../../observability';
+import type { AnyAISpan } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';

@@ -1,5 +1,5 @@
+import { AISpanType, AITracingEventType } from '@mastra/core/observability';
 import { describe, expect, it, vi } from 'vitest';
-import { AISpanType, AITracingEventType } from '../types';
 import { ConsoleExporter } from './console';
 
 describe('DefaultConsoleExporter', () => {
