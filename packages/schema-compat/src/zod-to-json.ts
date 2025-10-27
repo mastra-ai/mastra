@@ -5,6 +5,9 @@ import type { ZodType as ZodSchemaV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import zodToJsonSchemaOriginal from 'zod-to-json-schema';
 
+// Symbol to mark schemas as already patched (for idempotency)
+const PATCHED = Symbol('__mastra_patched__');
+
 /**
  * Recursively patch Zod v4 record schemas that are missing valueType.
  * This fixes a bug in Zod v4 where z.record(valueSchema) doesn't set def.valueType.
@@ -12,6 +15,10 @@ import zodToJsonSchemaOriginal from 'zod-to-json-schema';
  */
 function patchRecordSchemas(schema: any): any {
   if (!schema || typeof schema !== 'object') return schema;
+
+  // Skip if already patched (idempotency check)
+  if ((schema as any)[PATCHED]) return schema;
+  (schema as any)[PATCHED] = true;
 
   // Check both def locations (direct and nested in _zod)
   const zodDef = schema._zod?.def;
@@ -36,7 +43,7 @@ function patchRecordSchemas(schema: any): any {
 
   if (def.type === 'object' && def.shape) {
     const shape = typeof def.shape === 'function' ? def.shape() : def.shape;
-    for (const key in shape) {
+    for (const key of Object.keys(shape)) {
       patchRecordSchemas(shape[key]);
     }
   }

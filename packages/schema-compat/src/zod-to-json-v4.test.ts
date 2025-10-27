@@ -11,10 +11,10 @@ vi.mock('zod', () => ({
 // Run the shared test suite with Zod v4
 runZodToJsonTestSuite();
 
-// Zod v4 specific tests for fallback behavior
+// Zod v4 specific tests for patched record behavior
 describe('zodToJsonSchema - Zod v4 specific', () => {
-  describe('v3 fallback produces valid output', () => {
-    it('should produce valid JSON Schema when v4 fails on z.record()', () => {
+  describe('patched v4 path produces valid output', () => {
+    it('should produce valid JSON Schema when patching z.record()', () => {
       const schema = zV4.object({
         variables: zV4.record(zV4.string()).optional(),
       });

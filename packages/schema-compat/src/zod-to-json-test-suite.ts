@@ -341,6 +341,12 @@ export function runZodToJsonTestSuite() {
         // The record's values should be dates (converted to string with date-time format)
         const timestampsSchema = result.properties!.timestamps as any;
         expect(timestampsSchema).toBeDefined();
+
+        // Verify the additionalProperties (record values) are properly typed as date-time strings
+        const additionalProps = timestampsSchema.additionalProperties as any;
+        expect(additionalProps).toBeDefined();
+        expect(additionalProps.type).toBe('string');
+        expect(additionalProps.format).toBe('date-time');
       });
 
       it('should handle deeply nested optional records', () => {
