@@ -180,7 +180,18 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
 
       if (!snapshot || !snapshot?.context) {
         await transaction.rollback();
-        throw new Error(`Snapshot not found for runId ${runId}`);
+        throw new MastraError(
+          {
+            id: 'MASTRA_STORAGE_MSSQL_STORE_UPDATE_WORKFLOW_STATE_SNAPSHOT_NOT_FOUND',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.SYSTEM,
+            details: {
+              workflowName,
+              runId,
+            },
+          },
+          new Error(`Snapshot not found for runId ${runId}`),
+        );
       }
 
       // Merge the new options with the existing snapshot

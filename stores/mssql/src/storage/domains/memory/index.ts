@@ -130,7 +130,8 @@ export class MemoryMSSQL extends MemoryStorage {
       }
 
       const orderByField = orderBy === 'createdAt' ? '[createdAt]' : '[updatedAt]';
-      const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${sortDirection} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
+      const dir = (sortDirection || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
       const dataRequest = this.pool.request();
       dataRequest.input('resourceId', resourceId);
       dataRequest.input('perPage', perPage);
@@ -189,7 +190,12 @@ export class MemoryMSSQL extends MemoryStorage {
       req.input('id', thread.id);
       req.input('resourceId', thread.resourceId);
       req.input('title', thread.title);
-      req.input('metadata', thread.metadata ? JSON.stringify(thread.metadata) : null);
+      const metadata = thread.metadata ? JSON.stringify(thread.metadata) : null;
+      if (metadata === null) {
+        req.input('metadata', sql.NVarChar, null);
+      } else {
+        req.input('metadata', metadata);
+      }
       req.input('createdAt', sql.DateTime2, thread.createdAt);
       req.input('updatedAt', sql.DateTime2, thread.updatedAt);
       await req.query(mergeSql);
@@ -218,7 +224,8 @@ export class MemoryMSSQL extends MemoryStorage {
     try {
       const baseQuery = `FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} WHERE [resourceId] = @resourceId`;
       const orderByField = orderBy === 'createdAt' ? '[createdAt]' : '[updatedAt]';
-      const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${sortDirection}`;
+      const dir = (sortDirection || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir}`;
       const request = this.pool.request();
       request.input('resourceId', resourceId);
       const resultSet = await request.query(dataQuery);
@@ -648,7 +655,7 @@ export class MemoryMSSQL extends MemoryStorage {
       const parsed = this._parseAndFormatMessages(messages, format);
       return {
         messages: parsed,
-        total: total + excludeIds.length,
+        total,
         page,
         perPage,
         hasMore: currentOffset + rows.length < total,

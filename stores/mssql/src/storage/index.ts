@@ -474,7 +474,7 @@ export class MSSQLStore extends MastraStorage {
   /**
    * AI Tracing / Observability
    */
-  async createAISpan(span: AISpanRecord): Promise<void> {
+  private getObservabilityStore(): ObservabilityMSSQL {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MSSQL_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -483,7 +483,11 @@ export class MSSQLStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.createAISpan(span);
+    return this.stores.observability as ObservabilityMSSQL;
+  }
+
+  async createAISpan(span: AISpanRecord): Promise<void> {
+    return this.getObservabilityStore().createAISpan(span);
   }
 
   async updateAISpan({
@@ -495,53 +499,21 @@ export class MSSQLStore extends MastraStorage {
     traceId: string;
     updates: Partial<UpdateAISpanRecord>;
   }): Promise<void> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: 'MSSQL_STORE_OBSERVABILITY_NOT_INITIALIZED',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.updateAISpan({ spanId, traceId, updates });
+    return this.getObservabilityStore().updateAISpan({ spanId, traceId, updates });
   }
 
   async getAITrace(traceId: string): Promise<AITraceRecord | null> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: 'MSSQL_STORE_OBSERVABILITY_NOT_INITIALIZED',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.getAITrace(traceId);
+    return this.getObservabilityStore().getAITrace(traceId);
   }
 
   async getAITracesPaginated(
     args: AITracesPaginatedArg,
   ): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: 'MSSQL_STORE_OBSERVABILITY_NOT_INITIALIZED',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.getAITracesPaginated(args);
+    return this.getObservabilityStore().getAITracesPaginated(args);
   }
 
   async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: 'MSSQL_STORE_OBSERVABILITY_NOT_INITIALIZED',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.batchCreateAISpans(args);
+    return this.getObservabilityStore().batchCreateAISpans(args);
   }
 
   async batchUpdateAISpans(args: {
@@ -551,27 +523,11 @@ export class MSSQLStore extends MastraStorage {
       updates: Partial<UpdateAISpanRecord>;
     }[];
   }): Promise<void> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: 'MSSQL_STORE_OBSERVABILITY_NOT_INITIALIZED',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.batchUpdateAISpans(args);
+    return this.getObservabilityStore().batchUpdateAISpans(args);
   }
 
   async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: 'MSSQL_STORE_OBSERVABILITY_NOT_INITIALIZED',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.batchDeleteAITraces(args);
+    return this.getObservabilityStore().batchDeleteAITraces(args);
   }
 
   /**

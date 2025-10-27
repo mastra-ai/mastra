@@ -132,12 +132,12 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     updates: Partial<UpdateAISpanRecord>;
   }): Promise<void> {
     try {
-      const data = { ...updates };
+      const data: Record<string, any> = { ...updates };
       if (data.endedAt instanceof Date) {
-        data.endedAt = data.endedAt.toISOString() as any;
+        data.endedAt = data.endedAt.toISOString();
       }
       if (data.startedAt instanceof Date) {
-        data.startedAt = data.startedAt.toISOString() as any;
+        data.startedAt = data.startedAt.toISOString();
       }
       // Note: updatedAt will be set automatically
 
@@ -281,7 +281,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
-  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
+  async batchCreateAISpans(args: { records: CreateAISpanRecord[] }): Promise<void> {
     if (!args.records || args.records.length === 0) {
       return;
     }
@@ -323,12 +323,12 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
 
     try {
       const updates = args.records.map(({ traceId, spanId, updates: data }) => {
-        const processedData = { ...data };
+        const processedData: Record<string, any> = { ...data };
         if (processedData.endedAt instanceof Date) {
-          processedData.endedAt = processedData.endedAt.toISOString() as any;
+          processedData.endedAt = processedData.endedAt.toISOString();
         }
         if (processedData.startedAt instanceof Date) {
-          processedData.startedAt = processedData.startedAt.toISOString() as any;
+          processedData.startedAt = processedData.startedAt.toISOString();
         }
 
         return {

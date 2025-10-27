@@ -149,6 +149,8 @@ export class StoreOperationsMSSQL extends StoreOperations {
 
         if (preparedValue instanceof Date) {
           request.input(`param${i}`, sql.DateTime2, preparedValue);
+        } else if (preparedValue === null || preparedValue === undefined) {
+          request.input(`param${i}`, this.getMssqlType(tableName, col), null);
         } else {
           request.input(`param${i}`, preparedValue);
         }
@@ -177,8 +179,8 @@ export class StoreOperationsMSSQL extends StoreOperations {
       try {
         await this.pool.request().query(`TRUNCATE TABLE ${fullTableName}`);
       } catch (truncateError: any) {
-        // If TRUNCATE fails due to foreign key constraints, fall back to DELETE
-        if (truncateError.message && truncateError.message.includes('foreign key')) {
+        // If TRUNCATE fails due to FK constraints (error 4712), fall back to DELETE
+        if (truncateError?.number === 4712) {
           await this.pool.request().query(`DELETE FROM ${fullTableName}`);
         } else {
           throw truncateError;
@@ -202,7 +204,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
   protected getDefaultValue(type: StorageColumn['type']): string {
     switch (type) {
       case 'timestamp':
-        return 'DEFAULT SYSDATETIMEOFFSET()';
+        return 'DEFAULT SYSUTCDATETIME()';
       case 'jsonb':
         return "DEFAULT N'{}'";
       case 'boolean':
@@ -223,7 +225,17 @@ export class StoreOperationsMSSQL extends StoreOperations {
       const uniqueConstraintColumns = tableName === TABLE_WORKFLOW_SNAPSHOT ? ['workflow_name', 'run_id'] : [];
 
       // Columns that store large amounts of data and should use NVARCHAR(MAX)
-      const largeDataColumns = ['workingMemory', 'snapshot', 'metadata'];
+      // Avoid listing columns that participate in indexes (resourceId, thread_id, agent_name, name, etc.)
+      const largeDataColumns = [
+        'workingMemory',
+        'snapshot',
+        'metadata',
+        'content', // messages.content - can be very long conversation content
+        'input', // evals.input - test input data
+        'output', // evals.output - test output data
+        'instructions', // evals.instructions - evaluation instructions
+        'other', // traces.other - additional trace data
+      ];
 
       const columns = Object.entries(schema)
         .map(([name, def]) => {
@@ -336,7 +348,20 @@ export class StoreOperationsMSSQL extends StoreOperations {
           const columnExists = Array.isArray(checkResult.recordset) && checkResult.recordset.length > 0;
           if (!columnExists) {
             const columnDef = schema[columnName];
-            const sqlType = this.getSqlType(columnDef.type);
+            // Apply the same large data column logic as createTable
+            const largeDataColumns = [
+              'workingMemory',
+              'snapshot',
+              'metadata',
+              'content',
+              'input',
+              'output',
+              'instructions',
+              'other',
+            ];
+            const useLargeStorage = largeDataColumns.includes(columnName);
+            const isIndexed = !!columnDef.primaryKey;
+            const sqlType = this.getSqlType(columnDef.type, isIndexed, useLargeStorage);
             const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
             const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
             const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
@@ -362,15 +387,19 @@ export class StoreOperationsMSSQL extends StoreOperations {
     }
   }
 
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
+  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<R | null> {
     try {
       const keyEntries = Object.entries(keys).map(([key, value]) => [parseSqlIdentifier(key, 'column name'), value]);
       const conditions = keyEntries.map(([key], i) => `[${key}] = @param${i}`).join(' AND ');
-      const values = keyEntries.map(([_, value]) => value);
       const sql = `SELECT * FROM ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} WHERE ${conditions}`;
       const request = this.pool.request();
-      values.forEach((value, i) => {
-        request.input(`param${i}`, value);
+      keyEntries.forEach(([key, value], i) => {
+        const preparedValue = this.prepareValue(value, key, tableName);
+        if (preparedValue === null || preparedValue === undefined) {
+          request.input(`param${i}`, this.getMssqlType(tableName, key), null);
+        } else {
+          request.input(`param${i}`, preparedValue);
+        }
       });
       const resultSet = await request.query(sql);
       const result = resultSet.recordset[0] || null;
@@ -479,6 +508,33 @@ export class StoreOperationsMSSQL extends StoreOperations {
   }
 
   /**
+   * Maps TABLE_SCHEMAS types to mssql param types (used when value is null)
+   */
+  private getMssqlType(tableName: TABLE_NAMES, columnName: string): any {
+    const col = TABLE_SCHEMAS[tableName]?.[columnName];
+    switch (col?.type) {
+      case 'text':
+        return sql.NVarChar;
+      case 'timestamp':
+        return sql.DateTime2;
+      case 'uuid':
+        return sql.UniqueIdentifier;
+      case 'jsonb':
+        return sql.NVarChar;
+      case 'integer':
+        return sql.Int;
+      case 'bigint':
+        return sql.BigInt;
+      case 'float':
+        return sql.Float;
+      case 'boolean':
+        return sql.Bit;
+      default:
+        return sql.NVarChar;
+    }
+  }
+
+  /**
    * Update a single record in the database
    */
   async update({
@@ -493,6 +549,23 @@ export class StoreOperationsMSSQL extends StoreOperations {
     transaction?: sql.Transaction;
   }): Promise<void> {
     try {
+      if (!data || Object.keys(data).length === 0) {
+        throw new MastraError({
+          id: 'MASTRA_STORAGE_MSSQL_UPDATE_EMPTY_DATA',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'Cannot update with empty data payload',
+        });
+      }
+      if (!keys || Object.keys(keys).length === 0) {
+        throw new MastraError({
+          id: 'MASTRA_STORAGE_MSSQL_UPDATE_EMPTY_KEYS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'Cannot update without keys to identify records',
+        });
+      }
+
       const setClauses: string[] = [];
       const request = transaction ? transaction.request() : this.pool.request();
       let paramIndex = 0;
@@ -502,7 +575,12 @@ export class StoreOperationsMSSQL extends StoreOperations {
         const parsedKey = parseSqlIdentifier(key, 'column name');
         const paramName = `set${paramIndex++}`;
         setClauses.push(`[${parsedKey}] = @${paramName}`);
-        request.input(paramName, this.prepareValue(value, key, tableName));
+        const preparedValue = this.prepareValue(value, key, tableName);
+        if (preparedValue === null || preparedValue === undefined) {
+          request.input(paramName, this.getMssqlType(tableName, key), null);
+        } else {
+          request.input(paramName, preparedValue);
+        }
       });
 
       // Build WHERE clause
@@ -512,7 +590,12 @@ export class StoreOperationsMSSQL extends StoreOperations {
         const parsedKey = parseSqlIdentifier(key, 'column name');
         const paramName = `where${paramIndex++}`;
         whereConditions.push(`[${parsedKey}] = @${paramName}`);
-        request.input(paramName, this.prepareValue(value, key, tableName));
+        const preparedValue = this.prepareValue(value, key, tableName);
+        if (preparedValue === null || preparedValue === undefined) {
+          request.input(paramName, this.getMssqlType(tableName, key), null);
+        } else {
+          request.input(paramName, preparedValue);
+        }
       });
 
       const tableName_ = getTableName({
@@ -603,7 +686,12 @@ export class StoreOperationsMSSQL extends StoreOperations {
           const parsedKey = parseSqlIdentifier(key, 'column name');
           const paramName = `p${paramIndex++}`;
           conditions.push(`[${parsedKey}] = @${paramName}`);
-          request.input(paramName, this.prepareValue(value, key, tableName));
+          const preparedValue = this.prepareValue(value, key, tableName);
+          if (preparedValue === null || preparedValue === undefined) {
+            request.input(paramName, this.getMssqlType(tableName, key), null);
+          } else {
+            request.input(paramName, preparedValue);
+          }
         });
 
         const deleteSql = `DELETE FROM ${tableName_} WHERE ${conditions.join(' AND ')}`;
@@ -642,17 +730,20 @@ export class StoreOperationsMSSQL extends StoreOperations {
       });
 
       // Check if index already exists
+      const indexNameSafe = parseSqlIdentifier(name, 'index name');
       const checkRequest = this.pool.request();
-      checkRequest.input('indexName', name);
+      checkRequest.input('indexName', indexNameSafe);
       checkRequest.input('schemaName', schemaName);
+      checkRequest.input('tableName', table);
 
       const indexExists = await checkRequest.query(`
         SELECT 1 as found
         FROM sys.indexes i
-        INNER JOIN sys.objects o ON i.object_id = o.object_id
-        INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
+        INNER JOIN sys.tables t ON i.object_id = t.object_id
+        INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
         WHERE i.name = @indexName
-        AND s.name = @schemaName
+          AND s.name = @schemaName
+          AND t.name = @tableName
       `);
 
       if (indexExists.recordset && indexExists.recordset.length > 0) {
@@ -678,7 +769,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
 
       const whereStr = where ? ` WHERE ${where}` : '';
 
-      const createIndexSql = `CREATE ${uniqueStr}INDEX [${name}] ON ${fullTableName} (${columnsStr})${whereStr}`;
+      const createIndexSql = `CREATE ${uniqueStr}INDEX [${indexNameSafe}] ON ${fullTableName} (${columnsStr})${whereStr}`;
 
       await this.pool.request().query(createIndexSql);
     } catch (error) {
@@ -703,24 +794,37 @@ export class StoreOperationsMSSQL extends StoreOperations {
   async dropIndex(indexName: string): Promise<void> {
     try {
       const schemaName = this.schemaName || 'dbo';
+      const indexNameSafe = parseSqlIdentifier(indexName, 'index name');
 
       // Check if index exists first
       const checkRequest = this.pool.request();
-      checkRequest.input('indexName', indexName);
+      checkRequest.input('indexName', indexNameSafe);
       checkRequest.input('schemaName', schemaName);
 
       const result = await checkRequest.query(`
-        SELECT o.name as table_name
+        SELECT t.name as table_name
         FROM sys.indexes i
-        INNER JOIN sys.objects o ON i.object_id = o.object_id
-        INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
+        INNER JOIN sys.tables t ON i.object_id = t.object_id
+        INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
         WHERE i.name = @indexName
-        AND s.name = @schemaName
+          AND s.name = @schemaName
       `);
 
       if (!result.recordset || result.recordset.length === 0) {
         // Index doesn't exist, nothing to drop
         return;
+      }
+
+      // In MSSQL, index names are unique per table, not per schema
+      // If multiple tables have the same index name, throw an error
+      if (result.recordset.length > 1) {
+        const tables = result.recordset.map((r: any) => r.table_name).join(', ');
+        throw new MastraError({
+          id: 'MASTRA_STORAGE_MSSQL_INDEX_AMBIGUOUS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Index "${indexNameSafe}" exists on multiple tables (${tables}) in schema "${schemaName}". Please drop indexes manually or ensure unique index names.`,
+        });
       }
 
       const tableName = result.recordset[0].table_name;
@@ -729,7 +833,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
         schemaName: getSchemaName(this.schemaName),
       });
 
-      const dropSql = `DROP INDEX [${indexName}] ON ${fullTableName}`;
+      const dropSql = `DROP INDEX [${indexNameSafe}] ON ${fullTableName}`;
       await this.pool.request().query(dropSql);
     } catch (error) {
       throw new MastraError(
@@ -858,9 +962,9 @@ export class StoreOperationsMSSQL extends StoreOperations {
           i.is_unique as is_unique,
           CAST(SUM(s.used_page_count) * 8 / 1024.0 AS VARCHAR(50)) + ' MB' as size,
           i.type_desc as method,
-          ISNULL(us.user_seeks, 0) as scans,
-          ISNULL(us.user_lookups, 0) as tuples_read,
-          ISNULL(us.user_seeks + us.user_scans + us.user_lookups, 0) as tuples_fetched
+          ISNULL(us.user_scans, 0) as scans,
+          ISNULL(us.user_seeks + us.user_scans, 0) as tuples_read,
+          ISNULL(us.user_lookups, 0) as tuples_fetched
         FROM sys.indexes i
         INNER JOIN sys.objects o ON i.object_id = o.object_id
         INNER JOIN sys.schemas sch ON o.schema_id = sch.schema_id
@@ -904,9 +1008,9 @@ export class StoreOperationsMSSQL extends StoreOperations {
         size: row.size || '0 MB',
         definition: '',
         method: row.method?.toLowerCase() || 'nonclustered',
-        scans: parseInt(row.scans) || 0,
-        tuples_read: parseInt(row.tuples_read) || 0,
-        tuples_fetched: parseInt(row.tuples_fetched) || 0,
+        scans: Number(row.scans) || 0,
+        tuples_read: Number(row.tuples_read) || 0,
+        tuples_fetched: Number(row.tuples_fetched) || 0,
       };
     } catch (error) {
       throw new MastraError(
