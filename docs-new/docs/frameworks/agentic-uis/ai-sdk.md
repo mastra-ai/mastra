@@ -570,7 +570,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> You can then access this data in your tools via the `runtimeContext` parameter. See the [Runtime Context documentation](/docs/server-db/runtime-context) for more details.
+> You can then access this data in your tools via the `runtimeContext` parameter. See the [Runtime Context documentation](/docs/tools-mcp/runtime-context) for more details.
 
 ## Migrating from AI SDK v4 to v5
 
