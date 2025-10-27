@@ -54,11 +54,11 @@ When creating tools, keep tool descriptions simple and focused on **what** the t
 
 ## Adding Tools to an Agent
 
-To make tools available to an agent, you configure them in the agent's definition. Mentioning available tools and their general purpose in the agent's system prompt can also improve tool usage. For detailed steps and examples, see the guide on [Using Tools and MCP with Agents](/docs/agents/using-tools-and-mcp#add-tools-to-an-agent).
+To make tools available to an agent, you configure them in the agent's definition. Mentioning available tools and their general purpose in the agent's system prompt can also improve tool usage. For detailed steps and examples, see the guide on [Using Tools and MCP with Agents](/agents/using-tools-and-mcp#add-tools-to-an-agent).
 
 ## Using `RuntimeContext`
 
-Use [RuntimeContext](../server-db/runtime-context.mdx) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RuntimeContext](/server-db/runtime-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers
 export type UserTier = {
@@ -85,9 +85,9 @@ export const testTool = createTool({
 });
 ```
 
-> See [Runtime Context](../server-db/runtime-context.mdx) for more information.
+> See [Runtime Context](/server-db/runtime-context) for more information.
 
 ## Testing with Mastra Playground
 
-Use the Mastra [Playground](../server-db/local-dev-playground.mdx) to test tools with different inputs, inspect execution results, and verify tool behavior.
+Use the Mastra [Playground](/server-db/local-dev-playground) to test tools with different inputs, inspect execution results, and verify tool behavior.
 

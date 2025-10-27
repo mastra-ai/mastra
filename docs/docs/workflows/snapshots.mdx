@@ -68,9 +68,9 @@ Each snapshot includes the `runId`, input, step status (`success`, `suspended`, 
 Snapshots are saved to the configured storage system. By default, they use LibSQL, but you can configure Upstash or PostgreSQL instead. Each snapshot is saved in the `workflow_snapshots` table and identified by the workflow’s `runId`.
 
 Read more about:
-- [LibSQL Storage](../../reference/storage/libsql.mdx)
-- [Upstash Storage](../../reference/storage/upstash.mdx)
-- [PostgreSQL Storage](../../reference/storage/postgresql.mdx)
+- [LibSQL Storage](/reference/storage/libsql)
+- [Upstash Storage](/reference/storage/upstash)
+- [PostgreSQL Storage](/reference/storage/postgresql)
 
 
 ### Saving snapshots
@@ -245,6 +245,6 @@ if (result.status === "suspended") {
 
 ## Related
 
-- [Suspend and resume](../../docs/workflows/suspend-and-resume.mdx)
-- [Human in the loop example](../../examples/workflows/human-in-the-loop.mdx)
-- [WorkflowRun.watch()](../../reference/workflows/run-methods/watch.mdx)
+- [Suspend and resume](/workflows/suspend-and-resume)
+- [Human in the loop example](/examples/workflows/human-in-the-loop)
+- [WorkflowRun.watch()](/reference/workflows/run-methods/watch)

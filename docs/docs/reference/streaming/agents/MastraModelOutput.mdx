@@ -7,14 +7,14 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # MastraModelOutput
 
-The `MastraModelOutput` class is returned by [.stream()](./stream.mdx) and provides both streaming and promise-based access to model outputs. It supports structured output generation, tool calls, reasoning, and comprehensive usage tracking.
+The `MastraModelOutput` class is returned by [.stream()](./stream) and provides both streaming and promise-based access to model outputs. It supports structured output generation, tool calls, reasoning, and comprehensive usage tracking.
 
 ```typescript
 // MastraModelOutput is returned by agent.stream()
 const stream = await agent.stream("Hello world");
 ```
 
-For setup and basic usage, see the [.stream()](./stream.mdx) method documentation.
+For setup and basic usage, see the [.stream()](./stream) method documentation.
 
 ## Streaming Properties
 
@@ -316,5 +316,5 @@ if (stream.error) {
 
 ## Related Types
 
-- [.stream()](./stream.mdx) - Method that returns MastraModelOutput
+- [.stream()](./stream) - Method that returns MastraModelOutput
 - [ChunkType](../ChunkType.mdx) - All possible chunk types in the full stream

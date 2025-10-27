@@ -11,7 +11,7 @@ If you ask your friend what they did last weekend, they will search in their mem
 
 ## How Semantic Recall Works
 
-Semantic recall is RAG-based search that helps agents maintain context across longer interactions when messages are no longer within [recent conversation history](./overview.mdx#conversation-history).
+Semantic recall is RAG-based search that helps agents maintain context across longer interactions when messages are no longer within [recent conversation history](./overview#conversation-history).
 
 It uses vector embeddings of messages for similarity search, integrates with various vector stores, and has configurable context windows around retrieved messages.
 
@@ -90,10 +90,10 @@ const agent = new Agent({
 
 **Storage/vector code Examples**:
 
-- [LibSQL](/docs/memory/storage/memory-with-libsql.mdx)
+- [LibSQL](/memory/storage/memory-with-libsql.mdx)
 - [MongoDB](/examples/memory/memory-with-mongodb.mdx)
-- [Postgres](/docs/memory/storage/memory-with-pg.mdx)
-- [Upstash](/docs/memory/storage/memory-with-upstash.mdx)
+- [Postgres](/memory/storage/memory-with-pg.mdx)
+- [Upstash](/memory/storage/memory-with-upstash.mdx)
 
 ### Embedder configuration
 
@@ -223,4 +223,4 @@ You might want to disable semantic recall in scenarios like:
 
 When tracing is enabled, any messages retrieved via semantic recall will appear in the agent’s trace output, alongside recent conversation history (if configured).
 
-For more info on viewing message traces, see [Viewing Retrieved Messages](./overview.mdx#viewing-retrieved-messages).
+For more info on viewing message traces, see [Viewing Retrieved Messages](./overview#viewing-retrieved-messages).

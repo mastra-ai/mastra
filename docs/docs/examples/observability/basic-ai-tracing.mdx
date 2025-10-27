@@ -50,10 +50,10 @@ export const mastra = new Mastra({
 ```
 
 This default configuration automatically includes:
-- **[DefaultExporter](/docs/observability/ai-tracing/exporters/default)** - Persists traces to your storage
-- **[CloudExporter](/docs/observability/ai-tracing/exporters/cloud)** - Sends to Mastra Cloud (if token is set)
-- **[SensitiveDataFilter](/docs/observability/ai-tracing/processors/sensitive-data-filter)** - Redacts sensitive fields
-- **[100% sampling](/docs/observability/ai-tracing/overview#always-sample)** - All traces are collected
+- **[DefaultExporter](/observability/ai-tracing/overview/exporters/default)** - Persists traces to your storage
+- **[CloudExporter](/observability/ai-tracing/overview/exporters/cloud)** - Sends to Mastra Cloud (if token is set)
+- **[SensitiveDataFilter](/observability/ai-tracing/overview/processors/sensitive-data-filter)** - Redacts sensitive fields
+- **[100% sampling](/observability/ai-tracing/overview/overview#always-sample)** - All traces are collected
 
 ### 3. Create an Agent with Automatic Tracing
 
@@ -145,9 +145,9 @@ const result = await agent.generate(
 ## Related
 
 ### Documentation
-- [AI Tracing Overview](/docs/observability/ai-tracing/overview) - Complete guide to tracing
-- [Sensitive Data Filter](/docs/observability/ai-tracing/processors/sensitive-data-filter) - Redact sensitive information
-- [Configuration Patterns](/docs/observability/ai-tracing/overview#common-configuration-patterns--troubleshooting) - Best practices
+- [AI Tracing Overview](/observability/ai-tracing/overview/overview) - Complete guide to tracing
+- [Sensitive Data Filter](/observability/ai-tracing/overview/processors/sensitive-data-filter) - Redact sensitive information
+- [Configuration Patterns](/observability/ai-tracing/overview/overview#common-configuration-patterns--troubleshooting) - Best practices
 
 ### Reference
 - [Configuration](/reference/observability/ai-tracing/configuration) - ObservabilityConfig API

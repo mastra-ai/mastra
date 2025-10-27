@@ -54,11 +54,11 @@ const step1 = createStep({
 });
 ```
 
-> See the [Step Class](../../reference/workflows/step.mdx) for a full list of configuration options.
+> See the [Step Class](/reference/workflows/step) for a full list of configuration options.
 
 ### Using agents and tools
 
-Workflow steps can also call registered agents or import and execute tools directly, visit the [Agents and Tools](./agents-and-tools.mdx) page for more information.
+Workflow steps can also call registered agents or import and execute tools directly, visit the [Agents and Tools](./agents-and-tools) page for more information.
 
 ## Creating a workflow
 
@@ -84,11 +84,11 @@ export const testWorkflow = createWorkflow({
 
 ```
 
-> See the [Workflow Class](../../reference/workflows/workflow.mdx) for a full list of configuration options.
+> See the [Workflow Class](/reference/workflows/workflow) for a full list of configuration options.
 
 ### Understanding control flow
 
-Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](./control-flow.mdx) page for more information.
+Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](./control-flow) page for more information.
 
 #### Composing workflow steps
 
@@ -158,7 +158,7 @@ const testWorkflow = mastra.getWorkflow("testWorkflow");
 
 :::
 
-> See [Running Workflows](../../examples/workflows/running-workflows.mdx) for more information.
+> See [Running Workflows](/examples/workflows/running-workflows) for more information.
 
 ## Running workflows
 
@@ -238,7 +238,7 @@ The workflow output includes the full execution lifecycle, showing the input and
 
 ## Using `RuntimeContext`
 
-Use [RuntimeContext](../server-db/runtime-context.mdx) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RuntimeContext](/server-db/runtime-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers
 export type UserTier = {
@@ -259,20 +259,20 @@ const step1 = createStep({
 });
 ```
 
-> See [Runtime Context](../server-db/runtime-context.mdx) for more information.
+> See [Runtime Context](/server-db/runtime-context) for more information.
 
 ## Testing with Mastra Playground
 
-Use the Mastra [Playground](../server-db/local-dev-playground.mdx) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
+Use the Mastra [Playground](/server-db/local-dev-playground) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
 
 ## Related
 
-For a closer look at workflows, see our [Workflow Guide](../../guides/guide/ai-recruiter.mdx), which walks through the core concepts with a practical example.
+For a closer look at workflows, see our [Workflow Guide](/guides/guide/ai-recruiter), which walks through the core concepts with a practical example.
 
-- [Parallel Steps workflow example](../../examples/workflows/parallel-steps.mdx)
-- [Conditional Branching workflow example](../../examples/workflows/conditional-branching.mdx)
-- [Inngest workflow example](../../examples/workflows/inngest-workflow.mdx)
-- [Suspend and Resume workflow example](../../examples/workflows/human-in-the-loop.mdx)
+- [Parallel Steps workflow example](/examples/workflows/parallel-steps)
+- [Conditional Branching workflow example](/examples/workflows/conditional-branching)
+- [Inngest workflow example](/examples/workflows/inngest-workflow)
+- [Suspend and Resume workflow example](/examples/workflows/human-in-the-loop)
 
 
 ## Workflows (Legacy)

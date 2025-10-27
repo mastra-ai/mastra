@@ -10,9 +10,9 @@ You can use the Command-Line Interface (CLI) provided by Mastra to develop, buil
 
 ## `mastra dev`
 
-Starts a server which exposes a [local dev playground](/docs/server-db/local-dev-playground) and REST endpoints for your agents, tools, and workflows. You can visit [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) for an overview of all available endpoints once `mastra dev` is running.
+Starts a server which exposes a [local dev playground](/server-db/studio) and REST endpoints for your agents, tools, and workflows. You can visit [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) for an overview of all available endpoints once `mastra dev` is running.
 
-You can also [configure the server](/docs/server-db/local-dev-playground#configuration).
+You can also [configure the server](/server-db/studio#configuration).
 
 ### Flags
 
@@ -20,7 +20,7 @@ The command accepts [common flags][common-flags] and the following additional fl
 
 #### `--https`
 
-Enable local HTTPS support. [Learn more](/docs/server-db/local-dev-playground#local-https).
+Enable local HTTPS support. [Learn more](/server-db/studio#local-https).
 
 #### `--inspect`
 
@@ -86,7 +86,7 @@ Under the hood Mastra's Rollup server locates your Mastra entry file and bundles
 
 The output in `.mastra` can be deployed to any cloud server using [`mastra start`](#mastra-start).
 
-If you're deploying to a [serverless platform](/docs/deployment/serverless-platforms) you need to install the correct deployer in order to receive the correct output in `.mastra`.
+If you're deploying to a [serverless platform](/deployment/serverless-platforms) you need to install the correct deployer in order to receive the correct output in `.mastra`.
 
 It accepts [common flags][common-flags].
 
@@ -110,7 +110,7 @@ You need to run `mastra build` before using `mastra start`.
 
 :::
 
-Starts a local server to serve your built Mastra application in production mode. By default, [OTEL Tracing](/docs/observability/otel-tracing) is enabled.
+Starts a local server to serve your built Mastra application in production mode. By default, [OTEL Tracing](/observability/otel-tracing) is enabled.
 
 ### Flags
 
@@ -122,7 +122,7 @@ The path to your built Mastra output directory. Defaults to `.mastra/output`.
 
 #### `--no-telemetry`
 
-Disable the [OTEL Tracing](/docs/observability/otel-tracing).
+Disable the [OTEL Tracing](/observability/otel-tracing).
 
 ## `mastra lint`
 
@@ -134,7 +134,7 @@ It accepts [common flags][common-flags].
 
 The `mastra scorers` command provides management capabilities for evaluation scorers that measure the quality, accuracy, and performance of AI-generated outputs.
 
-Read the [Scorers overview](/docs/scorers/overview) to learn more.
+Read the [Scorers overview](/scorers/overview) to learn more.
 
 ### `add`
 

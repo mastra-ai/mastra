@@ -7,14 +7,14 @@ description: "Workflows in Mastra help you orchestrate complex sequences of oper
 
 All the legacy workflow documentation is available on the links below.
 
-- [Steps](/docs/workflows-legacy/steps.mdx)
-- [Control Flow](/docs/workflows-legacy/control-flow.mdx)
-- [Variables](/docs/workflows-legacy/variables.mdx)
-- [Suspend & Resume](/docs/workflows-legacy/suspend-and-resume.mdx)
-- [Dynamic Workflows](/docs/workflows-legacy/dynamic-workflows.mdx)
-- [Error Handling](/docs/workflows-legacy/error-handling.mdx)
-- [Nested Workflows](/docs/workflows-legacy/nested-workflows.mdx)
-- [Runtime/Dynamic Variables](/docs/workflows-legacy/runtime-variables.mdx)
+- [Steps](/workflows-legacy/steps.mdx)
+- [Control Flow](/workflows-legacy/control-flow.mdx)
+- [Variables](/workflows-legacy/variables.mdx)
+- [Suspend & Resume](/workflows-legacy/suspend-and-resume.mdx)
+- [Dynamic Workflows](/workflows-legacy/dynamic-workflows.mdx)
+- [Error Handling](/workflows-legacy/error-handling.mdx)
+- [Nested Workflows](/workflows-legacy/nested-workflows.mdx)
+- [Runtime/Dynamic Variables](/workflows-legacy/runtime-variables.mdx)
 
 Workflows in Mastra help you orchestrate complex sequences of operations with features like branching, parallel execution, resource suspension, and more.
 
@@ -146,23 +146,23 @@ This example shows the essentials: define your workflow, add steps, commit the w
 
 ## Defining Steps
 
-The basic building block of a workflow [is a step](./steps.mdx). Steps are defined using schemas for inputs and outputs, and can fetch prior step results.
+The basic building block of a workflow [is a step](./steps). Steps are defined using schemas for inputs and outputs, and can fetch prior step results.
 
 ## Control Flow
 
-Workflows let you define a [control flow](./control-flow.mdx) to chain steps together in with parallel steps, branching paths, and more.
+Workflows let you define a [control flow](./control-flow) to chain steps together in with parallel steps, branching paths, and more.
 
 ## Workflow Variables
 
-When you need to map data between steps or create dynamic data flows, [workflow variables](./variables.mdx) provide a powerful mechanism for passing information from one step to another and accessing nested properties within step outputs.
+When you need to map data between steps or create dynamic data flows, [workflow variables](./variables) provide a powerful mechanism for passing information from one step to another and accessing nested properties within step outputs.
 
 ## Suspend and Resume
 
-When you need to pause execution for external data, user input, or asynchronous events, Mastra [supports suspension at any step](./suspend-and-resume.mdx), persisting the state of the workflow so you can resume it later.
+When you need to pause execution for external data, user input, or asynchronous events, Mastra [supports suspension at any step](./suspend-and-resume), persisting the state of the workflow so you can resume it later.
 
 ## Observability and Debugging
 
-Mastra workflows automatically [log the input and output of each step within a workflow run](../../reference/observability/otel-config.mdx), allowing you to send this data to your preferred logging, telemetry, or observability tools.
+Mastra workflows automatically [log the input and output of each step within a workflow run](/reference/observability/otel-config), allowing you to send this data to your preferred logging, telemetry, or observability tools.
 
 You can:
 
@@ -172,9 +172,9 @@ You can:
 
 ## More Resources
 
-- [Sequential Steps workflow example](../../examples/workflows_legacy/sequential-steps.mdx)
-- [Parallel Steps workflow example](../../examples/workflows_legacy/parallel-steps.mdx)
-- [Branching Paths workflow example](../../examples/workflows_legacy/branching-paths.mdx)
-- [Workflow Variables example](../../examples/workflows_legacy/workflow-variables.mdx)
-- [Cyclical Dependencies workflow example](../../examples/workflows_legacy/cyclical-dependencies.mdx)
-- [Suspend and Resume workflow example](../../examples/workflows_legacy/suspend-and-resume.mdx)
+- [Sequential Steps workflow example](/examples/workflows_legacy/sequential-steps)
+- [Parallel Steps workflow example](/examples/workflows_legacy/parallel-steps)
+- [Branching Paths workflow example](/examples/workflows_legacy/branching-paths)
+- [Workflow Variables example](/examples/workflows_legacy/workflow-variables)
+- [Cyclical Dependencies workflow example](/examples/workflows_legacy/cyclical-dependencies)
+- [Suspend and Resume workflow example](/examples/workflows_legacy/suspend-and-resume)

@@ -25,7 +25,7 @@ npm install @mastra/memory@latest @mastra/libsql@latest
 
 ## Storage providers
 
-Memory requires a storage provider to persist conversation history, including user messages and agent responses. For more details on available providers and how storage works in Mastra, see the [Storage](../server-db/storage.mdx) documentation.
+Memory requires a storage provider to persist conversation history, including user messages and agent responses. For more details on available providers and how storage works in Mastra, see the [Storage](/server-db/storage) documentation.
 
 ## Configuring memory
 
@@ -67,7 +67,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> See the [LibSQL Storage](../../reference/storage/libsql.mdx) for a full list of configuration options.
+> See the [LibSQL Storage](/reference/storage/libsql) for a full list of configuration options.
 
 </Steps>
 
@@ -121,7 +121,7 @@ To learn more about memory see the [Memory](../memory/overview.mdx) documentatio
 
 ## Using `RuntimeContext`
 
-Use [RuntimeContext](../server-db/runtime-context.mdx) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
+Use [RuntimeContext](/server-db/runtime-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
 
 ```typescript filename="src/mastra/agents/memory-agent.ts" showLineNumbers
 export type UserTier = {
@@ -148,11 +148,11 @@ export const memoryAgent = new Agent({
 });
 ```
 
-> See [Runtime Context](../server-db/runtime-context.mdx) for more information.
+> See [Runtime Context](/server-db/runtime-context) for more information.
 
 ## Related
 
 - [Working Memory](../memory/working-memory.mdx)
 - [Semantic Recall](../memory/semantic-recall.mdx)
 - [Threads and Resources](../memory/threads-and-resources.mdx)
-- [Runtime Context](../server-db/runtime-context.mdx)
+- [Runtime Context](/server-db/runtime-context)

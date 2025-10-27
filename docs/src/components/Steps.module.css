@@ -1,0 +1,37 @@
+/* Steps component styles */
+.steps-container {
+  counter-reset: step;
+  margin: 2rem 0;
+}
+
+.steps-container > :global(h3) {
+  counter-increment: step;
+  position: relative;
+  padding-left: 3rem;
+}
+
+.steps-container > :global(h3)::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background-color: var(--ifm-color-primary);
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.steps-container > :global(div),
+.steps-container > :global(p),
+.steps-container > :global(ul),
+.steps-container > :global(ol),
+.steps-container > :global(pre),
+.steps-container > :global(blockquote) {
+  padding-left: 3rem;
+}

@@ -5,7 +5,7 @@ description: "Suspend and resume in Mastra workflows allows you to pause executi
 
 # Suspend & Resume
 
-Workflows can be paused at any step, with their current state persisted as a [snapshot](./snapshots.mdx) in storage. Execution can then be resumed from this saved snapshot when ready. Persisting the snapshot ensures the workflow state is maintained across sessions, deployments, and server restarts, essential for workflows that may remain suspended while awaiting external input or resources.
+Workflows can be paused at any step, with their current state persisted as a [snapshot](./snapshots) in storage. Execution can then be resumed from this saved snapshot when ready. Persisting the snapshot ensures the workflow state is maintained across sessions, deployments, and server restarts, essential for workflows that may remain suspended while awaiting external input or resources.
 
 Common scenarios for suspending workflows include:
 
@@ -65,7 +65,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> For more details, check out the [Suspend workflow example](../../examples/workflows/human-in-the-loop.mdx#suspend-workflow).
+> For more details, check out the [Suspend workflow example](/examples/workflows/human-in-the-loop#suspend-workflow).
 
 ### Identifying suspended steps
 
@@ -114,7 +114,7 @@ In this case, the logic resumes the first step listed in the `suspended` array. 
 }
 ```
 
-> See [Run Workflow Results](./overview.mdx#run-workflow-results) for more details.
+> See [Run Workflow Results](./overview#run-workflow-results) for more details.
 
 ## Providing user feedback with suspend
 
@@ -173,7 +173,7 @@ In this case, the reason provided explains that the user must confirm to continu
 }
 ```
 
-> See [Run Workflow Results](./overview.mdx#run-workflow-results) for more details.
+> See [Run Workflow Results](./overview#run-workflow-results) for more details.
 
 ## Resuming a workflow with `resume()`
 
@@ -239,7 +239,7 @@ const resumedResult = await run.resume({
 });
 ```
 
-> See [Runtime Context](../server-db/runtime-context.mdx) for more information.
+> See [Runtime Context](/server-db/runtime-context) for more information.
 
 ### Resuming nested workflows
 
@@ -292,7 +292,7 @@ Workflows can also pause execution for timed delays or external events. These me
 
 **Available methods:**
 
-- [`.sleep()`](../../reference/workflows/workflow-methods/sleep.mdx): Pause for a specified number of milliseconds
-- [`.sleepUntil()`](../../reference/workflows/workflow-methods/sleepUntil.mdx) : Pause until a specific date
-- [`.waitForEvent()`](../../reference/workflows/workflow-methods/waitForEvent.mdx): Pause until an external event is received
-- [`.sendEvent()`](../../reference/workflows/workflow-methods/sendEvent.mdx) : Send an event to resume a waiting workflow
+- [`.sleep()`](/reference/workflows/workflow-methods/sleep): Pause for a specified number of milliseconds
+- [`.sleepUntil()`](/reference/workflows/workflow-methods/sleepUntil) : Pause until a specific date
+- [`.waitForEvent()`](/reference/workflows/workflow-methods/waitForEvent): Pause until an external event is received
+- [`.sendEvent()`](/reference/workflows/workflow-methods/sendEvent) : Send an event to resume a waiting workflow
