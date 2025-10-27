@@ -2692,10 +2692,7 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps).toMatchObject({
         'test-workflow': {
           status: 'failed',
-          error: {
-            name: 'Error',
-            stepId: 'workflow.main-workflow.step.test-workflow',
-          },
+          error: 'Step execution failed',
         },
       });
 
@@ -9196,4 +9193,4 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
   });
-}, 160e3);
+}, 80e3);
