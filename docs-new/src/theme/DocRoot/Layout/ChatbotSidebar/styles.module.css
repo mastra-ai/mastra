@@ -12,7 +12,7 @@
     display: block;
     width: var(--chatbot-sidebar-width);
     margin-top: calc(-1 * var(--ifm-navbar-height));
-    border-left: 1px solid var(--ifm-toc-border-color);
+    border-left: 0.5px solid var(--border);
     will-change: width;
     transition: width var(--ifm-transition-fast) ease;
     background-color: var(--mastra-surface-1);

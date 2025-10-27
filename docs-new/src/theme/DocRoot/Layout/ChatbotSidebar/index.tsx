@@ -99,7 +99,7 @@ export default function ChatbotSidebar({
         />
         {/* Sidebar content */}
         <div className={styles.chatbotContent} ref={scrollRef}>
-          <div className="sticky top-0 backdrop-blur-md bg-(--mastra-surface-1)/50 z-10 flex items-center gap-2 px-3 py-2 -mx-[10px] border-b border-(--ifm-toc-border-color)">
+          <div className="sticky top-0 backdrop-blur-md bg-(--mastra-surface-1)/50 z-10 flex items-center gap-2 px-3 py-2 -mx-[10px] border-b border-(--border)">
             <button className="hover:bg-(--mastra-surface-5) p-1.5 rounded-lg cursor-pointer" onClick={toggleSidebar}>
               <PanelRightClose className="w-4 h-4" />
             </button>
@@ -204,11 +204,11 @@ export default function ChatbotSidebar({
                   </div>
                 </form>
 
-                <div className="flex items-center -mx-[10px] py-2 px-3 border-t border-(--ifm-toc-border-color)">
+                <div className="flex items-center -mx-[10px] py-2 px-3 border-t border-(--border)">
                   <span className="text-xs font-medium text-(--mastra-text-muted)">
                     Powered by{' '}
                     <a href="https://kapaai.com" target="_blank" rel="noopener noreferrer">
-                      Kapaai
+                      KapaAI
                     </a>
                   </span>
                 </div>

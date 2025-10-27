@@ -31,7 +31,7 @@ function NavbarContentDesktop() {
           <NavbarMobileSidebarToggle />
         </div>
       </div>
-      <div className="hidden px-4 2xl:px-0 lg:block">
+      <div className="hidden 2xl:px-0 lg:block">
         <TabSwitcher />
       </div>
     </>
