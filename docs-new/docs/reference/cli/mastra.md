@@ -1,5 +1,5 @@
 ---
-title: 'CLI Commands'
+title: "CLI Commands"
 description: Documentation for the Mastra CLI to develop, build, and start your project.
 ---
 
@@ -9,9 +9,9 @@ You can use the Command-Line Interface (CLI) provided by Mastra to develop, buil
 
 ## `mastra dev`
 
-Starts a server which exposes a [local dev playground](/docs/getting-started/local-dev-playground) and REST endpoints for your agents, tools, and workflows. You can visit [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) for an overview of all available endpoints once `mastra dev` is running.
+Starts a server which exposes a [local dev playground](/docs/getting-started/studio) and REST endpoints for your agents, tools, and workflows. You can visit [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) for an overview of all available endpoints once `mastra dev` is running.
 
-You can also [configure the server](/docs/getting-started/local-dev-playground#configuration).
+You can also [configure the server](/docs/getting-started/studio#configuration).
 
 ### Flags
 
@@ -19,7 +19,7 @@ The command accepts [common flags][common-flags] and the following additional fl
 
 #### `--https`
 
-Enable local HTTPS support. [Learn more](/docs/getting-started/local-dev-playground#local-https).
+Enable local HTTPS support. [Learn more](/docs/getting-started/studio#local-https).
 
 #### `--inspect`
 

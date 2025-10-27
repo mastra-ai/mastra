@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Hallucination '
+title: "Hallucination"
 description: Documentation for the Hallucination Metric in Mastra, which evaluates the factual correctness of LLM outputs by identifying contradictions with provided context.
 ---
 
@@ -16,19 +16,21 @@ The `HallucinationMetric` evaluates whether an LLM generates factually correct i
 ## Basic Usage
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { HallucinationMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { HallucinationMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new HallucinationMetric(model, {
-  context: ['Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning in San Carlos, California.'],
+  context: [
+    "Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning in San Carlos, California.",
+  ],
 });
 
 const result = await metric.measure(
   "Tell me about Tesla's founding.",
-  'Tesla was founded in 2004 by Elon Musk in California.',
+  "Tesla was founded in 2004 by Elon Musk in California.",
 );
 
 console.log(result.score); // Score from 0-1
@@ -185,23 +187,24 @@ Final score: `(hallucinated_statements / total_statements) * scale`
 ## Example with Analysis
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { HallucinationMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { HallucinationMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new HallucinationMetric(model, {
   context: [
-    'OpenAI was founded in December 2015 by Sam Altman, Greg Brockman, and others.',
-    'The company launched with a $1 billion investment commitment.',
-    'Elon Musk was an early supporter but left the board in 2018.',
+    "OpenAI was founded in December 2015 by Sam Altman, Greg Brockman, and others.",
+    "The company launched with a $1 billion investment commitment.",
+    "Elon Musk was an early supporter but left the board in 2018.",
   ],
 });
 
 const result = await metric.measure({
-  input: 'What are the key details about OpenAI?',
-  output: 'OpenAI was founded in 2015 by Elon Musk and Sam Altman with a $2 billion investment.',
+  input: "What are the key details about OpenAI?",
+  output:
+    "OpenAI was founded in 2015 by Elon Musk and Sam Altman with a $2 billion investment.",
 });
 
 // Example output:

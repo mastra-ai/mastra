@@ -12,27 +12,27 @@ The following code snippets demonstrate how to implement a multi-agent conversat
 First, we need to create two agents with distinct personalities and voice capabilities:
 
 ```typescript filename="src/mastra/agents/index.ts"
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { OpenAIVoice } from '@mastra/voice-openai';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { OpenAIVoice } from "@mastra/voice-openai";
 
 export const optimistAgent = new Agent({
-  name: 'Optimist',
+  name: "Optimist",
   instructions:
-    'You are an optimistic debater who sees the positive side of every topic. Keep your responses concise and engaging, about 2-3 sentences.',
-  model: openai('gpt-4o'),
+    "You are an optimistic debater who sees the positive side of every topic. Keep your responses concise and engaging, about 2-3 sentences.",
+  model: openai("gpt-4o"),
   voice: new OpenAIVoice({
-    speaker: 'alloy',
+    speaker: "alloy",
   }),
 });
 
 export const skepticAgent = new Agent({
-  name: 'Skeptic',
+  name: "Skeptic",
   instructions:
-    'You are a RUDE skeptical debater who questions assumptions and points out potential issues. Keep your responses concise and engaging, about 2-3 sentences.',
-  model: openai('gpt-4o'),
+    "You are a RUDE skeptical debater who questions assumptions and points out potential issues. Keep your responses concise and engaging, about 2-3 sentences.",
+  model: openai("gpt-4o"),
   voice: new OpenAIVoice({
-    speaker: 'echo',
+    speaker: "echo",
   }),
 });
 ```
@@ -42,9 +42,9 @@ export const skepticAgent = new Agent({
 Next, register both agents with your Mastra instance:
 
 ```typescript filename="src/mastra/index.ts"
-import { PinoLogger } from '@mastra/loggers';
-import { Mastra } from '@mastra/core/mastra';
-import { optimistAgent, skepticAgent } from './agents';
+import { PinoLogger } from "@mastra/loggers";
+import { Mastra } from "@mastra/core/mastra";
+import { optimistAgent, skepticAgent } from "./agents";
 
 export const mastra = new Mastra({
   agents: {
@@ -52,8 +52,8 @@ export const mastra = new Mastra({
     skepticAgent,
   },
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
 });
 ```
@@ -63,27 +63,27 @@ export const mastra = new Mastra({
 This example demonstrates how to manage the turn-taking flow between agents, ensuring each agent responds to the previous agent's statements:
 
 ```typescript filename="src/debate/turn-taking.ts"
-import { mastra } from '../../mastra';
-import { playAudio, Recorder } from '@mastra/node-audio';
-import * as p from '@clack/prompts';
+import { mastra } from "../../mastra";
+import { playAudio, Recorder } from "@mastra/node-audio";
+import * as p from "@clack/prompts";
 
 // Helper function to format text with line wrapping
 function formatText(text: string, maxWidth: number): string {
-  const words = text.split(' ');
-  let result = '';
-  let currentLine = '';
+  const words = text.split(" ");
+  let result = "";
+  let currentLine = "";
 
   for (const word of words) {
     if (currentLine.length + word.length + 1 <= maxWidth) {
-      currentLine += (currentLine ? ' ' : '') + word;
+      currentLine += (currentLine ? " " : "") + word;
     } else {
-      result += (result ? '\n' : '') + currentLine;
+      result += (result ? "\n" : "") + currentLine;
       currentLine = word;
     }
   }
 
   if (currentLine) {
-    result += (result ? '\n' : '') + currentLine;
+    result += (result ? "\n" : "") + currentLine;
   }
 
   return result;
@@ -91,15 +91,15 @@ function formatText(text: string, maxWidth: number): string {
 
 // Initialize audio recorder
 const recorder = new Recorder({
-  outputPath: './debate.mp3',
+  outputPath: "./debate.mp3",
 });
 
 // Process one turn of the conversation
 async function processTurn(
-  agentName: 'optimistAgent' | 'skepticAgent',
+  agentName: "optimistAgent" | "skepticAgent",
   otherAgentName: string,
   topic: string,
-  previousResponse: string = '',
+  previousResponse: string = "",
 ) {
   const agent = mastra.getAgent(agentName);
   const spinner = p.spinner();
@@ -124,11 +124,11 @@ async function processTurn(
   // Convert to speech and play
   const audioStream = await agent.voice.speak(text, {
     speed: 1.2,
-    responseFormat: 'wav', // Optional: specify a response format
+    responseFormat: "wav", // Optional: specify a response format
   });
 
   if (audioStream) {
-    audioStream.on('data', chunk => {
+    audioStream.on("data", (chunk) => {
       recorder.write(chunk);
     });
   }
@@ -142,8 +142,8 @@ async function processTurn(
   if (audioStream) {
     const speaker = playAudio(audioStream);
 
-    await new Promise<void>(resolve => {
-      speaker.once('close', () => {
+    await new Promise<void>((resolve) => {
+      speaker.once("close", () => {
         resolve();
       });
     });
@@ -156,36 +156,48 @@ async function processTurn(
 export async function runDebate(topic: string, turns: number = 3) {
   recorder.start();
 
-  p.intro('AI Debate - Two Agents Discussing a Topic');
+  p.intro("AI Debate - Two Agents Discussing a Topic");
   p.log.info(`Starting a debate on: ${topic}`);
-  p.log.info(`The debate will continue for ${turns} turns each. Press Ctrl+C to exit at any time.`);
+  p.log.info(
+    `The debate will continue for ${turns} turns each. Press Ctrl+C to exit at any time.`,
+  );
 
-  let optimistResponse = '';
-  let skepticResponse = '';
+  let optimistResponse = "";
+  let skepticResponse = "";
   const responses = [];
 
   for (let turn = 1; turn <= turns; turn++) {
     p.log.step(`Turn ${turn}`);
 
     // Optimist's turn
-    optimistResponse = await processTurn('optimistAgent', 'Skeptic', topic, skepticResponse);
+    optimistResponse = await processTurn(
+      "optimistAgent",
+      "Skeptic",
+      topic,
+      skepticResponse,
+    );
 
     responses.push({
-      agent: 'Optimist',
+      agent: "Optimist",
       text: optimistResponse,
     });
 
     // Skeptic's turn
-    skepticResponse = await processTurn('skepticAgent', 'Optimist', topic, optimistResponse);
+    skepticResponse = await processTurn(
+      "skepticAgent",
+      "Optimist",
+      topic,
+      optimistResponse,
+    );
 
     responses.push({
-      agent: 'Skeptic',
+      agent: "Skeptic",
       text: skepticResponse,
     });
   }
 
   recorder.end();
-  p.outro('Debate concluded! The full audio has been saved to debate.mp3');
+  p.outro("Debate concluded! The full audio has been saved to debate.mp3");
 
   return responses;
 }
@@ -196,41 +208,41 @@ export async function runDebate(topic: string, turns: number = 3) {
 Here's a simple script to run the debate from the command line:
 
 ```typescript filename="src/index.ts"
-import { runDebate } from './debate/turn-taking';
-import * as p from '@clack/prompts';
+import { runDebate } from "./debate/turn-taking";
+import * as p from "@clack/prompts";
 
 async function main() {
   // Get the topic from the user
   const topic = await p.text({
-    message: 'Enter a topic for the agents to discuss:',
-    placeholder: 'Climate change',
+    message: "Enter a topic for the agents to discuss:",
+    placeholder: "Climate change",
     validate(value) {
-      if (!value) return 'Please enter a topic';
+      if (!value) return "Please enter a topic";
       return;
     },
   });
 
   // Exit if cancelled
   if (p.isCancel(topic)) {
-    p.cancel('Operation cancelled.');
+    p.cancel("Operation cancelled.");
     process.exit(0);
   }
 
   // Get the number of turns
   const turnsInput = await p.text({
-    message: 'How many turns should each agent have?',
-    placeholder: '3',
-    initialValue: '3',
+    message: "How many turns should each agent have?",
+    placeholder: "3",
+    initialValue: "3",
     validate(value) {
       const num = parseInt(value);
-      if (isNaN(num) || num < 1) return 'Please enter a positive number';
+      if (isNaN(num) || num < 1) return "Please enter a positive number";
       return;
     },
   });
 
   // Exit if cancelled
   if (p.isCancel(turnsInput)) {
-    p.cancel('Operation cancelled.');
+    p.cancel("Operation cancelled.");
     process.exit(0);
   }
 
@@ -240,8 +252,8 @@ async function main() {
   await runDebate(topic as string, turns);
 }
 
-main().catch(error => {
-  p.log.error('An error occurred:');
+main().catch((error) => {
+  p.log.error("An error occurred:");
   console.error(error);
   process.exit(1);
 });
@@ -252,17 +264,17 @@ main().catch(error => {
 For web applications, you can create a simple Next.js component that allows users to start a debate and listen to the agents' responses:
 
 ```tsx filename="app/components/DebateInterface.tsx"
-'use client';
+"use client";
 
-import { useState, useRef } from 'react';
-import { MastraClient } from '@mastra/client-js';
+import { useState, useRef } from "react";
+import { MastraClient } from "@mastra/client-js";
 
 const mastraClient = new MastraClient({
-  baseUrl: process.env.NEXT_PUBLIC_MASTRA_URL || 'http://localhost:4111',
+  baseUrl: process.env.NEXT_PUBLIC_MASTRA_URL || "http://localhost:4111",
 });
 
 export default function DebateInterface() {
-  const [topic, setTopic] = useState('');
+  const [topic, setTopic] = useState("");
   const [turns, setTurns] = useState(3);
   const [isDebating, setIsDebating] = useState(false);
   const [responses, setResponses] = useState<any[]>([]);
@@ -277,12 +289,12 @@ export default function DebateInterface() {
     setResponses([]);
 
     try {
-      const optimist = mastraClient.getAgent('optimistAgent');
-      const skeptic = mastraClient.getAgent('skepticAgent');
+      const optimist = mastraClient.getAgent("optimistAgent");
+      const skeptic = mastraClient.getAgent("skepticAgent");
 
       const newResponses = [];
-      let optimistResponse = '';
-      let skepticResponse = '';
+      let optimistResponse = "";
+      let skepticResponse = "";
 
       for (let turn = 1; turn <= turns; turn++) {
         // Optimist's turn
@@ -294,12 +306,12 @@ export default function DebateInterface() {
         }
 
         const optimistResult = await optimist.generate({
-          messages: [{ role: 'user', content: prompt }],
+          messages: [{ role: "user", content: prompt }],
         });
 
         optimistResponse = optimistResult.text;
         newResponses.push({
-          agent: 'Optimist',
+          agent: "Optimist",
           text: optimistResponse,
         });
 
@@ -310,12 +322,12 @@ export default function DebateInterface() {
         prompt = `The topic is: ${topic}. Optimist just said: "${optimistResponse}". Respond to their points.`;
 
         const skepticResult = await skeptic.generate({
-          messages: [{ role: 'user', content: prompt }],
+          messages: [{ role: "user", content: prompt }],
         });
 
         skepticResponse = skepticResult.text;
         newResponses.push({
-          agent: 'Skeptic',
+          agent: "Skeptic",
           text: skepticResponse,
         });
 
@@ -323,7 +335,7 @@ export default function DebateInterface() {
         setResponses([...newResponses]);
       }
     } catch (error) {
-      console.error('Error starting debate:', error);
+      console.error("Error starting debate:", error);
     } finally {
       setIsDebating(false);
     }
@@ -335,12 +347,14 @@ export default function DebateInterface() {
 
     try {
       setIsPlaying(true);
-      const agentClient = mastraClient.getAgent(agent === 'Optimist' ? 'optimistAgent' : 'skepticAgent');
+      const agentClient = mastraClient.getAgent(
+        agent === "Optimist" ? "optimistAgent" : "skepticAgent",
+      );
 
       const audioResponse = await agentClient.voice.speak(text);
 
       if (!audioResponse.body) {
-        throw new Error('No audio stream received');
+        throw new Error("No audio stream received");
       }
 
       // Convert stream to blob
@@ -353,7 +367,7 @@ export default function DebateInterface() {
         chunks.push(value);
       }
 
-      const blob = new Blob(chunks, { type: 'audio/mpeg' });
+      const blob = new Blob(chunks, { type: "audio/mpeg" });
       const url = URL.createObjectURL(blob);
 
       if (audioRef.current) {
@@ -365,7 +379,7 @@ export default function DebateInterface() {
         audioRef.current.play();
       }
     } catch (error) {
-      console.error('Error playing audio:', error);
+      console.error("Error playing audio:", error);
       setIsPlaying(false);
     }
   };
@@ -379,7 +393,7 @@ export default function DebateInterface() {
         <input
           type="text"
           value={topic}
-          onChange={e => setTopic(e.target.value)}
+          onChange={(e) => setTopic(e.target.value)}
           className="w-full p-2 border rounded"
           placeholder="e.g., Climate change, AI ethics, Space exploration"
         />
@@ -390,7 +404,7 @@ export default function DebateInterface() {
         <input
           type="number"
           value={turns}
-          onChange={e => setTurns(parseInt(e.target.value))}
+          onChange={(e) => setTurns(parseInt(e.target.value))}
           min={1}
           max={10}
           className="w-full p-2 border rounded"
@@ -402,7 +416,7 @@ export default function DebateInterface() {
         disabled={isDebating || !topic}
         className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
       >
-        {isDebating ? 'Debate in Progress...' : 'Start Debate'}
+        {isDebating ? "Debate in Progress..." : "Start Debate"}
       </button>
 
       <audio ref={audioRef} className="hidden" />
@@ -415,7 +429,7 @@ export default function DebateInterface() {
             {responses.map((response, index) => (
               <div
                 key={index}
-                className={`p-4 rounded ${response.agent === 'Optimist' ? 'bg-blue-100' : 'bg-gray-100'}`}
+                className={`p-4 rounded ${response.agent === "Optimist" ? "bg-blue-100" : "bg-gray-100"}`}
               >
                 <div className="flex justify-between items-center">
                   <div className="font-bold">{response.agent}:</div>
@@ -424,7 +438,7 @@ export default function DebateInterface() {
                     disabled={isPlaying}
                     className="text-sm px-2 py-1 bg-blue-500 text-white rounded disabled:bg-gray-300"
                   >
-                    {isPlaying ? 'Playing...' : 'Play'}
+                    {isPlaying ? "Playing..." : "Play"}
                   </button>
                 </div>
                 <p className="mt-2">{response.text}</p>

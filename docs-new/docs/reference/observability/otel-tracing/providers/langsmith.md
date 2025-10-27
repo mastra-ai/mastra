@@ -1,5 +1,5 @@
 ---
-title: 'Reference: LangSmith Integration '
+title: "LangSmith Integration"
 description: Documentation for integrating LangSmith with Mastra, a platform for debugging, testing, evaluating, and monitoring LLM applications.
 ---
 
@@ -25,16 +25,16 @@ LANGSMITH_PROJECT=your-project-name
 Here's how to configure Mastra to use LangSmith:
 
 ```typescript
-import { Mastra } from '@mastra/core';
-import { AISDKExporter } from 'langsmith/vercel';
+import { Mastra } from "@mastra/core";
+import { AISDKExporter } from "langsmith/vercel";
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: 'your-service-name',
+    serviceName: "your-service-name",
     enabled: true,
     export: {
-      type: 'custom',
+      type: "custom",
       exporter: new AISDKExporter(),
     },
   },

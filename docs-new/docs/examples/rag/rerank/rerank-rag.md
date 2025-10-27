@@ -1,5 +1,5 @@
 ---
-title: 'Re-ranking Results with Tools '
+title: "Re-ranking Results with Tools "
 description: Example of implementing a RAG system with re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
@@ -34,12 +34,16 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="index.ts"
-import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
-import { Agent } from '@mastra/core/agent';
-import { PgVector } from '@mastra/pg';
-import { MDocument, createVectorQueryTool, MastraAgentRelevanceScorer } from '@mastra/rag';
-import { embedMany } from 'ai';
+import { openai } from "@ai-sdk/openai";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { PgVector } from "@mastra/pg";
+import {
+  MDocument,
+  createVectorQueryTool,
+  MastraAgentRelevanceScorer,
+} from "@mastra/rag";
+import { embedMany } from "ai";
 ```
 
 ## Vector Query Tool Creation with Re-ranking
@@ -48,11 +52,14 @@ Using createVectorQueryTool imported from @mastra/rag, you can create a tool tha
 
 ```typescript copy showLineNumbers{8} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
   reranker: {
-    model: new MastraAgentRelevanceScorer('relevance-scorer', openai('gpt-4o-mini')),
+    model: new MastraAgentRelevanceScorer(
+      "relevance-scorer",
+      openai("gpt-4o-mini"),
+    ),
   },
 });
 ```
@@ -63,11 +70,11 @@ Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{17} filename="index.ts"
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
+  name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
     Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
     If the context doesn't contain enough information to fully answer the question, please state that explicitly.`,
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   tools: {
     vectorQueryTool,
   },
@@ -88,7 +95,7 @@ export const mastra = new Mastra({
   vectors: { pgVector },
 });
 
-const agent = mastra.getAgent('ragAgent');
+const agent = mastra.getAgent("ragAgent");
 ```
 
 ## Document Processing
@@ -118,10 +125,10 @@ rare cards appreciate yearly.
 `);
 
 const chunks = await doc1.chunk({
-  strategy: 'recursive',
+  strategy: "recursive",
   size: 150,
   overlap: 20,
-  separator: '\n',
+  separator: "\n",
 });
 ```
 
@@ -131,18 +138,18 @@ Generate embeddings for the chunks and store them in the vector database:
 
 ```typescript copy showLineNumbers{66} filename="index.ts"
 const { embeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 
-const vectorStore = mastra.getVector('pgVector');
+const vectorStore = mastra.getVector("pgVector");
 await vectorStore.createIndex({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   dimension: 1536,
 });
 
 await vectorStore.upsert({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   vectors: embeddings,
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
@@ -153,20 +160,20 @@ await vectorStore.upsert({
 Try different queries to see how the re-ranking affects results:
 
 ```typescript copy showLineNumbers{82} filename="index.ts"
-const queryOne = 'explain technical trading analysis';
+const queryOne = "explain technical trading analysis";
 const answerOne = await agent.generate(queryOne);
-console.log('\nQuery:', queryOne);
-console.log('Response:', answerOne.text);
+console.log("\nQuery:", queryOne);
+console.log("Response:", answerOne.text);
 
-const queryTwo = 'explain trading card valuation';
+const queryTwo = "explain trading card valuation";
 const answerTwo = await agent.generate(queryTwo);
-console.log('\nQuery:', queryTwo);
-console.log('Response:', answerTwo.text);
+console.log("\nQuery:", queryTwo);
+console.log("Response:", answerTwo.text);
 
-const queryThree = 'how do you analyze market resistance';
+const queryThree = "how do you analyze market resistance";
 const answerThree = await agent.generate(queryThree);
-console.log('\nQuery:', queryThree);
-console.log('Response:', answerThree.text);
+console.log("\nQuery:", queryThree);
+console.log("Response:", answerThree.text);
 ```
 
 <br />

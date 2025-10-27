@@ -1,5 +1,5 @@
 ---
-title: 'Step Class '
+title: "Step Class "
 description: Documentation for the Step class in Mastra, which defines individual units of work within a workflow.
 ---
 
@@ -11,12 +11,12 @@ It can take either a tool or an agent as a parameter to automatically create a s
 ## Usage example
 
 ```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
 const step1 = createStep({
-  id: 'step-1',
-  description: 'passes value from input to output',
+  id: "step-1",
+  description: "passes value from input to output",
   inputSchema: z.object({
     value: z.number(),
   }),

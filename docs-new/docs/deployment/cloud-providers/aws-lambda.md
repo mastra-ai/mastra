@@ -1,6 +1,6 @@
 ---
-title: 'AWS Lambda'
-description: 'Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter.'
+title: "AWS Lambda"
+description: "Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter."
 ---
 
 # AWS Lambda
@@ -42,10 +42,10 @@ Lambda functions have limitations with file system storage. Configure your Mastr
 ### Option 1: In-Memory (Simplest)
 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers
-import { LibSQLStore } from '@mastra/libsql';
+import { LibSQLStore } from "@mastra/libsql";
 
 const storage = new LibSQLStore({
-  url: ':memory:', // in-memory storage
+  url: ":memory:", // in-memory storage
 });
 ```
 
@@ -54,10 +54,10 @@ const storage = new LibSQLStore({
 For persistent memory across Lambda invocations, use external storage providers like `LibSQLStore` with Turso or other storage providers like `PostgreStore`:
 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers
-import { LibSQLStore } from '@mastra/libsql';
+import { LibSQLStore } from "@mastra/libsql";
 
 const storage = new LibSQLStore({
-  url: 'libsql://your-database.turso.io', // External Turso database
+  url: "libsql://your-database.turso.io", // External Turso database
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 ```
@@ -200,10 +200,10 @@ For more information about available API endpoints, see the [Server documentatio
 Update your client application to use the Lambda function URL:
 
 ```typescript filename="src/client.ts" copy showLineNumbers
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from "@mastra/client-js";
 
 const mastraClient = new MastraClient({
-  baseUrl: 'https://your-function-url.lambda-url.us-east-1.on.aws',
+  baseUrl: "https://your-function-url.lambda-url.us-east-1.on.aws",
 });
 ```
 

@@ -1,5 +1,5 @@
 ---
-title: 'Reference: embed() '
+title: "embed()"
 description: Documentation for embedding functionality in Mastra using the AI SDK.
 ---
 
@@ -12,11 +12,11 @@ Mastra uses the AI SDK's `embed` and `embedMany` functions to generate vector em
 The `embed` function generates a vector embedding for a single text input:
 
 ```typescript
-import { embed } from 'ai';
+import { embed } from "ai";
 
 const result = await embed({
-  model: openai.embedding('text-embedding-3-small'),
-  value: 'Your text to embed',
+  model: openai.embedding("text-embedding-3-small"),
+  value: "Your text to embed",
   maxRetries: 2, // optional, defaults to 2
 });
 ```
@@ -77,11 +77,11 @@ description: "The embedding vector for the input",
 For embedding multiple texts at once, use the `embedMany` function:
 
 ```typescript
-import { embedMany } from 'ai';
+import { embedMany } from "ai";
 
 const result = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: ['First text', 'Second text', 'Third text'],
+  model: openai.embedding("text-embedding-3-small"),
+  values: ["First text", "Second text", "Third text"],
   maxRetries: 2, // optional, defaults to 2
 });
 ```
@@ -141,19 +141,23 @@ description:
 ## Example Usage
 
 ```typescript
-import { embed, embedMany } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { embed, embedMany } from "ai";
+import { openai } from "@ai-sdk/openai";
 
 // Single embedding
 const singleResult = await embed({
-  model: openai.embedding('text-embedding-3-small'),
-  value: 'What is the meaning of life?',
+  model: openai.embedding("text-embedding-3-small"),
+  value: "What is the meaning of life?",
 });
 
 // Multiple embeddings
 const multipleResult = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: ['First question about life', 'Second question about universe', 'Third question about everything'],
+  model: openai.embedding("text-embedding-3-small"),
+  values: [
+    "First question about life",
+    "Second question about universe",
+    "Third question about everything",
+  ],
 });
 ```
 

@@ -1,6 +1,6 @@
 ---
-title: 'Together AI '
-description: 'Use AI models through Together AI.'
+title: "Together AI "
+description: "Use AI models through Together AI."
 ---
 
 # <img src="https://models.dev/logos/togetherai.svg" alt="Together AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Together AI
@@ -12,12 +12,12 @@ Learn more in the [Together AI documentation](https://docs.together.ai/docs/serv
 ## Usage
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'togetherai/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "togetherai/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
 });
 ```
 

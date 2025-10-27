@@ -1,5 +1,5 @@
 ---
-title: 'Cloudflare Storage '
+title: "Cloudflare Storage "
 description: Documentation for the Cloudflare KV storage implementation in Mastra.
 ---
 
@@ -16,7 +16,7 @@ npm install @mastra/cloudflare@latest
 ## Usage
 
 ```typescript copy showLineNumbers
-import { CloudflareStore } from '@mastra/cloudflare';
+import { CloudflareStore } from "@mastra/cloudflare";
 
 // --- Example 1: Using Workers Binding ---
 const storageWorkers = new CloudflareStore({
@@ -25,14 +25,14 @@ const storageWorkers = new CloudflareStore({
     messages: MESSAGES_KV, // KVNamespace binding for messages table
     // Add other tables as needed
   },
-  keyPrefix: 'dev_', // Optional: isolate keys per environment
+  keyPrefix: "dev_", // Optional: isolate keys per environment
 });
 
 // --- Example 2: Using REST API ---
 const storageRest = new CloudflareStore({
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
   apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
-  namespacePrefix: 'dev_', // Optional: isolate namespaces per environment
+  namespacePrefix: "dev_", // Optional: isolate namespaces per environment
 });
 ```
 

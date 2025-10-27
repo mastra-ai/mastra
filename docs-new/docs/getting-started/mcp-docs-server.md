@@ -1,6 +1,6 @@
 ---
-title: 'MCP Docs Server '
-description: 'Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert.'
+title: "MCP Docs Server "
+description: "Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert."
 ---
 
 import YouTube from '@site/src/components/YouTube';

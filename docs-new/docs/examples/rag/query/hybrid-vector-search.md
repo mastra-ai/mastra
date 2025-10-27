@@ -1,5 +1,5 @@
 ---
-title: 'Hybrid Vector Search '
+title: "Hybrid Vector Search "
 description: Example of using metadata filters with PGVector to enhance vector search results in Mastra.
 ---
 
@@ -41,9 +41,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { embed } from 'ai';
-import { PgVector } from '@mastra/pg';
-import { openai } from '@ai-sdk/openai';
+import { embed } from "ai";
+import { PgVector } from "@mastra/pg";
+import { openai } from "@ai-sdk/openai";
 ```
 
 ## Vector Store Initialization
@@ -63,23 +63,23 @@ const pgVector = new PgVector({
 ```typescript copy showLineNumbers{6} filename="src/index.ts"
 // Create embedding for the query
 const { embedding } = await embed({
-  model: openai.embedding('text-embedding-3-small'),
-  value: '[Insert query based on document here]',
+  model: openai.embedding("text-embedding-3-small"),
+  value: "[Insert query based on document here]",
 });
 
 // Query with metadata filter
 const result = await pgVector.query({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   queryVector: embedding,
   topK: 3,
   filter: {
-    'path.to.metadata': {
-      $eq: 'value',
+    "path.to.metadata": {
+      $eq: "value",
     },
   },
 });
 
-console.log('Results:', result);
+console.log("Results:", result);
 ```
 
 <br />

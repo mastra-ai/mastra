@@ -436,8 +436,6 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   _internal,
   messageId,
   runId,
-  modelStreamSpan,
-  telemetry_settings,
   tools,
   toolChoice,
   messageList,
@@ -541,7 +539,6 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               toolChoice: stepToolChoice,
               options,
               modelSettings,
-              telemetry_settings,
               includeRawChunks,
               structuredOutput,
               headers,
@@ -571,7 +568,6 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
                   },
                 });
               },
-              modelStreamSpan,
               shouldThrowError: !isLastModel,
             });
             break;
@@ -592,9 +588,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
           messageId,
           options: {
             runId,
-            rootSpan: modelStreamSpan,
             toolCallStreaming,
-            telemetry_settings,
             includeRawChunks,
             structuredOutput,
             outputProcessors,

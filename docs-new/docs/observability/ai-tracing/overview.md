@@ -1,6 +1,6 @@
 ---
-title: 'Overview'
-description: 'Set up AI tracing for Mastra applications'
+title: "Overview"
+description: "Set up AI tracing for Mastra applications"
 sidebar_position: 1
 ---
 
@@ -29,7 +29,7 @@ export const mastra = new Mastra({
     default: { enabled: true }, // Enables DefaultExporter and CloudExporter
   },
   storage: new LibSQLStore({
-    url: 'file:./mastra.db', // Storage is required for tracing
+    url: "file:./mastra.db", // Storage is required for tracing
   }),
 });
 ```
@@ -48,22 +48,26 @@ When enabled, the default configuration automatically includes:
 This default configuration is a minimal helper that equates to this more verbose configuration:
 
 ```ts filename="src/mastra/index.ts" showLineNumbers copy
-import { CloudExporter, DefaultExporter, SensitiveDataFilter } from '@mastra/core/ai-tracing';
+import {
+  CloudExporter,
+  DefaultExporter,
+  SensitiveDataFilter,
+} from "@mastra/core/ai-tracing";
 
 export const mastra = new Mastra({
   // ... other config
   observability: {
     configs: {
       default: {
-        serviceName: 'mastra',
-        sampling: { type: 'always' },
+        serviceName: "mastra",
+        sampling: { type: "always" },
         processors: [new SensitiveDataFilter()],
         exporters: [new CloudExporter(), new DefaultExporter()],
       },
     },
   },
   storage: new LibSQLStore({
-    url: 'file:./mastra.db', // Storage is required for tracing
+    url: "file:./mastra.db", // Storage is required for tracing
   }),
 });
 ```
@@ -103,7 +107,7 @@ Collects 100% of traces. Best for development, debugging, or low-traffic scenari
 
 ```ts
 sampling: {
-  type: 'always';
+  type: "always";
 }
 ```
 
@@ -113,7 +117,7 @@ Disables tracing entirely. Useful for specific environments where tracing adds n
 
 ```ts
 sampling: {
-  type: 'never';
+  type: "never";
 }
 ```
 
@@ -153,11 +157,11 @@ sampling: {
 export const mastra = new Mastra({
   observability: {
     configs: {
-      '10_percent': {
-        serviceName: 'my-service',
+      "10_percent": {
+        serviceName: "my-service",
         // Sample 10% of traces
         sampling: {
-          type: 'ratio',
+          type: "ratio",
           probability: 0.1,
         },
         exporters: [new DefaultExporter()],
@@ -195,37 +199,37 @@ export const mastra = new Mastra({
     default: { enabled: true }, // Provides 'default' instance
     configs: {
       langfuse: {
-        serviceName: 'langfuse-service',
+        serviceName: "langfuse-service",
         exporters: [langfuseExporter],
       },
       braintrust: {
-        serviceName: 'braintrust-service',
+        serviceName: "braintrust-service",
         exporters: [braintrustExporter],
       },
       debug: {
-        serviceName: 'debug-service',
-        sampling: { type: 'always' },
+        serviceName: "debug-service",
+        sampling: { type: "always" },
         exporters: [new DefaultExporter()],
       },
     },
     configSelector: (context, availableTracers) => {
       // Use debug config for support requests
-      if (context.runtimeContext?.get('supportMode')) {
-        return 'debug';
+      if (context.runtimeContext?.get("supportMode")) {
+        return "debug";
       }
 
       // Route specific customers to different providers
-      const customerId = context.runtimeContext?.get('customerId');
+      const customerId = context.runtimeContext?.get("customerId");
       if (customerId && premiumCustomers.includes(customerId)) {
-        return 'braintrust';
+        return "braintrust";
       }
 
       // Route specific requests to langfuse
-      if (context.runtimeContext?.get('useExternalTracing')) {
-        return 'langfuse';
+      if (context.runtimeContext?.get("useExternalTracing")) {
+        return "langfuse";
       }
 
-      return 'default';
+      return "default";
     },
   },
 });
@@ -240,23 +244,23 @@ export const mastra = new Mastra({
   observability: {
     configs: {
       development: {
-        serviceName: 'my-service-dev',
-        sampling: { type: 'always' },
+        serviceName: "my-service-dev",
+        sampling: { type: "always" },
         exporters: [new DefaultExporter()],
       },
       staging: {
-        serviceName: 'my-service-staging',
-        sampling: { type: 'ratio', probability: 0.5 },
+        serviceName: "my-service-staging",
+        sampling: { type: "ratio", probability: 0.5 },
         exporters: [langfuseExporter],
       },
       production: {
-        serviceName: 'my-service-prod',
-        sampling: { type: 'ratio', probability: 0.01 },
+        serviceName: "my-service-prod",
+        sampling: { type: "ratio", probability: 0.01 },
         exporters: [cloudExporter, langfuseExporter],
       },
     },
     configSelector: (context, availableTracers) => {
-      const env = process.env.NODE_ENV || 'development';
+      const env = process.env.NODE_ENV || "development";
       return env;
     },
   },
@@ -275,7 +279,7 @@ export const mastra = new Mastra({
     default: { enabled: true }, // This will always be used!
     configs: {
       langfuse: {
-        serviceName: 'my-service',
+        serviceName: "my-service",
         exporters: [langfuseExporter], // This won't be reached
       },
     },
@@ -319,15 +323,15 @@ observability: {
 When creating a custom config with external exporters, you might lose access to Mastra Playground and Cloud. To maintain access while adding external exporters, include the default exporters in your custom config:
 
 ```ts filename="src/mastra/index.ts" showLineNumbers copy
-import { DefaultExporter, CloudExporter } from '@mastra/core/ai-tracing';
-import { LangfuseExporter } from '@mastra/langfuse';
+import { DefaultExporter, CloudExporter } from "@mastra/core/ai-tracing";
+import { LangfuseExporter } from "@mastra/langfuse";
 
 export const mastra = new Mastra({
   observability: {
     default: { enabled: false }, // Disable default to use custom
     configs: {
       production: {
-        serviceName: 'my-service',
+        serviceName: "my-service",
         exporters: [
           new LangfuseExporter(), // External exporter
           new DefaultExporter(), // Keep Playground access
@@ -389,10 +393,10 @@ Create child spans inside a tool call or workflow step to track specific operati
 execute: async ({ input, tracingContext }) => {
   // Create another child span for the main database operation
   const querySpan = tracingContext.currentSpan?.createChildSpan({
-    type: 'generic',
-    name: 'database-query',
+    type: "generic",
+    name: "database-query",
     input: { query: input.query },
-    metadata: { database: 'production' },
+    metadata: { database: "production" },
   });
 
   try {
@@ -431,10 +435,10 @@ Span processors allow you to transform, filter, or enrich trace data before it's
 You can create custom span processors by implementing the `AISpanProcessor` interface. Here's a simple example that converts all input text in spans to lowercase:
 
 ```ts filename="src/processors/lowercase-input-processor.ts" showLineNumbers copy
-import type { AISpanProcessor, AnyAISpan } from '@mastra/core/ai-tracing';
+import type { AISpanProcessor, AnyAISpan } from "@mastra/core/ai-tracing";
 
 export class LowercaseInputProcessor implements AISpanProcessor {
-  name = 'lowercase-processor';
+  name = "lowercase-processor";
 
   process(span: AnyAISpan): AnyAISpan {
     span.input = `${span.input}`.toLowerCase();
@@ -478,17 +482,17 @@ Both `generate` and `stream` methods return the trace ID in their response:
 ```ts showLineNumbers copy
 // Using generate
 const result = await agent.generate({
-  messages: [{ role: 'user', content: 'Hello' }],
+  messages: [{ role: "user", content: "Hello" }],
 });
 
-console.log('Trace ID:', result.traceId);
+console.log("Trace ID:", result.traceId);
 
 // Using stream
 const streamResult = await agent.stream({
-  messages: [{ role: 'user', content: 'Tell me a story' }],
+  messages: [{ role: "user", content: "Tell me a story" }],
 });
 
-console.log('Trace ID:', streamResult.traceId);
+console.log("Trace ID:", streamResult.traceId);
 ```
 
 ### Workflow Trace IDs
@@ -497,23 +501,23 @@ Workflow executions also return trace IDs:
 
 ```ts showLineNumbers copy
 // Create a workflow run
-const run = await mastra.getWorkflow('myWorkflow').createRunAsync();
+const run = await mastra.getWorkflow("myWorkflow").createRunAsync();
 
 // Start the workflow
 const result = await run.start({
-  inputData: { data: 'process this' },
+  inputData: { data: "process this" },
 });
 
-console.log('Trace ID:', result.traceId);
+console.log("Trace ID:", result.traceId);
 
 // Or stream the workflow
 const { stream, getWorkflowState } = run.stream({
-  inputData: { data: 'process this' },
+  inputData: { data: "process this" },
 });
 
 // Get the final state which includes the trace ID
 const finalState = await getWorkflowState();
-console.log('Trace ID:', finalState.traceId);
+console.log("Trace ID:", finalState.traceId);
 ```
 
 ### Using Trace IDs

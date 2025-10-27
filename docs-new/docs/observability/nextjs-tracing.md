@@ -1,6 +1,6 @@
 ---
-title: 'Next.js Tracing '
-description: 'Set up OpenTelemetry tracing for Next.js applications'
+title: "Next.js Tracing "
+description: "Set up OpenTelemetry tracing for Next.js applications"
 ---
 
 # Next.js Tracing
@@ -12,7 +12,7 @@ Next.js requires additional configuration to enable OpenTelemetry tracing.
 Start by enabling the instrumentation hook in your Next.js config:
 
 ```ts filename="next.config.ts" showLineNumbers copy
-import type { NextConfig } from 'next';
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   experimental: {
@@ -28,12 +28,12 @@ export default nextConfig;
 Configure your Mastra instance:
 
 ```typescript filename="mastra.config.ts" copy
-import { Mastra } from '@mastra/core';
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: 'your-project-name',
+    serviceName: "your-project-name",
     enabled: true,
   },
 });
@@ -56,8 +56,12 @@ npm install @opentelemetry/api langfuse-vercel
 2. Create an instrumentation file:
 
 ```ts filename="instrumentation.ts" copy
-import { NodeSDK, ATTR_SERVICE_NAME, resourceFromAttributes } from '@mastra/core/telemetry/otel-vendor';
-import { LangfuseExporter } from 'langfuse-vercel';
+import {
+  NodeSDK,
+  ATTR_SERVICE_NAME,
+  resourceFromAttributes,
+} from "@mastra/core/telemetry/otel-vendor";
+import { LangfuseExporter } from "langfuse-vercel";
 
 export function register() {
   const exporter = new LangfuseExporter({
@@ -66,7 +70,7 @@ export function register() {
 
   const sdk = new NodeSDK({
     resource: resourceFromAttributes({
-      [ATTR_SERVICE_NAME]: 'ai',
+      [ATTR_SERVICE_NAME]: "ai",
     }),
     traceExporter: exporter,
   });
@@ -88,10 +92,10 @@ npm install @opentelemetry/api @vercel/otel
 2. Create an instrumentation file at the root of your project (or in the src folder if using one):
 
 ```ts filename="instrumentation.ts" copy
-import { registerOTel } from '@vercel/otel';
+import { registerOTel } from "@vercel/otel";
 
 export function register() {
-  registerOTel({ serviceName: 'your-project-name' });
+  registerOTel({ serviceName: "your-project-name" });
 }
 ```
 

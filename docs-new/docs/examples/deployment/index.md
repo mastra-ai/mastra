@@ -1,6 +1,6 @@
 ---
 title: Deployment examples
-description: 'A few ways to extend your Mastra server during deployment. Each example assumes'
+description: "A few ways to extend your Mastra server during deployment. Each example assumes"
 ---
 
 # Deployment examples

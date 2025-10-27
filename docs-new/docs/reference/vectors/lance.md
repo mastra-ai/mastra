@@ -1,6 +1,7 @@
 ---
-title: 'Reference: Lance Vector Store '
-description: 'Documentation for the LanceVectorStore class in Mastra, which provides vector search using LanceDB, an embedded vector database based on the Lance columnar format.'
+title: "LanceVector"
+description: "Documentation for the LanceVectorStore class in Mastra, which provides vector search using LanceDB, an embedded vector database based on the Lance columnar format."
+sidebar_position: 5
 ---
 
 # Lance Vector Store
@@ -33,17 +34,17 @@ isOptional: true,
 You can create a `LanceVectorStore` instance using the static create method:
 
 ```ts
-import { LanceVectorStore } from '@mastra/lance';
+import { LanceVectorStore } from "@mastra/lance";
 
 // Connect to a local database
-const vectorStore = await LanceVectorStore.create('/path/to/db');
+const vectorStore = await LanceVectorStore.create("/path/to/db");
 
 // Connect to a LanceDB cloud database
-const cloudStore = await LanceVectorStore.create('db://host:port');
+const cloudStore = await LanceVectorStore.create("db://host:port");
 
 // Connect to a cloud database with options
-const s3Store = await LanceVectorStore.create('s3://bucket/db', {
-  storageOptions: { timeout: '60s' },
+const s3Store = await LanceVectorStore.create("s3://bucket/db", {
+  storageOptions: { timeout: "60s" },
 });
 ```
 
@@ -321,8 +322,8 @@ Returns information about the index:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
-  type: 'ivfflat' | 'hnsw';
+  metric: "cosine" | "euclidean" | "dotproduct";
+  type: "ivfflat" | "hnsw";
   config: {
     m?: number;
     efConstruction?: number;
@@ -427,7 +428,7 @@ The store throws typed errors that can be caught:
 ```typescript copy
 try {
   await store.query({
-    tableName: 'my_vectors',
+    tableName: "my_vectors",
     queryVector: queryVector,
   });
 } catch (error) {

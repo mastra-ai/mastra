@@ -1,6 +1,6 @@
 ---
-title: 'MastraAuthFirebase Class'
-description: 'API reference for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication.'
+title: "MastraAuthFirebase Class"
+description: "API reference for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication."
 ---
 
 # MastraAuthFirebase Class
@@ -12,8 +12,8 @@ The `MastraAuthFirebase` class provides authentication for Mastra using Firebase
 ### Basic usage with environment variables
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { MastraAuthFirebase } from '@mastra/auth-firebase';
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 // Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
 export const mastra = new Mastra({
@@ -27,15 +27,15 @@ export const mastra = new Mastra({
 ### Custom configuration
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { MastraAuthFirebase } from '@mastra/auth-firebase';
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 export const mastra = new Mastra({
   // ..
   server: {
     experimental_auth: new MastraAuthFirebase({
-      serviceAccount: '/path/to/service-account-key.json',
-      databaseId: 'your-database-id',
+      serviceAccount: "/path/to/service-account-key.json",
+      databaseId: "your-database-id",
     }),
   },
 });

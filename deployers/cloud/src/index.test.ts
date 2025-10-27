@@ -249,7 +249,7 @@ describe('CloudDeployer', () => {
       expect(entry).toContain('process.env.MASTRA_STORAGE_URL');
       expect(entry).toContain('process.env.MASTRA_STORAGE_AUTH_TOKEN');
 
-      // Check for telemetry/logging setup
+      // Check for logging setup
       expect(entry).toContain('new PinoLogger');
       expect(entry).toContain('mastra.setLogger');
 

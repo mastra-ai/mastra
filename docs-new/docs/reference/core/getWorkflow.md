@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.getWorkflow() '
-description: 'Documentation for the `Mastra.getWorkflow()` method in Mastra, which retrieves a workflow by ID.'
+title: "Mastra.getWorkflow() "
+description: "Documentation for the `Mastra.getWorkflow()` method in Mastra, which retrieves a workflow by ID."
 ---
 
 # Mastra.getWorkflow()
@@ -10,7 +10,7 @@ The `.getWorkflow()` method is used to retrieve a workflow by its ID. The method
 ## Usage example
 
 ```typescript copy
-mastra.getWorkflow('testWorkflow');
+mastra.getWorkflow("testWorkflow");
 ```
 
 ## Parameters
