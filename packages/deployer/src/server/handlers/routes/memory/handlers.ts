@@ -247,7 +247,6 @@ export async function getMessagesPaginatedHandler(c: Context) {
     const resourceId = c.req.query('resourceId');
     const format = (c.req.query('format') || 'v1') as MastraMessageFormat;
     const selectByArgs = c.req.query('selectBy');
-    const runtimeContext = c.get('runtimeContext');
 
     let selectBy = {} as StorageGetMessagesArg['selectBy'];
 
