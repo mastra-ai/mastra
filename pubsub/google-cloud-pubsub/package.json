@@ -1,6 +1,6 @@
 {
   "name": "@mastra/google-cloud-pubsub",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Mastra Google Cloud PubSub integration",
   "type": "module",
   "main": "dist/index.js",
@@ -44,12 +44,12 @@
     "@mastra/libsql": "workspace:*",
     "@types/node": "^20.19.0",
     "typescript": "^5.8.3",
-    "eslint": "^9.36.0",
+    "eslint": "^9.37.0",
     "vitest": "^3.2.4",
     "tsup": "^8.4.0"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.22.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

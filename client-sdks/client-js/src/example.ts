@@ -14,44 +14,27 @@ import { MastraClient } from './client';
     const agent = client.getAgent('weatherAgent');
     const response = await agent.stream({
       messages: 'what is the weather in new york?',
-      output: z.object({
-        weather: z.string(),
-        temperature: z.number(),
-        humidity: z.number(),
-        windSpeed: z.number(),
-        windDirection: z.string(),
-        windGust: z.number(),
-        windChill: z.number(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          weather: z.string(),
+          temperature: z.number(),
+          humidity: z.number(),
+          windSpeed: z.number(),
+          windDirection: z.string(),
+          windGust: z.number(),
+          windChill: z.number(),
+        }),
+      },
     });
 
-    // Process data stream - unstructured output
-
-    // response.processDataStream({
-    //   onTextPart: text => {
-    //     process.stdout.write(text);
-    //   },
-    //   onFilePart: file => {
-    //     console.log(file);
-    //   },
-    //   onDataPart: data => {
-    //     console.log(data);
-    //   },
-    //   onErrorPart: error => {
-    //     console.error(error);
-    //   },
-    //   onToolCallPart(streamPart) {
-    //     console.log(streamPart);
-    //   },
-    // });
-
-    // Process text stream - structured output
-
-    // response.processTextStream({
-    //   onTextPart: text => {
-    //     process.stdout.write(text);
-    //   },
-    // });
+    // Process data stream
+    response.processDataStream({
+      onChunk: async chunk => {
+        if (chunk.type === 'text-delta') {
+          console.log(chunk.payload.text);
+        }
+      },
+    });
 
     // read the response body directly
 

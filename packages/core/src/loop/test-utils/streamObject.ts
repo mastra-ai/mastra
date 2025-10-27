@@ -13,7 +13,7 @@ import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import { createMockServerResponse } from './mock-server-response';
-import { mockDate, testUsage } from './utils';
+import { createMessageListWithUserMessage, mockDate, testUsage } from './utils';
 
 function createTestModels({
   warnings = [],
@@ -94,7 +94,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           agentId: 'agent-id',
           models: createTestModels(),
           structuredOutput: { schema: z.object({ content: z.string() }) },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         // Test that we can await result.object directly without consuming any stream
@@ -123,7 +123,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             ]),
           }),
           structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         // Test that auto-consume works for arrays too
@@ -138,7 +138,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           agentId: 'agent-id',
           models: createTestModels(),
           structuredOutput: { schema: z.object({ content: z.string() }) },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         // Manually consume stream first (existing pattern)
@@ -157,7 +157,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.objectStream', () => {
         it('should send object deltas', async () => {
           const mockModel = createTestModels();
-          const messageList = new MessageList();
+          const messageList = createMessageListWithUserMessage();
           const result = loopFn({
             runId,
             agentId: 'agent-id',
@@ -208,7 +208,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models,
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           expect(await convertAsyncIterableToArray(result.objectStream)).toMatchInlineSnapshot(`
@@ -230,11 +230,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 "content": [
                   {
-                    "text": ".",
+                    "text": "test-input",
                     "type": "text",
                   },
                 ],
-                "providerOptions": undefined,
                 "role": "user",
               },
             ]
@@ -276,7 +275,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
             options: {
               onError: () => {},
             },
@@ -306,7 +305,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
             options: {
               onError(event) {
                 errors.push(event);
@@ -331,7 +330,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels(),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           const data = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
@@ -413,7 +412,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels(),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // aisdk
@@ -444,7 +443,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels(),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           const response = result.aisdk.v5.toTextStreamResponse();
@@ -473,7 +472,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             agentId: 'agent-id',
             models: createTestModels(),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           pipeTextStreamToResponse({
@@ -522,7 +521,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ]),
             }),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // consume stream (runs in parallel)
@@ -563,7 +562,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ]),
             }),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // consume stream (runs in parallel)
@@ -606,7 +605,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               response: { headers: { call: '2' } },
             }),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // consume stream (runs in parallel)
@@ -704,7 +703,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           expect(await result.request).toStrictEqual({
@@ -744,7 +743,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // consume stream (runs in parallel)
@@ -785,7 +784,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // consume stream (runs in parallel)
@@ -824,7 +823,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // consume stream (runs in parallel)
@@ -864,7 +863,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           // Now finishReason is a delayed promise that auto-consumes
@@ -917,7 +916,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             },
             _internal: { generateId: () => '1234', currentDate: () => new Date(0), now: () => 0 },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
           // consume stream
           await convertAsyncIterableToArray(objectStream);
@@ -976,7 +975,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "1234",
                     "metadata": {
                       "__originalContent": "{ "content": "Hello, world!" }",
-                      "createdAt": 2024-01-01T00:00:00.000Z,
+                      "createdAt": 2024-01-01T00:00:00.001Z,
+                      "structuredOutput": {
+                        "content": "Hello, world!",
+                      },
                     },
                     "parts": [
                       {
@@ -1037,7 +1039,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "id": "1234",
                         "metadata": {
                           "__originalContent": "{ "content": "Hello, world!" }",
-                          "createdAt": 2024-01-01T00:00:00.000Z,
+                          "createdAt": 2024-01-01T00:00:00.001Z,
+                          "structuredOutput": {
+                            "content": "Hello, world!",
+                          },
                         },
                         "parts": [
                           {
@@ -1126,7 +1131,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             },
             _internal: { generateId: () => '1234', currentDate: () => new Date(0), now: () => 0 },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           await output.consumeStream();
@@ -1192,7 +1197,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "1234",
                     "metadata": {
                       "__originalContent": "{ "invalid": "Hello, world!" }",
-                      "createdAt": 2024-01-01T00:00:00.000Z,
+                      "createdAt": 2024-01-01T00:00:00.001Z,
                     },
                     "parts": [
                       {
@@ -1249,7 +1254,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "id": "1234",
                         "metadata": {
                           "__originalContent": "{ "invalid": "Hello, world!" }",
-                          "createdAt": 2024-01-01T00:00:00.000Z,
+                          "createdAt": 2024-01-01T00:00:00.001Z,
                         },
                         "parts": [
                           {
@@ -1338,7 +1343,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             },
             _internal: { generateId: () => '1234', currentDate: () => new Date(0), now: () => 0 },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           await consumeStream();
@@ -1404,7 +1409,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "1234",
                     "metadata": {
                       "__originalContent": "{ "invalid": "Hello, world!" }",
-                      "createdAt": 2024-01-01T00:00:00.000Z,
+                      "createdAt": 2024-01-01T00:00:00.001Z,
                     },
                     "parts": [
                       {
@@ -1461,7 +1466,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "id": "1234",
                         "metadata": {
                           "__originalContent": "{ "invalid": "Hello, world!" }",
-                          "createdAt": 2024-01-01T00:00:00.000Z,
+                          "createdAt": 2024-01-01T00:00:00.001Z,
                         },
                         "parts": [
                           {
@@ -1544,7 +1549,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
             modelSettings: { headers: { 'custom-request-header': 'request-header-value' } },
             headers: { 'custom-request-header': 'request-header-value' },
           });
@@ -1595,7 +1600,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
             providerOptions: {
               aProvider: { someKey: 'someValue' },
             },
@@ -1628,7 +1633,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 additionalProperties: false,
               }),
             },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
           const expectedOutput = `
           [
@@ -1699,7 +1704,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ],
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
           const expectedErrorMessage = `Structured output validation failed
 ✖ Expected string, received number
@@ -1747,7 +1752,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ]),
             }),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           expect(await convertAsyncIterableToArray(result.objectStream)).toMatchInlineSnapshot(`
@@ -1781,7 +1786,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ]),
             }),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           expect(await result.object).toStrictEqual({
@@ -1814,7 +1819,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ]),
             }),
             structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           const streamResults = await convertAsyncIterableToArray(result.objectStream);
@@ -1856,7 +1861,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ]),
             }),
             structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           expect(await result.object).toStrictEqual([{ content: 'element 1' }, { content: 'element 2' }]);
@@ -1883,7 +1888,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ]),
             }),
             structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           const streamResults = await convertAsyncIterableToArray(result.objectStream);
@@ -1917,7 +1922,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ]),
             }),
             structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           expect(await result.object).toStrictEqual('sunny');
@@ -1946,7 +1951,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ]),
             }),
             structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
 
           const streamResults = await convertAsyncIterableToArray(result.objectStream);
@@ -2003,7 +2008,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 onFinishResult = event as unknown as typeof onFinishResult;
               },
             },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
         });
 
@@ -2097,7 +2102,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 onFinishResult = event as unknown as typeof onFinishResult;
               },
             },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
         });
 
@@ -2174,7 +2179,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ]),
             }),
             structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
-            messageList: new MessageList(),
+            messageList: createMessageListWithUserMessage(),
           });
           await result.consumeStream();
           const expectedErrorMessage = `Structured output validation failed
@@ -2211,7 +2216,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           agentId: 'agent-id',
           models: mockModels,
           structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
@@ -2278,7 +2283,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           agentId: 'agent-id',
           models: mockModels,
           structuredOutput: { schema: z.enum(['sunny', 'rainy', 'snowy']) },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`[]`);
@@ -2307,7 +2312,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           agentId: 'agent-id',
           models: mockModels,
           structuredOutput: { schema: z.enum(['foobar', 'foobar2']) },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
@@ -2342,7 +2347,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           agentId: 'agent-id',
           models: mockModels,
           structuredOutput: { schema: z.enum(['foobar', 'barfoo']) },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
@@ -2397,7 +2402,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           //     return text + '}';
           //   },
           // },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         // consume stream
@@ -2451,7 +2456,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           //     return `{ "content": "provider metadata test" }`;
           //   },
           // },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         // consume stream
@@ -2507,7 +2512,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           //     return null;
           //   },
           // },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         // consume stream
@@ -2564,7 +2569,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           //     return cleaned;
           //   },
           // },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         // consume stream
@@ -2610,7 +2615,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           // options: {
           //   experimental_repairText: async ({ text }) => text + '{',
           // },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         try {

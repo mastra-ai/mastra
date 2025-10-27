@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "0.12.8",
+  "version": "0.12.12",
   "description": "",
   "type": "module",
   "files": [
@@ -33,7 +33,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/deployer": "workspace:^",
-    "@rollup/plugin-virtual": "^3.0.2",
+    "@rollup/plugin-virtual": "3.0.2",
     "fs-extra": "^11.3.2"
   },
   "devDependencies": {
@@ -42,7 +42,7 @@
     "@microsoft/api-extractor": "^7.52.8",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.19.0",
-    "eslint": "^9.36.0",
+    "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
@@ -58,6 +58,6 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.20.1-0 <0.22.0-0"
+    "@mastra/core": ">=0.20.1-0 <2.0.0-0"
   }
 }

@@ -120,7 +120,7 @@ const step1 = createStep({
     },
     {
       name: "suspend",
-      type: "() => Promise<void>",
+      type: "(suspendPayload: any, suspendOptions?: { resumeLabel?: string }) => Promise<void>",
       description: "Function to pause workflow execution",
     },
     {
@@ -152,4 +152,4 @@ const step1 = createStep({
 ## Related
 
 - [Control flow](../../docs/workflows/control-flow.mdx)
-- [Using agents and tools](../../docs/workflows/using-with-agents-and-tools.mdx)
+- [Using agents and tools](../../docs/workflows/agents-and-tools.mdx)

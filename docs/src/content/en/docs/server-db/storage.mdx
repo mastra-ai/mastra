@@ -259,8 +259,6 @@ Stores user-specific data for resource-scoped working memory. Each resource repr
   ]}
 />
 
-**Note**: This table is only created and used by storage adapters that support resource-scoped working memory (LibSQL, PostgreSQL, Upstash). Other storage adapters will provide helpful error messages if resource-scoped memory is attempted.
-
 </Tabs.Tab>
   <Tabs.Tab>
 When `suspend` is called on a workflow, its state is saved in the following format. When `resume` is called, that state is rehydrated.
@@ -512,3 +510,4 @@ Mastra supports the following providers:
 - For local development, check out [LibSQL Storage](../../reference/storage/libsql.mdx)
 - For production, check out [PostgreSQL Storage](../../reference/storage/postgresql.mdx)
 - For serverless deployments, check out [Upstash Storage](../../reference/storage/upstash.mdx)
+- For document-based storage, check out [MongoDB Storage](../../reference/storage/mongodb.mdx)

@@ -8,8 +8,7 @@ import type {
   LanguageModelV2,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
-import type { Span } from '@opentelemetry/api';
-import type { FinishReason, LanguageModelRequestMetadata, TelemetrySettings } from 'ai';
+import type { FinishReason, LanguageModelRequestMetadata } from 'ai';
 import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
@@ -205,7 +204,7 @@ interface StartPayload {
   [key: string]: unknown;
 }
 
-interface StepStartPayload {
+export interface StepStartPayload {
   messageId?: string;
   request: {
     body?: string;
@@ -340,6 +339,10 @@ interface RoutingAgentTextDeltaPayload {
   text: string;
 }
 
+interface RoutingAgentTextStartPayload {
+  runId: string;
+}
+
 interface AgentExecutionStartPayload {
   agentId: string;
   args: {
@@ -446,9 +449,16 @@ interface ToolCallSuspendedPayload {
   suspendPayload: any;
 }
 
+export type DataChunkType = {
+  type: `data-${string}`;
+  data: any;
+  id?: string;
+};
+
 export type NetworkChunkType =
   | (BaseChunkType & { type: 'routing-agent-start'; payload: RoutingAgentStartPayload })
   | (BaseChunkType & { type: 'routing-agent-text-delta'; payload: RoutingAgentTextDeltaPayload })
+  | (BaseChunkType & { type: 'routing-agent-text-start'; payload: RoutingAgentTextStartPayload })
   | (BaseChunkType & { type: 'routing-agent-end'; payload: RoutingAgentEndPayload })
   | (BaseChunkType & { type: 'agent-execution-start'; payload: AgentExecutionStartPayload })
   | (BaseChunkType & { type: 'agent-execution-end'; payload: AgentExecutionEndPayload })
@@ -588,7 +598,8 @@ export type WorkflowStreamEvent =
 export type TypedChunkType<OUTPUT extends OutputSchema = undefined> =
   | AgentChunkType<OUTPUT>
   | WorkflowStreamEvent
-  | NetworkChunkType;
+  | NetworkChunkType
+  | (DataChunkType & { from: never; runId: never; metadata?: BaseChunkType['metadata']; payload: never });
 
 // Default ChunkType for backward compatibility using dynamic (any) tool types
 export type ChunkType<OUTPUT extends OutputSchema = undefined> = TypedChunkType<OUTPUT>;
@@ -651,8 +662,6 @@ export type MastraOnFinishCallback = (event: MastraOnFinishCallbackArgs) => Prom
 
 export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   runId: string;
-  rootSpan?: Span;
-  telemetry_settings?: TelemetrySettings;
   toolCallStreaming?: boolean;
   onFinish?: MastraOnFinishCallback;
   onStepFinish?: MastraOnStepFinishCallback;

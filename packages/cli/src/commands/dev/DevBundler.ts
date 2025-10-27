@@ -2,10 +2,10 @@ import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
-import { createWatcher, getWatcherInputOptions, writeTelemetryConfig, getBundlerOptions } from '@mastra/deployer/build';
+import { createWatcher, getWatcherInputOptions, getBundlerOptions } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
-import type { RollupWatcherEvent } from 'rollup';
+import type { Plugin, RollupWatcherEvent } from 'rollup';
 
 import { devLogger } from '../../utils/dev-logger.js';
 
@@ -76,17 +76,6 @@ export class DevBundler extends Bundler {
     const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
 
     const outputDir = join(outputDirectory, this.outputDir);
-    await writeTelemetryConfig(entryFile, outputDir, this.logger);
-
-    const mastraFolder = dirname(entryFile);
-    const fileService = new FileService();
-    const customInstrumentation = fileService.getFirstExistingFileOrUndefined([
-      join(mastraFolder, 'instrumentation.js'),
-      join(mastraFolder, 'instrumentation.ts'),
-      join(mastraFolder, 'instrumentation.mjs'),
-    ]);
-
-    await this.writeInstrumentationFile(outputDir, customInstrumentation);
 
     await this.writePackageJson(outputDir, new Map(), {});
 
@@ -107,9 +96,8 @@ export class DevBundler extends Bundler {
           }
         },
         plugins: [
-          // @ts-ignore - types are good
-          // eslint-disable-next-line @typescript-eslint/no-misused-promises
-          ...inputOptions.plugins,
+          // inputOptions.plugins is guaranteed to be Plugin[] by getWatcherInputOptions
+          ...((inputOptions.plugins as Plugin[]) || []),
           {
             name: 'env-watcher',
             buildStart() {
@@ -143,7 +131,7 @@ export class DevBundler extends Bundler {
               await writeFile(
                 join(outputDir, 'tools.mjs'),
                 `${toolImports.join('\n')}
-        
+
                 export const tools = [${toolsExports.join(', ')}]`,
               );
             },

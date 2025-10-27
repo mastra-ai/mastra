@@ -1,5 +1,47 @@
 # create-mastra
 
+## 0.17.3
+
+## 0.17.3-alpha.0
+
+## 0.17.2
+
+## 0.17.2-alpha.0
+
+## 0.17.1
+
+### Patch Changes
+
+- Add scorers to the default weather agent in the create command. ([#9042](https://github.com/mastra-ai/mastra/pull/9042))
+
+- Fix tool result in playground ([#9087](https://github.com/mastra-ai/mastra/pull/9087))
+
+## 0.17.1-alpha.1
+
+### Patch Changes
+
+- Add scorers to the default weather agent in the create command. ([#9042](https://github.com/mastra-ai/mastra/pull/9042))
+
+- Fix tool result in playground ([#9087](https://github.com/mastra-ai/mastra/pull/9087))
+
+## 0.17.1-alpha.0
+
+## 0.17.0
+
+### Patch Changes
+
+- Pin `@rollup/*` dependencies to fixed versions (instead of using `^`) to: ([#8900](https://github.com/mastra-ai/mastra/pull/8900))
+  - Hotfix a bug inside `@rollup/plugin-commonjs`
+  - Have more control over the versions in the future to not have breakages over night
+
+## 0.17.0-alpha.0
+
+### Patch Changes
+
+- Pin `@rollup/*` dependencies to fixed versions (instead of using `^`) to: ([#8900](https://github.com/mastra-ai/mastra/pull/8900))
+  - Hotfix a bug inside `@rollup/plugin-commonjs`
+  - Have more control over the versions in the future to not have breakages over night
+
 ## 0.16.0
 
 ### Patch Changes

@@ -75,15 +75,24 @@ export type ProviderModelsMap = {
     'grok-code-fast-1',
     'grok-vision-beta',
   ];
+  readonly vultr: readonly [
+    'deepseek-r1-distill-llama-70b',
+    'deepseek-r1-distill-qwen-32b',
+    'gpt-oss-120b',
+    'kimi-k2-instruct',
+    'qwen2.5-coder-32b-instruct',
+  ];
   readonly nvidia: readonly [
     'black-forest-labs/flux.1-dev',
     'deepseek-ai/deepseek-v3.1',
+    'deepseek-ai/deepseek-v3.1-terminus',
     'google/gemma-3-27b-it',
     'microsoft/phi-4-mini-instruct',
     'moonshotai/kimi-k2-instruct',
     'moonshotai/kimi-k2-instruct-0905',
     'nvidia/cosmos-nemotron-34b',
     'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+    'nvidia/llama-embed-nemotron-8b',
     'nvidia/nemoretriever-ocr-v1',
     'nvidia/parakeet-tdt-0.6b-v2',
     'openai/gpt-oss-120b',
@@ -142,15 +151,16 @@ export type ProviderModelsMap = {
     'amazon/nova-lite',
     'amazon/nova-micro',
     'amazon/nova-pro',
-    'anthropic/claude-3-5-haiku',
     'anthropic/claude-3-haiku',
     'anthropic/claude-3-opus',
+    'anthropic/claude-3.5-haiku',
     'anthropic/claude-3.5-sonnet',
     'anthropic/claude-3.7-sonnet',
     'anthropic/claude-4-1-opus',
     'anthropic/claude-4-opus',
     'anthropic/claude-4-sonnet',
     'anthropic/claude-4.5-sonnet',
+    'anthropic/claude-haiku-4.5',
     'cerebras/qwen3-coder',
     'deepseek/deepseek-r1',
     'deepseek/deepseek-r1-distill-llama-70b',
@@ -426,10 +436,16 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2-Instruct',
     'openai/gpt-oss-120b',
   ];
-  readonly baseten: readonly ['Qwen3/Qwen3-Coder-480B-A35B-Instruct', 'moonshotai/Kimi-K2-Instruct-0905'];
+  readonly baseten: readonly [
+    'Qwen3/Qwen3-Coder-480B-A35B-Instruct',
+    'moonshotai/Kimi-K2-Instruct-0905',
+    'zai-org/GLM-4.6',
+  ];
   readonly huggingface: readonly [
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+    'Qwen/Qwen3-Embedding-4B',
+    'Qwen/Qwen3-Embedding-8B',
     'Qwen/Qwen3-Next-80B-A3B-Instruct',
     'Qwen/Qwen3-Next-80B-A3B-Thinking',
     'deepseek-ai/DeepSeek-R1-0528',
@@ -441,7 +457,8 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.6',
   ];
   readonly opencode: readonly [
-    'an-g8x',
+    'an-gbt',
+    'big-pickle',
     'claude-3-5-haiku',
     'claude-haiku-4-5',
     'claude-opus-4-1',
@@ -491,6 +508,7 @@ export type ProviderModelsMap = {
     'gemini-2.5-pro-preview-05-06',
     'gemini-2.5-pro-preview-06-05',
     'gemini-2.5-pro-preview-tts',
+    'gemini-embedding-001',
     'gemini-flash-latest',
     'gemini-flash-lite-latest',
     'gemini-live-2.5-flash',
@@ -537,12 +555,16 @@ export type ProviderModelsMap = {
     'o3-pro',
     'o4-mini',
     'o4-mini-deep-research',
+    'text-embedding-3-large',
+    'text-embedding-3-small',
+    'text-embedding-ada-002',
   ];
   readonly 'zhipuai-coding-plan': readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'];
   readonly perplexity: readonly ['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro'];
   readonly openrouter: readonly [
     'anthropic/claude-3.5-haiku',
     'anthropic/claude-3.7-sonnet',
+    'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4',
     'anthropic/claude-opus-4.1',
     'anthropic/claude-sonnet-4',
@@ -558,6 +580,7 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-r1:free',
     'deepseek/deepseek-v3-base:free',
     'deepseek/deepseek-v3.1-terminus',
+    'deepseek/deepseek-v3.1-terminus:exacto',
     'featherless/qwerky-72b',
     'google/gemini-2.0-flash-001',
     'google/gemini-2.0-flash-exp:free',
@@ -592,6 +615,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-dev-72b:free',
     'moonshotai/kimi-k2',
     'moonshotai/kimi-k2-0905',
+    'moonshotai/kimi-k2-0905:exacto',
     'moonshotai/kimi-k2:free',
     'nousresearch/deephermes-3-llama-3-8b-preview',
     'nousresearch/hermes-4-405b',
@@ -602,9 +626,11 @@ export type ProviderModelsMap = {
     'openai/gpt-5',
     'openai/gpt-5-chat',
     'openai/gpt-5-codex',
+    'openai/gpt-5-image',
     'openai/gpt-5-mini',
     'openai/gpt-5-nano',
     'openai/gpt-oss-120b',
+    'openai/gpt-oss-120b:exacto',
     'openai/gpt-oss-20b',
     'openai/o4-mini',
     'openrouter/cypher-alpha:free',
@@ -627,6 +653,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-32b:free',
     'qwen/qwen3-8b:free',
     'qwen/qwen3-coder',
+    'qwen/qwen3-coder:exacto',
     'qwen/qwen3-coder:free',
     'qwen/qwen3-max',
     'qwen/qwen3-next-80b-a3b-instruct',
@@ -649,6 +676,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.5-air:free',
     'z-ai/glm-4.5v',
     'z-ai/glm-4.6',
+    'z-ai/glm-4.6:exacto',
   ];
   readonly synthetic: readonly [
     'hf:Qwen/Qwen2.5-Coder-32B-Instruct',
@@ -722,16 +750,23 @@ export type ProviderModelsMap = {
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
   readonly anthropic: readonly [
     'claude-3-5-haiku-20241022',
+    'claude-3-5-haiku-latest',
     'claude-3-5-sonnet-20240620',
     'claude-3-5-sonnet-20241022',
     'claude-3-7-sonnet-20250219',
+    'claude-3-7-sonnet-latest',
     'claude-3-haiku-20240307',
     'claude-3-opus-20240229',
     'claude-3-sonnet-20240229',
+    'claude-haiku-4-5',
     'claude-haiku-4-5-20251001',
+    'claude-opus-4-0',
+    'claude-opus-4-1',
     'claude-opus-4-1-20250805',
     'claude-opus-4-20250514',
+    'claude-sonnet-4-0',
     'claude-sonnet-4-20250514',
+    'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
   ];
   readonly 'fireworks-ai': readonly [
@@ -753,6 +788,7 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3-30B-A3B-Thinking-2507',
     'Qwen/Qwen3-Coder-30B-A3B-Instruct',
     'ZhipuAI/GLM-4.5',
+    'ZhipuAI/GLM-4.6',
   ];
   readonly llama: readonly [
     'cerebras-llama-4-maverick-17b-128e-instruct',
@@ -763,6 +799,21 @@ export type ProviderModelsMap = {
     'llama-4-maverick-17b-128e-instruct-fp8',
     'llama-4-scout-17b-16e-instruct-fp8',
   ];
+  readonly scaleway: readonly [
+    'bge-multilingual-gemma2',
+    'deepseek-r1-distill-llama-70b',
+    'gemma-3-27b-it',
+    'gpt-oss-120b',
+    'llama-3.1-8b-instruct',
+    'llama-3.3-70b-instruct',
+    'mistral-nemo-instruct-2407',
+    'mistral-small-3.2-24b-instruct-2506',
+    'pixtral-12b-2409',
+    'qwen3-235b-a22b-instruct-2507',
+    'qwen3-coder-30b-a3b-instruct',
+    'voxtral-small-24b-2507',
+    'whisper-large-v3',
+  ];
   readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'qwen-3-coder-480b'];
   readonly netlify: readonly [
     'anthropic/claude-3-5-haiku-20241022',
@@ -770,6 +821,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-3-7-sonnet-20250219',
     'anthropic/claude-3-7-sonnet-latest',
     'anthropic/claude-3-haiku-20240307',
+    'anthropic/claude-haiku-4-5-20251001',
     'anthropic/claude-opus-4-1-20250805',
     'anthropic/claude-opus-4-20250514',
     'anthropic/claude-sonnet-4-20250514',

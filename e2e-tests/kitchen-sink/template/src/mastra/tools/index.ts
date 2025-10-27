@@ -13,8 +13,8 @@ interface WeatherResponse {
   };
 }
 
-export const weatherTool = createTool({
-  id: 'get-weather',
+export const weatherInfo = createTool({
+  id: 'weatherInfo',
   description: 'Get current weather for a location',
   inputSchema: z.object({
     location: z.string().describe('City name'),
@@ -93,3 +93,17 @@ function getWeatherCondition(code: number): string {
   };
   return conditions[code] || 'Unknown';
 }
+
+export const simpleMcpTool = createTool({
+  id: 'simpleMcpTool',
+  description: 'A simple MCP tool',
+  inputSchema: z.object({
+    name: z.string().describe('The name of the person'),
+  }),
+  execute: async () => {
+    return {
+      hello: 'world',
+      thisIsA: 'fixture',
+    };
+  },
+});

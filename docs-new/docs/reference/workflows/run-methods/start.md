@@ -1,0 +1,134 @@
+---
+title: "Run.start() "
+description: Documentation for the `Run.start()` method in workflows, which starts a workflow run with input data.
+---
+
+# Run.start()
+
+The `.start()` method starts a workflow run with input data, allowing you to execute the workflow from the beginning.
+
+## Usage example
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+const result = await run.start({
+  inputData: {
+    value: "initial data",
+  },
+});
+```
+
+## Parameters
+
+<PropertiesTable
+content={[
+{
+name: "inputData",
+type: "z.infer<TInput>",
+description: "Input data that matches the workflow's input schema",
+isOptional: true,
+},
+{
+name: "runtimeContext",
+type: "RuntimeContext",
+description: "Runtime context data to use during workflow execution",
+isOptional: true,
+},
+{
+name: "writableStream",
+type: "WritableStream<ChunkType>",
+description: "Optional writable stream for streaming workflow output",
+isOptional: true,
+},
+{
+name: "tracingContext",
+type: "TracingContext",
+isOptional: true,
+description: "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+properties: [
+{
+parameters: [{
+name: "currentSpan",
+type: "AISpan",
+isOptional: true,
+description: "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution."
+}]
+}
+]
+},
+{
+name: "tracingOptions",
+type: "TracingOptions",
+isOptional: true,
+description: "Options for AI tracing configuration.",
+properties: [
+{
+parameters: [{
+name: "metadata",
+type: "Record<string, any>",
+isOptional: true,
+description: "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags."
+}]
+}
+]
+},
+{
+name: "outputOptions",
+type: "OutputOptions",
+isOptional: true,
+description: "Options for AI tracing configuration.",
+properties: [
+{
+parameters: [{
+name: "includeState",
+type: "boolean",
+isOptional: true,
+description: "Whether to include the workflow run state in the result."
+}]
+}
+]
+},
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+content={[
+{
+name: "result",
+type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+description: "A promise that resolves to the workflow execution result containing step outputs and status",
+},
+{
+name: "traceId",
+type: "string",
+isOptional: true,
+description: "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
+},
+]}
+/>
+
+## Extended usage example
+
+```typescript showLineNumbers copy
+import { RuntimeContext } from "@mastra/core/runtime-context";
+
+const run = await workflow.createRunAsync();
+
+const runtimeContext = new RuntimeContext();
+runtimeContext.set("variable", false);
+
+const result = await run.start({
+  inputData: {
+    value: "initial data",
+  },
+  runtimeContext,
+});
+```
+
+## Related
+
+- [Workflows overview](/docs/workflows/overview)
+- [Run Class](../run)

@@ -1,5 +1,84 @@
 # @mastra/react-hooks
 
+## 0.0.10
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@0.16.4
+
+## 0.0.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@0.16.4-alpha.0
+
+## 0.0.9
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@0.16.3
+
+## 0.0.9-alpha.0
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@0.16.3-alpha.0
+
+## 0.0.8
+
+### Patch Changes
+
+- Fix perf issue: removed flush sync ([#9014](https://github.com/mastra-ai/mastra/pull/9014))
+
+- Fix tool result in playground ([#9087](https://github.com/mastra-ai/mastra/pull/9087))
+
+- Show agent tool output better in playground ([#9021](https://github.com/mastra-ai/mastra/pull/9021))
+
+- Updated dependencies []:
+  - @mastra/client-js@0.16.2
+
+## 0.0.8-alpha.1
+
+### Patch Changes
+
+- Fix perf issue: removed flush sync ([#9014](https://github.com/mastra-ai/mastra/pull/9014))
+
+- Fix tool result in playground ([#9087](https://github.com/mastra-ai/mastra/pull/9087))
+
+- Show agent tool output better in playground ([#9021](https://github.com/mastra-ai/mastra/pull/9021))
+
+- Updated dependencies []:
+  - @mastra/client-js@0.16.2-alpha.1
+
+## 0.0.8-alpha.0
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@0.16.2-alpha.0
+
+## 0.0.7
+
+### Patch Changes
+
+- Add @mastra/react to peer deps ([#8857](https://github.com/mastra-ai/mastra/pull/8857))
+
+- Updated dependencies []:
+  - @mastra/client-js@0.16.1
+
+## 0.0.7-alpha.0
+
+### Patch Changes
+
+- Add @mastra/react to peer deps ([#8857](https://github.com/mastra-ai/mastra/pull/8857))
+
+- Updated dependencies []:
+  - @mastra/client-js@0.16.1-alpha.0
+
 ## 0.0.6
 
 ### Patch Changes

@@ -3,11 +3,16 @@ import type { generateText as generateText5 } from 'ai-v5';
 import { convertArrayToReadableStream, mockId, MockLanguageModelV2 } from 'ai-v5/test';
 import { assertType, describe, expect, it } from 'vitest';
 import z from 'zod';
-import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import type { LoopOptions } from '../types';
-import { MockTracer } from './mockTracer';
-import { createTestModels, modelWithFiles, modelWithReasoning, modelWithSources, testUsage } from './utils';
+import {
+  createMessageListWithUserMessage,
+  createTestModels,
+  modelWithFiles,
+  modelWithReasoning,
+  modelWithSources,
+  testUsage,
+} from './utils';
 
 export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   const generateText = async (args: Omit<LoopOptions, 'runId'>): ReturnType<typeof generateText5> => {
@@ -35,14 +40,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     describe('result.content', () => {
       // TODO: content is not in the correct shape. missing `source` chunks if tool calls are included in stream
       it.todo('should generate content', async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'prompt',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
 
         const result = await generateText({
           agentId: 'agent-id',
@@ -165,7 +163,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         const result = await generateText({
           agentId: 'agent-id',
           models: createTestModels(),
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(modelWithSources.doGenerateCalls).toMatchSnapshot();
@@ -178,7 +176,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         const result = await generateText({
           agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(result.reasoningText).toStrictEqual(
@@ -192,7 +190,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         const result = await generateText({
           agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(await result.sources).toMatchSnapshot();
@@ -204,7 +202,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         const result = await generateText({
           agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(await result.files).toMatchSnapshot();
@@ -297,7 +295,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         const result = await generateText({
           agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
           _internal: {
             generateId: mockId({ prefix: 'id' }),
             currentDate: () => new Date(0),
@@ -311,7 +309,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         const result = await generateText({
           agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
           _internal: {
             generateId: mockId({ prefix: 'id' }),
             currentDate: () => new Date(0),
@@ -327,7 +325,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         const result = await generateText({
           agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
           _internal: {
             generateId: mockId({ prefix: 'id' }),
             currentDate: () => new Date(0),
@@ -340,14 +338,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     describe.todo('result.toolCalls', () => {
       it('should contain tool calls', async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
         const result = await generateText({
           agentId: 'agent-id',
           models: [
@@ -448,14 +439,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     describe.todo('result.toolResults', () => {
       it('should contain tool results', async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
         const result = await generateText({
           agentId: 'agent-id',
           models: [
@@ -542,14 +526,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     describe.todo('result.providerMetadata', () => {
       it('should contain provider metadata', async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
         const result = await generateText({
           agentId: 'agent-id',
           models: [
@@ -584,14 +561,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
 
     describe.todo('result.response.messages', () => {
       it('should contain assistant response message when there are no tool calls', async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
 
         const result = await generateText({
           agentId: 'agent-id',
@@ -619,14 +589,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
       });
 
       it('should contain assistant response message and tool message when there are tool calls with results', async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
         const result = await generateText({
           agentId: 'agent-id',
           models: [
@@ -667,14 +630,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
       });
 
       it('should contain reasoning', async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
         const result = await generateText({
           agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
@@ -709,7 +665,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               }),
             },
           ],
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(await result.request).toStrictEqual({
@@ -751,7 +707,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             },
           ],
           _internal: { generateId: () => '1234', currentDate: () => new Date(0), now: () => 0 },
-          messageList: new MessageList(),
+          messageList: createMessageListWithUserMessage(),
         });
 
         expect(result.steps?.[0]?.response).toMatchInlineSnapshot(`
@@ -786,7 +742,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 "id": "1234",
                 "metadata": {
                   "__originalContent": "Hello, world!",
-                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "createdAt": 2024-01-01T00:00:00.001Z,
                 },
                 "parts": [
                   {
@@ -831,7 +787,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 "id": "1234",
                 "metadata": {
                   "__originalContent": "Hello, world!",
-                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "createdAt": 2024-01-01T00:00:00.001Z,
                 },
                 "parts": [
                   {
@@ -2021,201 +1977,6 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //   });
     // });
 
-    // describe.todo('telemetry', () => {
-    //   let tracer: MockTracer;
-
-    //   beforeEach(() => {
-    //     tracer = new MockTracer();
-    //   });
-
-    //   it('should not record any telemetry data when not explicitly enabled', async () => {
-    //     await generateText({
-    //       model: new MockLanguageModelV2({
-    //         doGenerate: async ({}) => ({
-    //           ...dummyResponseValues,
-    //           content: [{ type: 'text', text: 'Hello, world!' }],
-    //         }),
-    //       }),
-    //       prompt: 'prompt',
-    //       experimental_telemetry: { tracer },
-    //     });
-
-    //     expect(tracer.jsonSpans).toMatchSnapshot();
-    //   });
-
-    //   it('should record telemetry data when enabled', async () => {
-    //     await generateText({
-    //       model: new MockLanguageModelV2({
-    //         doGenerate: async ({}) => ({
-    //           ...dummyResponseValues,
-    //           content: [{ type: 'text', text: 'Hello, world!' }],
-    //           response: {
-    //             id: 'test-id-from-model',
-    //             timestamp: new Date(10000),
-    //             modelId: 'test-response-model-id',
-    //           },
-    //           providerMetadata: {
-    //             testProvider: {
-    //               testKey: 'testValue',
-    //             },
-    //           },
-    //         }),
-    //       }),
-    //       prompt: 'prompt',
-    //       topK: 0.1,
-    //       topP: 0.2,
-    //       frequencyPenalty: 0.3,
-    //       presencePenalty: 0.4,
-    //       temperature: 0.5,
-    //       stopSequences: ['stop'],
-    //       headers: {
-    //         header1: 'value1',
-    //         header2: 'value2',
-    //       },
-    //       experimental_telemetry: {
-    //         isEnabled: true,
-    //         functionId: 'test-function-id',
-    //         metadata: {
-    //           test1: 'value1',
-    //           test2: false,
-    //         },
-    //         tracer,
-    //       },
-    //     });
-
-    //     expect(tracer.jsonSpans).toMatchSnapshot();
-    //   });
-
-    it('should record successful tool call', async () => {
-      const tracer = new MockTracer();
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'user',
-      );
-      await generateText({
-        agentId: 'agent-id',
-        models: [
-          {
-            id: 'test-model',
-            maxRetries: 0,
-            model: new MockLanguageModelV2({
-              doStream: async ({}) => ({
-                ...dummyResponseValues,
-                stream: convertArrayToReadableStream([
-                  {
-                    type: 'tool-call',
-                    toolCallType: 'function',
-                    toolCallId: 'call-1',
-                    toolName: 'tool1',
-                    input: `{ "value": "value" }`,
-                  },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsage,
-                  },
-                ]),
-              }),
-            }),
-          },
-        ],
-        tools: {
-          tool1: {
-            inputSchema: z.object({ value: z.string() }),
-            execute: async () => 'result1',
-          },
-        },
-        messageList,
-        mode: 'generate',
-        telemetry_settings: {
-          isEnabled: true,
-          tracer,
-        },
-        _internal: {
-          generateId: () => 'test-id',
-          now: () => new Date(0).getTime(),
-        },
-      });
-
-      expect(tracer.jsonSpans).toMatchInlineSnapshot(`
-        [
-          {
-            "attributes": {
-              "aisdk.model.id": "mock-model-id",
-              "aisdk.model.provider": "mock-provider",
-              "mastra.operationId": "mastra.generate",
-              "operation.name": "mastra.generate",
-              "stream.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
-              "stream.response.finishReason": "stop",
-              "stream.response.text": "",
-              "stream.response.toolCalls": "[{"type":"tool-call","toolCallId":"call-1","args":{"value":"value"},"toolName":"tool1"}]",
-              "stream.settings.maxRetries": 2,
-              "stream.usage.inputTokens": 3,
-              "stream.usage.outputTokens": 10,
-              "stream.usage.totalTokens": 13,
-            },
-            "events": [],
-            "name": "mastra.generate",
-          },
-          {
-            "attributes": {
-              "aisdk.model.id": "mock-model-id",
-              "aisdk.model.provider": "mock-provider",
-              "mastra.operationId": "mastra.generate.aisdk.doStream",
-              "operation.name": "mastra.generate.aisdk.doStream",
-              "stream.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
-              "stream.prompt.toolChoice": "auto",
-              "stream.prompt.tools": [
-                "{"type":"function","name":"tool1","inputSchema":{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}",
-              ],
-              "stream.response.avgOutputTokensPerSecond": Infinity,
-              "stream.response.finishReason": "stop",
-              "stream.response.id": "test-id",
-              "stream.response.model": "mock-model-id",
-              "stream.response.msToFinish": 0,
-              "stream.response.msToFirstChunk": 0,
-              "stream.response.text": "",
-              "stream.response.timestamp": "1970-01-01T00:00:00.000Z",
-              "stream.response.toolCalls": "[{"toolCallId":"call-1","args":{"value":"value"},"toolName":"tool1"}]",
-              "stream.settings.maxRetries": 2,
-              "stream.usage.inputTokens": 3,
-              "stream.usage.outputTokens": 10,
-              "stream.usage.totalTokens": 13,
-            },
-            "events": [
-              {
-                "attributes": {
-                  "ai.response.msToFirstChunk": 0,
-                },
-                "name": "ai.stream.firstChunk",
-              },
-              {
-                "attributes": undefined,
-                "name": "ai.stream.finish",
-              },
-            ],
-            "name": "mastra.generate.aisdk.doStream",
-          },
-          {
-            "attributes": {
-              "mastra.operationId": "mastra.stream.toolCall",
-              "operation.name": "mastra.stream.toolCall",
-              "stream.toolCall.args": "{"value":"value"}",
-              "stream.toolCall.result": ""result1"",
-              "stream.toolCall.toolCallId": "call-1",
-              "stream.toolCall.toolName": "tool1",
-            },
-            "events": [],
-            "name": "mastra.stream.toolCall",
-          },
-        ]
-      `);
-    });
-
     //   it('should record error on tool call', async () => {
     //     await generateText({
     //       model: new MockLanguageModelV2({
@@ -2241,10 +2002,6 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //         },
     //       },
     //       prompt: 'test-input',
-    //       experimental_telemetry: {
-    //         isEnabled: true,
-    //         tracer,
-    //       },
     //       _internal: {
     //         generateId: () => 'test-id',
     //         currentDate: () => new Date(0),
@@ -2275,45 +2032,6 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //     expect(exceptionEvent.attributes?.['exception.stack']).toContain('Tool execution failed');
     //     expect(exceptionEvent.time).toEqual([0, 0]);
     //   });
-
-    //   it('should not record telemetry inputs / outputs when disabled', async () => {
-    //     await generateText({
-    //       model: new MockLanguageModelV2({
-    //         doGenerate: async ({}) => ({
-    //           ...dummyResponseValues,
-    //           content: [
-    //             {
-    //               type: 'tool-call',
-    //               toolCallType: 'function',
-    //               toolCallId: 'call-1',
-    //               toolName: 'tool1',
-    //               input: `{ "value": "value" }`,
-    //             },
-    //           ],
-    //         }),
-    //       }),
-    //       tools: {
-    //         tool1: {
-    //           inputSchema: z.object({ value: z.string() }),
-    //           execute: async () => 'result1',
-    //         },
-    //       },
-    //       prompt: 'test-input',
-    //       experimental_telemetry: {
-    //         isEnabled: true,
-    //         recordInputs: false,
-    //         recordOutputs: false,
-    //         tracer,
-    //       },
-    //       _internal: {
-    //         generateId: () => 'test-id',
-    //         currentDate: () => new Date(0),
-    //       },
-    //     });
-
-    //     expect(tracer.jsonSpans).toMatchSnapshot();
-    //   });
-    // });
 
     // describe.todo('tool callbacks', () => {
     //   it('should invoke callbacks in the correct order', async () => {

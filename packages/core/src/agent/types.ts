@@ -1,4 +1,5 @@
-import type { GenerateTextOnStepFinishCallback, TelemetrySettings, ToolSet } from 'ai';
+import type { ProviderDefinedTool } from '@internal/external-types';
+import type { GenerateTextOnStepFinishCallback, ToolSet } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
@@ -20,6 +21,7 @@ import type {
   StreamTextOnStepFinishCallback,
   StreamObjectOnFinishCallback,
 } from '../llm/model/base.types';
+import type { ProviderOptions } from '../llm/model/provider-options';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
@@ -42,7 +44,11 @@ export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, Me
 export type { Message as AiMessageType } from 'ai';
 export type { LLMStepResult } from '../stream/types';
 
-export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
+/**
+ * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
+ * (e.g., google.tools.googleSearch()).
+ */
+export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool>;
 
 export type AgentInstructions = SystemMessage;
 export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;
@@ -162,7 +168,7 @@ export interface AgentConfig<
    */
   agents?: DynamicArgument<Record<string, Agent>>;
   /**
-   * Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.
+   * Scoring configuration for runtime evaluation and observability. Can be static or dynamically provided.
    */
   scorers?: DynamicArgument<MastraScorers>;
   /**
@@ -232,8 +238,6 @@ export type AgentGenerateOptions<
   experimental_output?: EXPERIMENTAL_OUTPUT;
   /** Controls how tools are selected during generation */
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
-  /** Telemetry settings */
-  telemetry?: TelemetrySettings;
   /** RuntimeContext for dependency injection */
   runtimeContext?: RuntimeContext;
   /** Scorers to use for this generation */
@@ -253,6 +257,8 @@ export type AgentGenerateOptions<
   tracingContext?: TracingContext;
   /** AI tracing options for starting new traces */
   tracingOptions?: TracingOptions;
+  /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
+  providerOptions?: ProviderOptions;
 } & (
   | {
       /**
@@ -315,8 +321,6 @@ export type AgentStreamOptions<
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Experimental schema for structured output */
   experimental_output?: EXPERIMENTAL_OUTPUT;
-  /** Telemetry settings */
-  telemetry?: TelemetrySettings;
   /** RuntimeContext for dependency injection */
   runtimeContext?: RuntimeContext;
   /**
@@ -332,6 +336,8 @@ export type AgentStreamOptions<
   tracingOptions?: TracingOptions;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
+  providerOptions?: ProviderOptions;
 } & (
   | {
       /**

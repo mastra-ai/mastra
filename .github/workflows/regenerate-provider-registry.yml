@@ -23,56 +23,32 @@ jobs:
       HUSKY: 0
 
     steps:
-      - name: Get Github App Token
-        uses: actions/create-github-app-token@v2
-        id: app-token
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          # Use default GITHUB_TOKEN for initial checkout
+          # This is needed to access the .github/actions/app-auth action
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
         with:
           app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
 
-      - name: Get GitHub App User ID
-        id: get-user-id
-        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-
-      - run: |
-          cat <<- EOF > $HOME/.netrc
-            machine github.com
-            login ${{ steps.app-token.outputs.app-slug }}
-            password ${{ steps.app-token.outputs.token }}
-            machine api.github.com
-            login ${{ steps.app-token.outputs.app-slug }}
-            password ${{ steps.app-token.outputs.token }}
-          EOF
-          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
-          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
-
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - name: Re-checkout with app token
+        uses: actions/checkout@v5
         with:
           ref: main
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
+          persist-credentials: true
 
-      - name: Configure npm registry
-        run: mkdir -p ~/setup-pnpm && echo "registry=https://registry.yarnpkg.com" > ~/setup-pnpm/.npmrc
-
-      - uses: wardpeet/action-setup@pnpm-registry
-        name: Install pnpm
-        with:
-          registry: https://registry.yarnpkg.com
-          run_install: false
-
-      - name: Setup Node.js 20.x
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20.19.1
-          cache: 'pnpm'
-          registry-url: 'https://registry.yarnpkg.com'
-
-      - name: Install dependencies
-        run: pnpm install
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Generate provider registry
         run: pnpm --filter @mastra/core generate:providers
@@ -85,7 +61,6 @@ jobs:
           pnpm prettier --write packages/core/src/llm/model/provider-registry.json
           pnpm prettier --write packages/core/src/llm/model/provider-types.generated.d.ts
           pnpm prettier --write docs/src/content/en/models/**/*.{mdx,ts}
-
       - name: Check for changes
         id: git-check
         run: |
@@ -94,12 +69,24 @@ jobs:
       - name: Create changeset
         if: steps.git-check.outputs.changed == 'true'
         run: |
-          # Generate a unique changeset filename with timestamp
-          CHANGESET_ID="automated-provider-registry-$(date +%Y%m%d-%H%M%S)"
-          CHANGESET_FILE=".changeset/${CHANGESET_ID}.md"
+          # Check if an automated provider registry changeset already exists
+          if [ -d .changeset ]; then
+            EXISTING_CHANGESET=$(ls .changeset/automated-provider-registry-*.md 2>/dev/null | head -n 1)
+          else
+            EXISTING_CHANGESET=""
+          fi
 
-          # Create changeset for @mastra/core with patch bump
-          cat > "${CHANGESET_FILE}" << 'EOF'
+          if [ -n "$EXISTING_CHANGESET" ]; then
+            echo "Automated changeset already exists: ${EXISTING_CHANGESET}"
+            echo "Skipping changeset creation to avoid spam"
+            echo "CHANGESET_FILE=" >> $GITHUB_ENV
+          else
+            # Generate a unique changeset filename with timestamp
+            CHANGESET_ID="automated-provider-registry-$(date +%Y%m%d-%H%M%S)"
+            CHANGESET_FILE=".changeset/${CHANGESET_ID}.md"
+
+            # Create changeset for @mastra/core with patch bump
+            cat > "${CHANGESET_FILE}" << 'EOF'
           ---
           '@mastra/core': patch
           ---
@@ -107,8 +94,9 @@ jobs:
           Update provider registry and model documentation with latest models and providers
           EOF
 
-          echo "Created changeset: ${CHANGESET_FILE}"
-          echo "CHANGESET_FILE=${CHANGESET_FILE}" >> $GITHUB_ENV
+            echo "Created changeset: ${CHANGESET_FILE}"
+            echo "CHANGESET_FILE=${CHANGESET_FILE}" >> $GITHUB_ENV
+          fi
 
       - name: Commit and push changes
         if: steps.git-check.outputs.changed == 'true'
@@ -116,7 +104,9 @@ jobs:
           git add packages/core/src/llm/model/provider-registry.json
           git add packages/core/src/llm/model/provider-types.generated.d.ts
           git add docs/src/content/en/models/
-          git add "${CHANGESET_FILE}"
+          if [ -n "${CHANGESET_FILE}" ]; then
+            git add "${CHANGESET_FILE}"
+          fi
           git commit -m "chore: regenerate provider registry and model documentation [skip ci]"
           git pull --rebase
           git push

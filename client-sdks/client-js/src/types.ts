@@ -4,7 +4,6 @@ import type {
   AgentGenerateOptions,
   AgentStreamOptions,
   SerializableStructuredOutputOptions,
-  DeprecatedOutputOptions,
   ToolsInput,
   UIMessageWithMetadata,
   AgentInstructions,
@@ -129,12 +128,8 @@ export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
   runtimeContext?: RuntimeContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<
-    AgentExecutionOptions<OUTPUT>,
-    'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
-  >
-> &
-  DeprecatedOutputOptions<OUTPUT>;
+  Omit<AgentExecutionOptions<OUTPUT>, 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
+>;
 
 export type UpdateModelParams = {
   modelId: string;
@@ -348,60 +343,6 @@ export type GetLogsResponse = {
 };
 
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
-
-type SpanStatus = {
-  code: number;
-};
-
-type SpanOther = {
-  droppedAttributesCount: number;
-  droppedEventsCount: number;
-  droppedLinksCount: number;
-};
-
-type SpanEventAttributes = {
-  key: string;
-  value: { [key: string]: string | number | boolean | null };
-};
-
-type SpanEvent = {
-  attributes: SpanEventAttributes[];
-  name: string;
-  timeUnixNano: string;
-  droppedAttributesCount: number;
-};
-
-type Span = {
-  id: string;
-  parentSpanId: string | null;
-  traceId: string;
-  name: string;
-  scope: string;
-  kind: number;
-  status: SpanStatus;
-  events: SpanEvent[];
-  links: any[];
-  attributes: Record<string, string | number | boolean | null>;
-  startTime: number;
-  endTime: number;
-  duration: number;
-  other: SpanOther;
-  createdAt: string;
-};
-
-export interface GetTelemetryResponse {
-  traces: Span[];
-}
-
-export interface GetTelemetryParams {
-  name?: string;
-  scope?: string;
-  page?: number;
-  perPage?: number;
-  attribute?: Record<string, string>;
-  fromDate?: Date;
-  toDate?: Date;
-}
 
 export interface GetVNextNetworkResponse {
   id: string;

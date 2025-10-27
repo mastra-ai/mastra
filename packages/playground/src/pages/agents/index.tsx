@@ -8,15 +8,15 @@ import {
   HeaderAction,
   useLinkComponent,
   DocsIcon,
+  useAgents,
 } from '@mastra/playground-ui';
 
-import { useAgents } from '@/hooks/use-agents';
 import { AgentsTable } from '@mastra/playground-ui';
 import { AgentIcon } from '@mastra/playground-ui';
 
 function Agents() {
   const { Link } = useLinkComponent();
-  const { data: agents, isLoading } = useAgents();
+  const { data: agents = {}, isLoading } = useAgents();
 
   return (
     <MainContentLayout>
