@@ -7,21 +7,27 @@ import { assembleOperationName, getTracer } from '../../telemetry';
 import type { OuterLLMRun } from '../../types';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
 
-interface CreateToolCallStepOptions {
-  telemetry_settings: any;
-}
-
 export function createToolCallStep<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
->({ telemetry_settings }: CreateToolCallStepOptions) {
+>() {
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
     execute: async ({ inputData, suspend, resumeData, runtimeContext, state }) => {
       // Access dynamic data from workflow state (shared across nested workflows)
-      const { tools, messageList, options, runId, streamState, modelSpanTracker, controller, writer } = state;
+      const {
+        telemetry_settings,
+        tools,
+        messageList,
+        options,
+        runId,
+        streamState,
+        modelSpanTracker,
+        controller,
+        writer,
+      } = state;
       // If the tool was already executed by the provider, skip execution
       if (inputData.providerExecuted) {
         // Still emit telemetry for provider-executed tools

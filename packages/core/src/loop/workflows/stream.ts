@@ -67,6 +67,7 @@ export function workflowLoopStream<
       // Use the pre-created workflow instance passed as parameter
       const workflowInputData = {
         models,
+        telemetry_settings,
         messageId: messageId!,
         runId,
         messageList,
@@ -89,6 +90,7 @@ export function workflowLoopStream<
         returnScorerData: rest.returnScorerData,
         modelSpanTracker: rest.modelSpanTracker,
         experimental_generateMessageId: rest.experimental_generateMessageId,
+        includeRawChunks: rest.includeRawChunks,
         // Dynamic params that change per execution
         _internal,
         modelStreamSpan,

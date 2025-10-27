@@ -22,32 +22,52 @@ describe('createToolCallStep tool approval workflow', () => {
     args: { param: 'test' },
   });
 
-  const makeExecuteParams = (overrides: any = {}) => ({
-    runId: 'test-run-id',
-    workflowId: 'test-workflow-id',
-    mastra: {} as any,
-    runtimeContext: new RuntimeContext(),
-    state: {},
-    setState: vi.fn(),
-    runCount: 1,
-    tracingContext: {} as any,
-    getInitData: vi.fn(),
-    getStepResult: vi.fn(),
-    suspend,
-    bail: vi.fn(),
-    abort: vi.fn(),
-    engine: 'default' as any,
-    abortSignal: new AbortController().signal,
-    writer: new ToolStream({
-      prefix: 'tool',
-      callId: 'test-call-id',
-      name: 'test-tool',
+  const makeExecuteParams = (overrides: any = {}) => {
+    const runtimeContext = new RuntimeContext();
+    runtimeContext.set('__mastra_requireToolApproval', true);
+
+    return {
       runId: 'test-run-id',
-    }),
-    validateSchemas: false,
-    inputData: makeInputData(),
-    ...overrides,
-  });
+      workflowId: 'test-workflow-id',
+      mastra: {} as any,
+      runtimeContext,
+      state: {
+        telemetry_settings: undefined,
+        tools,
+        messageList,
+        controller,
+        runId: 'test-run',
+        streamState,
+        options: {},
+        writer: new ToolStream({
+          prefix: 'tool',
+          callId: 'test-call-id',
+          name: 'test-tool',
+          runId: 'test-run-id',
+        }),
+        modelSpanTracker: undefined,
+      },
+      setState: vi.fn(),
+      runCount: 1,
+      tracingContext: {} as any,
+      getInitData: vi.fn(),
+      getStepResult: vi.fn(),
+      suspend,
+      bail: vi.fn(),
+      abort: vi.fn(),
+      engine: 'default' as any,
+      abortSignal: new AbortController().signal,
+      writer: new ToolStream({
+        prefix: 'tool',
+        callId: 'test-call-id',
+        name: 'test-tool',
+        runId: 'test-run-id',
+      }),
+      validateSchemas: false,
+      inputData: makeInputData(),
+      ...overrides,
+    };
+  };
 
   const expectNoToolExecution = () => {
     expect(tools['test-tool'].execute).not.toHaveBeenCalled();
@@ -78,14 +98,7 @@ describe('createToolCallStep tool approval workflow', () => {
       },
     } as unknown as MessageList;
 
-    toolCallStep = createToolCallStep({
-      tools,
-      messageList,
-      controller,
-      requireToolApproval: true,
-      runId: 'test-run',
-      streamState,
-    });
+    toolCallStep = createToolCallStep();
   });
 
   afterEach(() => {

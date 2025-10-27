@@ -11,18 +11,15 @@ import type { LLMIterationData } from '../schema';
 import { isControllerOpen } from '../stream';
 
 interface CreateAgenticLoopWorkflowOptions {
-  telemetry_settings: any;
   logger?: any;
   mastra?: any;
 }
 
 export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
-  telemetry_settings,
   logger,
   mastra,
 }: CreateAgenticLoopWorkflowOptions) {
   const agenticExecutionWorkflow = createAgenticExecutionWorkflow<Tools, OUTPUT>({
-    telemetry_settings,
     logger,
     mastra,
   });
@@ -52,6 +49,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         maxSteps,
         controller,
         modelStreamSpan,
+        telemetry_settings,
         accumulatedSteps = [],
         previousContentLength = 0,
       } = state;

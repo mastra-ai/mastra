@@ -10,7 +10,6 @@ import { createLLMMappingStep } from './llm-mapping-step';
 import { createToolCallStep } from './tool-call-step';
 
 interface CreateAgenticExecutionWorkflowOptions {
-  telemetry_settings: any;
   logger?: any;
   mastra?: any;
 }
@@ -18,21 +17,12 @@ interface CreateAgenticExecutionWorkflowOptions {
 export function createAgenticExecutionWorkflow<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema = undefined,
->({ telemetry_settings, logger, mastra }: CreateAgenticExecutionWorkflowOptions) {
-  const llmExecutionStep = createLLMExecutionStep({
-    telemetry_settings,
-  });
+>({ logger, mastra }: CreateAgenticExecutionWorkflowOptions) {
+  const llmExecutionStep = createLLMExecutionStep();
 
-  const toolCallStep = createToolCallStep({
-    telemetry_settings,
-  });
+  const toolCallStep = createToolCallStep();
 
-  const llmMappingStep = createLLMMappingStep(
-    {
-      telemetry_settings,
-    },
-    llmExecutionStep,
-  );
+  const llmMappingStep = createLLMMappingStep(llmExecutionStep);
 
   return createWorkflow({
     id: 'executionWorkflow',
@@ -51,7 +41,7 @@ export function createAgenticExecutionWorkflow<
     .map(
       async ({ inputData, state }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
-        const { modelStreamSpan } = state;
+        const { telemetry_settings, modelStreamSpan } = state;
         if (modelStreamSpan && telemetry_settings?.recordOutputs !== false && typedInputData.output.toolCalls?.length) {
           modelStreamSpan.setAttribute(
             'stream.response.toolCalls',

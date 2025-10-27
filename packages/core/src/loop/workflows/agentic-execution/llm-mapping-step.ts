@@ -8,12 +8,7 @@ import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
-interface CreateLLMMappingStepOptions {
-  telemetry_settings: any;
-}
-
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
-  { telemetry_settings }: CreateLLMMappingStepOptions,
   llmExecutionStep: any,
 ) {
   return createStep({

@@ -70,7 +70,6 @@ export class MastraLLMVNext extends MastraBase {
 
     // Create workflow once at instance level with only static parameters
     this.#agenticLoopWorkflow = createAgenticLoopWorkflow({
-      telemetry_settings: this.experimental_telemetry,
       logger: this.logger,
       mastra: this.#mastra,
     });

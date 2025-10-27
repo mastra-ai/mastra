@@ -436,13 +436,7 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
   };
 }
 
-interface CreateLLMExecutionStepOptions {
-  telemetry_settings: any;
-}
-
-export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
-  telemetry_settings,
-}: CreateLLMExecutionStepOptions) {
+export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>() {
   return createStep({
     id: 'llm-execution',
     inputSchema: llmIterationOutputSchema,
@@ -451,6 +445,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
       // Access dynamic data from workflow state (shared across nested workflows)
       const {
         models,
+        telemetry_settings,
         messageId,
         runId,
         tools,
@@ -467,11 +462,11 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
         downloadConcurrency,
         processorStates,
         experimental_generateMessageId,
+        includeRawChunks,
         controller,
         _internal,
         modelStreamSpan,
       } = state;
-      const includeRawChunks = options?.includeRawChunks;
       let modelResult;
       let warnings: any;
       let request: any;
