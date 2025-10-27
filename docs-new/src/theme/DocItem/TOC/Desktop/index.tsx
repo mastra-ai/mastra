@@ -16,7 +16,7 @@ export default function DocItemTOCDesktop(): ReactNode {
         maxHeadingLevel={frontMatter.toc_max_heading_level}
         className={ThemeClassNames.docs.docTocDesktop}
       />
-      <div className="mt-3 hidden md:flex flex-col gap-4 px-1.5">
+      <div className="mt-3 hidden xl:flex flex-col gap-4 px-1.5">
         <SubscribeForm />
         <FeedbackTrigger />
       </div>
