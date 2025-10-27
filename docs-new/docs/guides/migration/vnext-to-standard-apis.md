@@ -1,6 +1,7 @@
 ---
-title: 'VNext to Standard APIs'
-description: 'Learn how to migrate from VNext methods to the new standard agent APIs in Mastra.'
+title: "VNext to Standard APIs"
+description: "Learn how to migrate from VNext methods to the new standard agent APIs in Mastra."
+sidebar_position: 2
 ---
 
 ## Overview
@@ -120,7 +121,7 @@ const result = await agent.stream(messages);
 ```typescript showLineNumbers copy
 // AI SDK v5 compatibility
 const result = await agent.stream(messages, {
-  format: 'aisdk',
+  format: "aisdk",
 });
 ```
 
@@ -132,7 +133,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
 ```typescript showLineNumbers copy
 const result = await agent.stream(messages, {
-  format: 'aisdk', // or 'mastra' (default)
+  format: "aisdk", // or 'mastra' (default)
 });
 ```
 
@@ -140,7 +141,7 @@ const result = await agent.stream(messages, {
 
 ```typescript showLineNumbers copy
 const result = await agent.stream(messages, {
-  system: 'You are a helpful assistant',
+  system: "You are a helpful assistant",
 });
 ```
 
@@ -159,10 +160,10 @@ const result = await agent.generate(messages, {
       name: z.string(),
       age: z.number(),
     }),
-    model: 'openai/gpt-4o-mini', // Optional model override for structuring
-    errorStrategy: 'fallback',
-    fallbackValue: { name: 'unknown', age: 0 },
-    instructions: 'Extract user information', // Override default structuring instructions
+    model: "openai/gpt-4o-mini", // Optional model override for structuring
+    errorStrategy: "fallback",
+    fallbackValue: { name: "unknown", age: 0 },
+    instructions: "Extract user information", // Override default structuring instructions
   },
 });
 ```
@@ -182,7 +183,7 @@ const result = await agent.stream(messages, {
   providerOptions: {
     openai: {
       store: true,
-      metadata: { userId: '123' },
+      metadata: { userId: "123" },
     },
   },
 });
@@ -192,8 +193,8 @@ const result = await agent.stream(messages, {
 
 ```typescript showLineNumbers copy
 const result = await agent.stream(messages, {
-  onChunk: chunk => {
-    console.log('Received chunk:', chunk);
+  onChunk: (chunk) => {
+    console.log("Received chunk:", chunk);
   },
 });
 ```
@@ -202,8 +203,8 @@ const result = await agent.stream(messages, {
 
 ```typescript showLineNumbers copy
 const result = await agent.stream(messages, {
-  onError: error => {
-    console.error('Stream error:', error);
+  onError: (error) => {
+    console.error("Stream error:", error);
   },
 });
 ```
@@ -213,7 +214,7 @@ const result = await agent.stream(messages, {
 ```typescript showLineNumbers copy
 const result = await agent.stream(messages, {
   onAbort: () => {
-    console.log('Stream aborted');
+    console.log("Stream aborted");
   },
 });
 ```
@@ -222,7 +223,7 @@ const result = await agent.stream(messages, {
 
 ```typescript showLineNumbers copy
 const result = await agent.stream(messages, {
-  activeTools: ['search', 'calculator'], // Only these tools will be available
+  activeTools: ["search", "calculator"], // Only these tools will be available
 });
 ```
 
@@ -242,7 +243,7 @@ const result = await agent.stream(messages, {
 ```typescript showLineNumbers copy
 const result = await agent.stream(messages, {
   prepareStep: ({ step, state }) => {
-    console.log('About to execute step:', step);
+    console.log("About to execute step:", step);
     return {
       /* modified state */
     };
@@ -280,8 +281,8 @@ const result = await agent.stream(messages, {
 ```typescript showLineNumbers copy
 const result = await agent.stream(messages, {
   memory: {
-    resource: 'user-123',
-    thread: 'thread-456',
+    resource: "user-123",
+    thread: "thread-456",
   },
 });
 ```
@@ -298,7 +299,7 @@ const result = await agent.generate(messages, {
     schema: z.object({
       summary: z.string(),
     }),
-    model: 'openai/gpt-4o',
+    model: "openai/gpt-4o",
   },
 });
 ```
@@ -350,11 +351,11 @@ See the following API references for more information:
 
 ```typescript showLineNumbers copy
 type ToolChoice<TOOLS extends Record<string, unknown>> =
-  | 'auto'
-  | 'none'
-  | 'required'
+  | "auto"
+  | "none"
+  | "required"
   | {
-      type: 'tool';
+      type: "tool";
       toolName: Extract<keyof TOOLS, string>;
     };
 ```

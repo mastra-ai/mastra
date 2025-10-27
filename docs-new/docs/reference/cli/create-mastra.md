@@ -1,5 +1,5 @@
 ---
-title: 'create-mastra '
+title: "create-mastra "
 description: Documentation for the create-mastra command, which creates a new Mastra project with interactive setup options.
 ---
 

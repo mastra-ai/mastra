@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Langfuse Integration '
+title: "Langfuse Integration"
 description: Documentation for integrating Langfuse with Mastra, an open-source observability platform for LLM applications.
 ---
 
@@ -45,15 +45,15 @@ echo -n "pk-lf-1234567890:sk-lf-1234567890" | base64 -w 0
 Here's how to configure Mastra to use Langfuse with OpenTelemetry:
 
 ```typescript
-import { Mastra } from '@mastra/core';
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
     enabled: true,
     export: {
-      type: 'otlp',
-      endpoint: 'https://cloud.langfuse.com/api/public/otel/v1/traces', // or your preferred endpoint
+      type: "otlp",
+      endpoint: "https://cloud.langfuse.com/api/public/otel/v1/traces", // or your preferred endpoint
       headers: {
         Authorization: `Basic ${AUTH_STRING}`, // Your base64-encoded auth string
       },
@@ -65,14 +65,14 @@ export const mastra = new Mastra({
 Alternatively, if you're using environment variables, you can simplify the configuration:
 
 ```typescript
-import { Mastra } from '@mastra/core';
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
     enabled: true,
     export: {
-      type: 'otlp',
+      type: "otlp",
       // endpoint and headers will be read from OTEL_EXPORTER_OTLP_* env vars
     },
   },

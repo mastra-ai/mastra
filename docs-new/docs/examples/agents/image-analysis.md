@@ -1,5 +1,5 @@
 ---
-title: 'Image Analysis Agent '
+title: "Image Analysis Agent "
 description: Example of using a Mastra AI Agent to analyze images from Unsplash to identify objects, determine species, and describe locations.
 ---
 
@@ -24,17 +24,17 @@ UNSPLASH_ACCESS_KEY=<your-unsplash-access-key>
 Create a simple agent that analyzes images to identify objects, describe scenes, and answer questions about visual content.
 
 ```typescript filename="src/mastra/agents/example-image-analysis-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
 export const imageAnalysisAgent = new Agent({
-  name: 'image-analysis',
-  description: 'Analyzes images to identify objects and describe scenes',
+  name: "image-analysis",
+  description: "Analyzes images to identify objects and describe scenes",
   instructions: `
     You can view an image and identify objects, describe scenes, and answer questions about the content.
     You can also determine species of animals and describe locations in the image.
    `,
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
 });
 ```
 
@@ -45,9 +45,9 @@ export const imageAnalysisAgent = new Agent({
 To use an agent, register it in your main Mastra instance.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from "@mastra/core/mastra";
 
-import { imageAnalysisAgent } from './agents/example-image-analysis-agent';
+import { imageAnalysisAgent } from "./agents/example-image-analysis-agent";
 
 export const mastra = new Mastra({
   // ...
@@ -61,19 +61,19 @@ This function retrieves a random image from Unsplash to pass to the agent for an
 
 ```typescript filename="src/mastra/utils/get-random-image.ts" showLineNumbers copy
 export const getRandomImage = async (): Promise<string> => {
-  const queries = ['wildlife', 'feathers', 'flying', 'birds'];
+  const queries = ["wildlife", "feathers", "flying", "birds"];
   const query = queries[Math.floor(Math.random() * queries.length)];
   const page = Math.floor(Math.random() * 20);
-  const order_by = Math.random() < 0.5 ? 'relevant' : 'latest';
+  const order_by = Math.random() < 0.5 ? "relevant" : "latest";
 
   const response = await fetch(
     `https://api.unsplash.com/search/photos?query=${query}&page=${page}&order_by=${order_by}`,
     {
       headers: {
         Authorization: `Client-ID ${process.env.UNSPLASH_ACCESS_KEY}`,
-        'Accept-Version': 'v1',
+        "Accept-Version": "v1",
       },
-      cache: 'no-store',
+      cache: "no-store",
     },
   );
 
@@ -87,25 +87,25 @@ export const getRandomImage = async (): Promise<string> => {
 Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt. Provide a `content` array that includes the image `type`, `imageUrl`, `mimeType`, and clear instructions for how the agent should respond.
 
 ```typescript filename="src/test-image-analysis.ts" showLineNumbers copy
-import 'dotenv/config';
+import "dotenv/config";
 
-import { mastra } from './mastra';
-import { getRandomImage } from './mastra/utils/get-random-image';
+import { mastra } from "./mastra";
+import { getRandomImage } from "./mastra/utils/get-random-image";
 
 const imageUrl = await getRandomImage();
-const agent = mastra.getAgent('imageAnalysisAgent');
+const agent = mastra.getAgent("imageAnalysisAgent");
 
 const response = await agent.generate([
   {
-    role: 'user',
+    role: "user",
     content: [
       {
-        type: 'image',
+        type: "image",
         image: imageUrl,
-        mimeType: 'image/jpeg',
+        mimeType: "image/jpeg",
       },
       {
-        type: 'text',
+        type: "text",
         text: `Analyze this image and identify the main objects or subjects. If there are animals, provide their common name and scientific name. Also describe the location or setting in one or two short sentences.`,
       },
     ],

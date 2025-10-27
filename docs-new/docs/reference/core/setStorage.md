@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.setStorage() '
-description: 'Documentation for the `Mastra.setStorage()` method in Mastra, which sets the storage instance for the Mastra instance.'
+title: "Mastra.setStorage() "
+description: "Documentation for the `Mastra.setStorage()` method in Mastra, which sets the storage instance for the Mastra instance."
 ---
 
 # Mastra.setStorage()
@@ -12,7 +12,7 @@ The `.setStorage()` method is used to set the storage instance for the Mastra in
 ```typescript copy
 mastra.setStorage(
   new LibSQLStore({
-    url: ':memory:',
+    url: ":memory:",
   }),
 );
 ```

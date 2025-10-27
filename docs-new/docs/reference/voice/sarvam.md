@@ -1,6 +1,6 @@
 ---
-title: 'Reference: Sarvam Voice '
-description: 'Documentation for the Sarvam class, providing text-to-speech and speech-to-text capabilities.'
+title: "Sarvam Voice"
+description: "Documentation for the Sarvam class, providing text-to-speech and speech-to-text capabilities."
 ---
 
 # Sarvam

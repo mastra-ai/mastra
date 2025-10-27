@@ -1,6 +1,6 @@
 ---
-title: 'Default Exporter '
-description: 'Store traces locally for development and debugging'
+title: "Default"
+description: "Store traces locally for development and debugging"
 ---
 
 # Default Exporter
@@ -26,18 +26,18 @@ DefaultExporter is ideal for:
 ### Basic Setup
 
 ```typescript filename="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { DefaultExporter } from '@mastra/core/ai-tracing';
-import { LibSQLStore } from '@mastra/libsql';
+import { Mastra } from "@mastra/core";
+import { DefaultExporter } from "@mastra/core/ai-tracing";
+import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
-    url: 'file:./mastra.db', // Required for trace persistence
+    url: "file:./mastra.db", // Required for trace persistence
   }),
   observability: {
     configs: {
       local: {
-        serviceName: 'my-service',
+        serviceName: "my-service",
         exporters: [new DefaultExporter()],
       },
     },
@@ -52,7 +52,7 @@ When using the default observability configuration, DefaultExporter is automatic
 ```typescript
 export const mastra = new Mastra({
   storage: new LibSQLStore({
-    url: 'file:./mastra.db',
+    url: "file:./mastra.db",
   }),
   observability: {
     default: { enabled: true }, // Automatically includes DefaultExporter
@@ -87,7 +87,7 @@ DefaultExporter automatically selects the optimal tracing strategy based on your
 
 ```typescript
 new DefaultExporter({
-  strategy: 'auto', // Default - let storage provider decide
+  strategy: "auto", // Default - let storage provider decide
   // or explicitly set:
   // strategy: 'realtime' | 'batch-with-updates' | 'insert-only'
 
@@ -143,7 +143,7 @@ new DefaultExporter();
 
 // Development override
 new DefaultExporter({
-  strategy: 'realtime', // Immediate visibility for debugging
+  strategy: "realtime", // Immediate visibility for debugging
 });
 
 // High-throughput production

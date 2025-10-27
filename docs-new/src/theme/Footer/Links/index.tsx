@@ -1,9 +1,9 @@
-import React, { type ReactNode } from 'react';
+import React, { type ReactNode } from "react";
 
-import { isMultiColumnFooterLinks } from '@docusaurus/theme-common';
-import FooterLinksMultiColumn from '@theme/Footer/Links/MultiColumn';
-import FooterLinksSimple from '@theme/Footer/Links/Simple';
-import type { Props } from '@theme/Footer/Links';
+import { isMultiColumnFooterLinks } from "@docusaurus/theme-common";
+import FooterLinksMultiColumn from "@theme/Footer/Links/MultiColumn";
+import FooterLinksSimple from "@theme/Footer/Links/Simple";
+import type { Props } from "@theme/Footer/Links";
 
 export default function FooterLinks({ links }: Props): ReactNode {
   return isMultiColumnFooterLinks(links) ? (

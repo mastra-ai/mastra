@@ -1,6 +1,6 @@
 ---
-title: 'MastraModelOutput (Experimental) '
-description: 'Complete reference for MastraModelOutput - the stream object returned by agent.stream() with streaming and promise-based access to model outputs.'
+title: "MastraModelOutput (Experimental) "
+description: "Complete reference for MastraModelOutput - the stream object returned by agent.stream() with streaming and promise-based access to model outputs."
 ---
 
 # MastraModelOutput
@@ -9,7 +9,7 @@ The `MastraModelOutput` class is returned by [.stream()](./stream) and provides 
 
 ```typescript
 // MastraModelOutput is returned by agent.stream()
-const stream = await agent.stream('Hello world');
+const stream = await agent.stream("Hello world");
 ```
 
 For setup and basic usage, see the [.stream()](./stream) method documentation.
@@ -199,7 +199,7 @@ parameters: [
 ### Basic Text Streaming
 
 ```typescript
-const stream = await agent.stream('Write a haiku');
+const stream = await agent.stream("Write a haiku");
 
 // Stream text as it's generated
 for await (const text of stream.textStream) {
@@ -214,7 +214,7 @@ console.log(fullText);
 ### Structured Output Streaming
 
 ```typescript
-const stream = await agent.stream('Generate user data', {
+const stream = await agent.stream("Generate user data", {
   structuredOutput: {
     schema: z.object({
       name: z.string(),
@@ -227,12 +227,12 @@ const stream = await agent.stream('Generate user data', {
 
 // Stream partial objects
 for await (const partial of stream.objectStream) {
-  console.log('Progress:', partial); // { name: "John" }, { name: "John", age: 30 }, ...
+  console.log("Progress:", partial); // { name: "John" }, { name: "John", age: 30 }, ...
 }
 
 // Get final validated object
 const user = await stream.object;
-console.log('Final:', user); // { name: "John", age: 30, email: "john@example.com" }
+console.log("Final:", user); // { name: "John", age: 30, email: "john@example.com" }
 ```
 
 ````
@@ -255,7 +255,7 @@ console.log("Results:", toolResults);
 ### Complete Output Access
 
 ```typescript
-const stream = await agent.stream('Analyze this data');
+const stream = await agent.stream("Analyze this data");
 
 const output = await stream.getFullOutput();
 console.log({
@@ -269,20 +269,20 @@ console.log({
 ### Full Stream Processing
 
 ```typescript
-const stream = await agent.stream('Complex task');
+const stream = await agent.stream("Complex task");
 
 for await (const chunk of stream.fullStream) {
   switch (chunk.type) {
-    case 'text-delta':
+    case "text-delta":
       process.stdout.write(chunk.payload.text);
       break;
-    case 'tool-call':
+    case "tool-call":
       console.log(`Calling ${chunk.payload.toolName}...`);
       break;
-    case 'reasoning-delta':
+    case "reasoning-delta":
       console.log(`Reasoning: ${chunk.payload.text}`);
       break;
-    case 'finish':
+    case "finish":
       console.log(`Done! Reason: ${chunk.payload.stepResult.reason}`);
       break;
   }
@@ -292,25 +292,25 @@ for await (const chunk of stream.fullStream) {
 ### Error Handling
 
 ```typescript
-const stream = await agent.stream('Analyze this data');
+const stream = await agent.stream("Analyze this data");
 
 try {
   // Option 1: Handle errors in consumeStream
   await stream.consumeStream({
-    onError: error => {
-      console.error('Stream error:', error);
+    onError: (error) => {
+      console.error("Stream error:", error);
     },
   });
 
   const result = await stream.text;
 } catch (error) {
-  console.error('Failed to get result:', error);
+  console.error("Failed to get result:", error);
 }
 
 // Option 2: Check error property
 const result = await stream.getFullOutput();
 if (stream.error) {
-  console.error('Stream had errors:', stream.error);
+  console.error("Stream had errors:", stream.error);
 }
 ```
 

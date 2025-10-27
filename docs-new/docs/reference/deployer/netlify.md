@@ -1,6 +1,6 @@
 ---
-title: 'Netlify Deployer'
-description: 'Documentation for the NetlifyDeployer class, which deploys Mastra applications to Netlify Functions.'
+title: "Netlify Deployer"
+description: "Documentation for the NetlifyDeployer class, which deploys Mastra applications to Netlify Functions."
 ---
 
 # NetlifyDeployer
@@ -10,8 +10,8 @@ The `NetlifyDeployer` class handles deployment of standalone Mastra applications
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { NetlifyDeployer } from '@mastra/deployer-netlify';
+import { Mastra } from "@mastra/core/mastra";
+import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 export const mastra = new Mastra({
   // ...

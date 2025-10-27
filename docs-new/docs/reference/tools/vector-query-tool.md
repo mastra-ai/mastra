@@ -1,5 +1,5 @@
 ---
-title: 'createVectorQueryTool() '
+title: "createVectorQueryTool() "
 description: Documentation for the Vector Query Tool in Mastra, which facilitates semantic search over vector stores with filtering and reranking capabilities.
 ---
 
@@ -13,13 +13,13 @@ The `createVectorQueryTool()` function creates a tool for semantic search over v
 ## Basic Usage
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { createVectorQueryTool } from '@mastra/rag';
+import { openai } from "@ai-sdk/openai";
+import { createVectorQueryTool } from "@mastra/rag";
 
 const queryTool = createVectorQueryTool({
-  vectorStoreName: 'pinecone',
-  indexName: 'docs',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
 });
 ```
 
@@ -298,9 +298,9 @@ The tool determines the number of results to return based on the user's query, w
 
 ```typescript
 const queryTool = createVectorQueryTool({
-  vectorStoreName: 'pinecone',
-  indexName: 'docs',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
   enableFilter: true,
 });
 ```
@@ -329,11 +329,11 @@ For an example of how agent-driven filtering works, see the [Agent-Driven Metada
 
 ```typescript
 const queryTool = createVectorQueryTool({
-  vectorStoreName: 'milvus',
-  indexName: 'documentation',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "milvus",
+  indexName: "documentation",
+  model: openai.embedding("text-embedding-3-small"),
   reranker: {
-    model: openai('gpt-4o-mini'),
+    model: openai("gpt-4o-mini"),
     options: {
       weights: {
         semantic: 0.5, // Semantic relevance weight
@@ -359,11 +359,11 @@ The reranker processes the initial vector search results and returns a reordered
 
 ```typescript
 const queryTool = createVectorQueryTool({
-  vectorStoreName: 'pinecone',
-  indexName: 'docs',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
   description:
-    'Search through document archives to find relevant information for answering questions about company policies and procedures',
+    "Search through document archives to find relevant information for answering questions about company policies and procedures",
 });
 ```
 
@@ -493,28 +493,30 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
 You can override database configurations at runtime to adapt to different scenarios:
 
 ```typescript
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RuntimeContext } from "@mastra/core/runtime-context";
 
 const queryTool = createVectorQueryTool({
-  vectorStoreName: 'pinecone',
-  indexName: 'docs',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
   databaseConfig: {
     pinecone: {
-      namespace: 'development',
+      namespace: "development",
     },
   },
 });
 
 // Override at runtime
 const runtimeContext = new RuntimeContext();
-runtimeContext.set('databaseConfig', {
+runtimeContext.set("databaseConfig", {
   pinecone: {
-    namespace: 'production', // Switch to production namespace
+    namespace: "production", // Switch to production namespace
   },
 });
 
-const response = await agent.generate('Find information about deployment', { runtimeContext });
+const response = await agent.generate("Find information about deployment", {
+  runtimeContext,
+});
 ```
 
 This approach allows you to:
@@ -527,9 +529,9 @@ This approach allows you to:
 
 ```typescript
 const queryTool = createVectorQueryTool({
-  vectorStoreName: 'pinecone',
-  indexName: 'docs',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
 });
 ```
 
@@ -543,18 +545,21 @@ const runtimeContext = new RuntimeContext<{
   filter: VectorFilter;
   databaseConfig: DatabaseConfig;
 }>();
-runtimeContext.set('vectorStoreName', 'my-store');
-runtimeContext.set('indexName', 'my-index');
-runtimeContext.set('topK', 5);
-runtimeContext.set('filter', { category: 'docs' });
-runtimeContext.set('databaseConfig', {
-  pinecone: { namespace: 'runtime-namespace' },
+runtimeContext.set("vectorStoreName", "my-store");
+runtimeContext.set("indexName", "my-index");
+runtimeContext.set("topK", 5);
+runtimeContext.set("filter", { category: "docs" });
+runtimeContext.set("databaseConfig", {
+  pinecone: { namespace: "runtime-namespace" },
 });
-runtimeContext.set('model', openai.embedding('text-embedding-3-small'));
+runtimeContext.set("model", openai.embedding("text-embedding-3-small"));
 
-const response = await agent.generate('Find documentation from the knowledge base.', {
-  runtimeContext,
-});
+const response = await agent.generate(
+  "Find documentation from the knowledge base.",
+  {
+    runtimeContext,
+  },
+);
 ```
 
 For more information on runtime context, please see:
@@ -567,25 +572,25 @@ For more information on runtime context, please see:
 The tool can be used by itself to retrieve documents matching a query:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { openai } from '@ai-sdk/openai';
-import { RuntimeContext } from '@mastra/core/runtime-context';
-import { createVectorQueryTool } from '@mastra/rag';
-import { PgVector } from '@mastra/pg';
+import { openai } from "@ai-sdk/openai";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { createVectorQueryTool } from "@mastra/rag";
+import { PgVector } from "@mastra/pg";
 
 const pgVector = new PgVector({
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector', // optional since we're passing in a store
+  vectorStoreName: "pgVector", // optional since we're passing in a store
   vectorStore: pgVector,
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
 });
 
 const runtimeContext = new RuntimeContext();
 const queryResult = await vectorQueryTool.execute({
-  context: { queryText: 'foo', topK: 1 },
+  context: { queryText: "foo", topK: 1 },
   runtimeContext,
 });
 

@@ -1,6 +1,6 @@
 ---
-title: 'Moonshot AI (China) '
-description: 'Use Moonshot AI (China) models with Mastra. 3 models available.'
+title: "Moonshot AI (China) "
+description: "Use Moonshot AI (China) models with Mastra. 3 models available."
 ---
 
 # <img src="https://models.dev/logos/moonshotai-cn.svg" alt="Moonshot AI (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Moonshot AI (China)
@@ -14,19 +14,19 @@ MOONSHOT_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'moonshotai-cn/kimi-k2-0711-preview',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "moonshotai-cn/kimi-k2-0711-preview",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -87,13 +87,13 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    url: 'https://api.moonshot.cn/v1',
-    modelId: 'kimi-k2-0711-preview',
+    url: "https://api.moonshot.cn/v1",
+    modelId: "kimi-k2-0711-preview",
     apiKey: process.env.MOONSHOT_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -103,10 +103,12 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'moonshotai-cn/kimi-k2-turbo-preview' : 'moonshotai-cn/kimi-k2-0711-preview';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "moonshotai-cn/kimi-k2-turbo-preview"
+      : "moonshotai-cn/kimi-k2-0711-preview";
   },
 });
 ```

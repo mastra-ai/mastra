@@ -1,6 +1,6 @@
 ---
-title: 'Cortecs '
-description: 'Use Cortecs models with Mastra. 10 models available.'
+title: "Cortecs "
+description: "Use Cortecs models with Mastra. 10 models available."
 ---
 
 # <img src="https://models.dev/logos/cortecs.svg" alt="Cortecs logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cortecs
@@ -14,19 +14,19 @@ CORTECS_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'cortecs/claude-sonnet-4',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "cortecs/claude-sonnet-4",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -171,13 +171,13 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    url: 'https://api.cortecs.ai/v1',
-    modelId: 'claude-sonnet-4',
+    url: "https://api.cortecs.ai/v1",
+    modelId: "claude-sonnet-4",
     apiKey: process.env.CORTECS_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -187,10 +187,12 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'cortecs/qwen3-coder-480b-a35b-instruct' : 'cortecs/claude-sonnet-4';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "cortecs/qwen3-coder-480b-a35b-instruct"
+      : "cortecs/claude-sonnet-4";
   },
 });
 ```

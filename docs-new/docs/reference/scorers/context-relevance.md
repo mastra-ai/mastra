@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Context Relevance Scorer '
+title: "Context Relevance Scorer"
 description: Documentation for the Context Relevance Scorer in Mastra. Evaluates the relevance and utility of provided context for generating agent responses using weighted relevance scoring.
 ---
 
@@ -151,9 +151,11 @@ Final Score = max(0, Base Score - Usage Penalty - Missing Penalty) × scale
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   options: {
-    context: ['Einstein won the Nobel Prize for his work on the photoelectric effect'],
+    context: [
+      "Einstein won the Nobel Prize for his work on the photoelectric effect",
+    ],
     scale: 1,
   },
 });
@@ -163,9 +165,9 @@ const scorer = createContextRelevanceScorerLLM({
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   options: {
-    context: ['Context information...'],
+    context: ["Context information..."],
     penalties: {
       unusedHighRelevanceContext: 0.05, // Lower penalty for unused context
       missingContextPerItem: 0.2, // Higher penalty per missing item
@@ -180,15 +182,18 @@ const scorer = createContextRelevanceScorerLLM({
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   options: {
     contextExtractor: (input, output) => {
       // Extract context based on the query
-      const userQuery = input?.inputMessages?.[0]?.content || '';
-      if (userQuery.includes('Einstein')) {
-        return ['Einstein won the Nobel Prize for the photoelectric effect', 'He developed the theory of relativity'];
+      const userQuery = input?.inputMessages?.[0]?.content || "";
+      if (userQuery.includes("Einstein")) {
+        return [
+          "Einstein won the Nobel Prize for the photoelectric effect",
+          "He developed the theory of relativity",
+        ];
       }
-      return ['General physics information'];
+      return ["General physics information"];
     },
     penalties: {
       unusedHighRelevanceContext: 0.15,

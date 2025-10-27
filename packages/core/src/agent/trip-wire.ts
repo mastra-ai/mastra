@@ -2,7 +2,6 @@ import { randomUUID } from 'crypto';
 import { ReadableStream } from 'stream/web';
 import type { TracingContext } from '../ai-tracing';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
-import { getRootSpan } from '../loop/telemetry';
 import { ChunkFrom, MastraModelOutput } from '../stream';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
@@ -49,18 +48,6 @@ export const getModelOutputForTripwire = async <
     },
   });
 
-  // Create a proper rootSpan using getRootSpan for tripwire response
-  const { rootSpan } = getRootSpan({
-    operationId: `mastra.stream.tripwire`,
-    model: {
-      modelId: model.modelId || 'unknown',
-      provider: model.provider || 'unknown',
-    },
-    modelSettings: options.modelSettings,
-    headers: options.modelSettings?.headers,
-    telemetry_settings: options.telemetry,
-  });
-
   const modelOutput = new MastraModelOutput<OUTPUT>({
     model: {
       modelId: model.modelId,
@@ -71,8 +58,6 @@ export const getModelOutputForTripwire = async <
     messageList,
     options: {
       runId,
-      rootSpan,
-      telemetry_settings: options.telemetry,
       structuredOutput: options.structuredOutput,
       tracingContext,
       onFinish: options.onFinish as any, // Fix these types after the types PR is merged
