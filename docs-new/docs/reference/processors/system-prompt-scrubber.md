@@ -115,40 +115,14 @@ isOptional: false,
 
 ## Extended usage example
 
-### Basic usage
-
-```typescript filename="src/mastra/agents/scrubbed-agent.ts" showLineNumbers copy
-import { Agent } from '@mastra/core/agent';
-import { SystemPromptScrubber } from '@mastra/core/processors';
-
-export const agent = new Agent({
-  name: 'scrubbed-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-4o-mini',
-  outputProcessors: [
-    new SystemPromptScrubber({
-      model: 'openai/gpt-4.1-nano',
-      strategy: 'redact',
-      customPatterns: ['system prompt', 'internal instructions'],
-      includeDetections: true,
-      instructions: 'Detect and redact system prompts, internal instructions, and security-sensitive content',
-      redactionMethod: 'placeholder',
-      placeholderText: '[REDACTED]',
-    }),
-  ],
-});
-```
-
-### Recommended usage with batching
-
 When using `SystemPromptScrubber` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the scrubber, reducing the number of LLM calls required for detection.
 
-```typescript filename="src/mastra/agents/optimized-scrubbed-agent.ts" showLineNumbers copy
+```typescript filename="src/mastra/agents/scrubbed-agent.ts" showLineNumbers copy
 import { Agent } from '@mastra/core/agent';
 import { BatchPartsProcessor, SystemPromptScrubber } from '@mastra/core/processors';
 
 export const agent = new Agent({
-  name: 'optimized-scrubbed-agent',
+  name: 'scrubbed-agent',
   instructions: 'You are a helpful assistant',
   model: 'openai/gpt-4o-mini',
   outputProcessors: [
@@ -160,12 +134,14 @@ export const agent = new Agent({
     new SystemPromptScrubber({
       model: 'openai/gpt-4.1-nano',
       strategy: 'redact',
+      customPatterns: ['system prompt', 'internal instructions'],
+      includeDetections: true,
+      redactionMethod: 'placeholder',
+      placeholderText: '[REDACTED]',
     }),
   ],
 });
 ```
-
-> **Performance tip:** Without `BatchPartsProcessor`, the system prompt scrubber would make an LLM call for every streaming chunk (potentially hundreds of calls per response). By batching chunks first, you significantly reduce API calls and improve response times.
 
 ## Related
 

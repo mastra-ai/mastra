@@ -164,8 +164,6 @@ export const agent = new Agent({
 });
 ```
 
-> **Performance tip:** Without `BatchPartsProcessor`, the moderation processor would make an LLM call for every streaming chunk (potentially hundreds of calls per response). By batching chunks first, you significantly reduce API calls and improve response times.
-
 ## Related
 
 - [Input Processors](/docs/agents/guardrails)
