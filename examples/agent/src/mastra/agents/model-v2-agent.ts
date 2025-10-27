@@ -26,7 +26,7 @@ export const weatherInfo = createTool({
       wind: '10 mph',
     };
   },
-  requireApproval: true,
+  // requireApproval: true,
 });
 
 const memory = new Memory();
