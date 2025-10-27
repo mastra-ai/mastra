@@ -15,7 +15,7 @@ Mastra integrates with [Vercel's AI SDK](https://sdk.vercel.ai) to support model
 
 When creating agents in Mastra, you can specify any AI SDK-supported model.
 
-```typescript {6} filename="agents/weather-agent.ts" copy
+```typescript {6} title="agents/weather-agent.ts" copy
 import { Agent } from '@mastra/core/agent';
 
 export const weatherAgent = new Agent({
@@ -194,8 +194,9 @@ Here's an example: For a [nested agent stream within a tool](/docs/streaming/too
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { AgentTool } from '../ui/agent-tool';
+import { AgentTool } from "../ui/agent-tool";
 import type { AgentDataPart } from "@mastra/ai-sdk";
+import { DefaultChatTransport } from "ai"
 
 export default function Page() {
   const { messages } = useChat({
@@ -476,6 +477,7 @@ export async function POST(req: Request) {
 
 import { useChat } from "@ai-sdk/react";
 import { useState } from "react";
+import { DefaultChatTransport } from "ai"
 
 export function ChatExtra() {
   const [inputValue, setInputValue] = useState('')
