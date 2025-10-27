@@ -217,7 +217,13 @@ describe('PIIDetector', () => {
           redacted_value: null,
         },
       ];
-      const model = setupMockModel(createMockPIIResult(['email', 'api-key'], detections, 'My email is t**t@*******.com and keys***************9789'));
+      const model = setupMockModel(
+        createMockPIIResult(
+          ['email', 'api-key'],
+          detections,
+          'My email is t**t@*******.com and keys***************9789',
+        ),
+      );
       const detector = new PIIDetector({ model });
       const messages = [createTestMessage('My email is test@example.com and key sk_test_123456789')];
 
