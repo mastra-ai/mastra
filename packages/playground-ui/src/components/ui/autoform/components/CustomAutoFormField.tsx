@@ -14,16 +14,11 @@ export const CustomAutoFormField: React.FC<{
     register,
     formState: { errors },
     getValues,
-    watch,
   } = useFormContext();
-
-  const allValues = watch();
 
   const fullPath = path.join('.');
   const error = getPathInObject(errors, path)?.message as string | undefined;
   const value = getValues(fullPath);
-
-  console.log({ value, fullPath, allValues });
 
   const FieldWrapper = field.fieldConfig?.fieldWrapper || uiComponents.FieldWrapper;
 

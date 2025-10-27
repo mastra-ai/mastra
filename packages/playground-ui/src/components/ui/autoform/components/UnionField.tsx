@@ -3,7 +3,7 @@ import { AutoFormFieldProps } from '@autoform/react';
 import { CustomAutoFormField } from './CustomAutoFormField';
 import { Txt } from '@/ds/components/Txt';
 
-export const UnionField: React.FC<AutoFormFieldProps> = ({ field, inputProps, value }) => {
+export const UnionField: React.FC<AutoFormFieldProps> = ({ field, inputProps }) => {
   const path = inputProps.name?.split('.') ?? [];
   return field.schema?.map((schema: ParsedField, index: number) => {
     return (

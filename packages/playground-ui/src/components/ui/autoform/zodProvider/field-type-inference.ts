@@ -25,7 +25,21 @@ export function inferFieldType(schema: z.ZodTypeAny, fieldConfig?: FieldConfig):
   if (schema instanceof zV3.ZodNativeEnum) return 'select';
   if (schema instanceof z.ZodArray) return 'array';
   if (schema instanceof z.ZodRecord) return 'record';
-  if (schema instanceof z.ZodUnion) return 'union';
+  if (schema instanceof z.ZodUnion) {
+    const options = schema._zod.def.options;
+    const hasLiteral = options.every(option => {
+      if ('shape' in option._zod.def) {
+        return Object.values(option._zod.def.shape as Record<string, z.ZodTypeAny>).some(
+          value => value instanceof z.ZodLiteral,
+        );
+      }
+      return false;
+    });
+    if (hasLiteral) {
+      return 'discriminated-union';
+    }
+    return 'union';
+  }
 
   return 'string'; // Default to string for unknown types
 }
