@@ -29,7 +29,7 @@ export class MemoryThread extends BaseResource {
    */
   get(runtimeContext?: RuntimeContext | Record<string, any>): Promise<StorageThreadType> {
     return this.request(
-      `/api/memory/threads/${this.threadId}${runtimeContextQueryString(runtimeContext)}&agentId=${this.agentId}`,
+      `/api/memory/threads/${this.threadId}?agentId=${this.agentId}${runtimeContextQueryString(runtimeContext, '&')}`,
     );
   }
 
@@ -40,7 +40,7 @@ export class MemoryThread extends BaseResource {
    */
   update(params: UpdateMemoryThreadParams): Promise<StorageThreadType> {
     return this.request(
-      `/api/memory/threads/${this.threadId}${runtimeContextQueryString(params.runtimeContext)}&agentId=${this.agentId}`,
+      `/api/memory/threads/${this.threadId}?agentId=${this.agentId}${runtimeContextQueryString(params.runtimeContext, '&')}`,
       {
         method: 'PATCH',
         body: params,
@@ -55,7 +55,7 @@ export class MemoryThread extends BaseResource {
    */
   delete(runtimeContext?: RuntimeContext | Record<string, any>): Promise<{ result: string }> {
     return this.request(
-      `/api/memory/threads/${this.threadId}${runtimeContextQueryString(runtimeContext)}&agentId=${this.agentId}`,
+      `/api/memory/threads/${this.threadId}?agentId=${this.agentId}${runtimeContextQueryString(runtimeContext, '&')}`,
       {
         method: 'DELETE',
       },
@@ -75,7 +75,7 @@ export class MemoryThread extends BaseResource {
       ...(params?.limit ? { limit: params.limit.toString() } : {}),
     });
     return this.request(
-      `/api/memory/threads/${this.threadId}/messages${runtimeContextQueryString(params?.runtimeContext)}&${query.toString()}`,
+      `/api/memory/threads/${this.threadId}/messages?${query.toString()}${runtimeContextQueryString(params?.runtimeContext, '&')}`,
     );
   }
 
@@ -96,7 +96,7 @@ export class MemoryThread extends BaseResource {
       ...(selectBy ? { selectBy: JSON.stringify(selectBy) } : {}),
     });
     return this.request(
-      `/api/memory/threads/${this.threadId}/messages/paginated${runtimeContextQueryString(runtimeContext)}&${query.toString()}`,
+      `/api/memory/threads/${this.threadId}/messages/paginated?${query.toString()}${runtimeContextQueryString(runtimeContext, '&')}`,
     );
   }
 
@@ -114,9 +114,12 @@ export class MemoryThread extends BaseResource {
     const query = new URLSearchParams({
       agentId: this.agentId,
     });
-    return this.request(`/api/memory/messages/delete${runtimeContextQueryString(runtimeContext)}&${query.toString()}`, {
-      method: 'POST',
-      body: { messageIds },
-    });
+    return this.request(
+      `/api/memory/messages/delete?${query.toString()}${runtimeContextQueryString(runtimeContext, '&')}`,
+      {
+        method: 'POST',
+        body: { messageIds },
+      },
+    );
   }
 }

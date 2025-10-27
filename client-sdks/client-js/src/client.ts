@@ -89,7 +89,7 @@ export class MastraClient extends BaseResource {
    */
   public getMemoryThreads(params: GetMemoryThreadParams): Promise<GetMemoryThreadResponse> {
     return this.request(
-      `/api/memory/threads${runtimeContextQueryString(params.runtimeContext)}&resourceid=${params.resourceId}&agentId=${params.agentId}`,
+      `/api/memory/threads?resourceid=${params.resourceId}&agentId=${params.agentId}${runtimeContextQueryString(params.runtimeContext, '&')}`,
     );
   }
 
@@ -100,7 +100,7 @@ export class MastraClient extends BaseResource {
    */
   public getMemoryConfig(params: GetMemoryConfigParams): Promise<GetMemoryConfigResponse> {
     return this.request(
-      `/api/memory/config${runtimeContextQueryString(params.runtimeContext)}&agentId=${params.agentId}`,
+      `/api/memory/config?agentId=${params.agentId}${runtimeContextQueryString(params.runtimeContext, '&')}`,
     );
   }
 
@@ -111,7 +111,7 @@ export class MastraClient extends BaseResource {
    */
   public createMemoryThread(params: CreateMemoryThreadParams): Promise<CreateMemoryThreadResponse> {
     return this.request(
-      `/api/memory/threads${runtimeContextQueryString(params.runtimeContext)}&agentId=${params.agentId}`,
+      `/api/memory/threads?agentId=${params.agentId}${runtimeContextQueryString(params.runtimeContext, '&')}`,
       { method: 'POST', body: params },
     );
   }
@@ -131,9 +131,9 @@ export class MastraClient extends BaseResource {
   ): Promise<GetMemoryThreadMessagesResponse> {
     let url = '';
     if (opts.agentId) {
-      url = `/api/memory/threads/${threadId}/messages${runtimeContextQueryString(opts.runtimeContext)}&agentId=${opts.agentId}`;
+      url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}${runtimeContextQueryString(opts.runtimeContext, '&')}`;
     } else if (opts.networkId) {
-      url = `/api/memory/network/threads/${threadId}/messages${runtimeContextQueryString(opts.runtimeContext)}&networkId=${opts.networkId}`;
+      url = `/api/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${runtimeContextQueryString(opts.runtimeContext, '&')}`;
     }
     return this.request(url);
   }
@@ -145,9 +145,9 @@ export class MastraClient extends BaseResource {
     let url = '';
 
     if (opts.agentId) {
-      url = `/api/memory/threads/${threadId}${runtimeContextQueryString(opts.runtimeContext)}&agentId=${opts.agentId}`;
+      url = `/api/memory/threads/${threadId}?agentId=${opts.agentId}${runtimeContextQueryString(opts.runtimeContext, '&')}`;
     } else if (opts.networkId) {
-      url = `/api/memory/network/threads/${threadId}${runtimeContextQueryString(opts.runtimeContext)}&networkId=${opts.networkId}`;
+      url = `/api/memory/network/threads/${threadId}?networkId=${opts.networkId}${runtimeContextQueryString(opts.runtimeContext, '&')}`;
     }
     return this.request(url, { method: 'DELETE' });
   }
@@ -159,7 +159,7 @@ export class MastraClient extends BaseResource {
    */
   public saveMessageToMemory(params: SaveMessageToMemoryParams): Promise<SaveMessageToMemoryResponse> {
     return this.request(
-      `/api/memory/save-messages${runtimeContextQueryString(params.runtimeContext)}&agentId=${params.agentId}`,
+      `/api/memory/save-messages?agentId=${params.agentId}${runtimeContextQueryString(params.runtimeContext, '&')}`,
       {
         method: 'POST',
         body: params,
@@ -177,7 +177,7 @@ export class MastraClient extends BaseResource {
     agentId: string,
     runtimeContext?: RuntimeContext | Record<string, any>,
   ): Promise<{ result: boolean }> {
-    return this.request(`/api/memory/status${runtimeContextQueryString(runtimeContext)}&agentId=${agentId}`);
+    return this.request(`/api/memory/status?agentId=${agentId}${runtimeContextQueryString(runtimeContext, '&')}`);
   }
 
   /**
@@ -490,7 +490,7 @@ export class MastraClient extends BaseResource {
     runtimeContext?: RuntimeContext | Record<string, any>;
   }) {
     return this.request(
-      `/api/memory/threads/${threadId}/working-memory${runtimeContextQueryString(runtimeContext)}&agentId=${agentId}&resourceId=${resourceId}`,
+      `/api/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}${runtimeContextQueryString(runtimeContext, '&')}`,
     );
   }
 
@@ -515,7 +515,7 @@ export class MastraClient extends BaseResource {
     runtimeContext?: RuntimeContext | Record<string, any>;
   }) {
     return this.request(
-      `/api/memory/threads/${threadId}/working-memory${runtimeContextQueryString(runtimeContext)}&agentId=${agentId}`,
+      `/api/memory/threads/${threadId}/working-memory?agentId=${agentId}${runtimeContextQueryString(runtimeContext, '&')}`,
       {
         method: 'POST',
         body: {
