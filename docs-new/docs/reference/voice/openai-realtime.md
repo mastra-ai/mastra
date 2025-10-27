@@ -1,6 +1,6 @@
 ---
-title: 'Reference: OpenAI Realtime Voice '
-description: 'Documentation for the OpenAIRealtimeVoice class, providing real-time text-to-speech and speech-to-text capabilities via WebSockets.'
+title: "OpenAI Realtime Voice"
+description: "Documentation for the OpenAIRealtimeVoice class, providing real-time text-to-speech and speech-to-text capabilities via WebSockets."
 ---
 
 # OpenAI Realtime Voice
@@ -10,22 +10,22 @@ The OpenAIRealtimeVoice class provides real-time voice interaction capabilities 
 ## Usage Example
 
 ```typescript
-import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
-import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
 // Initialize with default configuration using environment variables
 const voice = new OpenAIRealtimeVoice();
 
 // Or initialize with specific configuration
 const voiceWithConfig = new OpenAIRealtimeVoice({
-  apiKey: 'your-openai-api-key',
-  model: 'gpt-4o-mini-realtime-preview-2024-12-17',
-  speaker: 'alloy', // Default voice
+  apiKey: "your-openai-api-key",
+  model: "gpt-4o-mini-realtime-preview-2024-12-17",
+  speaker: "alloy", // Default voice
 });
 
 voiceWithConfig.updateSession({
   turn_detection: {
-    type: 'server_vad',
+    type: "server_vad",
     threshold: 0.6,
     silence_duration_ms: 1200,
   },
@@ -35,19 +35,19 @@ voiceWithConfig.updateSession({
 await voice.connect();
 
 // Set up event listeners
-voice.on('speaker', ({ audio }) => {
+voice.on("speaker", ({ audio }) => {
   // Handle audio data (Int16Array) pcm format by default
   playAudio(audio);
 });
 
-voice.on('writing', ({ text, role }) => {
+voice.on("writing", ({ text, role }) => {
   // Handle transcribed text
   console.log(`${role}: ${text}`);
 });
 
 // Convert text to speech
-await voice.speak('Hello, how can I help you today?', {
-  speaker: 'echo', // Override default voice
+await voice.speak("Hello, how can I help you today?", {
+  speaker: "echo", // Override default voice
 });
 
 // Process audio input

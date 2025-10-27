@@ -1,6 +1,6 @@
 ---
-title: 'Agent.generateLegacy() (Legacy) '
-description: 'Documentation for the legacy `Agent.generateLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version.'
+title: "Agent.generateLegacy() (Legacy) "
+description: "Documentation for the legacy `Agent.generateLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version."
 ---
 
 # Agent.generateLegacy() (Legacy)
@@ -16,7 +16,7 @@ The `.generateLegacy()` method is the legacy version of the agent generation API
 ## Usage example
 
 ```typescript copy
-await agent.generateLegacy('message for agent');
+await agent.generateLegacy("message for agent");
 ```
 
 ## Parameters
@@ -452,7 +452,7 @@ The new `.generate()` method offers enhanced capabilities including AI SDK v5 co
 #### Before (Legacy)
 
 ```typescript
-const result = await agent.generateLegacy('message', {
+const result = await agent.generateLegacy("message", {
   temperature: 0.7,
   maxSteps: 3,
 });
@@ -461,7 +461,7 @@ const result = await agent.generateLegacy('message', {
 #### After (New API)
 
 ```typescript
-const result = await agent.generate('message', {
+const result = await agent.generate("message", {
   modelSettings: {
     temperature: 0.7,
   },
@@ -472,23 +472,26 @@ const result = await agent.generate('message', {
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-import { z } from 'zod';
-import { ModerationProcessor, TokenLimiterProcessor } from '@mastra/core/processors';
+import { z } from "zod";
+import {
+  ModerationProcessor,
+  TokenLimiterProcessor,
+} from "@mastra/core/processors";
 
 await agent.generateLegacy(
   [
-    { role: 'user', content: 'message for agent' },
+    { role: "user", content: "message for agent" },
     {
-      role: 'user',
+      role: "user",
       content: [
         {
-          type: 'text',
-          text: 'message for agent',
+          type: "text",
+          text: "message for agent",
         },
         {
-          type: 'image',
-          imageUrl: 'https://example.com/image.jpg',
-          mimeType: 'image/jpeg',
+          type: "image",
+          imageUrl: "https://example.com/image.jpg",
+          mimeType: "image/jpeg",
         },
       ],
     },
@@ -497,27 +500,27 @@ await agent.generateLegacy(
     temperature: 0.7,
     maxSteps: 3,
     memory: {
-      thread: 'user-123',
-      resource: 'test-app',
+      thread: "user-123",
+      resource: "test-app",
     },
-    toolChoice: 'auto',
+    toolChoice: "auto",
     providerOptions: {
       openai: {
-        reasoningEffort: 'high',
+        reasoningEffort: "high",
       },
     },
     // Structured output with better DX
     structuredOutput: {
       schema: z.object({
-        sentiment: z.enum(['positive', 'negative', 'neutral']),
+        sentiment: z.enum(["positive", "negative", "neutral"]),
         confidence: z.number(),
       }),
-      model: openai('gpt-4o-mini'),
-      errorStrategy: 'warn',
+      model: openai("gpt-4o-mini"),
+      errorStrategy: "warn",
     },
     // Output processors for response validation
     outputProcessors: [
-      new ModerationProcessor({ model: openai('gpt-4.1-nano') }),
+      new ModerationProcessor({ model: openai("gpt-4.1-nano") }),
       new TokenLimiterProcessor({ maxTokens: 1000 }),
     ],
   },

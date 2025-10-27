@@ -1,5 +1,5 @@
 ---
-title: 'Context Relevance Scorer '
+title: "Context Relevance Scorer "
 description: Example of using the Context Relevance scorer to evaluate how relevant and useful provided context is for generating agent responses.
 ---
 
@@ -18,16 +18,16 @@ npm install @mastra/evals
 This example shows excellent context relevance where all context directly supports the response:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { createContextRelevanceScorerLLM } from '@mastra/evals';
+import { openai } from "@ai-sdk/openai";
+import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     context: [
-      'Einstein won the Nobel Prize for his discovery of the photoelectric effect in 1921.',
-      'He published his theory of special relativity in 1905.',
-      'His general relativity theory, published in 1915, revolutionized our understanding of gravity.',
+      "Einstein won the Nobel Prize for his discovery of the photoelectric effect in 1921.",
+      "He published his theory of special relativity in 1905.",
+      "His general relativity theory, published in 1915, revolutionized our understanding of gravity.",
     ],
     scale: 1,
   },
@@ -37,16 +37,16 @@ const result = await scorer.run({
   input: {
     inputMessages: [
       {
-        id: '1',
-        role: 'user',
+        id: "1",
+        role: "user",
         content: "What were Einstein's major scientific achievements?",
       },
     ],
   },
   output: [
     {
-      id: '2',
-      role: 'assistant',
+      id: "2",
+      role: "assistant",
       content:
         "Einstein's major achievements include the Nobel Prize for the photoelectric effect, special relativity in 1905, and general relativity in 1915.",
     },
@@ -66,18 +66,18 @@ console.log(result);
 This example shows moderate relevance with some context being irrelevant or unused:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { createContextRelevanceScorerLLM } from '@mastra/evals';
+import { openai } from "@ai-sdk/openai";
+import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     context: [
-      'Solar eclipses occur when the Moon blocks the Sun.',
-      'The Moon moves between the Earth and Sun during eclipses.',
-      'The Moon is visible at night.',
-      'Stars twinkle due to atmospheric interference.',
-      'Total eclipses can last up to 7.5 minutes.',
+      "Solar eclipses occur when the Moon blocks the Sun.",
+      "The Moon moves between the Earth and Sun during eclipses.",
+      "The Moon is visible at night.",
+      "Stars twinkle due to atmospheric interference.",
+      "Total eclipses can last up to 7.5 minutes.",
     ],
     scale: 1,
   },
@@ -87,17 +87,18 @@ const result = await scorer.run({
   input: {
     inputMessages: [
       {
-        id: '1',
-        role: 'user',
-        content: 'What causes solar eclipses?',
+        id: "1",
+        role: "user",
+        content: "What causes solar eclipses?",
       },
     ],
   },
   output: [
     {
-      id: '2',
-      role: 'assistant',
-      content: 'Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.',
+      id: "2",
+      role: "assistant",
+      content:
+        "Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.",
     },
   ],
 });
@@ -111,14 +112,14 @@ console.log(result);
 
 // With custom penalty configuration
 const customScorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     context: [
-      'Solar eclipses occur when the Moon blocks the Sun.',
-      'The Moon moves between the Earth and Sun during eclipses.',
-      'The Moon is visible at night.',
-      'Stars twinkle due to atmospheric interference.',
-      'Total eclipses can last up to 7.5 minutes.',
+      "Solar eclipses occur when the Moon blocks the Sun.",
+      "The Moon moves between the Earth and Sun during eclipses.",
+      "The Moon is visible at night.",
+      "Stars twinkle due to atmospheric interference.",
+      "Total eclipses can last up to 7.5 minutes.",
     ],
     penalties: {
       unusedHighRelevanceContext: 0.05, // Lower penalty for unused context
@@ -129,12 +130,17 @@ const customScorer = createContextRelevanceScorerLLM({
 });
 
 const customResult = await customScorer.run({
-  input: { inputMessages: [{ id: '1', role: 'user', content: 'What causes solar eclipses?' }] },
+  input: {
+    inputMessages: [
+      { id: "1", role: "user", content: "What causes solar eclipses?" },
+    ],
+  },
   output: [
     {
-      id: '2',
-      role: 'assistant',
-      content: 'Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.',
+      id: "2",
+      role: "assistant",
+      content:
+        "Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.",
     },
   ],
 });
@@ -152,18 +158,18 @@ console.log(customResult);
 This example shows poor context relevance with mostly irrelevant information:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { createContextRelevanceScorerLLM } from '@mastra/evals';
+import { openai } from "@ai-sdk/openai";
+import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     context: [
-      'The Great Barrier Reef is located in Australia.',
-      'Coral reefs need warm water to survive.',
-      'Many fish species live in coral reefs.',
-      'Australia has six states and two territories.',
-      'The capital of Australia is Canberra.',
+      "The Great Barrier Reef is located in Australia.",
+      "Coral reefs need warm water to survive.",
+      "Many fish species live in coral reefs.",
+      "Australia has six states and two territories.",
+      "The capital of Australia is Canberra.",
     ],
     scale: 1,
   },
@@ -173,17 +179,17 @@ const result = await scorer.run({
   input: {
     inputMessages: [
       {
-        id: '1',
-        role: 'user',
-        content: 'What is the capital of Australia?',
+        id: "1",
+        role: "user",
+        content: "What is the capital of Australia?",
       },
     ],
   },
   output: [
     {
-      id: '2',
-      role: 'assistant',
-      content: 'The capital of Australia is Canberra.',
+      id: "2",
+      role: "assistant",
+      content: "The capital of Australia is Canberra.",
     },
   ],
 });
@@ -201,26 +207,34 @@ console.log(result);
 Extract context dynamically based on the run input:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { createContextRelevanceScorerLLM } from '@mastra/evals';
+import { openai } from "@ai-sdk/openai";
+import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     contextExtractor: (input, output) => {
       // Extract query from input
-      const query = input?.inputMessages?.[0]?.content || '';
+      const query = input?.inputMessages?.[0]?.content || "";
 
       // Dynamically retrieve context based on query
-      if (query.toLowerCase().includes('einstein')) {
-        return ['Einstein developed E=mc²', 'He won the Nobel Prize in 1921', 'His theories revolutionized physics'];
+      if (query.toLowerCase().includes("einstein")) {
+        return [
+          "Einstein developed E=mc²",
+          "He won the Nobel Prize in 1921",
+          "His theories revolutionized physics",
+        ];
       }
 
-      if (query.toLowerCase().includes('climate')) {
-        return ['Global temperatures are rising', 'CO2 levels affect climate', 'Renewable energy reduces emissions'];
+      if (query.toLowerCase().includes("climate")) {
+        return [
+          "Global temperatures are rising",
+          "CO2 levels affect climate",
+          "Renewable energy reduces emissions",
+        ];
       }
 
-      return ['General knowledge base entry'];
+      return ["General knowledge base entry"];
     },
     penalties: {
       unusedHighRelevanceContext: 0.15, // 15% penalty for unused relevant context
@@ -237,18 +251,20 @@ const scorer = createContextRelevanceScorerLLM({
 Integrate with RAG pipelines to evaluate retrieved context:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { createContextRelevanceScorerLLM } from '@mastra/evals';
+import { openai } from "@ai-sdk/openai";
+import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     contextExtractor: (input, output) => {
       // Extract from RAG retrieval results
       const ragResults = input.metadata?.ragResults || [];
 
       // Return the text content of retrieved documents
-      return ragResults.filter(doc => doc.relevanceScore > 0.5).map(doc => doc.content);
+      return ragResults
+        .filter((doc) => doc.relevanceScore > 0.5)
+        .map((doc) => doc.content);
     },
     penalties: {
       unusedHighRelevanceContext: 0.12, // Moderate penalty for unused RAG context
@@ -260,7 +276,7 @@ const scorer = createContextRelevanceScorerLLM({
 });
 
 // Evaluate RAG system performance
-const evaluateRAG = async testCases => {
+const evaluateRAG = async (testCases) => {
   const results = [];
 
   for (const testCase of testCases) {
@@ -269,8 +285,8 @@ const evaluateRAG = async testCases => {
       query: testCase.input.inputMessages[0].content,
       relevanceScore: score.score,
       feedback: score.reason,
-      unusedContext: score.reason.includes('unused'),
-      missingContext: score.reason.includes('missing'),
+      unusedContext: score.reason.includes("unused"),
+      missingContext: score.reason.includes("missing"),
     });
   }
 
@@ -285,17 +301,17 @@ const evaluateRAG = async testCases => {
 Control how penalties are applied for unused and missing context:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { createContextRelevanceScorerLLM } from '@mastra/evals';
+import { openai } from "@ai-sdk/openai";
+import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 // Stricter penalty configuration
 const strictScorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     context: [
-      'Einstein won the Nobel Prize for photoelectric effect',
-      'He developed the theory of relativity',
-      'Einstein was born in Germany',
+      "Einstein won the Nobel Prize for photoelectric effect",
+      "He developed the theory of relativity",
+      "Einstein was born in Germany",
     ],
     penalties: {
       unusedHighRelevanceContext: 0.2, // 20% penalty per unused high-relevance context
@@ -308,12 +324,12 @@ const strictScorer = createContextRelevanceScorerLLM({
 
 // Lenient penalty configuration
 const lenientScorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     context: [
-      'Einstein won the Nobel Prize for photoelectric effect',
-      'He developed the theory of relativity',
-      'Einstein was born in Germany',
+      "Einstein won the Nobel Prize for photoelectric effect",
+      "He developed the theory of relativity",
+      "Einstein was born in Germany",
     ],
     penalties: {
       unusedHighRelevanceContext: 0.05, // 5% penalty per unused high-relevance context
@@ -328,17 +344,18 @@ const testRun = {
   input: {
     inputMessages: [
       {
-        id: '1',
-        role: 'user',
-        content: 'What did Einstein achieve in physics?',
+        id: "1",
+        role: "user",
+        content: "What did Einstein achieve in physics?",
       },
     ],
   },
   output: [
     {
-      id: '2',
-      role: 'assistant',
-      content: 'Einstein won the Nobel Prize for his work on the photoelectric effect.',
+      id: "2",
+      role: "assistant",
+      content:
+        "Einstein won the Nobel Prize for his work on the photoelectric effect.",
     },
   ],
 };
@@ -346,17 +363,17 @@ const testRun = {
 const strictResult = await strictScorer.run(testRun);
 const lenientResult = await lenientScorer.run(testRun);
 
-console.log('Strict penalties:', strictResult.score); // Lower score due to unused context
-console.log('Lenient penalties:', lenientResult.score); // Higher score, less penalty
+console.log("Strict penalties:", strictResult.score); // Lower score due to unused context
+console.log("Lenient penalties:", lenientResult.score); // Higher score, less penalty
 ```
 
 ### Custom scale factor
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
-    context: ['Relevant information...', 'Supporting details...'],
+    context: ["Relevant information...", "Supporting details..."],
     scale: 100, // Scale scores from 0-100 instead of 0-1
   },
 });
@@ -368,10 +385,10 @@ const scorer = createContextRelevanceScorerLLM({
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: {
     contextExtractor: (input, output) => {
-      const query = input?.inputMessages?.[0]?.content || '';
+      const query = input?.inputMessages?.[0]?.content || "";
 
       // Combine from multiple sources
       const kbContext = knowledgeBase.search(query);

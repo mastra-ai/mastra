@@ -1,5 +1,5 @@
 ---
-title: 'Reference: LangWatch Integration '
+title: "LangWatch Integration"
 description: Documentation for integrating LangWatch with Mastra, a specialized observability platform for LLM applications.
 ---
 
@@ -20,16 +20,16 @@ LANGWATCH_API_KEY=your_api_key
 Here's how to configure Mastra to use LangWatch:
 
 ```typescript
-import { Mastra } from '@mastra/core';
-import { LangWatchExporter } from 'langwatch';
+import { Mastra } from "@mastra/core";
+import { LangWatchExporter } from "langwatch";
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: 'ai', // this must be set to "ai" so that the LangWatchExporter thinks it's an AI SDK trace
+    serviceName: "ai", // this must be set to "ai" so that the LangWatchExporter thinks it's an AI SDK trace
     enabled: true,
     export: {
-      type: 'custom',
+      type: "custom",
       exporter: new LangWatchExporter({
         apiKey: process.env.LANGWATCH_API_KEY,
       }),

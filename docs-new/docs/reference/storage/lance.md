@@ -1,5 +1,5 @@
 ---
-title: 'LanceDB Storage'
+title: "LanceDB Storage"
 description: Documentation for the LanceDB storage implementation in Mastra.
 ---
 
@@ -18,17 +18,17 @@ npm install @mastra/lance
 ### Basic Storage Usage
 
 ```typescript copy showLineNumbers
-import { LanceStorage } from '@mastra/lance';
+import { LanceStorage } from "@mastra/lance";
 
 // Connect to a local database
-const storage = await LanceStorage.create('my-storage', '/path/to/db');
+const storage = await LanceStorage.create("my-storage", "/path/to/db");
 
 // Connect to a LanceDB cloud database
-const storage = await LanceStorage.create('my-storage', 'db://host:port');
+const storage = await LanceStorage.create("my-storage", "db://host:port");
 
 // Connect to a cloud database with custom options
-const storage = await LanceStorage.create('my-storage', 's3://bucket/db', {
-  storageOptions: { timeout: '60s' },
+const storage = await LanceStorage.create("my-storage", "s3://bucket/db", {
+  storageOptions: { timeout: "60s" },
 });
 ```
 

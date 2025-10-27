@@ -1,6 +1,6 @@
 ---
-title: 'Vercel'
-description: 'Learn how to deploy a Mastra application to Vercel using the Mastra VercelDeployer'
+title: "Vercel"
+description: "Learn how to deploy a Mastra application to Vercel using the Mastra VercelDeployer"
 ---
 
 # VercelDeployer
@@ -16,8 +16,8 @@ npm install @mastra/deployer-vercel@latest
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { VercelDeployer } from '@mastra/deployer-vercel';
+import { Mastra } from "@mastra/core/mastra";
+import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
   // ...
@@ -41,7 +41,7 @@ Example:
 deployer: new VercelDeployer({
   maxDuration: 600,
   memory: 1536,
-  regions: ['sfo1', 'iad1'],
+  regions: ["sfo1", "iad1"],
 });
 ```
 

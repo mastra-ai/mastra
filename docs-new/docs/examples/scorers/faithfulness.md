@@ -1,5 +1,5 @@
 ---
-title: 'Faithfulness '
+title: "Faithfulness "
 description: Example of using the Faithfulness scorer to evaluate how factually accurate responses are compared to context.
 ---
 

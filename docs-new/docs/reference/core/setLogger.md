@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.setLogger() '
-description: 'Documentation for the `Mastra.setLogger()` method in Mastra, which sets the logger for all components (agents, workflows, etc.).'
+title: "Mastra.setLogger() "
+description: "Documentation for the `Mastra.setLogger()` method in Mastra, which sets the logger for all components (agents, workflows, etc.)."
 ---
 
 # Mastra.setLogger()
@@ -10,7 +10,7 @@ The `.setLogger()` method is used to set the logger for all components (agents, 
 ## Usage example
 
 ```typescript copy
-mastra.setLogger({ logger: new PinoLogger({ name: 'testLogger' }) });
+mastra.setLogger({ logger: new PinoLogger({ name: "testLogger" }) });
 ```
 
 ## Parameters

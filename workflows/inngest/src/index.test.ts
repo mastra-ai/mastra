@@ -8,7 +8,6 @@ import { Mastra } from '@mastra/core/mastra';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import type { MastraScorer } from '@mastra/core/scores';
 import { createScorer, runExperiment } from '@mastra/core/scores';
-import { Telemetry } from '@mastra/core/telemetry';
 import { createTool } from '@mastra/core/tools';
 import type { StreamEvent } from '@mastra/core/workflows';
 import { createHonoServer } from '@mastra/deployer/server';
@@ -5237,65 +5236,6 @@ describe('MastraInngestWorkflow', () => {
     });
   });
 
-  describe('Accessing Mastra', () => {
-    it('should be able to access the deprecated mastra primitives', async ctx => {
-      const inngest = new Inngest({
-        id: 'mastra',
-        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-      });
-
-      const { createWorkflow, createStep } = init(inngest);
-      let telemetry: Telemetry | undefined;
-      const step1 = createStep({
-        id: 'step1',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        execute: async ({ mastra }) => {
-          telemetry = mastra?.getTelemetry();
-          return {};
-        },
-      });
-
-      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
-      workflow.then(step1).commit();
-
-      const mastra = new Mastra({
-        storage: new DefaultStorage({
-          url: ':memory:',
-        }),
-        workflows: {
-          'test-workflow': workflow,
-        },
-        server: {
-          apiRoutes: [
-            {
-              path: '/inngest/api',
-              method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
-            },
-          ],
-        },
-      });
-
-      const app = await createHonoServer(mastra);
-
-      const srv = (globServer = serve({
-        fetch: app.fetch,
-        port: (ctx as any).handlerPort,
-      }));
-      await resetInngest();
-
-      // Access new instance properties directly - should work without warning
-      const run = await workflow.createRunAsync();
-      await run.start({ inputData: {} });
-
-      expect(telemetry).toBeDefined();
-      expect(telemetry).toBeInstanceOf(Telemetry);
-
-      srv.close();
-    });
-  });
-
   describe('Agent as step', () => {
     it('should be able to use an agent as a step', async ctx => {
       const inngest = new Inngest({
@@ -7011,66 +6951,6 @@ describe('MastraInngestWorkflow', () => {
         output: { success: true },
         status: 'success',
       });
-    });
-  });
-
-  describe('Accessing Mastra', () => {
-    it('should be able to access the deprecated mastra primitives', async ctx => {
-      const inngest = new Inngest({
-        id: 'mastra',
-        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-      });
-
-      const { createWorkflow, createStep } = init(inngest);
-
-      let telemetry: Telemetry | undefined;
-      const step1 = createStep({
-        id: 'step1',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        execute: async ({ mastra }) => {
-          telemetry = mastra?.getTelemetry();
-          return {};
-        },
-      });
-
-      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
-      workflow.then(step1).commit();
-
-      const mastra = new Mastra({
-        storage: new DefaultStorage({
-          url: ':memory:',
-        }),
-        workflows: {
-          'test-workflow': workflow,
-        },
-        server: {
-          apiRoutes: [
-            {
-              path: '/inngest/api',
-              method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
-            },
-          ],
-        },
-      });
-
-      const app = await createHonoServer(mastra);
-
-      const srv = (globServer = serve({
-        fetch: app.fetch,
-        port: (ctx as any).handlerPort,
-      }));
-      await resetInngest();
-
-      // Access new instance properties directly - should work without warning
-      const run = await workflow.createRunAsync();
-      await run.start({ inputData: {} });
-
-      srv.close();
-
-      expect(telemetry).toBeDefined();
-      expect(telemetry).toBeInstanceOf(Telemetry);
     });
   });
 

@@ -1,5 +1,5 @@
 ---
-title: 'BraintrustExporter '
+title: "BraintrustExporter "
 description: Braintrust exporter for AI tracing
 ---
 
@@ -20,7 +20,7 @@ interface BraintrustExporterConfig {
   apiKey?: string;
   endpoint?: string;
   projectName?: string;
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  logLevel?: "debug" | "info" | "warn" | "error";
   tuningParameters?: Record<string, any>;
 }
 ```
@@ -89,11 +89,11 @@ Flushes pending data and shuts down the client.
 ## Usage
 
 ```typescript
-import { BraintrustExporter } from '@mastra/braintrust';
+import { BraintrustExporter } from "@mastra/braintrust";
 
 const exporter = new BraintrustExporter({
   apiKey: process.env.BRAINTRUST_API_KEY,
-  projectName: 'my-ai-project',
+  projectName: "my-ai-project",
 });
 ```
 

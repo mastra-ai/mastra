@@ -68,7 +68,7 @@ For type safety and compatibility with both live agent scoring and trace scoring
 ```typescript
 const myScorer = createScorer({
   // ...
-  type: 'agent', // Automatically handles agent input/output types
+  type: "agent", // Automatically handles agent input/output types
 }).generateScore(({ run, results }) => {
   // run.output is automatically typed as ScorerRunOutputForAgent
   // run.input is automatically typed as ScorerRunInputForAgent

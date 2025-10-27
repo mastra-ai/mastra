@@ -1,5 +1,5 @@
 ---
-title: 'createTool() '
+title: "createTool() "
 description: Documentation for the `createTool()` function in Mastra, used to define custom tools for agents.
 ---
 
@@ -10,12 +10,12 @@ The `createTool()` function is used to define custom tools that your Mastra agen
 ## Usage example
 
 ```typescript filename="src/mastra/tools/reverse-tool.ts" showLineNumbers copy
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
 export const tool = createTool({
-  id: 'test-tool',
-  description: 'Reverse the input string',
+  id: "test-tool",
+  description: "Reverse the input string",
   inputSchema: z.object({
     input: z.string(),
   }),
@@ -24,7 +24,7 @@ export const tool = createTool({
   }),
   execute: async ({ context }) => {
     const { input } = context;
-    const reversed = input.split('').reverse().join('');
+    const reversed = input.split("").reverse().join("");
 
     return {
       output: reversed,

@@ -1,5 +1,5 @@
 ---
-title: 'Custom Judge '
+title: "Custom Judge "
 description: Example of creating a custom based scorer using createScorer with prompt objects.
 ---
 
@@ -29,13 +29,17 @@ Together, these components allow you to define custom evaluation logic using LLM
 > See [createScorer](/docs/reference/scorers/create-scorer) for the full API and configuration options.
 
 ```typescript filename="src/mastra/scorers/gluten-checker.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { createScorer } from '@mastra/core/scores';
-import { z } from 'zod';
+import { openai } from "@ai-sdk/openai";
+import { createScorer } from "@mastra/core/scores";
+import { z } from "zod";
 
 export const GLUTEN_INSTRUCTIONS = `You are a Chef that identifies if recipes contain gluten.`;
 
-export const generateGlutenPrompt = ({ output }: { output: string }) => `Check if this recipe is gluten-free.
+export const generateGlutenPrompt = ({
+  output,
+}: {
+  output: string;
+}) => `Check if this recipe is gluten-free.
 
 Check for:
 - Wheat
@@ -72,23 +76,23 @@ export const generateReasonPrompt = ({
 }: {
   isGlutenFree: boolean;
   glutenSources: string[];
-}) => `Explain why this recipe is${isGlutenFree ? '' : ' not'} gluten-free.
+}) => `Explain why this recipe is${isGlutenFree ? "" : " not"} gluten-free.
 
-${glutenSources.length > 0 ? `Sources of gluten: ${glutenSources.join(', ')}` : 'No gluten-containing ingredients found'}
+${glutenSources.length > 0 ? `Sources of gluten: ${glutenSources.join(", ")}` : "No gluten-containing ingredients found"}
 
 Return your response in this format:
 "This recipe is [gluten-free/contains gluten] because [explanation]"`;
 
 export const glutenCheckerScorer = createScorer({
-  name: 'Gluten Checker',
-  description: 'Check if the output contains any gluten',
+  name: "Gluten Checker",
+  description: "Check if the output contains any gluten",
   judge: {
-    model: openai('gpt-4o'),
+    model: openai("gpt-4o"),
     instructions: GLUTEN_INSTRUCTIONS,
   },
 })
   .analyze({
-    description: 'Analyze the output for gluten',
+    description: "Analyze the output for gluten",
     outputSchema: z.object({
       isGlutenFree: z.boolean(),
       glutenSources: z.array(z.string()),
@@ -102,7 +106,7 @@ export const glutenCheckerScorer = createScorer({
     return results.analyzeStepResult.isGlutenFree ? 1 : 0;
   })
   .generateReason({
-    description: 'Generate a reason for the score',
+    description: "Generate a reason for the score",
     createPrompt: ({ results }) => {
       return generateReasonPrompt({
         glutenSources: results.analyzeStepResult.glutenSources,
@@ -209,13 +213,13 @@ console.log('Reason:', result.reason);
 
 ```typescript filename="src/example-partial-gluten.ts" showLineNumbers copy
 const result = await glutenCheckerScorer.run({
-  input: [{ role: 'user', content: 'Mix flour and water to make dough' }],
-  output: { text: 'Mix flour and water to make dough' },
+  input: [{ role: "user", content: "Mix flour and water to make dough" }],
+  output: { text: "Mix flour and water to make dough" },
 });
 
-console.log('Score:', result.score);
-console.log('Gluten sources:', result.analyzeStepResult.glutenSources);
-console.log('Reason:', result.reason);
+console.log("Score:", result.score);
+console.log("Gluten sources:", result.analyzeStepResult.glutenSources);
+console.log("Reason:", result.reason);
 ```
 
 ### Partial gluten output
@@ -235,13 +239,13 @@ console.log('Reason:', result.reason);
 
 ```typescript filename="src/example-low-gluten-free.ts" showLineNumbers copy
 const result = await glutenCheckerScorer.run({
-  input: [{ role: 'user', content: 'Add soy sauce and noodles' }],
-  output: { text: 'Add soy sauce and noodles' },
+  input: [{ role: "user", content: "Add soy sauce and noodles" }],
+  output: { text: "Add soy sauce and noodles" },
 });
 
-console.log('Score:', result.score);
-console.log('Gluten sources:', result.analyzeStepResult.glutenSources);
-console.log('Reason:', result.reason);
+console.log("Score:", result.score);
+console.log("Gluten sources:", result.analyzeStepResult.glutenSources);
+console.log("Reason:", result.reason);
 ```
 
 ### Low gluten-free output

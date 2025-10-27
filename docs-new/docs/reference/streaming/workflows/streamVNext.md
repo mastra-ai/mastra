@@ -1,5 +1,5 @@
 ---
-title: 'Run.streamVNext() '
+title: "Run.streamVNext() "
 description: Documentation for the `Run.streamVNext()` method in workflows, which enables real-time streaming of responses.
 ---
 
@@ -20,7 +20,7 @@ const run = await workflow.createRunAsync();
 
 const stream = run.streamVNext({
   inputData: {
-    value: 'initial data',
+    value: "initial data",
   },
 });
 ```
@@ -122,7 +122,7 @@ const run = await workflow.createRunAsync();
 
 const stream = run.streamVNext({
   inputData: {
-    value: 'initial data',
+    value: "initial data",
   },
 });
 

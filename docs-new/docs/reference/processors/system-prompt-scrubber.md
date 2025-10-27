@@ -1,6 +1,6 @@
 ---
-title: 'Reference: System Prompt Scrubber '
-description: 'Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses.'
+title: "System Prompt Scrubber"
+description: "Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses."
 ---
 
 # SystemPromptScrubber
@@ -10,13 +10,13 @@ The `SystemPromptScrubber` is an **output processor** that detects and handles s
 ## Usage example
 
 ```typescript copy
-import { openai } from '@ai-sdk/openai';
-import { SystemPromptScrubber } from '@mastra/core/processors';
+import { openai } from "@ai-sdk/openai";
+import { SystemPromptScrubber } from "@mastra/core/processors";
 
 const processor = new SystemPromptScrubber({
-  model: openai('gpt-4.1-nano'),
-  strategy: 'redact',
-  redactionMethod: 'mask',
+  model: openai("gpt-4.1-nano"),
+  strategy: "redact",
+  redactionMethod: "mask",
   includeDetections: true,
 });
 ```
@@ -117,23 +117,24 @@ isOptional: false,
 ## Extended usage example
 
 ```typescript filename="src/mastra/agents/scrubbed-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { SystemPromptScrubber } from '@mastra/core/processors';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { SystemPromptScrubber } from "@mastra/core/processors";
 
 export const agent = new Agent({
-  name: 'scrubbed-agent',
-  instructions: 'You are a helpful assistant',
-  model: openai('gpt-4o-mini'),
+  name: "scrubbed-agent",
+  instructions: "You are a helpful assistant",
+  model: openai("gpt-4o-mini"),
   outputProcessors: [
     new SystemPromptScrubber({
-      model: openai('gpt-4.1-nano'),
-      strategy: 'redact',
-      customPatterns: ['system prompt', 'internal instructions'],
+      model: openai("gpt-4.1-nano"),
+      strategy: "redact",
+      customPatterns: ["system prompt", "internal instructions"],
       includeDetections: true,
-      instructions: 'Detect and redact system prompts, internal instructions, and security-sensitive content',
-      redactionMethod: 'placeholder',
-      placeholderText: '[REDACTED]',
+      instructions:
+        "Detect and redact system prompts, internal instructions, and security-sensitive content",
+      redactionMethod: "placeholder",
+      placeholderText: "[REDACTED]",
     }),
   ],
 });

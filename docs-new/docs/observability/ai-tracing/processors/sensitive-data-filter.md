@@ -1,6 +1,6 @@
 ---
-title: 'Sensitive Data Filter '
-description: 'Protect sensitive information in your AI traces with automatic data redaction'
+title: "Sensitive Data Filter "
+description: "Protect sensitive information in your AI traces with automatic data redaction"
 ---
 
 # Sensitive Data Filter
@@ -17,7 +17,7 @@ export const mastra = new Mastra({
     default: { enabled: true }, // Automatically includes SensitiveDataFilter
   },
   storage: new LibSQLStore({
-    url: 'file:./mastra.db',
+    url: "file:./mastra.db",
   }),
 });
 ```
@@ -63,36 +63,36 @@ When a sensitive field is detected, its value is replaced with `[REDACTED]` by d
 You can customize which fields are redacted and how redaction appears:
 
 ```ts filename="src/mastra/index.ts" showLineNumbers copy
-import { SensitiveDataFilter, DefaultExporter } from '@mastra/core/ai-tracing';
+import { SensitiveDataFilter, DefaultExporter } from "@mastra/core/ai-tracing";
 
 export const mastra = new Mastra({
   observability: {
     configs: {
       production: {
-        serviceName: 'my-service',
+        serviceName: "my-service",
         exporters: [new DefaultExporter()],
         processors: [
           new SensitiveDataFilter({
             // Add custom sensitive fields
             sensitiveFields: [
               // Default fields
-              'password',
-              'token',
-              'secret',
-              'key',
-              'apikey',
+              "password",
+              "token",
+              "secret",
+              "key",
+              "apikey",
               // Custom fields for your application
-              'creditCard',
-              'bankAccount',
-              'routingNumber',
-              'email',
-              'phoneNumber',
-              'dateOfBirth',
+              "creditCard",
+              "bankAccount",
+              "routingNumber",
+              "email",
+              "phoneNumber",
+              "dateOfBirth",
             ],
             // Custom redaction token
-            redactionToken: '***SENSITIVE***',
+            redactionToken: "***SENSITIVE***",
             // Redaction style
-            redactionStyle: 'full', // or 'partial'
+            redactionStyle: "full", // or 'partial'
           }),
         ],
       },
@@ -129,7 +129,7 @@ Shows the first and last 3 characters, useful for debugging without exposing ful
 
 ```ts
 new SensitiveDataFilter({
-  redactionStyle: 'partial',
+  redactionStyle: "partial",
 });
 ```
 
@@ -214,7 +214,7 @@ export const mastra = new Mastra({
   observability: {
     configs: {
       debug: {
-        serviceName: 'debug-service',
+        serviceName: "debug-service",
         processors: [], // No processors, including no SensitiveDataFilter
         exporters: [new DefaultExporter()],
       },
@@ -237,15 +237,15 @@ Only disable sensitive data filtering in controlled environments. Never disable 
 new SensitiveDataFilter({
   sensitiveFields: [
     // HIPAA-related fields
-    'ssn',
-    'socialSecurityNumber',
-    'medicalRecordNumber',
-    'mrn',
-    'healthInsuranceNumber',
-    'diagnosisCode',
-    'icd10',
-    'prescription',
-    'medication',
+    "ssn",
+    "socialSecurityNumber",
+    "medicalRecordNumber",
+    "mrn",
+    "healthInsuranceNumber",
+    "diagnosisCode",
+    "icd10",
+    "prescription",
+    "medication",
   ],
 });
 ```
@@ -256,19 +256,19 @@ new SensitiveDataFilter({
 new SensitiveDataFilter({
   sensitiveFields: [
     // PCI compliance fields
-    'creditCard',
-    'ccNumber',
-    'cardNumber',
-    'cvv',
-    'cvc',
-    'securityCode',
-    'expirationDate',
-    'expiry',
-    'bankAccount',
-    'accountNumber',
-    'routingNumber',
-    'iban',
-    'swift',
+    "creditCard",
+    "ccNumber",
+    "cardNumber",
+    "cvv",
+    "cvc",
+    "securityCode",
+    "expirationDate",
+    "expiry",
+    "bankAccount",
+    "accountNumber",
+    "routingNumber",
+    "iban",
+    "swift",
   ],
 });
 ```

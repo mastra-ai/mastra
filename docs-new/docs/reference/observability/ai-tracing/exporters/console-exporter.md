@@ -1,5 +1,5 @@
 ---
-title: 'ConsoleExporter '
+title: "ConsoleExporter "
 description: API reference for the ConsoleExporter
 ---
 
@@ -110,8 +110,8 @@ The exporter outputs different formats based on event type:
 ## Usage
 
 ```typescript
-import { ConsoleExporter } from '@mastra/core/ai-tracing';
-import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
+import { ConsoleExporter } from "@mastra/core/ai-tracing";
+import { ConsoleLogger, LogLevel } from "@mastra/core/logger";
 
 // Use default logger (INFO level)
 const exporter = new ConsoleExporter();

@@ -1,5 +1,5 @@
-import React from 'react';
-import styles from './Tag.module.css';
+import React from "react";
+import styles from "./Tag.module.css";
 
 export interface TagProps {
   text: string;

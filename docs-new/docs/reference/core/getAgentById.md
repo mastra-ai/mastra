@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.getAgentById() '
-description: 'Documentation for the `Mastra.getAgentById()` method in Mastra, which retrieves an agent by its ID.'
+title: "Mastra.getAgentById() "
+description: "Documentation for the `Mastra.getAgentById()` method in Mastra, which retrieves an agent by its ID."
 ---
 
 # Mastra.getAgentById()
@@ -10,7 +10,7 @@ The `.getAgentById()` method is used to retrieve an agent by its ID. The method 
 ## Usage example
 
 ```typescript copy
-mastra.getAgentById('test-agent-123');
+mastra.getAgentById("test-agent-123");
 ```
 
 ## Parameters

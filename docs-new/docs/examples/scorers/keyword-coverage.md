@@ -1,5 +1,5 @@
 ---
-title: 'Keyword Coverage '
+title: "Keyword Coverage "
 description: Example of using the Keyword Coverage scorer to evaluate how well responses cover important keywords from input text.
 ---
 
@@ -20,20 +20,21 @@ npm install @mastra/evals
 In this example, the response fully reflects the key terms from the input. All required keywords are present, resulting in complete coverage with no omissions.
 
 ```typescript filename="src/example-full-keyword-coverage.ts" showLineNumbers copy
-import { createKeywordCoverageScorer } from '@mastra/evals/scorers/code';
+import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createKeywordCoverageScorer();
 
-const input = 'JavaScript frameworks like React and Vue';
-const output = 'Popular JavaScript frameworks include React and Vue for web development';
+const input = "JavaScript frameworks like React and Vue";
+const output =
+  "Popular JavaScript frameworks include React and Vue for web development";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 ### Full coverage output
@@ -55,20 +56,20 @@ A score of 1 indicates that all expected keywords were found in the response. Th
 In this example, the response includes some, but not all, of the important keywords from the input. The score reflects partial coverage, with key terms either missing or only partially matched.
 
 ```typescript filename="src/example-partial-keyword-coverage.ts" showLineNumbers copy
-import { createKeywordCoverageScorer } from '@mastra/evals/scorers/code';
+import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createKeywordCoverageScorer();
 
-const input = 'TypeScript offers interfaces, generics, and type inference';
-const output = 'TypeScript provides type inference and some advanced features';
+const input = "TypeScript offers interfaces, generics, and type inference";
+const output = "TypeScript provides type inference and some advanced features";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 ### Partial coverage output
@@ -90,20 +91,21 @@ A score of 0.5 indicates that only half of the expected keywords were found in t
 In this example, the response includes very few of the important keywords from the input. The score reflects minimal coverage, with most key terms missing or unaccounted for.
 
 ```typescript filename="src/example-minimal-keyword-coverage.ts" showLineNumbers copy
-import { createKeywordCoverageScorer } from '@mastra/evals/scorers/code';
+import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createKeywordCoverageScorer();
 
-const input = 'Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning';
-const output = 'Data preparation is important for models';
+const input =
+  "Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning";
+const output = "Data preparation is important for models";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 ### Minimal coverage output

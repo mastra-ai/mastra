@@ -1,5 +1,5 @@
 ---
-title: 'Content Similarity '
+title: "Content Similarity "
 description: Example of using the Content Similarity scorer to evaluate text similarity between content.
 ---
 
@@ -20,15 +20,15 @@ npm install @mastra/evals
 In this example, the response closely resembles the query in both structure and meaning. Minor differences in tense and phrasing do not significantly affect the overall similarity.
 
 ```typescript filename="src/example-high-similarity.ts" showLineNumbers copy
-import { createContentSimilarityScorer } from '@mastra/evals/scorers/llm';
+import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
 
 const scorer = createContentSimilarityScorer();
 
-const query = 'The quick brown fox jumps over the lazy dog.';
-const response = 'A quick brown fox jumped over a lazy dog.';
+const query = "The quick brown fox jumps over the lazy dog.";
+const response = "A quick brown fox jumped over a lazy dog.";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: query }],
+  input: [{ role: "user", content: query }],
   output: { text: response },
 });
 
@@ -53,15 +53,15 @@ The output receives a high score because the response preserves the intent and c
 In this example, the response shares some conceptual overlap with the query but diverges in structure and wording. Key elements remain present, but the phrasing introduces moderate variation.
 
 ```typescript filename="src/example-moderate-similarity.ts" showLineNumbers copy
-import { createContentSimilarityScorer } from '@mastra/evals/scorers/llm';
+import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
 
 const scorer = createContentSimilarityScorer();
 
-const query = 'A brown fox quickly leaps across a sleeping dog.';
-const response = 'The quick brown fox jumps over the lazy dog.';
+const query = "A brown fox quickly leaps across a sleeping dog.";
+const response = "The quick brown fox jumps over the lazy dog.";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: query }],
+  input: [{ role: "user", content: query }],
   output: { text: response },
 });
 
@@ -86,15 +86,15 @@ The output receives a mid-range score because the response captures the general 
 In this example, the response and query are unrelated in meaning, despite having a similar grammatical structure. There is little to no shared content overlap.
 
 ```typescript filename="src/example-low-similarity.ts" showLineNumbers copy
-import { createContentSimilarityScorer } from '@mastra/evals/scorers/llm';
+import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
 
 const scorer = createContentSimilarityScorer();
 
-const query = 'The cat sleeps on the windowsill.';
-const response = 'The quick brown fox jumps over the lazy dog.';
+const query = "The cat sleeps on the windowsill.";
+const response = "The quick brown fox jumps over the lazy dog.";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: query }],
+  input: [{ role: "user", content: query }],
   output: { text: response },
 });
 
