@@ -51,7 +51,7 @@ That memory instance has options you can configure for working memory, conversat
 
 ## Different types of memory
 
-Mastra supports three types of memory: working memory, conversation history, and semantic recall. 
+Mastra supports three types of memory: working memory, conversation history, and semantic recall.
 
 [**Working memory**](./working-memory.mdx) stores persistent user-specific details such as names, preferences, goals, and other structured data. (Compare this to ChatGPT where you can ask it to tell you about yourself). This is implemented as a block of Markdown text that the agent is able to update over time (or alternately, as a Zod schema)
 
@@ -69,7 +69,7 @@ All memory types are [resource-scoped](./working-memory.mdx#resource-scoped-memo
 
 To persist and recall information between conversations, memory requires a storage adapter.
 
-Supported options include [LibSQL](/docs/memory/storage/memory-with-libsql), [MongoDB](/docs/memory/storage/memory-with-mongodb), [Postgres](/docs/memory/storage/memory-with-pg), and [Upstash](/docs/memory/storage/memory-with-upstash)
+Supported options include [LibSQL](/docs/memory/storage/memory-with-libsql.mdx), [MongoDB](/docs/memory/storage/memory-with-mongodb.mdx), [Postgres](/docs/memory/storage/memory-with-pg.mdx), and [Upstash](/docs/memory/storage/memory-with-upstash.mdx)
 
 We use LibSQL out of the box because it is file-based or in-memory, so it is easy to install and works well with the playground.
 
