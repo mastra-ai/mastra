@@ -259,6 +259,172 @@ export function runZodToJsonTestSuite() {
         expect(result).toBeDefined();
         expect(result.type).toBe('object');
       });
+
+      it('should handle z.record() with .nullable()', () => {
+        const schema = z.object({
+          config: z.record(z.string()).nullable(),
+        });
+
+        const result = zodToJsonSchema(schema);
+
+        expect(result).toBeDefined();
+        expect(result.type).toBe('object');
+        expect(result.properties).toHaveProperty('config');
+      });
+
+      it('should handle z.record() with .default()', () => {
+        const schema = z.object({
+          settings: z.record(z.string()).default({}),
+        });
+
+        const result = zodToJsonSchema(schema);
+
+        expect(result).toBeDefined();
+        expect(result.type).toBe('object');
+        expect(result.properties).toHaveProperty('settings');
+      });
+
+      it('should handle mixed one-arg and two-arg records in same schema', () => {
+        const schema = z.object({
+          // One-arg form (string values)
+          metadata: z.record(z.string()),
+          // Two-arg form (number values with explicit string keys)
+          scores: z.record(z.string(), z.number()),
+          // Two-arg with enum keys
+          roles: z.record(z.enum(['admin', 'user']), z.boolean()).optional(),
+        });
+
+        const result = zodToJsonSchema(schema);
+
+        expect(result).toBeDefined();
+        expect(result.type).toBe('object');
+        expect(result.properties).toHaveProperty('metadata');
+        expect(result.properties).toHaveProperty('scores');
+        expect(result.properties).toHaveProperty('roles');
+      });
+
+      it('should handle z.record() with .nullish()', () => {
+        const schema = z.object({
+          extra: z.record(z.string()).nullish(),
+        });
+
+        const result = zodToJsonSchema(schema);
+
+        expect(result).toBeDefined();
+        expect(result.type).toBe('object');
+        expect(result.properties).toHaveProperty('extra');
+      });
+
+      it('should handle z.record() with .catch()', () => {
+        const schema = z.object({
+          config: z.record(z.string()).catch({}),
+        });
+
+        const result = zodToJsonSchema(schema);
+
+        expect(result).toBeDefined();
+        expect(result.type).toBe('object');
+        expect(result.properties).toHaveProperty('config');
+      });
+
+      it('should handle z.record() with date values', () => {
+        const schema = z.object({
+          timestamps: z.record(z.date()),
+        });
+
+        const result = zodToJsonSchema(schema);
+
+        expect(result).toBeDefined();
+        expect(result.type).toBe('object');
+        expect(result.properties).toHaveProperty('timestamps');
+
+        // The record's values should be dates (converted to string with date-time format)
+        const timestampsSchema = result.properties!.timestamps as any;
+        expect(timestampsSchema).toBeDefined();
+      });
+
+      it('should handle deeply nested optional records', () => {
+        const schema = z.object({
+          level1: z
+            .object({
+              level2: z
+                .object({
+                  level3: z
+                    .object({
+                      data: z.record(z.string()).optional(),
+                    })
+                    .optional(),
+                })
+                .optional(),
+            })
+            .optional(),
+        });
+
+        const result = zodToJsonSchema(schema);
+
+        expect(result).toBeDefined();
+        expect(result.type).toBe('object');
+        expect(result.properties).toHaveProperty('level1');
+      });
+
+      it('should handle z.record() with .describe()', () => {
+        const schema = z.object({
+          metadata: z.record(z.string()).describe('User metadata fields'),
+        });
+
+        const result = zodToJsonSchema(schema);
+
+        expect(result).toBeDefined();
+        expect(result.type).toBe('object');
+        expect(result.properties).toHaveProperty('metadata');
+      });
+
+      it('should handle z.record() with literal union values', () => {
+        const schema = z.record(z.union([z.literal('active'), z.literal('inactive')]));
+
+        const result = zodToJsonSchema(schema);
+
+        expect(result).toBeDefined();
+        expect(result.type).toBe('object');
+      });
+
+      it('should handle intersection with z.record()', () => {
+        const baseSchema = z.object({
+          name: z.string(),
+        });
+
+        const extendedSchema = z.object({
+          metadata: z.record(z.string()),
+        });
+
+        const schema = z.intersection(baseSchema, extendedSchema);
+
+        const result = zodToJsonSchema(schema);
+
+        expect(result).toBeDefined();
+        // Intersection could be represented as allOf or merged object
+        expect(result.allOf || result.type === 'object').toBeTruthy();
+      });
+
+      it('should handle lazy/recursive schemas with records', () => {
+        type Node = {
+          value: string;
+          children: Record<string, Node>;
+        };
+
+        const nodeSchema: z.ZodType<Node> = z.lazy(() =>
+          z.object({
+            value: z.string(),
+            children: z.record(nodeSchema),
+          }),
+        );
+
+        const result = zodToJsonSchema(nodeSchema);
+
+        expect(result).toBeDefined();
+        // Lazy schemas might use $ref or be inlined
+        expect(result).toBeDefined();
+      });
     });
 
     describe('date handling', () => {

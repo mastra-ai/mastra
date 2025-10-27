@@ -1,8 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { z as zV4 } from 'zod/v4';
-import { runZodToJsonTestSuite } from './zod-to-json-test-suite';
 import { zodToJsonSchema } from './zod-to-json';
+import { runZodToJsonTestSuite } from './zod-to-json-test-suite';
 
 // Mock 'zod' to use v4
 vi.mock('zod', () => ({

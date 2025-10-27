@@ -54,16 +54,31 @@ function patchRecordSchemas(schema: any): any {
     if (def.valueType) patchRecordSchemas(def.valueType);
   }
 
-  // Handle optional, nullable, and other wrapper types
-  if (def.type === 'optional' && def.innerType) {
-    patchRecordSchemas(def.innerType);
+  // Handle intersection types
+  if (def.type === 'intersection') {
+    if (def.left) patchRecordSchemas(def.left);
+    if (def.right) patchRecordSchemas(def.right);
   }
 
-  if (def.type === 'nullable' && def.innerType) {
-    patchRecordSchemas(def.innerType);
+  // Handle lazy types - patch the schema returned by the getter
+  if (def.type === 'lazy') {
+    // For lazy schemas, we need to patch the schema when it's accessed
+    // Store the original getter and wrap it
+    if (def.getter && typeof def.getter === 'function') {
+      const originalGetter = def.getter;
+      def.getter = function () {
+        const innerSchema = originalGetter();
+        if (innerSchema) {
+          patchRecordSchemas(innerSchema);
+        }
+        return innerSchema;
+      };
+    }
   }
 
-  if (def.type === 'default' && def.innerType) {
+  // Handle wrapper types that have innerType
+  // This covers: optional, nullable, default, catch, nullish, and any other wrappers
+  if (def.innerType) {
     patchRecordSchemas(def.innerType);
   }
 
