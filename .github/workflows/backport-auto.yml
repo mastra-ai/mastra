@@ -10,7 +10,7 @@ on:
     branches: [main]
 
 jobs:
-  version:
+  backport:
     # Only run on the main repository, not on forks
     if: |
       github.repository == 'mastra-ai/mastra' && 
@@ -47,3 +47,5 @@ jobs:
 
       - name: Backport PR
         run: pnpm dlx tsx packages/_changeset-cli/src/git/backport.ts ${{ github.event.pull_request.number }}
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
