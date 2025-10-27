@@ -1,5 +1,5 @@
 ---
-title: 'createGraphRAGTool() '
+title: "createGraphRAGTool() "
 description: Documentation for the Graph RAG Tool in Mastra, which enhances RAG by building a graph of semantic relationships between documents.
 ---
 
@@ -10,13 +10,13 @@ The `createGraphRAGTool()` creates a tool that enhances RAG by building a graph 
 ## Usage Example
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { createGraphRAGTool } from '@mastra/rag';
+import { openai } from "@ai-sdk/openai";
+import { createGraphRAGTool } from "@mastra/rag";
 
 const graphTool = createGraphRAGTool({
-  vectorStoreName: 'pinecone',
-  indexName: 'docs',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,
@@ -191,9 +191,9 @@ The default description focuses on:
 
 ```typescript
 const graphTool = createGraphRAGTool({
-  vectorStoreName: 'pinecone',
-  indexName: 'docs',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
   graphOptions: {
     dimension: 1536,
     threshold: 0.8, // Higher similarity threshold
@@ -207,9 +207,9 @@ const graphTool = createGraphRAGTool({
 
 ```typescript
 const graphTool = createGraphRAGTool({
-  vectorStoreName: 'pinecone',
-  indexName: 'docs',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
   description:
     "Analyze document relationships to find complex patterns and connections in our company's historical data",
 });
@@ -221,9 +221,9 @@ This example shows how to customize the tool description for a specific use case
 
 ```typescript
 const graphTool = createGraphRAGTool({
-  vectorStoreName: 'pinecone',
-  indexName: 'docs',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
 });
 ```
 
@@ -236,16 +236,19 @@ const runtimeContext = new RuntimeContext<{
   topK: number;
   filter: any;
 }>();
-runtimeContext.set('vectorStoreName', 'my-store');
-runtimeContext.set('indexName', 'my-index');
-runtimeContext.set('topK', 5);
-runtimeContext.set('filter', { category: 'docs' });
-runtimeContext.set('randomWalkSteps', 100);
-runtimeContext.set('restartProb', 0.15);
+runtimeContext.set("vectorStoreName", "my-store");
+runtimeContext.set("indexName", "my-index");
+runtimeContext.set("topK", 5);
+runtimeContext.set("filter", { category: "docs" });
+runtimeContext.set("randomWalkSteps", 100);
+runtimeContext.set("restartProb", 0.15);
 
-const response = await agent.generate('Find documentation from the knowledge base.', {
-  runtimeContext,
-});
+const response = await agent.generate(
+  "Find documentation from the knowledge base.",
+  {
+    runtimeContext,
+  },
+);
 ```
 
 For more information on runtime context, please see:

@@ -1,5 +1,5 @@
 ---
-title: 'Embedding Chunk Arrays '
+title: "Embedding Chunk Arrays "
 description: Example of using Mastra to generate embeddings for an array of text chunks for similarity search.
 ---
 
@@ -8,17 +8,17 @@ description: Example of using Mastra to generate embeddings for an array of text
 After chunking documents, you need to convert the text chunks into numerical vectors that can be used for similarity search. The `embed` method transforms text chunks into embeddings using your chosen provider and model. This example shows how to generate embeddings for an array of text chunks.
 
 ```tsx copy
-import { openai } from '@ai-sdk/openai';
-import { MDocument } from '@mastra/rag';
-import { embed } from 'ai';
+import { openai } from "@ai-sdk/openai";
+import { MDocument } from "@mastra/rag";
+import { embed } from "ai";
 
-const doc = MDocument.fromText('Your text content...');
+const doc = MDocument.fromText("Your text content...");
 
 const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 ```
 

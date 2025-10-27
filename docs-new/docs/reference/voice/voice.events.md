@@ -1,6 +1,6 @@
 ---
-title: 'Reference: Voice Events '
-description: 'Documentation for events emitted by voice providers, particularly for real-time voice interactions.'
+title: "Voice Events"
+description: "Documentation for events emitted by voice providers, particularly for real-time voice interactions."
 ---
 
 # Voice Events

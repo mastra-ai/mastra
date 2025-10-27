@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.getServer() '
-description: 'Documentation for the `Mastra.getServer()` method in Mastra, which retrieves the configured server configuration.'
+title: "Mastra.getServer() "
+description: "Documentation for the `Mastra.getServer()` method in Mastra, which retrieves the configured server configuration."
 ---
 
 # Mastra.getServer()

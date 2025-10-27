@@ -1,6 +1,6 @@
 ---
-title: 'Reference: PII Detector '
-description: 'Documentation for the PIIDetector in Mastra, which detects and redacts personally identifiable information (PII) from AI responses.'
+title: "PII Detector"
+description: "Documentation for the PIIDetector in Mastra, which detects and redacts personally identifiable information (PII) from AI responses."
 ---
 
 # PIIDetector
@@ -10,14 +10,14 @@ The `PIIDetector` is a **hybrid processor** that can be used for both input and 
 ## Usage example
 
 ```typescript copy
-import { openai } from '@ai-sdk/openai';
-import { PIIDetector } from '@mastra/core/processors';
+import { openai } from "@ai-sdk/openai";
+import { PIIDetector } from "@mastra/core/processors";
 
 const processor = new PIIDetector({
-  model: openai('gpt-4.1-nano'),
+  model: openai("gpt-4.1-nano"),
   threshold: 0.6,
-  strategy: 'redact',
-  detectionTypes: ['email', 'phone', 'credit-card', 'ssn'],
+  strategy: "redact",
+  detectionTypes: ["email", "phone", "credit-card", "ssn"],
 });
 ```
 
@@ -124,22 +124,23 @@ isOptional: false,
 ## Extended usage example
 
 ```typescript filename="src/mastra/agents/private-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { PIIDetector } from '@mastra/core/processors';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { PIIDetector } from "@mastra/core/processors";
 
 export const agent = new Agent({
-  name: 'private-agent',
-  instructions: 'You are a helpful assistant',
-  model: openai('gpt-4o-mini'),
+  name: "private-agent",
+  instructions: "You are a helpful assistant",
+  model: openai("gpt-4o-mini"),
   inputProcessors: [
     new PIIDetector({
-      model: openai('gpt-4.1-nano'),
-      detectionTypes: ['email', 'phone', 'credit-card', 'ssn'],
+      model: openai("gpt-4.1-nano"),
+      detectionTypes: ["email", "phone", "credit-card", "ssn"],
       threshold: 0.6,
-      strategy: 'redact',
-      redactionMethod: 'mask',
-      instructions: 'Detect and redact personally identifiable information while preserving message intent',
+      strategy: "redact",
+      redactionMethod: "mask",
+      instructions:
+        "Detect and redact personally identifiable information while preserving message intent",
       includeDetections: true,
       preserveFormat: true,
     }),

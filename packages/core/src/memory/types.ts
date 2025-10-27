@@ -417,23 +417,6 @@ export type SharedMemoryConfig = {
   processors?: MemoryProcessor[];
 };
 
-export type TraceType = {
-  id: string;
-  parentSpanId: string | null;
-  name: string;
-  traceId: string;
-  scope: string;
-  kind: number;
-  attributes: Record<string, unknown> | null;
-  status: Record<string, unknown> | null;
-  events: Record<string, unknown> | null;
-  links: Record<string, unknown> | null;
-  other: Record<string, unknown> | null;
-  startTime: number;
-  endTime: number;
-  createdAt: Date;
-};
-
 export type WorkingMemoryFormat = 'json' | 'markdown';
 
 export type WorkingMemoryTemplate = {

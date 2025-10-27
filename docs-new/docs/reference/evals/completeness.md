@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Completeness '
+title: "Completeness"
 description: Documentation for the Completeness Metric in Mastra, which evaluates how thoroughly LLM outputs cover key elements present in the input.
 ---
 
@@ -16,13 +16,13 @@ The `CompletenessMetric` class evaluates how thoroughly an LLM's output covers t
 ## Basic Usage
 
 ```typescript
-import { CompletenessMetric } from '@mastra/evals/nlp';
+import { CompletenessMetric } from "@mastra/evals/nlp";
 
 const metric = new CompletenessMetric();
 
 const result = await metric.measure(
-  'Explain how photosynthesis works in plants using sunlight, water, and carbon dioxide.',
-  'Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis.',
+  "Explain how photosynthesis works in plants using sunlight, water, and carbon dioxide.",
+  "Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis.",
 );
 
 console.log(result.score); // Coverage score from 0-1
@@ -156,11 +156,14 @@ Final score: `(covered_elements / total_input_elements) * scale`
 ## Example with Analysis
 
 ```typescript
-import { CompletenessMetric } from '@mastra/evals/nlp';
+import { CompletenessMetric } from "@mastra/evals/nlp";
 
 const metric = new CompletenessMetric();
 
-const result = await metric.measure('The quick brown fox jumps over the lazy dog', 'A brown fox jumped over a dog');
+const result = await metric.measure(
+  "The quick brown fox jumps over the lazy dog",
+  "A brown fox jumped over a dog",
+);
 
 // Example output:
 // {

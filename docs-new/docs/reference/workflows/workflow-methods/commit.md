@@ -1,5 +1,5 @@
 ---
-title: 'Workflow.commit() '
+title: "Workflow.commit() "
 description: Documentation for the `Workflow.commit()` method in workflows, which finalizes the workflow and returns the final result.
 ---
 

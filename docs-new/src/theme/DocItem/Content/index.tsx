@@ -1,12 +1,12 @@
-import BrowserOnly from '@docusaurus/BrowserOnly';
-import { useDoc } from '@docusaurus/plugin-content-docs/client';
-import { ThemeClassNames } from '@docusaurus/theme-common';
-import { CopyPageButton } from '@site/src/components/copy-page-button';
-import type { Props } from '@theme/DocItem/Content';
-import Heading from '@theme/Heading';
-import MDXContent from '@theme/MDXContent';
-import { cn } from '@site/src/css/utils';
-import { type ReactNode } from 'react';
+import BrowserOnly from "@docusaurus/BrowserOnly";
+import { useDoc } from "@docusaurus/plugin-content-docs/client";
+import { ThemeClassNames } from "@docusaurus/theme-common";
+import { CopyPageButton } from "@site/src/components/copy-page-button";
+import type { Props } from "@theme/DocItem/Content";
+import Heading from "@theme/Heading";
+import MDXContent from "@theme/MDXContent";
+import { cn } from "@site/src/css/utils";
+import { type ReactNode } from "react";
 
 /**
  Title can be declared inside md content or declared through
@@ -20,7 +20,8 @@ import { type ReactNode } from 'react';
 */
 function useSyntheticTitle(): string | null {
   const { metadata, frontMatter, contentTitle } = useDoc();
-  const shouldRender = !frontMatter.hide_title && typeof contentTitle === 'undefined';
+  const shouldRender =
+    !frontMatter.hide_title && typeof contentTitle === "undefined";
   if (!shouldRender) {
     return null;
   }
@@ -33,11 +34,13 @@ export default function DocItemContent({ children }: Props): ReactNode {
   const shouldShowCopyButton = !frontMatter.hide_table_of_contents;
 
   return (
-    <div className={cn(ThemeClassNames.docs.docMarkdown, 'markdown')}>
+    <div className={cn(ThemeClassNames.docs.docMarkdown, "markdown")}>
       {shouldShowCopyButton && (
-        <div className="relative">
+        <div className="relative hidden md:block">
           <div className="absolute top-0 right-0">
-            <BrowserOnly fallback={<div />}>{() => <CopyPageButton />}</BrowserOnly>
+            <BrowserOnly fallback={<div />}>
+              {() => <CopyPageButton />}
+            </BrowserOnly>
           </div>
         </div>
       )}

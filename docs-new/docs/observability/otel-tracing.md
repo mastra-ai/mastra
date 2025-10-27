@@ -1,6 +1,6 @@
 ---
-title: 'OTEL Tracing '
-description: 'Set up OpenTelemetry tracing for Mastra applications'
+title: "OTEL Tracing "
+description: "Set up OpenTelemetry tracing for Mastra applications"
 ---
 
 # OTEL Tracing
@@ -15,14 +15,14 @@ Here's a simple example of enabling telemetry:
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: 'my-app',
+    serviceName: "my-app",
     enabled: true,
     sampling: {
-      type: 'always_on',
+      type: "always_on",
     },
     export: {
-      type: 'otlp',
-      endpoint: 'http://localhost:4318', // SigNoz local endpoint
+      type: "otlp",
+      endpoint: "http://localhost:4318", // SigNoz local endpoint
     },
   },
 });
@@ -42,7 +42,7 @@ type OtelConfig = {
 
   // Control how many traces are sampled
   sampling?: {
-    type: 'ratio' | 'always_on' | 'always_off' | 'parent_based';
+    type: "ratio" | "always_on" | "always_off" | "parent_based";
     probability?: number; // For ratio sampling
     root?: {
       probability: number; // For parent_based sampling
@@ -51,7 +51,7 @@ type OtelConfig = {
 
   // Where to send telemetry data
   export?: {
-    type: 'otlp' | 'console';
+    type: "otlp" | "console";
     endpoint?: string;
     headers?: Record<string, string>;
   };
@@ -75,10 +75,10 @@ Then in your config:
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: 'my-app',
+    serviceName: "my-app",
     enabled: true,
     export: {
-      type: 'otlp',
+      type: "otlp",
       // endpoint and headers will be picked up from env vars
     },
   },
@@ -110,13 +110,13 @@ Mastra looks for instrumentation files with these extensions:
 #### Example
 
 ```ts filename="/mastra/instrumentation.ts" showLineNumbers copy
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 
 const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter({
-    url: 'http://localhost:4318/v1/traces',
+    url: "http://localhost:4318/v1/traces",
   }),
   instrumentations: [getNodeAutoInstrumentations()],
 });
@@ -145,9 +145,9 @@ export const mastra = new Mastra({
 2. Create an instrumentation file in your project (e.g., `instrumentation.mjs`):
 
 ```typescript
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 
 const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter(),

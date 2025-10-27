@@ -129,15 +129,13 @@ export class GoogleVoice extends MastraVoice {
    * @returns {Promise<Array<{voiceId: string, languageCodes: string[]}>>} List of available voices and their supported languages. Default language is en-US.
    */
   async getSpeakers({ languageCode = 'en-US' }: { languageCode?: string } = {}) {
-    return this.traced(async () => {
-      const [response] = await this.ttsClient.listVoices({ languageCode: languageCode });
-      return (response?.voices || [])
-        .filter(voice => voice.name && voice.languageCodes)
-        .map(voice => ({
-          voiceId: voice.name!,
-          languageCodes: voice.languageCodes!,
-        }));
-    }, 'voice.google.getSpeakers')();
+    const [response] = await this.ttsClient.listVoices({ languageCode: languageCode });
+    return (response?.voices || [])
+      .filter(voice => voice.name && voice.languageCodes)
+      .map(voice => ({
+        voiceId: voice.name!,
+        languageCodes: voice.languageCodes!,
+      }));
   }
 
   private async streamToString(stream: NodeJS.ReadableStream): Promise<string> {
@@ -169,32 +167,30 @@ export class GoogleVoice extends MastraVoice {
       audioConfig?: TextToSpeechTypes.cloud.texttospeech.v1.ISynthesizeSpeechRequest['audioConfig'];
     },
   ): Promise<NodeJS.ReadableStream> {
-    return this.traced(async () => {
-      const text = typeof input === 'string' ? input : await this.streamToString(input);
+    const text = typeof input === 'string' ? input : await this.streamToString(input);
 
-      const request: TextToSpeechTypes.cloud.texttospeech.v1.ISynthesizeSpeechRequest = {
-        input: { text },
-        voice: {
-          name: options?.speaker || this.speaker,
-          languageCode: options?.languageCode || options?.speaker?.split('-').slice(0, 2).join('-') || 'en-US',
-        },
-        audioConfig: options?.audioConfig || { audioEncoding: 'LINEAR16' },
-      };
+    const request: TextToSpeechTypes.cloud.texttospeech.v1.ISynthesizeSpeechRequest = {
+      input: { text },
+      voice: {
+        name: options?.speaker || this.speaker,
+        languageCode: options?.languageCode || options?.speaker?.split('-').slice(0, 2).join('-') || 'en-US',
+      },
+      audioConfig: options?.audioConfig || { audioEncoding: 'LINEAR16' },
+    };
 
-      const [response] = await this.ttsClient.synthesizeSpeech(request);
+    const [response] = await this.ttsClient.synthesizeSpeech(request);
 
-      if (!response.audioContent) {
-        throw new Error('No audio content returned.');
-      }
+    if (!response.audioContent) {
+      throw new Error('No audio content returned.');
+    }
 
-      if (typeof response.audioContent === 'string') {
-        throw new Error('Audio content is a string.');
-      }
+    if (typeof response.audioContent === 'string') {
+      throw new Error('Audio content is a string.');
+    }
 
-      const stream = new PassThrough();
-      stream.end(Buffer.from(response.audioContent));
-      return stream;
-    }, 'voice.google.speak')();
+    const stream = new PassThrough();
+    stream.end(Buffer.from(response.audioContent));
+    return stream;
   }
 
   /**
@@ -217,48 +213,46 @@ export class GoogleVoice extends MastraVoice {
     audioStream: NodeJS.ReadableStream,
     options?: { stream?: boolean; config?: SpeechTypes.cloud.speech.v1.IRecognitionConfig },
   ): Promise<string> {
-    return this.traced(async () => {
-      const chunks: Buffer[] = [];
-      for await (const chunk of audioStream) {
-        if (typeof chunk === 'string') {
-          chunks.push(Buffer.from(chunk));
-        } else {
-          chunks.push(chunk);
+    const chunks: Buffer[] = [];
+    for await (const chunk of audioStream) {
+      if (typeof chunk === 'string') {
+        chunks.push(Buffer.from(chunk));
+      } else {
+        chunks.push(chunk);
+      }
+    }
+    const buffer = Buffer.concat(chunks);
+
+    let request = {
+      config: {
+        encoding: 'LINEAR16',
+        languageCode: 'en-US',
+        ...options?.config,
+      },
+      audio: {
+        content: buffer.toString('base64'),
+      },
+    };
+    const [response] = await this.speechClient.recognize(request as SpeechTypes.cloud.speech.v1.IRecognizeRequest);
+
+    if (!response.results || response.results.length === 0) {
+      throw new Error('No transcription results returned');
+    }
+
+    const transcription = response.results
+      .map((result: any) => {
+        if (!result.alternatives || result.alternatives.length === 0) {
+          return '';
         }
-      }
-      const buffer = Buffer.concat(chunks);
+        return result.alternatives[0].transcript || '';
+      })
+      .filter((text: string) => text.length > 0)
+      .join(' ');
 
-      let request = {
-        config: {
-          encoding: 'LINEAR16',
-          languageCode: 'en-US',
-          ...options?.config,
-        },
-        audio: {
-          content: buffer.toString('base64'),
-        },
-      };
-      const [response] = await this.speechClient.recognize(request as SpeechTypes.cloud.speech.v1.IRecognizeRequest);
+    if (!transcription) {
+      throw new Error('No valid transcription found in results');
+    }
 
-      if (!response.results || response.results.length === 0) {
-        throw new Error('No transcription results returned');
-      }
-
-      const transcription = response.results
-        .map((result: any) => {
-          if (!result.alternatives || result.alternatives.length === 0) {
-            return '';
-          }
-          return result.alternatives[0].transcript || '';
-        })
-        .filter((text: string) => text.length > 0)
-        .join(' ');
-
-      if (!transcription) {
-        throw new Error('No valid transcription found in results');
-      }
-
-      return transcription;
-    }, 'voice.google.listen')();
+    return transcription;
   }
 }

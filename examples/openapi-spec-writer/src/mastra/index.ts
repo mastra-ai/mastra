@@ -16,16 +16,6 @@ export const mastra = new Mastra({
     },
   }),
   agents: { "openapi-spec-gen-agent": agentOne },
-  telemetry: {
-    serviceName: "mastra-vnext",
-    sampling: {
-      type: "always_on",
-    },
-    enabled: true,
-    export: {
-      type: "otlp",
-    },
-  },
   workflows: {
     openApiSpecGenWorkflow,
     makePRToMastraWorkflow,

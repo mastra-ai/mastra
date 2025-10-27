@@ -1,14 +1,21 @@
-import { useForm } from 'react-hook-form';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@site/src/components/ui/forms';
-import { Spinner } from './spinner';
-import { cn } from '../css/utils';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { AnimatePresence, motion } from 'motion/react';
-import { useState } from 'react';
-import { toast } from './custom-toast';
-import { z } from 'zod/v4';
-import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
-import { Button } from './ui/button';
+import { useForm } from "react-hook-form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@site/src/components/ui/forms";
+import { Spinner } from "./spinner";
+import { cn } from "../css/utils";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { AnimatePresence, motion } from "motion/react";
+import { useState } from "react";
+import { toast } from "./custom-toast";
+import { z } from "zod/v4";
+import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
+import { Button } from "./ui/button";
 
 export const formSchema = z.object({
   email: z.email(),
@@ -22,9 +29,11 @@ const buttonCopy = ({
   successIcon?: React.ReactNode;
   isDark?: boolean;
 }) => ({
-  idle: idleIcon ? idleIcon : 'Subscribe',
-  loading: <Spinner className="w-4 h-4 duration-300! dark:text-white text-black" />,
-  success: successIcon ? successIcon : 'Subscribed!',
+  idle: idleIcon ? idleIcon : "Subscribe",
+  loading: (
+    <Spinner className="w-4 h-4 duration-300! dark:text-white text-black" />
+  ),
+  success: successIcon ? successIcon : "Subscribed!",
 });
 
 const SubscribeForm = ({
@@ -52,39 +61,39 @@ const SubscribeForm = ({
     hsFormGuid?: string;
   };
 
-  const [buttonState, setButtonState] = useState('idle');
+  const [buttonState, setButtonState] = useState("idle");
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      email: '',
+      email: "",
     },
-    reValidateMode: 'onSubmit',
+    reValidateMode: "onSubmit",
   });
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    if (buttonState === 'success') return;
+    if (buttonState === "success") return;
 
     const sanitizedEmail = values.email.trim();
     if (!sanitizedEmail) {
       return toast({
-        title: 'Error Validating Email',
-        description: 'Please enter an email',
+        title: "Error Validating Email",
+        description: "Please enter an email",
       });
     }
-    setButtonState('loading');
+    setButtonState("loading");
     try {
       const response = await fetch(
         `https://api.hsforms.com/submissions/v3/integration/submit/${hsPortalId}/${hsFormGuid}`,
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
           body: JSON.stringify({
             fields: [
               {
-                objectTypeId: '0-1',
-                name: 'email',
+                objectTypeId: "0-1",
+                name: "email",
                 value: sanitizedEmail,
               },
             ],
@@ -98,19 +107,19 @@ const SubscribeForm = ({
       );
 
       if (!response.ok) {
-        throw new Error('Submission failed');
+        throw new Error("Submission failed");
       }
-      setButtonState('success');
-      await new Promise(resolve => setTimeout(resolve, 1750));
+      setButtonState("success");
+      await new Promise((resolve) => setTimeout(resolve, 1750));
     } catch (error) {
-      console.error('Error submitting form:', error);
+      console.error("Error submitting form:", error);
       toast({
-        title: 'Error Submitting Form',
-        description: 'Please try again',
+        title: "Error Submitting Form",
+        description: "Please try again",
       });
-      setButtonState('idle');
+      setButtonState("idle");
     } finally {
-      setButtonState('idle');
+      setButtonState("idle");
       form.reset();
     }
   };
@@ -118,9 +127,9 @@ const SubscribeForm = ({
   return (
     <Form {...form}>
       <form
-        className={cn('items-end flex flex-col w-full gap-2 ', className)}
-        onKeyDown={e => {
-          if (e.key === 'Enter') {
+        className={cn("items-end flex flex-col w-full gap-2 ", className)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
             e.preventDefault();
             form.handleSubmit(onSubmit)();
           }
@@ -133,16 +142,16 @@ const SubscribeForm = ({
             <FormItem className="flex-1 w-full">
               {showLabel ? (
                 <FormLabel className="text-[13px] mb-[0.69rem] block text-gray-500 dark:text-[#E6E6E6]">
-                  {label || 'Mastra Newsletter'}
+                  {label || "Mastra Newsletter"}
                 </FormLabel>
               ) : null}
 
               <FormControl>
                 <input
-                  placeholder={placeholder || 'you@example.com'}
+                  placeholder={placeholder || "you@example.com"}
                   {...field}
                   className={cn(
-                    'bg-transparent dark:text-white focus-visible:border-green-500 placeholder:text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none h-[35px] focus:ring-2 focus:ring-(--mastra-green-accent)/50 w-full py-[0.56rem] px-4 dark:border-[#343434] border border-(--border) rounded-[10px]',
+                    "bg-transparent dark:text-white focus-visible:border-green-500 placeholder:text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none h-[35px] focus:ring-2 focus:ring-(--mastra-green-accent)/50 w-full py-[0.56rem] px-4 dark:border-[#343434] border border-(--border) rounded-[10px]",
                     inputClassName,
                   )}
                 />
@@ -174,18 +183,18 @@ const SubscribeForm = ({
 
         <Button
           className={cn(
-            'bg-(--mastra-surface-3) w-full rounded-[10px] hover:opacity-90 h-[32px] justify-center flex items-center px-4  dark:text-white text-[14px]',
+            "bg-(--mastra-surface-3) w-full rounded-[10px] hover:opacity-90 h-[32px] justify-center flex items-center px-4  dark:text-white text-[14px]",
             buttonClassName,
           )}
-          onClick={e => {
+          onClick={(e) => {
             e.preventDefault();
             form.handleSubmit(onSubmit)();
           }}
-          disabled={buttonState === 'loading'}
+          disabled={buttonState === "loading"}
         >
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.span
-              transition={{ type: 'spring', duration: 0.3, bounce: 0 }}
+              transition={{ type: "spring", duration: 0.3, bounce: 0 }}
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}

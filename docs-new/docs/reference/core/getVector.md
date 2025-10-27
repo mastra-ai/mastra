@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.getVector() '
-description: 'Documentation for the `Mastra.getVector()` method in Mastra, which retrieves a vector store by name.'
+title: "Mastra.getVector() "
+description: "Documentation for the `Mastra.getVector()` method in Mastra, which retrieves a vector store by name."
 ---
 
 # Mastra.getVector()
@@ -10,7 +10,7 @@ The `.getVector()` method is used to retrieve a vector store by its name. The me
 ## Usage example
 
 ```typescript copy
-mastra.getVector('testVectorStore');
+mastra.getVector("testVectorStore");
 ```
 
 ## Parameters

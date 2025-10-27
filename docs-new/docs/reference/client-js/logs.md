@@ -13,7 +13,7 @@ Retrieve system logs with optional filtering:
 
 ```typescript
 const logs = await mastraClient.getLogs({
-  transportId: 'transport-1',
+  transportId: "transport-1",
 });
 ```
 
@@ -23,7 +23,7 @@ Retrieve logs for a specific execution run:
 
 ```typescript
 const runLogs = await mastraClient.getLogForRun({
-  runId: 'run-1',
-  transportId: 'transport-1',
+  runId: "run-1",
+  transportId: "transport-1",
 });
 ```
