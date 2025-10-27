@@ -21,7 +21,7 @@
     transform: rotate(0);
   }
 
-  [dir='rtl'] .expandButtonIcon {
+  [dir="rtl"] .expandButtonIcon {
     transform: rotate(180deg);
   }
 }

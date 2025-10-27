@@ -1,21 +1,24 @@
-import React, {type ReactNode, useState, useCallback} from 'react';
-import clsx from 'clsx';
-import {prefersReducedMotion, ThemeClassNames} from '@docusaurus/theme-common';
-import {useDocsSidebar} from '@docusaurus/plugin-content-docs/client';
-import {useLocation} from '@docusaurus/router';
-import DocSidebar from '@theme/DocSidebar';
-import ExpandButton from '@theme/DocRoot/Layout/Sidebar/ExpandButton';
-import type {Props} from '@theme/DocRoot/Layout/Sidebar';
+import React, { type ReactNode, useState, useCallback } from "react";
+import clsx from "clsx";
+import {
+  prefersReducedMotion,
+  ThemeClassNames,
+} from "@docusaurus/theme-common";
+import { useDocsSidebar } from "@docusaurus/plugin-content-docs/client";
+import { useLocation } from "@docusaurus/router";
+import DocSidebar from "@theme/DocSidebar";
+import ExpandButton from "@theme/DocRoot/Layout/Sidebar/ExpandButton";
+import type { Props } from "@theme/DocRoot/Layout/Sidebar";
 
-import styles from './styles.module.css';
+import styles from "./styles.module.css";
 
 // Reset sidebar state when sidebar changes
 // Use React key to unmount/remount the children
 // See https://github.com/facebook/docusaurus/issues/3414
-function ResetOnSidebarChange({children}: {children: ReactNode}) {
+function ResetOnSidebarChange({ children }: { children: ReactNode }) {
   const sidebar = useDocsSidebar();
   return (
-    <React.Fragment key={sidebar?.name ?? 'noSidebar'}>
+    <React.Fragment key={sidebar?.name ?? "noSidebar"}>
       {children}
     </React.Fragment>
   );
@@ -26,7 +29,7 @@ export default function DocRootLayoutSidebar({
   hiddenSidebarContainer,
   setHiddenSidebarContainer,
 }: Props): ReactNode {
-  const {pathname} = useLocation();
+  const { pathname } = useLocation();
 
   const [hiddenSidebar, setHiddenSidebar] = useState(false);
   const toggleSidebar = useCallback(() => {
@@ -56,13 +59,15 @@ export default function DocRootLayoutSidebar({
         if (hiddenSidebarContainer) {
           setHiddenSidebar(true);
         }
-      }}>
+      }}
+    >
       <ResetOnSidebarChange>
         <div
           className={clsx(
             styles.sidebarViewport,
             hiddenSidebar && styles.sidebarViewportHidden,
-          )}>
+          )}
+        >
           <DocSidebar
             sidebar={sidebar}
             path={pathname}

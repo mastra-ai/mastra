@@ -1,20 +1,29 @@
-import { prefersReducedMotion } from '@docusaurus/theme-common';
-import clsx from 'clsx';
-import React, { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { prefersReducedMotion } from "@docusaurus/theme-common";
+import clsx from "clsx";
+import React, { type ReactNode, useCallback, useEffect, useState } from "react";
 
-import { Markdown } from '@copilotkit/react-ui';
-import { useChat } from '@kapaai/react-sdk';
-import { PulsingDots } from '@site/src/components/loading';
-import { Button } from '@site/src/components/ui/button';
-import { Textarea } from '@site/src/components/ui/textarea';
-import { ArrowUp, PanelLeftClose, PanelRightClose, Square, ThumbsDown, ThumbsUp } from 'lucide-react';
-import { useStickToBottom } from 'use-stick-to-bottom';
-import styles from './styles.module.css';
-import { cn } from '@site/src/lib/utils';
+import { Markdown } from "@copilotkit/react-ui";
+import { useChat } from "@kapaai/react-sdk";
+import { PulsingDots } from "@site/src/components/loading";
+import { Button } from "@site/src/components/ui/button";
+import { Textarea } from "@site/src/components/ui/textarea";
+import {
+  ArrowUp,
+  PanelLeftClose,
+  PanelRightClose,
+  Square,
+  ThumbsDown,
+  ThumbsUp,
+} from "lucide-react";
+import { useStickToBottom } from "use-stick-to-bottom";
+import styles from "./styles.module.css";
+import { cn } from "@site/src/lib/utils";
 
 interface ChatbotSidebarProps {
   hiddenChatbotSidebar: boolean;
-  setHiddenChatbotSidebar: (value: boolean | ((prev: boolean) => boolean)) => void;
+  setHiddenChatbotSidebar: (
+    value: boolean | ((prev: boolean) => boolean),
+  ) => void;
 }
 
 export default function ChatbotSidebar({
@@ -32,34 +41,44 @@ export default function ChatbotSidebar({
     if (!hiddenSidebar && prefersReducedMotion()) {
       setHiddenSidebar(true);
     }
-    setHiddenChatbotSidebar(value => !value);
+    setHiddenChatbotSidebar((value) => !value);
   }, [setHiddenChatbotSidebar, hiddenSidebar]);
 
-  const { conversation, submitQuery, isGeneratingAnswer, isPreparingAnswer, stopGeneration, addFeedback } = useChat();
-  const [inputValue, setInputValue] = useState('');
+  const {
+    conversation,
+    submitQuery,
+    isGeneratingAnswer,
+    isPreparingAnswer,
+    stopGeneration,
+    addFeedback,
+  } = useChat();
+  const [inputValue, setInputValue] = useState("");
 
   const isLoading = isGeneratingAnswer || isPreparingAnswer;
-  const isDisabled = inputValue.trim() === '' || isLoading;
+  const isDisabled = inputValue.trim() === "" || isLoading;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputValue.trim()) {
       submitQuery(inputValue);
-      setInputValue('');
+      setInputValue("");
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (inputValue.trim()) {
         submitQuery(inputValue);
-        setInputValue('');
+        setInputValue("");
       }
     }
   };
 
-  const handleFeedback = (questionAnswerId: string, reaction: 'upvote' | 'downvote') => {
+  const handleFeedback = (
+    questionAnswerId: string,
+    reaction: "upvote" | "downvote",
+  ) => {
     addFeedback(questionAnswerId, reaction);
   };
 
@@ -67,14 +86,22 @@ export default function ChatbotSidebar({
 
   // Set global CSS variable when chatbot sidebar open/close state changes
   useEffect(() => {
-    document.documentElement.style.setProperty('--chatbot-sidebar-open', hiddenChatbotSidebar ? '0' : '1');
+    document.documentElement.style.setProperty(
+      "--chatbot-sidebar-open",
+      hiddenChatbotSidebar ? "0" : "1",
+    );
   }, [hiddenChatbotSidebar]);
 
   return (
     <aside
-      className={clsx(styles.chatbotSidebarContainer, hiddenChatbotSidebar && styles.chatbotSidebarContainerHidden)}
-      onTransitionEnd={e => {
-        if (!e.currentTarget.classList.contains(styles.chatbotSidebarContainer!)) {
+      className={clsx(
+        styles.chatbotSidebarContainer,
+        hiddenChatbotSidebar && styles.chatbotSidebarContainerHidden,
+      )}
+      onTransitionEnd={(e) => {
+        if (
+          !e.currentTarget.classList.contains(styles.chatbotSidebarContainer!)
+        ) {
           return;
         }
 
@@ -83,82 +110,117 @@ export default function ChatbotSidebar({
         }
       }}
     >
-      <div className={clsx(styles.sidebarViewport, hiddenSidebar && styles.sidebarViewportHidden)}>
+      <div
+        className={clsx(
+          styles.sidebarViewport,
+          hiddenSidebar && styles.sidebarViewportHidden,
+        )}
+      >
         {/* Clickable border for collapsing */}
         <div
           className="absolute top-0 bottom-0 -left-2 w-4 h-full cursor-col-resize z-100"
           onClick={toggleSidebar}
           role="button"
           tabIndex={0}
-          onKeyDown={e => {
-            if (e.key === 'Enter' || e.key === ' ') {
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
               toggleSidebar();
             }
           }}
-          title={hiddenChatbotSidebar ? 'Expand chatbot' : 'Collapse chatbot'}
-          aria-label={hiddenChatbotSidebar ? 'Expand chatbot' : 'Collapse chatbot'}
+          title={hiddenChatbotSidebar ? "Expand chatbot" : "Collapse chatbot"}
+          aria-label={
+            hiddenChatbotSidebar ? "Expand chatbot" : "Collapse chatbot"
+          }
         />
         {/* Sidebar content */}
         <div className={styles.chatbotContent} ref={scrollRef}>
-          <div className={cn("sticky top-0 backdrop-blur-md bg-(--mastra-surface-1)/50 z-10 flex items-center gap-2 px-3 py-2 -mx-[10px]", !hiddenChatbotSidebar && "border-b border-(--border)")}>
-            <button className="hover:bg-(--mastra-surface-5) p-1.5 rounded-lg cursor-pointer" onClick={toggleSidebar}>
-              {!hiddenChatbotSidebar ? <PanelRightClose className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+          <div
+            className={cn(
+              "sticky top-0 backdrop-blur-md bg-(--mastra-surface-1)/50 z-10 flex items-center gap-2 px-3 py-2 -mx-[10px]",
+              !hiddenChatbotSidebar && "border-b border-(--border)",
+            )}
+          >
+            <button
+              className="hover:bg-(--mastra-surface-5) p-1.5 rounded-lg cursor-pointer"
+              onClick={toggleSidebar}
+            >
+              {!hiddenChatbotSidebar ? (
+                <PanelRightClose className="w-4 h-4" />
+              ) : (
+                <PanelLeftClose className="w-4 h-4" />
+              )}
             </button>
             {!hiddenChatbotSidebar && (
-              <span className="text-sm font-medium text-(--mastra-text-tertiary)">Chat with Mastra docs</span>
+              <span className="text-sm font-medium text-(--mastra-text-tertiary)">
+                Chat with Mastra docs
+              </span>
             )}
           </div>
           {!hiddenChatbotSidebar && (
             <>
-              <div ref={contentRef} className="flex flex-col flex-1 gap-8 h-full">
+              <div
+                ref={contentRef}
+                className="flex flex-col flex-1 gap-8 h-full"
+              >
                 {conversation.length > 0
-                  ? conversation.map(({ answer: a, question: q, id, reaction }) => {
-                      return (
-                        <div key={id} className={`flex flex-col gap-8 w-full`}>
-                          {!!q && (
-                            <div className="px-2 self-end ring ring-(--border-subtle) text-sm py-1 rounded-lg max-w-[80%] dark:bg-surface-3 dark:text-icons-6 text-(--light-color-text-4) rounded-br-none">
-                              {q}
-                            </div>
-                          )}
+                  ? conversation.map(
+                      ({ answer: a, question: q, id, reaction }) => {
+                        return (
+                          <div
+                            key={id}
+                            className={`flex flex-col gap-8 w-full`}
+                          >
+                            {!!q && (
+                              <div className="px-2 self-end ring ring-(--border-subtle) text-sm py-1 rounded-lg max-w-[80%] dark:bg-surface-3 dark:text-icons-6 text-(--light-color-text-4) rounded-br-none">
+                                {q}
+                              </div>
+                            )}
 
-                          {!!a && (
-                            <div className="relative text-sm bg-transparent max-w-full dark:text-icons-6 text-[--light-color-text-4]">
-                              <Markdown content={a} />
-                              {/* Feedback buttons - only show when answer is complete */}
-                              {id && (
-                                <div className="flex gap-2 items-center mt-3">
-                                  <span className="text-xs text-icons-2">Was this helpful?</span>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    onClick={() => handleFeedback(id, 'upvote')}
-                                    className={`p-1 cursor-pointer ${
-                                      reaction === 'upvote'
-                                        ? 'dark:text-accent-green text-[--light-green-accent]'
-                                        : 'dark:text-icons-3 text-[--light-color-text-4]'
-                                    }`}
-                                  >
-                                    <ThumbsUp className="w-3.5 h-3.5" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    onClick={() => handleFeedback(id, 'downvote')}
-                                    className={`p-1 cursor-pointer ${
-                                      reaction === 'downvote'
-                                        ? 'dark:text-red-500 text-red-600'
-                                        : 'dark:text-icons-3 text-[--light-color-text-4]'
-                                    }`}
-                                  >
-                                    <ThumbsDown className="w-3.5 h-3.5" />
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
+                            {!!a && (
+                              <div className="relative text-sm bg-transparent max-w-full dark:text-icons-6 text-[--light-color-text-4]">
+                                <Markdown content={a} />
+                                {/* Feedback buttons - only show when answer is complete */}
+                                {id && (
+                                  <div className="flex gap-2 items-center mt-3">
+                                    <span className="text-xs text-icons-2">
+                                      Was this helpful?
+                                    </span>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      onClick={() =>
+                                        handleFeedback(id, "upvote")
+                                      }
+                                      className={`p-1 cursor-pointer ${
+                                        reaction === "upvote"
+                                          ? "dark:text-accent-green text-[--light-green-accent]"
+                                          : "dark:text-icons-3 text-[--light-color-text-4]"
+                                      }`}
+                                    >
+                                      <ThumbsUp className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      onClick={() =>
+                                        handleFeedback(id, "downvote")
+                                      }
+                                      className={`p-1 cursor-pointer ${
+                                        reaction === "downvote"
+                                          ? "dark:text-red-500 text-red-600"
+                                          : "dark:text-icons-3 text-[--light-color-text-4]"
+                                      }`}
+                                    >
+                                      <ThumbsDown className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      },
+                    )
                   : null}
                 {isPreparingAnswer && (
                   <div className="self-start p-4 w-fit">
@@ -177,7 +239,7 @@ export default function ChatbotSidebar({
                     rows={1}
                     placeholder="Ask questions about Mastra..."
                     value={inputValue}
-                    onChange={e => setInputValue(e.target.value)}
+                    onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={handleKeyDown}
                   />
                   <div className="flex justify-end w-full">
@@ -207,8 +269,12 @@ export default function ChatbotSidebar({
 
                 <div className="flex items-center -mx-[10px] py-2 px-3 border-t border-(--border)">
                   <span className="text-xs font-medium text-(--mastra-text-muted)">
-                    Powered by{' '}
-                    <a href="https://kapaai.com" target="_blank" rel="noopener noreferrer">
+                    Powered by{" "}
+                    <a
+                      href="https://kapaai.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
                       KapaAI
                     </a>
                   </span>

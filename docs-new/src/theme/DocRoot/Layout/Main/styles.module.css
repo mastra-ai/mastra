@@ -9,19 +9,28 @@
 
 @media (min-width: 997px) {
   .docMainContainer {
-    max-width: calc(100% - (var(--doc-sidebar-width) + var(--chatbot-sidebar-width)));
+    max-width: calc(
+      100% - (var(--doc-sidebar-width) + var(--chatbot-sidebar-width))
+    );
   }
 
   .docMainContainerEnhanced {
-    max-width: calc(100% - (var(--doc-sidebar-hidden-width) + var(--chatbot-sidebar-width)));
+    max-width: calc(
+      100% - (var(--doc-sidebar-hidden-width) + var(--chatbot-sidebar-width))
+    );
   }
 
   .docMainContainerChatbotHidden {
-    max-width: calc(100% - (var(--doc-sidebar-width) + var(--chatbot-sidebar-hidden-width)));
+    max-width: calc(
+      100% - (var(--doc-sidebar-width) + var(--chatbot-sidebar-hidden-width))
+    );
   }
 
   .docMainContainerEnhanced.docMainContainerChatbotHidden {
-    max-width: calc(100% - (var(--doc-sidebar-hidden-width) + var(--chatbot-sidebar-hidden-width)));
+    max-width: calc(
+      100% -
+        (var(--doc-sidebar-hidden-width) + var(--chatbot-sidebar-hidden-width))
+    );
   }
 
   .docItemWrapperEnhanced {
@@ -38,7 +47,8 @@
 
   .docItemWrapperEnhanced.docItemWrapperChatbotHidden {
     max-width: calc(
-      var(--ifm-container-width) + var(--doc-sidebar-width) + var(--chatbot-sidebar-width)
+      var(--ifm-container-width) + var(--doc-sidebar-width) +
+        var(--chatbot-sidebar-width)
     ) !important;
   }
 }
