@@ -88,13 +88,14 @@ isOptional: false,
 ## Extended usage example
 
 ```typescript filename="src/mastra/agents/batched-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { BatchPartsProcessor } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "batched-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o-mini",
+  model: openai("gpt-4o-mini"),
   outputProcessors: [
     new BatchPartsProcessor({
       batchSize: 5,

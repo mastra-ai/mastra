@@ -112,13 +112,14 @@ isOptional: false,
 ## Extended usage example
 
 ```typescript filename="src/mastra/agents/limited-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { TokenLimiterProcessor } from "@mastra/core/processors";
 
 export const agent = new Agent({
   name: "limited-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o-mini",
+  model: openai("gpt-4o-mini"),
   outputProcessors: [
     new TokenLimiterProcessor({
       limit: 1000,
