@@ -489,7 +489,7 @@ pre,
     border-right: var(--border-sm) solid var(--border);
   }
 
-  @media(min-width: 1536px){
+  @media (min-width: 1536px) {
     .theme-doc-sidebar-container.theme-doc-sidebar-container {
       padding-inline-start: 0;
     }
@@ -1190,4 +1190,3 @@ textarea:-webkit-autofill:focus {
     overflow-x: revert;
   }
 }
-
