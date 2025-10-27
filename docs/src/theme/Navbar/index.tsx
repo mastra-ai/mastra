@@ -11,7 +11,7 @@ import { TabSwitcher } from "./tab-switcher";
 function NavbarContentDesktop() {
   return (
     <>
-      <div className="flex px-4 2xl:px-0 border-b-[0.5px] h-[60px] border-(--border-subtle) mx-auto w-full items-center justify-between">
+      <div className="flex px-4 border-b-[0.5px] h-[47px] border-(--border-subtle) mx-auto w-full items-center justify-between">
         <Link href="/docs">
           <div className="flex gap-2 items-center">
             <Logo />
@@ -30,9 +30,6 @@ function NavbarContentDesktop() {
           </div>
           <NavbarMobileSidebarToggle />
         </div>
-      </div>
-      <div className="hidden 2xl:px-0 lg:block">
-        <TabSwitcher />
       </div>
     </>
   );
