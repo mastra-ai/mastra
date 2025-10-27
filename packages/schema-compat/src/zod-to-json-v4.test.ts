@@ -82,6 +82,53 @@ describe('zodToJsonSchema - Zod v4 specific', () => {
     });
   });
 
+  describe('idempotency verification', () => {
+    it('should handle multiple conversions of the same lazy schema with z.record()', () => {
+      // Create a lazy schema that contains a z.record()
+      const lazySchema = zV4.lazy(() =>
+        zV4.object({
+          data: zV4.record(zV4.string()),
+        }),
+      );
+
+      // Convert the same schema multiple times
+      const result1 = zodToJsonSchema(lazySchema as any);
+      const result2 = zodToJsonSchema(lazySchema as any);
+      const result3 = zodToJsonSchema(lazySchema as any);
+
+      // All results should be valid
+      expect(result1).toBeDefined();
+      expect(result2).toBeDefined();
+      expect(result3).toBeDefined();
+
+      // Should not throw and should produce consistent results
+      expect(result1.type).toBe('object');
+      expect(result2.type).toBe('object');
+      expect(result3.type).toBe('object');
+    });
+
+    it('should handle nested lazy schemas with records without re-wrapping getters', () => {
+      // Create a schema with nested lazy and record
+      const nestedLazySchema = zV4.object({
+        nested: zV4.lazy(() =>
+          zV4.object({
+            records: zV4.record(zV4.string()),
+          }),
+        ),
+      });
+
+      // Convert multiple times - should not cause getter wrapping issues
+      const result1 = zodToJsonSchema(nestedLazySchema as any);
+      const result2 = zodToJsonSchema(nestedLazySchema as any);
+
+      // Both should succeed
+      expect(result1).toBeDefined();
+      expect(result2).toBeDefined();
+      expect(result1.type).toBe('object');
+      expect(result2.type).toBe('object');
+    });
+  });
+
   describe('fallback mechanism verification', () => {
     it('should successfully convert all agent-builder schemas that were failing', () => {
       // These are the real schemas that were causing production issues
