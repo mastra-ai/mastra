@@ -1,8 +1,8 @@
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { experimental_customProvider } from 'ai';
-import { customProvider } from 'ai-v5';
+import { customProvider } from 'ai';
+import { experimental_customProvider } from 'ai-v4';
 import { FlagEmbedding, EmbeddingModel } from 'fastembed';
 
 async function getModelCachePath() {

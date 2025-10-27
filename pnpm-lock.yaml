@@ -1877,15 +1877,15 @@ importers:
 
   packages/fastembed:
     dependencies:
-      '@ai-sdk/provider-v5':
-        specifier: npm:@ai-sdk/provider@2.0.0
-        version: '@ai-sdk/provider@2.0.0'
+      '@ai-sdk/provider':
+        specifier: ^2.0.0
+        version: 2.0.0
       ai:
-        specifier: ^4.3.19
-        version: 4.3.19(react@19.2.0)(zod@4.1.12)
-      ai-v5:
-        specifier: npm:ai@5.0.76
-        version: ai@5.0.76(zod@4.1.12)
+        specifier: ^5.0.76
+        version: 5.0.81(zod@4.1.12)
+      ai-v4:
+        specifier: npm:ai@4.3.19
+        version: ai@4.3.19(react@19.2.0)(zod@4.1.12)
       fastembed:
         specifier: ^1.14.4
         version: 1.14.4
@@ -16349,13 +16349,6 @@ snapshots:
       '@vercel/oidc': 3.0.3
       zod: 3.25.76
 
-  '@ai-sdk/gateway@2.0.0(zod@4.1.12)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.12(zod@4.1.12)
-      '@vercel/oidc': 3.0.3
-      zod: 4.1.12
-
   '@ai-sdk/gateway@2.0.2(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
@@ -16478,13 +16471,6 @@ snapshots:
       '@standard-schema/spec': 1.0.0
       eventsource-parser: 3.0.6
       zod: 3.25.76
-
-  '@ai-sdk/provider-utils@3.0.12(zod@4.1.12)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@standard-schema/spec': 1.0.0
-      eventsource-parser: 3.0.6
-      zod: 4.1.12
 
   '@ai-sdk/provider-utils@3.0.13(zod@3.25.76)':
     dependencies:
@@ -23451,14 +23437,6 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.12(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
       zod: 3.25.76
-
-  ai@5.0.76(zod@4.1.12):
-    dependencies:
-      '@ai-sdk/gateway': 2.0.0(zod@4.1.12)
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.12(zod@4.1.12)
-      '@opentelemetry/api': 1.9.0
-      zod: 4.1.12
 
   ai@5.0.81(zod@3.25.76):
     dependencies:
