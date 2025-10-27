@@ -128,6 +128,21 @@ describe('zodToJsonSchema - Zod v4 specific', () => {
       expect(result1.type).toBe('object');
       expect(result2.type).toBe('object');
     });
+
+    it('should not double-wrap lazy getter across multiple conversions', () => {
+      type Node = { value: string; children: Record<string, any> };
+      const nodeSchema: zV4.ZodType<Node> = zV4.lazy(() =>
+        zV4.object({
+          value: zV4.string(),
+          children: zV4.record(nodeSchema),
+        }),
+      );
+      // Call twice; should not throw or degrade
+      expect(() => zodToJsonSchema(nodeSchema as any)).not.toThrow();
+      expect(() => zodToJsonSchema(nodeSchema as any)).not.toThrow();
+      const res = zodToJsonSchema(nodeSchema as any);
+      expect(res).toBeDefined();
+    });
   });
 
   describe('fallback mechanism verification', () => {
