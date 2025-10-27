@@ -20,6 +20,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@lukeed/uuid": "^2.0.1",
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/react": "workspace:*",

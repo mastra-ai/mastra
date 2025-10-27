@@ -2331,6 +2331,9 @@ importers:
 
   packages/playground:
     dependencies:
+      '@lukeed/uuid':
+        specifier: ^2.0.1
+        version: 2.0.1
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../../client-sdks/client-js
