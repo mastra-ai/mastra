@@ -1,7 +1,7 @@
 import { toast } from 'sonner';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import type { MemorySearchResponse, MemorySearchParams } from '@/types/memory';
+import type { MemorySearchParams } from '@/types/memory';
 import { useMastraClient } from '@mastra/react';
 
 export const useMemory = (agentId?: string) => {
@@ -85,41 +85,10 @@ export const useMemorySearch = ({
   resourceId: string;
   threadId?: string;
 }) => {
-  const searchMemory = async (searchQuery: string, memoryConfig?: MemorySearchParams) => {
-    if (!searchQuery.trim()) {
-      return { results: [], count: 0, query: searchQuery };
-    }
-
-    const params = new URLSearchParams({
-      searchQuery,
-      resourceId,
-      agentId,
-    });
-
-    if (threadId) {
-      params.append('threadId', threadId);
-    }
-
-    if (memoryConfig) {
-      params.append('memoryConfig', JSON.stringify(memoryConfig));
-    }
-
-    const response = await fetch(`/api/memory/search?${params}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-mastra-dev-playground': 'true',
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-      console.error('Search memory error:', errorData);
-      throw new Error(errorData.message || errorData.error || 'Failed to search memory');
-    }
-
-    return response.json() as Promise<MemorySearchResponse>;
-  };
-
-  return { searchMemory };
+  const client = useMastraClient();
+  return useMutation({
+    mutationFn: async ({ searchQuery, memoryConfig }: { searchQuery: string; memoryConfig?: MemorySearchParams }) => {
+      return client.searchMemory({ agentId, resourceId, threadId, searchQuery, memoryConfig });
+    },
+  });
 };
