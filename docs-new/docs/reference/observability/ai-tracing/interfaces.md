@@ -1,5 +1,5 @@
 ---
-title: 'Interfaces '
+title: "Interfaces "
 description: AI Tracing type definitions and interfaces
 ---
 
@@ -26,7 +26,9 @@ interface AITracing {
   getLogger(): IMastraLogger;
 
   /** Start a new span of a specific AISpanType */
-  startSpan<TType extends AISpanType>(options: StartSpanOptions<TType>): AISpan<TType>;
+  startSpan<TType extends AISpanType>(
+    options: StartSpanOptions<TType>,
+  ): AISpan<TType>;
 
   /** Shutdown AI tracing and clean up resources */
   shutdown(): Promise<void>;
@@ -94,10 +96,14 @@ interface AISpan<TType extends AISpanType> {
   update(options: UpdateSpanOptions<TType>): void;
 
   /** Create child span - can be any span type independent of parent */
-  createChildSpan<TChildType extends AISpanType>(options: ChildSpanOptions<TChildType>): AISpan<TChildType>;
+  createChildSpan<TChildType extends AISpanType>(
+    options: ChildSpanOptions<TChildType>,
+  ): AISpan<TChildType>;
 
   /** Create event span - can be any span type independent of parent */
-  createEventSpan<TChildType extends AISpanType>(options: ChildEventOptions<TChildType>): AISpan<TChildType>;
+  createEventSpan<TChildType extends AISpanType>(
+    options: ChildEventOptions<TChildType>,
+  ): AISpan<TChildType>;
 
   /** Returns TRUE if the span is the root span of a trace */
   get isRootSpan(): boolean;
@@ -153,46 +159,46 @@ AI-specific span types with their associated metadata.
 ```typescript
 enum AISpanType {
   /** Agent run - root span for agent processes */
-  AGENT_RUN = 'agent_run',
+  AGENT_RUN = "agent_run",
 
   /** Generic span for custom operations */
-  GENERIC = 'generic',
+  GENERIC = "generic",
 
   /** LLM generation with model calls, token usage, prompts, completions */
-  LLM_GENERATION = 'llm_generation',
+  LLM_GENERATION = "llm_generation",
 
   /** Individual LLM streaming chunk/event */
-  LLM_CHUNK = 'llm_chunk',
+  LLM_CHUNK = "llm_chunk",
 
   /** MCP (Model Context Protocol) tool execution */
-  MCP_TOOL_CALL = 'mcp_tool_call',
+  MCP_TOOL_CALL = "mcp_tool_call",
 
   /** Function/tool execution with inputs, outputs, errors */
-  TOOL_CALL = 'tool_call',
+  TOOL_CALL = "tool_call",
 
   /** Workflow run - root span for workflow processes */
-  WORKFLOW_RUN = 'workflow_run',
+  WORKFLOW_RUN = "workflow_run",
 
   /** Workflow step execution with step status, data flow */
-  WORKFLOW_STEP = 'workflow_step',
+  WORKFLOW_STEP = "workflow_step",
 
   /** Workflow conditional execution with condition evaluation */
-  WORKFLOW_CONDITIONAL = 'workflow_conditional',
+  WORKFLOW_CONDITIONAL = "workflow_conditional",
 
   /** Individual condition evaluation within conditional */
-  WORKFLOW_CONDITIONAL_EVAL = 'workflow_conditional_eval',
+  WORKFLOW_CONDITIONAL_EVAL = "workflow_conditional_eval",
 
   /** Workflow parallel execution */
-  WORKFLOW_PARALLEL = 'workflow_parallel',
+  WORKFLOW_PARALLEL = "workflow_parallel",
 
   /** Workflow loop execution */
-  WORKFLOW_LOOP = 'workflow_loop',
+  WORKFLOW_LOOP = "workflow_loop",
 
   /** Workflow sleep operation */
-  WORKFLOW_SLEEP = 'workflow_sleep',
+  WORKFLOW_SLEEP = "workflow_sleep",
 
   /** Workflow wait for event operation */
-  WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
+  WORKFLOW_WAIT_EVENT = "workflow_wait_event",
 }
 ```
 
@@ -242,7 +248,11 @@ interface LLMGenerationAttributes {
   provider?: string;
 
   /** Type of result/output this LLM call produced */
-  resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
+  resultType?:
+    | "tool_selection"
+    | "response_generation"
+    | "reasoning"
+    | "planning";
 
   /** Token usage statistics */
   usage?: {
@@ -545,7 +555,7 @@ interface ObservabilityRegistryConfig {
   };
 
   /** Map of tracing instance names to their configurations or pre-instantiated instances */
-  configs?: Record<string, Omit<TracingConfig, 'name'> | AITracing>;
+  configs?: Record<string, Omit<TracingConfig, "name"> | AITracing>;
 
   /** Optional selector function to choose which tracing instance to use */
   configSelector?: ConfigSelector;
@@ -560,10 +570,10 @@ Sampling strategy configuration.
 
 ```typescript
 type SamplingStrategy =
-  | { type: 'always' }
-  | { type: 'never' }
-  | { type: 'ratio'; probability: number }
-  | { type: 'custom'; sampler: (options?: CustomSamplerOptions) => boolean };
+  | { type: "always" }
+  | { type: "never" }
+  | { type: "ratio"; probability: number }
+  | { type: "custom"; sampler: (options?: CustomSamplerOptions) => boolean };
 ```
 
 ### CustomSamplerOptions

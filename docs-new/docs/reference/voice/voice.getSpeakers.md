@@ -1,6 +1,6 @@
 ---
-title: 'voice.getSpeakers() '
-description: 'Documentation for the getSpeakers() method available in voice providers, which retrieves available voice options.'
+title: "voice.getSpeakers() "
+description: "Documentation for the getSpeakers() method available in voice providers, which retrieves available voice options."
 ---
 
 import Tabs from '@theme/Tabs';
@@ -13,8 +13,8 @@ The `getSpeakers()` method retrieves a list of available voice options (speakers
 ## Usage Example
 
 ```typescript
-import { OpenAIVoice } from '@mastra/voice-openai';
-import { ElevenLabsVoice } from '@mastra/voice-elevenlabs';
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 
 // Initialize voice providers
 const openaiVoice = new OpenAIVoice();
@@ -24,16 +24,16 @@ const elevenLabsVoice = new ElevenLabsVoice({
 
 // Get available speakers from OpenAI
 const openaiSpeakers = await openaiVoice.getSpeakers();
-console.log('OpenAI voices:', openaiSpeakers);
+console.log("OpenAI voices:", openaiSpeakers);
 // Example output: [{ voiceId: "alloy" }, { voiceId: "echo" }, { voiceId: "fable" }, ...]
 
 // Get available speakers from ElevenLabs
 const elevenLabsSpeakers = await elevenLabsVoice.getSpeakers();
-console.log('ElevenLabs voices:', elevenLabsSpeakers);
+console.log("ElevenLabs voices:", elevenLabsSpeakers);
 // Example output: [{ voiceId: "21m00Tcm4TlvDq8ikWAM", name: "Rachel" }, ...]
 
 // Use a specific voice for speech
-const text = 'Hello, this is a test of different voices.';
+const text = "Hello, this is a test of different voices.";
 await openaiVoice.speak(text, { speaker: openaiSpeakers[2].voiceId });
 await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
 ```

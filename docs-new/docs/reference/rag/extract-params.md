@@ -1,5 +1,5 @@
 ---
-title: 'Reference: ExtractParams '
+title: "ExtractParams"
 description: Documentation for metadata extraction configuration in Mastra.
 ---
 
@@ -10,7 +10,7 @@ ExtractParams configures metadata extraction from document chunks using LLM anal
 ## Example
 
 ```typescript showLineNumbers copy
-import { MDocument } from '@mastra/rag';
+import { MDocument } from "@mastra/rag";
 
 const doc = MDocument.fromText(text);
 const chunks = await doc.chunk({
@@ -189,7 +189,7 @@ description:
 ## Advanced Example
 
 ```typescript showLineNumbers copy
-import { MDocument } from '@mastra/rag';
+import { MDocument } from "@mastra/rag";
 
 const doc = MDocument.fromText(text);
 const chunks = await doc.chunk({
@@ -197,27 +197,27 @@ const chunks = await doc.chunk({
     // Title extraction with custom settings
     title: {
       nodes: 2, // Extract 2 title nodes
-      nodeTemplate: 'Generate a title for this: {context}',
-      combineTemplate: 'Combine these titles: {context}',
+      nodeTemplate: "Generate a title for this: {context}",
+      combineTemplate: "Combine these titles: {context}",
     },
 
     // Summary extraction with custom settings
     summary: {
-      summaries: ['self'], // Generate summaries for current chunk
-      promptTemplate: 'Summarize this: {context}',
+      summaries: ["self"], // Generate summaries for current chunk
+      promptTemplate: "Summarize this: {context}",
     },
 
     // Question generation with custom settings
     questions: {
       questions: 3, // Generate 3 questions
-      promptTemplate: 'Generate {numQuestions} questions about: {context}',
+      promptTemplate: "Generate {numQuestions} questions about: {context}",
       embeddingOnly: false,
     },
 
     // Keyword extraction with custom settings
     keywords: {
       keywords: 5, // Extract 5 keywords
-      promptTemplate: 'Extract {maxKeywords} key terms from: {context}',
+      promptTemplate: "Extract {maxKeywords} key terms from: {context}",
     },
   },
 });
@@ -238,15 +238,15 @@ When using the `TitleExtractor`, you can group multiple chunks together for titl
 **Example:**
 
 ```ts
-import { MDocument } from '@mastra/rag';
+import { MDocument } from "@mastra/rag";
 
 const doc = new MDocument({
   docs: [
-    { text: 'chunk 1', metadata: { docId: 'docA' } },
-    { text: 'chunk 2', metadata: { docId: 'docA' } },
-    { text: 'chunk 3', metadata: { docId: 'docB' } },
+    { text: "chunk 1", metadata: { docId: "docA" } },
+    { text: "chunk 2", metadata: { docId: "docA" } },
+    { text: "chunk 3", metadata: { docId: "docB" } },
   ],
-  type: 'text',
+  type: "text",
 });
 
 await doc.extractMetadata({ title: true });

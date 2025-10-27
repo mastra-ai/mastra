@@ -1,6 +1,7 @@
 ---
-title: 'Tools and MCP '
+title: "Using Tools"
 description: Learn how to create tools, add them to Mastra agents, and integrate tools from MCP servers.
+sidebar_position: 2
 ---
 
 # Tools and MCP
@@ -17,12 +18,12 @@ Mastra supports two patterns for providing tools to agents:
 This example shows how to create a simple tool that asynchronously fetches data from a weather API:
 
 ```typescript filename="src/mastra/tools/weather-tool.ts" showLineNumbers copy
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
 export const weatherTool = createTool({
-  id: 'weather-tool',
-  description: 'Fetches the current weather for a given city',
+  id: "weather-tool",
+  description: "Fetches the current weather for a given city",
   inputSchema: z.object({
     city: z.string(),
   }),
@@ -44,16 +45,16 @@ For details on creating and designing tools, see the [Tools Overview](../tools-m
 To make a tool available to an agent, add it to the `tools` property in the agent's configuration.
 
 ```typescript {3,12} filename="src/mastra/agents/weather-agent.ts" showLineNumbers copy
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { weatherTool } from '../tools/weather-tool';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { weatherTool } from "../tools/weather-tool";
 
 export const weatherAgent = new Agent({
-  name: 'Weather Agent',
+  name: "Weather Agent",
   instructions: `
     You are a helpful assistant that provides weather information.
     When asked about the weather, use the weatherTool to fetch the data.`,
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   tools: {
     weatherTool,
   },
@@ -83,14 +84,18 @@ Because there are so many MCP server registries to choose from, we've created an
 Once you have a server you want to use with your agent, import the Mastra `MCPClient` and add the server configuration.
 
 ```typescript filename="src/mastra/mcp.ts" {1,7-16}
-import { MCPClient } from '@mastra/mcp';
+import { MCPClient } from "@mastra/mcp";
 
 // Configure MCPClient to connect to your server(s)
 export const mcp = new MCPClient({
   servers: {
     filesystem: {
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-filesystem', '/Users/username/Downloads'],
+      command: "npx",
+      args: [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/username/Downloads",
+      ],
     },
   },
 });
@@ -99,15 +104,15 @@ export const mcp = new MCPClient({
 Then connect your agent to the server tools:
 
 ```typescript filename="src/mastra/agents/mcpAgent.ts" {7}
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { mcp } from '../mcp';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { mcp } from "../mcp";
 
 // Create an agent and add tools from the MCP client
 const agent = new Agent({
-  name: 'Agent with MCP Tools',
-  instructions: 'You can use tools from connected MCP servers.',
-  model: openai('gpt-4o-mini'),
+  name: "Agent with MCP Tools",
+  instructions: "You can use tools from connected MCP servers.",
+  model: openai("gpt-4o-mini"),
   tools: await mcp.getTools(),
 });
 ```
@@ -115,22 +120,22 @@ const agent = new Agent({
 When creating agents that will consume an MCP server in the same repo they need to connect to, always use function based tools to prevent race conditions.
 
 ```typescript filename="src/mastra/agents/selfReferencingAgent.ts"
-import { Agent } from '@mastra/core/agent';
-import { MCPServer } from '@mastra/mcp';
-import { MCPClient } from '@mastra/mcp';
-import { openai } from '@ai-sdk/openai';
+import { Agent } from "@mastra/core/agent";
+import { MCPServer } from "@mastra/mcp";
+import { MCPClient } from "@mastra/mcp";
+import { openai } from "@ai-sdk/openai";
 
 const myAgent = new Agent({
-  name: 'My Agent',
-  description: 'An agent that can use tools from an http MCP server',
-  instructions: 'You can use remote calculation tools.',
-  model: openai('gpt-4o-mini'),
+  name: "My Agent",
+  description: "An agent that can use tools from an http MCP server",
+  instructions: "You can use remote calculation tools.",
+  model: openai("gpt-4o-mini"),
   tools: async () => {
     // Tools resolve when needed, not during initialization
     const mcpClient = new MCPClient({
       servers: {
         myServer: {
-          url: new URL('http://localhost:4111/api/mcp/mcpServer/mcp'),
+          url: new URL("http://localhost:4111/api/mcp/mcpServer/mcp"),
         },
       },
     });
@@ -140,7 +145,7 @@ const myAgent = new Agent({
 
 // This works because tools resolve after server startup
 export const mcpServer = new MCPServer({
-  name: 'My MCP Server',
+  name: "My MCP Server",
   agents: {
     myAgent,
   },
@@ -154,14 +159,16 @@ For more details on configuring `MCPClient` and the difference between static an
 In addition to tools, MCP servers can also expose resources - data or content that can be retrieved and used in your application.
 
 ```typescript filename="src/mastra/resources.ts" {3-8}
-import { mcp } from './mcp';
+import { mcp } from "./mcp";
 
 // Get resources from all connected MCP servers
 const resources = await mcp.getResources();
 
 // Access resources from a specific server
 if (resources.filesystem) {
-  const resource = resources.filesystem.find(r => r.uri === 'filesystem://Downloads');
+  const resource = resources.filesystem.find(
+    (r) => r.uri === "filesystem://Downloads",
+  );
   console.log(`Resource: ${resource?.name}`);
 }
 ```
@@ -175,14 +182,14 @@ MCP servers can also expose prompts, which represent structured message template
 ### Listing prompts
 
 ```typescript filename="src/mastra/prompts.ts"
-import { mcp } from './mcp';
+import { mcp } from "./mcp";
 
 // Get prompts from all connected MCP servers
 const prompts = await mcp.prompts.list();
 
 // Access prompts from a specific server
 if (prompts.weather) {
-  const prompt = prompts.weather.find(p => p.name === 'current');
+  const prompt = prompts.weather.find((p) => p.name === "current");
   console.log(`Prompt: ${prompt?.name}`);
 }
 ```
@@ -192,7 +199,10 @@ Each prompt has a name, description, and (optional) version.
 ### Retrieving a prompt and its messages
 
 ```typescript filename="src/mastra/prompts.ts"
-const { prompt, messages } = await mcp.prompts.get({ serverName: 'weather', name: 'current' });
+const { prompt, messages } = await mcp.prompts.get({
+  serverName: "weather",
+  name: "current",
+});
 console.log(prompt); // { name: "current", version: "v1", ... }
 console.log(messages); // [ { role: "assistant", content: { type: "text", text: "..." } }, ... ]
 ```
@@ -212,15 +222,15 @@ This allows other AI models or MCP clients to interact with your Mastra Agents a
 **Example `MCPServer` Configuration with an Agent:**
 
 ```typescript filename="src/mastra/mcp.ts"
-import { Agent } from '@mastra/core/agent';
-import { MCPServer } from '@mastra/mcp';
-import { openai } from '@ai-sdk/openai';
-import { weatherInfo } from '../tools/weatherInfo';
-import { generalHelper } from '../agents/generalHelper';
+import { Agent } from "@mastra/core/agent";
+import { MCPServer } from "@mastra/mcp";
+import { openai } from "@ai-sdk/openai";
+import { weatherInfo } from "../tools/weatherInfo";
+import { generalHelper } from "../agents/generalHelper";
 
 const server = new MCPServer({
-  name: 'My Custom Server with Agent-Tool',
-  version: '1.0.0',
+  name: "My Custom Server with Agent-Tool",
+  version: "1.0.0",
   tools: {
     weatherInfo,
   },

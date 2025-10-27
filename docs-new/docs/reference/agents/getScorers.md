@@ -1,6 +1,6 @@
 ---
-title: 'Agent.getScorers() '
-description: 'Documentation for the `Agent.getScorers()` method in Mastra agents, which retrieves the scoring configuration.'
+title: "Agent.getScorers() "
+description: "Documentation for the `Agent.getScorers()` method in Mastra agents, which retrieves the scoring configuration."
 ---
 
 # Agent.getScorers()
@@ -64,4 +64,4 @@ description: "Runtime context for dependency injection and contextual informatio
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Agent Runtime Context](/docs/agents/runtime-context)
+- [Agent Runtime Context](/docs/server-db/runtime-context)

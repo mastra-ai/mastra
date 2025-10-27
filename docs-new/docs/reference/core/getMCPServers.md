@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.getMCPServers() '
-description: 'Documentation for the `Mastra.getMCPServers()` method in Mastra, which retrieves all registered MCP server instances.'
+title: "Mastra.getMCPServers() "
+description: "Documentation for the `Mastra.getMCPServers()` method in Mastra, which retrieves all registered MCP server instances."
 ---
 
 # Mastra.getMCPServers()

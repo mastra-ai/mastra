@@ -1,6 +1,6 @@
 ---
-title: 'Digital Ocean'
-description: 'Deploy your Mastra applications to Digital Ocean.'
+title: "Digital Ocean"
+description: "Deploy your Mastra applications to Digital Ocean."
 ---
 
 import Tabs from '@theme/Tabs';
@@ -191,10 +191,10 @@ You can now connect to your Mastra server from your client application using a `
 Refer to the [`MastraClient` documentation](/docs/server-db/mastra-client) for more information.
 
 ```typescript copy showLineNumbers
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from "@mastra/client-js";
 
 const mastraClient = new MastraClient({
-  baseUrl: 'https://<your-domain-name>',
+  baseUrl: "https://<your-domain-name>",
 });
 ```
 

@@ -1,6 +1,6 @@
 ---
-title: 'Reference: PII Detector '
-description: 'Documentation for the PIIDetector in Mastra, which detects and redacts personally identifiable information (PII) from AI responses.'
+title: "PII Detector"
+description: "Documentation for the PIIDetector in Mastra, which detects and redacts personally identifiable information (PII) from AI responses."
 ---
 
 # PIIDetector
@@ -10,13 +10,13 @@ The `PIIDetector` is a **hybrid processor** that can be used for both input and 
 ## Usage example
 
 ```typescript copy
-import { PIIDetector } from '@mastra/core/processors';
+import { PIIDetector } from "@mastra/core/processors";
 
 const processor = new PIIDetector({
-  model: 'openai/gpt-4.1-nano',
+  model: "openai/gpt-4.1-nano",
   threshold: 0.6,
-  strategy: 'redact',
-  detectionTypes: ['email', 'phone', 'credit-card', 'ssn'],
+  strategy: "redact",
+  detectionTypes: ["email", "phone", "credit-card", "ssn"],
 });
 ```
 
@@ -125,21 +125,22 @@ isOptional: false,
 ### Input processing
 
 ```typescript filename="src/mastra/agents/private-agent.ts" showLineNumbers copy
-import { Agent } from '@mastra/core/agent';
-import { PIIDetector } from '@mastra/core/processors';
+import { Agent } from "@mastra/core/agent";
+import { PIIDetector } from "@mastra/core/processors";
 
 export const agent = new Agent({
-  name: 'private-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-4o-mini',
+  name: "private-agent",
+  instructions: "You are a helpful assistant",
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new PIIDetector({
-      model: 'openai/gpt-4.1-nano',
-      detectionTypes: ['email', 'phone', 'credit-card', 'ssn'],
+      model: "openai/gpt-4.1-nano",
+      detectionTypes: ["email", "phone", "credit-card", "ssn"],
       threshold: 0.6,
-      strategy: 'redact',
-      redactionMethod: 'mask',
-      instructions: 'Detect and redact personally identifiable information while preserving message intent',
+      strategy: "redact",
+      redactionMethod: "mask",
+      instructions:
+        "Detect and redact personally identifiable information while preserving message intent",
       includeDetections: true,
       preserveFormat: true,
     }),
@@ -152,13 +153,13 @@ export const agent = new Agent({
 When using `PIIDetector` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the PII detector, reducing the number of LLM calls required for detection.
 
 ```typescript filename="src/mastra/agents/output-pii-agent.ts" showLineNumbers copy
-import { Agent } from '@mastra/core/agent';
-import { BatchPartsProcessor, PIIDetector } from '@mastra/core/processors';
+import { Agent } from "@mastra/core/agent";
+import { BatchPartsProcessor, PIIDetector } from "@mastra/core/processors";
 
 export const agent = new Agent({
-  name: 'output-pii-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-4o-mini',
+  name: "output-pii-agent",
+  instructions: "You are a helpful assistant",
+  model: "openai/gpt-4o-mini",
   outputProcessors: [
     // Batch stream parts first to reduce LLM calls
     new BatchPartsProcessor({
@@ -166,8 +167,8 @@ export const agent = new Agent({
     }),
     // Then apply PII detection on batched content
     new PIIDetector({
-      model: 'openai/gpt-4.1-nano',
-      strategy: 'redact',
+      model: "openai/gpt-4.1-nano",
+      strategy: "redact",
     }),
   ],
 });

@@ -1,6 +1,6 @@
 ---
-title: 'Fireworks AI '
-description: 'Use AI models through Fireworks AI.'
+title: "Fireworks AI "
+description: "Use AI models through Fireworks AI."
 ---
 
 # <img src="https://models.dev/logos/fireworks-ai.svg" alt="Fireworks AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Fireworks AI
@@ -12,12 +12,12 @@ Learn more in the [Fireworks AI documentation](https://fireworks.ai/docs/).
 ## Usage
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'fireworks-ai/accounts/fireworks/models/deepseek-r1-0528',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "fireworks-ai/accounts/fireworks/models/deepseek-r1-0528",
 });
 ```
 

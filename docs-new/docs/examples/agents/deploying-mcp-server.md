@@ -1,5 +1,5 @@
 ---
-title: 'Deploying an MCPServer '
+title: "Deploying an MCPServer "
 description: Example of setting up, building, and deploying a Mastra MCPServer using the stdio transport and publishing it to NPM.
 ---
 
@@ -23,17 +23,17 @@ pnpm add @mastra/mcp @mastra/core tsup
 
     ```typescript filename="src/mastra/stdio.ts" copy
     #!/usr/bin/env node
-    import { MCPServer } from '@mastra/mcp';
-    import { weatherTool } from './tools';
+    import { MCPServer } from "@mastra/mcp";
+    import { weatherTool } from "./tools";
 
     const server = new MCPServer({
-      name: 'my-mcp-server',
-      version: '1.0.0',
+      name: "my-mcp-server",
+      version: "1.0.0",
       tools: { weatherTool },
     });
 
-    server.startStdio().catch(error => {
-      console.error('Error running MCP server:', error);
+    server.startStdio().catch((error) => {
+      console.error("Error running MCP server:", error);
       process.exit(1);
     });
     ```
@@ -76,14 +76,14 @@ To make your MCP server available for others (or yourself) to use via `npx` or a
 Once published, your MCP server can be used by an `MCPClient` by specifying the command to run your package. You can also use any other MCP client like Claude desktop, Cursor, or Windsurf.
 
 ```typescript
-import { MCPClient } from '@mastra/mcp';
+import { MCPClient } from "@mastra/mcp";
 
 const mcp = new MCPClient({
   servers: {
     // Give this MCP server instance a name
     yourServerName: {
-      command: 'npx',
-      args: ['-y', '@your-org-name/your-package-name@latest'], // Replace with your package name
+      command: "npx",
+      args: ["-y", "@your-org-name/your-package-name@latest"], // Replace with your package name
     },
   },
 });

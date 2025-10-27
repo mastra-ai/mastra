@@ -70,7 +70,7 @@ export class ArizeExporter extends OtelExporter {
       },
       provider: {
         custom: {
-          endpoint: config.endpoint,
+          endpoint,
           headers,
           protocol: 'http/protobuf',
         },

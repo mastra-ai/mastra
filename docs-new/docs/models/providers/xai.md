@@ -1,6 +1,6 @@
 ---
-title: 'XAI'
-description: 'Use xAI models with Mastra. 20 models available.'
+title: "XAI"
+description: "Use xAI models with Mastra. 20 models available."
 ---
 
 import Tabs from '@theme/Tabs';
@@ -17,19 +17,19 @@ XAI_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'xai/grok-2',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "xai/grok-2",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -288,12 +288,12 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    modelId: 'grok-2',
+    modelId: "grok-2",
     apiKey: process.env.XAI_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -303,10 +303,10 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'xai/grok-vision-beta' : 'xai/grok-2';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced ? "xai/grok-vision-beta" : "xai/grok-2";
   },
 });
 ```

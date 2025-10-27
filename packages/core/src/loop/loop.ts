@@ -5,7 +5,6 @@ import { ConsoleLogger } from '../logger';
 import type { ProcessorState } from '../processors';
 import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
-import { getRootSpan } from './telemetry';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflows/stream';
 
@@ -15,16 +14,13 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   logger,
   runId,
   idGenerator,
-  telemetry_settings,
   messageList,
   includeRawChunks,
   modelSettings,
   tools,
   _internal,
-  mode = 'stream',
   outputProcessors,
   returnScorerData,
-  llmAISpan,
   requireToolApproval,
   agentId,
   ...rest
@@ -62,36 +58,6 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
 
   let startTimestamp = internalToUse.now?.();
 
-  const { rootSpan } = getRootSpan({
-    operationId: mode === 'stream' ? `mastra.stream` : `mastra.generate`,
-    model: {
-      modelId: firstModel.model.modelId,
-      provider: firstModel.model.provider,
-    },
-    modelSettings,
-    headers: modelSettings?.headers ?? rest.headers,
-    telemetry_settings,
-  });
-
-  rootSpan.setAttributes({
-    ...(telemetry_settings?.recordOutputs !== false
-      ? {
-          'stream.prompt.messages': JSON.stringify(messageList.get.input.aiV5.model()),
-        }
-      : {}),
-  });
-
-  const { rootSpan: modelStreamSpan } = getRootSpan({
-    operationId: `mastra.${mode}.aisdk.doStream`,
-    model: {
-      modelId: firstModel.model.modelId,
-      provider: firstModel.model.provider,
-    },
-    modelSettings,
-    headers: modelSettings?.headers ?? rest.headers,
-    telemetry_settings,
-  });
-
   const messageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
 
   let modelOutput: MastraModelOutput<OUTPUT> | undefined;
@@ -116,11 +82,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     includeRawChunks: !!includeRawChunks,
     _internal: internalToUse,
     tools,
-    modelStreamSpan,
-    telemetry_settings,
     modelSettings,
     outputProcessors,
-    llmAISpan,
     messageId: messageId!,
     agentId,
     requireToolApproval,
@@ -160,8 +123,6 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     messageId: messageId!,
     options: {
       runId: runIdToUse!,
-      telemetry_settings,
-      rootSpan,
       toolCallStreaming: rest.toolCallStreaming,
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
@@ -169,7 +130,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       structuredOutput: rest.structuredOutput,
       outputProcessors,
       returnScorerData,
-      tracingContext: { currentSpan: llmAISpan },
+      tracingContext: rest.modelSpanTracker?.getTracingContext(),
     },
     initialState: initialStreamState,
   });

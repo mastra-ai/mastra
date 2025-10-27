@@ -1,5 +1,5 @@
 ---
-title: 'Answer Relevancy '
+title: "Answer Relevancy "
 description: Example of using the Answer Relevancy scorer to evaluate response relevancy to queries.
 ---
 
@@ -20,14 +20,19 @@ npm install @mastra/evals
 In this example, the response accurately addresses the input query with specific and relevant information.
 
 ```typescript filename="src/example-high-answer-relevancy.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
+import { openai } from "@ai-sdk/openai";
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
 
-const scorer = createAnswerRelevancyScorer({ model: openai('gpt-4o-mini') });
+const scorer = createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") });
 
-const inputMessages = [{ role: 'user', content: 'What are the health benefits of regular exercise?' }];
+const inputMessages = [
+  {
+    role: "user",
+    content: "What are the health benefits of regular exercise?",
+  },
+];
 const outputMessage = {
-  text: 'Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.',
+  text: "Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.",
 };
 
 const result = await scorer.run({
@@ -54,14 +59,16 @@ The output receives a high score because it accurately answers the query without
 In this example, the response addresses the query in part but includes additional information that isn’t directly relevant.
 
 ```typescript filename="src/example-partial-answer-relevancy.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
+import { openai } from "@ai-sdk/openai";
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
 
-const scorer = createAnswerRelevancyScorer({ model: openai('gpt-4o-mini') });
+const scorer = createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") });
 
-const inputMessages = [{ role: 'user', content: 'What should a healthy breakfast include?' }];
+const inputMessages = [
+  { role: "user", content: "What should a healthy breakfast include?" },
+];
 const outputMessage = {
-  text: 'A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.',
+  text: "A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.",
 };
 
 const result = await scorer.run({
@@ -88,14 +95,16 @@ The output receives a lower score because it partially answers the query. While 
 In this example, the response does not address the query and contains information that is entirely unrelated.
 
 ```typescript filename="src/example-low-answer-relevancy.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
+import { openai } from "@ai-sdk/openai";
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
 
-const scorer = createAnswerRelevancyScorer({ model: openai('gpt-4o-mini') });
+const scorer = createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") });
 
-const inputMessages = [{ role: 'user', content: 'What are the benefits of meditation?' }];
+const inputMessages = [
+  { role: "user", content: "What are the benefits of meditation?" },
+];
 const outputMessage = {
-  text: 'The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.',
+  text: "The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.",
 };
 
 const result = await scorer.run({
@@ -123,7 +132,7 @@ You can customize how the Answer Relevancy Scorer calculates scores by adjusting
 
 ```typescript showLineNumbers copy
 const scorer = createAnswerRelevancyScorer({
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   options: { uncertaintyWeight: 0.3, scale: 1 },
 });
 ```

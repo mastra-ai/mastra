@@ -1,6 +1,7 @@
 ---
-title: Deployment Overview
+title: Overview
 description: Learn about different deployment options for your Mastra applications
+sidebar_position: 1
 ---
 
 # Deployment Overview

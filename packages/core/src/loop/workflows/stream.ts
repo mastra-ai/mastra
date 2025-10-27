@@ -29,13 +29,10 @@ export function workflowLoopStream<
 >({
   resumeContext,
   requireToolApproval,
-  telemetry_settings,
   models,
   toolChoice,
   modelSettings,
   _internal,
-  modelStreamSpan,
-  llmAISpan,
   messageId,
   runId,
   messageList,
@@ -53,23 +50,13 @@ export function workflowLoopStream<
         },
       });
 
-      modelStreamSpan.setAttributes({
-        ...(telemetry_settings?.recordInputs !== false
-          ? {
-              'stream.prompt.toolChoice': toolChoice ? JSON.stringify(toolChoice) : 'auto',
-            }
-          : {}),
-      });
-
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
         messageId: messageId!,
         models,
-        telemetry_settings,
         _internal,
         modelSettings,
         toolChoice,
-        modelStreamSpan,
         controller,
         writer,
         runId,
@@ -104,17 +91,6 @@ export function workflowLoopStream<
         },
       };
 
-      const msToFirstChunk = _internal?.now?.()! - startTimestamp!;
-
-      modelStreamSpan.addEvent('ai.stream.firstChunk', {
-        'ai.response.msToFirstChunk': msToFirstChunk,
-      });
-
-      modelStreamSpan.setAttributes({
-        'stream.response.timestamp': new Date(startTimestamp).toISOString(),
-        'stream.response.msToFirstChunk': msToFirstChunk,
-      });
-
       if (!resumeContext) {
         controller.enqueue({
           type: 'start',
@@ -139,12 +115,12 @@ export function workflowLoopStream<
       const executionResult = resumeContext
         ? await run.resume({
             resumeData: resumeContext.resumeData,
-            tracingContext: { currentSpan: llmAISpan },
+            tracingContext: rest.modelSpanTracker?.getTracingContext(),
             label: toolCallId,
           })
         : await run.start({
             inputData: initialData,
-            tracingContext: { currentSpan: llmAISpan },
+            tracingContext: rest.modelSpanTracker?.getTracingContext(),
             runtimeContext,
           });
 
@@ -170,14 +146,6 @@ export function workflowLoopStream<
             reason: executionResult.result.stepResult.reason,
           },
         },
-      });
-
-      const msToFinish = (_internal?.now?.() ?? Date.now()) - startTimestamp;
-      modelStreamSpan.addEvent('ai.stream.finish');
-      modelStreamSpan.setAttributes({
-        'stream.response.msToFinish': msToFinish,
-        'stream.response.avgOutputTokensPerSecond':
-          (1000 * (executionResult?.result?.output?.usage?.outputTokens ?? 0)) / msToFinish,
       });
 
       controller.close();

@@ -317,9 +317,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       } else {
         response = await agentOne.generate('Who won the 2012 US presidential election?', {
-          output: z.object({
-            winner: z.string(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              winner: z.string(),
+            }),
+          },
         });
       }
 
@@ -362,9 +364,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(previousPartialObject['winner']).toBe('Barack Obama');
       } else {
         response = await agentOne.stream('Who won the 2012 US presidential election?', {
-          output: z.object({
-            winner: z.string(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              winner: z.string(),
+            }),
+          },
         });
         const { objectStream } = response;
 
@@ -1137,10 +1141,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Override getMergedThreadConfig to return our test config
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel,
-            },
+          generateTitle: {
+            model: titleModel,
           },
         };
       };
@@ -1321,12 +1323,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Override getMergedThreadConfig to return dynamic model selection
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-                const userTier = runtimeContext.get('userTier');
-                return userTier === 'premium' ? premiumModel : standardModel;
-              },
+          generateTitle: {
+            model: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
+              const userTier = runtimeContext.get('userTier');
+              return userTier === 'premium' ? premiumModel : standardModel;
             },
           },
         };
@@ -1565,9 +1565,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Test with generateTitle: true
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: true,
-          },
+          generateTitle: true,
         };
       };
 
@@ -1737,9 +1735,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       agentCallCount = 0;
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: false,
-          },
+          generateTitle: false,
         };
       };
 
@@ -1806,10 +1802,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: errorModel,
-            },
+          generateTitle: {
+            model: errorModel,
           },
         };
       };
@@ -2180,15 +2174,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Override getMergedThreadConfig to return dynamic instructions selection
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel,
-              instructions: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-                const language = runtimeContext.get('language');
-                return language === 'ja'
-                  ? '会話内容に基づいて簡潔なタイトルを生成してください'
-                  : 'Generate a concise title based on the conversation';
-              },
+          generateTitle: {
+            model: titleModel,
+            instructions: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
+              const language = runtimeContext.get('language');
+              return language === 'ja'
+                ? '会話内容に基づいて簡潔なタイトルを生成してください'
+                : 'Generate a concise title based on the conversation';
             },
           },
         };
@@ -2363,11 +2355,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Override getMergedThreadConfig to return our test config with custom instructions
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel,
-              instructions: customInstructions,
-            },
+          generateTitle: {
+            model: titleModel,
+            instructions: customInstructions,
           },
         };
       };
@@ -2504,11 +2494,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel,
-              // instructions field is intentionally omitted
-            },
+          generateTitle: {
+            model: titleModel,
+            // instructions field is intentionally omitted
           },
         };
       };
@@ -2629,12 +2617,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel,
-              instructions: () => {
-                throw new Error('Instructions selection failed');
-              },
+          generateTitle: {
+            model: titleModel,
+            instructions: () => {
+              throw new Error('Instructions selection failed');
             },
           },
         };
@@ -2851,11 +2837,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Test with empty string instructions
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel1,
-              instructions: '', // Empty string
-            },
+          generateTitle: {
+            model: titleModel1,
+            instructions: '', // Empty string
           },
         };
       };
@@ -2900,11 +2884,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       capturedPrompt = '';
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel2,
-              instructions: () => '', // Function returning empty string
-            },
+          generateTitle: {
+            model: titleModel2,
+            instructions: () => '', // Function returning empty string
           },
         };
       };
@@ -3843,9 +3825,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toBe('You are a helpful assistant.');
-
-      // Deprecated getter should work for strings
-      expect(agent.instructions).toBe('You are a helpful assistant.');
     });
 
     it('should support CoreSystemMessage instructions', async () => {
@@ -3862,11 +3841,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toEqual(systemMessage);
-
-      // Deprecated getter should throw for non-string
-      expect(() => agent.instructions).toThrow(
-        'The instructions getter is deprecated and only supports string instructions',
-      );
     });
 
     it('should support SystemModelMessage instructions', async () => {
@@ -3883,11 +3857,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toEqual(systemMessage);
-
-      // Deprecated getter should throw for non-string
-      expect(() => agent.instructions).toThrow(
-        'The instructions getter is deprecated and only supports string instructions',
-      );
     });
 
     it('should support array of string instructions', async () => {
@@ -3901,11 +3870,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toEqual(instructionsArray);
-
-      // Deprecated getter should throw for arrays
-      expect(() => agent.instructions).toThrow(
-        'The instructions getter is deprecated and only supports string instructions',
-      );
     });
 
     it('should support array of CoreSystemMessage instructions', async () => {
@@ -3922,11 +3886,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toEqual(instructionsArray);
-
-      // Deprecated getter should throw
-      expect(() => agent.instructions).toThrow(
-        'The instructions getter is deprecated and only supports string instructions',
-      );
     });
 
     it('should support array of CoreSystemMessage with provider metadata', async () => {
@@ -3969,9 +3928,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions({ runtimeContext });
       expect(instructions).toBe('You are a helpful teacher.');
-
-      // Deprecated getter should throw for function
-      expect(() => agent.instructions).toThrow('Instructions are not compatible when instructions are a function');
     });
 
     it('should support dynamic instructions returning CoreSystemMessage', async () => {
@@ -4139,28 +4095,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toEqual([]);
-    });
-
-    it('should throw error for function instructions in deprecated getter', async () => {
-      const agent = new Agent({
-        name: 'test-agent',
-        instructions: () => 'Dynamic instructions',
-        model: dummyModel,
-      });
-
-      expect(() => agent.instructions).toThrow('Instructions are not compatible when instructions are a function');
-    });
-
-    it('should throw error for non-string static instructions in deprecated getter', async () => {
-      const agent = new Agent({
-        name: 'test-agent',
-        instructions: { role: 'system', content: 'Instructions' },
-        model: dummyModel,
-      });
-
-      expect(() => agent.instructions).toThrow(
-        'The instructions getter is deprecated and only supports string instructions',
-      );
     });
 
     it('should allow override instructions in generate options', async () => {
@@ -7510,9 +7444,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         onFinish: props => {
           expect(props.toolCalls.length).toBeGreaterThan(0);
         },
-        output: z.object({
-          color: z.string(),
-        }),
+        structuredOutput: {
+          schema: z.object({
+            color: z.string(),
+          }),
+        },
       });
 
       await result.consumeStream();
@@ -7557,9 +7493,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               }),
             },
           },
-          output: z.object({
-            color: z.string(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              color: z.string(),
+            }),
+          },
         });
 
         expect(result.toolCalls.length).toBeGreaterThan(0);

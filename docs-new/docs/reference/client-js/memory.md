@@ -13,8 +13,8 @@ Retrieve all memory threads for a specific resource:
 
 ```typescript
 const threads = await mastraClient.getMemoryThreads({
-  resourceId: 'resource-1',
-  agentId: 'agent-1',
+  resourceId: "resource-1",
+  agentId: "agent-1",
 });
 ```
 
@@ -24,10 +24,10 @@ Create a new memory thread:
 
 ```typescript
 const thread = await mastraClient.createMemoryThread({
-  title: 'New Conversation',
-  metadata: { category: 'support' },
-  resourceId: 'resource-1',
-  agentId: 'agent-1',
+  title: "New Conversation",
+  metadata: { category: "support" },
+  resourceId: "resource-1",
+  agentId: "agent-1",
 });
 ```
 
@@ -36,7 +36,7 @@ const thread = await mastraClient.createMemoryThread({
 Get an instance of a specific memory thread:
 
 ```typescript
-const thread = mastraClient.getMemoryThread('thread-id', 'agent-id');
+const thread = mastraClient.getMemoryThread("thread-id", "agent-id");
 ```
 
 ## Thread Methods
@@ -55,9 +55,9 @@ Update thread properties:
 
 ```typescript
 const updated = await thread.update({
-  title: 'Updated Title',
-  metadata: { status: 'resolved' },
-  resourceId: 'resource-1',
+  title: "Updated Title",
+  metadata: { status: "resolved" },
+  resourceId: "resource-1",
 });
 ```
 
@@ -79,15 +79,15 @@ Save messages to memory:
 const savedMessages = await mastraClient.saveMessageToMemory({
   messages: [
     {
-      role: 'user',
-      content: 'Hello!',
-      id: '1',
-      threadId: 'thread-1',
+      role: "user",
+      content: "Hello!",
+      id: "1",
+      threadId: "thread-1",
       createdAt: new Date(),
-      type: 'text',
+      type: "text",
     },
   ],
-  agentId: 'agent-1',
+  agentId: "agent-1",
 });
 ```
 
@@ -108,7 +108,7 @@ const { messages } = await thread.getMessages({ limit: 10 });
 Delete a specific message from a thread:
 
 ```typescript
-const result = await thread.deleteMessage('message-id');
+const result = await thread.deleteMessage("message-id");
 // Returns: { success: true, message: "Message deleted successfully" }
 ```
 
@@ -117,7 +117,11 @@ const result = await thread.deleteMessage('message-id');
 Delete multiple messages from a thread in a single operation:
 
 ```typescript
-const result = await thread.deleteMessages(['message-1', 'message-2', 'message-3']);
+const result = await thread.deleteMessages([
+  "message-1",
+  "message-2",
+  "message-3",
+]);
 // Returns: { success: true, message: "3 messages deleted successfully" }
 ```
 
@@ -126,5 +130,5 @@ const result = await thread.deleteMessages(['message-1', 'message-2', 'message-3
 Check the status of the memory system:
 
 ```typescript
-const status = await mastraClient.getMemoryStatus('agent-id');
+const status = await mastraClient.getMemoryStatus("agent-id");
 ```

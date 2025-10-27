@@ -1,5 +1,5 @@
 ---
-title: 'Getting Started with Mastra and SvelteKit '
+title: "With SvelteKit "
 description: A step-by-step guide to integrating Mastra with SvelteKit.
 ---
 
@@ -140,7 +140,7 @@ Start the Mastra Dev Server to expose your agents as REST endpoints:
   </TabItem>
 </Tabs>
 
-> Once running, your agents are available locally. See [Local Development Environment](/docs/server-db/local-dev-playground) for more information.
+> Once running, your agents are available locally. See [Local Development Environment](/docs/getting-started/studio) for more information.
 
 ## Start SvelteKit Dev Server
 
@@ -161,13 +161,13 @@ touch src/routes/test/+page.server.ts
 ```
 
 ```typescript filename="src/routes/test/+page.server.ts" showLineNumbers copy
-import type { Actions } from './$types';
-import { mastra } from '../../mastra';
+import type { Actions } from "./$types";
+import { mastra } from "../../mastra";
 
 export const actions = {
-  default: async event => {
-    const city = (await event.request.formData()).get('city')!.toString();
-    const agent = mastra.getAgent('weatherAgent');
+  default: async (event) => {
+    const city = (await event.request.formData()).get("city")!.toString();
+    const agent = mastra.getAgent("weatherAgent");
 
     const result = await agent.generate(`What's the weather like in ${city}?`);
     return { result: result.text };
@@ -343,7 +343,7 @@ Start the Mastra Dev Server to expose your agents as REST endpoints:
   </TabItem>
 </Tabs>
 
-> Once running, your agents are available locally. See [Local Development Environment](/docs/server-db/local-dev-playground) for more information.
+> Once running, your agents are available locally. See [Local Development Environment](/docs/getting-started/studio) for more information.
 
 ## Start SvelteKit Dev Server
 
@@ -364,13 +364,15 @@ touch src/routes/weather-api/+server.ts
 ```
 
 ```typescript filename="src/routes/weather-api/+server.ts" showLineNumbers copy
-import { json } from '@sveltejs/kit';
-import { mastra } from '../../mastra';
+import { json } from "@sveltejs/kit";
+import { mastra } from "../../mastra";
 
 export async function POST({ request }) {
   const { city } = await request.json();
 
-  const response = await mastra.getAgent('weatherAgent').generate(`What's the weather like in ${city}?`);
+  const response = await mastra
+    .getAgent("weatherAgent")
+    .generate(`What's the weather like in ${city}?`);
 
   return json({ result: response.text });
 }

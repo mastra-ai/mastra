@@ -1,6 +1,6 @@
 ---
-title: 'MastraAuthSupabase Class'
-description: 'API reference for the MastraAuthSupabase class, which authenticates Mastra applications using Supabase Auth.'
+title: "MastraAuthSupabase Class"
+description: "API reference for the MastraAuthSupabase class, which authenticates Mastra applications using Supabase Auth."
 ---
 
 # MastraAuthSupabase Class
@@ -10,8 +10,8 @@ The `MastraAuthSupabase` class provides authentication for Mastra using Supabase
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { MastraAuthSupabase } from '@mastra/auth-supabase';
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthSupabase } from "@mastra/auth-supabase";
 
 export const mastra = new Mastra({
   // ..

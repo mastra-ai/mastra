@@ -1,5 +1,5 @@
 ---
-title: 'LibSQL Storage '
+title: "LibSQL Storage "
 description: Documentation for the LibSQL storage implementation in Mastra.
 ---
 
@@ -16,11 +16,11 @@ npm install @mastra/libsql@latest
 ## Usage
 
 ```typescript copy showLineNumbers
-import { LibSQLStore } from '@mastra/libsql';
+import { LibSQLStore } from "@mastra/libsql";
 
 // File database (development)
 const storage = new LibSQLStore({
-  url: 'file:./storage.db',
+  url: "file:./storage.db",
 });
 
 // Persistent database (production)

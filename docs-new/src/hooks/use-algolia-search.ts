@@ -1,6 +1,6 @@
-import { algoliasearch, type SearchClient } from 'algoliasearch';
-import { useEffect, useRef, useState } from 'react';
-import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
+import { algoliasearch, type SearchClient } from "algoliasearch";
+import { useEffect, useRef, useState } from "react";
+import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 
 /**
  * Options that can be passed to Algolia search.
@@ -139,12 +139,15 @@ interface UseAlgoliaSearchResult {
  * @param searchOptions Options to pass to Algolia search
  * @returns Search state and setter function
  */
-export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSearchOptions): UseAlgoliaSearchResult {
+export function useAlgoliaSearch(
+  debounceTime = 100,
+  searchOptions?: AlgoliaSearchOptions,
+): UseAlgoliaSearchResult {
   const { siteConfig } = useDocusaurusContext();
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [results, setResults] = useState<AlgoliaResult[]>([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -158,13 +161,14 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
 
   useEffect(() => {
     // Initialize Algolia client with your credentials from site config
-    const { algoliaAppId: appId, algoliaSearchApiKey: apiKey } = siteConfig.customFields || {};
+    const { algoliaAppId: appId, algoliaSearchApiKey: apiKey } =
+      siteConfig.customFields || {};
 
     if (appId && apiKey) {
       algoliaClient.current = algoliasearch(appId as string, apiKey as string);
     } else {
       console.warn(
-        'Algolia credentials not found. Please set algoliaAppId and algoliaSearchApiKey in docusaurus.config.js customFields.',
+        "Algolia credentials not found. Please set algoliaAppId and algoliaSearchApiKey in docusaurus.config.js customFields.",
       );
     }
   }, [siteConfig]);
@@ -190,7 +194,7 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
     }
 
     if (!algoliaClient.current) {
-      console.error('Algolia client not initialized');
+      console.error("Algolia client not initialized");
       return;
     }
 
@@ -211,7 +215,7 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
           return;
         }
 
-        const indexName = searchOptions?.indexName || 'docs_crawler'; // Default index name
+        const indexName = searchOptions?.indexName || "docs_crawler"; // Default index name
 
         const searchRequest = {
           indexName: indexName,
@@ -219,27 +223,29 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
           params: {
             hitsPerPage: searchOptions?.hitsPerPage || 20,
             attributesToRetrieve: searchOptions?.attributesToRetrieve || [
-              'hierarchy',
-              'content',
-              'anchor',
-              'url',
-              'url_without_anchor',
-              'type',
-              'section',
-              'lang',
-              'priority',
-              'depth',
+              "hierarchy",
+              "content",
+              "anchor",
+              "url",
+              "url_without_anchor",
+              "type",
+              "section",
+              "lang",
+              "priority",
+              "depth",
             ],
             attributesToHighlight: searchOptions?.attributesToHighlight || [
-              'hierarchy.lvl1',
-              'hierarchy.lvl2',
-              'hierarchy.lvl3',
-              'content',
+              "hierarchy.lvl1",
+              "hierarchy.lvl2",
+              "hierarchy.lvl3",
+              "content",
             ],
-            attributesToSnippet: searchOptions?.attributesToSnippet || ['content:30'],
-            highlightPreTag: searchOptions?.highlightPreTag || '<mark>',
-            highlightPostTag: searchOptions?.highlightPostTag || '</mark>',
-            snippetEllipsisText: searchOptions?.snippetEllipsisText || '…',
+            attributesToSnippet: searchOptions?.attributesToSnippet || [
+              "content:30",
+            ],
+            highlightPreTag: searchOptions?.highlightPreTag || "<mark>",
+            highlightPostTag: searchOptions?.highlightPostTag || "</mark>",
+            snippetEllipsisText: searchOptions?.snippetEllipsisText || "…",
             ...(searchOptions?.filters && { filters: searchOptions.filters }),
             ...(searchOptions?.facetFilters && {
               facetFilters: searchOptions.facetFilters,
@@ -254,121 +260,141 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
 
         // Transform Algolia results to match the expected format
         const firstResult = results[0];
-        if ('hits' in firstResult) {
-          const transformedResults: AlgoliaResult[] = firstResult.hits.map(hit => {
-            // Type assertion to our expected structure
-            const typedHit = hit as AlgoliaHit;
+        if ("hits" in firstResult) {
+          const transformedResults: AlgoliaResult[] = firstResult.hits.map(
+            (hit) => {
+              // Type assertion to our expected structure
+              const typedHit = hit as AlgoliaHit;
 
-            // Helper function to extract relevant snippet around search terms
-            const extractRelevantSnippet = (content: string, searchTerm: string, maxLength: number = 200): string => {
-              if (!content || !searchTerm) return content?.substring(0, maxLength) + '...' || '';
+              // Helper function to extract relevant snippet around search terms
+              const extractRelevantSnippet = (
+                content: string,
+                searchTerm: string,
+                maxLength: number = 200,
+              ): string => {
+                if (!content || !searchTerm)
+                  return content?.substring(0, maxLength) + "..." || "";
 
-              const lowerContent = content.toLowerCase();
-              const lowerSearchTerm = searchTerm.toLowerCase();
-              const searchWords = lowerSearchTerm.split(/\s+/).filter(word => word.length > 2);
+                const lowerContent = content.toLowerCase();
+                const lowerSearchTerm = searchTerm.toLowerCase();
+                const searchWords = lowerSearchTerm
+                  .split(/\s+/)
+                  .filter((word) => word.length > 2);
 
-              // Find the first occurrence of any search word
-              let bestIndex = -1;
-              for (const word of searchWords) {
-                const index = lowerContent.indexOf(word);
-                if (index !== -1 && (bestIndex === -1 || index < bestIndex)) {
-                  bestIndex = index;
+                // Find the first occurrence of any search word
+                let bestIndex = -1;
+                for (const word of searchWords) {
+                  const index = lowerContent.indexOf(word);
+                  if (index !== -1 && (bestIndex === -1 || index < bestIndex)) {
+                    bestIndex = index;
+                  }
                 }
-              }
 
-              if (bestIndex === -1) {
-                return content.substring(0, maxLength) + '...';
-              }
-
-              // Extract snippet around the found term
-              const start = Math.max(0, bestIndex - 50);
-              const end = Math.min(content.length, start + maxLength);
-
-              let snippet = content.substring(start, end);
-
-              // Clean up the snippet
-              if (start > 0) snippet = '...' + snippet;
-              if (end < content.length) snippet = snippet + '...';
-
-              return snippet;
-            };
-
-            // Build hierarchical title with format "h1: h2" or "h1: h3" etc.
-            const buildHierarchicalTitle = (): string => {
-              const levels: string[] = [];
-              const highlightedLevels: string[] = [];
-
-              // Collect all hierarchy levels (skip lvl0 as it's usually just the section name like "Docs")
-              const hierarchyKeys = ['lvl1', 'lvl2', 'lvl3', 'lvl4', 'lvl5', 'lvl6'] as const;
-
-              for (const key of hierarchyKeys) {
-                const value = typedHit.hierarchy?.[key];
-                const highlightedValue = typedHit._highlightResult?.hierarchy?.[key]?.value;
-
-                if (value) {
-                  levels.push(value);
-                  highlightedLevels.push(highlightedValue || value);
+                if (bestIndex === -1) {
+                  return content.substring(0, maxLength) + "...";
                 }
+
+                // Extract snippet around the found term
+                const start = Math.max(0, bestIndex - 50);
+                const end = Math.min(content.length, start + maxLength);
+
+                let snippet = content.substring(start, end);
+
+                // Clean up the snippet
+                if (start > 0) snippet = "..." + snippet;
+                if (end < content.length) snippet = snippet + "...";
+
+                return snippet;
+              };
+
+              // Build hierarchical title with format "h1: h2" or "h1: h3" etc.
+              const buildHierarchicalTitle = (): string => {
+                const levels: string[] = [];
+                const highlightedLevels: string[] = [];
+
+                // Collect all hierarchy levels (skip lvl0 as it's usually just the section name like "Docs")
+                const hierarchyKeys = [
+                  "lvl1",
+                  "lvl2",
+                  "lvl3",
+                  "lvl4",
+                  "lvl5",
+                  "lvl6",
+                ] as const;
+
+                for (const key of hierarchyKeys) {
+                  const value = typedHit.hierarchy?.[key];
+                  const highlightedValue =
+                    typedHit._highlightResult?.hierarchy?.[key]?.value;
+
+                  if (value) {
+                    levels.push(value);
+                    highlightedLevels.push(highlightedValue || value);
+                  }
+                }
+
+                // If we have multiple levels, format as "h1: h2" or "h1: h3" (showing first and last)
+                if (highlightedLevels.length > 1) {
+                  return stripColon(
+                    `${highlightedLevels[0]}: ${highlightedLevels[highlightedLevels.length - 1]}`,
+                  );
+                } else if (highlightedLevels.length === 1) {
+                  return stripColon(highlightedLevels[0]);
+                } else if (typedHit.hierarchy?.lvl0) {
+                  return (
+                    stripColon(
+                      typedHit._highlightResult?.hierarchy?.lvl0?.value || "",
+                    ) || stripColon(typedHit.hierarchy.lvl0)
+                  );
+                }
+
+                return "Untitled";
+              };
+
+              const displayTitle = buildHierarchicalTitle();
+
+              // Prioritize snippet result, then highlighted content, then fallback
+              let excerpt = "";
+
+              if (typedHit._snippetResult?.content?.value) {
+                // Use Algolia's snippet if available (already highlighted)
+                excerpt = typedHit._snippetResult.content.value;
+              } else if (typedHit._highlightResult?.content?.value) {
+                // Use highlighted content
+                excerpt = typedHit._highlightResult.content.value;
+              } else if (typedHit.content) {
+                // Fallback to extracting snippet from raw content
+                excerpt = extractRelevantSnippet(typedHit.content, search, 200);
+              } else {
+                excerpt = displayTitle;
               }
 
-              // If we have multiple levels, format as "h1: h2" or "h1: h3" (showing first and last)
-              if (highlightedLevels.length > 1) {
-                return stripColon(`${highlightedLevels[0]}: ${highlightedLevels[highlightedLevels.length - 1]}`);
-              } else if (highlightedLevels.length === 1) {
-                return stripColon(highlightedLevels[0]);
-              } else if (typedHit.hierarchy?.lvl0) {
-                return (
-                  stripColon(typedHit._highlightResult?.hierarchy?.lvl0?.value || '') ||
-                  stripColon(typedHit.hierarchy.lvl0)
-                );
-              }
+              // Single result per hit (Algolia already handles ranking and deduplication)
+              const subResults: AlgoliaResult["sub_results"] = [
+                {
+                  title: displayTitle,
+                  excerpt: excerpt,
+                  url: toRelativePath(typedHit.url || ""),
+                },
+              ];
 
-              return 'Untitled';
-            };
-
-            const displayTitle = buildHierarchicalTitle();
-
-            // Prioritize snippet result, then highlighted content, then fallback
-            let excerpt = '';
-
-            if (typedHit._snippetResult?.content?.value) {
-              // Use Algolia's snippet if available (already highlighted)
-              excerpt = typedHit._snippetResult.content.value;
-            } else if (typedHit._highlightResult?.content?.value) {
-              // Use highlighted content
-              excerpt = typedHit._highlightResult.content.value;
-            } else if (typedHit.content) {
-              // Fallback to extracting snippet from raw content
-              excerpt = extractRelevantSnippet(typedHit.content, search, 200);
-            } else {
-              excerpt = displayTitle;
-            }
-
-            // Single result per hit (Algolia already handles ranking and deduplication)
-            const subResults: AlgoliaResult['sub_results'] = [
-              {
+              return {
+                objectID: typedHit.objectID,
                 title: displayTitle,
                 excerpt: excerpt,
-                url: toRelativePath(typedHit.url || ''),
-              },
-            ];
-
-            return {
-              objectID: typedHit.objectID,
-              title: displayTitle,
-              excerpt: excerpt,
-              url: toRelativePath(typedHit.url || ''),
-              section: typedHit.section,
-              priority: typedHit.priority,
-              depth: typedHit.depth,
-              _highlightResult: typedHit._highlightResult,
-              _snippetResult: typedHit._snippetResult,
-              sub_results: subResults,
-            };
-          });
+                url: toRelativePath(typedHit.url || ""),
+                section: typedHit.section,
+                priority: typedHit.priority,
+                depth: typedHit.depth,
+                _highlightResult: typedHit._highlightResult,
+                _snippetResult: typedHit._snippetResult,
+                sub_results: subResults,
+              };
+            },
+          );
 
           // Update pagination metadata
-          if ('nbPages' in firstResult) {
+          if ("nbPages" in firstResult) {
             setTotalPages(firstResult.nbPages || 1);
             setCurrentPage(firstResult.page || 0);
           }
@@ -383,12 +409,12 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
         }
       } catch (error) {
         // Ignore AbortError
-        if (error instanceof DOMException && error.name === 'AbortError') {
+        if (error instanceof DOMException && error.name === "AbortError") {
           return;
         }
 
         if (!signal.aborted) {
-          console.error('Algolia search error:', error);
+          console.error("Algolia search error:", error);
           setIsSearchLoading(false);
           setResults([]);
         }
@@ -423,7 +449,7 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
     const { signal } = loadMoreAbortControllerRef.current;
 
     try {
-      const indexName = searchOptions?.indexName || 'docs_crawler';
+      const indexName = searchOptions?.indexName || "docs_crawler";
       const nextPage = currentPage + 1;
 
       const searchRequest = {
@@ -433,27 +459,29 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
           page: nextPage,
           hitsPerPage: searchOptions?.hitsPerPage || 20,
           attributesToRetrieve: searchOptions?.attributesToRetrieve || [
-            'hierarchy',
-            'content',
-            'anchor',
-            'url',
-            'url_without_anchor',
-            'type',
-            'section',
-            'lang',
-            'priority',
-            'depth',
+            "hierarchy",
+            "content",
+            "anchor",
+            "url",
+            "url_without_anchor",
+            "type",
+            "section",
+            "lang",
+            "priority",
+            "depth",
           ],
           attributesToHighlight: searchOptions?.attributesToHighlight || [
-            'hierarchy.lvl1',
-            'hierarchy.lvl2',
-            'hierarchy.lvl3',
-            'content',
+            "hierarchy.lvl1",
+            "hierarchy.lvl2",
+            "hierarchy.lvl3",
+            "content",
           ],
-          attributesToSnippet: searchOptions?.attributesToSnippet || ['content:30'],
-          highlightPreTag: searchOptions?.highlightPreTag || '<mark>',
-          highlightPostTag: searchOptions?.highlightPostTag || '</mark>',
-          snippetEllipsisText: searchOptions?.snippetEllipsisText || '…',
+          attributesToSnippet: searchOptions?.attributesToSnippet || [
+            "content:30",
+          ],
+          highlightPreTag: searchOptions?.highlightPreTag || "<mark>",
+          highlightPostTag: searchOptions?.highlightPostTag || "</mark>",
+          snippetEllipsisText: searchOptions?.snippetEllipsisText || "…",
           ...(searchOptions?.filters && { filters: searchOptions.filters }),
           ...(searchOptions?.facetFilters && {
             facetFilters: searchOptions.facetFilters,
@@ -461,76 +489,98 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
         },
       };
 
-      const { results: algoliaResults } = await algoliaClient.current.search([searchRequest]);
+      const { results: algoliaResults } = await algoliaClient.current.search([
+        searchRequest,
+      ]);
 
       if (signal.aborted) return;
 
       const firstResult = algoliaResults[0];
-      if ('hits' in firstResult) {
-        const transformedResults: AlgoliaResult[] = firstResult.hits.map(hit => {
-          const typedHit = hit as AlgoliaHit;
+      if ("hits" in firstResult) {
+        const transformedResults: AlgoliaResult[] = firstResult.hits.map(
+          (hit) => {
+            const typedHit = hit as AlgoliaHit;
 
-          const buildHierarchicalTitle = (): string => {
-            const hierarchyKeys = ['lvl1', 'lvl2', 'lvl3', 'lvl4', 'lvl5', 'lvl6'] as const;
-            const highlightedLevels: string[] = [];
+            const buildHierarchicalTitle = (): string => {
+              const hierarchyKeys = [
+                "lvl1",
+                "lvl2",
+                "lvl3",
+                "lvl4",
+                "lvl5",
+                "lvl6",
+              ] as const;
+              const highlightedLevels: string[] = [];
 
-            for (const key of hierarchyKeys) {
-              const value = typedHit.hierarchy?.[key];
-              const highlightedValue = typedHit._highlightResult?.hierarchy?.[key]?.value;
-              if (value) {
-                highlightedLevels.push(highlightedValue || value);
+              for (const key of hierarchyKeys) {
+                const value = typedHit.hierarchy?.[key];
+                const highlightedValue =
+                  typedHit._highlightResult?.hierarchy?.[key]?.value;
+                if (value) {
+                  highlightedLevels.push(highlightedValue || value);
+                }
               }
-            }
 
-            if (highlightedLevels.length > 1) {
-              const nextLevel = highlightedLevels[highlightedLevels.length - 1];
-              if (nextLevel) {
-                return stripColon(`${highlightedLevels[0]}: ${nextLevel}`);
-              } else {
+              if (highlightedLevels.length > 1) {
+                const nextLevel =
+                  highlightedLevels[highlightedLevels.length - 1];
+                if (nextLevel) {
+                  return stripColon(`${highlightedLevels[0]}: ${nextLevel}`);
+                } else {
+                  return stripColon(highlightedLevels[0]);
+                }
+              } else if (highlightedLevels.length === 1) {
                 return stripColon(highlightedLevels[0]);
+              } else if (typedHit.hierarchy?.lvl0) {
+                return (
+                  stripColon(
+                    typedHit._highlightResult?.hierarchy?.lvl0?.value || "",
+                  ) || stripColon(typedHit.hierarchy.lvl0)
+                );
               }
-            } else if (highlightedLevels.length === 1) {
-              return stripColon(highlightedLevels[0]);
-            } else if (typedHit.hierarchy?.lvl0) {
-              return (
-                stripColon(typedHit._highlightResult?.hierarchy?.lvl0?.value || '') ||
-                stripColon(typedHit.hierarchy.lvl0)
-              );
-            }
-            return 'Untitled';
-          };
+              return "Untitled";
+            };
 
-          const displayTitle = buildHierarchicalTitle();
-          const excerpt =
-            typedHit._snippetResult?.content?.value || typedHit._highlightResult?.content?.value || displayTitle;
+            const displayTitle = buildHierarchicalTitle();
+            const excerpt =
+              typedHit._snippetResult?.content?.value ||
+              typedHit._highlightResult?.content?.value ||
+              displayTitle;
 
-          return {
-            objectID: typedHit.objectID,
-            title: displayTitle,
-            excerpt,
-            url: toRelativePath(typedHit.url || ''),
-            section: typedHit.section,
-            priority: typedHit.priority,
-            depth: typedHit.depth,
-            _highlightResult: typedHit._highlightResult,
-            _snippetResult: typedHit._snippetResult,
-            sub_results: [{ title: displayTitle, excerpt, url: toRelativePath(typedHit.url || '') }],
-          };
-        });
+            return {
+              objectID: typedHit.objectID,
+              title: displayTitle,
+              excerpt,
+              url: toRelativePath(typedHit.url || ""),
+              section: typedHit.section,
+              priority: typedHit.priority,
+              depth: typedHit.depth,
+              _highlightResult: typedHit._highlightResult,
+              _snippetResult: typedHit._snippetResult,
+              sub_results: [
+                {
+                  title: displayTitle,
+                  excerpt,
+                  url: toRelativePath(typedHit.url || ""),
+                },
+              ],
+            };
+          },
+        );
 
         // Append new results to existing ones
-        setResults(prevResults => [...prevResults, ...transformedResults]);
+        setResults((prevResults) => [...prevResults, ...transformedResults]);
         setCurrentPage(nextPage);
         setIsLoadingMore(false);
       } else {
         setIsLoadingMore(false);
       }
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
+      if (error instanceof DOMException && error.name === "AbortError") {
         return;
       }
       if (!signal.aborted) {
-        console.error('Algolia load more error:', error);
+        console.error("Algolia load more error:", error);
         setIsLoadingMore(false);
       }
     }
@@ -548,7 +598,7 @@ export function useAlgoliaSearch(debounceTime = 100, searchOptions?: AlgoliaSear
 }
 
 function stripColon(title: string) {
-  return title.charAt(title.length - 1) === ':' ? title.slice(0, -1) : title;
+  return title.charAt(title.length - 1) === ":" ? title.slice(0, -1) : title;
 }
 
 /**
@@ -557,7 +607,7 @@ function stripColon(title: string) {
  * @returns Relative path with hash if present
  */
 function toRelativePath(url: string): string {
-  if (!url) return '';
+  if (!url) return "";
 
   try {
     // Try to parse as URL - if it's absolute, extract pathname + hash

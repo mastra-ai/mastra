@@ -1,5 +1,5 @@
 ---
-title: 'Using a Tool as a Step '
+title: "Using a Tool as a Step "
 description: Example of using Mastra to integrate a custom tool as a step in a legacy workflow.
 ---
 
@@ -8,13 +8,13 @@ description: Example of using Mastra to integrate a custom tool as a step in a l
 This example demonstrates how to create and integrate a custom tool as a workflow step, showing how to define input/output schemas and implement the tool's execution logic.
 
 ```ts showLineNumbers copy
-import { createTool } from '@mastra/core/tools';
-import { LegacyWorkflow } from '@mastra/core/workflows/legacy';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
 
 const crawlWebpage = createTool({
-  id: 'Crawl Webpage',
-  description: 'Crawls a webpage and extracts the text content',
+  id: "Crawl Webpage",
+  description: "Crawls a webpage and extracts the text content",
   inputSchema: z.object({
     url: z.string().url(),
   }),
@@ -24,17 +24,17 @@ const crawlWebpage = createTool({
   execute: async ({ context }) => {
     const response = await fetch(context.triggerData.url);
     const text = await response.text();
-    return { rawText: 'This is the text content of the webpage: ' + text };
+    return { rawText: "This is the text content of the webpage: " + text };
   },
 });
 
-const contentWorkflow = new LegacyWorkflow({ name: 'content-review' });
+const contentWorkflow = new LegacyWorkflow({ name: "content-review" });
 
 contentWorkflow.step(crawlWebpage).commit();
 
 const { start } = contentWorkflow.createRun();
 
-const res = await start({ triggerData: { url: 'https://example.com' } });
+const res = await start({ triggerData: { url: "https://example.com" } });
 
 console.log(res.results);
 ```

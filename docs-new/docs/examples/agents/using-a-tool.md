@@ -1,5 +1,5 @@
 ---
-title: 'Adding Tools to Agents '
+title: "Adding Tools to Agents "
 description: Example of creating an AI agent in Mastra that uses a dedicated tool to provide weather information.
 ---
 
@@ -20,12 +20,12 @@ OPENAI_API_KEY=<your-api-key>
 This tool provides historical weather data for London, returning arrays of daily temperature, precipitation, wind speed, snowfall, and weather conditions from January 1st of the current year up to today. This structure makes it easy for agents to access and reason about recent weather trends.
 
 ```typescript filename="src/mastra/tools/example-london-weather-tool.ts" showLineNumbers copy
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
 export const londonWeatherTool = createTool({
-  id: 'london-weather-tool',
-  description: 'Returns year-to-date historical weather data for London',
+  id: "london-weather-tool",
+  description: "Returns year-to-date historical weather data for London",
   outputSchema: z.object({
     date: z.array(z.string()),
     temp_max: z.array(z.number()),
@@ -36,7 +36,7 @@ export const londonWeatherTool = createTool({
   }),
   execute: async () => {
     const startDate = `${new Date().getFullYear()}-01-01`;
-    const endDate = new Date().toISOString().split('T')[0];
+    const endDate = new Date().toISOString().split("T")[0];
 
     const response = await fetch(
       `https://archive-api.open-meteo.com/v1/archive?latitude=51.5072&longitude=-0.1276&start_date=${startDate}&end_date=${endDate}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,snowfall_sum&timezone=auto`,
@@ -61,21 +61,21 @@ export const londonWeatherTool = createTool({
 This agent uses the `londonWeatherTool` to answer questions about historical weather in London. It has clear instructions that guide it to use the tool for every query and limit its responses to data available for the current calendar year.
 
 ```typescript filename="src/mastra/agents/example-london-weather-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
-import { londonWeatherTool } from '../tools/example-london-weather-tool';
+import { londonWeatherTool } from "../tools/example-london-weather-tool";
 
 export const londonWeatherAgent = new Agent({
-  name: 'london-weather-agent',
-  description: 'Provides historical information about London weather',
+  name: "london-weather-agent",
+  description: "Provides historical information about London weather",
   instructions: `You are a helpful assistant with access to historical weather data for London.
     - The data is limited to the current calendar year, from January 1st up to today's date.
     - Use the provided tool (londonWeatherTool) to retrieve relevant data.
     - Answer the user's question using that data.
     - Keep responses concise, factual, and informative.
     - If the question cannot be answered with available data, say so clearly.`,
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   tools: { londonWeatherTool },
 });
 ```
@@ -85,13 +85,15 @@ export const londonWeatherAgent = new Agent({
 Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt.
 
 ```typescript filename="src/test-london-weather-agent.ts" showLineNumbers copy
-import 'dotenv/config';
+import "dotenv/config";
 
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
-const agent = mastra.getAgent('londonWeatherAgent');
+const agent = mastra.getAgent("londonWeatherAgent");
 
-const response = await agent.generate('How many times has it rained this year?');
+const response = await agent.generate(
+  "How many times has it rained this year?",
+);
 
 console.log(response.text);
 ```

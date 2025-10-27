@@ -1,6 +1,6 @@
 ---
-title: 'Reference: System Prompt Scrubber '
-description: 'Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses.'
+title: "System Prompt Scrubber"
+description: "Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses."
 ---
 
 # SystemPromptScrubber
@@ -10,12 +10,12 @@ The `SystemPromptScrubber` is an **output processor** that detects and handles s
 ## Usage example
 
 ```typescript copy
-import { SystemPromptScrubber } from '@mastra/core/processors';
+import { SystemPromptScrubber } from "@mastra/core/processors";
 
 const processor = new SystemPromptScrubber({
-  model: 'openai/gpt-4.1-nano',
-  strategy: 'redact',
-  redactionMethod: 'mask',
+  model: "openai/gpt-4.1-nano",
+  strategy: "redact",
+  redactionMethod: "mask",
   includeDetections: true,
 });
 ```
@@ -118,13 +118,16 @@ isOptional: false,
 When using `SystemPromptScrubber` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the scrubber, reducing the number of LLM calls required for detection.
 
 ```typescript filename="src/mastra/agents/scrubbed-agent.ts" showLineNumbers copy
-import { Agent } from '@mastra/core/agent';
-import { BatchPartsProcessor, SystemPromptScrubber } from '@mastra/core/processors';
+import { Agent } from "@mastra/core/agent";
+import {
+  BatchPartsProcessor,
+  SystemPromptScrubber,
+} from "@mastra/core/processors";
 
 export const agent = new Agent({
-  name: 'scrubbed-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-4o-mini',
+  name: "scrubbed-agent",
+  instructions: "You are a helpful assistant",
+  model: "openai/gpt-4o-mini",
   outputProcessors: [
     // Batch stream parts first to reduce LLM calls
     new BatchPartsProcessor({
@@ -132,12 +135,12 @@ export const agent = new Agent({
     }),
     // Then apply system prompt detection on batched content
     new SystemPromptScrubber({
-      model: 'openai/gpt-4.1-nano',
-      strategy: 'redact',
-      customPatterns: ['system prompt', 'internal instructions'],
+      model: "openai/gpt-4.1-nano",
+      strategy: "redact",
+      customPatterns: ["system prompt", "internal instructions"],
       includeDetections: true,
-      redactionMethod: 'placeholder',
-      placeholderText: '[REDACTED]',
+      redactionMethod: "placeholder",
+      placeholderText: "[REDACTED]",
     }),
   ],
 });

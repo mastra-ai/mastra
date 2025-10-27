@@ -1,6 +1,6 @@
 ---
-title: 'Vercel '
-description: 'Use AI models through Vercel.'
+title: "Vercel "
+description: "Use AI models through Vercel."
 ---
 
 # <img src="https://models.dev/logos/vercel.svg" alt="Vercel logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Vercel
@@ -12,12 +12,12 @@ Learn more in the [Vercel documentation](https://ai-sdk.dev/providers/ai-sdk-pro
 ## Usage
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'vercel/amazon/nova-lite',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "vercel/amazon/nova-lite",
 });
 ```
 

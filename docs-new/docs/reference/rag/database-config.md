@@ -1,5 +1,5 @@
 ---
-title: 'DatabaseConfig '
+title: "DatabaseConfig "
 description: API reference for database-specific configuration types used with vector query tools in Mastra RAG systems.
 ---
 
@@ -300,12 +300,12 @@ export type DatabaseConfig = {
 
 // 3. Use in vector query tool
 const vectorTool = createVectorQueryTool({
-  vectorStoreName: 'newdatabase',
-  indexName: 'documents',
+  vectorStoreName: "newdatabase",
+  indexName: "documents",
   model: embedModel,
   databaseConfig: {
     newdatabase: {
-      customParam1: 'value',
+      customParam1: "value",
       customParam2: 42,
     },
   },

@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import Head from '@docusaurus/Head';
-import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
-import { useState } from 'react';
-import { CookieBanner } from './cookie-banner';
-import HubspotTracker from './hubspot-tracker';
+import Head from "@docusaurus/Head";
+import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
+import { useState } from "react";
+import { CookieBanner } from "./cookie-banner";
+import HubspotTracker from "./hubspot-tracker";
 
 declare global {
   interface Window {
@@ -12,21 +12,23 @@ declare global {
   }
 }
 
-const REO_SCRIPT_ID = 'reo-script';
-const REO_CLIENT_ID = 'fdd9258c52d6769';
+const REO_SCRIPT_ID = "reo-script";
+const REO_CLIENT_ID = "fdd9258c52d6769";
 
 export const CookieConsent = () => {
   const { siteConfig } = useDocusaurusContext();
   const [cookieConsent, setCookieConsent] = useState<boolean | null>(null);
 
   const GA_ID = siteConfig.customFields?.gaId as string | undefined;
-  const HS_PORTAL_ID = siteConfig.customFields?.hsPortalId as string | undefined;
+  const HS_PORTAL_ID = siteConfig.customFields?.hsPortalId as
+    | string
+    | undefined;
 
   if (!GA_ID) {
-    console.warn('Google Analytics ID is not defined');
+    console.warn("Google Analytics ID is not defined");
   }
   if (!HS_PORTAL_ID) {
-    console.warn('Hubspot Portal ID is not defined');
+    console.warn("Hubspot Portal ID is not defined");
   }
 
   return (
@@ -37,7 +39,10 @@ export const CookieConsent = () => {
       {cookieConsent && GA_ID && (
         <>
           <Head>
-            <script async src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`} />
+            <script
+              async
+              src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
+            />
             <script>
               {`
                 window.dataLayer = window.dataLayer || [];
@@ -55,7 +60,11 @@ export const CookieConsent = () => {
       {/* HubSpot - Only load with consent */}
       {cookieConsent && HS_PORTAL_ID && (
         <Head>
-          <script async src={`//js.hs-scripts.com/${HS_PORTAL_ID}.js`} id="hs-script-loader" />
+          <script
+            async
+            src={`//js.hs-scripts.com/${HS_PORTAL_ID}.js`}
+            id="hs-script-loader"
+          />
         </Head>
       )}
 

@@ -1,6 +1,6 @@
 ---
-title: 'Reference: voice.send() '
-description: 'Documentation for the send() method available in real-time voice providers, which streams audio data for continuous processing.'
+title: "voice.send()"
+description: "Documentation for the send() method available in real-time voice providers, which streams audio data for continuous processing."
 ---
 
 # voice.send()
@@ -10,9 +10,9 @@ The `send()` method streams audio data in real-time to voice providers for conti
 ## Usage Example
 
 ```typescript
-import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
-import Speaker from '@mastra/node-speaker';
-import { getMicrophoneStream } from '@mastra/node-audio';
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import Speaker from "@mastra/node-speaker";
+import { getMicrophoneStream } from "@mastra/node-audio";
 
 const speaker = new Speaker({
   sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
@@ -23,7 +23,7 @@ const speaker = new Speaker({
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: 'gpt-4o-mini-realtime',
+    model: "gpt-4o-mini-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });
@@ -32,11 +32,11 @@ const voice = new OpenAIRealtimeVoice({
 await voice.connect();
 
 // Set up event listeners for responses
-voice.on('writing', ({ text, role }) => {
+voice.on("writing", ({ text, role }) => {
   console.log(`${role}: ${text}`);
 });
 
-voice.on('speaker', stream => {
+voice.on("speaker", (stream) => {
   stream.pipe(speaker);
 });
 

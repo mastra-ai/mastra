@@ -1,6 +1,6 @@
 ---
-title: 'Workflow Streaming '
-description: 'Learn how to use workflow streaming in Mastra, including handling workflow execution events, step streaming, and workflow integration with agents and tools.'
+title: "Workflow Streaming "
+description: "Learn how to use workflow streaming in Mastra, including handling workflow execution events, step streaming, and workflow integration with agents and tools."
 ---
 
 # Workflow streaming
@@ -56,13 +56,13 @@ export const testStep = createStep({
 Events written to the stream are included in the emitted chunks. These chunks can be inspected to access any custom fields, such as event types, intermediate values, or step-specific data.
 
 ```typescript showLineNumbers copy
-const testWorkflow = mastra.getWorkflow('testWorkflow');
+const testWorkflow = mastra.getWorkflow("testWorkflow");
 
 const run = await testWorkflow.createRunAsync();
 
 const stream = await run.stream({
   inputData: {
-    value: 'initial data',
+    value: "initial data",
   },
 });
 
@@ -70,10 +70,10 @@ for await (const chunk of stream) {
   console.log(chunk);
 }
 
-if (result!.status === 'suspended') {
+if (result!.status === "suspended") {
   // if the workflow is suspended, we can resume it with the resumeStreamVNext method
   const resumedStream = await run.resumeStreamVNext({
-    resumeData: { value: 'resume data' },
+    resumeData: { value: "resume data" },
   });
 
   for await (const chunk of resumedStream) {
@@ -99,15 +99,15 @@ for await (const chunk of newStream) {
 Pipe an agent's `textStream` to the workflow step's `writer`. This streams partial output, and Mastra automatically aggregates the agent's usage into the workflow run.
 
 ```typescript showLineNumbers copy
-import { createStep } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
 export const testStep = createStep({
   // ...
   execute: async ({ inputData, mastra, writer }) => {
     const { city } = inputData;
 
-    const testAgent = mastra?.getAgent('testAgent');
+    const testAgent = mastra?.getAgent("testAgent");
     const stream = await testAgent?.stream(`What is the weather in ${city}$?`);
 
     await stream!.textStream.pipeTo(writer!);
