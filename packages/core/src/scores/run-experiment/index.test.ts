@@ -8,6 +8,8 @@ import { createWorkflow, createStep } from '../../workflows';
 import { createScorer } from '../base';
 import type { MastraScorer } from '../base';
 import { runExperiment } from '.';
+import { Dataset } from '../../datasets/dataset';
+import type { MastraStorage } from '../../storage';
 
 const createMockScorer = (name: string, score: number = 0.8): MastraScorer => {
   const scorer = createScorer({

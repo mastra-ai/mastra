@@ -1,10 +1,19 @@
 import type { MastraMessageV2 } from '../agent';
+
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource } from '../scores/types';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
 import type { TABLE_NAMES } from './constants';
+import {
+  MemoryDatasetsStorage,
+  type DatasetRecord,
+  type DatasetRow,
+  type DatasetVersion,
+  type ExperimentRecord,
+  type ExperimentRowResult,
+} from './domains';
 import { InMemoryLegacyEvals } from './domains/legacy-evals/inmemory';
 import type { InMemoryEvals } from './domains/legacy-evals/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
@@ -71,6 +80,17 @@ export class InMemoryStore extends MastraStorage {
       operations: operationsStorage,
     });
 
+    const datasetsStorage = new MemoryDatasetsStorage({
+      collections: {
+        datasets: database.mastra_datasets as Map<string, Omit<DatasetRecord, 'currentVersion'>>,
+        datasetVersions: database.mastra_dataset_versions as Map<string, DatasetVersion>,
+        datasetRows: database.mastra_dataset_rows as Map<string, DatasetRow>,
+        experiments: database.mastra_experiments as Map<string, ExperimentRecord>,
+        experimentRowResults: database.mastra_experiment_row_results as Map<string, ExperimentRowResult>,
+      },
+      operations: operationsStorage,
+    });
+
     this.stores = {
       legacyEvals: legacyEvalsStorage,
       operations: operationsStorage,
@@ -78,6 +98,7 @@ export class InMemoryStore extends MastraStorage {
       scores: scoresStorage,
       memory: memoryStorage,
       observability: observabilityStorage,
+      datasets: datasetsStorage,
     };
   }
 
@@ -91,6 +112,7 @@ export class InMemoryStore extends MastraStorage {
       aiTracing: true,
       indexManagement: false,
       getScoresBySpan: true,
+      datasets: true,
     };
   }
 
@@ -430,6 +452,30 @@ export class InMemoryStore extends MastraStorage {
 
   async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
     return this.stores.observability!.batchDeleteAITraces(args);
+  }
+
+  // DATASETS
+  async createDataset(args: {
+    name: string;
+    description?: string;
+    metadata?: Record<string, any>;
+  }): Promise<DatasetRecord> {
+    return this.stores.datasets!.createDataset(args);
+  }
+
+  async updateDataset(args: {
+    id: string;
+    updates: { name?: string; description?: string; metadata?: Record<string, any> };
+  }): Promise<DatasetRecord> {
+    return this.stores.datasets!.updateDataset(args);
+  }
+
+  async deleteDataset(args: { id: string }): Promise<void> {
+    return this.stores.datasets!.deleteDataset(args);
+  }
+
+  async getDataset(args: { id: string }): Promise<DatasetRecord> {
+    return this.stores.datasets!.getDataset(args);
   }
 }
 
