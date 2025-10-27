@@ -3,7 +3,7 @@ import type { MetricResult } from '@mastra/core/eval';
 import { LegacyEvalsStorage, TABLE_EVALS } from '@mastra/core/storage';
 import type { PaginationArgs, PaginationInfo, EvalRow } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
-import { getSchemaName, getTableName } from '../utils';
+import type { StoreOperationsPG } from '../operations';
 
 function transformEvalRow(row: Record<string, any>): EvalRow {
   let testInfoValue = null;
@@ -31,17 +31,21 @@ function transformEvalRow(row: Record<string, any>): EvalRow {
 
 export class LegacyEvalsPG extends LegacyEvalsStorage {
   private client: IDatabase<{}>;
+  private operations: StoreOperationsPG;
   private schema: string;
-  constructor({ client, schema }: { client: IDatabase<{}>; schema: string }) {
+  constructor({ client, operations, schema }: { client: IDatabase<{}>; operations: StoreOperationsPG; schema: string }) {
     super();
     this.client = client;
+    this.operations = operations;
     this.schema = schema;
   }
 
   /** @deprecated use getEvals instead */
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     try {
-      const baseQuery = `SELECT * FROM ${getTableName({ indexName: TABLE_EVALS, schemaName: getSchemaName(this.schema) })} WHERE agent_name = $1`;
+      const baseQuery = `SELECT * FROM ${
+        this.operations.getQualifiedTableName(TABLE_EVALS)
+      } WHERE agent_name = $1`;
       const typeCondition =
         type === 'test'
           ? " AND test_info IS NOT NULL AND test_info->>'testPath' IS NOT NULL"
@@ -69,7 +73,7 @@ export class LegacyEvalsPG extends LegacyEvalsStorage {
       type?: 'test' | 'live';
     } & PaginationArgs = {},
   ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    const tableName = getTableName({ indexName: TABLE_EVALS, schemaName: getSchemaName(this.schema) });
+    const tableName = this.operations.getQualifiedTableName(TABLE_EVALS);
 
     const { agentName, type, page = 0, perPage = 100, dateRange } = options;
     const fromDate = dateRange?.start;

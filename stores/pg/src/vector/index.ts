@@ -64,6 +64,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private createdIndexes = new Map<string, number>();
   private mutexesByName = new Map<string, Mutex>();
   private schema?: string;
+  private tableMap?: Partial<Record<string, string>>;
   private setupSchemaPromise: Promise<void> | null = null;
   private installVectorExtensionPromise: Promise<void> | null = null;
   private vectorExtensionInstalled: boolean | undefined = undefined;
@@ -77,6 +78,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       super();
 
       this.schema = config.schemaName;
+      // Accept shared tableMap to allow logical->physical mapping for index tables
+      // The shared type is keyed by TABLE_NAMES; for vectors we treat keys as logical index names.
+      this.tableMap = config.tableMap;
 
       let poolConfig: pg.PoolConfig;
 
@@ -218,8 +222,23 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     return 'vector';
   }
 
+  private mapLogicalToPhysicalIndexName(name: string): string {
+    if (!this.tableMap) return name;
+    const mapped = this.tableMap[name];
+    return mapped || name;
+  }
+
+  private mapPhysicalToLogicalIndexName(name: string): string {
+    if (!this.tableMap) return name;
+    for (const [logical, physical] of Object.entries(this.tableMap)) {
+      if (physical === name) return logical;
+    }
+    return name;
+  }
+
   private getTableName(indexName: string) {
-    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    const physicalIndexName = this.mapLogicalToPhysicalIndexName(indexName);
+    const parsedIndexName = parseSqlIdentifier(physicalIndexName, 'index name');
     const quotedIndexName = `"${parsedIndexName}"`;
     const quotedSchemaName = this.getSchemaName();
     const quotedVectorName = `"${parsedIndexName}_vector_idx"`;
@@ -845,7 +864,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         );
       `;
       const mastraTables = await client.query(mastraTablesQuery, [this.schema || 'public']);
-      return mastraTables.rows.map(row => row.table_name);
+      return mastraTables.rows.map(row => this.mapPhysicalToLogicalIndexName(row.table_name));
     } catch (e) {
       const mastraError = new MastraError(
         {
@@ -882,7 +901,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           AND udt_name = 'vector'
         LIMIT 1;
       `;
-      const tableExists = await client.query(tableExistsQuery, [this.schema || 'public', indexName]);
+      const physicalIndexName = parseSqlIdentifier(this.mapLogicalToPhysicalIndexName(indexName), 'index name');
+      const tableExists = await client.query(tableExistsQuery, [this.schema || 'public', physicalIndexName]);
 
       if (tableExists.rows.length === 0) {
         throw new Error(`Vector table ${tableName} does not exist`);
@@ -920,7 +940,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const [dimResult, countResult, indexResult] = await Promise.all([
         client.query(dimensionQuery, [tableName]),
         client.query(countQuery),
-        client.query(indexQuery, [`${indexName}_vector_idx`, this.schema || 'public']),
+        client.query(indexQuery, [`${physicalIndexName}_vector_idx`, this.schema || 'public']),
       ]);
 
       const { index_method, index_def, operator_class } = indexResult.rows[0] || {
