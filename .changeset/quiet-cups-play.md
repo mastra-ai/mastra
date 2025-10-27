@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Add import for WriteableStream in execution-engine and dedupe llm.getModel in agent.ts
+Add import for WritableStream in execution-engine and dedupe llm.getModel in agent.ts
