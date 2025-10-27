@@ -7,9 +7,9 @@ sidebar_position: 2
 Before processing, create a MDocument instance from your content. You can initialize it from various formats:
 
 ```ts showLineNumbers copy
-const docFromText = MDocument.fromText('Your plain text content...');
-const docFromHTML = MDocument.fromHTML('<html>Your HTML content...</html>');
-const docFromMarkdown = MDocument.fromMarkdown('# Your Markdown content...');
+const docFromText = MDocument.fromText("Your plain text content...");
+const docFromHTML = MDocument.fromHTML("<html>Your HTML content...</html>");
+const docFromMarkdown = MDocument.fromMarkdown("# Your Markdown content...");
 const docFromJSON = MDocument.fromJSON(`{ "key": "value" }`);
 ```
 
@@ -33,10 +33,10 @@ Here's an example of how to use the `recursive` strategy:
 
 ```ts showLineNumbers copy
 const chunks = await doc.chunk({
-  strategy: 'recursive',
+  strategy: "recursive",
   maxSize: 512,
   overlap: 50,
-  separators: ['\n'],
+  separators: ["\n"],
   extract: {
     metadata: true, // Optionally extract metadata
   },
@@ -47,11 +47,11 @@ For text where preserving sentence structure is important, here's an example of 
 
 ```ts showLineNumbers copy
 const chunks = await doc.chunk({
-  strategy: 'sentence',
+  strategy: "sentence",
   maxSize: 450,
   minSize: 50,
   overlap: 0,
-  sentenceEnders: ['.'],
+  sentenceEnders: ["."],
   keepSeparator: true,
 });
 ```
@@ -60,9 +60,9 @@ For markdown documents where preserving the semantic relationships between secti
 
 ```ts showLineNumbers copy
 const chunks = await doc.chunk({
-  strategy: 'semantic-markdown',
+  strategy: "semantic-markdown",
   joinThreshold: 500,
-  modelName: 'gpt-3.5-turbo',
+  modelName: "gpt-3.5-turbo",
 });
 ```
 
@@ -77,24 +77,24 @@ Transform chunks into embeddings using your preferred provider. Mastra supports 
 ### Using OpenAI
 
 ```ts showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { embedMany } from 'ai';
+import { openai } from "@ai-sdk/openai";
+import { embedMany } from "ai";
 
 const { embeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 ```
 
 ### Using Cohere
 
 ```ts showLineNumbers copy
-import { cohere } from '@ai-sdk/cohere';
-import { embedMany } from 'ai';
+import { cohere } from "@ai-sdk/cohere";
+import { embedMany } from "ai";
 
 const { embeddings } = await embedMany({
-  model: cohere.embedding('embed-english-v3.0'),
-  values: chunks.map(chunk => chunk.text),
+  model: cohere.embedding("embed-english-v3.0"),
+  values: chunks.map((chunk) => chunk.text),
 });
 ```
 
@@ -114,10 +114,10 @@ OpenAI (text-embedding-3 models):
 
 ```ts
 const { embeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small', {
+  model: openai.embedding("text-embedding-3-small", {
     dimensions: 256, // Only supported in text-embedding-3 and later
   }),
-  values: chunks.map(chunk => chunk.text),
+  values: chunks.map((chunk) => chunk.text),
 });
 ```
 
@@ -125,10 +125,10 @@ Google (text-embedding-004):
 
 ```ts
 const { embeddings } = await embedMany({
-  model: google.textEmbeddingModel('text-embedding-004', {
+  model: google.textEmbeddingModel("text-embedding-004", {
     outputDimensionality: 256, // Truncates excessive values from the end
   }),
-  values: chunks.map(chunk => chunk.text),
+  values: chunks.map((chunk) => chunk.text),
 });
 ```
 
@@ -141,11 +141,11 @@ When storing embeddings, the vector database index must be configured to match t
 Here's an example showing document processing and embedding generation with both providers:
 
 ```ts showLineNumbers copy
-import { embedMany } from 'ai';
-import { openai } from '@ai-sdk/openai';
-import { cohere } from '@ai-sdk/cohere';
+import { embedMany } from "ai";
+import { openai } from "@ai-sdk/openai";
+import { cohere } from "@ai-sdk/cohere";
 
-import { MDocument } from '@mastra/rag';
+import { MDocument } from "@mastra/rag";
 
 // Initialize document
 const doc = MDocument.fromText(`
@@ -155,28 +155,28 @@ const doc = MDocument.fromText(`
 
 // Create chunks
 const chunks = await doc.chunk({
-  strategy: 'recursive',
+  strategy: "recursive",
   maxSize: 256,
   overlap: 50,
 });
 
 // Generate embeddings with OpenAI
 const { embeddings: openAIEmbeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 
 // OR
 
 // Generate embeddings with Cohere
 const { embeddings: cohereEmbeddings } = await embedMany({
-  model: cohere.embedding('embed-english-v3.0'),
-  values: chunks.map(chunk => chunk.text),
+  model: cohere.embedding("embed-english-v3.0"),
+  values: chunks.map((chunk) => chunk.text),
 });
 
 // Store embeddings in your vector database
 await vectorStore.upsert({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   vectors: embeddings,
 });
 ```

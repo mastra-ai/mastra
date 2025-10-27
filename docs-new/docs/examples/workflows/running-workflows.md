@@ -1,5 +1,5 @@
 ---
-title: 'Running Workflows '
+title: "Running Workflows "
 description: Example for how to run workflows.
 ---
 
@@ -41,9 +41,9 @@ export const TestWorkflow = () => {
 In this example, a run script has been added to the `src` directory. The `inputData` matches the `inputSchema` for the [sequentialSteps](./sequential-steps) example.
 
 ```typescript filename="src/test-run-workflow.ts" showLineNumbers copy
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
-const run = await mastra.getWorkflow('sequentialSteps').createRunAsync();
+const run = await mastra.getWorkflow("sequentialSteps").createRunAsync();
 
 const result = await run.start({
   inputData: {

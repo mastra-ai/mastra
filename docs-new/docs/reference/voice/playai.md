@@ -1,6 +1,6 @@
 ---
-title: 'Reference: PlayAI Voice '
-description: 'Documentation for the PlayAI voice implementation, providing text-to-speech capabilities.'
+title: "PlayAI Voice"
+description: "Documentation for the PlayAI voice implementation, providing text-to-speech capabilities."
 ---
 
 # PlayAI
@@ -10,7 +10,7 @@ The PlayAI voice implementation in Mastra provides text-to-speech capabilities u
 ## Usage Example
 
 ```typescript
-import { PlayAIVoice } from '@mastra/voice-playai';
+import { PlayAIVoice } from "@mastra/voice-playai";
 
 // Initialize with default configuration (uses PLAYAI_API_KEY environment variable and PLAYAI_USER_ID environment variable)
 const voice = new PlayAIVoice();
@@ -18,16 +18,17 @@ const voice = new PlayAIVoice();
 // Initialize with default configuration
 const voice = new PlayAIVoice({
   speechModel: {
-    name: 'PlayDialog',
+    name: "PlayDialog",
     apiKey: process.env.PLAYAI_API_KEY,
     userId: process.env.PLAYAI_USER_ID,
   },
-  speaker: 'Angelo', // Default voice
+  speaker: "Angelo", // Default voice
 });
 
 // Convert text to speech with a specific voice
-const audioStream = await voice.speak('Hello, world!', {
-  speaker: 's3://voice-cloning-zero-shot/b27bc13e-996f-4841-b584-4d35801aea98/original/manifest.json', // Dexter voice
+const audioStream = await voice.speak("Hello, world!", {
+  speaker:
+    "s3://voice-cloning-zero-shot/b27bc13e-996f-4841-b584-4d35801aea98/original/manifest.json", // Dexter voice
 });
 ```
 

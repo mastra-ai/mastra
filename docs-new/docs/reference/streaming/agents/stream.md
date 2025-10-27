@@ -1,6 +1,6 @@
 ---
-title: 'Agent.stream() '
-description: 'Documentation for the `Agent.stream()` method in Mastra agents, which enables real-time streaming of responses with enhanced capabilities.'
+title: "Agent.stream() "
+description: "Documentation for the `Agent.stream()` method in Mastra agents, which enables real-time streaming of responses with enhanced capabilities."
 ---
 
 # Agent.stream()
@@ -11,11 +11,11 @@ The `.stream()` method enables real-time streaming of responses from an agent wi
 
 ```ts filename="index.ts" copy
 // Default Mastra format
-const mastraStream = await agent.stream('message for agent');
+const mastraStream = await agent.stream("message for agent");
 
 // AI SDK v5 compatible format
-const aiSdkStream = await agent.stream('message for agent', {
-  format: 'aisdk',
+const aiSdkStream = await agent.stream("message for agent", {
+  format: "aisdk",
 });
 ```
 
@@ -575,9 +575,9 @@ description: "The trace ID associated with this execution when AI tracing is ena
 ### Mastra Format (Default)
 
 ```ts filename="index.ts" showLineNumbers copy
-import { stepCountIs } from 'ai-v5';
+import { stepCountIs } from "ai-v5";
 
-const stream = await agent.stream('Tell me a story', {
+const stream = await agent.stream("Tell me a story", {
   stopWhen: stepCountIs(3), // Stop after 3 steps
   modelSettings: {
     temperature: 0.7,
@@ -596,10 +596,10 @@ const fullText = await stream.text;
 ### AI SDK v5 Format
 
 ```ts filename="index.ts" showLineNumbers copy
-import { stepCountIs } from 'ai-v5';
+import { stepCountIs } from "ai-v5";
 
-const stream = await agent.stream('Tell me a story', {
-  format: 'aisdk',
+const stream = await agent.stream("Tell me a story", {
+  format: "aisdk",
   stopWhen: stepCountIs(3), // Stop after 3 steps
   modelSettings: {
     temperature: 0.7,
@@ -608,7 +608,7 @@ const stream = await agent.stream('Tell me a story', {
 
 // Use with AI SDK v5 compatible interfaces
 for await (const part of stream.fullStream) {
-  if (part.type === 'text-delta') {
+  if (part.type === "text-delta") {
     console.log(part.text);
   }
 }
@@ -622,21 +622,21 @@ return stream.toUIMessageStreamResponse();
 All callback functions are now available as top-level properties for a cleaner API experience.
 
 ```ts filename="index.ts" showLineNumbers copy
-const stream = await agent.stream('Tell me a story', {
-  onFinish: result => {
-    console.log('Streaming finished:', result);
+const stream = await agent.stream("Tell me a story", {
+  onFinish: (result) => {
+    console.log("Streaming finished:", result);
   },
-  onStepFinish: step => {
-    console.log('Step completed:', step);
+  onStepFinish: (step) => {
+    console.log("Step completed:", step);
   },
-  onChunk: chunk => {
-    console.log('Received chunk:', chunk);
+  onChunk: (chunk) => {
+    console.log("Received chunk:", chunk);
   },
   onError: ({ error }) => {
-    console.error('Streaming error:', error);
+    console.error("Streaming error:", error);
   },
-  onAbort: event => {
-    console.log('Stream aborted:', event);
+  onAbort: (event) => {
+    console.log("Stream aborted:", event);
   },
 });
 
@@ -649,32 +649,32 @@ for await (const chunk of stream.textStream) {
 ### Advanced Example with Options
 
 ```ts filename="index.ts" showLineNumbers copy
-import { z } from 'zod';
-import { stepCountIs } from 'ai-v5';
+import { z } from "zod";
+import { stepCountIs } from "ai-v5";
 
-await agent.stream('message for agent', {
-  format: 'aisdk', // Enable AI SDK v5 compatibility
+await agent.stream("message for agent", {
+  format: "aisdk", // Enable AI SDK v5 compatibility
   stopWhen: stepCountIs(3), // Stop after 3 steps
   modelSettings: {
     temperature: 0.7,
   },
   memory: {
-    thread: 'user-123',
-    resource: 'test-app',
+    thread: "user-123",
+    resource: "test-app",
   },
-  toolChoice: 'auto',
+  toolChoice: "auto",
   // Structured output with better DX
   structuredOutput: {
     schema: z.object({
-      sentiment: z.enum(['positive', 'negative', 'neutral']),
+      sentiment: z.enum(["positive", "negative", "neutral"]),
       confidence: z.number(),
     }),
-    model: openai('gpt-4o-mini'),
-    errorStrategy: 'warn',
+    model: openai("gpt-4o-mini"),
+    errorStrategy: "warn",
   },
   // Output processors for streaming response validation
   outputProcessors: [
-    new ModerationProcessor({ model: openai('gpt-4.1-nano') }),
+    new ModerationProcessor({ model: openai("gpt-4.1-nano") }),
     new BatchPartsProcessor({ maxBatchSize: 3, maxWaitTime: 100 }),
   ],
 });

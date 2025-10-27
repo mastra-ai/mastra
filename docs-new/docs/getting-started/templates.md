@@ -1,5 +1,5 @@
 ---
-title: 'Templates '
+title: "Templates "
 description: Pre-built project structures that demonstrate common Mastra use cases and patterns
 ---
 

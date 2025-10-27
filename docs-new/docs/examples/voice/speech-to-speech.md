@@ -46,22 +46,22 @@ npm install
 First, we define our agent with voice capabilities:
 
 ```ts filename="speech-to-speech/call-analysis/src/mastra/agents/index.ts" copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { createTool } from '@mastra/core/tools';
-import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
-import { z } from 'zod';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { z } from "zod";
 
 // Have the agent do something
 export const speechToSpeechServer = new Agent({
-  name: 'mastra',
-  instructions: 'You are a helpful assistant.',
+  name: "mastra",
+  instructions: "You are a helpful assistant.",
   voice: new OpenAIRealtimeVoice(),
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   tools: {
     salutationTool: createTool({
-      id: 'salutationTool',
-      description: 'Read the result of the tool',
+      id: "salutationTool",
+      description: "Read the result of the tool",
       inputSchema: z.object({ name: z.string() }),
       outputSchema: z.object({ message: z.string() }),
       execute: async ({ context }) => {
@@ -77,8 +77,8 @@ export const speechToSpeechServer = new Agent({
 Register the agent with Mastra:
 
 ```ts filename="speech-to-speech/call-analysis/src/mastra/index.ts" copy
-import { Mastra } from '@mastra/core';
-import { speechToSpeechServer } from './agents';
+import { Mastra } from "@mastra/core";
+import { speechToSpeechServer } from "./agents";
 
 export const mastra = new Mastra({
   agents: {
@@ -92,7 +92,7 @@ export const mastra = new Mastra({
 Set up Cloudinary for storing the recorded audio files:
 
 ```ts filename="speech-to-speech/call-analysis/src/upload.ts" copy
-import { v2 as cloudinary } from 'cloudinary';
+import { v2 as cloudinary } from "cloudinary";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -102,7 +102,7 @@ cloudinary.config({
 
 export async function uploadToCloudinary(path: string) {
   const response = await cloudinary.uploader.upload(path, {
-    resource_type: 'raw',
+    resource_type: "raw",
   });
   console.log(response);
   return response.url;
@@ -114,13 +114,13 @@ export async function uploadToCloudinary(path: string) {
 The main application orchestrates the conversation flow, recording, and analytics integration:
 
 ```ts filename="speech-to-speech/call-analysis/src/base.ts" copy
-import { Roark } from '@roarkanalytics/sdk';
-import chalk from 'chalk';
+import { Roark } from "@roarkanalytics/sdk";
+import chalk from "chalk";
 
-import { mastra } from './mastra';
-import { createConversation, formatToolInvocations } from './utils';
-import { uploadToCloudinary } from './upload';
-import fs from 'fs';
+import { mastra } from "./mastra";
+import { createConversation, formatToolInvocations } from "./utils";
+import { uploadToCloudinary } from "./upload";
+import fs from "fs";
 
 const client = new Roark({
   bearerToken: process.env.ROARK_API_KEY,
@@ -129,42 +129,42 @@ const client = new Roark({
 async function speechToSpeechServerExample() {
   const { start, stop } = createConversation({
     mastra,
-    recordingPath: './speech-to-speech-server.mp3',
+    recordingPath: "./speech-to-speech-server.mp3",
     providerOptions: {},
-    initialMessage: 'Howdy partner',
-    onConversationEnd: async props => {
+    initialMessage: "Howdy partner",
+    onConversationEnd: async (props) => {
       // File upload
       fs.writeFileSync(props.recordingPath, props.audioBuffer);
       const url = await uploadToCloudinary(props.recordingPath);
 
       // Send to Roark
-      console.log('Send to Roark', url);
+      console.log("Send to Roark", url);
       const response = await client.callAnalysis.create({
         recordingUrl: url,
         startedAt: props.startedAt,
-        callDirection: 'INBOUND',
-        interfaceType: 'PHONE',
+        callDirection: "INBOUND",
+        interfaceType: "PHONE",
         participants: [
           {
-            role: 'AGENT',
+            role: "AGENT",
             spokeFirst: props.agent.spokeFirst,
             name: props.agent.name,
             phoneNumber: props.agent.phoneNumber,
           },
           {
-            role: 'CUSTOMER',
-            name: 'Yujohn Nattrass',
-            phoneNumber: '987654321',
+            role: "CUSTOMER",
+            name: "Yujohn Nattrass",
+            phoneNumber: "987654321",
           },
         ],
         properties: props.metadata,
         toolInvocations: formatToolInvocations(props.toolInvocations),
       });
 
-      console.log('Call Recording Posted:', response.data);
+      console.log("Call Recording Posted:", response.data);
     },
-    onWriting: ev => {
-      if (ev.role === 'assistant') {
+    onWriting: (ev) => {
+      if (ev.role === "assistant") {
         process.stdout.write(chalk.blue(ev.text));
       }
     },
@@ -172,7 +172,7 @@ async function speechToSpeechServerExample() {
 
   await start();
 
-  process.on('SIGINT', async e => {
+  process.on("SIGINT", async (e) => {
     await stop();
   });
 }

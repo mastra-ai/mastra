@@ -1,6 +1,6 @@
 ---
-title: 'Cloudflare'
-description: 'Learn how to deploy a Mastra application to Cloudflare using the Mastra CloudflareDeployer'
+title: "Cloudflare"
+description: "Learn how to deploy a Mastra application to Cloudflare using the Mastra CloudflareDeployer"
 sidebar_position: 2
 ---
 
@@ -17,15 +17,15 @@ npm install @mastra/deployer-cloudflare@latest
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
+import { Mastra } from "@mastra/core/mastra";
+import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 export const mastra = new Mastra({
   // ...
   deployer: new CloudflareDeployer({
-    projectName: 'hello-mastra',
+    projectName: "hello-mastra",
     env: {
-      NODE_ENV: 'production',
+      NODE_ENV: "production",
     },
   }),
 });
@@ -64,7 +64,10 @@ The `CloudflareDeployer` automatically generates a `wrangler.json` configuration
   "name": "hello-mastra",
   "main": "./index.mjs",
   "compatibility_date": "2025-04-01",
-  "compatibility_flags": ["nodejs_compat", "nodejs_compat_populate_process_env"],
+  "compatibility_flags": [
+    "nodejs_compat",
+    "nodejs_compat_populate_process_env"
+  ],
   "observability": { "logs": { "enabled": true } },
   "vars": {
     "OPENAI_API_KEY": "...",

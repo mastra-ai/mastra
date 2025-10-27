@@ -1,6 +1,6 @@
 ---
-title: 'Netlify'
-description: 'Learn how to deploy a Mastra application to Netlify using the Mastra NetlifyDeployer'
+title: "Netlify"
+description: "Learn how to deploy a Mastra application to Netlify using the Mastra NetlifyDeployer"
 sidebar_position: 3
 ---
 
@@ -17,8 +17,8 @@ npm install @mastra/deployer-netlify@latest
 ## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { NetlifyDeployer } from '@mastra/deployer-netlify';
+import { Mastra } from "@mastra/core/mastra";
+import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 export const mastra = new Mastra({
   // ...

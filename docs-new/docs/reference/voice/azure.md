@@ -1,6 +1,6 @@
 ---
-title: 'Reference: Azure Voice '
-description: 'Documentation for the AzureVoice class, providing text-to-speech and speech-to-text capabilities using Azure Cognitive Services.'
+title: "Azure Voice"
+description: "Documentation for the AzureVoice class, providing text-to-speech and speech-to-text capabilities using Azure Cognitive Services."
 ---
 
 # Azure
@@ -10,33 +10,33 @@ The AzureVoice class in Mastra provides text-to-speech and speech-to-text capabi
 ## Usage Example
 
 ```typescript
-import { AzureVoice } from '@mastra/voice-azure';
+import { AzureVoice } from "@mastra/voice-azure";
 
 // Initialize with configuration
 const voice = new AzureVoice({
   speechModel: {
-    name: 'neural',
-    apiKey: 'your-azure-speech-api-key',
-    region: 'eastus',
+    name: "neural",
+    apiKey: "your-azure-speech-api-key",
+    region: "eastus",
   },
   listeningModel: {
-    name: 'whisper',
-    apiKey: 'your-azure-speech-api-key',
-    region: 'eastus',
+    name: "whisper",
+    apiKey: "your-azure-speech-api-key",
+    region: "eastus",
   },
-  speaker: 'en-US-JennyNeural', // Default voice
+  speaker: "en-US-JennyNeural", // Default voice
 });
 
 // Convert text to speech
-const audioStream = await voice.speak('Hello, how can I help you?', {
-  speaker: 'en-US-GuyNeural', // Override default voice
-  style: 'cheerful', // Voice style
+const audioStream = await voice.speak("Hello, how can I help you?", {
+  speaker: "en-US-GuyNeural", // Override default voice
+  style: "cheerful", // Voice style
 });
 
 // Convert speech to text
 const text = await voice.listen(audioStream, {
-  filetype: 'wav',
-  language: 'en-US',
+  filetype: "wav",
+  language: "en-US",
 });
 ```
 

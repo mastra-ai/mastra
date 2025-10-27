@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.setTelemetry() '
-description: 'Documentation for the `Mastra.setTelemetry()` method in Mastra, which sets the telemetry configuration for all components.'
+title: "Mastra.setTelemetry() "
+description: "Documentation for the `Mastra.setTelemetry()` method in Mastra, which sets the telemetry configuration for all components."
 ---
 
 # Mastra.setTelemetry()
@@ -10,7 +10,7 @@ The `.setTelemetry()` method is used to set the telemetry configuration for all 
 ## Usage example
 
 ```typescript copy
-mastra.setTelemetry({ export: { type: 'console' } });
+mastra.setTelemetry({ export: { type: "console" } });
 ```
 
 ## Parameters

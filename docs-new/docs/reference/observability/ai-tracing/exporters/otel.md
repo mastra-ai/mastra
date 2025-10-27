@@ -1,5 +1,5 @@
 ---
-title: 'OtelExporter '
+title: "OtelExporter "
 description: OpenTelemetry exporter for AI tracing
 ---
 
@@ -26,7 +26,7 @@ interface OtelExporterConfig {
   provider?: ProviderConfig;
   timeout?: number;
   batchSize?: number;
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  logLevel?: "debug" | "info" | "warn" | "error";
 }
 ```
 
@@ -99,7 +99,7 @@ required: false,
 ```typescript
 interface SignozConfig {
   apiKey: string;
-  region?: 'us' | 'eu' | 'in';
+  region?: "us" | "eu" | "in";
   endpoint?: string;
 }
 ```
@@ -224,7 +224,7 @@ required: false,
 ```typescript
 interface CustomConfig {
   endpoint: string;
-  protocol?: 'http/json' | 'http/protobuf' | 'grpc' | 'zipkin';
+  protocol?: "http/json" | "http/protobuf" | "grpc" | "zipkin";
   headers?: Record<string, string>;
 }
 ```
@@ -275,13 +275,13 @@ Flushes pending traces and shuts down the exporter.
 ### Basic Usage
 
 ```typescript
-import { OtelExporter } from '@mastra/otel-exporter';
+import { OtelExporter } from "@mastra/otel-exporter";
 
 const exporter = new OtelExporter({
   provider: {
     signoz: {
       apiKey: process.env.SIGNOZ_API_KEY,
-      region: 'us',
+      region: "us",
     },
   },
 });
@@ -293,15 +293,15 @@ const exporter = new OtelExporter({
 const exporter = new OtelExporter({
   provider: {
     custom: {
-      endpoint: 'https://my-collector.example.com/v1/traces',
-      protocol: 'http/protobuf',
+      endpoint: "https://my-collector.example.com/v1/traces",
+      protocol: "http/protobuf",
       headers: {
-        'x-api-key': process.env.API_KEY,
+        "x-api-key": process.env.API_KEY,
       },
     },
   },
   timeout: 60000,
-  logLevel: 'debug',
+  logLevel: "debug",
 });
 ```
 

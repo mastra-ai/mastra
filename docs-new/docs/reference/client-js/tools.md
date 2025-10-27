@@ -20,7 +20,7 @@ const tools = await mastraClient.getTools();
 Get an instance of a specific tool:
 
 ```typescript
-const tool = mastraClient.getTool('tool-id');
+const tool = mastraClient.getTool("tool-id");
 ```
 
 ## Tool Methods
@@ -40,10 +40,10 @@ Execute a tool with specific arguments:
 ```typescript
 const result = await tool.execute({
   args: {
-    param1: 'value1',
-    param2: 'value2',
+    param1: "value1",
+    param2: "value2",
   },
-  threadId: 'thread-1', // Optional: Thread context
-  resourceId: 'resource-1', // Optional: Resource identifier
+  threadId: "thread-1", // Optional: Thread context
+  resourceId: "resource-1", // Optional: Resource identifier
 });
 ```

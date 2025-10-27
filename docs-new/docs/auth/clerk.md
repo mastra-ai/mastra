@@ -1,6 +1,6 @@
 ---
 title: Clerk
-description: 'Documentation for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication.'
+description: "Documentation for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication."
 sidebar_position: 3
 ---
 
@@ -34,8 +34,8 @@ npm install @mastra/auth-clerk@latest
 ## Usage example
 
 ```typescript {2,7-11} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { MastraAuthClerk } from '@mastra/auth-clerk';
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthClerk } from "@mastra/auth-clerk";
 
 export const mastra = new Mastra({
   // ..
@@ -62,7 +62,7 @@ When using Clerk auth, you'll need to retrieve the access token from Clerk on th
 Use the Clerk React hooks to authenticate users and retrieve their access token:
 
 ```typescript filename="lib/auth.ts" showLineNumbers copy
-import { useAuth } from '@clerk/nextjs';
+import { useAuth } from "@clerk/nextjs";
 
 export const useClerkAuth = () => {
   const { getToken } = useAuth();
@@ -83,10 +83,10 @@ export const useClerkAuth = () => {
 When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Clerk access token in the `Authorization` header:
 
 ```typescript {6} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
-  baseUrl: 'https://<mastra-api-url>',
+  baseUrl: "https://<mastra-api-url>",
   headers: {
     Authorization: `Bearer ${accessToken}`,
   },

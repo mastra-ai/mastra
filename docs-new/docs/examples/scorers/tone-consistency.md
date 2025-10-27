@@ -1,5 +1,5 @@
 ---
-title: 'Tone Consistency '
+title: "Tone Consistency "
 description: Example of using the Tone Consistency scorer to evaluate emotional tone patterns and sentiment consistency in text.
 ---
 
@@ -20,20 +20,20 @@ npm install @mastra/evals
 In this example, the texts exhibit a similar positive sentiment. The scorer measures the consistency between the tones, resulting in a high score.
 
 ```typescript filename="src/example-positive-tone.ts" showLineNumbers copy
-import { createToneScorer } from '@mastra/evals/scorers/code';
+import { createToneScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createToneScorer();
 
-const input = 'This product is fantastic and amazing!';
-const output = 'The product is excellent and wonderful!';
+const input = "This product is fantastic and amazing!";
+const output = "The product is excellent and wonderful!";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 ### Positive tone output
@@ -56,20 +56,20 @@ The scorer returns a high score reflecting strong sentiment alignment. The `anal
 In this example, the text’s internal tone consistency is analyzed by passing an empty response. This signals the scorer to evaluate sentiment stability within the single input text, resulting in a score reflecting how uniform the tone is throughout.
 
 ```typescript filename="src/example-stable-tone.ts" showLineNumbers copy
-import { createToneScorer } from '@mastra/evals/scorers/code';
+import { createToneScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createToneScorer();
 
-const input = 'Great service! Friendly staff. Perfect atmosphere.';
-const output = '';
+const input = "Great service! Friendly staff. Perfect atmosphere.";
+const output = "";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 ### Stable tone output
@@ -91,20 +91,22 @@ The scorer returns a high score indicating consistent sentiment throughout the i
 In this example, the input and response have different emotional tones. The scorer picks up on these variations and gives a lower consistency score.
 
 ```typescript filename="src/example-mixed-tone.ts" showLineNumbers copy
-import { createToneScorer } from '@mastra/evals/scorers/code';
+import { createToneScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createToneScorer();
 
-const input = 'The interface is frustrating and confusing, though it has potential.';
-const output = 'The design shows promise but needs significant improvements to be usable.';
+const input =
+  "The interface is frustrating and confusing, though it has potential.";
+const output =
+  "The design shows promise but needs significant improvements to be usable.";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 ### Mixed tone output

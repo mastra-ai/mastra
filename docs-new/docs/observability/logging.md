@@ -1,5 +1,5 @@
 ---
-title: 'Logging '
+title: "Logging "
 description: Learn how to use logging in Mastra to monitor execution, capture application behavior, and improve the accuracy of AI applications.
 sidebar_position: 3
 ---
@@ -15,14 +15,14 @@ When deploying to Mastra Cloud, logs are shown on the [Logs](../mastra-cloud/obs
 When [initializing a new Mastra project](../getting-started/installation) using the CLI, `PinoLogger` is included by default.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
 
 export const mastra = new Mastra({
   // ...
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
 });
 ```
@@ -64,17 +64,17 @@ export const testWorkflow = createWorkflow({...})
 Similarly, tools have access to the logger instance via the `mastra` parameter. Use this to log tool specific activity during execution.
 
 ```typescript {8-9} filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
 export const testTool = createTool({
   // ...
   execute: async ({ mastra }) => {
     const logger = mastra?.getLogger();
-    logger?.info('tool info log');
+    logger?.info("tool info log");
 
     return {
-      output: '',
+      output: "",
     };
   },
 });

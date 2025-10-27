@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Metadata Filters '
+title: "Metadata Filters"
 description: Documentation for metadata filtering capabilities in Mastra, which allow for precise querying of vector search results across different vector stores.
 ---
 
@@ -10,18 +10,18 @@ Mastra provides a unified metadata filtering syntax across all vector stores, ba
 ## Basic Example
 
 ```typescript
-import { PgVector } from '@mastra/pg';
+import { PgVector } from "@mastra/pg";
 
 const store = new PgVector({ connectionString });
 
 const results = await store.query({
-  indexName: 'my_index',
+  indexName: "my_index",
   queryVector: queryVector,
   topK: 10,
   filter: {
-    category: 'electronics', // Simple equality
+    category: "electronics", // Simple equality
     price: { $gt: 100 }, // Numeric comparison
-    tags: { $in: ['sale', 'new'] }, // Array membership
+    tags: { $in: ["sale", "new"] }, // Array membership
   },
 });
 ```

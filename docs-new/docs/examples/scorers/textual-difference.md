@@ -1,5 +1,5 @@
 ---
-title: 'Textual Difference '
+title: "Textual Difference "
 description: Example of using the Textual Difference scorer to evaluate similarity between text strings by analyzing sequence differences and changes.
 ---
 
@@ -20,20 +20,20 @@ npm install @mastra/evals
 In this example, the texts are exactly the same. The scorer identifies complete similarity with a perfect score and no detected changes.
 
 ```typescript filename="src/example-no-differences.ts" showLineNumbers copy
-import { createTextualDifferenceScorer } from '@mastra/evals/scorers/code';
+import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createTextualDifferenceScorer();
 
-const input = 'The quick brown fox jumps over the lazy dog';
-const output = 'The quick brown fox jumps over the lazy dog';
+const input = "The quick brown fox jumps over the lazy dog";
+const output = "The quick brown fox jumps over the lazy dog";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 ### No differences output
@@ -57,20 +57,20 @@ The scorer returns a high score, indicating the texts are identical. The detaile
 In this example, the texts have small variations. The scorer detects these minor differences and returns a moderate similarity score.
 
 ```typescript filename="src/example-minor-differences.ts" showLineNumbers copy
-import { createTextualDifferenceScorer } from '@mastra/evals/scorers/code';
+import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createTextualDifferenceScorer();
 
-const input = 'Hello world! How are you?';
-const output = 'Hello there! How is it going?';
+const input = "Hello world! How are you?";
+const output = "Hello there! How is it going?";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 ### Minor differences output
@@ -94,20 +94,20 @@ The scorer returns a moderate score reflecting the small variations between the 
 In this example, the texts differ significantly. The scorer detects extensive changes and returns a low similarity score.
 
 ```typescript filename="src/example-major-differences.ts" showLineNumbers copy
-import { createTextualDifferenceScorer } from '@mastra/evals/scorers/code';
+import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
 
 const scorer = createTextualDifferenceScorer();
 
-const input = 'Python is a high-level programming language';
-const output = 'JavaScript is used for web development';
+const input = "Python is a high-level programming language";
+const output = "JavaScript is used for web development";
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: input }],
-  output: { role: 'assistant', text: output },
+  input: [{ role: "user", content: input }],
+  output: { role: "assistant", text: output },
 });
 
-console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
+console.log("Score:", result.score);
+console.log("AnalyzeStepResult:", result.analyzeStepResult);
 ```
 
 ### Major differences output
