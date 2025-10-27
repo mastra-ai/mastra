@@ -17,8 +17,6 @@ import type {
   StoragePagination,
   ThreadSortOptions,
   StorageDomains,
-  StorageGetTracesArg,
-  StorageGetTracesPaginatedArg,
   AISpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,
