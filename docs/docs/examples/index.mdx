@@ -1,0 +1,137 @@
+---
+title: "Examples List: Workflows, Agents, RAG | Mastra Docs"
+description: "Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini."
+---
+
+import { CardItems } from "@site/src/components/CardItems";
+
+# Examples
+
+The Examples section is a short list of example projects demonstrating basic AI engineering with Mastra, including text generation, structured output, streaming responses, retrieval‐augmented generation (RAG), and voice.
+
+<CardItems
+  titles={["Agent", "Workflow", "Tool", "Processors", "legacyWorkflow", "Memory", "RAG", "Evals", "Scorers (Experimental)", "Voice"]}
+  items={{
+    Agent: [
+      { title: "Calling Agents", href: "/examples/agents/calling-agents" },
+      { title: "Agent System Prompt", href: "/examples/agents/system-prompt" },
+      { title: "Agents with Tools", href: "/examples/agents/using-a-tool" },
+      { title: "Supervisor Agent", href: "/examples/agents/supervisor-agent" },
+      { title: "Image Analysis Agent", href: "/examples/agents/image-analysis" },
+      { title: "Voice Agents", href: "/examples/agents/adding-voice-capabilities" },
+      { title: "Dynamic Agents", href: "/examples/agents/dynamic-agents" },
+      { title: "Deploying an MCPServer", href: "/examples/agents/deploying-mcp-server" },
+      { title: "AI SDK v5 Integration", href: "/examples/agents/ai-sdk-v5-integration" },
+      { title: "WhatsApp Chat Bot", href: "/examples/agents/whatsapp-chat-bot" }
+    ],
+    Workflow: [
+      { title: "Running Workflows", href: "/examples/workflows/running-workflows" },
+      { title: "Sequential Steps", href: "/examples/workflows/sequential-steps" },
+      { title: "Parallel Steps", href: "/examples/workflows/parallel-steps" },
+      { title: "Conditional Branching", href: "/examples/workflows/conditional-branching" },
+      { title: "Array as Input", href: "/examples/workflows/array-as-input" },
+      { title: "Calling an Agent", href: "/examples/workflows/calling-agent" },
+      { title: "Agent as Step", href: "/examples/workflows/agent-as-step" },
+      { title: "Tool as Step", href: "/examples/workflows/tool-as-step" },
+      { title: "Human in the Loop", href: "/examples/workflows/human-in-the-loop" },
+      { title: "Multi-Turn Human in the Loop", href: "/examples/workflows/human-in-the-loop-multi-turn" },
+      { title: "Inngest Workflow", href: "/examples/workflows/inngest-workflow" }
+    ],
+    Tool: [
+      { title: "Calling Tools", href: "/examples/tools/calling-tools" },
+      { title: "Dynamic Tools", href: "/examples/tools/dynamic-tools" },
+      { title: "Tools with Workflows", href: "/examples/tools/workflow-as-tools" }
+    ],
+    Processors: [
+      { title: "Message Length Limiter", href: "/examples/processors/message-length-limiter" },
+      { title: "Response Length Limiter", href: "/examples/processors/response-length-limiter" },
+      { title: "Response Validator", href: "/examples/processors/response-validator" }
+    ],
+    legacyWorkflow: [
+      { title: "Creating a Workflow", href: "/examples/workflows_legacy/creating-a-workflow" },
+      { title: "Sequential Steps", href: "/examples/workflows_legacy/sequential-steps" },
+      { title: "Parallel Steps", href: "/examples/workflows_legacy/parallel-steps" },
+      { title: "Branching Paths", href: "/examples/workflows_legacy/branching-paths" },
+      { title: "Conditional Branching", href: "/examples/workflows_legacy/conditional-branching" },
+      { title: "Calling an Agent", href: "/examples/workflows_legacy/calling-agent" },
+      { title: "Using a Tool as a Step", href: "/examples/workflows_legacy/using-a-tool-as-a-step" },
+      { title: "Cyclical Dependencies", href: "/examples/workflows_legacy/cyclical-dependencies" },
+      { title: "Workflow Variables", href: "/examples/workflows_legacy/workflow-variables" }
+    ],
+    Memory: [
+      { title: "Basic Working Memory", href: "/examples/memory/working-memory-basic" },
+      { title: "Memory with Template", href: "/examples/memory/working-memory-template" },
+      { title: "Memory with Schema", href: "/examples/memory/working-memory-schema" },
+      { title: "Memory with LibSQL", href: "/docs/memory/storage/memory-with-libsql" },
+      { title: "Memory with MongoDB", href: "/docs/memory/storage/memory-with-mongodb" },
+      { title: "Memory with PostgreSQL", href: "/docs/memory/storage/memory-with-pg" },
+      { title: "Memory with Upstash", href: "/docs/memory/storage/memory-with-upstash" },
+      { title: "Memory with Mem0", href: "/examples/memory/memory-with-mem0" },
+      { title: "Memory Processors", href: "/docs/memory/memory-processors" }
+    ],
+    RAG: [
+      { title: "Chunk Text", href: "/examples/rag/chunking/chunk-text" },
+      { title: "Chunk Markdown", href: "/examples/rag/chunking/chunk-markdown" },
+      { title: "Chunk HTML", href: "/examples/rag/chunking/chunk-html" },
+      { title: "Chunk JSON", href: "/examples/rag/chunking/chunk-json" },
+      { title: "Adjust Chunk Size", href: "/examples/rag/chunking/adjust-chunk-size" },
+      { title: "Adjust Chunk Delimiters", href: "/examples/rag/chunking/adjust-chunk-delimiters" },
+      { title: "Embed Text Chunk", href: "/examples/rag/embedding/embed-text-chunk" },
+      { title: "Embed Chunk Array", href: "/examples/rag/embedding/embed-chunk-array" },
+      { title: "Embed Text with Cohere", href: "/examples/rag/embedding/embed-text-with-cohere" },
+      { title: "Metadata Extraction", href: "/examples/rag/embedding/metadata-extraction" },
+      { title: "Upsert Embeddings", href: "/examples/rag/upsert/upsert-embeddings" },
+      { title: "Using the Vector Query Tool", href: "/examples/rag/usage/basic-rag" },
+      { title: "Optimizing Information Density", href: "/examples/rag/usage/cleanup-rag" },
+      { title: "Metadata Filtering", href: "/examples/rag/usage/filter-rag" },
+      { title: "Chain of Thought Prompting", href: "/examples/rag/usage/cot-rag" },
+      { title: "Structured Reasoning with Workflows", href: "/examples/rag/usage/cot-workflow-rag" },
+      { title: "Graph RAG", href: "/examples/rag/usage/graph-rag" }
+    ],
+    Evals: [
+      { title: "Answer Relevancy", href: "/examples/evals/answer-relevancy" },
+      { title: "Bias", href: "/examples/evals/bias" },
+      { title: "Completeness", href: "/examples/evals/completeness" },
+      { title: "Content Similarity", href: "/examples/evals/content-similarity" },
+      { title: "Context Position", href: "/examples/evals/context-position" },
+      { title: "Context Precision", href: "/examples/evals/context-precision" },
+      { title: "Context Relevancy", href: "/examples/evals/context-relevancy" },
+      { title: "Contextual Recall", href: "/examples/evals/contextual-recall" },
+      { title: "Faithfulness", href: "/examples/evals/faithfulness" },
+      { title: "Hallucination", href: "/examples/evals/hallucination" },
+      { title: "Keyword Coverage", href: "/examples/evals/keyword-coverage" },
+      { title: "Prompt Alignment", href: "/examples/evals/prompt-alignment" },
+      { title: "Summarization", href: "/examples/evals/summarization" },
+      { title: "Textual Difference", href: "/examples/evals/textual-difference" },
+      { title: "Tone Consistency", href: "/examples/evals/tone-consistency" },
+      { title: "Toxicity", href: "/examples/evals/toxicity" },
+      { title: "LLM as a Judge", href: "/examples/evals/custom-llm-judge-eval" },
+      { title: "Native JavaScript", href: "/examples/evals/custom-native-javascript-eval" }
+    ],
+    "Scorers (Experimental)": [
+      { title: "Custom Scorer", href: "/examples/scorers/custom-scorer" },
+      { title: "Answer Relevancy", href: "/examples/scorers/answer-relevancy" },
+      { title: "Answer Similarity", href: "/examples/scorers/answer-similarity" },
+      { title: "Bias", href: "/examples/scorers/bias" },
+      { title: "Completeness", href: "/examples/scorers/completeness" },
+      { title: "Content Similarity", href: "/examples/scorers/content-similarity" },
+      { title: "Faithfulness", href: "/examples/scorers/faithfulness" },
+      { title: "Hallucination", href: "/examples/scorers/hallucination" },
+      { title: "Keyword Coverage", href: "/examples/scorers/keyword-coverage" },
+      { title: "Textual Difference", href: "/examples/scorers/textual-difference" },
+      { title: "Tone Consistency", href: "/examples/scorers/tone-consistency" },
+      { title: "Toxicity", href: "/examples/scorers/toxicity" },
+      { title: "Noise Sensitivity", href: "/examples/scorers/noise-sensitivity" },
+      { title: "Prompt Alignment", href: "/examples/scorers/prompt-alignment" },
+      { title: "Tool Call Accuracy", href: "/examples/scorers/tool-call-accuracy" },
+      { title: "Context Relevance", href: "/examples/scorers/context-relevance" },
+      { title: "Context Precision", href: "/examples/scorers/context-precision" },
+    ],
+    Voice: [
+      { title: "Text to Speech", href: "/examples/voice/text-to-speech" },
+      { title: "Speech to Text", href: "/examples/voice/speech-to-text" },
+      { title: "Turn Taking", href: "/examples/voice/turn-taking" },
+      { title: "Speech to Speech", href: "/examples/voice/speech-to-speech" }
+    ]
+  }}
+/>

@@ -1,0 +1,183 @@
+---
+title: "MCP Docs Server | Getting Started | Mastra Docs"
+description: "Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert."
+---
+
+import YouTube from "@site/src/components/YouTube";
+
+# Mastra Docs Server
+
+The `@mastra/mcp-docs-server` package provides direct access to Mastra’s full knowledge base, including documentation, code examples, blog posts, and changelogs, via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). It works with Cursor, Windsurf, Cline, Claude Code, Codex or any tool that supports MCP.
+
+These tools are designed to help agents retrieve precise, task-specific information — whether you're adding a feature to an agent, scaffolding a new project, or exploring how something works.
+
+In this guide you'll learn how to add Mastra's MCP server to your AI tooling.
+
+<YouTube id="vciV57lF0og" />
+
+## Installation
+
+### create-mastra
+
+During the interactive [create-mastra](/reference/cli/create-mastra) wizard, choose one of your tools in the MCP step.
+
+### Manual setup
+
+If there are no specific instructions for your tool below, you may be able to add the MCP server with this common JSON configuration anyways.
+
+```json copy
+{
+  "mcpServers": {
+    "mastra": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server"]
+    }
+  }
+}
+```
+
+### Claude Code CLI
+
+Install using the terminal command:
+
+```bash copy
+claude mcp add mastra -- npx -y @mastra/mcp-docs-server
+```
+
+[More info on using MCP servers with Claude Code](https://docs.claude.com/en/docs/claude-code/mcp)
+
+### OpenAI Codex CLI
+
+1. Register it from the terminal:
+
+    ```bash copy
+    codex mcp add mastra-docs -- npx -y @mastra/mcp-docs-server
+    ```
+
+2. Run `codex mcp list` to confirm the server shows as `enabled`.
+
+[More info on using MCP servers with OpenAI Codex](https://developers.openai.com/codex/mcp)
+
+### Cursor
+
+Install by clicking the button below:
+
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=mastra&config=eyJjb21tYW5kIjoibnB4IC15IEBtYXN0cmEvbWNwLWRvY3Mtc2VydmVyIn0%3D)
+
+If you followed the automatic installation, you'll see a popup when you open cursor in the bottom left corner to prompt you to enable the Mastra Docs MCP Server.
+
+<img
+  src="/img/enable-mastra-docs-cursor.png"
+  alt="Diagram showing cursor prompt to enable Mastra docs MCP server"
+  width={800}
+/>
+
+[More info on using MCP servers with Cursor](https://cursor.com/de/docs/context/mcp)
+
+### Visual Studio Code
+
+1. Create a `.vscode/mcp.json` file in your workspace
+2. Insert the following configuration:
+
+    ```json copy
+    {
+      "servers": {
+        "mastra": {
+          "type": "stdio",
+          "command": "npx",
+          "args": [
+            "-y",
+            "@mastra/mcp-docs-server"
+          ]
+        }
+      }
+    }
+    ```
+
+Once you installed the MCP server, you can use it like so:
+
+1. Open VSCode settings.
+2. Navigate to MCP settings.
+3. Click "enable" on the Chat > MCP option.
+
+    <img
+      src="/img/vscode-mcp-setting.png"
+      alt="Settings page of VSCode to enable MCP"
+      width={800}
+      className="rounded-lg"
+    />
+
+MCP only works in Agent mode in VSCode. Once you are in agent mode, open the `mcp.json` file and click the "start" button. Note that the "start" button will only appear if the `.vscode` folder containing `mcp.json` is in your workspace root, or the highest level of the in-editor file explorer.
+
+<img
+  src="/img/vscode-start-mcp.png"
+  alt="Settings page of VSCode to enable MCP"
+  width={800}
+  className="rounded-lg"
+/>
+
+After starting the MCP server, click the tools button in the Copilot pane to see available tools.
+
+<img
+  src="/img/vscode-mcp-running.png"
+  alt="Tools page of VSCode to see available tools"
+  width={800}
+  className="rounded-lg"
+/>
+
+[More info on using MCP servers with Visual Studio Code](https://code.visualstudio.com/docs/copilot/customization/mcp-servers)
+
+### Windsurf
+
+1. Open `~/.codeium/windsurf/mcp_config.json` in your editor
+2. Insert the following configuration:
+
+    ```json copy
+    {
+      "mcpServers": {
+        "mastra": {
+          "command": "npx",
+          "args": ["-y", "@mastra/mcp-docs-server"]
+        }
+      }
+    }
+    ```
+3. Save the configuration and restart Windsurf
+
+[More info on using MCP servers with Windsurf](https://docs.windsurf.com/windsurf/cascade/mcp#mcp-config-json)
+
+## Usage
+
+Once configured, you can ask your AI tool questions about Mastra or instruct it to take actions. For these steps, it'll take the up-to-date information from Mastra's MCP server.
+
+**Add features:**
+
+- "Add evals to my agent and write tests"
+- "Write me a workflow that does the following `[task]`"
+- "Make a new tool that allows my agent to access `[3rd party API]`"
+
+**Ask about integrations:**
+
+- "Does Mastra work with the AI SDK?
+  How can I use it in my `[React/Svelte/etc]` project?"
+- "What's the latest Mastra news around MCP?"
+- "Does Mastra support `[provider]` speech and voice APIs? Show me an example in my code of how I can use it."
+
+**Debug or update existing code:**
+
+- "I'm running into a bug with agent memory, have there been any related changes or bug fixes recently?"
+- "How does working memory behave in Mastra and how can I use it to do `[task]`? It doesn't seem to work the way I expect."
+- "I saw there are new workflow features, explain them to me and then update `[workflow]` to use them."
+
+### Troubleshooting
+
+1. **Server Not Starting**
+
+   - Ensure [npx](https://docs.npmjs.com/cli/v11/commands/npx) is installed and working.
+   - Check for conflicting MCP servers.
+   - Verify your configuration file syntax.
+
+2. **Tool Calls Failing**
+   - Restart the MCP server and/or your IDE.
+   - Update to the latest version of your IDE.

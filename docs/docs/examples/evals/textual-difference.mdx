@@ -1,0 +1,168 @@
+---
+title: "Example: Textual Difference | Evals | Mastra Docs"
+description: Example of using the Textual Difference metric to evaluate similarity between text strings by analyzing sequence differences and changes.
+---
+
+# Textual Difference Evaluation
+
+:::note
+The Scorers API is currently in beta. We're actively working on improvements and appreciate your feedback. For questions or feature requests, please reach out on [Discord](https://discord.gg/mastra).
+:::
+
+Use `TextualDifferenceMetric` to evaluate the similarity between two text strings by analyzing sequence differences and edit operations. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing confidence, ratio, number of changes, and length difference.
+
+## Installation
+
+```bash copy
+npm install @mastra/evals
+```
+
+## No differences example
+
+In this example, the texts are exactly the same. The metric identifies complete similarity with a perfect score and no detected changes.
+
+
+```typescript filename="src/example-no-differences.ts" showLineNumbers copy
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+
+const metric = new TextualDifferenceMetric();
+
+const query = "The quick brown fox jumps over the lazy dog.";
+const response = "The quick brown fox jumps over the lazy dog.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### No differences output
+
+The metric returns a high score, indicating the texts are identical. The detailed info confirms zero changes and no length difference.
+
+```typescript
+{
+  score: 1,
+  info: {
+    confidence: 1,
+    ratio: 1,
+    changes: 0,
+    lengthDiff: 0
+  }
+}
+```
+## Minor differences example
+
+In this example, the texts have small variations. The metric detects these minor differences and returns a moderate similarity score.
+
+```typescript filename="src/example-minor-differences.ts" showLineNumbers copy
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+
+const metric = new TextualDifferenceMetric();
+
+const query = "Hello world! How are you?";
+const response = "Hello there! How is it going?";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Minor differences output
+
+The metric returns a moderate score reflecting the small variations between the texts. The detailed info includes the number of changes and length difference observed.
+
+```typescript
+{
+  score: 0.5925925925925926,
+  info: {
+    confidence: 0.8620689655172413,
+    ratio: 0.5925925925925926,
+    changes: 5,
+    lengthDiff: 0.13793103448275862
+  }
+}
+```
+
+## Major differences example
+
+In this example, the texts differ significantly. The metric detects extensive changes and returns a low similarity score.
+
+```typescript filename="src/example-major-differences.ts" showLineNumbers copy
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
+
+const metric = new TextualDifferenceMetric();
+
+const query = "Python is a high-level programming language.";
+const response = "JavaScript is used for web development";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Major differences output
+
+The metric returns a low score due to significant differences between the texts. The detailed info shows numerous changes and a notable length difference.
+
+```typescript
+{
+  score: 0.3170731707317073,
+  info: {
+    confidence: 0.8636363636363636,
+    ratio: 0.3170731707317073,
+    changes: 8,
+    lengthDiff: 0.13636363636363635
+  }
+}
+```
+
+## Metric configuration
+
+You can create a `TextualDifferenceMetric` instance with default settings. No additional configuration is required.
+
+```typescript
+const metric = new TextualDifferenceMetric();
+```
+
+> See [TextualDifferenceMetric](/reference/evals/textual-difference.mdx) for a full list of configuration options.
+
+## Understanding the results
+
+`TextualDifferenceMetric` returns a result in the following shape:
+
+```typescript
+{
+  score: number,
+  info: {
+    confidence: number,
+    ratio: number,
+    changes: number,
+    lengthDiff: number
+  }
+}
+```
+
+### Textual difference score
+
+A textual difference score between 0 and 1:
+
+- **1.0**: Identical texts – no differences detected.
+- **0.7–0.9**: Minor differences – few changes needed.
+- **0.4–0.6**: Moderate differences – noticeable changes required.
+- **0.1–0.3**: Major differences – extensive changes needed.
+- **0.0**: Completely different texts.
+
+### Textual difference info
+
+An explanation for the score, with details including:
+
+- Confidence level based on text length comparison.
+- Similarity ratio derived from sequence matching.
+- Number of edit operations required to match texts.
+- Normalized difference in text lengths.
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/textual-difference"
+/>
