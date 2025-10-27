@@ -134,9 +134,6 @@ const main = defineCommand({
     } catch (err) {
       console.error(err);
     } finally {
-      childProcess.execSync(`git checkout feat-backport`, {
-        stdio: `inherit`,
-      });
       console.log('Backport script completed.');
     }
   },
