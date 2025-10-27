@@ -28,7 +28,6 @@
     "@mastra/core": "workspace:*",
     "@mastra/react": "workspace:*",
     "@mastra/playground-ui": "workspace:^",
-    "@radix-ui/react-checkbox": "^1.3.2",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-form": "^0.1.7",
     "@radix-ui/react-label": "^2.1.7",
