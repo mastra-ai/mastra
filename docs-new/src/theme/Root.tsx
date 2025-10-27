@@ -15,7 +15,6 @@ const queryClient = new QueryClient({
 });
 
 export default function Root({ children }: { children: React.ReactNode }) {
-  console.log({ children });
   const { siteConfig } = useDocusaurusContext();
   const kapaIntegrationId = siteConfig.customFields.kapaIntegrationId as string;
   return (
