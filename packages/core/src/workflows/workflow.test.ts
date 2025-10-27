@@ -4,7 +4,7 @@ import path from 'path';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { MockLanguageModelV2 } from 'ai-v5/test';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createTool, Mastra } from '..';
 import { Agent } from '../agent';
@@ -6038,60 +6038,6 @@ describe('Workflow', () => {
       expect(String(failedStepResult.error)).not.toContain('\n');
     });
 
-    it('issue #5848: WorkflowResult.error should be string, not Error instance', async () => {
-      // This test verifies the ACTUAL runtime behavior when a workflow fails
-      // The bug is that TypeScript types say result.error is Error, but it's actually a string
-      const errorMessage = 'Step execution failed';
-      const failingAction = vi.fn<any>().mockImplementation(() => {
-        throw new Error(errorMessage);
-      });
-
-      const step1 = createStep({
-        id: 'step1',
-        execute: failingAction,
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-      });
-
-      workflow.then(step1).commit();
-
-      const run = await workflow.createRunAsync();
-      const result = await run.startAsync({ inputData: {} });
-
-      // Verify workflow failed
-      expect(result.status).toBe('failed');
-
-      if (result.status === 'failed') {
-        // The core issue: TypeScript types say result.error is Error
-        // But the actual runtime value is a string
-
-        // Verify it's actually a string at runtime
-        expect(typeof result.error).toBe('string');
-        expect(result.error).toBe(`Error: ${errorMessage}`);
-
-        // Verify it's NOT an Error instance
-        expect(result.error instanceof Error).toBe(false);
-
-        // Demonstrate the bug reporter's issue:
-        const error: unknown = result.error;
-        if (error instanceof Error) {
-          // This branch should NOT execute
-          throw new Error('TEST FAILED: error should not be an Error instance');
-        } else if (typeof error === 'string') {
-          // This branch SHOULD execute (this is the actual runtime behavior)
-          expect(error).toBe(`Error: ${errorMessage}`);
-        } else {
-          throw new Error('TEST FAILED: error should be a string');
-        }
-      }
-    });
-
     it('should handle step execution errors within branches', async () => {
       const error = new Error('Step execution failed');
       const failingAction = vi.fn<any>().mockRejectedValue(error);
@@ -6212,6 +6158,45 @@ describe('Workflow', () => {
         },
       });
       expect((result.steps?.['test-workflow'] as any)?.error).toMatch(/^Error: Error: Step execution failed/);
+    });
+
+    it('WorkflowResult.error should be string, not Error instance', async () => {
+      const errorMessage = 'Step execution failed';
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: async () => {
+          throw new Error(errorMessage);
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-error-type',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status !== 'failed') {
+        throw new Error('Workflow should have failed');
+      }
+
+      expectTypeOf(result.error).toBeString();
+      expectTypeOf(result.error).not.toEqualTypeOf<Error>();
+
+      expect(typeof result.error).toBe('string');
+      expect(result.error).toBe(`Error: ${errorMessage}`);
+
+      const error: unknown = result.error;
+      expect(error instanceof Error).toBe(false);
     });
   });
 

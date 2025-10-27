@@ -371,7 +371,7 @@ export type WorkflowResult<
               z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
-      error: Error;
+      error: string;
     } & TracingProperties)
   | ({
       status: 'suspended';
