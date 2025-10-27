@@ -161,7 +161,7 @@
   --ifm-footer-background-color: #050505;
   --ifm-code-background: var(--mastra-surface-2);
 
-  --ifm-navbar-height: calc(60px + 5px);
+  --ifm-navbar-height: calc(58px);
 
   /* Code blocks */
   --docusaurus-highlighted-code-line-bg: color-mix(
@@ -318,7 +318,7 @@ html {
 }
 
 .navbar-sidebar__brand {
-  height: calc(var(--ifm-navbar-height) - 50px);
+  height: calc(var(--ifm-navbar-height));
   border: none;
   box-shadow: none;
 }
@@ -750,6 +750,7 @@ span[class*="categoryLinkLabel"] {
     border-top: var(--border-sm) solid var(--border);
     color: var(--mastra-text-secondary);
     padding: 2rem 0;
+    display: none;
   }
 
   .footer__link-item {
