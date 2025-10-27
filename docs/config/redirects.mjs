@@ -1284,6 +1284,11 @@ export const redirectList = [
     permanent: true,
   },
   {
+    source: "/:locale/docs/workflows/using-with-agents-and-tools",
+    destination: "/:locale/docs/workflows/agents-and-tools",
+    permanent: true,
+  },
+  {
     source: "/:locale/examples/workflows/agent-as-step",
     destination: "/:locale/docs/workflows/agents-and-tools",
     permanent: true,
