@@ -144,7 +144,7 @@ Browse the directory of available models using the navigation on the left, or ex
 
 You can also discover models directly in your editor. Mastra provides full autocomplete for the `model` field - just start typing, and your IDE will show available options.
 
-Alternatively, browse and test models in the [Playground](/docs/getting-started/local-dev-playground) UI.
+Alternatively, browse and test models in the [Playground](/docs/getting-started/studio) UI.
 
 :::note Development Behavior
 In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Playground stay up-to-date with the latest models. To disable, set `MASTRA_AUTO_REFRESH_PROVIDERS=false`. Auto-refresh is disabled by default in production.

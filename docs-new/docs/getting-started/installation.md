@@ -66,7 +66,7 @@ Try asking about the weather. If your API key is set up correctly, you'll get a 
 If you encounter an error, your API key may not be configured correctly. Double-check your setup and try again. Need more help? [Join our Discord](https://discord.gg/BTYqqHKUrf) and talk to the team directly.
 :::
 
-The [Playground](/docs/getting-started/local-dev-playground) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your application using the guides below.
+The [Playground](/docs/getting-started/studio) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your application using the guides below.
 
 ### Next steps
 
@@ -270,7 +270,7 @@ export const mastra = new Mastra({
 
 ### Test your agent
 
-You can now launch the [Playground](/docs/getting-started/local-dev-playground) and test your agent.
+You can now launch the [Playground](/docs/getting-started/studio) and test your agent.
 
 <Tabs>
   <TabItem value="npm" label="npm" default>

@@ -433,13 +433,13 @@ pre,
   }
 }
 
-@media (min-width: 997px) {
+@media (min-width: 1366px) {
   [class*="docMainContainer"][class*="docMainContainer"] {
     min-width: 69rem;
   }
+}
 
-  /* Custom Scrollbars*/
-
+@media (min-width: 997px) {
   li:has(ul.menu__list) .menu__list {
     margin-bottom: 0.25rem;
     position: relative;

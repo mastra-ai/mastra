@@ -396,7 +396,7 @@ export const notes = new MCPServer({
 
 ## Run the Server
 
-Great, you've authored your first MCP server! Now you can try it out by starting the [playground](/docs/getting-started/local-dev-playground):
+Great, you've authored your first MCP server! Now you can try it out by starting the [playground](/docs/getting-started/studio):
 
 ```bash copy
 npm run dev

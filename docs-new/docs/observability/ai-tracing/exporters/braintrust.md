@@ -1,5 +1,5 @@
 ---
-title: "Braintrust Exporter "
+title: "Braintrust"
 description: "Send AI traces to Braintrust for evaluation and monitoring"
 ---
 

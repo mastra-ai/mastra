@@ -140,7 +140,7 @@ Start the Mastra Dev Server to expose your agents as REST endpoints:
   </TabItem>
 </Tabs>
 
-> Once running, your agents are available locally. See [Local Development Environment](/docs/getting-started/local-dev-playground) for more information.
+> Once running, your agents are available locally. See [Local Development Environment](/docs/getting-started/studio) for more information.
 
 ## Start SvelteKit Dev Server
 
@@ -343,7 +343,7 @@ Start the Mastra Dev Server to expose your agents as REST endpoints:
   </TabItem>
 </Tabs>
 
-> Once running, your agents are available locally. See [Local Development Environment](/docs/getting-started/local-dev-playground) for more information.
+> Once running, your agents are available locally. See [Local Development Environment](/docs/getting-started/studio) for more information.
 
 ## Start SvelteKit Dev Server
 

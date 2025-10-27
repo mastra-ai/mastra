@@ -1,5 +1,5 @@
 ---
-title: "LangSmith Exporter "
+title: "LangSmith"
 description: "Send AI traces to LangSmith for LLM observability and evaluation"
 ---
 

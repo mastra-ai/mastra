@@ -1,5 +1,5 @@
 ---
-title: "OpenTelemetry Exporter "
+title: "OpenTelemetry"
 description: "Send AI traces to any OpenTelemetry-compatible observability platform"
 ---
 
