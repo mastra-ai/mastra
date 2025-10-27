@@ -2,8 +2,8 @@ import { anthropic as anthropic_v5 } from '@ai-sdk/anthropic-v5';
 import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
+// import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+// import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import type { LanguageModel } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -19,7 +19,7 @@ export const isOpenAIModel = (model: LanguageModel | LanguageModelV2) =>
   model.provider.includes('openai') || model.modelId.includes('openai');
 
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
-const openrouter_v5 = createOpenRouterV5({ apiKey: process.env.OPENROUTER_API_KEY });
+// const openrouter_v5 = createOpenRouterV5({ apiKey: process.env.OPENROUTER_API_KEY });
 
 type Result = {
   modelName: string;
