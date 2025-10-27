@@ -684,6 +684,34 @@ export class Memory extends MastraMemory {
 
     if (this.vector && config.semanticRecall) {
       let indexName: Promise<string>;
+
+      // Group messages by threadId to minimize database calls
+      const messagesByThread = new Map<string, (MastraMessageV1 | MastraMessageV2)[]>();
+      updatedMessages.forEach(message => {
+        if (message.threadId && !messagesByThread.has(message.threadId)) {
+          messagesByThread.set(message.threadId, []);
+        }
+        if (message.threadId) {
+          messagesByThread.get(message.threadId)!.push(message);
+        }
+      });
+
+      // Fetch thread metadata for all threads
+      const threadMetadataMap = new Map<string, Record<string, unknown>>();
+      await Promise.all(
+        Array.from(messagesByThread.keys()).map(async threadId => {
+          try {
+            const thread = await this.storage.getThreadById({ threadId });
+            if (thread?.metadata) {
+              threadMetadataMap.set(threadId, thread.metadata);
+            }
+          } catch (error) {
+            // Thread might not exist yet, continue without metadata
+            this.logger.warn(`Could not fetch metadata for thread ${threadId}:`, error);
+          }
+        }),
+      );
+
       await Promise.all(
         updatedMessages.map(async message => {
           let textForEmbedding: string | null = null;
@@ -732,6 +760,9 @@ export class Memory extends MastraMemory {
             );
           }
 
+          // Get thread metadata for this message's thread
+          const threadMetadata = message.threadId ? threadMetadataMap.get(message.threadId) || {} : {};
+
           await this.vector.upsert({
             indexName: await indexName,
             vectors: embeddings,
@@ -739,6 +770,7 @@ export class Memory extends MastraMemory {
               message_id: message.id,
               thread_id: message.threadId,
               resource_id: message.resourceId,
+              ...threadMetadata, // Include thread metadata for filtering
             })),
           });
         }),
