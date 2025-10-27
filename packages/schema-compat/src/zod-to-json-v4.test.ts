@@ -4,9 +4,10 @@ import { zodToJsonSchema } from './zod-to-json';
 import { runZodToJsonTestSuite } from './zod-to-json-test-suite';
 
 // Mock 'zod' to use v4
-vi.mock('zod', () => ({
-  z: zV4,
-}));
+vi.mock('zod', async () => {
+  const { z } = await import('zod/v4');
+  return { z };
+});
 
 // Run the shared test suite with Zod v4
 runZodToJsonTestSuite();
