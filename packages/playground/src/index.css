@@ -165,17 +165,6 @@
   margin-bottom: 5px;
 }
 
-/* styles.css */
-.CollapsibleContent {
-  overflow: hidden;
-}
-.CollapsibleContent[data-state='open'] {
-  animation: slideDown 300ms ease-out;
-}
-.CollapsibleContent[data-state='closed'] {
-  animation: slideUp 300ms ease-out;
-}
-
 @keyframes slideDown {
   from {
     height: 0;
