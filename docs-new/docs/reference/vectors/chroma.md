@@ -1,6 +1,7 @@
 ---
-title: 'Chroma Vector Store '
+title: "ChromaVector"
 description: Documentation for the ChromaVector class in Mastra, which provides vector search using ChromaDB.
+sidebar_position: 2
 ---
 
 # Chroma Vector Store
@@ -309,7 +310,7 @@ Returns:
 interface IndexStats {
   dimension: number;
   count: number;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
+  metric: "cosine" | "euclidean" | "dotproduct";
 }
 ```
 
@@ -404,7 +405,7 @@ The store throws typed errors that can be caught:
 ```typescript copy
 try {
   await store.query({
-    indexName: 'index_name',
+    indexName: "index_name",
     queryVector: queryVector,
   });
 } catch (error) {

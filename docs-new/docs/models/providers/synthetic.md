@@ -1,6 +1,6 @@
 ---
-title: 'Synthetic '
-description: 'Use Synthetic models with Mastra. 21 models available.'
+title: "Synthetic "
+description: "Use Synthetic models with Mastra. 21 models available."
 ---
 
 # <img src="https://models.dev/logos/synthetic.svg" alt="Synthetic logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Synthetic
@@ -14,19 +14,19 @@ SYNTHETIC_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'synthetic/hf:Qwen/Qwen2.5-Coder-32B-Instruct',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "synthetic/hf:Qwen/Qwen2.5-Coder-32B-Instruct",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -303,13 +303,13 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    url: 'https://api.synthetic.new/v1',
-    modelId: 'hf:Qwen/Qwen2.5-Coder-32B-Instruct',
+    url: "https://api.synthetic.new/v1",
+    modelId: "hf:Qwen/Qwen2.5-Coder-32B-Instruct",
     apiKey: process.env.SYNTHETIC_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -319,10 +319,12 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'synthetic/hf:zai-org/GLM-4.6' : 'synthetic/hf:Qwen/Qwen2.5-Coder-32B-Instruct';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "synthetic/hf:zai-org/GLM-4.6"
+      : "synthetic/hf:Qwen/Qwen2.5-Coder-32B-Instruct";
   },
 });
 ```

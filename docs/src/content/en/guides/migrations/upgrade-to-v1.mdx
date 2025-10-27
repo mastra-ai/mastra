@@ -27,6 +27,80 @@ This version isn't released yet but we're adding changes as we make them.
 
 </Callout>
 
+### Changed: Thread Title Generation Location and Default
+
+**Breaking Changes:**
+1. `generateTitle` has been moved from `threads.generateTitle` to the top-level of memory options
+2. The default value has changed from `true` to `false`
+3. Using `threads.generateTitle` will now throw an error
+
+**Why these changes?**
+- Simplify the API by moving `generateTitle` to the top level where it logically belongs
+- Avoid unexpected LLM API calls and associated costs
+- Give developers explicit control over when title generation occurs
+- Improve predictability of memory behavior
+
+**Migration:**
+
+If your application uses `threads.generateTitle`, you must update it to use the top-level `generateTitle` option:
+
+```typescript
+// Before (v0.22 and earlier)
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      threads: {
+        generateTitle: true  // ❌ This will now throw an error
+      }
+    }
+  })
+});
+
+// After (v0.23+)
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      generateTitle: true  // ✅ Now at the top level
+    }
+  })
+});
+```
+
+If your application relied on the old default behavior (automatic title generation), explicitly enable it:
+
+```typescript
+// Before (implicit true in v0.22)
+const agent = new Agent({
+  memory: new Memory({
+    // generateTitle was true by default
+  })
+});
+
+// After (explicit true in v0.23+)
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      generateTitle: true  // Explicitly enable title generation
+    }
+  })
+});
+```
+
+You can also customize the model and instructions used for title generation:
+
+```typescript
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      generateTitle: {
+        model: openai("gpt-4o-mini"),
+        instructions: "Generate a concise title (max 5 words) that summarizes the conversation"
+      }
+    }
+  })
+});
+```
+
 ### Changed: Memory Default Settings
 
 The default settings for semantic recall have been optimized based on RAG research:
@@ -160,6 +234,56 @@ export const accountBalance = createTool({
 - `InputProcessor` type removed in favour of `Processor` which implements a `processInput` function.
 
 ## Migrate to v0.22
+
+### Changed: Memory Scope Defaults
+
+`@mastra/memory` - `0.16.0`  
+`@mastra/core` - `0.22.0`
+
+The default memory scope for both **working memory** and **semantic recall** has changed from `'thread'` to `'resource'`.
+
+**Before:**
+- Working memory defaulted to `scope: 'thread'` (isolated per conversation)
+- Semantic recall defaulted to `scope: 'thread'` (search within current conversation only)
+
+**After:**
+- Working memory defaults to `scope: 'resource'` (persists across all user conversations)
+- Semantic recall defaults to `scope: 'resource'` (search across all user conversations)
+
+**Why this change?**
+
+1. **Better user experience**: Most applications want to remember user information across conversations, not just within a single thread
+2. **More intuitive default**: Users expect AI agents to "remember" them, which requires resource-scoped memory
+3. **Alignment with common use cases**: The majority of production applications use resource-scoped memory
+
+**Migration:**
+
+If you want to maintain the old behavior where memory is isolated per conversation thread, explicitly set `scope: 'thread'` in your memory configuration:
+
+```typescript showLineNumbers copy
+import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
+
+const memory = new Memory({
+  storage: new LibSQLStore({ url: 'file:local.db' }),
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: 'thread', // Explicitly set to thread-scoped
+      template: `# User Profile
+- **Name**: 
+- **Interests**: 
+`,
+    },
+    semanticRecall: {
+      topK: 3,
+      scope: 'thread', // Explicitly set to thread-scoped
+    },
+  },
+});
+```
+
+If you want to adopt the new default behavior, you can optionally remove explicit `scope: 'resource'` declarations as they're now redundant.
 
 ### Deprecated: `format: "aisdk"`
 

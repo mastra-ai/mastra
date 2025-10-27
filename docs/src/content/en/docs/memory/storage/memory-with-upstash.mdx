@@ -47,9 +47,7 @@ export const upstashAgent = new Agent({
       token: process.env.UPSTASH_REDIS_REST_TOKEN!
     }),
     options: {
-      threads: {
-        generateTitle: true
-      }
+      generateTitle: true  // Explicitly enable automatic title generation
     }
   })
 });

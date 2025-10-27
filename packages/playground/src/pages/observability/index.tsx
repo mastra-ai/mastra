@@ -224,10 +224,6 @@ export default function Observability() {
         onNext={toNextTrace}
         onPrevious={toPreviousTrace}
         isLoadingSpans={isLoadingAiTrace}
-        onScorerTriggered={scorerName => {
-          setDialogIsOpen(false);
-          navigate(`/scorers/${scorerName}`);
-        }}
         computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
       />
     </>

@@ -1,5 +1,5 @@
 ---
-title: 'Metadata Extraction '
+title: "Metadata Extraction "
 description: Example of extracting and utilizing metadata from documents in Mastra for enhanced document processing and retrieval.
 ---
 
@@ -22,7 +22,7 @@ The system demonstrates metadata extraction in two ways:
 Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { MDocument } from '@mastra/rag';
+import { MDocument } from "@mastra/rag";
 ```
 
 ## Document Creation
@@ -58,7 +58,7 @@ await doc.extractMetadata({
 
 // Retrieve the extracted metadata
 const meta = doc.getMetadata();
-console.log('Extracted Metadata:', meta);
+console.log("Extracted Metadata:", meta);
 
 // Example Output:
 // Extracted Metadata: {
@@ -81,7 +81,7 @@ Combine document chunking with metadata extraction:
 ```typescript copy showLineNumbers{40} filename="src/index.ts"
 // Configure chunking with metadata extraction
 await doc.chunk({
-  strategy: 'recursive', // Use recursive chunking strategy
+  strategy: "recursive", // Use recursive chunking strategy
   size: 200, // Maximum chunk size
   extract: {
     keywords: true, // Extract keywords per chunk
@@ -91,7 +91,7 @@ await doc.chunk({
 
 // Get metadata from chunks
 const metaTwo = doc.getMetadata();
-console.log('Chunk Metadata:', metaTwo);
+console.log("Chunk Metadata:", metaTwo);
 
 // Example Output:
 // Chunk Metadata: {

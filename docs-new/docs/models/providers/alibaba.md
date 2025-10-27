@@ -1,6 +1,6 @@
 ---
-title: 'Alibaba '
-description: 'Use Alibaba models with Mastra. 1 model available.'
+title: "Alibaba "
+description: "Use Alibaba models with Mastra. 1 model available."
 ---
 
 # <img src="https://models.dev/logos/alibaba.svg" alt="Alibaba logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Alibaba
@@ -14,19 +14,19 @@ DASHSCOPE_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'alibaba/qwen3-coder-plus',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "alibaba/qwen3-coder-plus",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -63,13 +63,13 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
-    modelId: 'qwen3-coder-plus',
+    url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    modelId: "qwen3-coder-plus",
     apiKey: process.env.DASHSCOPE_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -79,10 +79,12 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'alibaba/qwen3-coder-plus' : 'alibaba/qwen3-coder-plus';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "alibaba/qwen3-coder-plus"
+      : "alibaba/qwen3-coder-plus";
   },
 });
 ```

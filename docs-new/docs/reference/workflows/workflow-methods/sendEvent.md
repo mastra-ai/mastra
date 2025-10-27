@@ -1,5 +1,5 @@
 ---
-title: 'Workflow.sendEvent() '
+title: "Workflow.sendEvent() "
 description: Documentation for the `Workflow.sendEvent()` method in workflows, which resumes execution when an event is sent.
 ---
 
@@ -10,7 +10,7 @@ The `.sendEvent()` resumes execution when an event is sent.
 ## Usage example
 
 ```typescript copy
-workflow.sendEvent('event-name', step1);
+workflow.sendEvent("event-name", step1);
 ```
 
 ## Parameters

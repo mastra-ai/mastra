@@ -1,5 +1,5 @@
 ---
-title: 'PostgreSQL Storage '
+title: "PostgreSQL Storage "
 description: Documentation for the PostgreSQL storage implementation in Mastra.
 ---
 
@@ -16,7 +16,7 @@ npm install @mastra/pg@latest
 ## Usage
 
 ```typescript copy showLineNumbers
-import { PostgresStore } from '@mastra/pg';
+import { PostgresStore } from "@mastra/pg";
 
 const storage = new PostgresStore({
   connectionString: process.env.DATABASE_URL,
@@ -49,36 +49,36 @@ isOptional: true,
 You can instantiate `PostgresStore` in the following ways:
 
 ```ts
-import { PostgresStore } from '@mastra/pg';
+import { PostgresStore } from "@mastra/pg";
 
 // Using a connection string only
 const store1 = new PostgresStore({
-  connectionString: 'postgresql://user:password@localhost:5432/mydb',
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
 });
 
 // Using a connection string with a custom schema name
 const store2 = new PostgresStore({
-  connectionString: 'postgresql://user:password@localhost:5432/mydb',
-  schemaName: 'custom_schema', // optional
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
+  schemaName: "custom_schema", // optional
 });
 
 // Using individual connection parameters
 const store4 = new PostgresStore({
-  host: 'localhost',
+  host: "localhost",
   port: 5432,
-  database: 'mydb',
-  user: 'user',
-  password: 'password',
+  database: "mydb",
+  user: "user",
+  password: "password",
 });
 
 // Individual parameters with schemaName
 const store5 = new PostgresStore({
-  host: 'localhost',
+  host: "localhost",
   port: 5432,
-  database: 'mydb',
-  user: 'user',
-  password: 'password',
-  schemaName: 'custom_schema', // optional
+  database: "mydb",
+  user: "user",
+  password: "password",
+  schemaName: "custom_schema", // optional
 });
 ```
 
@@ -135,24 +135,24 @@ Create additional indexes to optimize specific query patterns:
 ```typescript copy
 // Basic index for common queries
 await storage.createIndex({
-  name: 'idx_threads_resource',
-  table: 'mastra_threads',
-  columns: ['resourceId'],
+  name: "idx_threads_resource",
+  table: "mastra_threads",
+  columns: ["resourceId"],
 });
 
 // Composite index with sort order for filtering + sorting
 await storage.createIndex({
-  name: 'idx_messages_composite',
-  table: 'mastra_messages',
-  columns: ['thread_id', 'createdAt DESC'],
+  name: "idx_messages_composite",
+  table: "mastra_messages",
+  columns: ["thread_id", "createdAt DESC"],
 });
 
 // GIN index for JSONB columns (fast JSON queries)
 await storage.createIndex({
-  name: 'idx_traces_attributes',
-  table: 'mastra_traces',
-  columns: ['attributes'],
-  method: 'gin',
+  name: "idx_traces_attributes",
+  table: "mastra_traces",
+  columns: ["attributes"],
+  method: "gin",
 });
 ```
 
@@ -252,10 +252,10 @@ console.log(allIndexes);
 // ]
 
 // List indexes for specific table
-const threadIndexes = await storage.listIndexes('mastra_threads');
+const threadIndexes = await storage.listIndexes("mastra_threads");
 
 // Get detailed statistics for an index
-const stats = await storage.describeIndex('idx_threads_resource');
+const stats = await storage.describeIndex("idx_threads_resource");
 console.log(stats);
 // {
 //   name: 'idx_threads_resource',
@@ -271,7 +271,7 @@ console.log(stats);
 // }
 
 // Drop an index
-await storage.dropIndex('idx_threads_status');
+await storage.dropIndex("idx_threads_status");
 ```
 
 ### Schema-Specific Indexes
@@ -281,14 +281,14 @@ When using custom schemas, indexes are created with schema prefixes:
 ```typescript copy
 const storage = new PostgresStore({
   connectionString: process.env.DATABASE_URL,
-  schemaName: 'custom_schema',
+  schemaName: "custom_schema",
 });
 
 // Creates index as: custom_schema_idx_threads_status
 await storage.createIndex({
-  name: 'idx_threads_status',
-  table: 'mastra_threads',
-  columns: ['status'],
+  name: "idx_threads_status",
+  table: "mastra_threads",
+  columns: ["status"],
 });
 ```
 

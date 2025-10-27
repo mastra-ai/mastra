@@ -44,7 +44,6 @@ function createMockMastra(agents: Record<string, Agent>) {
     agents: agents,
     storage: {
       init: vi.fn(),
-      __setTelemetry: vi.fn(),
       __setLogger: vi.fn(),
       getEvalsByAgentName: vi.fn(),
       getStorage: () => {

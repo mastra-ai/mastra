@@ -1,5 +1,5 @@
 ---
-title: 'CloudExporter '
+title: "CloudExporter "
 description: API reference for the CloudExporter
 ---
 
@@ -146,14 +146,14 @@ interface MastraCloudSpanRecord {
 ## Usage
 
 ```typescript
-import { CloudExporter } from '@mastra/core/ai-tracing';
+import { CloudExporter } from "@mastra/core/ai-tracing";
 
 // Uses environment variable for token
 const exporter = new CloudExporter();
 
 // Explicit configuration
 const customExporter = new CloudExporter({
-  accessToken: 'your-token',
+  accessToken: "your-token",
   maxBatchSize: 500,
   maxBatchWaitMs: 2000,
 });

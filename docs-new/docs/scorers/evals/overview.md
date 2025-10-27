@@ -1,6 +1,6 @@
 ---
-title: 'Overview'
-description: 'Understanding how to evaluate and measure AI agent quality using Mastra evals.'
+title: "Overview"
+description: "Understanding how to evaluate and measure AI agent quality using Mastra evals."
 sidebar_position: 1
 ---
 
@@ -39,16 +39,19 @@ npm install @mastra/evals@latest
 Evals need to be added to an agent. Here's an example using the summarization, content similarity, and tone consistency metrics:
 
 ```typescript copy showLineNumbers filename="src/mastra/agents/index.ts"
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { SummarizationMetric } from '@mastra/evals/llm';
-import { ContentSimilarityMetric, ToneConsistencyMetric } from '@mastra/evals/nlp';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { SummarizationMetric } from "@mastra/evals/llm";
+import {
+  ContentSimilarityMetric,
+  ToneConsistencyMetric,
+} from "@mastra/evals/nlp";
 
-const model = openai('gpt-4o');
+const model = openai("gpt-4o");
 
 export const myAgent = new Agent({
-  name: 'ContentWriter',
-  instructions: 'You are a content writer that creates accurate summaries',
+  name: "ContentWriter",
+  instructions: "You are a content writer that creates accurate summaries",
   model,
   evals: {
     summarization: new SummarizationMetric(model),

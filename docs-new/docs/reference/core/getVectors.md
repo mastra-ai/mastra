@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.getVectors() '
-description: 'Documentation for the `Mastra.getVectors()` method in Mastra, which retrieves all configured vector stores.'
+title: "Mastra.getVectors() "
+description: "Documentation for the `Mastra.getVectors()` method in Mastra, which retrieves all configured vector stores."
 ---
 
 # Mastra.getVectors()

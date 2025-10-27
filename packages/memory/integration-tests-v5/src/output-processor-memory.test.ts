@@ -27,9 +27,7 @@ describe('Output Processor Memory Persistence Integration', () => {
       options: {
         lastMessages: 10,
         semanticRecall: false,
-        threads: {
-          generateTitle: false,
-        },
+        generateTitle: false,
       },
     });
   });

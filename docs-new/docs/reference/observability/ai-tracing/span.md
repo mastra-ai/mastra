@@ -1,5 +1,5 @@
 ---
-title: 'Span '
+title: "Span "
 description: Span interfaces, methods, and lifecycle events
 ---
 
@@ -314,13 +314,13 @@ Events emitted during the span lifecycle.
 ```typescript
 enum AITracingEventType {
   /** Emitted when a span is created and started */
-  SPAN_STARTED = 'span_started',
+  SPAN_STARTED = "span_started",
 
   /** Emitted when a span is updated via update() */
-  SPAN_UPDATED = 'span_updated',
+  SPAN_UPDATED = "span_updated",
 
   /** Emitted when a span is ended via end() or error() */
-  SPAN_ENDED = 'span_ended',
+  SPAN_ENDED = "span_ended",
 }
 ```
 
@@ -328,9 +328,9 @@ enum AITracingEventType {
 
 ```typescript
 type AITracingEvent =
-  | { type: 'span_started'; exportedSpan: AnyExportedAISpan }
-  | { type: 'span_updated'; exportedSpan: AnyExportedAISpan }
-  | { type: 'span_ended'; exportedSpan: AnyExportedAISpan };
+  | { type: "span_started"; exportedSpan: AnyExportedAISpan }
+  | { type: "span_updated"; exportedSpan: AnyExportedAISpan }
+  | { type: "span_ended"; exportedSpan: AnyExportedAISpan };
 ```
 
 Exporters receive these events to process and send trace data to observability platforms.

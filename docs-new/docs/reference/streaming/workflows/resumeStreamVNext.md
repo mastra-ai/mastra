@@ -1,5 +1,5 @@
 ---
-title: 'Run.resumeStreamVNext() '
+title: "Run.resumeStreamVNext() "
 description: Documentation for the `Run.resumeStreamVNext()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
 ---
 
@@ -20,16 +20,16 @@ const run = await workflow.createRunAsync();
 
 const stream = run.streamVNext({
   inputData: {
-    value: 'initial data',
+    value: "initial data",
   },
 });
 
 const result = await stream.result;
 
-if (result!.status === 'suspended') {
+if (result!.status === "suspended") {
   const resumedStream = await run.resumeStreamVNext({
     resumeData: {
-      value: 'resume data',
+      value: "resume data",
     },
   });
 }

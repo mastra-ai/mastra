@@ -1,5 +1,5 @@
 ---
-title: 'Reference: MDocument '
+title: "MDocument"
 description: Documentation for the MDocument class in Mastra, which handles document processing and chunking.
 ---
 
@@ -106,17 +106,17 @@ async extractMetadata(params: ExtractParams): Promise<MDocument>
 ## Examples
 
 ```typescript
-import { MDocument } from '@mastra/rag';
+import { MDocument } from "@mastra/rag";
 
 // Create document from text
-const doc = MDocument.fromText('Your content here');
+const doc = MDocument.fromText("Your content here");
 
 // Split into chunks with metadata extraction
 const chunks = await doc.chunk({
-  strategy: 'markdown',
+  strategy: "markdown",
   headers: [
-    ['#', 'title'],
-    ['##', 'section'],
+    ["#", "title"],
+    ["##", "section"],
   ],
   extract: {
     summary: true, // Extract summaries with default settings

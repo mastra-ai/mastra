@@ -1,5 +1,5 @@
 ---
-title: 'OTLP Providers '
+title: "OTLP Providers "
 description: Overview of OTLP observability providers.
 ---
 

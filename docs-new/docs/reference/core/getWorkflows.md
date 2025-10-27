@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.getWorkflows() '
-description: 'Documentation for the `Mastra.getWorkflows()` method in Mastra, which retrieves all configured workflows.'
+title: "Mastra.getWorkflows() "
+description: "Documentation for the `Mastra.getWorkflows()` method in Mastra, which retrieves all configured workflows."
 ---
 
 # Mastra.getWorkflows()

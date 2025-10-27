@@ -1,6 +1,6 @@
 ---
-title: 'Deep Infra '
-description: 'Use Deep Infra models with Mastra. 4 models available.'
+title: "Deep Infra "
+description: "Use Deep Infra models with Mastra. 4 models available."
 ---
 
 import Tabs from '@theme/Tabs';
@@ -17,19 +17,19 @@ DEEPINFRA_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -102,13 +102,13 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    url: 'https://api.deepinfra.com/v1/openai',
-    modelId: 'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+    url: "https://api.deepinfra.com/v1/openai",
+    modelId: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
     apiKey: process.env.DEEPINFRA_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -118,10 +118,12 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'deepinfra/zai-org/GLM-4.5' : 'deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "deepinfra/zai-org/GLM-4.5"
+      : "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct";
   },
 });
 ```

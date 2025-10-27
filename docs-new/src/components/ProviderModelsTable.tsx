@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 interface Model {
   model: string;
@@ -15,9 +15,11 @@ interface ProviderModelsTableProps {
   models: Model[];
 }
 
-export default function ProviderModelsTable({ models }: ProviderModelsTableProps): React.JSX.Element {
+export default function ProviderModelsTable({
+  models,
+}: ProviderModelsTableProps): React.JSX.Element {
   return (
-    <div style={{ marginTop: '2rem', marginBottom: '2rem', overflowX: 'auto' }}>
+    <div style={{ marginTop: "2rem", marginBottom: "2rem", overflowX: "auto" }}>
       <table>
         <thead>
           <tr>
@@ -36,12 +38,16 @@ export default function ProviderModelsTable({ models }: ProviderModelsTableProps
               <td>
                 <code>{model.model}</code>
               </td>
-              <td>{model.imageInput ? '✓' : '✗'}</td>
-              <td>{model.audioInput ? '✓' : '✗'}</td>
-              <td>{model.videoInput ? '✓' : '✗'}</td>
-              <td>{model.toolUsage ? '✓' : '✗'}</td>
-              <td>{model.streaming ? '✓' : '✗'}</td>
-              <td>{model.contextWindow ? model.contextWindow.toLocaleString() : 'N/A'}</td>
+              <td>{model.imageInput ? "✓" : "✗"}</td>
+              <td>{model.audioInput ? "✓" : "✗"}</td>
+              <td>{model.videoInput ? "✓" : "✗"}</td>
+              <td>{model.toolUsage ? "✓" : "✗"}</td>
+              <td>{model.streaming ? "✓" : "✗"}</td>
+              <td>
+                {model.contextWindow
+                  ? model.contextWindow.toLocaleString()
+                  : "N/A"}
+              </td>
             </tr>
           ))}
         </tbody>

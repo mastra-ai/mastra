@@ -1,6 +1,7 @@
 ---
-title: 'Reference: PG Vector Store '
+title: "PgVector"
 description: Documentation for the PgVector class in Mastra, which provides vector search using PostgreSQL with pgvector extension.
+sidebar_position: 9
 ---
 
 # PG Vector Store
@@ -32,11 +33,11 @@ isOptional: true,
 You can instantiate `PgVector` using a config object (with optional schemaName):
 
 ```ts
-import { PgVector } from '@mastra/pg';
+import { PgVector } from "@mastra/pg";
 
 const vectorStore = new PgVector({
-  connectionString: 'postgresql://user:password@localhost:5432/mydb',
-  schemaName: 'custom_schema', // optional
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
+  schemaName: "custom_schema", // optional
 });
 ```
 
@@ -294,8 +295,8 @@ Returns:
 interface PGIndexStats {
   dimension: number;
   count: number;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
-  type: 'flat' | 'hnsw' | 'ivfflat';
+  metric: "cosine" | "euclidean" | "dotproduct";
+  type: "flat" | "hnsw" | "ivfflat";
   config: {
     m?: number;
     efConstruction?: number;
@@ -363,8 +364,8 @@ Updates an existing vector by ID. At least one of vector or metadata must be pro
 ```typescript copy
 // Update just the vector
 await pgVector.updateVector({
-  indexName: 'my_vectors',
-  id: 'vector123',
+  indexName: "my_vectors",
+  id: "vector123",
   update: {
     vector: [0.1, 0.2, 0.3],
   },
@@ -372,20 +373,20 @@ await pgVector.updateVector({
 
 // Update just the metadata
 await pgVector.updateVector({
-  indexName: 'my_vectors',
-  id: 'vector123',
+  indexName: "my_vectors",
+  id: "vector123",
   update: {
-    metadata: { label: 'updated' },
+    metadata: { label: "updated" },
   },
 });
 
 // Update both vector and metadata
 await pgVector.updateVector({
-  indexName: 'my_vectors',
-  id: 'vector123',
+  indexName: "my_vectors",
+  id: "vector123",
   update: {
     vector: [0.1, 0.2, 0.3],
-    metadata: { label: 'updated' },
+    metadata: { label: "updated" },
   },
 });
 ```
@@ -410,7 +411,7 @@ description: "ID of the vector to delete",
 Deletes a single vector by ID from the specified index.
 
 ```typescript copy
-await pgVector.deleteVector({ indexName: 'my_vectors', id: 'vector123' });
+await pgVector.deleteVector({ indexName: "my_vectors", id: "vector123" });
 ```
 
 ### disconnect()
@@ -445,8 +446,8 @@ Builds or rebuilds an index with specified metric and configuration. Will drop a
 
 ```typescript copy
 // Define HNSW index
-await pgVector.buildIndex('my_vectors', 'cosine', {
-  type: 'hnsw',
+await pgVector.buildIndex("my_vectors", "cosine", {
+  type: "hnsw",
   hnsw: {
     m: 8,
     efConstruction: 32,
@@ -454,16 +455,16 @@ await pgVector.buildIndex('my_vectors', 'cosine', {
 });
 
 // Define IVF index
-await pgVector.buildIndex('my_vectors', 'cosine', {
-  type: 'ivfflat',
+await pgVector.buildIndex("my_vectors", "cosine", {
+  type: "ivfflat",
   ivf: {
     lists: 100,
   },
 });
 
 // Define flat index
-await pgVector.buildIndex('my_vectors', 'cosine', {
-  type: 'flat',
+await pgVector.buildIndex("my_vectors", "cosine", {
+  type: "flat",
 });
 ```
 
@@ -487,7 +488,7 @@ The store throws typed errors that can be caught:
 ```typescript copy
 try {
   await store.query({
-    indexName: 'index_name',
+    indexName: "index_name",
     queryVector: queryVector,
   });
 } catch (error) {
