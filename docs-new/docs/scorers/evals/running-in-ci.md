@@ -1,6 +1,6 @@
 ---
-title: 'Running in CI'
-description: 'Learn how to run Mastra evals in your CI/CD pipeline to monitor agent quality over time.'
+title: "Running in CI"
+description: "Learn how to run Mastra evals in your CI/CD pipeline to monitor agent quality over time."
 ---
 
 # Running Evals in CI
@@ -18,15 +18,15 @@ Running evals in your CI pipeline helps bridge this gap by providing quantifiabl
 We support any testing framework that supports ESM modules. For example, you can use [Vitest](https://vitest.dev/), [Jest](https://jestjs.io/) or [Mocha](https://mochajs.org/) to run evals in your CI/CD pipeline.
 
 ```typescript copy showLineNumbers filename="src/mastra/agents/index.test.ts"
-import { describe, it, expect } from 'vitest';
-import { evaluate } from '@mastra/evals';
-import { ToneConsistencyMetric } from '@mastra/evals/nlp';
-import { myAgent } from './index';
+import { describe, it, expect } from "vitest";
+import { evaluate } from "@mastra/evals";
+import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+import { myAgent } from "./index";
 
-describe('My Agent', () => {
-  it('should validate tone consistency', async () => {
+describe("My Agent", () => {
+  it("should validate tone consistency", async () => {
     const metric = new ToneConsistencyMetric();
-    const result = await evaluate(myAgent, 'Hello, world!', metric);
+    const result = await evaluate(myAgent, "Hello, world!", metric);
 
     expect(result.score).toBe(1);
   });
@@ -42,7 +42,7 @@ You will need to configure a testSetup and globalSetup script for your testing f
 Add these files to your project to run evals in your CI/CD pipeline:
 
 ```typescript copy showLineNumbers filename="globalSetup.ts"
-import { globalSetup } from '@mastra/evals';
+import { globalSetup } from "@mastra/evals";
 
 export default function setup() {
   globalSetup();
@@ -50,8 +50,8 @@ export default function setup() {
 ```
 
 ```typescript copy showLineNumbers filename="testSetup.ts"
-import { beforeAll } from 'vitest';
-import { attachListeners } from '@mastra/evals';
+import { beforeAll } from "vitest";
+import { attachListeners } from "@mastra/evals";
 
 beforeAll(async () => {
   await attachListeners();
@@ -59,12 +59,12 @@ beforeAll(async () => {
 ```
 
 ```typescript copy showLineNumbers filename="vitest.config.ts"
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    globalSetup: './globalSetup.ts',
-    setupFiles: ['./testSetup.ts'],
+    globalSetup: "./globalSetup.ts",
+    setupFiles: ["./testSetup.ts"],
   },
 });
 ```
@@ -74,9 +74,9 @@ export default defineConfig({
 To store eval results in Mastra Storage and capture results in the Mastra dashboard:
 
 ```typescript copy showLineNumbers filename="testSetup.ts"
-import { beforeAll } from 'vitest';
-import { attachListeners } from '@mastra/evals';
-import { mastra } from './your-mastra-setup';
+import { beforeAll } from "vitest";
+import { attachListeners } from "@mastra/evals";
+import { mastra } from "./your-mastra-setup";
 
 beforeAll(async () => {
   // Store evals in Mastra Storage (requires storage to be enabled)

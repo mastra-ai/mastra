@@ -1,5 +1,5 @@
 ---
-title: 'Reference: OtelConfig '
+title: "OtelConfig"
 description: Documentation for the OtelConfig object, which configures OpenTelemetry instrumentation, tracing, and exporting behavior.
 ---
 
@@ -10,20 +10,20 @@ The `OtelConfig` object is used to configure OpenTelemetry instrumentation, trac
 To use the `OtelConfig` within Mastra, pass it as the value of the `telemetry` key when initializing Mastra. This will configure Mastra to use your custom OpenTelemetry settings for tracing and instrumentation.
 
 ```typescript showLineNumbers copy
-import { Mastra } from 'mastra';
+import { Mastra } from "mastra";
 
 const otelConfig: OtelConfig = {
-  serviceName: 'my-awesome-service',
+  serviceName: "my-awesome-service",
   enabled: true,
   sampling: {
-    type: 'ratio',
+    type: "ratio",
     probability: 0.5,
   },
   export: {
-    type: 'otlp',
-    endpoint: 'https://otel-collector.example.com/v1/traces',
+    type: "otlp",
+    endpoint: "https://otel-collector.example.com/v1/traces",
     headers: {
-      Authorization: 'Bearer YOUR_TOKEN_HERE',
+      Authorization: "Bearer YOUR_TOKEN_HERE",
     },
   },
 };

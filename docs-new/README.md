@@ -84,7 +84,7 @@ Navigation is defined in a relative `meta.ts` file. It modifies the title of the
 
 ```ts
 const meta = {
-  overview: 'Overview',
+  overview: "Overview",
 };
 
 export default meta;

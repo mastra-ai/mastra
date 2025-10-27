@@ -1,5 +1,5 @@
 ---
-title: 'Sequential Steps '
+title: "Sequential Steps "
 description: Example of using Mastra to chain legacy workflow steps in a specific sequence, passing data between them.
 ---
 
@@ -24,20 +24,20 @@ Here's the control flow diagram:
 Let's start by creating the steps and initializing the workflow.
 
 ```ts showLineNumbers copy
-import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
-import { z } from 'zod';
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
 
 const stepOne = new LegacyStep({
-  id: 'stepOne',
+  id: "stepOne",
   execute: async ({ context }) => ({
     doubledValue: context.triggerData.inputValue * 2,
   }),
 });
 
 const stepTwo = new LegacyStep({
-  id: 'stepTwo',
+  id: "stepTwo",
   execute: async ({ context }) => {
-    if (context.steps.stepOne.status !== 'success') {
+    if (context.steps.stepOne.status !== "success") {
       return { incrementedValue: 0 };
     }
 
@@ -46,9 +46,9 @@ const stepTwo = new LegacyStep({
 });
 
 const stepThree = new LegacyStep({
-  id: 'stepThree',
+  id: "stepThree",
   execute: async ({ context }) => {
-    if (context.steps.stepTwo.status !== 'success') {
+    if (context.steps.stepTwo.status !== "success") {
       return { tripledValue: 0 };
     }
 
@@ -58,7 +58,7 @@ const stepThree = new LegacyStep({
 
 // Build the workflow
 const myWorkflow = new LegacyWorkflow({
-  name: 'my-workflow',
+  name: "my-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
   }),

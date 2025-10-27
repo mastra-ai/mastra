@@ -4,7 +4,6 @@ import type {
   GenerateObjectResult as OriginalGenerateObjectResult,
   StreamTextResult as OriginalStreamTextResult,
   StreamObjectResult as OriginalStreamObjectResult,
-  TelemetrySettings,
   UIMessage,
   Tool,
   generateText,
@@ -31,7 +30,6 @@ export type { ToolSet } from 'ai';
 
 type MastraCustomLLMOptions = {
   tools?: Record<string, Tool>;
-  telemetry?: TelemetrySettings;
   threadId?: string;
   resourceId?: string;
   runtimeContext: RuntimeContext;

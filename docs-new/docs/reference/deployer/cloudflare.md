@@ -1,6 +1,6 @@
 ---
-title: 'Cloudflare Deployer'
-description: 'Documentation for the CloudflareDeployer class, which deploys Mastra applications to Cloudflare Workers.'
+title: "Cloudflare Deployer"
+description: "Documentation for the CloudflareDeployer class, which deploys Mastra applications to Cloudflare Workers."
 ---
 
 # CloudflareDeployer

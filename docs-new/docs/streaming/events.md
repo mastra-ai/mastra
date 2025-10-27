@@ -1,6 +1,6 @@
 ---
-title: 'Events '
-description: 'Learn about the different types of streaming events in Mastra, including text deltas, tool calls, step events, and how to handle them in your applications.'
+title: "Events "
+description: "Learn about the different types of streaming events in Mastra, including text deltas, tool calls, step events, and how to handle them in your applications."
 ---
 
 # Events
@@ -27,9 +27,11 @@ Depending on whether you’re streaming from an **agent** or a **workflow**, onl
 Iterate over the `stream` with a `for await` loop to inspect all emitted event chunks.
 
 ```typescript {3,7} showLineNumbers copy
-const testAgent = mastra.getAgent('testAgent');
+const testAgent = mastra.getAgent("testAgent");
 
-const stream = await testAgent.stream([{ role: 'user', content: 'Help me organize my day' }]);
+const stream = await testAgent.stream([
+  { role: "user", content: "Help me organize my day" },
+]);
 
 for await (const chunk of stream) {
   console.log(chunk);
@@ -72,13 +74,13 @@ Below is an example of events that may be emitted. Each event always includes a 
 Iterate over the `stream` with a `for await` loop to inspect all emitted event chunks.
 
 ```typescript {5,11} showLineNumbers copy
-const testWorkflow = mastra.getWorkflow('testWorkflow');
+const testWorkflow = mastra.getWorkflow("testWorkflow");
 
 const run = await testWorkflow.createRunAsync();
 
 const stream = await run.stream({
   inputData: {
-    value: 'initial data',
+    value: "initial data",
   },
 });
 

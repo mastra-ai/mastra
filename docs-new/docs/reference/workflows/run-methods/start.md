@@ -1,5 +1,5 @@
 ---
-title: 'Run.start() '
+title: "Run.start() "
 description: Documentation for the `Run.start()` method in workflows, which starts a workflow run with input data.
 ---
 
@@ -14,7 +14,7 @@ const run = await workflow.createRunAsync();
 
 const result = await run.start({
   inputData: {
-    value: 'initial data',
+    value: "initial data",
   },
 });
 ```
@@ -113,16 +113,16 @@ description: "The trace ID associated with this execution when AI tracing is ena
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RuntimeContext } from "@mastra/core/runtime-context";
 
 const run = await workflow.createRunAsync();
 
 const runtimeContext = new RuntimeContext();
-runtimeContext.set('variable', false);
+runtimeContext.set("variable", false);
 
 const result = await run.start({
   inputData: {
-    value: 'initial data',
+    value: "initial data",
   },
   runtimeContext,
 });

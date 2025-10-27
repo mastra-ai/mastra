@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Context Position '
+title: "Context Position"
 description: Documentation for the Context Position Metric in Mastra, which evaluates the ordering of context nodes based on their relevance to the query and output.
 ---
 
@@ -16,23 +16,23 @@ The `ContextPositionMetric` class evaluates how well context nodes are ordered b
 ## Basic Usage
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { ContextPositionMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ContextPositionMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new ContextPositionMetric(model, {
   context: [
-    'Photosynthesis is a biological process used by plants to create energy from sunlight.',
-    'The process of photosynthesis produces oxygen as a byproduct.',
-    'Plants need water and nutrients from the soil to grow.',
+    "Photosynthesis is a biological process used by plants to create energy from sunlight.",
+    "The process of photosynthesis produces oxygen as a byproduct.",
+    "Plants need water and nutrients from the soil to grow.",
   ],
 });
 
 const result = await metric.measure(
-  'What is photosynthesis?',
-  'Photosynthesis is the process by which plants convert sunlight into energy.',
+  "What is photosynthesis?",
+  "Photosynthesis is the process by which plants convert sunlight into energy.",
 );
 
 console.log(result.score); // Position score from 0-1
@@ -158,24 +158,24 @@ Final score: `(weighted_sum / max_possible_sum) * scale`
 ## Example with Analysis
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { ContextPositionMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ContextPositionMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new ContextPositionMetric(model, {
   context: [
-    'A balanced diet is important for health.',
-    'Exercise strengthens the heart and improves blood circulation.',
-    'Regular physical activity reduces stress and anxiety.',
-    'Exercise equipment can be expensive.',
+    "A balanced diet is important for health.",
+    "Exercise strengthens the heart and improves blood circulation.",
+    "Regular physical activity reduces stress and anxiety.",
+    "Exercise equipment can be expensive.",
   ],
 });
 
 const result = await metric.measure(
-  'What are the benefits of exercise?',
-  'Regular exercise improves cardiovascular health and mental wellbeing.',
+  "What are the benefits of exercise?",
+  "Regular exercise improves cardiovascular health and mental wellbeing.",
 );
 
 // Example output:

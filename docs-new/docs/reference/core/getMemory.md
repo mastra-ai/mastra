@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.getMemory() '
-description: 'Documentation for the `Mastra.getMemory()` method in Mastra, which retrieves the configured memory instance.'
+title: "Mastra.getMemory() "
+description: "Documentation for the `Mastra.getMemory()` method in Mastra, which retrieves the configured memory instance."
 ---
 
 # Mastra.getMemory()

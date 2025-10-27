@@ -1136,6 +1136,7 @@
       "apiKeyHeader": "Authorization",
       "name": "Scaleway",
       "models": [
+        "bge-multilingual-gemma2",
         "deepseek-r1-distill-llama-70b",
         "gemma-3-27b-it",
         "gpt-oss-120b",
@@ -1146,7 +1147,8 @@
         "pixtral-12b-2409",
         "qwen3-235b-a22b-instruct-2507",
         "qwen3-coder-30b-a3b-instruct",
-        "voxtral-small-24b-2507"
+        "voxtral-small-24b-2507",
+        "whisper-large-v3"
       ],
       "docUrl": "https://www.scaleway.com/en/docs/generative-apis/",
       "gateway": "models.dev"
@@ -1993,6 +1995,7 @@
       "llama-4-scout-17b-16e-instruct-fp8"
     ],
     "scaleway": [
+      "bge-multilingual-gemma2",
       "deepseek-r1-distill-llama-70b",
       "gemma-3-27b-it",
       "gpt-oss-120b",
@@ -2003,7 +2006,8 @@
       "pixtral-12b-2409",
       "qwen3-235b-a22b-instruct-2507",
       "qwen3-coder-30b-a3b-instruct",
-      "voxtral-small-24b-2507"
+      "voxtral-small-24b-2507",
+      "whisper-large-v3"
     ],
     "cerebras": ["gpt-oss-120b", "qwen-3-235b-a22b-instruct-2507", "qwen-3-coder-480b"],
     "netlify": [

@@ -1,6 +1,6 @@
 ---
-title: 'Agent.listAgents() '
-description: 'Documentation for the `Agent.listAgents()` method in Mastra agents, which retrieves the sub-agents that the agent can access.'
+title: "Agent.listAgents() "
+description: "Documentation for the `Agent.listAgents()` method in Mastra agents, which retrieves the sub-agents that the agent can access."
 ---
 
 # Agent.listAgents()
@@ -42,7 +42,7 @@ description: "A promise that resolves to a record of agent names to their corres
 ## Extended usage example
 
 ```typescript copy
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RuntimeContext } from "@mastra/core/runtime-context";
 
 await agent.listAgents({
   runtimeContext: new RuntimeContext(),

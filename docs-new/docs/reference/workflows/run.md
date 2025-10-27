@@ -1,5 +1,5 @@
 ---
-title: 'Run Class '
+title: "Run Class "
 description: Documentation for the Run class in Mastra, which represents a workflow execution instance.
 ---
 
@@ -13,12 +13,12 @@ The `Run` class represents a workflow execution instance, providing methods to s
 const run = await workflow.createRunAsync();
 
 const result = await run.start({
-  inputData: { value: 'initial data' },
+  inputData: { value: "initial data" },
 });
 
-if (result.status === 'suspended') {
+if (result.status === "suspended") {
   const resumedResult = await run.resume({
-    resumeData: { value: 'resume data' },
+    resumeData: { value: "resume data" },
   });
 }
 ```

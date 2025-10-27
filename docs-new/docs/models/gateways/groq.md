@@ -1,6 +1,6 @@
 ---
-title: 'Groq '
-description: 'Use AI models through Groq.'
+title: "Groq "
+description: "Use AI models through Groq."
 ---
 
 # <img src="https://models.dev/logos/groq.svg" alt="Groq logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Groq
@@ -12,12 +12,12 @@ Learn more in the [Groq documentation](https://console.groq.com/docs/models).
 ## Usage
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'groq/deepseek-r1-distill-llama-70b',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "groq/deepseek-r1-distill-llama-70b",
 });
 ```
 

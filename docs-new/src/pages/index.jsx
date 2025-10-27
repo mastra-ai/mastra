@@ -1,9 +1,12 @@
-import Link from '@docusaurus/Link';
-import Layout from '@theme/Layout';
+import Link from "@docusaurus/Link";
+import Layout from "@theme/Layout";
 
 export default function Home() {
   return (
-    <Layout title={`Mastra Documentation`} description="Description will go into a meta tag in <head />">
+    <Layout
+      title={`Mastra Documentation`}
+      description="Description will go into a meta tag in <head />"
+    >
       <main>
         <div className="px-4 py-12 text-center">
           <h1>Welcome to Mastra Documentation</h1>

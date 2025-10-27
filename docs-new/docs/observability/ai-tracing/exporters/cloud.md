@@ -1,6 +1,6 @@
 ---
-title: 'Cloud Exporter '
-description: 'Send traces to Mastra Cloud for production monitoring'
+title: "Cloud"
+description: "Send traces to Mastra Cloud for production monitoring"
 ---
 
 # Cloud Exporter
@@ -31,14 +31,14 @@ MASTRA_CLOUD_ACCESS_TOKEN=mst_xxxxxxxxxxxxxxxx
 ### Basic Setup
 
 ```typescript filename="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { CloudExporter } from '@mastra/core/ai-tracing';
+import { Mastra } from "@mastra/core";
+import { CloudExporter } from "@mastra/core/ai-tracing";
 
 export const mastra = new Mastra({
   observability: {
     configs: {
       production: {
-        serviceName: 'my-service',
+        serviceName: "my-service",
         exporters: [
           new CloudExporter(), // Uses MASTRA_CLOUD_ACCESS_TOKEN env var
         ],
@@ -68,14 +68,14 @@ new CloudExporter({
   accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
 
   // Optional - for self-hosted Mastra Cloud
-  endpoint: 'https://cloud.your-domain.com',
+  endpoint: "https://cloud.your-domain.com",
 
   // Batching configuration
   maxBatchSize: 1000, // Max spans per batch
   maxBatchWaitMs: 5000, // Max wait before sending batch
 
   // Diagnostic logging
-  logLevel: 'info', // debug | info | warn | error
+  logLevel: "info", // debug | info | warn | error
 });
 ```
 

@@ -13,11 +13,11 @@ All API methods can throw errors that you can catch and handle:
 
 ```typescript
 try {
-  const agent = mastraClient.getAgent('agent-id');
+  const agent = mastraClient.getAgent("agent-id");
   const response = await agent.generate({
-    messages: [{ role: 'user', content: 'Hello' }],
+    messages: [{ role: "user", content: "Hello" }],
   });
 } catch (error) {
-  console.error('An error occurred:', error.message);
+  console.error("An error occurred:", error.message);
 }
 ```
