@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { experimental_customProvider } from 'ai';
+import { customProvider } from 'ai-v5';
 import { FlagEmbedding, EmbeddingModel } from 'fastembed';
 
 async function getModelCachePath() {
@@ -34,7 +35,8 @@ async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' |
   };
 }
 
-const fastEmbedProvider = experimental_customProvider({
+// Legacy v1 provider for backwards compatibility
+const fastEmbedLegacyProvider = experimental_customProvider({
   textEmbeddingModels: {
     'bge-small-en-v1.5': {
       specificationVersion: 'v1',
@@ -59,7 +61,37 @@ const fastEmbedProvider = experimental_customProvider({
   },
 });
 
+
+// V2 provider for AI SDK v5 compatibility
+const fastEmbedProvider = customProvider({
+  textEmbeddingModels: {
+    'bge-small-en-v1.5': {
+      specificationVersion: 'v2',
+      provider: 'fastembed',
+      modelId: 'bge-small-en-v1.5',
+      maxEmbeddingsPerCall: 256,
+      supportsParallelCalls: true,
+      async doEmbed({ values }) {
+        return generateEmbeddings(values, 'BGESmallENV15');
+      },
+    },
+    'bge-base-en-v1.5': {
+      specificationVersion: 'v2',
+      provider: 'fastembed',
+      modelId: 'bge-base-en-v1.5',
+      maxEmbeddingsPerCall: 256,
+      supportsParallelCalls: true,
+      async doEmbed({ values }) {
+        return generateEmbeddings(values, 'BGEBaseENV15');
+      },
+    },
+  },
+});
+
+
 export const fastembed = Object.assign(fastEmbedProvider.textEmbeddingModel(`bge-small-en-v1.5`), {
   small: fastEmbedProvider.textEmbeddingModel(`bge-small-en-v1.5`),
   base: fastEmbedProvider.textEmbeddingModel(`bge-base-en-v1.5`),
+  smallLegacy: fastEmbedLegacyProvider.textEmbeddingModel(`bge-small-en-v1.5`),
+  baseLegacy: fastEmbedLegacyProvider.textEmbeddingModel(`bge-base-en-v1.5`),
 });
