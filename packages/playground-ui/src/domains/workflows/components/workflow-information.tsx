@@ -1,25 +1,23 @@
 import { useState, useEffect } from 'react';
 
-import {
-  Badge,
-  WorkflowIcon,
-  WorkflowTrigger,
-  EntityHeader,
-  useWorkflow,
-  WorkflowRunDetail,
-  useExecuteWorkflow,
-  useStreamWorkflow,
-  useCancelWorkflowRun,
-} from '@mastra/playground-ui';
-
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { CopyIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { useParams } from 'react-router';
+import { useWorkflow } from '@/hooks/use-workflows';
+import { useCancelWorkflowRun, useExecuteWorkflow, useStreamWorkflow } from '../hooks/use-workflows-actions';
+import { EntityHeader } from '@/components/ui/entity-header';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+import { Badge } from '@/ds/components/Badge';
+import { WorkflowRunDetail } from '../runs/workflow-run-details';
+import { WorkflowTrigger } from '../workflow/workflow-trigger';
 
-export function WorkflowInformation({ workflowId }: { workflowId: string }) {
-  const params = useParams();
+export interface WorkflowInformationProps {
+  workflowId: string;
+  initialRunId?: string;
+}
+
+export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInformationProps) {
   const { data: workflow, isLoading } = useWorkflow(workflowId);
 
   const { createWorkflowRun } = useExecuteWorkflow();
@@ -39,10 +37,10 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
   const stepsCount = Object.keys(workflow?.steps ?? {}).length;
 
   useEffect(() => {
-    if (!runId && !params?.runId) {
+    if (!runId && !initialRunId) {
       closeStreamsAndReset();
     }
-  }, [runId, params]);
+  }, [runId, initialRunId]);
 
   return (
     <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto border-l-sm border-border1">
@@ -67,10 +65,10 @@ export function WorkflowInformation({ workflowId }: { workflowId: string }) {
 
       <div className="overflow-y-auto border-t-sm border-border1">
         {workflowId ? (
-          params?.runId ? (
+          initialRunId ? (
             <WorkflowRunDetail
               workflowId={workflowId}
-              runId={params?.runId}
+              runId={initialRunId}
               setRunId={setRunId}
               workflow={workflow ?? undefined}
               isLoading={isLoading}
