@@ -75,9 +75,9 @@ export class StoreLegacyEvalsLance extends LegacyEvalsStorage {
 
       // Apply type filtering
       if (options.type === 'live') {
-        conditions.push('length(test_info) = 0');
+        conditions.push('test_info IS NULL');
       } else if (options.type === 'test') {
-        conditions.push('length(test_info) > 0');
+        conditions.push('test_info IS NOT NULL');
       }
 
       // Apply date filtering
