@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Faithfulness '
+title: "Faithfulness"
 description: Documentation for the Faithfulness Metric in Mastra, which evaluates the factual accuracy of LLM outputs compared to the provided context.
 ---
 
@@ -16,19 +16,22 @@ The `FaithfulnessMetric` in Mastra evaluates how factually accurate an LLM's out
 ## Basic Usage
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { FaithfulnessMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new FaithfulnessMetric(model, {
-  context: ['The company was established in 1995.', 'Currently employs around 450-550 people.'],
+  context: [
+    "The company was established in 1995.",
+    "Currently employs around 450-550 people.",
+  ],
 });
 
 const result = await metric.measure(
-  'Tell me about the company.',
-  'The company was founded in 1995 and has 500 employees.',
+  "Tell me about the company.",
+  "The company was founded in 1995 and has 500 employees.",
 );
 
 console.log(result.score); // 1.0
@@ -160,20 +163,23 @@ Final score: `(supported_claims / total_claims) * scale`
 ## Advanced Example
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { FaithfulnessMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { FaithfulnessMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
 const metric = new FaithfulnessMetric(model, {
-  context: ['The company had 100 employees in 2020.', 'Current employee count is approximately 500.'],
+  context: [
+    "The company had 100 employees in 2020.",
+    "Current employee count is approximately 500.",
+  ],
 });
 
 // Example with mixed claim types
 const result = await metric.measure(
   "What's the company's growth like?",
-  'The company has grown from 100 employees in 2020 to 500 now, and might expand to 1000 by next year.',
+  "The company has grown from 100 employees in 2020 to 500 now, and might expand to 1000 by next year.",
 );
 
 // Example output:

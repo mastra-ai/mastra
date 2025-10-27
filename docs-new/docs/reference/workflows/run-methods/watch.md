@@ -1,5 +1,5 @@
 ---
-title: 'Run.watch() '
+title: "Run.watch() "
 description: Documentation for the `Run.watch()` method in workflows, which allows you to monitor the execution of a workflow run.
 ---
 
@@ -12,11 +12,11 @@ The `.watch()` method allows you to monitor the execution of a workflow run, pro
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
 
-run.watch(event => {
+run.watch((event) => {
   console.log(event?.payload?.currentStep?.id);
 });
 
-const result = await run.start({ inputData: { value: 'initial data' } });
+const result = await run.start({ inputData: { value: "initial data" } });
 ```
 
 ## Parameters
@@ -57,11 +57,11 @@ description:
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
 
-run.watch(event => {
+run.watch((event) => {
   console.log(event?.payload?.currentStep?.id);
-}, 'watch');
+}, "watch");
 
-const result = await run.start({ inputData: { value: 'initial data' } });
+const result = await run.start({ inputData: { value: "initial data" } });
 ```
 
 ## Related

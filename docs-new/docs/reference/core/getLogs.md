@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.getLogs() '
-description: 'Documentation for the `Mastra.getLogs()` method in Mastra, which retrieves all logs for a specific transport ID.'
+title: "Mastra.getLogs() "
+description: "Documentation for the `Mastra.getLogs()` method in Mastra, which retrieves all logs for a specific transport ID."
 ---
 
 # Mastra.getLogs()
@@ -10,7 +10,7 @@ The `.getLogs()` method is used to retrieve all logs for a specific transport ID
 ## Usage example
 
 ```typescript copy
-mastra.getLogs('456');
+mastra.getLogs("456");
 ```
 
 ## Parameters

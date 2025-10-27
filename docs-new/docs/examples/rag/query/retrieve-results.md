@@ -1,5 +1,5 @@
 ---
-title: 'Retrieving Top-K Results '
+title: "Retrieving Top-K Results "
 description: Example of using Mastra to query a vector database and retrieve semantically similar chunks.
 ---
 
@@ -12,31 +12,31 @@ The `query` method returns the most semantically similar chunks to your input em
 This example shows how to retrieve similar chunks from a Pinecone vector database.
 
 ```tsx copy
-import { openai } from '@ai-sdk/openai';
-import { PineconeVector } from '@mastra/pinecone';
-import { MDocument } from '@mastra/rag';
-import { embedMany } from 'ai';
+import { openai } from "@ai-sdk/openai";
+import { PineconeVector } from "@mastra/pinecone";
+import { MDocument } from "@mastra/rag";
+import { embedMany } from "ai";
 
-const doc = MDocument.fromText('Your text content...');
+const doc = MDocument.fromText("Your text content...");
 
 const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
-  values: chunks.map(chunk => chunk.text),
-  model: openai.embedding('text-embedding-3-small'),
+  values: chunks.map((chunk) => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
 });
 
 const pinecone = new PineconeVector({
-  apiKey: 'your-api-key',
+  apiKey: "your-api-key",
 });
 
 await pinecone.createIndex({
-  indexName: 'test_index',
+  indexName: "test_index",
   dimension: 1536,
 });
 
 await pinecone.upsert({
-  indexName: 'test_index',
+  indexName: "test_index",
   vectors: embeddings,
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
@@ -44,7 +44,7 @@ await pinecone.upsert({
 const topK = 10;
 
 const results = await pinecone.query({
-  indexName: 'test_index',
+  indexName: "test_index",
   queryVector: embeddings[0],
   topK,
 });

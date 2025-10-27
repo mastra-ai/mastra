@@ -800,6 +800,7 @@ export type ProviderModelsMap = {
     'llama-4-scout-17b-16e-instruct-fp8',
   ];
   readonly scaleway: readonly [
+    'bge-multilingual-gemma2',
     'deepseek-r1-distill-llama-70b',
     'gemma-3-27b-it',
     'gpt-oss-120b',
@@ -811,6 +812,7 @@ export type ProviderModelsMap = {
     'qwen3-235b-a22b-instruct-2507',
     'qwen3-coder-30b-a3b-instruct',
     'voxtral-small-24b-2507',
+    'whisper-large-v3',
   ];
   readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'qwen-3-coder-480b'];
   readonly netlify: readonly [

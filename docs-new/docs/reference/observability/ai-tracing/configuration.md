@@ -1,5 +1,5 @@
 ---
-title: 'Configuration '
+title: "Configuration "
 description: AI Tracing configuration types and registry functions
 ---
 
@@ -89,16 +89,19 @@ required: false,
 
 ```typescript
 type SamplingStrategy =
-  | { type: 'always' }
-  | { type: 'never' }
-  | { type: 'ratio'; probability: number }
-  | { type: 'custom'; sampler: (options?: TracingOptions) => boolean };
+  | { type: "always" }
+  | { type: "never" }
+  | { type: "ratio"; probability: number }
+  | { type: "custom"; sampler: (options?: TracingOptions) => boolean };
 ```
 
 ## ConfigSelector
 
 ```typescript
-type ConfigSelector = (options: ConfigSelectorOptions, availableConfigs: Map<string, AITracing>) => string | undefined;
+type ConfigSelector = (
+  options: ConfigSelectorOptions,
+  availableConfigs: Map<string, AITracing>,
+) => string | undefined;
 ```
 
 ## ConfigSelectorOptions
@@ -123,7 +126,11 @@ Initializes AI tracing from configuration. Called automatically by Mastra constr
 ## registerAITracing
 
 ```typescript
-function registerAITracing(name: string, instance: AITracing, isDefault?: boolean): void;
+function registerAITracing(
+  name: string,
+  instance: AITracing,
+  isDefault?: boolean,
+): void;
 ```
 
 Registers a tracing config in the global registry.
@@ -147,7 +154,9 @@ Returns the default tracing config.
 ## getSelectedAITracing
 
 ```typescript
-function getSelectedAITracing(options: ConfigSelectorOptions): AITracing | undefined;
+function getSelectedAITracing(
+  options: ConfigSelectorOptions,
+): AITracing | undefined;
 ```
 
 Returns the tracing config selected by the config selector or default.

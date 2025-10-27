@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Google Gemini Live Voice '
+title: "Google Gemini Live Voice"
 description: "Documentation for the GeminiLiveVoice class, providing real-time multimodal voice interactions using Google's Gemini Live API with support for both Gemini API and Vertex AI."
 ---
 
@@ -10,36 +10,36 @@ The GeminiLiveVoice class provides real-time voice interaction capabilities usin
 ## Usage Example
 
 ```typescript
-import { GeminiLiveVoice } from '@mastra/voice-google-gemini-live';
-import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
+import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
 // Initialize with Gemini API (using API key)
 const voice = new GeminiLiveVoice({
   apiKey: process.env.GOOGLE_API_KEY, // Required for Gemini API
-  model: 'gemini-2.0-flash-exp',
-  speaker: 'Puck', // Default voice
+  model: "gemini-2.0-flash-exp",
+  speaker: "Puck", // Default voice
   debug: true,
 });
 
 // Or initialize with Vertex AI (using OAuth)
 const voiceWithVertexAI = new GeminiLiveVoice({
   vertexAI: true,
-  project: 'your-gcp-project',
-  location: 'us-central1',
-  serviceAccountKeyFile: '/path/to/service-account.json',
-  model: 'gemini-2.0-flash-exp',
-  speaker: 'Puck',
+  project: "your-gcp-project",
+  location: "us-central1",
+  serviceAccountKeyFile: "/path/to/service-account.json",
+  model: "gemini-2.0-flash-exp",
+  speaker: "Puck",
 });
 
 // Or use the VoiceConfig pattern (recommended for consistency with other providers)
 const voiceWithConfig = new GeminiLiveVoice({
   speechModel: {
-    name: 'gemini-2.0-flash-exp',
+    name: "gemini-2.0-flash-exp",
     apiKey: process.env.GOOGLE_API_KEY,
   },
-  speaker: 'Puck',
+  speaker: "Puck",
   realtimeConfig: {
-    model: 'gemini-2.0-flash-exp',
+    model: "gemini-2.0-flash-exp",
     apiKey: process.env.GOOGLE_API_KEY,
     options: {
       debug: true,
@@ -54,25 +54,25 @@ const voiceWithConfig = new GeminiLiveVoice({
 await voice.connect();
 
 // Set up event listeners
-voice.on('speaker', audioStream => {
+voice.on("speaker", (audioStream) => {
   // Handle audio stream (NodeJS.ReadableStream)
   playAudio(audioStream);
 });
 
-voice.on('writing', ({ text, role }) => {
+voice.on("writing", ({ text, role }) => {
   // Handle transcribed text
   console.log(`${role}: ${text}`);
 });
 
-voice.on('turnComplete', ({ timestamp }) => {
+voice.on("turnComplete", ({ timestamp }) => {
   // Handle turn completion
-  console.log('Turn completed at:', timestamp);
+  console.log("Turn completed at:", timestamp);
 });
 
 // Convert text to speech
-await voice.speak('Hello, how can I help you today?', {
-  speaker: 'Charon', // Override default voice
-  responseModalities: ['AUDIO', 'TEXT'],
+await voice.speak("Hello, how can I help you today?", {
+  speaker: "Charon", // Override default voice
+  responseModalities: ["AUDIO", "TEXT"],
 });
 
 // Process audio input
@@ -81,8 +81,8 @@ await voice.send(microphoneStream);
 
 // Update session configuration
 await voice.updateSessionConfig({
-  speaker: 'Kore',
-  instructions: 'Be more concise in your responses',
+  speaker: "Kore",
+  instructions: "Be more concise in your responses",
 });
 
 // When done, disconnect
@@ -539,8 +539,8 @@ The simplest method using an API key from [Google AI Studio](https://makersuite.
 
 ```typescript
 const voice = new GeminiLiveVoice({
-  apiKey: 'your-api-key', // Required for Gemini API
-  model: 'gemini-2.0-flash-exp',
+  apiKey: "your-api-key", // Required for Gemini API
+  model: "gemini-2.0-flash-exp",
 });
 ```
 
@@ -552,24 +552,24 @@ For production use with OAuth authentication and Google Cloud Platform:
 // Using service account key file
 const voice = new GeminiLiveVoice({
   vertexAI: true,
-  project: 'your-gcp-project',
-  location: 'us-central1',
-  serviceAccountKeyFile: '/path/to/service-account.json',
+  project: "your-gcp-project",
+  location: "us-central1",
+  serviceAccountKeyFile: "/path/to/service-account.json",
 });
 
 // Using Application Default Credentials
 const voice = new GeminiLiveVoice({
   vertexAI: true,
-  project: 'your-gcp-project',
-  location: 'us-central1',
+  project: "your-gcp-project",
+  location: "us-central1",
 });
 
 // Using service account impersonation
 const voice = new GeminiLiveVoice({
   vertexAI: true,
-  project: 'your-gcp-project',
-  location: 'us-central1',
-  serviceAccountEmail: 'service-account@project.iam.gserviceaccount.com',
+  project: "your-gcp-project",
+  location: "us-central1",
+  serviceAccountEmail: "service-account@project.iam.gserviceaccount.com",
 });
 ```
 
@@ -580,7 +580,7 @@ const voice = new GeminiLiveVoice({
 The Gemini Live API supports session resumption for handling network interruptions:
 
 ```typescript
-voice.on('sessionHandle', ({ handle, expiresAt }) => {
+voice.on("sessionHandle", ({ handle, expiresAt }) => {
   // Store session handle for resumption
   saveSessionHandle(handle, expiresAt);
 });
@@ -589,7 +589,7 @@ voice.on('sessionHandle', ({ handle, expiresAt }) => {
 const voice = new GeminiLiveVoice({
   sessionConfig: {
     enableResumption: true,
-    maxDuration: '2h',
+    maxDuration: "2h",
   },
 });
 ```
@@ -599,11 +599,11 @@ const voice = new GeminiLiveVoice({
 Enable the model to call functions during conversations:
 
 ```typescript
-import { z } from 'zod';
+import { z } from "zod";
 
 voice.addTools({
   weather: {
-    description: 'Get weather information',
+    description: "Get weather information",
     parameters: z.object({
       location: z.string(),
     }),
@@ -614,7 +614,7 @@ voice.addTools({
   },
 });
 
-voice.on('toolCall', ({ name, args, id }) => {
+voice.on("toolCall", ({ name, args, id }) => {
   console.log(`Tool called: ${name} with args:`, args);
 });
 ```

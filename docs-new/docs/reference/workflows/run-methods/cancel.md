@@ -1,5 +1,5 @@
 ---
-title: 'Run.cancel() '
+title: "Run.cancel() "
 description: Documentation for the `Run.cancel()` method in workflows, which cancels a workflow run.
 ---
 
@@ -46,7 +46,7 @@ description: "A promise that resolves when the workflow run has been cancelled",
 const run = await workflow.createRunAsync();
 
 try {
-  const result = await run.start({ inputData: { value: 'initial data' } });
+  const result = await run.start({ inputData: { value: "initial data" } });
 } catch (error) {
   await run.cancel();
 }

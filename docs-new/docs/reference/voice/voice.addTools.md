@@ -1,6 +1,6 @@
 ---
-title: 'Reference: voice.addTools() '
-description: 'Documentation for the addTools() method available in voice providers, which equips voice models with function calling capabilities.'
+title: "voice.addTools()"
+description: "Documentation for the addTools() method available in voice providers, which equips voice models with function calling capabilities."
 ---
 
 # voice.addTools()
@@ -10,23 +10,25 @@ The `addTools()` method equips a voice provider with tools (functions) that can 
 ## Usage Example
 
 ```typescript
-import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
 // Define tools
 const weatherTool = createTool({
-  id: 'getWeather',
-  description: 'Get the current weather for a location',
+  id: "getWeather",
+  description: "Get the current weather for a location",
   inputSchema: z.object({
-    location: z.string().describe('The city and state, e.g. San Francisco, CA'),
+    location: z.string().describe("The city and state, e.g. San Francisco, CA"),
   }),
   outputSchema: z.object({
     message: z.string(),
   }),
   execute: async ({ context }) => {
     // Fetch weather data from an API
-    const response = await fetch(`https://api.weather.com?location=${encodeURIComponent(context.location)}`);
+    const response = await fetch(
+      `https://api.weather.com?location=${encodeURIComponent(context.location)}`,
+    );
     const data = await response.json();
     return {
       message: `The current temperature in ${context.location} is ${data.temperature}°F with ${data.conditions}.`,
@@ -37,7 +39,7 @@ const weatherTool = createTool({
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: 'gpt-4o-mini-realtime',
+    model: "gpt-4o-mini-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });

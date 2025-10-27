@@ -1,7 +1,6 @@
 ---
-title: 'Overview'
+title: "Overview"
 description: "Learn how Mastra's memory system works with working memory, conversation history, and semantic recall."
-sidebar_position: 1
 ---
 
 # Memory overview
@@ -23,13 +22,13 @@ npm install @mastra/core @mastra/memory @mastra/libsql
 Then add a storage adapter to the main Mastra instance. Any agent with memory enabled will use this shared storage to store and recall interactions.
 
 ```typescript {6-8} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { LibSQLStore } from '@mastra/libsql';
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({
-    url: ':memory:',
+    url: ":memory:",
   }),
 });
 ```
@@ -37,8 +36,8 @@ export const mastra = new Mastra({
 Now, enable memory by passing a `Memory` instance to the agent's `memory` parameter:
 
 ```typescript {3-5} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
   // ...
@@ -62,13 +61,13 @@ Mastra combines all memory types into a single context window. If the total exce
 
 ## Scoping memory with threads and resources
 
-All memory types are [thread-scoped](./working-memory#thread-scoped-memory-default) by default, meaning they apply only to a single conversation. [Resource-scoped](./working-memory#resource-scoped-memory) configuration allows working memory and semantic recall to persist across all threads that use the same user or entity.
+All memory types are [resource-scoped](./working-memory#resource-scoped-memory-default) by default, meaning they persist across all conversations for the same user or entity. [Thread-scoped](./working-memory#thread-scoped-memory) configuration isolates memory to a single conversation thread.
 
 ## Memory Storage Adapters
 
 To persist and recall information between conversations, memory requires a storage adapter.
 
-Supported options include [LibSQL](/docs/examples/memory/memory-with-libsql), [Postgres](/docs/examples/memory/memory-with-pg), and [Upstash](/docs/examples/memory/memory-with-upstash)
+Supported options include [LibSQL](/docs/examples/memory/memory-with-libsql), [MongoDB](/docs/examples/memory/memory-with-mongodb), [Postgres](/docs/examples/memory/memory-with-pg), and [Upstash](/docs/examples/memory/memory-with-upstash)
 
 We use LibSQL out of the box because it is file-based or in-memory, so it is easy to install and works well with the playground.
 
@@ -81,16 +80,16 @@ Agents can be configured with their own dedicated storage, keeping tasks, conver
 To assign dedicated storage to an agent, install and import the required dependency and pass a `storage` instance to the `Memory` constructor:
 
 ```typescript {3, 9-11} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
-import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore } from "@mastra/libsql";
 
 export const testAgent = new Agent({
   // ...
   memory: new Memory({
     // ...
     storage: new LibSQLStore({
-      url: 'file:agent-memory.db',
+      url: "file:agent-memory.db",
     }),
     // ...
   }),
@@ -103,7 +102,7 @@ If tracing is enabled in your Mastra deployment and memory is configured either 
 
 This is helpful for debugging, understanding agent decisions, and verifying that the agent is retrieving the right information for each request.
 
-For more details on enabling and configuring tracing, see [AI Tracing](/docs/observability/ai-tracing/overview).
+For more details on enabling and configuring tracing, see [Tracing](../observability/overview).
 
 ## Local development with LibSQL
 
@@ -115,4 +114,4 @@ For local development with `LibSQLStore`, you can inspect stored memory using th
 
 Now that you understand the core concepts, continue to [semantic recall](./semantic-recall) to learn how to add RAG memory to your Mastra agents.
 
-Alternatively you can visit the [configuration reference](/docs/reference/memory) for available options.
+Alternatively you can visit the [configuration reference](/docs/reference/client-js/memory) for available options.

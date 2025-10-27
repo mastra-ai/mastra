@@ -1,6 +1,6 @@
 ---
-title: 'Networks'
-description: 'Networks in Mastra help you execute individual or multiple Mastra primitives in a non-deterministic way using a single API.'
+title: "Networks"
+description: "Networks in Mastra help you execute individual or multiple Mastra primitives in a non-deterministic way using a single API."
 sidebar_position: 4
 ---
 
@@ -35,25 +35,25 @@ As an example, we have an Agent with 3 primitives at its disposal:
 We use the `network` method to create a task that requires multiple primitives. The Agent will, using memory, figure out which primitives to call and in which order, as well as when the task is complete.
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { createStep, createWorkflow } from '@mastra/core/workflows';
-import { RuntimeContext } from '@mastra/core/runtime-context';
-import { Memory } from '@mastra/memory';
-import { openai } from '@ai-sdk/openai';
-import { LibSQLStore } from '@mastra/libsql';
-import { z } from 'zod';
+import { Agent } from "@mastra/core/agent";
+import { createStep, createWorkflow } from "@mastra/core/workflows";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
+import { z } from "zod";
 
 const memory = new Memory({
   storage: new LibSQLStore({
-    url: 'file:../mastra.db', // Or your database URL
+    url: "file:../mastra.db", // Or your database URL
   }),
 });
 
 const agentStep1 = createStep({
-  id: 'agent-step',
-  description: 'This step is used to do research and text synthesis.',
+  id: "agent-step",
+  description: "This step is used to do research and text synthesis.",
   inputSchema: z.object({
-    city: z.string().describe('The city to research'),
+    city: z.string().describe("The city to research"),
   }),
   outputSchema: z.object({
     text: z.string(),
@@ -73,10 +73,10 @@ const agentStep1 = createStep({
 });
 
 const agentStep2 = createStep({
-  id: 'agent-step-two',
-  description: 'This step is used to do research and text synthesis.',
+  id: "agent-step-two",
+  description: "This step is used to do research and text synthesis.",
   inputSchema: z.object({
-    text: z.string().describe('The city to research'),
+    text: z.string().describe("The city to research"),
   }),
   outputSchema: z.object({
     text: z.string(),
@@ -96,9 +96,9 @@ const agentStep2 = createStep({
 });
 
 const workflow1 = createWorkflow({
-  id: 'workflow1',
+  id: "workflow1",
   description:
-    'This workflow is perfect for researching a specific city. It should be used when you have a city in mind to research.',
+    "This workflow is perfect for researching a specific city. It should be used when you have a city in mind to research.",
   steps: [],
   inputSchema: z.object({
     city: z.string(),
@@ -112,29 +112,29 @@ const workflow1 = createWorkflow({
   .commit();
 
 const agent1 = new Agent({
-  name: 'agent1',
+  name: "agent1",
   instructions:
-    'This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.',
+    "This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.",
   description:
-    'This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.',
-  model: openai('gpt-4o'),
+    "This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.",
+  model: openai("gpt-4o"),
 });
 
 const agent2 = new Agent({
-  name: 'agent2',
+  name: "agent2",
   description:
-    'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Writes reports in full paragraphs. Should be used to synthesize text from different sources together as a final report.',
+    "This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Writes reports in full paragraphs. Should be used to synthesize text from different sources together as a final report.",
   instructions:
-    'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report.',
-  model: openai('gpt-4o'),
+    "This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report.",
+  model: openai("gpt-4o"),
 });
 
 const routingAgent = new Agent({
-  id: 'test-network',
-  name: 'Test Network',
+  id: "test-network",
+  name: "Test Network",
   instructions:
-    'You are a network of writers and researchers. The user will ask you to research a topic. You always need to answer with a full report. Bullet points are NOT a full report. WRITE FULL PARAGRAPHS like this is a blog post or something similar. You should not rely on partial information.',
-  model: openai('gpt-4o'),
+    "You are a network of writers and researchers. The user will ask you to research a topic. You always need to answer with a full report. Bullet points are NOT a full report. WRITE FULL PARAGRAPHS like this is a blog post or something similar. You should not rely on partial information.",
+  model: openai("gpt-4o"),
   agents: {
     agent1,
     agent2,
@@ -150,7 +150,7 @@ const runtimeContext = new RuntimeContext();
 console.log(
   // specifying the task, note that there is a mention here about using an agent for synthesis. This is because the routing agent can actually do some synthesis on results on its own, so this will force it to use agent2 instead
   await routingAgent.network(
-    'What are the biggest cities in France? Give me 3. How are they like? Find cities, then do thorough research on each city, and give me a final full report synthesizing all that information. Make sure to use an agent for synthesis.',
+    "What are the biggest cities in France? Give me 3. How are they like? Find cities, then do thorough research on each city, and give me a final full report synthesizing all that information. Make sure to use an agent for synthesis.",
     { runtimeContext },
   ),
 );

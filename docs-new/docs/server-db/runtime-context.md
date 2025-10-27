@@ -1,5 +1,5 @@
 ---
-title: 'Runtime Context'
+title: "Runtime Context"
 description: Learn how to use Mastra's RuntimeContext to provide dynamic, request-specific configuration to agents.
 sidebar_position: 3
 ---
@@ -28,42 +28,42 @@ The `.set()` method takes two arguments:
 2. **value**: The data to associate with that key.
 
 ```typescript showLineNumbers
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RuntimeContext } from "@mastra/core/runtime-context";
 
 export type UserTier = {
-  'user-tier': 'enterprise' | 'pro';
+  "user-tier": "enterprise" | "pro";
 };
 
 const runtimeContext = new RuntimeContext<UserTier>();
-runtimeContext.set('user-tier', 'enterprise');
+runtimeContext.set("user-tier", "enterprise");
 
-const agent = mastra.getAgent('weatherAgent');
+const agent = mastra.getAgent("weatherAgent");
 await agent.generate("What's the weather in London?", {
   runtimeContext,
 });
 
-const routingAgent = mastra.getAgent('routingAgent');
+const routingAgent = mastra.getAgent("routingAgent");
 routingAgent.network("What's the weather in London?", {
   runtimeContext,
 });
 
-const run = await mastra.getWorkflow('weatherWorkflow').createRunAsync();
+const run = await mastra.getWorkflow("weatherWorkflow").createRunAsync();
 await run.start({
   inputData: {
-    location: 'London',
+    location: "London",
   },
   runtimeContext,
 });
 await run.resume({
   resumeData: {
-    city: 'New York',
+    city: "New York",
   },
   runtimeContext,
 });
 
 await weatherTool.execute({
   context: {
-    location: 'London',
+    location: "London",
   },
   runtimeContext,
 });
@@ -74,19 +74,22 @@ await weatherTool.execute({
 You can populate `runtimeContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
-import { testWeatherAgent } from './agents/test-weather-agent';
+import { Mastra } from "@mastra/core/mastra";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { testWeatherAgent } from "./agents/test-weather-agent";
 
 export const mastra = new Mastra({
   agents: { testWeatherAgent },
   server: {
     middleware: [
       async (context, next) => {
-        const country = context.req.header('CF-IPCountry');
-        const runtimeContext = context.get('runtimeContext');
+        const country = context.req.header("CF-IPCountry");
+        const runtimeContext = context.get("runtimeContext");
 
-        runtimeContext.set('temperature-unit', country === 'US' ? 'fahrenheit' : 'celsius');
+        runtimeContext.set(
+          "temperature-unit",
+          country === "US" ? "fahrenheit" : "celsius",
+        );
 
         await next();
       },
@@ -103,15 +106,15 @@ You can access the `runtimeContext` argument from any supported configuration op
 
 ```typescript {7-8,15,18,21} filename="src/mastra/agents/weather-agent.ts" showLineNumbers
 export type UserTier = {
-  'user-tier': 'enterprise' | 'pro';
+  "user-tier": "enterprise" | "pro";
 };
 
 export const weatherAgent = new Agent({
-  name: 'weather-agent',
+  name: "weather-agent",
   instructions: async ({ runtimeContext }) => {
-    const userTier = runtimeContext.get('user-tier') as UserTier['user-tier'];
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
 
-    if (userTier === 'enterprise') {
+    if (userTier === "enterprise") {
       // ...
     }
     // ...
@@ -138,15 +141,15 @@ You can access the `runtimeContext` argument from a workflow step's `execute` fu
 
 ```typescript {7-8} filename="src/mastra/workflows/weather-workflow.ts" showLineNumbers copy
 export type UserTier = {
-  'user-tier': 'enterprise' | 'pro';
+  "user-tier": "enterprise" | "pro";
 };
 
 const stepOne = createStep({
-  id: 'step-one',
+  id: "step-one",
   execute: async ({ runtimeContext }) => {
-    const userTier = runtimeContext.get('user-tier') as UserTier['user-tier'];
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
 
-    if (userTier === 'enterprise') {
+    if (userTier === "enterprise") {
       // ...
     }
     // ...
@@ -162,15 +165,15 @@ You can access the `runtimeContext` argument from a tool’s `execute` function.
 
 ```typescript {7-8} filename="src/mastra/tools/weather-tool.ts" showLineNumbers
 export type UserTier = {
-  'user-tier': 'enterprise' | 'pro';
+  "user-tier": "enterprise" | "pro";
 };
 
 export const weatherTool = createTool({
-  id: 'weather-tool',
+  id: "weather-tool",
   execute: async ({ runtimeContext }) => {
-    const userTier = runtimeContext.get('user-tier') as UserTier['user-tier'];
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
 
-    if (userTier === 'enterprise') {
+    if (userTier === "enterprise") {
       // ...
     }
     // ...

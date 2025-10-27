@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Faithfulness '
+title: "Faithfulness"
 description: Documentation for the Faithfulness Scorer in Mastra, which evaluates the factual accuracy of LLM outputs compared to the provided context.
 ---
 
