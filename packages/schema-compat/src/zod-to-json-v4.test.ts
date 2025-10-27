@@ -30,6 +30,8 @@ describe('zodToJsonSchema - Zod v4 specific', () => {
       // Verify it's actually valid JSON Schema structure
       expect(result).toHaveProperty('type');
       expect(typeof result.type).toBe('string');
+      const vars = result.properties!.variables as any;
+      expect(vars?.additionalProperties).toMatchObject({ type: 'string' });
     });
 
     it('should handle the exact error case from the bug report', () => {
@@ -53,7 +55,7 @@ describe('zodToJsonSchema - Zod v4 specific', () => {
     });
   });
 
-  describe('v3 and v4 output comparison', () => {
+  describe('v4 output validation', () => {
     it('should produce valid schema for basic z.record() after patching', () => {
       const schema = zV4.record(zV4.string());
 
@@ -64,9 +66,10 @@ describe('zodToJsonSchema - Zod v4 specific', () => {
       expect(v4Result.type).toBe('object');
       expect(v4Result).toHaveProperty('additionalProperties');
       expect(v4Result.additionalProperties).toBeDefined();
+      expect((v4Result.additionalProperties as any).type).toBe('string');
     });
 
-    it('should produce equivalent schemas for complex z.record() scenarios', () => {
+    it('should produce valid schema for complex z.record() scenarios', () => {
       const schema = zV4.object({
         name: zV4.string(),
         metadata: zV4.record(zV4.union([zV4.string(), zV4.number()])),
