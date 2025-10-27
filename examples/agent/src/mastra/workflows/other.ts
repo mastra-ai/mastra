@@ -6,7 +6,10 @@ const personSchema = z.object({
   number: z
     .union([z.number(), z.object({ prefix: z.string(), value: z.number() })])
     .default({ prefix: 'tel', value: 0 }),
-  // profession: z.intersection(z.object({ title: z.string() }), z.object({ tools: z.array(z.string()) })),
+  profession: z.intersection(
+    z.object({ title: z.string().default('developer') }),
+    z.object({ tools: z.array(z.string()).default(['React']) }),
+  ),
   // profession: z.discriminatedUnion('type', [
   //   z.object({ type: z.literal('developer'), languages: z.array(z.string()) }),
   //   z.object({ type: z.literal('designer'), tools: z.array(z.string()) }),

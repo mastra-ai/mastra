@@ -7,6 +7,10 @@ export function getDefaultValueInZodStack(schema: z.core.$ZodType): any {
     return getDefaultValueInZodStack(schema._zod.def.innerType as z.core.$ZodType);
   } else if ('shape' in schema._zod.def) {
     return getDefaultValues(schema as z.core.$ZodObject);
+  } else if ('left' in schema._zod.def && 'right' in schema._zod.def) {
+    const left = getDefaultValues(schema._zod.def.left as z.core.$ZodObject);
+    const right = getDefaultValues(schema._zod.def.right as z.core.$ZodObject);
+    return { ...left, ...right };
   }
   return undefined;
 }
