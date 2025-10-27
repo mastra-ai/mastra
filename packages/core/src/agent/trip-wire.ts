@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { ReadableStream } from 'stream/web';
-import type { TracingContext } from '../ai-tracing';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { TracingContext } from '../observability';
 import { ChunkFrom, MastraModelOutput } from '../stream';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';

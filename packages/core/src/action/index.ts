@@ -2,6 +2,7 @@ import type { Agent } from '../agent';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory';
+import type { ObservabilityEntrypoint } from '../observability';
 import type { MastraStorage } from '../storage';
 import type { MastraTTS } from '../tts';
 import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
@@ -14,6 +15,7 @@ export type MastraPrimitives = {
   tts?: Record<string, MastraTTS>;
   vectors?: Record<string, MastraVector>;
   memory?: MastraMemory;
+  observability: ObservabilityEntrypoint;
 };
 
 export type MastraUnion = {

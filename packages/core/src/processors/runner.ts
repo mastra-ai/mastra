@@ -1,8 +1,9 @@
 import type { MastraMessageV2, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
-import { AISpanType } from '../ai-tracing';
-import type { AISpan, TracingContext } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
+import type { Mastra } from '../mastra';
+import { AISpanType } from '../observability';
+import type { AISpan, TracingContext } from '../observability';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Processor } from './index';
@@ -62,22 +63,26 @@ export class ProcessorRunner {
   public readonly outputProcessors: Processor[];
   private readonly logger: IMastraLogger;
   private readonly agentName: string;
+  private readonly mastra?: Mastra;
 
   constructor({
     inputProcessors,
     outputProcessors,
     logger,
     agentName,
+    mastra,
   }: {
     inputProcessors?: Processor[];
     outputProcessors?: Processor[];
     logger: IMastraLogger;
     agentName: string;
+    mastra?: Mastra;
   }) {
     this.inputProcessors = inputProcessors ?? [];
     this.outputProcessors = outputProcessors ?? [];
     this.logger = logger;
     this.agentName = agentName;
+    this.mastra = mastra;
   }
 
   async runOutputProcessors(messageList: MessageList, tracingContext?: TracingContext): Promise<MessageList> {
@@ -124,6 +129,7 @@ export class ProcessorRunner {
         messages: processableMessages,
         abort: ctx.abort,
         tracingContext: { currentSpan: processorSpan },
+        mastra: this.mastra,
       });
 
       processorSpan?.end({ output: processableMessages });
@@ -181,6 +187,7 @@ export class ProcessorRunner {
                 throw new TripWire(reason || `Stream part blocked by ${processor.name}`);
               },
               tracingContext: { currentSpan: state.span },
+              mastra: this.mastra,
             });
 
             if (state.span && !state.span.isEvent) {
@@ -329,6 +336,7 @@ export class ProcessorRunner {
         messages: processableMessages,
         abort: ctx.abort,
         tracingContext: { currentSpan: processorSpan },
+        mastra: this.mastra,
       });
 
       processorSpan?.end({ output: processableMessages });

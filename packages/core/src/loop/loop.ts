@@ -23,6 +23,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   returnScorerData,
   requireToolApproval,
   agentId,
+  mastra,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
@@ -131,6 +132,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       outputProcessors,
       returnScorerData,
       tracingContext: rest.modelSpanTracker?.getTracingContext(),
+      mastra,
     },
     initialState: initialStreamState,
   });

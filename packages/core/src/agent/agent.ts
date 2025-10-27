@@ -7,8 +7,6 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
-import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
-import type { AISpan, TracingContext, TracingOptions, TracingProperties } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
@@ -41,6 +39,8 @@ import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { AISpan, TracingContext, TracingOptions, TracingProperties } from '../observability';
+import { AISpanType } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
 import { RuntimeContext } from '../runtime-context';
@@ -249,6 +249,7 @@ export class Agent<
       this.__registerMastra(config.mastra);
       this.__registerPrimitives({
         logger: config.mastra.getLogger(),
+        observability: config.mastra.observability,
       });
     }
 
@@ -366,6 +367,7 @@ export class Agent<
       outputProcessors,
       logger: this.logger,
       agentName: this.name,
+      mastra: this.#mastra,
     });
   }
 
@@ -2088,7 +2090,7 @@ export class Agent<
           this.logger.debug(`[Agents:${this.name}] - Starting generation`, { runId });
         }
 
-        const agentAISpan = getOrCreateSpan({
+        const agentAISpan = this.#mastra?.observability.getOrCreateSpan({
           type: AISpanType.AGENT_RUN,
           name: `agent run: '${this.id}'`,
           input: {
@@ -3139,7 +3141,7 @@ export class Agent<
 
     // Set AI Tracing context
     // Note this span is ended at the end of #executeOnFinish
-    const agentAISpan = getOrCreateSpan({
+    const agentAISpan = this.#mastra?.observability.getOrCreateSpan({
       type: AISpanType.AGENT_RUN,
       name: `agent run: '${this.id}'`,
       input: options.messages,
@@ -3211,7 +3213,10 @@ export class Agent<
       toolCallId: options.toolCallId,
     });
 
+    executionWorkflow.__registerMastra(this.#mastra!);
+
     const run = await executionWorkflow.createRunAsync();
+
     const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
 
     return result;
@@ -3743,7 +3748,7 @@ export class Agent<
     let llmToUse = llm as MastraLLMV1;
 
     const beforeResult = await before();
-    const traceId = getValidTraceId(beforeResult.agentAISpan);
+    const traceId = beforeResult.agentAISpan?.externalTraceId;
 
     // Check for tripwire and return early if triggered
     if (beforeResult.tripwire) {
@@ -4082,7 +4087,7 @@ export class Agent<
     }
 
     const beforeResult = await before();
-    const traceId = getValidTraceId(beforeResult.agentAISpan);
+    const traceId = beforeResult.agentAISpan?.externalTraceId;
 
     // Check for tripwire and return early if triggered
     if (beforeResult.tripwire) {

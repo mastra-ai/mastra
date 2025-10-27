@@ -831,6 +831,9 @@ importers:
 
   observability/braintrust:
     dependencies:
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../mastra
       braintrust:
         specifier: ^0.4.3
         version: 0.4.6(@aws-sdk/credential-provider-web-identity@3.911.0)(zod@4.1.12)
@@ -865,6 +868,9 @@ importers:
 
   observability/langfuse:
     dependencies:
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../mastra
       langfuse:
         specifier: ^3.38.5
         version: 3.38.6
@@ -899,6 +905,9 @@ importers:
 
   observability/langsmith:
     dependencies:
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../mastra
       langsmith:
         specifier: '>=0.3.72'
         version: 0.3.74(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.205.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@5.23.2(ws@8.18.3)(zod@3.25.76))
@@ -941,6 +950,10 @@ importers:
         version: 3.25.76
 
   observability/mastra:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -948,15 +961,18 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.8
         version: 7.53.1(@types/node@20.19.23)
       '@types/node':
         specifier: ^20.19.21
         version: 20.19.23
+      ai:
+        specifier: ^4.3.19
+        version: 4.3.19(react@19.2.0)(zod@3.25.76)
+      ai-v5:
+        specifier: npm:ai@5.0.76
+        version: ai@5.0.76(zod@3.25.76)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -969,9 +985,15 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.23)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
 
   observability/otel-exporter:
     dependencies:
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../mastra
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0

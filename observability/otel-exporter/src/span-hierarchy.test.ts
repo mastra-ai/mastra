@@ -2,7 +2,7 @@
  * Tests for span hierarchy and parent-child relationships
  */
 
-import { AISpanType } from '@mastra/core/ai-tracing';
+import { AISpanType } from '@mastra/core/observability';
 import type {
   ExportedAISpan,
   AgentRunAttributes,
@@ -10,7 +10,7 @@ import type {
   ToolCallAttributes,
   WorkflowRunAttributes,
   WorkflowStepAttributes,
-} from '@mastra/core/ai-tracing';
+} from '@mastra/core/observability';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { SpanConverter } from './span-converter.js';
 

@@ -1,4 +1,4 @@
-import type { AISpanType } from '@mastra/core/ai-tracing';
+import type { AISpanType } from '@mastra/core/observability';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
 

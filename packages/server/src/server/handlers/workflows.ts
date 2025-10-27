@@ -1,6 +1,6 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
-import type { TracingOptions } from '@mastra/core/ai-tracing';
 import type { RuntimeContext } from '@mastra/core/di';
+import type { TracingOptions } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import type {
   Workflow,

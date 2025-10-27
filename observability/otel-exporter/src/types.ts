@@ -2,7 +2,8 @@
  * OtelExporter Types
  */
 
-import type { AnyExportedAISpan, BaseExporterConfig } from '@mastra/core/ai-tracing';
+import type { AnyExportedAISpan } from '@mastra/core/observability';
+import type { BaseExporterConfig } from '@mastra/observability';
 import type { DetectedResourceAttributes } from '@opentelemetry/resources';
 import type { SpanExporter } from '@opentelemetry/sdk-trace-base';
 

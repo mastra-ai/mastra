@@ -1,4 +1,4 @@
-import type { ModelGenerationAttributes } from '@mastra/core/ai-tracing';
+import type { ModelGenerationAttributes } from '@mastra/core/observability';
 /**
  * BraintrustUsageMetrics
  *

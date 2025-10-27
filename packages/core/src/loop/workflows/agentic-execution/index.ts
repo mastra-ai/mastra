@@ -1,5 +1,5 @@
 import type { ToolSet } from 'ai-v5';
-import { InternalSpans } from '../../../ai-tracing';
+import { InternalSpans } from '../../../observability';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createWorkflow } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';

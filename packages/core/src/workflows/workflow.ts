@@ -6,11 +6,11 @@ import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions, AgentStreamOptions } from '../agent';
-import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
-import type { TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
+import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
+import { AISpanType } from '../observability';
 import type { MastraScorers } from '../scores';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType } from '../stream/types';
@@ -1629,7 +1629,7 @@ export class Run<
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // note: this span is ended inside this.executionEngine.execute()
-    const workflowAISpan = getOrCreateSpan({
+    const workflowAISpan = this.#mastra?.observability.getOrCreateSpan({
       type: AISpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
       input: inputData,
@@ -1646,8 +1646,7 @@ export class Run<
       runtimeContext,
     });
 
-    const traceId = getValidTraceId(workflowAISpan);
-
+    const traceId = workflowAISpan?.externalTraceId;
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? {});
 
@@ -2354,7 +2353,7 @@ export class Run<
     });
 
     // note: this span is ended inside this.executionEngine.execute()
-    const workflowAISpan = getOrCreateSpan({
+    const workflowAISpan = this.#mastra?.observability.getOrCreateSpan({
       type: AISpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
       input: resumeDataToUse,
@@ -2371,7 +2370,7 @@ export class Run<
       runtimeContext: runtimeContextToUse,
     });
 
-    const traceId = getValidTraceId(workflowAISpan);
+    const traceId = workflowAISpan?.externalTraceId;
 
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({

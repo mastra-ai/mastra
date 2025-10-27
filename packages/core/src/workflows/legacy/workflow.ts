@@ -94,6 +94,7 @@ export class LegacyWorkflow<
     if (mastra) {
       this.__registerPrimitives({
         logger: mastra.getLogger(),
+        observability: mastra.observability,
       });
       this.#mastra = mastra;
     }

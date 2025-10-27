@@ -1,8 +1,8 @@
 import type { TransformStreamDefaultController } from 'stream/web';
 import { Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
-import type { TracingContext } from '../../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import type { TracingContext } from '../../observability';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
 import type { InferSchemaOutput } from '../../stream/base/schema';
@@ -73,8 +73,9 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     };
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
+    mastra?: any;
   }): Promise<ChunkType | null | undefined> {
-    const { part, state, streamParts, abort, tracingContext } = args;
+    const { part, state, streamParts, abort, tracingContext, mastra } = args;
     const controller = state.controller;
 
     switch (part.type) {
@@ -83,7 +84,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
         // - enqueue the structuring agent stream chunks into the main stream
         // - when the structuring agent stream is finished, enqueue the final chunk into the main stream
 
-        await this.processAndEmitStructuredOutput(streamParts, controller, abort, tracingContext);
+        await this.processAndEmitStructuredOutput(streamParts, controller, abort, tracingContext, mastra);
         return part;
 
       default:
@@ -96,10 +97,16 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     controller: TransformStreamDefaultController<ChunkType<OUTPUT>>,
     abort: (reason?: string) => never,
     tracingContext?: TracingContext,
+    mastra?: any,
   ): Promise<void> {
     if (this.isStructuringAgentStreamStarted) return;
     this.isStructuringAgentStreamStarted = true;
     try {
+      // Register mastra with the internal agent if available
+      if (mastra) {
+        this.structuringAgent.__registerMastra(mastra);
+      }
+
       const structuringPrompt = this.buildStructuringPrompt(streamParts);
       const prompt = `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n${structuringPrompt}`;
 

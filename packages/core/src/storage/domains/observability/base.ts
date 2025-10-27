@@ -1,6 +1,6 @@
-import type { TracingStrategy } from '../../../ai-tracing';
 import { MastraBase } from '../../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
+import type { TracingStrategy } from '../../../observability';
 import type {
   AISpanRecord,
   AITraceRecord,

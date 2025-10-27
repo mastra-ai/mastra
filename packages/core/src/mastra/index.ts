@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
-import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
-import type { ObservabilityRegistryConfig } from '../ai-tracing';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
@@ -15,6 +13,8 @@ import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
+import type { ObservabilityEntrypoint, ObservabilityRegistryConfig } from '../observability';
+import { initObservability } from '../observability';
 import type { MastraScorer } from '../scores';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
@@ -229,6 +229,7 @@ export class Mastra<
   #logger: TLogger;
   #legacy_workflows: TLegacyWorkflows;
   #workflows: TWorkflows;
+  #observability: ObservabilityEntrypoint;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
   #serverMiddleware: Array<{
@@ -435,13 +436,7 @@ export class Mastra<
       storage = augmentWithInit(storage);
     }
 
-    /*
-    AI Tracing
-    */
-
-    if (config?.observability) {
-      setupAITracing(config.observability);
-    }
+    this.#observability = initObservability({ config: config?.observability, logger: this.#logger });
 
     /*
       Storage
@@ -521,6 +516,7 @@ do:
           agents: agents,
           tts: this.#tts,
           vectors: this.#vectors,
+          observability: this.#observability,
         });
 
         agents[key] = agent;
@@ -556,6 +552,7 @@ do:
           agents: agents,
           tts: this.#tts,
           vectors: this.#vectors,
+          observability: this.#observability,
         });
         // @ts-ignore
         this.#legacy_workflows[key] = workflow;
@@ -581,6 +578,7 @@ do:
           agents: agents,
           tts: this.#tts,
           vectors: this.#vectors,
+          observability: this.#observability,
         });
         // @ts-ignore
         this.#workflows[key] = workflow;
@@ -594,55 +592,11 @@ do:
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
 
     /*
-      Register Mastra instance with AI tracing exporters and initialize them
+      Register mastra on Observability exporters and other items that require it
     */
-    if (config?.observability) {
-      this.registerAITracingExporters();
-      this.initAITracingExporters();
-    }
+    this.#observability.registerMastra({ mastra: this });
 
     this.setLogger({ logger });
-  }
-
-  /**
-   * Register this Mastra instance with AI tracing exporters that need it
-   */
-  private registerAITracingExporters(): void {
-    const allTracingInstances = getAllAITracing();
-    allTracingInstances.forEach(tracing => {
-      const exporters = tracing.getExporters();
-      exporters.forEach(exporter => {
-        // Check if exporter has __registerMastra method
-        if ('__registerMastra' in exporter && typeof (exporter as any).__registerMastra === 'function') {
-          (exporter as any).__registerMastra(this);
-        }
-      });
-    });
-  }
-
-  /**
-   * Initialize all AI tracing exporters after registration is complete
-   */
-  private initAITracingExporters(): void {
-    const allTracingInstances = getAllAITracing();
-
-    allTracingInstances.forEach(tracing => {
-      const config = tracing.getConfig();
-      const exporters = tracing.getExporters();
-      exporters.forEach(exporter => {
-        // Initialize exporter if it has an init method
-        if ('init' in exporter && typeof exporter.init === 'function') {
-          try {
-            exporter.init(config);
-          } catch (error) {
-            this.#logger?.warn('Failed to initialize AI tracing exporter', {
-              exporterName: exporter.name,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        }
-      });
-    });
   }
 
   /**
@@ -984,6 +938,7 @@ do:
     workflow.__registerPrimitives({
       logger: this.getLogger(),
       storage: this.storage,
+      observability: this.#observability,
     });
     this.#internalMastraWorkflows[workflow.id] = workflow;
   }
@@ -1327,11 +1282,7 @@ do:
       });
     }
 
-    // Set logger for AI tracing instances
-    const allTracingInstances = getAllAITracing();
-    allTracingInstances.forEach(instance => {
-      instance.__setLogger(this.#logger);
-    });
+    this.#observability.setLogger({ logger: this.#logger });
   }
 
   /**
@@ -1426,6 +1377,10 @@ do:
    */
   public getStorage() {
     return this.#storage;
+  }
+
+  get observability(): ObservabilityEntrypoint {
+    return this.#observability;
   }
 
   public getServerMiddleware() {
@@ -1750,9 +1705,9 @@ do:
    * ```
    */
   async shutdown(): Promise<void> {
-    // Shutdown AI tracing registry and all instances
-    await shutdownAITracingRegistry();
     await this.stopEventEngine();
+    // Shutdown observability registry, exporters, etc...
+    await this.#observability.shutdown();
 
     this.#logger?.info('Mastra shutdown completed');
   }

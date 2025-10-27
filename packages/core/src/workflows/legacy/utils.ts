@@ -275,6 +275,7 @@ export function agentToStep<
       agent.__registerMastra(realMastra);
       agent.__registerPrimitives({
         logger: realMastra.getLogger(),
+        observability: realMastra.getObservability(),
       });
 
       const result = await agent.generateLegacy(context.inputData.prompt, {
@@ -311,6 +312,7 @@ export function workflowToStep<
         workflow.__registerMastra(realMastra);
         workflow.__registerPrimitives({
           logger: realMastra.getLogger(),
+          observability: realMastra.getObservability(),
         });
       }
 

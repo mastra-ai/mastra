@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { AISpanType } from '@mastra/core/ai-tracing';
+import { AISpanType } from '@mastra/core/observability';
 import type { AISpanRecord } from '@mastra/core/storage';
 
 export function createSampleAISpanForDB({

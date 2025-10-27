@@ -2,10 +2,10 @@ import { randomUUID } from 'crypto';
 import { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
-import { AISpanType, wrapMastra } from '@mastra/core/ai-tracing';
-import type { TracingContext, AnyAISpan } from '@mastra/core/ai-tracing';
 import { RuntimeContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
+import { AISpanType } from '@mastra/core/observability';
+import type { TracingContext, AnyAISpan } from '@mastra/core/observability';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { ChunkFrom, WorkflowRunOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
@@ -954,7 +954,7 @@ export function createStep<
       execute: async ({ inputData, mastra, runtimeContext, tracingContext, suspend, resumeData }) => {
         return params.execute({
           context: inputData,
-          mastra: wrapMastra(mastra, tracingContext),
+          mastra: mastra.observability.wrapMastra(mastra, tracingContext),
           runtimeContext,
           tracingContext,
           suspend,

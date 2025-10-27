@@ -1,8 +1,8 @@
 import type { MastraMessageContentV2, MastraMessageV2 } from '../agent';
-import type { TracingStrategy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
+import type { TracingStrategy } from '../observability';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../scores';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 

@@ -2,8 +2,8 @@
  * Test that exporter packages can be imported without errors
  *
  * This catches issues like GitHub #9272 where an exporter's ai-tracing.ts file
- * tries to import from '@mastra/core/ai-tracing/exporters' (which doesn't exist)
- * instead of '@mastra/core/ai-tracing'.
+ * tries to import from '@mastra/core/observability/exporters' (which doesn't exist)
+ * instead of '@mastra/core/observability'.
  */
 
 import { describe, it, expect } from 'vitest';

@@ -1,5 +1,6 @@
 import type { MastraMessageV2 } from '../agent/message-list';
-import type { TracingContext } from '../ai-tracing';
+import type { Mastra } from '../mastra';
+import type { TracingContext } from '../observability';
 import type { ChunkType } from '../stream';
 
 export interface Processor {
@@ -12,6 +13,7 @@ export interface Processor {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
+    mastra?: Mastra;
   }): Promise<MastraMessageV2[]> | MastraMessageV2[];
 
   /**
@@ -25,6 +27,7 @@ export interface Processor {
     state: Record<string, any>;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
+    mastra?: Mastra;
   }): Promise<ChunkType | null | undefined>;
 
   /**
@@ -34,6 +37,7 @@ export interface Processor {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
+    mastra?: Mastra;
   }): Promise<MastraMessageV2[]> | MastraMessageV2[];
 }
 

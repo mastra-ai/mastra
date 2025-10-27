@@ -1,23 +1,12 @@
-import {
-  AnthropicSchemaCompatLayer,
-  applyCompatLayer,
-  DeepSeekSchemaCompatLayer,
-  GoogleSchemaCompatLayer,
-  MetaSchemaCompatLayer,
-  OpenAIReasoningSchemaCompatLayer,
-  OpenAISchemaCompatLayer,
-} from '@mastra/schema-compat';
 import { stepCountIs } from 'ai-v5';
-import type { Schema, ModelMessage, ToolSet } from 'ai-v5';
-import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { ModelMessage, ToolSet } from 'ai-v5';
 import type { MastraPrimitives } from '../../action';
-import { AISpanType, ModelSpanTracker } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
+import { AISpanType } from '../../observability';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ModelManagerModelConfig } from '../../stream/types';
@@ -89,34 +78,6 @@ export class MastraLLMVNext extends MastraBase {
     return this.#firstModel.model;
   }
 
-  private _applySchemaCompat(schema: OutputSchema): Schema {
-    const model = this.#firstModel.model;
-
-    const schemaCompatLayers = [];
-
-    if (model) {
-      const modelInfo = {
-        modelId: model.modelId,
-        supportsStructuredOutputs: true,
-        provider: model.provider,
-      };
-      schemaCompatLayers.push(
-        new OpenAIReasoningSchemaCompatLayer(modelInfo),
-        new OpenAISchemaCompatLayer(modelInfo),
-        new GoogleSchemaCompatLayer(modelInfo),
-        new AnthropicSchemaCompatLayer(modelInfo),
-        new DeepSeekSchemaCompatLayer(modelInfo),
-        new MetaSchemaCompatLayer(modelInfo),
-      );
-    }
-
-    return applyCompatLayer({
-      schema: schema as any,
-      compatLayers: schemaCompatLayers,
-      mode: 'aiSdkSchema',
-    }) as unknown as Schema<ZodSchema | JSONSchema7>;
-  }
-
   convertToMessages(messages: string | string[] | ModelMessage[]): ModelMessage[] {
     if (Array.isArray(messages)) {
       return messages.map(m => {
@@ -179,7 +140,7 @@ export class MastraLLMVNext extends MastraBase {
       tools: Object.keys(tools || {}),
     });
 
-    const llmAISpan = tracingContext?.currentSpan?.createChildSpan({
+    const modelSpan = tracingContext?.currentSpan?.createChildSpan({
       name: `llm: '${firstModel.modelId}'`,
       type: AISpanType.MODEL_GENERATION,
       input: {
@@ -200,7 +161,7 @@ export class MastraLLMVNext extends MastraBase {
     });
 
     // Create model span tracker that will be shared across all LLM execution steps
-    const modelSpanTracker = new ModelSpanTracker(llmAISpan);
+    const modelSpanTracker = modelSpan?.createTracker();
 
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {

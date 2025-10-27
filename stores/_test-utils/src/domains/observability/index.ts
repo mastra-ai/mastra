@@ -1,4 +1,4 @@
-import { AISpanType } from '@mastra/core/ai-tracing';
+import { AISpanType } from '@mastra/core/observability';
 import { MastraStorage, TABLE_AI_SPANS } from '@mastra/core/storage';
 import type { AISpanRecord } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';

@@ -21,7 +21,7 @@ observability/braintrust/
 
 ### 1. BraintrustExporter Class
 
-- Implements `AITracingExporter` interface from `@mastra/core/ai-tracing`
+- Implements `AITracingExporter` interface from `@mastra/core/observability`
 - Uses `startSpan()` and `startSpanWithParents()` methods from Braintrust SDK
 - Maintains internal span tracking similar to Langfuse implementation
 - Supports realtime and batch modes

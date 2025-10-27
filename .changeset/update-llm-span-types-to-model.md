@@ -21,6 +21,6 @@ BREAKING CHANGE: This release renames AI tracing span types and attribute interf
 This change better reflects that these span types apply to all AI models, not just Large Language Models.
 
 Migration guide:
-- Update all imports: `import { ModelGenerationAttributes } from '@mastra/core/ai-tracing'`
+- Update all imports: `import { ModelGenerationAttributes } from '@mastra/core/observability'`
 - Update span type references: `AISpanType.MODEL_GENERATION`
 - Update InternalSpans usage: `InternalSpans.MODEL`

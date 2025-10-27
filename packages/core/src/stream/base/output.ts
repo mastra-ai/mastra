@@ -2,7 +2,6 @@ import { EventEmitter } from 'events';
 import { ReadableStream, TransformStream } from 'stream/web';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
-import { getValidTraceId } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
@@ -172,7 +171,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#options = options;
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
-    this.traceId = getValidTraceId(options.tracingContext?.currentSpan);
+    this.traceId = options.tracingContext?.currentSpan?.externalTraceId;
 
     this.#model = _model;
 
@@ -193,6 +192,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         outputProcessors: options.outputProcessors,
         logger: this.logger,
         agentName: 'MastraModelOutput',
+        mastra: options.mastra,
       });
     }
 

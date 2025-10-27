@@ -1,6 +1,6 @@
 import type { Mutable } from '@arizeai/openinference-genai/types';
-import { AISpanType, AITracingEventType } from '@mastra/core/ai-tracing';
-import type { AnyExportedAISpan } from '@mastra/core/ai-tracing';
+import { AISpanType, AITracingEventType } from '@mastra/core/observability';
+import type { AnyExportedAISpan } from '@mastra/core/observability';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ArizeExporter } from './ai-tracing';
 

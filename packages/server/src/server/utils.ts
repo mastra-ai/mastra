@@ -78,6 +78,7 @@ export class WorkflowRegistry {
           agents: mastra.getAgents(),
           tts: mastra.getTTS(),
           vectors: mastra.getVectors(),
+          observability: mastra.observability,
         });
       }
       this.additionalWorkflows[id] = workflow;

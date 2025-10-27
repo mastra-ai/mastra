@@ -1,4 +1,4 @@
-import type { TracingOptions } from '@mastra/core/ai-tracing';
+import type { TracingOptions } from '@mastra/core/observability';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { registerApiRoute } from '@mastra/core/server';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';

@@ -1,6 +1,6 @@
 import type { z } from 'zod';
-import type { TracingContext } from '../ai-tracing';
 import type { Mastra } from '../mastra';
+import type { TracingContext } from '../observability';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorers } from '../scores';
 import type { ChunkType } from '../stream/types';
