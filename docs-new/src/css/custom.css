@@ -593,7 +593,7 @@ h2:has(code) {
   gap: 0.5rem;
 }
 
-h2 code {
+h2 code, h3 code, h4 code, h5 code, h6 code {
   font-size: calc(var(--ifm-h2-font-size) - 0.25rem);
   border-radius: 10px;
 }
