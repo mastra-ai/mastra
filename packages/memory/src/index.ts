@@ -767,10 +767,10 @@ export class Memory extends MastraMemory {
             indexName: await indexName,
             vectors: embeddings,
             metadata: chunks.map(() => ({
+              ...threadMetadata, // Include thread metadata for filtering
               message_id: message.id,
               thread_id: message.threadId,
               resource_id: message.resourceId,
-              ...threadMetadata, // Include thread metadata for filtering
             })),
           });
         }),
