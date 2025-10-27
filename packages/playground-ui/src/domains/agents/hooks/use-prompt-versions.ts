@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 
-import { usePlaygroundStore } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export function usePromptVersions(agentId: string, instructions?: string) {
   const [versions, setVersions] = useState<any[]>([]);

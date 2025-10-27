@@ -1,20 +1,22 @@
-import { MemorySearch, useThreadInput, useMemoryConfig, useMemorySearch } from '@mastra/playground-ui';
 import { AgentWorkingMemory } from './agent-working-memory';
 import { AgentMemoryConfig } from './agent-memory-config';
-import { useParams, useNavigate } from 'react-router';
 import { useCallback, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ExternalLink } from 'lucide-react';
+import { useLinkComponent } from '@/lib/framework';
+import { useThreadInput } from '@/domains/conversation';
+import { useMemoryConfig, useMemorySearch } from '@/domains/memory/hooks';
+import { MemorySearch } from '@/components/assistant-ui/memory-search';
 
 interface AgentMemoryProps {
   agentId: string;
+  threadId: string;
 }
 
-export function AgentMemory({ agentId }: AgentMemoryProps) {
+export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   const { threadInput: chatInputValue } = useThreadInput();
+  const { paths, navigate } = useLinkComponent();
 
-  const { threadId } = useParams();
-  const navigate = useNavigate();
   const [searchScope, setSearchScope] = useState<string | null>(null);
 
   // Get memory config to check if semantic recall is enabled
@@ -49,7 +51,7 @@ export function AgentMemory({ agentId }: AgentMemoryProps) {
     (messageId: string, resultThreadId?: string) => {
       // If the result is from a different thread, navigate to that thread with message ID
       if (resultThreadId && resultThreadId !== threadId) {
-        navigate(`/agents/${agentId}/chat/${resultThreadId}?messageId=${messageId}`);
+        navigate(paths.agentThreadLink(agentId, resultThreadId, messageId));
       } else {
         // Find the message element by id and scroll to it
         const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);

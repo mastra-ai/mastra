@@ -1,4 +1,4 @@
-import { useWorkingMemory, useMemoryConfig } from '@mastra/playground-ui';
+import { useMemoryConfig } from '@/domains/memory/hooks';
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -7,8 +7,9 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import MarkdownRenderer from '@/components/ui/markdown-renderer';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { CodeDisplay } from '@/components/ui/code-display';
+import { CodeDisplay } from './code-display';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useWorkingMemory } from '../../context/agent-working-memory-context';
 
 interface AgentWorkingMemoryProps {
   agentId: string;

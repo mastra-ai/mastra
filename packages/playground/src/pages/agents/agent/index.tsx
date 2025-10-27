@@ -7,12 +7,12 @@ import {
   useAgent,
   useMemory,
   useThreads,
+  AgentInformation,
 } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
 
-import { AgentInformation } from '@/domains/agents/agent-information';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 
 function Agent() {
