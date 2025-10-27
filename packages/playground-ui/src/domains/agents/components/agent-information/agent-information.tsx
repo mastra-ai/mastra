@@ -2,7 +2,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 import { AgentMemory } from './agent-memory';
 import { useState, useEffect } from 'react';
-import { AgentPromptEnhancer } from './agent-instructions-enhancer';
 import { AgentEntityHeader } from '../agent-entity-header';
 import { PlaygroundTabs, Tab, TabContent, TabList } from '@/components/ui/playground-tabs';
 import { AgentMetadata } from '../agent-metadata';
@@ -84,7 +83,6 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
                 reorderModelList={reorderModelList}
                 modelProviders={modelProviders || []}
                 hasMemoryEnabled={Boolean(memory?.result)}
-                promptSlot={<AgentPromptEnhancer agentId={agentId} />}
                 modelVersion={agent.modelVersion}
               />
             )}

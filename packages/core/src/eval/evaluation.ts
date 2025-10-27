@@ -1,6 +1,7 @@
 import type { Agent } from '../agent';
 import { MastraError, ErrorCategory, ErrorDomain } from '../error';
 import { AvailableHooks, executeHook } from '../hooks';
+import type { SystemMessage } from '../llm';
 import type { Metric } from './metric';
 import type { TestInfo, EvaluationResult } from './types';
 
@@ -21,7 +22,7 @@ export async function evaluate<T extends Agent>({
   globalRunId: string;
   runId?: string;
   testInfo?: TestInfo;
-  instructions: string;
+  instructions: SystemMessage;
 }): Promise<EvaluationResult> {
   const runIdToUse = runId || crypto.randomUUID();
 

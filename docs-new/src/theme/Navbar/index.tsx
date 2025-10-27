@@ -11,9 +11,9 @@ import { TabSwitcher } from "./tab-switcher";
 function NavbarContentDesktop() {
   return (
     <>
-      <div className="flex px-4 xl:px-0 border-b-[0.5px] h-[60px] border-(--border-subtle) max-w-(--ifm-container-width) mx-auto w-full items-center justify-between">
+      <div className="flex px-4 2xl:px-0 border-b-[0.5px] h-[60px] border-(--border-subtle) mx-auto w-full items-center justify-between">
         <Link href="/docs">
-          <div className="flex items-center gap-2">
+          <div className="flex gap-2 items-center">
             <Logo />
             <span className="px-1.5 dark:text-(--mastra-green-accent) mb-0 w-[3.2rem] grid place-items-center h-[1.6rem] font-medium tracking-wider py-0.5 text-xs rounded-[0.44rem] border border-(--border) uppercase">
               Docs
@@ -31,7 +31,7 @@ function NavbarContentDesktop() {
           <NavbarMobileSidebarToggle />
         </div>
       </div>
-      <div className="hidden lg:block">
+      <div className="hidden 2xl:px-0 lg:block">
         <TabSwitcher />
       </div>
     </>
@@ -42,8 +42,6 @@ export default function Navbar(): ReactNode {
   return (
     <NavbarLayout>
       <NavbarContentDesktop />
-
-      {/* <NavbarContent /> */}
     </NavbarLayout>
   );
 }
