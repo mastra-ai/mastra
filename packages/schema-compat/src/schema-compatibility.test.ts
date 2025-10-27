@@ -41,8 +41,6 @@ const mockModel = new MockLanguageModelV1({
   defaultObjectGenerationMode: 'json',
 });
 
-const constraintsPrefix = `The following constraint hints should be followed, but these constraints are not a schema shape: `;
-
 describe('SchemaCompatLayer', () => {
   let compatibility: MockSchemaCompatibility;
 
