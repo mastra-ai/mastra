@@ -119,7 +119,7 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => { });
 
       const messages = [createTestMessage('Hello, how are you today?', 'user')];
 
@@ -149,7 +149,7 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => { });
 
       const messages = [createTestMessage('Hola, ¿cómo estás?', 'user')];
 
@@ -231,7 +231,7 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       const messages = [createTestMessage('Ciao, come stai?', 'user')];
       const result = await detector.processInput({ messages, abort: mockAbort as any });
@@ -305,7 +305,7 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => { });
 
       const messages = [createTestMessage('Bonjour le monde', 'user', 'msg1')];
 
@@ -336,7 +336,7 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
       const messages = [createTestMessage('Привет, как дела?', 'user')];
       const result = await detector.processInput({ messages, abort: mockAbort as any });
@@ -531,8 +531,8 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
+      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => { });
 
       const messages = [createTestMessage('Some text content', 'user')];
       const result = await detector.processInput({ messages, abort: mockAbort as any });
@@ -640,6 +640,21 @@ describe('LanguageDetector', () => {
 
       expect(detector.name).toBe('language-detector');
     });
+
+    it('should accept providerOptions in constructor', () => {
+      const providerOptions = {
+        openai: { reasoningEffort: 'low' },
+      };
+      const model = setupMockModel(createMockLanguageResult('English', 'en', 0.95, true));
+
+      const detector = new LanguageDetector({
+        model,
+        providerOptions,
+        targetLanguages: ['English'],
+      });
+
+      expect(detector['providerOptions']).toEqual(providerOptions);
+    });
   });
 
   describe('translation quality settings', () => {
@@ -683,8 +698,8 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
+      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => { });
 
       const messages = [createTestMessage('Some text content here', 'user')];
       const result = await detector.processInput({ messages, abort: mockAbort as any });
@@ -737,4 +752,5 @@ describe('LanguageDetector', () => {
       expect((result[0].content.metadata as any)?.language_detection?.is_target_language).toBe(true);
     });
   });
+
 });
