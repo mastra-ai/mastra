@@ -51,6 +51,7 @@ const config = {
     gaId: process.env.GA_ID,
     posthogApiKey: process.env.POSTHOG_API_KEY,
     posthogHost: process.env.POSTHOG_HOST,
+    kapaIntegrationId: process.env.KAPA_INTEGRATION_ID,
   },
 
   // Preconnect to Google Fonts
