@@ -209,7 +209,12 @@ export interface GetWorkflowResponse {
 
 export type WorkflowWatchResult = WatchEvent & { runId: string };
 
-export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
+// Override WorkflowResult error type for client SDK - errors are serialized as strings over HTTP
+export type WorkflowRunResult =
+  | Exclude<WorkflowResult<any, any, any, any>, { status: 'failed' }>
+  | (Omit<Extract<WorkflowResult<any, any, any, any>, { status: 'failed' }>, 'error'> & {
+      error: string; // Errors are serialized as strings over HTTP
+    });
 export interface UpsertVectorParams {
   indexName: string;
   vectors: number[][];
