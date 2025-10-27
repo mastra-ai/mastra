@@ -5,7 +5,7 @@ import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { LoopRun } from '../types';
-import { createAgenticLoopWorkflow } from './agentic-loop';
+import type { createAgenticLoopWorkflow } from './agentic-loop';
 
 /**
  * Check if a ReadableStreamDefaultController is open and can accept data.
@@ -26,25 +26,28 @@ export function isControllerOpen(controller: ReadableStreamDefaultController<any
 export function workflowLoopStream<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
->({
-  resumeContext,
-  requireToolApproval,
-  telemetry_settings,
-  models,
-  toolChoice,
-  modelSettings,
-  _internal,
-  modelStreamSpan,
-  llmAISpan,
-  messageId,
-  runId,
-  messageList,
-  startTimestamp,
-  streamState,
-  agentId,
-  toolCallId,
-  ...rest
-}: LoopRun<Tools, OUTPUT>) {
+>(
+  agenticLoopWorkflow: ReturnType<typeof createAgenticLoopWorkflow>,
+  {
+    resumeContext,
+    requireToolApproval,
+    telemetry_settings,
+    models,
+    toolChoice,
+    modelSettings,
+    _internal,
+    modelStreamSpan,
+    llmAISpan,
+    messageId,
+    runId,
+    messageList,
+    startTimestamp,
+    streamState,
+    agentId,
+    toolCallId,
+    ...rest
+  }: LoopRun<Tools, OUTPUT>,
+) {
   return new ReadableStream<ChunkType<OUTPUT>>({
     start: async controller => {
       const writer = new WritableStream<ChunkType<OUTPUT>>({
@@ -61,28 +64,38 @@ export function workflowLoopStream<
           : {}),
       });
 
-      const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
-        resumeContext,
-        messageId: messageId!,
+      // Use the pre-created workflow instance passed as parameter
+      const workflowInputData = {
         models,
-        telemetry_settings,
-        _internal,
-        modelSettings,
-        toolChoice,
-        modelStreamSpan,
-        controller,
-        writer,
+        messageId: messageId!,
         runId,
         messageList,
         startTimestamp,
         streamState,
+        tools: rest.tools,
+        toolChoice,
+        modelSettings,
+        providerOptions: rest.providerOptions,
+        options: rest.options,
+        toolCallStreaming: rest.toolCallStreaming,
+        structuredOutput: rest.structuredOutput,
+        outputProcessors: rest.outputProcessors,
+        headers: rest.headers,
+        downloadRetries: rest.downloadRetries,
+        downloadConcurrency: rest.downloadConcurrency,
+        processorStates: rest.processorStates,
+        stopWhen: rest.stopWhen,
+        maxSteps: rest.maxSteps,
+        returnScorerData: rest.returnScorerData,
+        modelSpanTracker: rest.modelSpanTracker,
+        experimental_generateMessageId: rest.experimental_generateMessageId,
+        // Dynamic params that change per execution
+        _internal,
+        modelStreamSpan,
+        controller,
+        writer,
         agentId,
-        ...rest,
-      });
-
-      if (rest.mastra) {
-        agenticLoopWorkflow.__registerMastra(rest.mastra);
-      }
+      };
 
       const initialData = {
         messageId: messageId!,
@@ -136,14 +149,28 @@ export function workflowLoopStream<
         runtimeContext.set('__mastra_requireToolApproval', true);
       }
 
+      // Store workflow data in initialState so all nested workflows can access it
+      const initialState = workflowInputData;
+
+      // Execution-specific objects that need to be fresh on each execution (including resume)
+      const freshExecutionObjects = {
+        controller,
+        writer,
+        modelStreamSpan,
+        _internal,
+      };
+
       const executionResult = resumeContext
         ? await run.resume({
             resumeData: resumeContext.resumeData,
             tracingContext: { currentSpan: llmAISpan },
             label: toolCallId,
+            runtimeContext,
+            stateOverride: freshExecutionObjects, // Override stale execution-specific objects from snapshot
           })
         : await run.start({
             inputData: initialData,
+            initialState,
             tracingContext: { currentSpan: llmAISpan },
             runtimeContext,
           });

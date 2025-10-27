@@ -17,6 +17,7 @@ import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
+import { createAgenticLoopWorkflow } from '../../loop/workflows/agentic-loop';
 import type { Mastra } from '../../mastra';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { OutputSchema } from '../../stream/base/schema';
@@ -31,6 +32,7 @@ export class MastraLLMVNext extends MastraBase {
   #mastra?: Mastra;
   #options?: MastraModelOptions;
   #firstModel: ModelManagerModelConfig;
+  #agenticLoopWorkflow: ReturnType<typeof createAgenticLoopWorkflow>;
 
   constructor({
     mastra,
@@ -64,6 +66,17 @@ export class MastraLLMVNext extends MastraBase {
     } else {
       this.#models = models;
       this.#firstModel = models[0];
+    }
+
+    // Create workflow once at instance level with only static parameters
+    this.#agenticLoopWorkflow = createAgenticLoopWorkflow({
+      telemetry_settings: this.experimental_telemetry,
+      logger: this.logger,
+      mastra: this.#mastra,
+    });
+
+    if (this.#mastra) {
+      this.#agenticLoopWorkflow.__registerMastra(this.#mastra);
     }
   }
 
@@ -344,7 +357,7 @@ export class MastraLLMVNext extends MastraBase {
         },
       };
 
-      return loop(loopOptions);
+      return loop(this.#agenticLoopWorkflow, loopOptions);
     } catch (e: unknown) {
       const mastraError = new MastraError(
         {

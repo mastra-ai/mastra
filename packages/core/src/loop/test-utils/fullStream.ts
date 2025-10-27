@@ -5,7 +5,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2, mockValues, mockId }
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
-import type { loop } from '../loop';
+import type { LoopFn } from './utils';
 import {
   createMessageListWithUserMessage,
   createTestModels,
@@ -18,7 +18,7 @@ import {
   testUsage2,
 } from './utils';
 
-export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
+export function fullStreamTests({ loopFn, runId }: { loopFn: LoopFn; runId: string }) {
   describe('result.fullStream', () => {
     it('should maintain conversation history in the llm input', async () => {
       const messageList = new MessageList();

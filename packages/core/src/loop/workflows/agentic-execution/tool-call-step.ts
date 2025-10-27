@@ -7,25 +7,21 @@ import { assembleOperationName, getTracer } from '../../telemetry';
 import type { OuterLLMRun } from '../../types';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
 
+interface CreateToolCallStepOptions {
+  telemetry_settings: any;
+}
+
 export function createToolCallStep<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
->({
-  tools,
-  messageList,
-  options,
-  telemetry_settings,
-  writer,
-  controller,
-  runId,
-  streamState,
-  modelSpanTracker,
-}: OuterLLMRun<Tools, OUTPUT>) {
+>({ telemetry_settings }: CreateToolCallStepOptions) {
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
-    execute: async ({ inputData, suspend, resumeData, runtimeContext }) => {
+    execute: async ({ inputData, suspend, resumeData, runtimeContext, state }) => {
+      // Access dynamic data from workflow state (shared across nested workflows)
+      const { tools, messageList, options, runId, streamState, modelSpanTracker, controller, writer } = state;
       // If the tool was already executed by the provider, skip execution
       if (inputData.providerExecuted) {
         // Still emit telemetry for provider-executed tools
@@ -62,7 +58,7 @@ export function createToolCallStep<
 
       const tool =
         tools?.[inputData.toolName] ||
-        Object.values(tools || {})?.find(tool => `id` in tool && tool.id === inputData.toolName);
+        Object.values(tools || {})?.find((tool: any) => `id` in tool && tool.id === inputData.toolName);
 
       if (!tool) {
         throw new Error(`Tool ${inputData.toolName} not found`);

@@ -8,7 +8,6 @@ import {
 import { mockValues } from 'ai-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
-import type { loop } from '../loop';
 import {
   createTestModels,
   defaultSettings,
@@ -18,9 +17,10 @@ import {
   modelWithSources,
   testUsage,
   createMessageListWithUserMessage,
+  type LoopFn,
 } from './utils';
 
-export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
+export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: LoopFn; runId: string }) {
   describe('result.toUIMessageStream', () => {
     it('should create a ui message stream', async () => {
       const messageList = createMessageListWithUserMessage();
@@ -439,7 +439,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       });
 
       const uiMessageStream = result.aisdk.v5.toUIMessageStream({
-        onError: error => `custom error message: ${error}`,
+        onError: (error: any) => `custom error message: ${error}`,
       });
 
       expect(await convertReadableStreamToArray(uiMessageStream)).toMatchSnapshot();
@@ -1190,7 +1190,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       });
 
       const response = result.aisdk.v5.toUIMessageStreamResponse({
-        onError: error => `custom error message: ${error}`,
+        onError: (error: any) => `custom error message: ${error}`,
       });
 
       expect(await convertResponseStreamToArray(response)).toMatchSnapshot();

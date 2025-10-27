@@ -1,5 +1,9 @@
 import { beforeEach, afterEach, describe, vi } from 'vitest';
+import type { ToolSet } from 'ai-v5';
 import { loop } from './loop';
+import { createAgenticLoopWorkflow } from './workflows/agentic-loop';
+import type { LoopOptions } from './types';
+import type { OutputSchema } from '../stream/base/schema';
 import { fullStreamTests } from './test-utils/fullStream';
 import { generateTextTestsV5 } from './test-utils/generateText';
 import { optionsTests } from './test-utils/options';
@@ -22,16 +26,29 @@ describe('Loop Tests', () => {
       vi.useRealTimers();
     });
 
-    textStreamTests({ loopFn: loop, runId: 'test-run-id' });
-    fullStreamTests({ loopFn: loop, runId: 'test-run-id' });
-    toUIMessageStreamTests({ loopFn: loop, runId: 'test-run-id' });
-    resultObjectTests({ loopFn: loop, runId: 'test-run-id' });
-    optionsTests({ loopFn: loop, runId: 'test-run-id' });
-    telemetryTests({ loopFn: loop, runId: 'test-run-id' });
-    generateTextTestsV5({ loopFn: loop, runId: 'test-run-id' });
-    toolsTests({ loopFn: loop, runId: 'test-run-id' });
+    // Create a test workflow instance that will be reused across all test calls
+    const testWorkflow = createAgenticLoopWorkflow({
+      models: [],
+      telemetry_settings: undefined,
+      logger: undefined,
+      mastra: undefined,
+    });
 
-    streamObjectTests({ loopFn: loop, runId: 'test-run-id' });
+    // Wrapper function that matches the old loop signature for backward compatibility with tests
+    const loopWrapper = <Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>(
+      options: LoopOptions<Tools, OUTPUT>,
+    ) => loop(testWorkflow, options);
+
+    textStreamTests({ loopFn: loopWrapper, runId: 'test-run-id' });
+    fullStreamTests({ loopFn: loopWrapper, runId: 'test-run-id' });
+    toUIMessageStreamTests({ loopFn: loopWrapper, runId: 'test-run-id' });
+    resultObjectTests({ loopFn: loopWrapper, runId: 'test-run-id' });
+    optionsTests({ loopFn: loopWrapper, runId: 'test-run-id' });
+    telemetryTests({ loopFn: loopWrapper, runId: 'test-run-id' });
+    generateTextTestsV5({ loopFn: loopWrapper, runId: 'test-run-id' });
+    toolsTests({ loopFn: loopWrapper, runId: 'test-run-id' });
+
+    streamObjectTests({ loopFn: loopWrapper, runId: 'test-run-id' });
   });
 
   // toolsTestsV5({ executeFn: execute, runId });

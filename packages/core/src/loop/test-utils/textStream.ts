@@ -3,9 +3,9 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, expect, it } from 'vitest';
 import { createMessageListWithUserMessage } from './utils';
 import { testUsage } from '../../stream/aisdk/v5/test-utils';
-import type { loop } from '../loop';
+import type { LoopFn } from './utils';
 
-export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
+export function textStreamTests({ loopFn, runId }: { loopFn: LoopFn; runId: string }) {
   describe('result.textStream', () => {
     it('should send text deltas', async () => {
       const messageList = createMessageListWithUserMessage();

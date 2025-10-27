@@ -7,28 +7,32 @@ import { createDestructurableOutput, MastraModelOutput } from '../stream/base/ou
 import type { OutputSchema } from '../stream/base/schema';
 import { getRootSpan } from './telemetry';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
+import type { createAgenticLoopWorkflow } from './workflows/agentic-loop';
 import { workflowLoopStream } from './workflows/stream';
 
-export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
-  resumeContext,
-  models,
-  logger,
-  runId,
-  idGenerator,
-  telemetry_settings,
-  messageList,
-  includeRawChunks,
-  modelSettings,
-  tools,
-  _internal,
-  mode = 'stream',
-  outputProcessors,
-  returnScorerData,
-  llmAISpan,
-  requireToolApproval,
-  agentId,
-  ...rest
-}: LoopOptions<Tools, OUTPUT>) {
+export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>(
+  agenticLoopWorkflow: ReturnType<typeof createAgenticLoopWorkflow>,
+  {
+    resumeContext,
+    models,
+    logger,
+    runId,
+    idGenerator,
+    telemetry_settings,
+    messageList,
+    includeRawChunks,
+    modelSettings,
+    tools,
+    _internal,
+    mode = 'stream',
+    outputProcessors,
+    returnScorerData,
+    llmAISpan,
+    requireToolApproval,
+    agentId,
+    ...rest
+  }: LoopOptions<Tools, OUTPUT>,
+) {
   let loggerToUse =
     logger ||
     new ConsoleLogger({
@@ -144,7 +148,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       }
     }
   }
-  const baseStream = workflowLoopStream(workflowLoopProps);
+  const baseStream = workflowLoopStream(agenticLoopWorkflow, workflowLoopProps);
 
   // Apply chunk tracing transform to track MODEL_STEP and MODEL_CHUNK spans
   const stream = rest.modelSpanTracker?.wrapStream(baseStream) ?? baseStream;

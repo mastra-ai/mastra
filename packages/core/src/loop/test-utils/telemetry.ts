@@ -2,11 +2,11 @@ import { convertArrayToReadableStream, mockValues } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
-import type { loop } from '../loop';
+import type { LoopFn } from './utils';
 import { MockTracer } from './mockTracer';
 import { createMessageListWithUserMessage, createTestModels, testUsage } from './utils';
 
-export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
+export function telemetryTests({ loopFn, runId }: { loopFn: LoopFn; runId: string }) {
   describe('telemetry', () => {
     let tracer: MockTracer;
 

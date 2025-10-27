@@ -436,34 +436,42 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
   };
 }
 
+interface CreateLLMExecutionStepOptions {
+  telemetry_settings: any;
+}
+
 export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
-  models,
-  _internal,
-  messageId,
-  runId,
-  modelStreamSpan,
   telemetry_settings,
-  tools,
-  toolChoice,
-  messageList,
-  includeRawChunks,
-  modelSettings,
-  providerOptions,
-  options,
-  toolCallStreaming,
-  controller,
-  structuredOutput,
-  outputProcessors,
-  headers,
-  downloadRetries,
-  downloadConcurrency,
-  processorStates,
-}: OuterLLMRun<Tools, OUTPUT>) {
+}: CreateLLMExecutionStepOptions) {
   return createStep({
     id: 'llm-execution',
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
-    execute: async ({ inputData, bail, tracingContext }) => {
+    execute: async ({ inputData, bail, tracingContext, state, runtimeContext }) => {
+      // Access dynamic data from workflow state (shared across nested workflows)
+      const {
+        models,
+        messageId,
+        runId,
+        tools,
+        toolChoice,
+        messageList,
+        modelSettings,
+        providerOptions,
+        options,
+        toolCallStreaming,
+        structuredOutput,
+        outputProcessors,
+        headers,
+        downloadRetries,
+        downloadConcurrency,
+        processorStates,
+        experimental_generateMessageId,
+        controller,
+        _internal,
+        modelStreamSpan,
+      } = state;
+      const includeRawChunks = options?.includeRawChunks;
       let modelResult;
       let warnings: any;
       let request: any;

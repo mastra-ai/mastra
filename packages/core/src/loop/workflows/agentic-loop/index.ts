@@ -10,48 +10,21 @@ import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 import { isControllerOpen } from '../stream';
 
-interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>
-  extends LoopRun<Tools, OUTPUT> {
-  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
-  writer: WritableStream<ChunkType<OUTPUT>>;
+interface CreateAgenticLoopWorkflowOptions {
+  telemetry_settings: any;
+  logger?: any;
+  mastra?: any;
 }
 
-export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
-  params: AgenticLoopParams<Tools, OUTPUT>,
-) {
-  const {
-    models,
-    _internal,
-    messageId,
-    runId,
-    modelStreamSpan,
-    telemetry_settings,
-    toolChoice,
-    messageList,
-    modelSettings,
-    controller,
-    writer,
-    ...rest
-  } = params;
-
-  // Track accumulated steps across iterations to pass to stopWhen
-  const accumulatedSteps: StepResult<Tools>[] = [];
-  // Track previous content to determine what's new in each step
-  let previousContentLength = 0;
-
+export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
+  telemetry_settings,
+  logger,
+  mastra,
+}: CreateAgenticLoopWorkflowOptions) {
   const agenticExecutionWorkflow = createAgenticExecutionWorkflow<Tools, OUTPUT>({
-    messageId: messageId!,
-    models,
     telemetry_settings,
-    _internal,
-    modelSettings,
-    toolChoice,
-    modelStreamSpan,
-    controller,
-    writer,
-    messageList,
-    runId,
-    ...rest,
+    logger,
+    mastra,
   });
 
   return createWorkflow({
@@ -69,8 +42,20 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       },
     },
   })
-    .dowhile(agenticExecutionWorkflow, async ({ inputData }) => {
+    .dowhile(agenticExecutionWorkflow, async ({ inputData, state, setState, runtimeContext }) => {
       const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
+      // Access dynamic data from workflow state (shared across nested workflows)
+      const {
+        stopWhen,
+        runId,
+        messageList,
+        maxSteps,
+        controller,
+        modelStreamSpan,
+        accumulatedSteps = [],
+        previousContentLength = 0,
+      } = state;
+
       let hasFinishedSteps = false;
 
       const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
@@ -79,7 +64,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
       // Only include new content in this step (content added since the previous iteration)
       const currentContent = allContent.slice(previousContentLength);
-      previousContentLength = allContent.length;
+      const newPreviousContentLength = allContent.length;
 
       const currentStep: StepResult<Tools> = {
         content: currentContent,
@@ -107,14 +92,21 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         providerMetadata: typedInputData.metadata?.providerMetadata,
       };
 
-      accumulatedSteps.push(currentStep);
+      const newAccumulatedSteps = [...accumulatedSteps, currentStep];
+
+      // Update state with new accumulated steps and previous content length
+      setState({
+        ...state,
+        accumulatedSteps: newAccumulatedSteps,
+        previousContentLength: newPreviousContentLength,
+      });
 
       // Only call stopWhen if we're continuing (not on the final step)
-      if (rest.stopWhen && typedInputData.stepResult?.isContinued && accumulatedSteps.length > 0) {
+      if (stopWhen && typedInputData.stepResult?.isContinued && newAccumulatedSteps.length > 0) {
         const conditions = await Promise.all(
-          (Array.isArray(rest.stopWhen) ? rest.stopWhen : [rest.stopWhen]).map(condition => {
+          (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(condition => {
             return condition({
-              steps: accumulatedSteps,
+              steps: newAccumulatedSteps,
             });
           }),
         );

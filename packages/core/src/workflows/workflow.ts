@@ -1978,6 +1978,7 @@ export class Run<
     runtimeContext,
     tracingContext,
     tracingOptions,
+    stateOverride,
   }: {
     resumeData?: z.input<TInput>;
     step?:
@@ -1988,6 +1989,7 @@ export class Run<
     runtimeContext?: RuntimeContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
+    stateOverride?: Partial<z.infer<TState>>;
   } = {}) {
     return this.resumeStreamVNext({
       resumeData,
@@ -1995,6 +1997,7 @@ export class Run<
       runtimeContext,
       tracingContext,
       tracingOptions,
+      stateOverride,
     });
   }
 
@@ -2010,6 +2013,7 @@ export class Run<
     tracingContext,
     tracingOptions,
     forEachIndex,
+    stateOverride,
   }: {
     resumeData?: z.input<TInput>;
     step?:
@@ -2021,6 +2025,7 @@ export class Run<
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     forEachIndex?: number;
+    stateOverride?: Partial<z.infer<TState>>;
   } = {}) {
     this.closeStreamAction = async () => {};
 
@@ -2063,6 +2068,7 @@ export class Run<
           }),
           isVNext: true,
           forEachIndex,
+          stateOverride,
         });
 
         self.executionResults = executionResultsPromise;
@@ -2188,6 +2194,7 @@ export class Run<
       includeResumeLabels?: boolean;
     };
     forEachIndex?: number;
+    stateOverride?: Partial<z.infer<TState>>;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._resume(params);
   }
@@ -2215,6 +2222,7 @@ export class Run<
       includeResumeLabels?: boolean;
     };
     forEachIndex?: number;
+    stateOverride?: Partial<z.infer<TState>>;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -2223,6 +2231,14 @@ export class Run<
 
     if (!snapshot) {
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
+    }
+
+    // Merge stateOverride with snapshot value (workflow state) to allow refreshing execution-specific objects
+    if (params.stateOverride) {
+      snapshot.value = {
+        ...snapshot.value,
+        ...params.stateOverride,
+      };
     }
 
     const snapshotResumeLabel = params.label ? snapshot?.resumeLabels?.[params.label] : undefined;
