@@ -5159,8 +5159,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         const chunks: any[] = [];
 
         const stream = await agent.stream('Hello', {
-          onChunk: (event: any) => {
-            chunks.push(event.chunk);
+          onChunk: chunk => {
+            chunks.push(chunk);
           },
         });
 
