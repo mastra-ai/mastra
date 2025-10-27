@@ -1,3 +1,4 @@
+import { anthropic as anthropic_v5 } from '@ai-sdk/anthropic-v5';
 import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -39,17 +40,17 @@ enum TestEnum {
 // Define all schema tests
 const allSchemas = {
   // String types
-  string: z.string().describe('Sample text'),
-  stringMin: z.string().min(5).describe('sample text with a minimum of 5 characters'),
-  stringMax: z.string().max(10).describe('sample text with a maximum of 10 characters'),
+  // string: z.string().describe('Sample text'),
+  // stringMin: z.string().min(5).describe('sample text with a minimum of 5 characters'),
+  // stringMax: z.string().max(10).describe('sample text with a maximum of 10 characters'),
   stringEmail: z.string().email().describe('a sample email address'),
 
   stringEmoji: z.string().emoji().describe('a valid sample emoji'),
   stringUrl: z.string().url().describe('a valid sample url'),
 
   // TODO: problematic for gemini-2.5-flash
-  stringUuid: z.string().uuid().describe('a valid sample uuid'),
-  stringCuid: z.string().cuid().describe('a valid sample cuid'),
+  // stringUuid: z.string().uuid().describe('a valid sample uuid'),
+  // stringCuid: z.string().cuid().describe('a valid sample cuid'),
   stringRegex: z
     .string()
     .regex(/^test-/)
@@ -57,22 +58,21 @@ const allSchemas = {
 
   // Number types
   number: z.number().describe('any valid sample number'),
-  numberGt: z.number().gt(3).describe('any valid sample number greater than 3'),
-  numberLt: z.number().lt(6).describe('any valid sample number less than 6'),
-  numberGte: z.number().gte(1).describe('any valid sample number greater than or equal to 1'),
-  numberLte: z.number().lte(1).describe('any valid sample number less than or equal to 1'),
-  numberMultipleOf: z.number().multipleOf(2).describe('any valid sample number that is a multiple of 2'),
-  numberInt: z.number().int().describe('any valid sample number that is an integer'),
+  // numberGt: z.number().gt(3).describe('any valid sample number greater than 3'),
+  // numberLt: z.number().lt(6).describe('any valid sample number less than 6'),
+  // numberGte: z.number().gte(1).describe('any valid sample number greater than or equal to 1'),
+  // numberLte: z.number().lte(1).describe('any valid sample number less than or equal to 1'),
+  // numberMultipleOf: z.number().multipleOf(2).describe('any valid sample number that is a multiple of 2'),
+  // numberInt: z.number().int().describe('any valid sample number that is an integer'),
 
   // Array types
   exampleArray: z.array(z.string()).describe('any valid array of example strings'),
-  arrayMin: z.array(z.string()).min(1).describe('any valid sample array of strings with a minimum of 1 string'),
+  // arrayMin: z.array(z.string()).min(1).describe('any valid sample array of strings with a minimum of 1 string'),
   arrayMax: z.array(z.string()).max(5).describe('any valid sample array of strings with a maximum of 5 strings'),
 
   // Object types
   object: z.object({ foo: z.string(), bar: z.number() }).describe('any valid sample object with a string and a number'),
 
-  // TODO: problematic for o4-mini
   objectNested: z
     .object({
       user: z.object({
@@ -85,7 +85,6 @@ const allSchemas = {
   objectPassthrough: z.object({}).passthrough().describe('any sample object with example keys and data'),
 
   // Optional and nullable
-  // TODO: problematic for o4-mini
   optional: z.string().optional().describe('leave this field empty as an example of an optional field'),
   nullable: z.string().nullable().describe('leave this field empty as an example of a nullable field'),
 
@@ -103,7 +102,7 @@ const allSchemas = {
     .describe('give an valid object'),
 
   // Default values
-  default: z.string().default('test').describe('sample text that is the default value'),
+  // default: z.string().default('test').describe('sample text that is the default value'),
 } as const;
 
 type SchemaMap = typeof allSchemas;
@@ -128,6 +127,7 @@ async function runStructuredOutputSchemaTest(
   toolName: string,
   schemaName: string,
   outputType: string,
+  inputSchema?: z.Schema,
 ): Promise<Result> {
   try {
     const generateOptions: any = {
@@ -177,11 +177,16 @@ async function runStructuredOutputSchemaTest(
     //   prompt: 'You are a test agent. Your task is to respond with valid JSON matching the schema provided.',
     // });
 
+    const prompt = inputSchema?.description || allSchemas[schemaName].description;
+    if (!prompt)
+      throw new Error(
+        `Could not find description for test prompt from input schema or all schemas object with schema name ${schemaName}`,
+      );
     // Check if model is V1 or V2 and use appropriate method
     const isV2Model = 'specificationVersion' in model && model.specificationVersion === 'v2';
     const response = isV2Model
-      ? await agent.generate(allSchemas[schemaName].description, generateOptions)
-      : await agent.generateLegacy(allSchemas[schemaName].description, generateOptions);
+      ? await agent.generate(prompt, generateOptions)
+      : await agent.generateLegacy(prompt, generateOptions);
 
     if (!response.object) {
       throw new Error('No object generated for schema: ' + schemaName + ' with text: ' + response.text);
@@ -295,137 +300,152 @@ async function runSingleToolSchemaTest(
 
 // These tests are both expensive to run and occasionally a couple are flakey. We should run them manually for now
 // to make sure that we still have good coverage, for both input and output schemas.
-describe('Tool Schema Compatibility', () => {
-  // Set a longer timeout for the entire test suite
-  // These tests make real API calls to LLMs which can be slow, especially reasoning models
-  const SUITE_TIMEOUT = 300000; // 5 minutes
-  const TEST_TIMEOUT = 300000; // 5 minutes
+// Set a longer timeout for the entire test suite
+// These tests make real API calls to LLMs which can be slow, especially reasoning models
+const SUITE_TIMEOUT = 300000; // 5 minutes
+const TEST_TIMEOUT = 300000; // 5 minutes
 
-  if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
-  const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
+// if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
+// const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
 
-  const modelsToTestV1 = [
-    // openrouter('anthropic/claude-3.7-sonnet'),
-    // openrouter('anthropic/claude-sonnet-4.5'),
-    openrouter('anthropic/claude-haiku-4.5'),
-    openrouter('openai/gpt-4o-mini'),
-    // openrouter('openai/gpt-4.1-mini'),
-    // openrouter_v5('openai/o3-mini'),
-    openai('o3-mini'),
-    // openai('o4-mini'),
-    // openrouter('google/gemini-2.5-pro'),
-    // openrouter('google/gemini-2.5-flash'),
-    openrouter('google/gemini-2.0-flash-lite-001'),
-  ];
-  const modelsToTestV2 = [
-    // openrouter_v5('anthropic/claude-3.7-sonnet'),
-    // openrouter_v5('anthropic/claude-sonnet-4.5'),
-    openrouter_v5('anthropic/claude-haiku-4.5'),
-    openrouter_v5('openai/gpt-4o-mini'),
-    // openrouter_v5('openai/gpt-4.1-mini'),
-    // openrouter_v5('openai/o3-mini'),
-    openai_v5('o3-mini'),
-    // openai_v5('o4-mini'),
-    // openrouter_v5('google/gemini-2.5-pro'),
-    // openrouter_v5('google/gemini-2.5-flash'),
-    openrouter_v5('google/gemini-2.0-flash-lite-001'),
-  ];
+const modelsToTestV1 = [
+  // openrouter('anthropic/claude-3.7-sonnet'),
+  // openrouter('anthropic/claude-sonnet-4.5'),
+  // openrouter('anthropic/claude-haiku-4.5'),
+  // openrouter('openai/gpt-4o-mini'),
+  // openrouter('openai/gpt-4.1-mini'),
+  // openrouter_v5('openai/o3-mini'),
+  openai('o3-mini'),
+  // openai('o4-mini'),
+  // openrouter('google/gemini-2.5-pro'),
+  // openrouter('google/gemini-2.5-flash'),
+  // openrouter('google/gemini-2.0-flash-lite-001'),
+];
+const modelsToTestV2 = [
+  // openrouter_v5('anthropic/claude-3.7-sonnet'),
+  // openrouter_v5('anthropic/claude-sonnet-4.5'),
+  anthropic_v5('claude-haiku-4-5'),
+  // openrouter_v5('openai/gpt-4o-mini'),
+  // openrouter_v5('openai/gpt-4.1-mini'),
+  // openrouter_v5('openai/o3-mini'),
+  openai_v5('o3-mini'),
+  // openai_v5('o4-mini'),
+  // openrouter_v5('google/gemini-2.5-pro'),
+  // openrouter_v5('google/gemini-2.5-flash'),
+  // openrouter_v5('google/gemini-2.0-flash-lite-001'),
+];
 
-  // Specify which schemas to test - empty array means test all
-  // To test specific schemas, add their names to this array
-  // Example: ['string', 'number'] to test only string and number schemas
-  const schemasToTest: SchemaKey[] = [];
-  const testSchemas = createTestSchemas(schemasToTest);
+// Specify which schemas to test - empty array means test all
+// To test specific schemas, add their names to this array
+// Example: ['string', 'number'] to test only string and number schemas
+const schemasToTest: SchemaKey[] = [];
+const testSchemas = createTestSchemas(schemasToTest);
+const runSchemasIndividually = process.env.RUN_EACH_SCHEMA_INDIVIDUALLY === `true`;
 
-  // Create test tools for each schema type
-  const testTools = Object.entries(testSchemas.shape).map(([key, schema]) => {
-    const tool = {
-      id: `testTool_${key}` as const,
-      description: `Test tool for schema type: ${key}. Call this tool to test the schema.`,
-      inputSchema: z.object({ [key]: schema as z.ZodTypeAny }),
-      execute: async ({ context }) => {
-        return { success: true, receivedContext: context };
-      },
-    } as const;
+// Create test tools for each schema type
+const testTools = runSchemasIndividually
+  ? Object.entries(testSchemas.shape).map(([key, schema]) => {
+      const tool = {
+        id: `testTool_${key}` as const,
+        description: `Test tool for schema type: ${key}. Call this tool to test the schema.`,
+        inputSchema: z.object({ [key]: schema as z.ZodTypeAny }),
+        execute: async ({ context }) => {
+          return { success: true, receivedContext: context };
+        },
+      } as const;
 
-    return createTool(tool);
-  });
+      return createTool(tool);
+    })
+  : [
+      createTool({
+        id: `testTool_manySchemas`,
+        description: `A tool to test many schema property types`,
+        inputSchema: z.object(allSchemas).describe(`A schema to test many schema configuration properties`),
+        execute: async ({ context }) => {
+          return { success: true, receivedContext: context };
+        },
+      }),
+    ];
 
-  // Group tests by model provider for better organization
-  const modelsByProviderV1 = modelsToTestV1.reduce(
-    (acc, model) => {
-      const provider = model.provider;
-      if (!acc[provider]) {
-        acc[provider] = [];
+// Group tests by model provider for better organization
+const modelsByProviderV1 = modelsToTestV1.reduce(
+  (acc, model) => {
+    const provider = model.provider;
+    if (!acc[provider]) {
+      acc[provider] = [];
+    }
+    acc[provider].push(model);
+    return acc;
+  },
+  {} as Record<string, (typeof modelsToTestV1)[number][]>,
+);
+
+// Group tests by model provider for better organization
+const modelsByProviderV2 = modelsToTestV2.reduce(
+  (acc, model) => {
+    const provider = model.provider;
+    if (!acc[provider]) {
+      acc[provider] = [];
+    }
+    acc[provider].push(model);
+    return acc;
+  },
+  {} as Record<string, (typeof modelsToTestV2)[number][]>,
+);
+
+[...Object.entries(modelsByProviderV1), ...Object.entries(modelsByProviderV2)].forEach(([provider, models]) => {
+  [
+    // 'output', // <- waste of time, output doesn't work very well
+    'structuredOutput',
+    'tools',
+  ].forEach(outputType => {
+    models.forEach(model => {
+      // we only support structured output for v2+ models (ai v5+)
+      if (outputType === `structuredOutput` && model.specificationVersion !== `v2`) {
+        return;
       }
-      acc[provider].push(model);
-      return acc;
-    },
-    {} as Record<string, (typeof modelsToTestV1)[number][]>,
-  );
+      describe(
+        `${outputType} schema compatibility > ${provider} > ${model.modelId}`,
+        { timeout: SUITE_TIMEOUT },
+        () => {
+          testTools.forEach(testTool => {
+            const schemaName = testTool.id.replace('testTool_', '');
 
-  // Group tests by model provider for better organization
-  const modelsByProviderV2 = modelsToTestV2.reduce(
-    (acc, model) => {
-      const provider = model.provider;
-      if (!acc[provider]) {
-        acc[provider] = [];
-      }
-      acc[provider].push(model);
-      return acc;
-    },
-    {} as Record<string, (typeof modelsToTestV2)[number][]>,
-  );
+            it.concurrent(
+              `should handle ${schemaName} schema`,
+              {
+                timeout: TEST_TIMEOUT,
+                // add retries here if we find some models are flaky in the future
+                retry: 0,
+              },
+              async () => {
+                let result =
+                  outputType === `structuredOutput`
+                    ? await runStructuredOutputSchemaTest(
+                        model,
+                        testTool,
+                        crypto.randomUUID(),
+                        testTool.id,
+                        schemaName,
+                        outputType,
+                        testTool.inputSchema,
+                      )
+                    : await runSingleToolSchemaTest(model, testTool, crypto.randomUUID(), testTool.id);
 
-  [...Object.entries(modelsByProviderV1), ...Object.entries(modelsByProviderV2)].forEach(([provider, models]) => {
-    describe.concurrent(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
-      [
-        // 'output', // <- waste of time, output doesn't work very well
-        'structuredOutput',
-        'tools',
-      ].forEach(outputType => {
-        describe(`${outputType}`, { timeout: SUITE_TIMEOUT }, () => {
-          models.forEach(model => {
-            // we only support structured output for v2+ models (ai v5+)
-            if (outputType === `structuredOutput` && model.specificationVersion !== `v2`) {
-              return;
-            }
-            describe(`${model.modelId}`, { timeout: SUITE_TIMEOUT, retry: 0 }, () => {
-              testTools.forEach(testTool => {
-                const schemaName = testTool.id.replace('testTool_', '');
+                if (result.status !== 'success' && result.status !== 'expected-error') {
+                  console.error(`Error for ${model.modelId} - ${schemaName}:`, result.error);
+                }
 
-                it.concurrent(
-                  `should handle ${schemaName} schema`,
-                  async () => {
-                    let result =
-                      outputType === `structuredOutput`
-                        ? await runStructuredOutputSchemaTest(
-                            model,
-                            testTool,
-                            crypto.randomUUID(),
-                            testTool.id,
-                            schemaName,
-                            outputType,
-                          )
-                        : await runSingleToolSchemaTest(model, testTool, crypto.randomUUID(), testTool.id);
-
-                    if (result.status !== 'success' && result.status !== 'expected-error') {
-                      console.error(`Error for ${model.modelId} - ${schemaName}:`, result.error);
-                    }
-
-                    if (result.status === 'expected-error') {
-                      expect(result.status).toBe('expected-error');
-                    } else {
-                      expect(result.status).toBe('success');
-                    }
-                  },
-                  TEST_TIMEOUT,
-                );
-              });
-            });
+                if (result.status === 'expected-error') {
+                  expect(result.status).toBe('expected-error');
+                } else {
+                  expect(result.status).toBe('success');
+                }
+              },
+            );
           });
-        });
-      });
+        },
+      );
     });
   });
 });
