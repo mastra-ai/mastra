@@ -2,6 +2,8 @@
 '@mastra/schema-compat': patch
 ---
 
-Fix Zod v4 toJSONSchema bug with z.record() schemas by adding fallback to v3 converter
+Fix Zod v4 toJSONSchema bug with z.record() single-argument form
 
-Zod v4 `toJSONSchema()` method has a bug when processing schemas containing `z.record()` fields, throwing "Cannot read properties of undefined (reading '_zod')" during recursive schema processing. This fix adds a try-catch wrapper that falls back to the v3 zod-to-json if Zod v4's converter fails.
+Zod v4 has a bug in the single-argument form of `z.record(valueSchema)` where it incorrectly assigns the value schema to `keyType` instead of `valueType`, leaving `valueType` undefined. This causes `toJSONSchema()` to throw "Cannot read properties of undefined (reading '_zod')" when processing schemas containing `z.record()` fields.
+
+This fix patches affected schemas before conversion by detecting records with missing `valueType` and correctly assigning the schema to `valueType` while setting `keyType` to `z.string()` (the default). The patch recursively handles nested schemas including those wrapped in `.optional()`, `.nullable()`, arrays, unions, and objects.

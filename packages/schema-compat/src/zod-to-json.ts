@@ -5,6 +5,71 @@ import type { ZodType as ZodSchemaV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import zodToJsonSchemaOriginal from 'zod-to-json-schema';
 
+/**
+ * Recursively patch Zod v4 record schemas that are missing valueType.
+ * This fixes a bug in Zod v4 where z.record(valueSchema) doesn't set def.valueType.
+ * The single-arg form should set valueType but instead only sets keyType.
+ */
+function patchRecordSchemas(schema: any): any {
+  if (!schema || typeof schema !== 'object') return schema;
+
+  // Check both def locations (direct and nested in _zod)
+  const zodDef = schema._zod?.def;
+  const directDef = schema.def;
+
+  // Fix record schemas with missing valueType
+  if (zodDef?.type === 'record' && zodDef.keyType && !zodDef.valueType) {
+    // The bug: z.record(valueSchema) puts the value in keyType instead of valueType
+    // Fix: move it to valueType and set keyType to string (the default)
+    zodDef.valueType = zodDef.keyType;
+    zodDef.keyType = (z as any).string();
+  }
+
+  if (directDef?.type === 'record' && directDef.keyType && !directDef.valueType) {
+    directDef.valueType = directDef.keyType;
+    directDef.keyType = (z as any).string();
+  }
+
+  // Recursively patch nested schemas
+  const def = zodDef || directDef;
+  if (!def) return schema;
+
+  if (def.type === 'object' && def.shape) {
+    const shape = typeof def.shape === 'function' ? def.shape() : def.shape;
+    for (const key in shape) {
+      patchRecordSchemas(shape[key]);
+    }
+  }
+
+  if (def.type === 'array' && def.element) {
+    patchRecordSchemas(def.element);
+  }
+
+  if (def.type === 'union' && def.options) {
+    def.options.forEach(patchRecordSchemas);
+  }
+
+  if (def.type === 'record') {
+    if (def.keyType) patchRecordSchemas(def.keyType);
+    if (def.valueType) patchRecordSchemas(def.valueType);
+  }
+
+  // Handle optional, nullable, and other wrapper types
+  if (def.type === 'optional' && def.innerType) {
+    patchRecordSchemas(def.innerType);
+  }
+
+  if (def.type === 'nullable' && def.innerType) {
+    patchRecordSchemas(def.innerType);
+  }
+
+  if (def.type === 'default' && def.innerType) {
+    patchRecordSchemas(def.innerType);
+  }
+
+  return schema;
+}
+
 export function zodToJsonSchema(
   zodSchema: ZodSchemaV3 | ZodSchemaV4,
   target: Targets = 'jsonSchema7',
@@ -13,27 +78,21 @@ export function zodToJsonSchema(
   const fn = 'toJSONSchema';
 
   if (fn in z) {
-    // Wrap in try-catch and fall back to v3 converter when it fails
-    try {
-      return (z as any)[fn](zodSchema, {
-        unrepresentable: 'any',
-        override: (ctx: any) => {
-          // Handle both Zod v4 structures: _def directly or nested in _zod
-          const def = ctx.zodSchema?._def || ctx.zodSchema?._zod?.def;
-          // Check for date type using both possible property names
-          if (def && (def.typeName === 'ZodDate' || def.type === 'date')) {
-            ctx.jsonSchema.type = 'string';
-            ctx.jsonSchema.format = 'date-time';
-          }
-        },
-      }) as JSONSchema7;
-    } catch {
-      // Fall back to v3 converter if v4 fails
-      return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
-        $refStrategy: strategy,
-        target,
-      }) as JSONSchema7;
-    }
+    // Zod v4 path - patch record schemas before converting
+    patchRecordSchemas(zodSchema);
+
+    return (z as any)[fn](zodSchema, {
+      unrepresentable: 'any',
+      override: (ctx: any) => {
+        // Handle both Zod v4 structures: _def directly or nested in _zod
+        const def = ctx.zodSchema?._def || ctx.zodSchema?._zod?.def;
+        // Check for date type using both possible property names
+        if (def && (def.typeName === 'ZodDate' || def.type === 'date')) {
+          ctx.jsonSchema.type = 'string';
+          ctx.jsonSchema.format = 'date-time';
+        }
+      },
+    }) as JSONSchema7;
   } else {
     // Zod v3 path - use the original converter
     return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
