@@ -25,11 +25,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/react": "workspace:*",
     "@mastra/playground-ui": "workspace:^",
-    "@radix-ui/react-scroll-area": "^1.2.9",
-    "@radix-ui/react-slot": "^1.2.3",
-    "@radix-ui/react-tooltip": "^1.2.7",
     "@tanstack/react-query": "^5.81.5",
-    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.522.0",
     "next-themes": "^0.4.6",
@@ -37,7 +33,6 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router": "^7.6.3",
-    "sonner": "^1.7.4",
     "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
