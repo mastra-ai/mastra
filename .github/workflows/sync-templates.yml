@@ -42,7 +42,7 @@ jobs:
         with:
           node-version: '22.x'
           registry-url: 'https://registry.yarnpkg.com'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: npm install @octokit/rest fs-extra dotenv --registry=https://registry.yarnpkg.com
