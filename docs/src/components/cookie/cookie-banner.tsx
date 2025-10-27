@@ -1,8 +1,49 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react";
+import useIsBrowser from "@docusaurus/useIsBrowser";
 import { Button } from "../ui/button";
 
-import { useFeatureFlagEnabled } from "posthog-js/react";
-import { T } from "gt-next/client";
+declare global {
+  interface Window {
+    gtag?: (...args: any[]) => void;
+    dataLayer?: any[];
+  }
+}
+
+// Simple EU timezone detection (not 100% accurate but good enough for cookie consent)
+function detectEUTimezone(): boolean {
+  const euTimezones = [
+    "Europe/London",
+    "Europe/Paris",
+    "Europe/Berlin",
+    "Europe/Madrid",
+    "Europe/Rome",
+    "Europe/Amsterdam",
+    "Europe/Brussels",
+    "Europe/Vienna",
+    "Europe/Stockholm",
+    "Europe/Copenhagen",
+    "Europe/Oslo",
+    "Europe/Helsinki",
+    "Europe/Warsaw",
+    "Europe/Prague",
+    "Europe/Budapest",
+    "Europe/Athens",
+    "Europe/Bucharest",
+    "Europe/Sofia",
+    "Europe/Zagreb",
+    "Europe/Dublin",
+    "Europe/Lisbon",
+  ];
+
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return euTimezones.some((tz) => timezone.startsWith(tz.split("/")[0]));
+  } catch {
+    // If timezone detection fails, show banner to be safe
+    return true;
+  }
+}
 
 export function CookieBanner({
   onConsentChange,
@@ -10,7 +51,16 @@ export function CookieBanner({
   onConsentChange: (consent: boolean) => void;
 }) {
   const [showBanner, setShowBanner] = useState(false);
-  const isEU = useFeatureFlagEnabled("cookie-banner");
+  const isBrowser = useIsBrowser();
+
+  // Detect if user is in EU timezone
+  const [isEU, setIsEU] = useState<boolean | undefined>(undefined);
+
+  useEffect(() => {
+    if (isBrowser) {
+      setIsEU(detectEUTimezone());
+    }
+  }, [isBrowser]);
 
   useEffect(() => {
     if (isEU === undefined) return;
@@ -26,8 +76,9 @@ export function CookieBanner({
         });
         localStorage.setItem("cookie-consent", "true");
         onConsentChange(true);
+      } else {
+        onConsentChange(storedConsent === "true");
       }
-      onConsentChange(storedConsent === "true");
       return;
     }
 
@@ -73,28 +124,26 @@ export function CookieBanner({
   if (!showBanner) return null;
 
   return (
-    <T id="components.cookie_banner.0">
-      <div className="fixed bottom-8 right-5 z-50 flex w-[322px] items-center justify-center rounded-xl dark:border-neutral-700 border bg-white dark:bg-black p-4">
-        <div>
-          <p className="mb-4 font-sans dark:text-white text-sm">
-            We use tracking cookies to understand how you use the product and
-            help us improve it. Please accept cookies to help us improve.
-          </p>
-          <Button size={"slim"} type="button" onClick={handleAccept}>
-            Accept cookies
-          </Button>
-          <span> </span>
-          <Button
-            variant={"secondary"}
-            className="dark:text-white"
-            size={"slim"}
-            type="button"
-            onClick={handleReject}
-          >
-            Decline cookies
-          </Button>
-        </div>
+    <div className="fixed bottom-8 right-5 z-50 flex w-[322px] items-center justify-center rounded-xl dark:border-neutral-700 border bg-white dark:bg-black p-4">
+      <div>
+        <p className="mb-4 font-sans dark:text-white text-sm">
+          We use tracking cookies to understand how you use the product and help
+          us improve it. Please accept cookies to help us improve.
+        </p>
+        <Button size={"slim"} type="button" onClick={handleAccept}>
+          Accept cookies
+        </Button>
+        <span> </span>
+        <Button
+          variant={"secondary"}
+          className="dark:text-white"
+          size={"slim"}
+          type="button"
+          onClick={handleReject}
+        >
+          Decline cookies
+        </Button>
       </div>
-    </T>
+    </div>
   );
 }

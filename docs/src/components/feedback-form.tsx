@@ -1,21 +1,20 @@
-"use client";
-
-import { Button } from "@/components/ui/button";
+import { Button } from "./ui/button";
+import { Textarea } from "./ui/textarea";
+import { cn } from "../css/utils";
+import { zodResolver } from "@hookform/resolvers/zod";
+import React, { useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import {
   Form,
   FormControl,
   FormField,
   FormItem,
   FormMessage,
-} from "@/components/ui/forms";
-import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { T } from "gt-next/client";
-import { X } from "lucide-react";
-import React, { useState } from "react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
+} from "./ui/forms";
+import { Label } from "./ui/label";
+import { CancelIcon } from "./copy-page-icons";
+import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 
 const feedbackSchema = z.object({
   feedback: z.string().min(5, "Please enter your feedback"),
@@ -33,9 +32,74 @@ interface FeedbackFormProps {
 }
 
 const ratings = [
-  { rating: 3, emoji: "😊", label: "Helpful" },
-  { rating: 2, emoji: "😐", label: "Somewhat helpful" },
-  { rating: 1, emoji: "😕", label: "Not helpful" },
+  {
+    rating: 3,
+    emoji: (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <path d="M18 13a6 6 0 0 1-6 5 6 6 0 0 1-6-5h12Z" />
+        <line x1="9" x2="9.01" y1="9" y2="9" />
+        <line x1="15" x2="15.01" y1="9" y2="9" />
+      </svg>
+    ),
+    label: "Helpful",
+  },
+  {
+    rating: 2,
+    emoji: (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <line x1="8" x2="16" y1="15" y2="15" />
+        <line x1="9" x2="9.01" y1="9" y2="9" />
+        <line x1="15" x2="15.01" y1="9" y2="9" />
+      </svg>
+    ),
+    label: "Somewhat helpful",
+  },
+  {
+    rating: 1,
+    emoji: (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <path d="M16 16s-1.5-2-4-2-4 2-4 2" />
+        <path d="M7.5 8 10 9" />
+        <path d="m14 9 2.5-1" />
+        <path d="M9 10h.01" />
+        <path d="M15 10h.01" />
+      </svg>
+    ),
+    label: "Not helpful",
+  },
 ];
 
 export const FeedbackForm = ({
@@ -43,6 +107,11 @@ export const FeedbackForm = ({
   onClose,
   currentPage,
 }: FeedbackFormProps) => {
+  const { siteConfig } = useDocusaurusContext();
+  const { mastraWebsite } = siteConfig.customFields as {
+    mastraWebsite?: string;
+  };
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<
     "idle" | "success" | "error"
@@ -67,12 +136,11 @@ export const FeedbackForm = ({
     setErrorMessage("");
 
     try {
-      const url =
-        process.env.NODE_ENV === "production"
-          ? "/docs/api/feedback"
-          : "/api/feedback";
+      if (!mastraWebsite) {
+        throw new Error("Website URL is not configured");
+      }
 
-      const response = await fetch(url, {
+      const response = await fetch(mastraWebsite, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -112,50 +180,49 @@ export const FeedbackForm = ({
   if (!isOpen) return null;
 
   return (
-    <div className="mt-4 p-4 border border-gray-200 dark:border-borders-1 rounded-lg bg-white dark:bg-[var(--primary-bg)]">
+    <div className="p-4 pt-2 px-0 border max-h-[400px] border-gray-200 dark:border-borders-1 rounded-[10px] bg-white dark:bg-[var(--primary-bg)]">
       {submitStatus === "success" ? (
         <div className="text-center py-4">
           <p className="text-sm text-black dark:text-white">
-            <T id="feedback.success.message">
-              Thank you! Your feedback has been submitted.
-            </T>
+            Thank you! Your feedback has been submitted
           </p>
         </div>
       ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            <div className="flex items-center justify-between mb-4">
-              <label className="text-sm font-medium text-gray-900 dark:text-white">
-                <T id="feedback.rating_label">Was this helpful?</T>
-              </label>
+            <div className="flex items-center px-4 pb-2 border-b-[0.5px] border-(--border) justify-between ">
+              <Label htmlFor="feedback" className="font-semibold">
+                Was this helpful?
+              </Label>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={onClose}
-                className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
+                className="h-6 w-6 p-0 rounded-full hover:bg-(--mastra-surface-3) transition-colors"
               >
-                <X className="h-4 w-4" />
+                <CancelIcon className="w-4 h-4" />
               </Button>
             </div>
 
-            <div className="flex gap-3 flex-col items-start">
-              <div className="flex gap-1 flex-shrink-0">
+            <div className="flex gap-3 py-3 px-4 flex-col items-start">
+              <div className="flex gap-1 items-center justify-center flex-shrink-0">
                 {ratings.map(({ rating, emoji, label }) => (
-                  <button
+                  <Button
+                    variant="ghost"
                     key={rating}
                     type="button"
                     onClick={() => form.setValue("rating", rating)}
                     className={cn(
-                      "w-8 h-8 focus-visible:outline-2 focus-visible:outline-accent-green rounded-full flex items-center justify-center text-lg transition-all hover:scale-110",
+                      "w-8 h-8 rounded-full flex hover:bg-(--mastra-surface-3)  items-center justify-center text-lg transition-all hover:scale-110",
                       currentRating === rating
-                        ? " ring-2 ring-accent-green"
+                        ? " ring-2 ring-(--mastra-green-accent)"
                         : "",
                     )}
                     title={label}
                   >
                     {emoji}
-                  </button>
+                  </Button>
                 ))}
               </div>
 
@@ -163,11 +230,11 @@ export const FeedbackForm = ({
                 control={form.control}
                 name="feedback"
                 render={({ field }) => (
-                  <FormItem className="flex-1">
+                  <FormItem className="flex-1 w-full">
                     <FormControl>
                       <Textarea
                         placeholder="Your feedback..."
-                        className="min-h-[60px] text-black focus:outline focus:outline-accent-green dark:text-white resize-none text-sm"
+                        className="min-h-[60px] w-full text-black  dark:text-white resize-none text-sm"
                         {...field}
                       />
                     </FormControl>
@@ -176,25 +243,23 @@ export const FeedbackForm = ({
                 )}
               />
 
-              <button
+              <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="dark:bg-[#121212] focus-visible:outline-2 focus-visible:outline-accent-green bg-[var(--light-color-surface-3)] w-full rounded-md hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]"
+                className="dark:bg-[#121212] focus-visible:outline-2 focus-visible:outline-accent-green bg-(--mastra-surface-3) w-full rounded-[10px] hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]"
               >
                 {isSubmitting ? (
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 ) : (
                   "Send"
                 )}
-              </button>
+              </Button>
             </div>
 
             {errorMessage && (
               <div className="mt-3 p-2 rounded bg-red-50 dark:bg-red-900/20">
                 <p className="text-xs text-red-500 dark:text-red-400">
-                  <T id="feedback.error">
-                    Something went wrong. Please try again.
-                  </T>
+                  Something went wrong. Please try again
                   {errorMessage && (
                     <span className="block mt-1 opacity-75">
                       {errorMessage}
