@@ -15,7 +15,7 @@ Mastra integrates with [Vercel's AI SDK](https://sdk.vercel.ai) to support model
 
 When creating agents in Mastra, you can specify any AI SDK-supported model.
 
-```typescript {6} filename="agents/weather-agent.ts" copy
+```typescript {6} title="agents/weather-agent.ts" copy
 import { Agent } from "@mastra/core/agent";
 
 export const weatherAgent = new Agent({
