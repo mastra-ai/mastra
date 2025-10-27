@@ -1,6 +1,6 @@
 import { AgentWorkingMemory } from './agent-working-memory';
 import { AgentMemoryConfig } from './agent-memory-config';
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { ExternalLink } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
@@ -17,8 +17,6 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   const { threadInput: chatInputValue } = useThreadInput();
   const { paths, navigate } = useLinkComponent();
 
-  const [searchScope, setSearchScope] = useState<string | null>(null);
-
   // Get memory config to check if semantic recall is enabled
   const { data } = useMemoryConfig(agentId);
 
@@ -27,24 +25,11 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   const isSemanticRecallEnabled = Boolean(config?.semanticRecall);
 
   // Get memory search hook
-  const { searchMemory } = useMemorySearch({
+  const { mutateAsync: searchMemory, data: searchMemoryData } = useMemorySearch({
     agentId: agentId || '',
     resourceId: agentId || '', // In playground, agentId is the resourceId
     threadId,
   });
-
-  // Wrap searchMemory to always pass lastMessages: 0 for semantic-only search
-  const searchSemanticRecall = useCallback(
-    async (query: string) => {
-      const result = await searchMemory(query, { lastMessages: 0 });
-      // Update scope from response
-      if (result.searchScope) {
-        setSearchScope(result.searchScope);
-      }
-      return result;
-    },
-    [searchMemory],
-  );
 
   // Handle clicking on a search result to scroll to the message
   const handleResultClick = useCallback(
@@ -68,6 +53,8 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
     [agentId, threadId, navigate],
   );
 
+  const searchScope = searchMemoryData?.searchScope;
+
   return (
     <div className="flex flex-col h-full">
       {/* Memory Search Section */}
@@ -75,7 +62,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
         <div className="mb-2">
           <div className="flex items-center gap-2 mb-2">
             <h3 className="text-sm font-medium text-icon5">Semantic Recall</h3>
-            {searchScope && (
+            {searchMemoryData?.searchScope && (
               <span
                 className={cn(
                   'text-xs font-medium px-2 py-0.5 rounded',
@@ -92,7 +79,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
         </div>
         {isSemanticRecallEnabled ? (
           <MemorySearch
-            searchMemory={searchSemanticRecall}
+            searchMemory={query => searchMemory({ searchQuery: query, memoryConfig: { lastMessages: 0 } })}
             onResultClick={handleResultClick}
             currentThreadId={threadId}
             className="w-full"
