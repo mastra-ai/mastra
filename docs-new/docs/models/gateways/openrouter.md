@@ -1,6 +1,6 @@
 ---
-title: 'OpenRouter '
-description: 'Use AI models through OpenRouter.'
+title: "OpenRouter "
+description: "Use AI models through OpenRouter."
 ---
 
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
@@ -12,12 +12,12 @@ Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 ## Usage
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'openrouter/anthropic/claude-3.5-haiku',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "openrouter/anthropic/claude-3.5-haiku",
 });
 ```
 

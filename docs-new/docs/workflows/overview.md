@@ -1,6 +1,7 @@
 ---
-title: 'Handling Complex LLM Operations '
-description: 'Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more.'
+title: "Overview"
+description: "Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more."
+sidebar_position: 1
 ---
 
 # Workflows overview
@@ -35,7 +36,7 @@ This structure provides full type safety and runtime validation, ensuring data i
 
 ### Visual testing
 
-Use the [Playground](../server-db/local-dev-playground#workflows) to visualize workflow execution in real time. It shows which steps are running, completed, or suspended.
+Use the [Playground](/docs/getting-started/studio#workflows) to visualize workflow execution in real time. It shows which steps are running, completed, or suspended.
 
 ## Getting started
 
@@ -48,8 +49,8 @@ npm install @mastra/core
 Import the necessary functions from the `workflows` subpath:
 
 ```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 ```
 
 ### Create step
@@ -149,21 +150,21 @@ export const testWorkflow = createWorkflow({
 Register a workflow using `workflows` in the main Mastra instance:
 
 ```typescript {8} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
-import { LibSQLStore } from '@mastra/libsql';
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
 
-import { testWorkflow } from './workflows/test-workflow';
+import { testWorkflow } from "./workflows/test-workflow";
 
 export const mastra = new Mastra({
   workflows: { testWorkflow },
   storage: new LibSQLStore({
     // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
-    url: ':memory:',
+    url: ":memory:",
   }),
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
 });
 ```
@@ -176,28 +177,28 @@ There are two ways to run and test workflows.
 
 With the Mastra Dev Server running you can run the workflow from the Mastra Playground by visiting [http://localhost:4111/workflows](http://localhost:4111/workflows) in your browser.
 
-> For more information, see the [Local Dev Playground](../server-db/local-dev-playground) documentation.
+> For more information, see the [Local Dev Playground](/docs/getting-started/studio) documentation.
 
 ### Command line
 
 Create a workflow run instance using `createRunAsync` and `start`:
 
 ```typescript {3,5} filename="src/test-workflow.ts" showLineNumbers copy
-import 'dotenv/config';
+import "dotenv/config";
 
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
-const run = await mastra.getWorkflow('testWorkflow').createRunAsync();
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 const result = await run.start({
   inputData: {
-    city: 'London',
+    city: "London",
   },
 });
 
 console.log(result);
 
-if (result.status === 'success') {
+if (result.status === "success") {
   console.log(result.result.output);
 }
 ```
@@ -279,13 +280,13 @@ The result of running a workflow using either `start()` or `resume()` will look 
 Similar to the run method shown above, workflows can also be streamed:
 
 ```typescript {5} filename="src/test-workflow.ts" showLineNumbers copy
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
-const run = await mastra.getWorkflow('testWorkflow').createRunAsync();
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 const result = await run.stream({
   inputData: {
-    city: 'London',
+    city: "London",
   },
 });
 
@@ -301,17 +302,17 @@ for await (const chunk of result.stream) {
 A workflow can also be watched, allowing you to inspect each event that is emitted.
 
 ```typescript {5} filename="src/test-workflow.ts" showLineNumbers copy
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
-const run = await mastra.getWorkflow('testWorkflow').createRunAsync();
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
-run.watch(event => {
+run.watch((event) => {
   console.log(event);
 });
 
 const result = await run.start({
   inputData: {
-    city: 'London',
+    city: "London",
   },
 });
 ```
@@ -328,4 +329,4 @@ const result = await run.start({
 
 ## Workflows (Legacy)
 
-For legacy workflow documentation, see [Workflows (Legacy)](/docs/workflows-legacy/overview).
+For legacy workflow documentation, see [Creating a Workflow (Legacy)](/docs/examples/workflows_legacy/creating-a-workflow).

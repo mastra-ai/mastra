@@ -1,5 +1,5 @@
 ---
-title: 'Reference: GraphRAG '
+title: "GraphRAG"
 description: Documentation for the GraphRAG class in Mastra, which implements a graph-based approach to retrieval augmented generation.
 ---
 
@@ -10,7 +10,7 @@ The `GraphRAG` class implements a graph-based approach to retrieval augmented ge
 ## Basic Usage
 
 ```typescript
-import { GraphRAG } from '@mastra/rag';
+import { GraphRAG } from "@mastra/rag";
 
 const graphRag = new GraphRAG({
   dimension: 1536,

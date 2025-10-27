@@ -1,6 +1,6 @@
 ---
-title: 'Mastra.getAgents() '
-description: 'Documentation for the `Mastra.getAgents()` method in Mastra, which retrieves all configured agents.'
+title: "Mastra.getAgents() "
+description: "Documentation for the `Mastra.getAgents()` method in Mastra, which retrieves all configured agents."
 ---
 
 # Mastra.getAgents()
@@ -32,4 +32,4 @@ description: "A record of all configured agents, where keys are agent names and 
 ## Related
 
 - [Agents overview](/docs/agents/overview)
-- [Runtime context](/docs/agents/runtime-context)
+- [Runtime context](/docs/server-db/runtime-context)

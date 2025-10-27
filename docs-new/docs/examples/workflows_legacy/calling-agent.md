@@ -1,5 +1,5 @@
 ---
-title: 'Calling an Agent from a Workflow (Legacy) '
+title: "Calling an Agent from a Workflow (Legacy) "
 description: Example of using Mastra to call an AI agent from within a legacy workflow step.
 ---
 
@@ -8,35 +8,35 @@ description: Example of using Mastra to call an AI agent from within a legacy wo
 This example demonstrates how to create a legacy workflow that calls an AI agent to process messages and generate responses, and execute it within a legacy workflow step.
 
 ```ts showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
-import { Agent } from '@mastra/core/agent';
-import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
-import { z } from 'zod';
+import { openai } from "@ai-sdk/openai";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
 
 const penguin = new Agent({
-  name: 'agent skipper',
+  name: "agent skipper",
   instructions: `You are skipper from penguin of madagascar, reply as that`,
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
 });
 
 const newWorkflow = new LegacyWorkflow({
-  name: 'pass message to the workflow',
+  name: "pass message to the workflow",
   triggerSchema: z.object({
     message: z.string(),
   }),
 });
 
 const replyAsSkipper = new LegacyStep({
-  id: 'reply',
+  id: "reply",
   outputSchema: z.object({
     reply: z.string(),
   }),
   execute: async ({ context, mastra }) => {
-    const skipper = mastra?.getAgent('penguin');
+    const skipper = mastra?.getAgent("penguin");
 
     const res = await skipper?.generate(context?.triggerData?.message);
-    return { reply: res?.text || '' };
+    return { reply: res?.text || "" };
   },
 });
 
@@ -48,10 +48,12 @@ const mastra = new Mastra({
   legacy_workflows: { newWorkflow },
 });
 
-const { runId, start } = await mastra.legacy_getWorkflow('newWorkflow').createRun();
+const { runId, start } = await mastra
+  .legacy_getWorkflow("newWorkflow")
+  .createRun();
 
 const runResult = await start({
-  triggerData: { message: 'Give me a run down of the mission to save private' },
+  triggerData: { message: "Give me a run down of the mission to save private" },
 });
 
 console.log(runResult.results);

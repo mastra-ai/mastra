@@ -1,5 +1,5 @@
 ---
-title: 'Reranking with Cohere '
+title: "Reranking with Cohere "
 description: Example of using Mastra to improve document retrieval relevance with Cohere's reranking service.
 ---
 

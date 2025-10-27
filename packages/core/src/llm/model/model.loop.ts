@@ -68,10 +68,6 @@ export class MastraLLMVNext extends MastraBase {
   }
 
   __registerPrimitives(p: MastraPrimitives) {
-    if (p.telemetry) {
-      this.__setTelemetry(p.telemetry);
-    }
-
     if (p.logger) {
       this.__setLogger(p.logger);
     }
@@ -150,7 +146,6 @@ export class MastraLLMVNext extends MastraBase {
     tools = {} as Tools,
     modelSettings,
     toolChoice = 'auto',
-    telemetry_settings,
     threadId,
     resourceId,
     structuredOutput,
@@ -220,10 +215,6 @@ export class MastraLLMVNext extends MastraBase {
         toolChoice,
         modelSettings,
         providerOptions,
-        telemetry_settings: {
-          ...this.experimental_telemetry,
-          ...telemetry_settings,
-        },
         _internal,
         structuredOutput,
         outputProcessors,

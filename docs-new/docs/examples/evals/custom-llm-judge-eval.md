@@ -1,5 +1,5 @@
 ---
-title: 'Real World Countries '
+title: "Real World Countries "
 description: Example of creating a custom LLM-based evaluation metric.
 ---
 
@@ -31,10 +31,10 @@ A custom eval in Mastra can use an LLM to judge the quality of a response based 
 Together, these allow you to define custom evaluation logic that might not be covered by Mastra's built-in metrics.
 
 ```typescript filename="src/mastra/evals/example-real-world-countries.ts" showLineNumbers copy
-import { Metric, type MetricResult } from '@mastra/core';
-import { MastraAgentJudge } from '@mastra/evals/judge';
-import { type LanguageModel } from '@mastra/core/llm';
-import { z } from 'zod';
+import { Metric, type MetricResult } from "@mastra/core";
+import { MastraAgentJudge } from "@mastra/evals/judge";
+import { type LanguageModel } from "@mastra/core/llm";
+import { z } from "zod";
 
 const INSTRUCTIONS = `You are a geography expert. Score how many valid countries are listed in a response, based on the original question.`;
 
@@ -58,7 +58,7 @@ Return:
 
 class WorldCountryJudge extends MastraAgentJudge {
   constructor(model: LanguageModel) {
-    super('WorldCountryJudge', INSTRUCTIONS, model);
+    super("WorldCountryJudge", INSTRUCTIONS, model);
   }
 
   async evaluate(query: string, response: string): Promise<MetricResult> {
@@ -120,13 +120,13 @@ Extends Mastra’s `Metric` class and acts as the main evaluation entry point. I
 This example shows a strong alignment between the response and the evaluation criteria. The metric assigns a high score and includes supporting details to explain why the output meets expectations.
 
 ```typescript filename="src/example-high-real-world-countries.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { WorldCountryMetric } from './mastra/evals/example-real-world-countries';
+import { openai } from "@ai-sdk/openai";
+import { WorldCountryMetric } from "./mastra/evals/example-real-world-countries";
 
-const metric = new WorldCountryMetric(openai('gpt-4o-mini'));
+const metric = new WorldCountryMetric(openai("gpt-4o-mini"));
 
-const query = 'Name some countries of the World.';
-const response = 'France, Japan, Argentina';
+const query = "Name some countries of the World.";
+const response = "France, Japan, Argentina";
 
 const result = await metric.measure(query, response);
 
@@ -153,13 +153,13 @@ The output receives a high score because everything in the response matches what
 In this example, the response includes a mix of correct and incorrect elements. The metric returns a mid-range score to reflect this and provides details to explain what was right and what was missed.
 
 ```typescript filename="src/example-partial-real-world-countries.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { WorldCountryMetric } from './mastra/evals/example-real-world-countries';
+import { openai } from "@ai-sdk/openai";
+import { WorldCountryMetric } from "./mastra/evals/example-real-world-countries";
 
-const metric = new WorldCountryMetric(openai('gpt-4o-mini'));
+const metric = new WorldCountryMetric(openai("gpt-4o-mini"));
 
-const query = 'Name some countries of the World.';
-const response = 'Germany, Narnia, Australia';
+const query = "Name some countries of the World.";
+const response = "Germany, Narnia, Australia";
 
 const result = await metric.measure(query, response);
 
@@ -186,13 +186,13 @@ The score reflects partial success because the response includes some valid, and
 In this example, the response doesn’t meet the evaluation criteria at all. None of the expected elements are present, so the metric returns a low score.
 
 ```typescript filename="src/example-low-real-world-countries.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { WorldCountryMetric } from './mastra/evals/example-real-world-countries';
+import { openai } from "@ai-sdk/openai";
+import { WorldCountryMetric } from "./mastra/evals/example-real-world-countries";
 
-const metric = new WorldCountryMetric(openai('gpt-4o-mini'));
+const metric = new WorldCountryMetric(openai("gpt-4o-mini"));
 
-const query = 'Name some countries of the World.';
-const response = 'Gotham, Wakanda, Atlantis';
+const query = "Name some countries of the World.";
+const response = "Gotham, Wakanda, Atlantis";
 
 const result = await metric.measure(query, response);
 

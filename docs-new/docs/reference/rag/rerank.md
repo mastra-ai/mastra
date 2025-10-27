@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Rerank '
+title: "Rerank"
 description: Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
 ---
 
@@ -19,19 +19,24 @@ function rerank(
 ## Usage Example
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { rerank } from '@mastra/rag';
+import { openai } from "@ai-sdk/openai";
+import { rerank } from "@mastra/rag";
 
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
-const rerankedResults = await rerank(vectorSearchResults, 'How do I deploy to production?', model, {
-  weights: {
-    semantic: 0.5,
-    vector: 0.3,
-    position: 0.2,
+const rerankedResults = await rerank(
+  vectorSearchResults,
+  "How do I deploy to production?",
+  model,
+  {
+    weights: {
+      semantic: 0.5,
+      vector: 0.3,
+      position: 0.2,
+    },
+    topK: 3,
   },
-  topK: 3,
-});
+);
 ```
 
 ## Parameters

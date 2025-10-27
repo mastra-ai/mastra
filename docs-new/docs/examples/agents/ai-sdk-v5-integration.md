@@ -1,5 +1,5 @@
 ---
-title: 'AI SDK v5 Integration '
+title: "AI SDK v5 Integration "
 description: Example of integrating Mastra agents with AI SDK v5 for streaming chat interfaces with memory and tool integration.
 ---
 
@@ -20,9 +20,9 @@ This example demonstrates how to integrate Mastra agents with [AI SDK v5](https:
 First, set up your Mastra agent with memory and tools:
 
 ```typescript showLineNumbers copy filename="src/mastra/index.ts"
-import { ConsoleLogger } from '@mastra/core/logger';
-import { Mastra } from '@mastra/core/mastra';
-import { weatherAgent } from './agents';
+import { ConsoleLogger } from "@mastra/core/logger";
+import { Mastra } from "@mastra/core/mastra";
+import { weatherAgent } from "./agents";
 
 export const mastra = new Mastra({
   agents: { weatherAgent },
@@ -32,11 +32,11 @@ export const mastra = new Mastra({
 ```
 
 ```typescript showLineNumbers copy filename="src/mastra/agents/index.ts"
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { Memory } from '@mastra/memory';
-import { LibSQLStore } from '@mastra/libsql';
-import { weatherTool } from '../tools';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+import { weatherTool } from "../tools";
 
 export const memory = new Memory({
   storage: new LibSQLStore({
@@ -52,7 +52,7 @@ export const memory = new Memory({
 });
 
 export const weatherAgent = new Agent({
-  name: 'Weather Agent',
+  name: "Weather Agent",
   instructions: `
     You are a helpful weather assistant that provides accurate weather information.
 
@@ -63,7 +63,7 @@ export const weatherAgent = new Agent({
 
     Use the weatherTool to fetch current weather data.
   `,
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   tools: {
     weatherTool,
   },
@@ -76,14 +76,14 @@ export const weatherAgent = new Agent({
 Create a tool that fetches real-time weather data:
 
 ```typescript showLineNumbers copy filename="src/mastra/tools/index.ts"
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
 export const weatherTool = createTool({
-  id: 'get-weather',
-  description: 'Get current weather for a location',
+  id: "get-weather",
+  description: "Get current weather for a location",
   inputSchema: z.object({
-    location: z.string().describe('City name'),
+    location: z.string().describe("City name"),
   }),
   outputSchema: z.object({
     temperature: z.number(),
@@ -135,19 +135,19 @@ const getWeather = async (location: string) => {
 Create an API route that streams responses from your Mastra agent using the `stream` method with AI SDK v5 format:
 
 ```typescript showLineNumbers copy filename="app/api/chat/route.ts"
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
-const myAgent = mastra.getAgent('weatherAgent');
+const myAgent = mastra.getAgent("weatherAgent");
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
 
   // Use stream with AI SDK v5 format (experimental)
   const stream = await myAgent.stream(messages, {
-    format: 'aisdk', // Enable AI SDK v5 compatibility
+    format: "aisdk", // Enable AI SDK v5 compatibility
     memory: {
-      thread: 'user-session', // Use actual user/session ID
-      resource: 'weather-chat',
+      thread: "user-session", // Use actual user/session ID
+      resource: "weather-chat",
     },
   });
 
@@ -161,18 +161,18 @@ export async function POST(req: Request) {
 Load conversation history from Mastra Memory:
 
 ```typescript showLineNumbers copy filename="app/api/initial-chat/route.ts"
-import { mastra } from './mastra';
-import { NextResponse } from 'next/server';
-import { convertMessages } from '@mastra/core/agent';
+import { mastra } from "./mastra";
+import { NextResponse } from "next/server";
+import { convertMessages } from "@mastra/core/agent";
 
-const myAgent = mastra.getAgent('weatherAgent');
+const myAgent = mastra.getAgent("weatherAgent");
 
 export async function GET() {
   const result = await myAgent.getMemory()?.query({
-    threadId: 'user-session',
+    threadId: "user-session",
   });
 
-  const messages = convertMessages(result?.uiMessages || []).to('AIV5.UI');
+  const messages = convertMessages(result?.uiMessages || []).to("AIV5.UI");
   return NextResponse.json(messages);
 }
 ```
@@ -266,7 +266,7 @@ The experimental `stream` method with `format: 'aisdk'` provides native AI SDK v
 ```typescript
 // Use stream with AI SDK v5 format
 const stream = await agent.stream(messages, {
-  format: 'aisdk', // Returns AISDKV5OutputStream
+  format: "aisdk", // Returns AISDKV5OutputStream
 });
 
 // Direct compatibility with AI SDK v5 interfaces

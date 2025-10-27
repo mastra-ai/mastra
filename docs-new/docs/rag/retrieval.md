@@ -1,5 +1,5 @@
 ---
-title: 'Retrieval, Semantic Search, Reranking '
+title: Retrieval
 description: Guide on retrieval processes in Mastra's RAG systems, including semantic search, filtering, and re-ranking.
 ---
 
@@ -27,14 +27,14 @@ Mastra provides flexible retrieval options with support for semantic search, fil
 The simplest approach is direct semantic search. This method uses vector similarity to find chunks that are semantically similar to the query:
 
 ```ts showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { embed } from 'ai';
-import { PgVector } from '@mastra/pg';
+import { openai } from "@ai-sdk/openai";
+import { embed } from "ai";
+import { PgVector } from "@mastra/pg";
 
 // Convert query to embedding
 const { embedding } = await embed({
-  value: 'What are the main points in the article?',
-  model: openai.embedding('text-embedding-3-small'),
+  value: "What are the main points in the article?",
+  model: openai.embedding("text-embedding-3-small"),
 });
 
 // Query vector store
@@ -42,7 +42,7 @@ const pgVector = new PgVector({
   connectionString: process.env.POSTGRES_CONNECTION_STRING,
 });
 const results = await pgVector.query({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   queryVector: embedding,
   topK: 10,
 });
@@ -56,14 +56,14 @@ Results include both the text content and a similarity score:
 ```ts showLineNumbers copy
 [
   {
-    text: 'Climate change poses significant challenges...',
+    text: "Climate change poses significant challenges...",
     score: 0.89,
-    metadata: { source: 'article1.txt' },
+    metadata: { source: "article1.txt" },
   },
   {
-    text: 'Rising temperatures affect crop yields...',
+    text: "Rising temperatures affect crop yields...",
     score: 0.82,
-    metadata: { source: 'article1.txt' },
+    metadata: { source: "article1.txt" },
   },
   // ... more results
 ];
@@ -84,17 +84,17 @@ Basic filtering examples:
 ```ts showLineNumbers copy
 // Simple equality filter
 const results = await pgVector.query({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   queryVector: embedding,
   topK: 10,
   filter: {
-    source: 'article1.txt',
+    source: "article1.txt",
   },
 });
 
 // Numeric comparison
 const results = await pgVector.query({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   queryVector: embedding,
   topK: 10,
   filter: {
@@ -104,11 +104,11 @@ const results = await pgVector.query({
 
 // Multiple conditions
 const results = await pgVector.query({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   queryVector: embedding,
   topK: 10,
   filter: {
-    category: 'electronics',
+    category: "electronics",
     price: { $lt: 1000 },
     inStock: true,
   },
@@ -116,21 +116,21 @@ const results = await pgVector.query({
 
 // Array operations
 const results = await pgVector.query({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   queryVector: embedding,
   topK: 10,
   filter: {
-    tags: { $in: ['sale', 'new'] },
+    tags: { $in: ["sale", "new"] },
   },
 });
 
 // Logical operators
 const results = await pgVector.query({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   queryVector: embedding,
   topK: 10,
   filter: {
-    $or: [{ category: 'electronics' }, { category: 'accessories' }],
+    $or: [{ category: "electronics" }, { category: "accessories" }],
     $and: [{ price: { $gt: 50 } }, { price: { $lt: 200 } }],
   },
 });
@@ -153,9 +153,9 @@ Sometimes you want to give your agent the ability to query a vector database dir
 
 ```ts showLineNumbers copy
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
 });
 ```
 
@@ -174,21 +174,21 @@ The Vector Query Tool supports database-specific configurations that enable you 
 ```ts showLineNumbers copy
 // Pinecone with namespace
 const pineconeQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pinecone',
-  indexName: 'docs',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
   databaseConfig: {
     pinecone: {
-      namespace: 'production', // Isolate data by environment
+      namespace: "production", // Isolate data by environment
     },
   },
 });
 
 // pgVector with performance tuning
 const pgVectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'postgres',
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "postgres",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
   databaseConfig: {
     pgvector: {
       minScore: 0.7, // Filter low-quality results
@@ -200,25 +200,25 @@ const pgVectorQueryTool = createVectorQueryTool({
 
 // Chroma with advanced filtering
 const chromaQueryTool = createVectorQueryTool({
-  vectorStoreName: 'chroma',
-  indexName: 'documents',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "chroma",
+  indexName: "documents",
+  model: openai.embedding("text-embedding-3-small"),
   databaseConfig: {
     chroma: {
-      where: { category: 'technical' },
-      whereDocument: { $contains: 'API' },
+      where: { category: "technical" },
+      whereDocument: { $contains: "API" },
     },
   },
 });
 
 // LanceDB with table specificity
 const lanceQueryTool = createVectorQueryTool({
-  vectorStoreName: 'lance',
-  indexName: 'documents',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "lance",
+  indexName: "documents",
+  model: openai.embedding("text-embedding-3-small"),
   databaseConfig: {
     lance: {
-      tableName: 'myVectors', // Specify which table to query
+      tableName: "myVectors", // Specify which table to query
       includeAllColumns: true, // Include all metadata columns in results
     },
   },
@@ -244,17 +244,17 @@ const lanceQueryTool = createVectorQueryTool({
 You can also override these configurations at runtime using the runtime context:
 
 ```ts showLineNumbers copy
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RuntimeContext } from "@mastra/core/runtime-context";
 
 const runtimeContext = new RuntimeContext();
-runtimeContext.set('databaseConfig', {
+runtimeContext.set("databaseConfig", {
   pinecone: {
-    namespace: 'runtime-namespace',
+    namespace: "runtime-namespace",
   },
 });
 
 await pineconeQueryTool.execute({
-  context: { queryText: 'search query' },
+  context: { queryText: "search query" },
   mastra,
   runtimeContext,
 });
@@ -271,12 +271,12 @@ When implementing filtering, these prompts are required in the agent's instructi
 <TabItem value="pgvector" label="Pg Vector">
 
 ```ts showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { PGVECTOR_PROMPT } from '@mastra/pg';
+import { openai } from "@ai-sdk/openai";
+import { PGVECTOR_PROMPT } from "@mastra/pg";
 
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
+  name: "RAG Agent",
+  model: openai("gpt-4o-mini"),
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${PGVECTOR_PROMPT}
@@ -507,11 +507,11 @@ const rerankedResults = await rerank({
 You can also use other relevance score providers like Cohere or ZeroEntropy:
 
 ```ts showLineNumbers copy
-const relevanceProvider = new CohereRelevanceScorer('rerank-v3.5');
+const relevanceProvider = new CohereRelevanceScorer("rerank-v3.5");
 ```
 
 ```ts showLineNumbers copy
-const relevanceProvider = new ZeroEntropyRelevanceScorer('zerank-1');
+const relevanceProvider = new ZeroEntropyRelevanceScorer("zerank-1");
 ```
 
 The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
@@ -532,9 +532,9 @@ Example setup:
 
 ```ts showLineNumbers copy
 const graphQueryTool = createGraphQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
   graphOptions: {
     threshold: 0.7,
   },

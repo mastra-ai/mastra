@@ -1,6 +1,6 @@
 ---
-title: 'Chutes '
-description: 'Use Chutes models with Mastra. 31 models available.'
+title: "Chutes "
+description: "Use Chutes models with Mastra. 31 models available."
 ---
 
 # <img src="https://models.dev/logos/chutes.svg" alt="Chutes logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Chutes
@@ -14,19 +14,19 @@ CHUTES_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'chutes/Qwen/Qwen3-235B-A22B-Instruct-2507',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -423,13 +423,13 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    url: 'https://llm.chutes.ai/v1',
-    modelId: 'Qwen/Qwen3-235B-A22B-Instruct-2507',
+    url: "https://llm.chutes.ai/v1",
+    modelId: "Qwen/Qwen3-235B-A22B-Instruct-2507",
     apiKey: process.env.CHUTES_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -439,10 +439,12 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'chutes/zai-org/GLM-4.6-FP8' : 'chutes/Qwen/Qwen3-235B-A22B-Instruct-2507';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "chutes/zai-org/GLM-4.6-FP8"
+      : "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507";
   },
 });
 ```

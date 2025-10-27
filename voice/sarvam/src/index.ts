@@ -116,41 +116,37 @@ export class SarvamVoice extends MastraVoice {
   ): Promise<NodeJS.ReadableStream> {
     const text = typeof input === 'string' ? input : await this.streamToString(input);
 
-    return this.traced(async () => {
-      const payload = {
-        inputs: [text],
-        target_language_code: this.language,
-        speaker: options?.speaker || this.speaker,
-        model: this.model,
-        ...this.properties,
-      };
+    const payload = {
+      inputs: [text],
+      target_language_code: this.language,
+      speaker: options?.speaker || this.speaker,
+      model: this.model,
+      ...this.properties,
+    };
 
-      const response = await this.makeRequest('/text-to-speech', payload);
+    const response = await this.makeRequest('/text-to-speech', payload);
 
-      const { audios } = (await response.json()) as { audios: any };
+    const { audios } = (await response.json()) as { audios: any };
 
-      if (!audios || !audios.length) {
-        throw new Error('No audio received from Sarvam AI');
-      }
+    if (!audios || !audios.length) {
+      throw new Error('No audio received from Sarvam AI');
+    }
 
-      // Convert base64 to buffer
-      const audioBuffer = Buffer.from(audios[0], 'base64');
+    // Convert base64 to buffer
+    const audioBuffer = Buffer.from(audios[0], 'base64');
 
-      // Create a PassThrough stream for the audio
-      const stream = new PassThrough();
-      stream.write(audioBuffer);
-      stream.end();
+    // Create a PassThrough stream for the audio
+    const stream = new PassThrough();
+    stream.write(audioBuffer);
+    stream.end();
 
-      return stream;
-    }, 'voice.sarvam.speak')();
+    return stream;
   }
 
   async getSpeakers() {
-    return this.traced(async () => {
-      return SARVAM_VOICES.map(voice => ({
-        voiceId: voice,
-      }));
-    }, 'voice.deepgram.getSpeakers')();
+    return SARVAM_VOICES.map(voice => ({
+      voiceId: voice,
+    }));
   }
 
   /**
@@ -163,42 +159,40 @@ export class SarvamVoice extends MastraVoice {
   }
 
   async listen(input: NodeJS.ReadableStream, options?: SarvamListenOptions): Promise<string> {
-    return this.traced(async () => {
-      // Collect audio data into buffer
-      const chunks: Buffer[] = [];
-      for await (const chunk of input) {
-        if (typeof chunk === 'string') {
-          chunks.push(Buffer.from(chunk));
-        } else {
-          chunks.push(chunk);
-        }
+    // Collect audio data into buffer
+    const chunks: Buffer[] = [];
+    for await (const chunk of input) {
+      if (typeof chunk === 'string') {
+        chunks.push(Buffer.from(chunk));
+      } else {
+        chunks.push(chunk);
       }
-      const audioBuffer = Buffer.concat(chunks);
+    }
+    const audioBuffer = Buffer.concat(chunks);
 
-      const form = new FormData();
-      const mimeType = options?.filetype === 'mp3' ? 'audio/mpeg' : 'audio/wav';
-      const blob = new Blob([audioBuffer], { type: mimeType });
+    const form = new FormData();
+    const mimeType = options?.filetype === 'mp3' ? 'audio/mpeg' : 'audio/wav';
+    const blob = new Blob([audioBuffer], { type: mimeType });
 
-      form.append('file', blob);
-      form.append('model', options?.model || 'saarika:v2');
-      form.append('language_code', options?.languageCode || 'unknown');
-      const requestOptions = {
-        method: 'POST',
-        headers: {
-          'api-subscription-key': this.apiKey!,
-        },
-        body: form,
-      };
+    form.append('file', blob);
+    form.append('model', options?.model || 'saarika:v2');
+    form.append('language_code', options?.languageCode || 'unknown');
+    const requestOptions = {
+      method: 'POST',
+      headers: {
+        'api-subscription-key': this.apiKey!,
+      },
+      body: form,
+    };
 
-      try {
-        const response = await fetch(`${this.baseUrl}/speech-to-text`, requestOptions);
-        const result = (await response.json()) as any;
-        //console.log(result);
-        return result.transcript;
-      } catch (error) {
-        console.error('Error during speech-to-text request:', error);
-        throw error;
-      }
-    }, 'voice.sarvam.listen')();
+    try {
+      const response = await fetch(`${this.baseUrl}/speech-to-text`, requestOptions);
+      const result = (await response.json()) as any;
+      //console.log(result);
+      return result.transcript;
+    } catch (error) {
+      console.error('Error during speech-to-text request:', error);
+      throw error;
+    }
   }
 }

@@ -1,5 +1,5 @@
 ---
-title: 'Cloudflare D1 Storage '
+title: "Cloudflare D1 Storage "
 description: Documentation for the Cloudflare D1 SQL storage implementation in Mastra.
 ---
 
@@ -16,7 +16,7 @@ npm install @mastra/cloudflare-d1@latest
 ## Usage
 
 ```typescript copy showLineNumbers
-import { D1Store } from '@mastra/cloudflare-d1';
+import { D1Store } from "@mastra/cloudflare-d1";
 
 type Env = {
   // Add your bindings here, e.g. Workers KV, D1, Workers AI, etc.
@@ -26,7 +26,7 @@ type Env = {
 // --- Example 1: Using Workers Binding ---
 const storageWorkers = new D1Store({
   binding: D1Database, // D1Database binding provided by the Workers runtime
-  tablePrefix: 'dev_', // Optional: isolate tables per environment
+  tablePrefix: "dev_", // Optional: isolate tables per environment
 });
 
 // --- Example 2: Using REST API ---
@@ -34,7 +34,7 @@ const storageRest = new D1Store({
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
   databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!, // D1 Database ID
   apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
-  tablePrefix: 'dev_', // Optional: isolate tables per environment
+  tablePrefix: "dev_", // Optional: isolate tables per environment
 });
 ```
 

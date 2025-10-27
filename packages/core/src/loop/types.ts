@@ -1,15 +1,5 @@
 import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { Span } from '@opentelemetry/api';
-import type {
-  CallSettings,
-  IdGenerator,
-  StopCondition,
-  TelemetrySettings,
-  ToolChoice,
-  ToolSet,
-  StepResult,
-  ModelMessage,
-} from 'ai-v5';
+import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet, StepResult, ModelMessage } from 'ai-v5';
 import z from 'zod';
 import type { MessageList } from '../agent/message-list';
 import type { StructuredOutputOptions } from '../agent/types';
@@ -72,10 +62,9 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   runId?: string;
   idGenerator?: MastraIdGenerator;
   toolCallStreaming?: boolean;
-  telemetry_settings?: TelemetrySettings;
   messageList: MessageList;
   includeRawChunks?: boolean;
-  modelSettings?: CallSettings;
+  modelSettings?: Omit<CallSettings, 'abortSignal'>;
   headers?: Record<string, string>;
   toolChoice?: ToolChoice<any>;
   options?: LoopConfig<OUTPUT>;
@@ -102,7 +91,6 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
   messageId: string;
   runId: string;
   startTimestamp: number;
-  modelStreamSpan: Span;
   _internal: StreamInternal;
   streamState: {
     serialize: () => any;

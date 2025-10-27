@@ -1,5 +1,5 @@
 ---
-title: 'Adjusting Chunk Delimiters '
+title: "Adjusting Chunk Delimiters "
 description: Adjust chunk delimiters in Mastra to better match your content structure.
 ---
 
@@ -8,12 +8,12 @@ description: Adjust chunk delimiters in Mastra to better match your content stru
 When processing large documents, you may want to control how the text is split into smaller chunks. By default, documents are split on newlines, but you can customize this behavior to better match your content structure. This example shows how to specify a custom delimiter for chunking documents.
 
 ```tsx copy
-import { MDocument } from '@mastra/rag';
+import { MDocument } from "@mastra/rag";
 
-const doc = MDocument.fromText('Your plain text content...');
+const doc = MDocument.fromText("Your plain text content...");
 
 const chunks = await doc.chunk({
-  separator: '\n',
+  separator: "\n",
 });
 ```
 

@@ -59,10 +59,6 @@ export class MastraLLMV1 extends MastraBase {
   }
 
   __registerPrimitives(p: MastraPrimitives) {
-    if (p.telemetry) {
-      this.__setTelemetry(p.telemetry);
-    }
-
     if (p.logger) {
       this.__setLogger(p.logger);
     }
@@ -121,7 +117,6 @@ export class MastraLLMV1 extends MastraBase {
     toolChoice = 'auto',
     onStepFinish,
     experimental_output,
-    telemetry,
     threadId,
     resourceId,
     runtimeContext,
@@ -241,10 +236,6 @@ export class MastraLLMV1 extends MastraBase {
           await delay(10 * 1000);
         }
       },
-      experimental_telemetry: {
-        ...this.experimental_telemetry,
-        ...telemetry,
-      },
       experimental_output: schema
         ? Output.object({
             schema,
@@ -300,7 +291,6 @@ export class MastraLLMV1 extends MastraBase {
     messages,
     structuredOutput,
     runId,
-    telemetry,
     threadId,
     resourceId,
     runtimeContext,
@@ -359,10 +349,6 @@ export class MastraLLMV1 extends MastraBase {
         // @ts-expect-error - output in our implementation can only be object or array
         output,
         schema: processedSchema as Schema<Z>,
-        experimental_telemetry: {
-          ...this.experimental_telemetry,
-          ...telemetry,
-        },
       };
 
       try {
@@ -436,7 +422,6 @@ export class MastraLLMV1 extends MastraBase {
     temperature,
     toolChoice = 'auto',
     experimental_output,
-    telemetry,
     threadId,
     resourceId,
     runtimeContext,
@@ -605,10 +590,6 @@ export class MastraLLMV1 extends MastraBase {
       },
       ...rest,
       messages,
-      experimental_telemetry: {
-        ...this.experimental_telemetry,
-        ...telemetry,
-      },
       experimental_output: schema
         ? (Output.object({
             schema,
@@ -647,7 +628,6 @@ export class MastraLLMV1 extends MastraBase {
     resourceId,
     onFinish,
     structuredOutput,
-    telemetry,
     tracingContext,
     ...rest
   }: StreamObjectWithMessagesArgs<T>): StreamObjectResult<T> {
@@ -757,10 +737,6 @@ export class MastraLLMV1 extends MastraBase {
         messages,
         // @ts-expect-error - output in our implementation can only be object or array
         output,
-        experimental_telemetry: {
-          ...this.experimental_telemetry,
-          ...telemetry,
-        },
         schema: processedSchema as Schema<inferOutput<T>>,
       };
 

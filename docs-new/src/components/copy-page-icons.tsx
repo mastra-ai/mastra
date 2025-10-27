@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 export const ChatGPTIcon = ({ className }: { className?: string }) => (
   <svg
@@ -49,8 +49,21 @@ export const ClaudeIcon = ({ className }: { className?: string }) => (
 );
 
 export const ChevronDownIcon = ({ className }: { className?: string }) => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-    <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      d="M6 9L12 15L18 9"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
@@ -61,7 +74,7 @@ export const ExternalLinkIcon = ({ className }: { className?: string }) => (
     strokeLinejoin="round"
     viewBox="0 0 16 16"
     width="16"
-    style={{ color: 'currentcolor' }}
+    style={{ color: "currentcolor" }}
   >
     <path
       fillRule="evenodd"
@@ -73,7 +86,14 @@ export const ExternalLinkIcon = ({ className }: { className?: string }) => (
 );
 
 export const CopyPageIcon = ({ className }: { className?: string }) => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 18 18"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
     <path
       d="M14.25 5.25H7.25C6.14543 5.25 5.25 6.14543 5.25 7.25V14.25C5.25 15.3546 6.14543 16.25 7.25 16.25H14.25C15.3546 16.25 16.25 15.3546 16.25 14.25V7.25C16.25 6.14543 15.3546 5.25 14.25 5.25Z"
       stroke="currentColor"

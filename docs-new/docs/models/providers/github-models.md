@@ -1,6 +1,6 @@
 ---
-title: 'GitHub Models '
-description: 'Use GitHub Models models with Mastra. 55 models available.'
+title: "GitHub Models "
+description: "Use GitHub Models models with Mastra. 55 models available."
 ---
 
 # <img src="https://models.dev/logos/github-models.svg" alt="GitHub Models logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />GitHub Models
@@ -14,19 +14,19 @@ GITHUB_TOKEN=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'github-models/ai21-labs/ai21-jamba-1.5-large',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "github-models/ai21-labs/ai21-jamba-1.5-large",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -711,13 +711,13 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    url: 'https://models.github.ai/inference',
-    modelId: 'ai21-labs/ai21-jamba-1.5-large',
+    url: "https://models.github.ai/inference",
+    modelId: "ai21-labs/ai21-jamba-1.5-large",
     apiKey: process.env.GITHUB_TOKEN,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -727,10 +727,12 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'github-models/xai/grok-3-mini' : 'github-models/ai21-labs/ai21-jamba-1.5-large';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "github-models/xai/grok-3-mini"
+      : "github-models/ai21-labs/ai21-jamba-1.5-large";
   },
 });
 ```

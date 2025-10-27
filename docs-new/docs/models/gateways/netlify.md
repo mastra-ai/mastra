@@ -1,6 +1,6 @@
 ---
-title: 'Netlify '
-description: 'Use AI models through Netlify.'
+title: "Netlify "
+description: "Use AI models through Netlify."
 ---
 
 # <NetlifyLogo className="inline w-8 h-8 mr-2 align-middle" />Netlify
@@ -12,12 +12,12 @@ Learn more in the [Netlify documentation](https://docs.netlify.com/build/ai-gate
 ## Usage
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'netlify/anthropic/claude-opus-4-20250514',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "netlify/anthropic/claude-opus-4-20250514",
 });
 ```
 

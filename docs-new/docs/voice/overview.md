@@ -1,6 +1,7 @@
 ---
-title: Voice in Mastra | Mastra Docs
+title: Overview
 description: Overview of voice capabilities in Mastra, including text-to-speech, speech-to-text, and real-time speech-to-speech interactions.
+sidebar_position: 1
 ---
 
 import Tabs from '@theme/Tabs';
@@ -16,16 +17,17 @@ Mastra's Voice system provides a unified interface for voice interactions, enabl
 To learn how to integrate voice capabilities into your agents, check out the [Adding Voice to Agents](../agents/adding-voice) documentation. This section covers how to use both single and multiple voice providers, as well as real-time interactions.
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { OpenAIVoice } from '@mastra/voice-openai';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { OpenAIVoice } from "@mastra/voice-openai";
 
 // Initialize OpenAI voice for TTS
 
 const voiceAgent = new Agent({
-  name: 'Voice Agent',
-  instructions: 'You are a voice assistant that can help users with their tasks.',
-  model: openai('gpt-4o'),
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
   voice: new OpenAIVoice(),
 });
 ```
@@ -857,15 +859,15 @@ This example demonstrates how to create and use two different voice providers in
 Start by creating instances of the voice providers with any necessary configuration.
 
 ```typescript
-import { OpenAIVoice } from '@mastra/voice-openai';
-import { PlayAIVoice } from '@mastra/voice-playai';
-import { CompositeVoice } from '@mastra/core/voice';
-import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { CompositeVoice } from "@mastra/core/voice";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
 // Initialize OpenAI voice for STT
 const input = new OpenAIVoice({
   listeningModel: {
-    name: 'whisper-1',
+    name: "whisper-1",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });
@@ -873,7 +875,7 @@ const input = new OpenAIVoice({
 // Initialize PlayAI voice for TTS
 const output = new PlayAIVoice({
   speechModel: {
-    name: 'playai-voice',
+    name: "playai-voice",
     apiKey: process.env.PLAYAI_API_KEY,
   },
 });
@@ -889,12 +891,12 @@ const audioStream = getMicrophoneStream(); // Assume this function gets audio in
 const transcript = await voice.listen(audioStream);
 
 // Log the transcribed text
-console.log('Transcribed text:', transcript);
+console.log("Transcribed text:", transcript);
 
 // Convert text to speech
 const responseAudio = await voice.speak(`You said: ${transcript}`, {
-  speaker: 'default', // Optional: specify a speaker,
-  responseFormat: 'wav', // Optional: specify a response format
+  speaker: "default", // Optional: specify a speaker,
+  responseFormat: "wav", // Optional: specify a response format
 });
 
 // Play the audio response

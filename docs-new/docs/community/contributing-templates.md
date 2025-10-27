@@ -1,6 +1,7 @@
 ---
-title: 'Contributing Templates'
-description: 'How to contribute your own templates to the Mastra ecosystem'
+title: "Contributing Templates"
+description: "How to contribute your own templates to the Mastra ecosystem"
+sidebar_position: 1
 ---
 
 # Contributing Templates
