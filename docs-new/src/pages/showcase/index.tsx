@@ -1,6 +1,5 @@
-import React from 'react';
-import Layout from '@theme/Layout';
 import { ShowcaseGrid } from '@site/src/components/ShowcaseGrid';
+import Layout from '@theme/Layout';
 
 export default function Showcase() {
   return (

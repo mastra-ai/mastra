@@ -6,21 +6,21 @@
 
 /* =====================================================================
    COLOR MAPPING: Docusaurus → Nextra (globals.css)
-   ===================================================================== 
-   
-   This mapping shows how Docusaurus variables correspond to the 
+   =====================================================================
+
+   This mapping shows how Docusaurus variables correspond to the
    Nextra docs colors from globals.css
-   
+
    LIGHT MODE MAPPINGS:
    =====================================================================
-   
+
    GREEN ACCENTS:
    --mastra-green-accent         → --color-accent-green: hsl(143, 97%, 54%)
    --mastra-green-accent-2       → --light-green-accent-2: hsla(125, 66%, 50%, 1)
    --mastra-green-muted          → --light-green-muted: #84d291
    --mastra-green-code           → --light-green-code: #177326
    --ifm-color-primary           → --light-green-accent: #0d8020
-   
+
    TEXT COLORS (darkest to lightest):
    --mastra-text-primary         → --light-color-text-6: #0a0a0a
    --mastra-text-secondary       → --light-color-text-5: #141414
@@ -28,7 +28,7 @@
    --mastra-text-quaternary      → --light-color-text-3: #7f7e7e
    --mastra-text-muted           → --light-color-text-2: #8f8f8f
    --mastra-text-muted-2         → --light-color-text-1: #929292
-   
+
    SURFACE/BACKGROUND COLORS:
    --ifm-background-color        → --light-color-surface-15: #fafafa
    --mastra-surface-1            → --light-color-surface-1: #f0f0f0
@@ -36,29 +36,29 @@
    --mastra-surface-3            → --light-color-surface-3: #ededed
    --mastra-surface-4            → --light-color-surface-4: #ebebeb
    --mastra-surface-5            → --light-color-surface-5: hsla(0, 0%, 88%, 0.9)
-    
+
    BORDER COLORS:
    --border                      → --light-border-muted: #ccc
    --border-subtle               → --border: hsla(0, 0%, 80%, 1)
    --border-code                 → --light-border-code: #b8b8b8
    --border-secondary            → --border-2: hsla(0, 0%, 72%, 1)
-   
+
    =====================================================================
-   
+
    DARK MODE MAPPINGS:
    =====================================================================
-   
+
    GREEN ACCENTS:
    --mastra-green-accent         → --color-accent-green: hsl(143, 97%, 54%)
    --mastra-green-accent-2       → hsla(125, 66%, 50%, 1)
    --ifm-color-primary           → hsl(143, 97%, 54%)
-   
+
    TEXT COLORS (lightest to darkest):
    --mastra-text-primary         → --color-primary: #ffffff
    --mastra-text-secondary       → --color-el-4: #e6e6e6
    --mastra-text-tertiary        → --color-el-3: #939393
    --mastra-text-quaternary      → --color-el-2: #707070
-   
+
    SURFACE/BACKGROUND COLORS:
    --ifm-background-color        → --primary-bg: #050505
    --ifm-background-surface      → --secondary-bg: #121212
@@ -68,12 +68,12 @@
    --mastra-surface-3            → #121212
    --mastra-surface-4            → #171717
    --mastra-surface-5            → --color-surface-5: hsla(0, 0%, 18%, 0.9)
-   
+
    BORDER COLORS:
    --mastra-border               → --border: #343434
    --mastra-border-subtle        → --color-borders-1: hsla(0, 0%, 19%, 1)
    --mastra-border-code          → --color-borders-2: hsla(0, 0%, 26%, 1)
-   
+
    =====================================================================
 */
 
@@ -390,9 +390,10 @@ span[class*='categoryLinkLabel'] {
 }
 
 @media (min-width: 997px) {
-  [class*='docMainContainer'][class*='docMainContainer'] {
-    min-width: 69rem;
-  }
+  /* [class*='docMainContainer'][class*='docMainContainer'] { */
+    /* use a container query to define behaviour below this point */
+    /* min-width: 69rem; */
+  /* } */
 
   /* Custom Scrollbars*/
   .menu,
@@ -958,7 +959,7 @@ table code {
 }
 
 .main-wrapper {
-  max-width: 1400px;
+  /* max-width: 1400px; */
   margin: 0 auto;
 }
 
@@ -1040,6 +1041,109 @@ textarea:-webkit-autofill:focus {
   -webkit-text-fill-color: #000 !important;
 }
 
-#docs-search-results {
-  scrollbar-width: none;
+.grecaptcha-badge { visibility: hidden; }
+
+.copilotKitMarkdown p {
+  font-size: 14px !important;
+  margin-bottom: 8px;
 }
+
+.copilotKitMarkdown pre {
+  padding: 0px;
+}
+
+.copilotKitMarkdown hr {
+  margin-block: 12px !important;
+  color: var(--borders-subtle) !important;
+}
+
+.copilotKitMarkdown h3 {
+  font-size: calc((16/16) * 1rem) !important;
+  font-weight: 500;
+  word-spacing: -1px;
+  margin-bottom: 8px;
+  margin-top: 20px;
+}
+
+.copilotKitMarkdown h2 {
+  font-size: calc((18/16) * 1rem) !important;
+  font-weight: 500;
+  word-spacing: -1px;
+  margin-bottom: 8px;
+  margin-top: 20px;
+  text-decoration: underline;
+}
+
+.copilotKitMarkdown a {
+  color: var(--mastra-green-accent-2) !important;
+  padding-left: 2px !important;
+  font-weight: 500;
+
+  &:where(.dark, .dark *) {
+    color: var(--mastra-green-accent) !important;
+  }
+}
+
+.copilotKitCodeBlockToolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+}
+
+.copilotKitMarkdown ul {
+  :where(& > :not(:last-child)) {
+    --tw-space-y-reverse: 0;
+    /* --spacing: 0.25rem; */
+    margin-block-start: calc(calc(var(--spacing) * 2) /* 0.25rem = 4px */ * var(--tw-space-y-reverse));
+    margin-block-end: calc(calc(var(--spacing) * 2) /* 0.25rem = 4px */ * calc(1 - var(--tw-space-y-reverse)));
+  }
+}
+
+button.copilotKitCodeBlockToolbarButton {
+  cursor: pointer !important;
+}
+
+.copilotKitCodeBlockToolbarButtons {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+}
+
+.copilotKitCodeBlock > div {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+#custom-chat-input {
+  /* hide scroll bar */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+#custom-chat-input::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide TOC when chatbot sidebar is open using CSS variable */
+/* Note: Container style queries (@container style()) only work on properties
+   set directly on the container element itself, not on root/ancestor elements.
+   Since --chatbot-sidebar-open is set on document.documentElement (:root),
+   we use attribute selectors instead to check for the inline style. */
+
+html[style*="--chatbot-sidebar-open: 1"] #toc-column {
+  display: none;
+}
+
+html[style*="--chatbot-sidebar-open: 0"] #doc-item-container {
+  max-width: 100% !important;
+}
+
+/* #toc-column {
+  display: none;
+} */

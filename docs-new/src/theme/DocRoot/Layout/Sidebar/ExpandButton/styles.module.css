@@ -1,0 +1,27 @@
+@media (min-width: 997px) {
+  .expandButton {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color var(--ifm-transition-fast) ease;
+    background-color: var(--docusaurus-collapse-button-bg);
+  }
+
+  .expandButton:hover,
+  .expandButton:focus {
+    background-color: var(--docusaurus-collapse-button-bg-hover);
+  }
+
+  .expandButtonIcon {
+    transform: rotate(0);
+  }
+
+  [dir='rtl'] .expandButtonIcon {
+    transform: rotate(180deg);
+  }
+}
