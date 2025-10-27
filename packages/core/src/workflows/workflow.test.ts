@@ -6,6 +6,7 @@ import { MockLanguageModelV1 } from 'ai/test';
 import { MockLanguageModelV2 } from 'ai-v5/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { z as zv4 } from 'zod-v4';
 import { createTool, Mastra } from '..';
 import { Agent } from '../agent';
 import { RuntimeContext } from '../di';
@@ -7992,6 +7993,774 @@ describe('Workflow', () => {
       // @ts-ignore
       expect(result.steps['nested-workflow-a'].error).toContain(
         'Error: Step input validation failed: \n- newValue: Required',
+      );
+
+      // @ts-ignore
+      expect(result.steps['nested-workflow-b'].output).toEqual({
+        finalValue: 1,
+      });
+
+      expect(result.steps['last-step']).toBeUndefined();
+    });
+  });
+
+  describe('Schema Validation Zod-v4', () => {
+    it('should throw error if trigger data is invalid', async () => {
+      const triggerSchema = zv4.object({
+        required: zv4.string(),
+        nested: zv4.object({
+          value: zv4.number(),
+        }),
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        // @ts-ignore
+        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
+        inputSchema: zv4.object({
+          required: zv4.string(),
+          nested: zv4.object({
+            value: zv4.number(),
+          }),
+        }),
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+      });
+
+      // @ts-ignore
+      const step2 = createStep({
+        id: 'step2',
+        execute: vi.fn<any>().mockResolvedValue({ result: 'step2 success' }),
+        inputSchema: zv4.object({
+          required: zv4.string(),
+          nested: zv4.object({
+            value: zv4.number(),
+          }),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        // @ts-ignore
+        execute: vi.fn<any>().mockResolvedValue({ result: 'step3 success' }),
+        inputSchema: zv4.object({
+          required: zv4.string(),
+          nested: zv4.object({
+            value: zv4.number(),
+          }),
+        }),
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        // @ts-ignore
+        inputSchema: triggerSchema,
+        // @ts-ignore
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+        steps: [step1],
+        options: { validateInputs: true },
+      });
+
+      const parallelWorkflow = createWorkflow({
+        id: 'parallel-workflow',
+        // @ts-ignore
+        inputSchema: zv4.object({
+          required: zv4.string(),
+          nested: zv4.object({
+            value: zv4.number(),
+          }),
+        }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+        steps: [step1, step2, step3],
+        options: { validateInputs: true },
+      });
+
+      parallelWorkflow.parallel([step1, step2, step3]).commit();
+
+      workflow.then(step1).commit();
+
+      try {
+        const run = await workflow.createRunAsync();
+        await run.start({
+          inputData: {
+            required: 'test',
+            // @ts-expect-error
+            nested: { value: 'not-a-number' },
+          },
+        });
+        expect.fail('Invalid input: expected error to be thrown');
+      } catch (error) {
+        expect((error as any)?.stack).toContain(
+          'Error: Invalid input data: \n- nested.value: Invalid input: expected number, received string',
+        );
+      }
+
+      try {
+        const run = await parallelWorkflow.createRunAsync();
+        await run.start({
+          inputData: {
+            required: 'test',
+            // @ts-expect-error
+            nested: { value: 'not-a-number' },
+          },
+        });
+
+        expect.fail('Invalid input: expected error to be thrown');
+      } catch (error) {
+        expect((error as any)?.stack).toContain(
+          'Error: Invalid input data: \n- nested.value: Invalid input: expected number, received string',
+        );
+      }
+    });
+
+    it('should use default value from inputSchema', async () => {
+      const triggerSchema = zv4.object({
+        required: zv4.string(),
+        nested: zv4
+          .object({
+            value: zv4.number(),
+          })
+          .optional()
+          .default({ value: 1 }),
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        // @ts-ignore
+        execute: async ({ inputData }) => {
+          return inputData;
+        },
+        inputSchema: triggerSchema,
+        outputSchema: triggerSchema,
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        // @ts-ignore
+        inputSchema: triggerSchema,
+        // @ts-ignore
+        outputSchema: triggerSchema,
+        steps: [step1],
+        options: { validateInputs: true },
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({
+        inputData: {
+          required: 'test',
+        },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.steps.step1).toEqual({
+        status: 'success',
+        payload: { required: 'test', nested: { value: 1 } },
+        output: { required: 'test', nested: { value: 1 } },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      // @ts-ignore
+      expect(result.result).toEqual({ required: 'test', nested: { value: 1 } });
+    });
+
+    it('should throw error if inputData is invalid', async () => {
+      const successAction = vi.fn<any>().mockImplementation(() => {
+        return { result: 'success' };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        // @ts-ignore
+        execute: successAction,
+        inputSchema: zv4.object({
+          start: zv4.string(),
+        }),
+        outputSchema: zv4.object({
+          start: zv4.string(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        // @ts-ignore
+        execute: successAction,
+        inputSchema: zv4.object({
+          start: zv4.string(),
+        }),
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        // @ts-ignore
+        inputSchema: zv4.object({
+          start: zv4.string(),
+        }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+        options: { validateInputs: true },
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const run = await workflow.createRunAsync();
+
+      const result = await run.start({
+        inputData: {
+          start: '2',
+        },
+      });
+
+      expect(result.status).toBe('failed'); // Assert status first
+
+      // Type guard for result.error
+      if (result.status === 'failed') {
+        // This check helps TypeScript narrow down the type of 'result'
+        expect(result.error).toContain(
+          'Error: Step input validation failed: \n- start: Invalid input: expected string, received undefined',
+        ); // Now safe to access
+      } else {
+        // This case should not be reached in this specific test.
+        // If it is, the test should fail clearly.
+        throw new Error("Assertion failed: workflow status was not 'failed' as expected.");
+      }
+
+      expect(result.steps?.input).toEqual({ start: '2' });
+      const step1Result = result.steps?.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result).toMatchObject({
+        status: 'success',
+        payload: { start: '2' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        output: { result: 'success' },
+      });
+      const step2Result = result.steps?.step2;
+      expect(step2Result).toBeDefined();
+      expect(step2Result).toMatchObject({
+        status: 'failed',
+        payload: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        error: expect.any(String),
+      });
+      expect((step2Result as any)?.error).toContain(
+        'Error: Step input validation failed: \n- start: Invalid input: expected string, received undefined',
+      );
+    });
+
+    it('should use default value from inputSchema for step input', async () => {
+      const successAction = vi.fn<any>().mockImplementation(() => {
+        return { result: 'success' };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        // @ts-ignore
+        execute: async () => {
+          return {};
+        },
+        inputSchema: zv4.object({
+          start: zv4.string(),
+        }),
+        outputSchema: zv4.object({
+          start: zv4.string().optional(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        // @ts-ignore
+        execute: successAction,
+        inputSchema: zv4.object({
+          start: zv4.string().optional().default('test'),
+        }),
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        // @ts-ignore
+        inputSchema: zv4.object({
+          start: zv4.string(),
+        }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+        options: { validateInputs: true },
+      });
+
+      workflow
+        .then(step1)
+        .map({
+          // @ts-ignore
+          start: mapVariable({
+            step: step1,
+            path: 'start',
+          }),
+        })
+        .then(step2)
+        .commit();
+
+      const run = await workflow.createRunAsync();
+
+      const result = await run.start({
+        inputData: {
+          start: '2',
+        },
+      });
+
+      expect(result.status).toBe('success');
+
+      expect(result.steps?.input).toEqual({ start: '2' });
+      const step1Result = result.steps?.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result).toMatchObject({
+        status: 'success',
+        payload: { start: '2' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        output: {},
+      });
+      const step2Result = result.steps?.step2;
+      expect(step2Result).toBeDefined();
+      expect(step2Result).toMatchObject({
+        status: 'success',
+        payload: { start: 'test' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        output: { result: 'success' },
+      });
+    });
+
+    it('should throw error if inputData is invalid in workflow with .map()', async () => {
+      const successAction = vi.fn<any>().mockImplementation(() => {
+        return { result: 'success' };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        // @ts-ignore
+        execute: async ({ inputData }) => {
+          return { start: inputData.start };
+        },
+        inputSchema: zv4.object({
+          start: zv4.number(),
+        }),
+        outputSchema: zv4.object({
+          start: zv4.number(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        // @ts-ignore
+        execute: successAction,
+        inputSchema: zv4.object({
+          start: zv4.string(),
+        }),
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        // @ts-ignore
+        inputSchema: zv4.object({
+          start: zv4.number(),
+        }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          result: zv4.string(),
+        }),
+        options: { validateInputs: true },
+      });
+
+      workflow
+        .then(step1)
+        .map(async ({ inputData }) => {
+          return {
+            start: inputData.start,
+          };
+        })
+        .then(step2)
+        .commit();
+
+      const run = await workflow.createRunAsync();
+
+      const result = await run.start({
+        inputData: {
+          start: 2,
+        },
+      });
+
+      expect(result.status).toBe('failed'); // Assert status first
+
+      // Type guard for result.error
+      if (result.status === 'failed') {
+        // This check helps TypeScript narrow down the type of 'result'
+        expect(result.error).toContain(
+          'Error: Step input validation failed: \n- start: Invalid input: expected string, received number',
+        ); // Now safe to access
+      } else {
+        // This case should not be reached in this specific test.
+        // If it is, the test should fail clearly.
+        throw new Error("Assertion failed: workflow status was not 'failed' as expected.");
+      }
+
+      expect(result.steps?.input).toEqual({ start: 2 });
+      const step1Result = result.steps?.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result).toMatchObject({
+        status: 'success',
+        payload: { start: 2 },
+        output: { start: 2 },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      const step2Result = result.steps?.step2;
+      expect(step2Result).toBeDefined();
+      expect(step2Result).toMatchObject({
+        status: 'failed',
+        payload: { start: 2 },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        error: expect.any(String),
+      });
+      expect((step2Result as any)?.error).toContain(
+        'Error: Step input validation failed: \n- start: Invalid input: expected string, received number',
+      );
+    });
+
+    it('should throw error when you try to resume a workflow step with invalid resume data', async () => {
+      const resumeStep = createStep({
+        id: 'resume',
+        // @ts-ignore
+        inputSchema: zv4.object({ value: zv4.number() }),
+        // @ts-ignore
+        outputSchema: zv4.object({ value: zv4.number() }),
+        // @ts-ignore
+        resumeSchema: zv4.object({ value: zv4.number() }),
+        // @ts-ignore
+        suspendSchema: zv4.object({ message: zv4.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          const finalValue = (resumeData?.value ?? 0) + inputData.value;
+
+          if (!resumeData?.value || finalValue < 10) {
+            return await suspend({ message: `Please provide additional information. now value is ${inputData.value}` });
+          }
+
+          return { value: finalValue };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        // @ts-ignore
+        inputSchema: zv4.object({
+          value: zv4.number(),
+        }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          value: zv4.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        // @ts-ignore
+        inputSchema: zv4.object({ value: zv4.number() }),
+        // @ts-ignore
+        outputSchema: zv4.object({ value: zv4.number() }),
+        options: { validateInputs: true },
+      })
+        .then(incrementStep)
+        .then(resumeStep)
+        .then(
+          createStep({
+            id: 'final',
+            // @ts-ignore
+            inputSchema: zv4.object({ value: zv4.number() }),
+            // @ts-ignore
+            outputSchema: zv4.object({ value: zv4.number() }),
+            execute: async ({ inputData }) => ({ value: inputData.value }),
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { incrementWorkflow },
+      });
+
+      const run = await incrementWorkflow.createRunAsync();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.status).toBe('suspended');
+
+      try {
+        await run.resume({
+          resumeData: { number: 2 },
+          step: ['resume'],
+        });
+      } catch (error) {
+        const errMessage = (error as { message: string })?.message;
+        expect(errMessage).toBe('Invalid resume data: \n- value: Invalid input: expected number, received undefined');
+      }
+
+      const wflowRun = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+      expect(wflowRun?.status).toBe('suspended');
+
+      const resumeResult = await run.resume({
+        resumeData: { value: 21 },
+        step: ['resume'],
+      });
+
+      expect(resumeResult.status).toBe('success');
+    });
+
+    it('should use default value from resumeSchema when resuming a workflow', async () => {
+      const resumeStep = createStep({
+        id: 'resume',
+        // @ts-ignore
+        inputSchema: zv4.object({ value: zv4.number() }),
+        // @ts-ignore
+        outputSchema: zv4.object({ value: zv4.number() }),
+        // @ts-ignore
+        resumeSchema: zv4.object({ value: zv4.number().optional().default(21) }),
+        // @ts-ignore
+        suspendSchema: zv4.object({ message: zv4.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          const finalValue = (resumeData?.value ?? 0) + inputData.value;
+
+          if (!resumeData?.value || finalValue < 10) {
+            return await suspend({ message: `Please provide additional information. now value is ${inputData.value}` });
+          }
+
+          return { value: finalValue };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        // @ts-ignore
+        inputSchema: zv4.object({
+          value: zv4.number(),
+        }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          value: zv4.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        // @ts-ignore
+        inputSchema: zv4.object({ value: zv4.number() }),
+        // @ts-ignore
+        outputSchema: zv4.object({ value: zv4.number() }),
+        options: { validateInputs: true },
+      })
+        .then(incrementStep)
+        .then(resumeStep)
+        .then(
+          createStep({
+            id: 'final',
+            // @ts-ignore
+            inputSchema: zv4.object({ value: zv4.number() }),
+            // @ts-ignore
+            outputSchema: zv4.object({ value: zv4.number() }),
+            execute: async ({ inputData }) => ({ value: inputData.value }),
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { incrementWorkflow },
+      });
+
+      const run = await incrementWorkflow.createRunAsync();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.status).toBe('suspended');
+
+      const resumeResult = await run.resume({
+        resumeData: {},
+        step: ['resume'],
+      });
+
+      expect(resumeResult.steps.resume).toEqual({
+        status: 'success',
+        payload: { value: 1 },
+        resumePayload: { value: 21 },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        resumedAt: expect.any(Number),
+        suspendedAt: expect.any(Number),
+        suspendPayload: { message: 'Please provide additional information. now value is 1' },
+        output: { value: 22 },
+      });
+
+      expect(resumeResult.status).toBe('success');
+    });
+
+    it('should throw error if inputData is invalid in nested workflows', async () => {
+      const start = vi.fn().mockImplementation(async ({ inputData }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue = inputData.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const startStep = createStep({
+        id: 'start',
+        // @ts-ignore
+        inputSchema: zv4.object({ startValue: zv4.number() }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          newValue: zv4.number(),
+        }),
+        execute: start,
+      });
+
+      const other = vi.fn().mockImplementation(async () => {
+        return { other: 26 };
+      });
+      const otherStep = createStep({
+        id: 'other',
+        // @ts-ignore
+        inputSchema: zv4.object({ newValue: zv4.number() }),
+        // @ts-ignore
+        outputSchema: zv4.object({ newValue: zv4.number(), other: zv4.number() }),
+        execute: other,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ getStepResult }) => {
+        const startVal = getStepResult(startStep)?.newValue ?? 0;
+        const otherVal = getStepResult(otherStep)?.other ?? 0;
+        return { finalValue: startVal + otherVal };
+      });
+      const last = vi.fn().mockImplementation(async () => {
+        return { success: true };
+      });
+      const finalStep = createStep({
+        id: 'final',
+        // @ts-ignore
+        inputSchema: zv4.object({ newValue: zv4.number(), other: zv4.number() }),
+        // @ts-ignore
+        outputSchema: zv4.object({ success: zv4.boolean() }),
+        execute: final,
+      });
+
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        // @ts-ignore
+        inputSchema: zv4.object({
+          startValue: zv4.number(),
+        }),
+        // @ts-ignore
+        outputSchema: zv4.object({
+          success: zv4.boolean(),
+        }),
+        options: { validateInputs: true },
+      });
+
+      const wfA = createWorkflow({
+        id: 'nested-workflow-a',
+        inputSchema: counterWorkflow.inputSchema,
+        // @ts-ignore
+        outputSchema: zv4.object({ finalValue: zv4.number() }),
+      })
+        .then(startStep)
+        .then(otherStep)
+        .then(finalStep)
+        .commit();
+      const wfB = createWorkflow({
+        id: 'nested-workflow-b',
+        inputSchema: counterWorkflow.inputSchema,
+        // @ts-ignore
+        outputSchema: zv4.object({ finalValue: zv4.number() }),
+      })
+        .then(startStep)
+        .map({
+          // @ts-ignore
+          other: mapVariable({
+            step: startStep,
+            path: 'newValue',
+          }),
+          // @ts-ignore
+          newValue: mapVariable({
+            step: startStep,
+            path: 'newValue',
+          }),
+        })
+        .then(finalStep)
+        .commit();
+      counterWorkflow
+        .parallel([wfA, wfB])
+        .then(
+          // @ts-ignore
+          createStep({
+            id: 'last-step',
+            // @ts-ignore
+            execute: last,
+            inputSchema: zv4.object({
+              'nested-workflow-a': zv4.object({ finalValue: zv4.number() }),
+              'nested-workflow-b': zv4.object({ finalValue: zv4.number() }),
+            }),
+            outputSchema: zv4.object({ success: zv4.boolean() }),
+          }),
+        )
+        .commit();
+
+      const run = await counterWorkflow.createRunAsync();
+      const result = await run.start({ inputData: { startValue: 0 } });
+
+      expect(result.status).toBe('failed');
+
+      expect(start).toHaveBeenCalledTimes(2);
+      expect(other).toHaveBeenCalledTimes(1);
+      expect(final).toHaveBeenCalledTimes(1);
+      expect(last).toHaveBeenCalledTimes(0);
+      // @ts-ignore
+      expect(result.steps['nested-workflow-a'].error).toContain(
+        'Error: Step input validation failed: \n- newValue: Invalid input: expected number, received undefined',
       );
 
       // @ts-ignore
