@@ -10,11 +10,10 @@ The `SystemPromptScrubber` is an **output processor** that detects and handles s
 ## Usage example
 
 ```typescript copy
-import { openai } from '@ai-sdk/openai';
 import { SystemPromptScrubber } from '@mastra/core/processors';
 
 const processor = new SystemPromptScrubber({
-  model: openai('gpt-4.1-nano'),
+  model: 'openai/gpt-4.1-nano',
   strategy: 'redact',
   redactionMethod: 'mask',
   includeDetections: true,
@@ -40,7 +39,7 @@ isOptional: false,
 content={[
 {
 name: "model",
-type: "MastraLanguageModel",
+type: "MastraModelConfig",
 description: "Model configuration for the detection agent",
 isOptional: false,
 },
@@ -116,18 +115,19 @@ isOptional: false,
 
 ## Extended usage example
 
+### Basic usage
+
 ```typescript filename="src/mastra/agents/scrubbed-agent.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { SystemPromptScrubber } from '@mastra/core/processors';
 
 export const agent = new Agent({
   name: 'scrubbed-agent',
   instructions: 'You are a helpful assistant',
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   outputProcessors: [
     new SystemPromptScrubber({
-      model: openai('gpt-4.1-nano'),
+      model: 'openai/gpt-4.1-nano',
       strategy: 'redact',
       customPatterns: ['system prompt', 'internal instructions'],
       includeDetections: true,
@@ -138,6 +138,34 @@ export const agent = new Agent({
   ],
 });
 ```
+
+### Recommended usage with batching
+
+When using `SystemPromptScrubber` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the scrubber, reducing the number of LLM calls required for detection.
+
+```typescript filename="src/mastra/agents/optimized-scrubbed-agent.ts" showLineNumbers copy
+import { Agent } from '@mastra/core/agent';
+import { BatchPartsProcessor, SystemPromptScrubber } from '@mastra/core/processors';
+
+export const agent = new Agent({
+  name: 'optimized-scrubbed-agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai/gpt-4o-mini',
+  outputProcessors: [
+    // Batch stream parts first to reduce LLM calls
+    new BatchPartsProcessor({
+      batchSize: 10,
+    }),
+    // Then apply system prompt detection on batched content
+    new SystemPromptScrubber({
+      model: 'openai/gpt-4.1-nano',
+      strategy: 'redact',
+    }),
+  ],
+});
+```
+
+> **Performance tip:** Without `BatchPartsProcessor`, the system prompt scrubber would make an LLM call for every streaming chunk (potentially hundreds of calls per response). By batching chunks first, you significantly reduce API calls and improve response times.
 
 ## Related
 
