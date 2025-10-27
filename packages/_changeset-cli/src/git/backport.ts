@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import 'dotenv/config';
 import childProcess from 'child_process';
 import { Octokit } from '@octokit/rest';
