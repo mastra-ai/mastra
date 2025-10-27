@@ -10,6 +10,7 @@ import { z as zv4 } from 'zod-v4';
 import { createTool, Mastra } from '..';
 import { Agent } from '../agent';
 import { RuntimeContext } from '../di';
+import { MastraError } from '../error';
 import { MockStore } from '../storage/mock';
 import type { ChunkType, StreamEvent, WatchEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
@@ -5924,6 +5925,118 @@ describe('Workflow', () => {
           },
         },
       });
+    });
+
+    it('should persist error message without stack trace in snapshot', async () => {
+      const mockStorage = new MockStore();
+      const persistSpy = vi.spyOn(mockStorage, 'persistWorkflowSnapshot');
+
+      const mastra = new Mastra({
+        storage: mockStorage,
+      });
+
+      const errorMessage = 'Test error: step execution failed.';
+      const failingAction = vi.fn<any>().mockImplementation(() => {
+        throw new Error(errorMessage);
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: failingAction,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        mastra,
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(persistSpy).toHaveBeenCalled();
+
+      const persistCall = persistSpy.mock.calls[persistSpy.mock.calls.length - 1];
+      const snapshot = persistCall?.[0]?.snapshot;
+
+      expect(snapshot).toBeDefined();
+      expect(snapshot.status).toBe('failed');
+
+      const step1Result = snapshot.context.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result?.status).toBe('failed');
+
+      const failedStepResult = step1Result as Extract<typeof step1Result, { status: 'failed' }>;
+      expect(failedStepResult.error).toBeDefined();
+      expect(failedStepResult.error).toBe('Error: ' + errorMessage);
+      expect(String(failedStepResult.error)).not.toContain('at Object.execute');
+      expect(String(failedStepResult.error)).not.toContain('at ');
+      expect(String(failedStepResult.error)).not.toContain('\n');
+    });
+
+    it('should persist MastraError message without stack trace in snapshot', async () => {
+      const mockStorage = new MockStore();
+      const persistSpy = vi.spyOn(mockStorage, 'persistWorkflowSnapshot');
+
+      const mastra = new Mastra({
+        storage: mockStorage,
+      });
+
+      const errorMessage = 'Step execution failed.';
+      const failingAction = vi.fn<any>().mockImplementation(() => {
+        throw new MastraError({
+          id: 'VALIDATION_ERROR',
+          domain: 'MASTRA_WORKFLOW',
+          category: 'USER',
+          text: errorMessage,
+          details: { field: 'test' },
+        });
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: failingAction,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        mastra,
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(persistSpy).toHaveBeenCalled();
+
+      const persistCall = persistSpy.mock.calls[persistSpy.mock.calls.length - 1];
+      const snapshot = persistCall?.[0]?.snapshot;
+
+      expect(snapshot).toBeDefined();
+      expect(snapshot.status).toBe('failed');
+
+      const step1Result = snapshot.context.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result?.status).toBe('failed');
+
+      const failedStepResult = step1Result as Extract<typeof step1Result, { status: 'failed' }>;
+      expect(failedStepResult.error).toBeDefined();
+      expect(failedStepResult.error).toBe('Error: ' + errorMessage);
+      expect(String(failedStepResult.error)).not.toContain('at Object.execute');
+      expect(String(failedStepResult.error)).not.toContain('at ');
+      expect(String(failedStepResult.error)).not.toContain('\n');
     });
 
     it('should handle step execution errors within branches', async () => {
