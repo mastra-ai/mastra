@@ -2,7 +2,7 @@ import EventEmitter from 'events';
 import { randomUUID } from 'node:crypto';
 import { WritableStream, ReadableStream, TransformStream } from 'node:stream/web';
 import { z } from 'zod';
-import { getZodErrors, type Mastra, type WorkflowRun } from '..';
+import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions, AgentStreamOptions } from '../agent';
@@ -22,22 +22,6 @@ import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step, SuspendOptions } from './step';
-
-// Options that can be passed when wrapping an agent with createStep
-// These work for both stream() (v2) and streamLegacy() (v1) methods
-type AgentStepOptions = Omit<
-  AgentExecutionOptions & AgentStreamOptions,
-  | 'format'
-  | 'tracingContext'
-  | 'runtimeContext'
-  | 'abortSignal'
-  | 'context'
-  | 'onStepFinish'
-  | 'output'
-  | 'experimental_output'
-  | 'resourceId'
-  | 'threadId'
->;
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -60,6 +44,23 @@ import type {
   WorkflowRunStatus,
   WorkflowStreamEvent,
 } from './types';
+import { getZodErrors } from './utils';
+
+// Options that can be passed when wrapping an agent with createStep
+// These work for both stream() (v2) and streamLegacy() (v1) methods
+type AgentStepOptions = Omit<
+  AgentExecutionOptions & AgentStreamOptions,
+  | 'format'
+  | 'tracingContext'
+  | 'runtimeContext'
+  | 'abortSignal'
+  | 'context'
+  | 'onStepFinish'
+  | 'output'
+  | 'experimental_output'
+  | 'resourceId'
+  | 'threadId'
+>;
 
 export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
   step,
