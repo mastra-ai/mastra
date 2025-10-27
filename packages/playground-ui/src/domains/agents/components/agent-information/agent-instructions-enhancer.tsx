@@ -1,11 +1,12 @@
-import { AlertDialog, extractPrompt, useAgent } from '@mastra/playground-ui';
+import { CurrentInstructions } from './current-instructions';
 
-import { CurrentInstructions } from './components/current-instructions';
-
-import { usePromptEnhancer } from './hooks/use-prompt-enhancer';
-import { usePromptVersions } from './hooks/use-prompt-versions';
+import { usePromptEnhancer } from '../../hooks/use-prompt-enhancer';
+import { usePromptVersions } from '../../hooks/use-prompt-versions';
 import { VersionHistoryDialog } from './version-history-dialog';
 import { useState } from 'react';
+import { useAgent } from '../../hooks/use-agent';
+import { extractPrompt } from '../../utils/extractPrompt';
+import { AlertDialog } from '@/components/ui/alert-dialog';
 
 interface AgentPromptEnhancerProps {
   agentId: string;
