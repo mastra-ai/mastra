@@ -36,7 +36,7 @@ In development
 
 ```ts showLineNumbers copy filename="src/mastra/inngest/index.ts"
 import { Inngest } from "inngest";
-import { realtimeMiddleware } from "@inngest/realtime/middleware";
+import { realtimeMiddleware } from "@inngest/realtime";
 
 export const inngest = new Inngest({
   id: "mastra",
@@ -50,7 +50,7 @@ In production
 
 ```ts showLineNumbers copy filename="src/mastra/inngest/index.ts"
 import { Inngest } from "inngest";
-import { realtimeMiddleware } from "@inngest/realtime/middleware";
+import { realtimeMiddleware } from "@inngest/realtime";
 
 export const inngest = new Inngest({
   id: "mastra",

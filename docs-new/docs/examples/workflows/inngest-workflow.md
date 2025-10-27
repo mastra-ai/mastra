@@ -324,7 +324,7 @@ import { PinoLogger } from "@mastra/loggers";
 import { Inngest } from "inngest";
 import { activityPlanningWorkflow } from "./workflows/inngest-workflow";
 import { planningAgent } from "./agents/planning-agent";
-import { realtimeMiddleware } from "@inngest/realtime/middleware";
+import { realtimeMiddleware } from "@inngest/realtime";
 
 // Create an Inngest instance for workflow orchestration and event handling
 const inngest = new Inngest({
