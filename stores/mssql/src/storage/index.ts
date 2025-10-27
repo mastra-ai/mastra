@@ -20,6 +20,7 @@ import type {
   AISpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,
+  UpdateAISpanRecord,
   CreateIndexOptions,
   IndexInfo,
   StorageIndexStats,
@@ -132,7 +133,7 @@ export class MSSQLStore extends MastraStorage {
       } catch (indexError) {
         // Log the error but don't fail initialization
         // Indexes are performance optimizations, not critical for functionality
-        console.warn('Failed to create indexes:', indexError);
+        this.logger?.warn?.('Failed to create indexes:', indexError);
       }
     } catch (error) {
       this.isConnected = null;
@@ -492,7 +493,7 @@ export class MSSQLStore extends MastraStorage {
   }: {
     spanId: string;
     traceId: string;
-    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+    updates: Partial<UpdateAISpanRecord>;
   }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
@@ -547,7 +548,7 @@ export class MSSQLStore extends MastraStorage {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+      updates: Partial<UpdateAISpanRecord>;
     }[];
   }): Promise<void> {
     if (!this.stores.observability) {

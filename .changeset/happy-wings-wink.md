@@ -25,4 +25,4 @@ Documentation improvements
 - Comprehensive README with complete API reference (58 methods)
 - Detailed feature descriptions for all storage capabilities
 - Index management examples and best practices
-- Updated to reflect all atomic transaction usage# Please enter your changeset message above this line.
+- Updated to reflect all atomic transaction usage

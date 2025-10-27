@@ -603,7 +603,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
           const parsedKey = parseSqlIdentifier(key, 'column name');
           const paramName = `p${paramIndex++}`;
           conditions.push(`[${parsedKey}] = @${paramName}`);
-          request.input(paramName, value);
+          request.input(paramName, this.prepareValue(value, key, tableName));
         });
 
         const deleteSql = `DELETE FROM ${tableName_} WHERE ${conditions.join(' AND ')}`;

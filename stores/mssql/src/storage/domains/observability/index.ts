@@ -314,7 +314,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+      updates: Partial<UpdateAISpanRecord>;
     }[];
   }): Promise<void> {
     if (!args.records || args.records.length === 0) {

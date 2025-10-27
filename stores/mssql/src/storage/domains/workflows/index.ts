@@ -5,25 +5,6 @@ import sql from 'mssql';
 import type { StoreOperationsMSSQL } from '../operations';
 import { getSchemaName, getTableName } from '../utils';
 
-function parseWorkflowRun(row: any): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-  if (typeof parsedSnapshot === 'string') {
-    try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-    }
-  }
-  return {
-    workflowName: row.workflow_name,
-    runId: row.run_id,
-    snapshot: parsedSnapshot,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    resourceId: row.resourceId,
-  };
-}
-
 export class WorkflowsMSSQL extends WorkflowsStorage {
   public pool: sql.ConnectionPool;
   private operations: StoreOperationsMSSQL;
@@ -42,6 +23,25 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     this.pool = pool;
     this.operations = operations;
     this.schema = schema;
+  }
+
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger?.warn?.(`Failed to parse snapshot for workflow ${row.workflow_name}:`, e);
+      }
+    }
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      resourceId: row.resourceId,
+    };
   }
 
   async updateWorkflowResults({
@@ -98,15 +98,21 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       snapshot.context[stepId] = result;
       snapshot.runtimeContext = { ...snapshot.runtimeContext, ...runtimeContext };
 
-      // Update the snapshot within the same transaction
-      const updateRequest = new sql.Request(transaction);
-      updateRequest.input('snapshot', JSON.stringify(snapshot));
-      updateRequest.input('workflow_name', workflowName);
-      updateRequest.input('run_id', runId);
-      updateRequest.input('updatedAt', sql.DateTime2, new Date());
+      // Upsert within the same transaction to handle both insert and update
+      const upsertReq = new sql.Request(transaction);
+      upsertReq.input('workflow_name', workflowName);
+      upsertReq.input('run_id', runId);
+      upsertReq.input('snapshot', JSON.stringify(snapshot));
+      upsertReq.input('createdAt', sql.DateTime2, new Date());
+      upsertReq.input('updatedAt', sql.DateTime2, new Date());
 
-      await updateRequest.query(
-        `UPDATE ${table} SET snapshot = @snapshot, [updatedAt] = @updatedAt WHERE workflow_name = @workflow_name AND run_id = @run_id`,
+      await upsertReq.query(
+        `MERGE ${table} AS target
+         USING (SELECT @workflow_name AS workflow_name, @run_id AS run_id) AS src
+           ON target.workflow_name = src.workflow_name AND target.run_id = src.run_id
+         WHEN MATCHED THEN UPDATE SET snapshot = @snapshot, [updatedAt] = @updatedAt
+         WHEN NOT MATCHED THEN INSERT (workflow_name, run_id, snapshot, [createdAt], [updatedAt])
+           VALUES (@workflow_name, @run_id, @snapshot, @createdAt, @updatedAt);`,
       );
 
       await transaction.commit();
@@ -328,7 +334,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         return null;
       }
 
-      return parseWorkflowRun(result.recordset[0]);
+      return this.parseWorkflowRun(result.recordset[0]);
     } catch (error) {
       throw new MastraError(
         {
@@ -375,7 +381,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           conditions.push(`[resourceId] = @resourceId`);
           paramMap['resourceId'] = resourceId;
         } else {
-          console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
+          this.logger?.warn?.(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
         }
       }
 
@@ -414,7 +420,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         request.input('offset', offset);
       }
       const result = await request.query(query);
-      const runs = (result.recordset || []).map(row => parseWorkflowRun(row));
+      const runs = (result.recordset || []).map(row => this.parseWorkflowRun(row));
       return { runs, total: total || runs.length };
     } catch (error) {
       throw new MastraError(

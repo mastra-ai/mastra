@@ -63,7 +63,7 @@ export class LegacyEvalsMSSQL extends LegacyEvalsStorage {
       if (error && error.number === 208 && error.message && error.message.includes('Invalid object name')) {
         return [];
       }
-      console.error('Failed to get evals for the specified agent: ' + error?.message);
+      this.logger?.error?.('Failed to get evals for the specified agent:', error);
       throw error;
     }
   }
@@ -168,7 +168,7 @@ export class LegacyEvalsMSSQL extends LegacyEvalsStorage {
         error,
       );
       this.logger?.error?.(mastraError.toString());
-      this.logger?.trackException(mastraError);
+      this.logger?.trackException?.(mastraError);
       throw mastraError;
     }
   }
