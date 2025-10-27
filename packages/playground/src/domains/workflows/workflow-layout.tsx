@@ -44,7 +44,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
 
           {children}
 
-          <WorkflowInformation workflowId={workflowId!} />
+          <WorkflowInformation workflowId={workflowId!} initialRunId={runId} />
         </MainContentContent>
       </MainContentLayout>
     </WorkflowRunProvider>
