@@ -2,8 +2,8 @@ import { anthropic as anthropic_v5 } from '@ai-sdk/anthropic-v5';
 import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-// import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-// import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import type { LanguageModel } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -19,7 +19,7 @@ export const isOpenAIModel = (model: LanguageModel | LanguageModelV2) =>
   model.provider.includes('openai') || model.modelId.includes('openai');
 
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
-// const openrouter_v5 = createOpenRouterV5({ apiKey: process.env.OPENROUTER_API_KEY });
+const openrouter_v5 = createOpenRouterV5({ apiKey: process.env.OPENROUTER_API_KEY });
 
 type Result = {
   modelName: string;
@@ -305,21 +305,21 @@ async function runSingleToolSchemaTest(
 const SUITE_TIMEOUT = 300000; // 5 minutes
 const TEST_TIMEOUT = 300000; // 5 minutes
 
-// if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
-// const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
+if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
+const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
 
 const modelsToTestV1 = [
   // openrouter('anthropic/claude-3.7-sonnet'),
   // openrouter('anthropic/claude-sonnet-4.5'),
-  // openrouter('anthropic/claude-haiku-4.5'),
+  openrouter('anthropic/claude-haiku-4.5'),
   // openrouter('openai/gpt-4o-mini'),
   // openrouter('openai/gpt-4.1-mini'),
   // openrouter_v5('openai/o3-mini'),
-  openai('o3-mini'),
-  // openai('o4-mini'),
+  // openai('o3-mini'),
+  openai('o4-mini'),
   // openrouter('google/gemini-2.5-pro'),
   // openrouter('google/gemini-2.5-flash'),
-  // openrouter('google/gemini-2.0-flash-lite-001'),
+  openrouter('google/gemini-2.0-flash-lite-001'),
 ];
 const modelsToTestV2 = [
   // openrouter_v5('anthropic/claude-3.7-sonnet'),
@@ -328,11 +328,11 @@ const modelsToTestV2 = [
   // openrouter_v5('openai/gpt-4o-mini'),
   // openrouter_v5('openai/gpt-4.1-mini'),
   // openrouter_v5('openai/o3-mini'),
-  openai_v5('o3-mini'),
-  // openai_v5('o4-mini'),
+  // openai_v5('o3-mini'),
+  openai_v5('o4-mini'),
   // openrouter_v5('google/gemini-2.5-pro'),
   // openrouter_v5('google/gemini-2.5-flash'),
-  // openrouter_v5('google/gemini-2.0-flash-lite-001'),
+  openrouter_v5('google/gemini-2.0-flash-lite-001'),
 ];
 
 // Specify which schemas to test - empty array means test all
@@ -396,7 +396,7 @@ const modelsByProviderV2 = modelsToTestV2.reduce(
 [...Object.entries(modelsByProviderV1), ...Object.entries(modelsByProviderV2)].forEach(([provider, models]) => {
   [
     // 'output', // <- waste of time, output doesn't work very well
-    'structuredOutput',
+    // 'structuredOutput', // <- not a waste, but until we do schema compat in structured output it doesn't make sense to test this here
     'tools',
   ].forEach(outputType => {
     models.forEach(model => {
@@ -404,7 +404,7 @@ const modelsByProviderV2 = modelsToTestV2.reduce(
       if (outputType === `structuredOutput` && model.specificationVersion !== `v2`) {
         return;
       }
-      describe(
+      describe.concurrent(
         `${outputType} schema compatibility > ${provider} > ${model.modelId}`,
         { timeout: SUITE_TIMEOUT },
         () => {
