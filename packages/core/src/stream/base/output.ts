@@ -688,68 +688,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
                 await options?.onFinish?.(onFinishPayload);
               }
-
-              if (options?.rootSpan) {
-                options.rootSpan.setAttributes({
-                  ...(self.#model.modelId ? { 'aisdk.model.id': self.#model.modelId } : {}),
-                  ...(self.#model.provider ? { 'aisdk.model.provider': self.#model.provider } : {}),
-                  ...(baseFinishStep?.usage?.reasoningTokens
-                    ? {
-                        'stream.usage.reasoningTokens': baseFinishStep.usage.reasoningTokens,
-                      }
-                    : {}),
-
-                  ...(baseFinishStep?.usage?.totalTokens
-                    ? {
-                        'stream.usage.totalTokens': baseFinishStep.usage.totalTokens,
-                      }
-                    : {}),
-
-                  ...(baseFinishStep?.usage?.inputTokens
-                    ? {
-                        'stream.usage.inputTokens': baseFinishStep.usage.inputTokens,
-                      }
-                    : {}),
-                  ...(baseFinishStep?.usage?.outputTokens
-                    ? {
-                        'stream.usage.outputTokens': baseFinishStep.usage.outputTokens,
-                      }
-                    : {}),
-                  ...(baseFinishStep?.usage?.cachedInputTokens
-                    ? {
-                        'stream.usage.cachedInputTokens': baseFinishStep.usage.cachedInputTokens,
-                      }
-                    : {}),
-
-                  ...(baseFinishStep?.providerMetadata
-                    ? { 'stream.response.providerMetadata': JSON.stringify(baseFinishStep?.providerMetadata) }
-                    : {}),
-                  ...(baseFinishStep?.finishReason
-                    ? { 'stream.response.finishReason': baseFinishStep?.finishReason }
-                    : {}),
-                  ...(options?.telemetry_settings?.recordOutputs !== false
-                    ? { 'stream.response.text': baseFinishStep?.text }
-                    : {}),
-                  ...(baseFinishStep?.toolCalls && options?.telemetry_settings?.recordOutputs !== false
-                    ? {
-                        'stream.response.toolCalls': JSON.stringify(
-                          baseFinishStep?.toolCalls
-                            ?.map(toolCall => {
-                              return {
-                                type: 'tool-call',
-                                toolCallId: toolCall.payload?.toolCallId,
-                                args: toolCall.payload?.args,
-                                toolName: toolCall.payload?.toolName,
-                              };
-                            })
-                            .filter(Boolean),
-                        ),
-                      }
-                    : {}),
-                });
-
-                options.rootSpan.end();
-              }
               break;
 
             case 'error':

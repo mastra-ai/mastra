@@ -4,7 +4,6 @@ import { join, posix } from 'path';
 import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions } from '@mastra/deployer/build';
-import { isWebContainer } from '@webcontainer/env';
 import { execa } from 'execa';
 import getPort from 'get-port';
 
@@ -63,14 +62,6 @@ const startServer = async (
       commands.push(...startOptions.customArgs);
     }
 
-    if (!isWebContainer()) {
-      const instrumentation = import.meta.resolve('@opentelemetry/instrumentation/hook.mjs');
-      commands.push(
-        `--import=${import.meta.resolve('mastra/telemetry-loader')}`,
-        '--import=./instrumentation.mjs',
-        `--import=${instrumentation}`,
-      );
-    }
     commands.push('index.mjs');
 
     currentServerProcess = execa(process.execPath, commands, {
