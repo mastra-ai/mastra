@@ -4,7 +4,6 @@ import {
   ensureDate,
   serializeDate,
   StoreOperations,
-  TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_SCORERS,
   TABLE_THREADS,
@@ -127,10 +126,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
       case TABLE_TRACES:
         if (!record.id) throw new Error('Trace ID is required');
         return `${prefix}${tableName}:${record.id}`;
-      case TABLE_EVALS:
-        const evalId = record.id || record.run_id;
-        if (!evalId) throw new Error('Eval ID or run_id is required');
-        return `${prefix}${tableName}:${evalId}`;
       case TABLE_SCORERS:
         if (!record.id) throw new Error('Score ID is required');
         return `${prefix}${tableName}:${record.id}`;
@@ -415,11 +410,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
             throw new Error('Trace record missing required fields');
           }
           break;
-        case TABLE_EVALS:
-          if (!('agent_name' in recordTyped) || !('run_id' in recordTyped)) {
-            throw new Error('Eval record missing required fields');
-          }
-          break;
         case TABLE_SCORERS:
           if (!('id' in recordTyped) || !('scorerId' in recordTyped)) {
             throw new Error('Score record missing required fields');
@@ -440,12 +430,7 @@ export class StoreOperationsCloudflare extends StoreOperations {
       const key = this.getKey(tableName, record);
 
       // Process dates and metadata
-      const processedRecord = {
-        ...record,
-        createdAt: record.createdAt ? serializeDate(record.createdAt) : undefined,
-        updatedAt: record.updatedAt ? serializeDate(record.updatedAt) : undefined,
-        metadata: record.metadata ? JSON.stringify(record.metadata) : '',
-      } as RecordTypes[TABLE_NAMES];
+      const processedRecord = { ...record } as RecordTypes[TABLE_NAMES];
 
       // Validate record type
       await this.validateRecord(processedRecord, tableName);
@@ -465,11 +450,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
     }
   }
 
-  private ensureMetadata(metadata: Record<string, unknown> | string | undefined): Record<string, unknown> | undefined {
-    if (!metadata) return {};
-    return typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
-  }
-
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     try {
       // Generate key using simplified approach
@@ -480,14 +460,7 @@ export class StoreOperationsCloudflare extends StoreOperations {
       if (!data) return null;
 
       // Handle dates and metadata
-      const processed = {
-        ...data,
-        createdAt: ensureDate(data.createdAt),
-        updatedAt: ensureDate(data.updatedAt),
-        metadata: this.ensureMetadata(data.metadata),
-      };
-
-      return processed as R;
+      return data as R;
     } catch (error: any) {
       const mastraError = new MastraError(
         {
@@ -516,14 +489,7 @@ export class StoreOperationsCloudflare extends StoreOperations {
           const key = this.getKey(input.tableName, record as Record<string, string>);
 
           // Process dates and metadata
-          const processedRecord = {
-            ...record,
-            createdAt: record.createdAt ? serializeDate(record.createdAt as Date) : undefined,
-            updatedAt: record.updatedAt ? serializeDate(record.updatedAt as Date) : undefined,
-            metadata: record.metadata ? JSON.stringify(record.metadata) : undefined,
-          } as RecordTypes[T];
-
-          await this.putKV({ tableName: input.tableName, key, value: processedRecord });
+          await this.putKV({ tableName: input.tableName, key, value: record });
         }),
       );
     } catch (error) {

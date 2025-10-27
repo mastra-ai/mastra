@@ -7,8 +7,6 @@ import { ChunkFrom } from '@mastra/core/stream';
 import {
   getAgentsHandler as getOriginalAgentsHandler,
   getAgentByIdHandler as getOriginalAgentByIdHandler,
-  getEvalsByAgentIdHandler as getOriginalEvalsByAgentIdHandler,
-  getLiveEvalsByAgentIdHandler as getOriginalLiveEvalsByAgentIdHandler,
   generateHandler as getOriginalGenerateHandler,
   streamGenerateHandler as getOriginalStreamGenerateHandler,
   updateAgentModelHandler as getOriginalUpdateAgentModelHandler,
@@ -146,34 +144,6 @@ export async function getAgentByIdHandler(c: Context) {
     agentId,
     runtimeContext,
     isPlayground,
-  });
-
-  return c.json(result);
-}
-
-export async function getEvalsByAgentIdHandler(c: Context) {
-  const mastra: Mastra = c.get('mastra');
-  const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
-
-  const result = await getOriginalEvalsByAgentIdHandler({
-    mastra,
-    agentId,
-    runtimeContext,
-  });
-
-  return c.json(result);
-}
-
-export async function getLiveEvalsByAgentIdHandler(c: Context) {
-  const mastra: Mastra = c.get('mastra');
-  const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
-
-  const result = await getOriginalLiveEvalsByAgentIdHandler({
-    mastra,
-    agentId,
-    runtimeContext,
   });
 
   return c.json(result);

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS } from '../../constants';
+import { TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '../../constants';
 import { StoreOperationsInMemory } from './inmemory';
 
 describe('StoreOperationsInMemory.batchInsert', () => {
@@ -76,22 +76,13 @@ describe('StoreOperationsInMemory.batchInsert', () => {
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       records: [snapshotRecord],
     });
-    await store.batchInsert({
-      tableName: TABLE_EVALS,
-      records: [evalRecord],
-    });
 
     // Assert: Verify records are stored with run_id as id
     const snapshotTable = store.data[TABLE_WORKFLOW_SNAPSHOT];
-    const evalsTable = store.data[TABLE_EVALS];
 
     expect(snapshotTable.get('run-123')).toEqual({
       ...snapshotRecord,
       id: 'run-123',
-    });
-    expect(evalsTable.get('run-456')).toEqual({
-      ...evalRecord,
-      id: 'run-456',
     });
   });
 
@@ -139,22 +130,15 @@ describe('StoreOperationsInMemory.batchInsert', () => {
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       records: snapshotRecords,
     });
-    await store.batchInsert({
-      tableName: TABLE_EVALS,
-      records: evalRecords,
-    });
 
     // Assert: Verify auto-generated ids and stored records
     const snapshotTable = store.data[TABLE_WORKFLOW_SNAPSHOT];
-    const evalsTable = store.data[TABLE_EVALS];
 
     // Verify record counts
     expect(snapshotTable.size).toBe(2);
-    expect(evalsTable.size).toBe(2);
 
     // Get all stored records
     const storedSnapshotRecords = Array.from(snapshotTable.values());
-    const storedEvalRecords = Array.from(evalsTable.values());
 
     // Verify ID format and uniqueness for snapshots
     const snapshotIds = storedSnapshotRecords.map(r => r.id);
@@ -165,8 +149,6 @@ describe('StoreOperationsInMemory.batchInsert', () => {
     // Verify record content matches
     expect(storedSnapshotRecords[0].data).toBe('snapshot data 1');
     expect(storedSnapshotRecords[1].data).toBe('snapshot data 2');
-    expect(storedEvalRecords[0].score).toBe(0.95);
-    expect(storedEvalRecords[1].score).toBe(0.85);
   });
 
   it('should handle empty records array without errors', async () => {

@@ -474,20 +474,6 @@ export class PostgresPerformanceTest {
       ),
     );
 
-    // Test getEvals (if evals exist)
-    try {
-      results.push(
-        await this.measureOperation(
-          'getEvals',
-          () => this.store.getEvals({ agentName: 'test_agent', page: 0, perPage: 20 }),
-          scenario,
-        ),
-      );
-    } catch {
-      // Skip if evals table doesn't exist or no evals
-      console.info('Skipping getEvals test (table may not exist)');
-    }
-
     return results;
   }
 

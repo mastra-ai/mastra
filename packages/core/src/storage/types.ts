@@ -1,5 +1,4 @@
 import type { AISpanType } from '../ai-tracing';
-import type { MetricResult, TestInfo } from '../eval';
 import type { MemoryConfig } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
 import type { LegacyWorkflowRunState } from '../workflows/legacy';
@@ -89,32 +88,6 @@ export type StorageGetMessagesArg = {
   };
   threadConfig?: MemoryConfig;
   format?: MastraMessageFormat;
-};
-
-export type StorageEvalRow = {
-  input: string;
-  output: string;
-  result: Record<string, any>;
-  agent_name: string;
-  metric_name: string;
-  instructions: string;
-  test_info: Record<string, any> | null;
-  global_run_id: string;
-  run_id: string;
-  created_at: Date;
-};
-
-export type EvalRow = {
-  input: string;
-  output: string;
-  result: MetricResult;
-  agentName: string;
-  createdAt: string;
-  metricName: string;
-  instructions: string;
-  runId: string;
-  globalRunId: string;
-  testInfo?: TestInfo;
 };
 
 export type StorageResourceType = {
