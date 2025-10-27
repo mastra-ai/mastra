@@ -178,7 +178,7 @@ response.processDataStream({
 
 Currently, AI SDK V5 format is not supported in the client SDK.
 For AI SDK v5 compatible format, leverage the `@mastra/ai-sdk` package
-[AI SDK v5 Stream Compatibility](/docs/frameworks/agentic-uis/ai-sdk#enabling-stream-compatibility)
+[AI SDK v5 Stream Compatibility](/docs/frameworks/agentic-uis/ai-sdk#stream-transformations)
 
 ### Generate
 

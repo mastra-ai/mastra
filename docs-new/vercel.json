@@ -6,8 +6,13 @@
       "permanent": true
     },
     {
-      "source": "/:locale/docs/getting-started/model-capability",
-      "destination": "/:locale/docs/models",
+      "source": "/docs/workflows/using-with-agents-and-tools",
+      "destination": "/docs/workflows/agents-and-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/model-capability",
+      "destination": "/docs/models",
       "permanent": true
     },
     {
@@ -1181,13 +1186,8 @@
       "permanent": true
     },
     {
-      "source": "/:locale/examples/scorers/toxicity",
-      "destination": "/:locale/docs/reference/scorers/toxicity",
-      "permanent": true
-    },
-    {
-      "source": "/:locale/examples/scorers/custom-scorer",
-      "destination": "/:locale/docs/scorers/custom-scorers",
+      "source": "/docs/server-db/snapshots",
+      "destination": "/docs/workflows/snapshots",
       "permanent": true
     },
     {

@@ -132,7 +132,3 @@ for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
 }
 ```
-
-## Related
-
-- [Calling Agents](../agents/calling-agents)
