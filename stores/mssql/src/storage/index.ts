@@ -26,7 +26,6 @@ import type {
   IndexInfo,
   StorageIndexStats,
 } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
 import { LegacyEvalsMSSQL } from './domains/legacy-evals';
@@ -34,7 +33,6 @@ import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
 import { StoreOperationsMSSQL } from './domains/operations';
 import { ScoresMSSQL } from './domains/scores';
-import { TracesMSSQL } from './domains/traces';
 import { WorkflowsMSSQL } from './domains/workflows';
 
 export type MSSQLConfigType = {
@@ -97,7 +95,6 @@ export class MSSQLStore extends MastraStorage {
       const legacyEvals = new LegacyEvalsMSSQL({ pool: this.pool, schema: this.schema });
       const operations = new StoreOperationsMSSQL({ pool: this.pool, schemaName: this.schema });
       const scores = new ScoresMSSQL({ pool: this.pool, operations, schema: this.schema });
-      const traces = new TracesMSSQL({ pool: this.pool, operations, schema: this.schema });
       const workflows = new WorkflowsMSSQL({ pool: this.pool, operations, schema: this.schema });
       const memory = new MemoryMSSQL({ pool: this.pool, schema: this.schema, operations });
       const observability = new ObservabilityMSSQL({ pool: this.pool, operations, schema: this.schema });
@@ -105,7 +102,6 @@ export class MSSQLStore extends MastraStorage {
       this.stores = {
         operations,
         scores,
-        traces,
         workflows,
         legacyEvals,
         memory,
@@ -196,21 +192,6 @@ export class MSSQLStore extends MastraStorage {
     } & PaginationArgs = {},
   ): Promise<PaginationInfo & { evals: EvalRow[] }> {
     return this.stores.legacyEvals.getEvals(options);
-  }
-
-  /**
-   * @deprecated use getTracesPaginated instead
-   */
-  public async getTraces(args: StorageGetTracesArg): Promise<Trace[]> {
-    return this.stores.traces.getTraces(args);
-  }
-
-  public async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
-    return this.stores.traces.getTracesPaginated(args);
-  }
-
-  async batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {
-    return this.stores.traces.batchTraceInsert({ records });
   }
 
   async createTable({

@@ -1,5 +1,6 @@
 ---
-title: "Guardrails"
+title: "Guardrails | Agents | Mastra Docs"
+sidebar_title: "Guardrails"
 description: "Learn how to implement guardrails using input and output processors to secure and control AI interactions."
 sidebar_position: 5
 ---
@@ -21,7 +22,7 @@ Use processors for content moderation, prompt injection prevention, response san
 
 ## Adding processors to an agent
 
-Import and instantiate the relevant processor class, and pass it to your agent’s configuration using either the `inputProcessors` or `outputProcessors` parameter:
+Import and instantiate the relevant processor class, and pass it to your agent’s configuration using either the `inputProcessors` or `outputProcessors` option:
 
 ```typescript {3,9-17} filename="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -66,7 +67,7 @@ export const normalizedAgent = new Agent({
 });
 ```
 
-> See [UnicodeNormalizer](/docs/reference/processors/unicode-normalizer) for a full list of configuration options.
+> See [UnicodeNormalizer](../reference/processors/unicode-normalizer.md) for a full list of configuration options.
 
 ### Preventing prompt injection
 
@@ -88,7 +89,7 @@ export const secureAgent = new Agent({
 });
 ```
 
-> See [PromptInjectionDetector](/docs/reference/processors/prompt-injection-detector) for a full list of configuration options.
+> See [PromptInjectionDetector](../reference/processors/prompt-injection-detector.md) for a full list of configuration options.
 
 ### Detecting and translating language
 
@@ -110,7 +111,7 @@ export const multilingualAgent = new Agent({
 });
 ```
 
-> See [LanguageDetector](/docs/reference/processors/language-detector) for a full list of configuration options.
+> See [LanguageDetector](../reference/processors/language-detector.md) for a full list of configuration options.
 
 ## Output processors
 
@@ -135,7 +136,7 @@ export const batchedAgent = new Agent({
 });
 ```
 
-> See [BatchPartsProcessor](/docs/reference/processors/batch-parts-processor) for a full list of configuration options.
+> See [BatchPartsProcessor](../reference/processors/batch-parts-processor.md) for a full list of configuration options.
 
 ### Limiting token usage
 
@@ -156,7 +157,7 @@ export const limitedAgent = new Agent({
 });
 ```
 
-> See [TokenLimiterProcessor](/docs/reference/processors/token-limiter-processor) for a full list of configuration options.
+> See [TokenLimiterProcessor](../reference/processors/token-limiter-processor.md) for a full list of configuration options.
 
 ### Scrubbing system prompts
 
@@ -181,7 +182,7 @@ const scrubbedAgent = new Agent({
 });
 ```
 
-> See [SystemPromptScrubber](/docs/reference/processors/system-prompt-scrubber) for a full list of configuration options.
+> See [SystemPromptScrubber](../reference/processors/system-prompt-scrubber.md) for a full list of configuration options.
 
 ## Hybrid processors
 
@@ -212,7 +213,7 @@ export const moderatedAgent = new Agent({
 });
 ```
 
-> See [ModerationProcessor](/docs/reference/processors/moderation-processor) for a full list of configuration options.
+> See [ModerationProcessor](../reference/processors/moderation-processor.md) for a full list of configuration options.
 
 ### Detecting and redacting PII
 
@@ -241,7 +242,7 @@ export const privateAgent = new Agent({
 });
 ```
 
-> See [PIIDetector](/docs/reference/processors/pii-detector) for a full list of configuration options.
+> See [PIIDetector](../reference/processors/pii-detector.md) for a full list of configuration options.
 
 ## Applying multiple processors
 
@@ -338,3 +339,13 @@ In this case, the `tripwireReason` indicates that a credit card number was detec
 ```text
 PII detected. Types: credit-card
 ```
+
+## Custom processors
+
+If the built-in processors don’t cover your needs, you can create your own by extending the `Processor` class.
+
+Available examples:
+
+- [Message Length Limiter](../examples/processors/message-length-limiter)
+- [Response Length Limiter](../examples/processors/response-length-limiter)
+- [Response Validator](../examples/processors/response-validator)
