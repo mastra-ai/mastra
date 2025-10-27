@@ -1,4 +1,3 @@
-import { anthropic as anthropic_v5 } from '@ai-sdk/anthropic-v5';
 import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -324,7 +323,7 @@ const modelsToTestV1 = [
 const modelsToTestV2 = [
   // openrouter_v5('anthropic/claude-3.7-sonnet'),
   // openrouter_v5('anthropic/claude-sonnet-4.5'),
-  anthropic_v5('claude-haiku-4-5'),
+  openrouter_v5('anthropic/claude-haiku-4.5'),
   // openrouter_v5('openai/gpt-4o-mini'),
   // openrouter_v5('openai/gpt-4.1-mini'),
   // openrouter_v5('openai/o3-mini'),
