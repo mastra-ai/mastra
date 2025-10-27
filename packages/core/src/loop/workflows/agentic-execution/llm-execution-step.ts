@@ -373,7 +373,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       ].includes(chunk.type)
     ) {
       if (chunk.type === 'raw' && !includeRawChunks) {
-        return;
+        continue;
       }
 
       await options?.onChunk?.(chunk);
