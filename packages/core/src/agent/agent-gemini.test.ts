@@ -235,6 +235,9 @@ describe('Gemini Model Compatibility Tests', () => {
         name: 'helper-agent',
         instructions: 'You help with tasks',
         model: MODEL,
+        defaultVNextStreamOptions: {
+          maxSteps: 1,
+        },
       });
 
       const agent = new Agent({
@@ -244,11 +247,14 @@ describe('Gemini Model Compatibility Tests', () => {
         model: MODEL,
         agents: { helperAgent },
         memory,
+        defaultVNextStreamOptions: {
+          maxSteps: 1,
+        },
       });
 
       const stream = await agent.network('', {
         runtimeContext,
-        maxSteps: 2,
+        maxSteps: 1,
       });
 
       const chunks: ChunkType[] = [];

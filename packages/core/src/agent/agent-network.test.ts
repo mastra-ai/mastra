@@ -130,8 +130,8 @@ describe('Agent - network', () => {
       runtimeContext,
     });
 
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
   });
 
@@ -140,8 +140,8 @@ describe('Agent - network', () => {
       runtimeContext,
     });
 
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
   });
 
@@ -150,8 +150,8 @@ describe('Agent - network', () => {
       runtimeContext,
     });
 
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
   });
 
@@ -164,11 +164,9 @@ describe('Agent - network', () => {
       },
     );
 
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
-
-    console.log('SUH', anStream);
   });
 
   it('LOOP - should track usage data from agent.network()', async () => {
@@ -271,8 +269,8 @@ describe('Agent - network', () => {
     });
 
     // Consume the stream
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
 
     // Wait a bit for async title generation to complete
@@ -334,8 +332,8 @@ describe('Agent - network', () => {
     });
 
     // Consume the stream
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
 
     // Wait a bit for async title generation to complete
@@ -383,8 +381,8 @@ describe('Agent - network', () => {
     });
 
     // Consume the stream
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
 
     // Wait for any async operations
@@ -432,8 +430,8 @@ describe('Agent - network', () => {
     });
 
     // Consume the stream
-    for await (const chunk of anStream) {
-      console.log(chunk);
+    for await (const _chunk of anStream) {
+      // console.log(chunk);
     }
 
     // Wait for any async operations
