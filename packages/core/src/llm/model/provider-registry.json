@@ -631,12 +631,12 @@
         "claude-opus-4-1",
         "claude-sonnet-4",
         "claude-sonnet-4-5",
-        "code-supernova",
         "glm-4.6",
         "gpt-5",
         "gpt-5-codex",
         "grok-code",
         "kimi-k2",
+        "minimax-m2",
         "qwen3-coder"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
@@ -827,6 +827,9 @@
         "meta-llama/llama-3.3-70b-instruct:free",
         "meta-llama/llama-4-scout:free",
         "microsoft/mai-ds-r1:free",
+        "minimax/minimax-01",
+        "minimax/minimax-m1",
+        "minimax/minimax-m2:free",
         "mistralai/codestral-2508",
         "mistralai/devstral-medium-2507",
         "mistralai/devstral-small-2505",
@@ -915,6 +918,7 @@
       "apiKeyHeader": "Authorization",
       "name": "Synthetic",
       "models": [
+        "hf:MiniMaxAI/MiniMax-M2",
         "hf:Qwen/Qwen2.5-Coder-32B-Instruct",
         "hf:Qwen/Qwen3-235B-A22B-Instruct-2507",
         "hf:Qwen/Qwen3-235B-A22B-Thinking-2507",
@@ -1661,12 +1665,12 @@
       "claude-opus-4-1",
       "claude-sonnet-4",
       "claude-sonnet-4-5",
-      "code-supernova",
       "glm-4.6",
       "gpt-5",
       "gpt-5-codex",
       "grok-code",
       "kimi-k2",
+      "minimax-m2",
       "qwen3-coder"
     ],
     "fastrouter": [
@@ -1798,6 +1802,9 @@
       "meta-llama/llama-3.3-70b-instruct:free",
       "meta-llama/llama-4-scout:free",
       "microsoft/mai-ds-r1:free",
+      "minimax/minimax-01",
+      "minimax/minimax-m1",
+      "minimax/minimax-m2:free",
       "mistralai/codestral-2508",
       "mistralai/devstral-medium-2507",
       "mistralai/devstral-small-2505",
@@ -1878,6 +1885,7 @@
       "z-ai/glm-4.6:exacto"
     ],
     "synthetic": [
+      "hf:MiniMaxAI/MiniMax-M2",
       "hf:Qwen/Qwen2.5-Coder-32B-Instruct",
       "hf:Qwen/Qwen3-235B-A22B-Instruct-2507",
       "hf:Qwen/Qwen3-235B-A22B-Thinking-2507",

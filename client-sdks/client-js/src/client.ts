@@ -45,6 +45,7 @@ import type {
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
   GetMemoryThreadMessagesResponse,
+  MemorySearchResponse,
 } from './types';
 import { base64RuntimeContext, parseClientRuntimeContext, runtimeContextQueryString } from './utils';
 
@@ -492,6 +493,38 @@ export class MastraClient extends BaseResource {
     return this.request(
       `/api/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}${runtimeContextQueryString(runtimeContext, '&')}`,
     );
+  }
+
+  public searchMemory({
+    agentId,
+    resourceId,
+    threadId,
+    searchQuery,
+    memoryConfig,
+    runtimeContext,
+  }: {
+    agentId: string;
+    resourceId: string;
+    threadId?: string;
+    searchQuery: string;
+    memoryConfig?: any;
+    runtimeContext?: RuntimeContext | Record<string, any>;
+  }): Promise<MemorySearchResponse> {
+    const params = new URLSearchParams({
+      searchQuery,
+      resourceId,
+      agentId,
+    });
+
+    if (threadId) {
+      params.append('threadId', threadId);
+    }
+
+    if (memoryConfig) {
+      params.append('memoryConfig', JSON.stringify(memoryConfig));
+    }
+
+    return this.request(`/api/memory/search?${params}${runtimeContextQueryString(runtimeContext, '&')}`);
   }
 
   /**

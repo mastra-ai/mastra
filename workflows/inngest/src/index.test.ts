@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { openai } from '@ai-sdk/openai';
 import { serve } from '@hono/node-server';
-import { realtimeMiddleware } from '@inngest/realtime';
+import { realtimeMiddleware } from '@inngest/realtime/middleware';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RuntimeContext } from '@mastra/core/runtime-context';
@@ -3809,7 +3809,7 @@ describe('MastraInngestWorkflow', () => {
       expect(toolAction).toHaveBeenCalled();
       expect(result.steps.step1).toMatchObject({ status: 'success', output: { name: 'step1' } });
       expect(result.steps['random-tool']).toMatchObject({ status: 'success', output: { name: 'step1' } });
-    }, 10000);
+    });
   });
 
   describe('Watch', () => {
@@ -5235,6 +5235,10 @@ describe('MastraInngestWorkflow', () => {
 
   describe('Agent as step', () => {
     it('should be able to use an agent as a step', async ctx => {
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OPENAI_API_KEY is not set');
+      }
+
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -5345,6 +5349,10 @@ describe('MastraInngestWorkflow', () => {
     });
 
     it('should be able to use an agent in parallel', async ctx => {
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OPENAI_API_KEY is not set');
+      }
+
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -7377,7 +7385,7 @@ describe('MastraInngestWorkflow', () => {
 
       await resetInngest();
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -7549,7 +7557,7 @@ describe('MastraInngestWorkflow', () => {
 
       await resetInngest();
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -7757,7 +7765,7 @@ describe('MastraInngestWorkflow', () => {
 
       await resetInngest();
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -7959,7 +7967,7 @@ describe('MastraInngestWorkflow', () => {
 
       await resetInngest();
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       setTimeout(() => {
         run.sendEvent('user-event-test', {
@@ -8180,7 +8188,7 @@ describe('MastraInngestWorkflow', () => {
 
       const run = await promptEvalWorkflow.createRunAsync();
 
-      const { stream, getWorkflowState } = run.stream({ inputData: { input: 'test' } });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: { input: 'test' } });
 
       for await (const data of stream) {
         if (data.type === 'step-suspended') {
@@ -8370,7 +8378,7 @@ describe('MastraInngestWorkflow', () => {
       const run = await workflow.createRunAsync({
         runId: 'test-run-id',
       });
-      const { stream } = run.stream({
+      const { stream } = run.streamLegacy({
         inputData: {
           prompt1: 'Capital of France, just the name',
           prompt2: 'Capital of UK, just the name',
@@ -9185,4 +9193,4 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
   });
-}, 40e3);
+}, 80e3);

@@ -21,14 +21,6 @@ export interface MemorySearchResult {
   };
 }
 
-export interface MemorySearchResponse {
-  results: MemorySearchResult[];
-  count: number;
-  query: string;
-  searchType?: string;
-  searchScope?: 'thread' | 'resource';
-}
-
 export interface MemorySearchParams {
   lastMessages?: number | false;
   // Add other memory config overrides as needed
