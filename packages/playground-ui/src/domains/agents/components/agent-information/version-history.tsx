@@ -33,7 +33,6 @@ export function VersionHistory({
             version={version}
             index={index}
             isExpanded={expandedVersion === index}
-            isAnalysisExpanded={expandedAnalysis}
             isUpdating={isUpdating}
             copiedVersions={copiedVersions}
             onToggleExpand={() => {
