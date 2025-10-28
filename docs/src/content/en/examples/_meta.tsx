@@ -26,10 +26,6 @@ const meta = {
     title: "RAG",
     theme: { collapsed: true },
   },
-  evals: {
-    title: "Evals",
-    theme: { collapsed: true },
-  },
   voice: {
     title: "Voice",
     theme: { collapsed: true },
