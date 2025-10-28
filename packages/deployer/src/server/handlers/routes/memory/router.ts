@@ -675,44 +675,145 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
     getThreadByIdHandler,
   );
 
-  router.get(
+  router.post(
     '/threads/:threadId/messages',
-    async (c, next) => {
-      c.header('Deprecation', 'true');
-      c.header(
-        'Warning',
-        '299 - "This endpoint is deprecated, use /api/memory/threads/:threadId/messages/paginated instead"',
-      );
-      c.header('Link', '</api/memory/threads/:threadId/messages/paginated>; rel="successor-version"');
-      return next();
-    },
     describeRoute({
-      description: 'Get messages for a thread',
+      description: 'List messages for a thread with advanced filtering and pagination',
       tags: ['memory'],
       parameters: [
         {
           name: 'threadId',
           in: 'path',
           required: true,
+          description: 'The unique identifier of the thread',
           schema: { type: 'string' },
         },
         {
           name: 'agentId',
           in: 'query',
           required: true,
+          description: 'The agent ID for context',
           schema: { type: 'string' },
         },
-        {
-          name: 'limit',
-          in: 'query',
-          required: false,
-          schema: { type: 'number' },
-          description: 'Limit the number of messages to retrieve (default: 40)',
-        },
       ],
+      requestBody: {
+        required: false,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                limit: {
+                  oneOf: [
+                    { type: 'number', minimum: 1 },
+                    { type: 'boolean', enum: [false] },
+                  ],
+                  description:
+                    'Number of messages to return. Use false to retrieve ALL messages (use with caution). Defaults to 40.',
+                },
+                offset: {
+                  type: 'number',
+                  minimum: 0,
+                  description:
+                    'Number of messages to skip. Use with limit for pagination (e.g., page 2 with limit 20 = offset 20). Defaults to 0.',
+                },
+                filter: {
+                  type: 'object',
+                  properties: {
+                    dateRange: {
+                      type: 'object',
+                      properties: {
+                        start: {
+                          type: 'string',
+                          format: 'date-time',
+                          description: 'Include only messages created on or after this date',
+                        },
+                        end: {
+                          type: 'string',
+                          format: 'date-time',
+                          description: 'Include only messages created on or before this date',
+                        },
+                      },
+                      description: 'Filter messages by creation date range',
+                    },
+                  },
+                  description: 'Filtering options for messages',
+                },
+                include: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    required: ['id'],
+                    properties: {
+                      id: {
+                        type: 'string',
+                        description: 'Message ID to include',
+                      },
+                      threadId: {
+                        type: 'string',
+                        description: 'Optional thread ID if different from main thread',
+                      },
+                      withPreviousMessages: {
+                        type: 'number',
+                        minimum: 0,
+                        description: 'Number of messages before this one to include',
+                      },
+                      withNextMessages: {
+                        type: 'number',
+                        minimum: 0,
+                        description: 'Number of messages after this one to include',
+                      },
+                    },
+                  },
+                  description: 'Array of message IDs with context (previous/next messages) to include in results',
+                },
+                format: {
+                  type: 'string',
+                  enum: ['v1', 'v2'],
+                  description: 'Message format version (default: v1)',
+                },
+                resourceId: {
+                  type: 'string',
+                  description: 'Optional resource ID for filtering messages',
+                },
+              },
+            },
+          },
+        },
+      },
       responses: {
         200: {
-          description: 'List of messages',
+          description: 'List of messages with pagination metadata',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  messages: {
+                    type: 'array',
+                    items: { type: 'object' },
+                    description: 'Array of messages in the specified format',
+                  },
+                  total: {
+                    type: 'number',
+                    description: 'Total number of messages matching the filter',
+                  },
+                  page: {
+                    type: 'number',
+                    description: 'Current page number (for backwards compatibility)',
+                  },
+                  perPage: {
+                    type: 'number',
+                    description: 'Number of messages per page (for backwards compatibility)',
+                  },
+                  hasMore: {
+                    type: 'boolean',
+                    description: 'Whether there are more messages available',
+                  },
+                },
+              },
+            },
+          },
         },
       },
     }),

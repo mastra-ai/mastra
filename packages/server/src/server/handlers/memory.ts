@@ -1,7 +1,12 @@
 import { convertMessages } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
-import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
+import type {
+  MastraMessageFormat,
+  StorageGetMessagesArg,
+  StorageListMessagesInput,
+  ThreadSortOptions,
+} from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
@@ -372,16 +377,29 @@ export async function getMessagesHandler({
   mastra,
   agentId,
   threadId,
-  limit,
   runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'runtimeContext'> & {
-  limit?: number;
-}) {
-  if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
-    throw new HTTPException(400, { message: 'Invalid limit: must be a positive integer' });
-  }
+  ...listMessagesParams
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'runtimeContext'> &
+  Omit<StorageListMessagesInput, 'threadId'>) {
   try {
     validateBody({ threadId });
+
+    // Validate limit if provided
+    if (
+      listMessagesParams.limit !== undefined &&
+      listMessagesParams.limit !== false &&
+      (!Number.isInteger(listMessagesParams.limit) || listMessagesParams.limit <= 0)
+    ) {
+      throw new HTTPException(400, { message: 'Invalid limit: must be a positive integer or false' });
+    }
+
+    // Validate offset if provided
+    if (
+      listMessagesParams.offset !== undefined &&
+      (!Number.isInteger(listMessagesParams.offset) || listMessagesParams.offset < 0)
+    ) {
+      throw new HTTPException(400, { message: 'Invalid offset: must be a non-negative integer' });
+    }
 
     const memory = await getMemoryFromContext({ mastra, agentId, runtimeContext });
 
@@ -394,14 +412,31 @@ export async function getMessagesHandler({
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
-    const result = await memory.query({
-      threadId: threadId!,
-      ...(limit && { selectBy: { last: limit } }),
-    });
-    const uiMessages = convertMessages(result.messagesV2).to('AIV5.UI');
-    return { messages: result.messages, uiMessages, legacyMessages: result.uiMessages };
+    const format = listMessagesParams.format || 'v1';
+
+    const result = await (format === 'v2'
+      ? memory.storage.listMessages({
+          threadId: threadId!,
+          limit: listMessagesParams.limit,
+          offset: listMessagesParams.offset,
+          filter: listMessagesParams.filter,
+          include: listMessagesParams.include,
+          format: 'v2' as const,
+          resourceId: listMessagesParams.resourceId,
+        })
+      : memory.storage.listMessages({
+          threadId: threadId!,
+          limit: listMessagesParams.limit,
+          offset: listMessagesParams.offset,
+          filter: listMessagesParams.filter,
+          include: listMessagesParams.include,
+          format: 'v1' as const,
+          resourceId: listMessagesParams.resourceId,
+        }));
+
+    return result;
   } catch (error) {
-    return handleError(error, 'Error getting messages');
+    return handleError(error, 'Error listing messages');
   }
 }
 

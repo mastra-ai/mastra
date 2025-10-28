@@ -1,6 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import type {
   StorageGetMessagesArg,
+  StorageListMessagesInput,
   MastraMessageFormat,
   ThreadOrderBy,
   ThreadSortDirection,
@@ -223,16 +224,28 @@ export async function getMessagesHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
     const threadId = c.req.param('threadId');
-    const limit = parseLimit(c.req.query('limit'));
     const runtimeContext = c.get('runtimeContext');
 
-    const result = await getOriginalGetMessagesHandler({
+    // Parse body parameters for listMessages
+    const body = (await c.req.json().catch(() => ({}))) as Partial<Omit<StorageListMessagesInput, 'threadId'>>;
+
+    // Parse filter.dateRange dates if provided
+    if (body.filter?.dateRange) {
+      if (body.filter.dateRange.start) {
+        body.filter.dateRange.start = new Date(body.filter.dateRange.start);
+      }
+      if (body.filter.dateRange.end) {
+        body.filter.dateRange.end = new Date(body.filter.dateRange.end);
+      }
+    }
+
+    const result = (await getOriginalGetMessagesHandler({
       mastra,
       agentId,
       threadId,
-      limit,
       runtimeContext,
-    });
+      ...body,
+    } as any)) as any;
 
     return c.json(result);
   } catch (error) {
