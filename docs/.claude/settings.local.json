@@ -14,7 +14,12 @@
       "Bash(else echo \"✗ $comp.tsx MISSING\")",
       "Read(//Users/kenny/dev/mastra/**)",
       "Bash(for dir in examples server-db getting-started observability tools-mcp workflows rag streaming scorers memory mastra-cloud agents voice community auth)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(for file in /Users/kenny/dev/mastra/docs/reference/processors/*.mdx)",
+      "Bash(for file in /Users/kenny/dev/mastra/docs/reference/streaming/workflows/*.mdx)",
+      "Bash(for file in /Users/kenny/dev/mastra/docs/reference/streaming/agents/*.mdx)",
+      "Bash({} +)",
+      "Bash(for file in auth0 clerk firebase jwt supabase workos)"
     ],
     "deny": [],
     "ask": []
