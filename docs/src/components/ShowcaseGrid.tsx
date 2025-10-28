@@ -130,7 +130,7 @@ const showcaseItems: ShowcaseCardProps[] = [
 
 export const ShowcaseGrid = () => {
   return (
-    <div className="showcase__grid max-w-[1440px] mx-auto py-12 px-12">
+    <div className="showcase__grid max-w-[64rem] mx-auto py-12 px-12">
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold tracking-tight mb-4 text-(--mastra-text-primary) dark:text-white">
           Showcase

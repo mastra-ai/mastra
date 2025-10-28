@@ -16,10 +16,15 @@ function NavbarContentDesktop() {
           <Link href="/docs">
             <Logo />
           </Link>
-          <TabSwitcher />
+          <div className="hidden lg:block">
+            <TabSwitcher />
+          </div>
         </div>
-        <SearchContainer locale="en" />
+
         <div className="flex gap-2 items-center">
+          <div className="hidden lg:block">
+            <SearchContainer locale="en" />
+          </div>
           <div className="flex gap-4 items-center">
             <GithubStarCount />
             <div className="hidden lg:block">

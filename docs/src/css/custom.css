@@ -1212,6 +1212,11 @@ p {
 }
 
 @media (min-width: 997px) {
+
+.menu__link--active:not(.menu__link--sublist) {
+ padding-inline-start: 0.5rem;
+}
+
   p {
     @apply tracking-[-0.09px] leading-[1.6];
   }
