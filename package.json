@@ -66,6 +66,7 @@
     "test:observability": "pnpm --filter \"./observability/*\" test",
     "lint-staged": "lint-staged",
     "lint": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!@internal/playground\" lint",
+    "lint:changed": "node scripts/lint-changed.js",
     "preinstall": "npx only-allow pnpm",
     "prepare": "husky",
     "prettier:format": "prettier --write . --log-level warn",
@@ -80,9 +81,6 @@
     "setup": "pnpm install --ignore-scripts && pnpm run build:cli"
   },
   "lint-staged": {
-    "*.{js,mjs,ts,tsx}": [
-      "eslint --fix"
-    ],
     "*.{js,mjs,ts,tsx,md,mdx,json,graphql,gql}": [
       "prettier --write"
     ]
