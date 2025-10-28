@@ -76,7 +76,7 @@ async function github({ pull_number }: { pull_number: number }) {
     childProcess.execSync(`git cherry-pick -x ${commitSha}`, {
       stdio: `inherit`,
     });
-  } catch (err) {
+  } catch {
     console.log('[ERROR]: cherry-pick failed');
 
     await octokit.rest.issues.createComment({
