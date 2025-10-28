@@ -232,11 +232,30 @@ export class InMemoryMemory extends MemoryStorage {
 
   protected parseStoredMessage(message: StorageMessageType): MastraMessageV2 {
     const { resourceId, content, role, thread_id, ...rest } = message;
+
+    // Parse content: if it's a string, try to parse as JSON (V2 format)
+    // If parsing fails, it's a plain text string (V1 format)
+    let parsedContent: MastraMessageV2['content'];
+    if (typeof content === 'string') {
+      try {
+        parsedContent = JSON.parse(content);
+      } catch {
+        // Plain text content (V1 format) - wrap in V2 structure
+        parsedContent = {
+          format: 2,
+          content: content,
+          parts: [],
+        };
+      }
+    } else {
+      parsedContent = content;
+    }
+
     return {
       ...rest,
       threadId: thread_id,
       ...(message.resourceId && { resourceId: message.resourceId }),
-      content: typeof content === 'string' ? JSON.parse(content) : content,
+      content: parsedContent,
       role: role as MastraMessageV2['role'],
     } satisfies MastraMessageV2;
   }
