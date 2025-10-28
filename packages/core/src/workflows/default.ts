@@ -1169,12 +1169,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     for (const step of entry.steps) {
       if (step.type === 'step') {
+        const prevOutput = this.getStepOutput(stepResults, prevStep);
         const startTime = resume?.steps[0] === step.step.id ? undefined : Date.now();
         const resumeTime = resume?.steps[0] === step.step.id ? Date.now() : undefined;
         stepResults[step.step.id] = {
           ...stepResults[step.step.id],
           status: 'running',
-          ...(resumeTime ? { resumePayload: resume?.resumePayload } : { payload: prevStep }),
+          ...(resumeTime ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
           ...(startTime ? { startedAt: startTime } : {}),
           ...(resumeTime ? { resumedAt: resumeTime } : {}),
         } as StepResult<any, any, any, any>;
