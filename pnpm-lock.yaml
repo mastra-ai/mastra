@@ -1689,6 +1689,9 @@ importers:
       zod:
         specifier: ^3.25.76
         version: 3.25.76
+      zod-v4:
+        specifier: npm:zod@4.1.12
+        version: zod@4.1.12
 
   packages/create-mastra:
     dependencies:
