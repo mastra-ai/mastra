@@ -781,6 +781,7 @@ export async function resumeStreamWorkflowHandler({
 
     return stream;
   } catch (error) {
+    console.log('error in server resumeStreamWorkflowHandler', error);
     return handleError(error, 'Error resuming workflow');
   }
 }

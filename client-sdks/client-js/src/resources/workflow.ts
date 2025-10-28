@@ -762,10 +762,12 @@ export class Workflow extends BaseResource {
     );
 
     if (!response.ok) {
+      console.log('error in client-js resumeStreamVNext', response.statusText);
       throw new Error(`Failed to stream vNext workflow: ${response.statusText}`);
     }
 
     if (!response.body) {
+      console.log('error in client-js resumeStreamVNext', 'Response body is null');
       throw new Error('Response body is null');
     }
 

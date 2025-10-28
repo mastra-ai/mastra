@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { mapWorkflowStreamChunkToWatchResult, useMastraClient } from '@mastra/react';
 import type { ReadableStreamDefaultReader } from 'stream/web';
+import { toast } from '@/lib/toast';
 
 export type ExtendedWorkflowWatchResult = WorkflowWatchResult & {
   sanitizedOutput?: string | null;
@@ -233,7 +234,7 @@ export const useStreamWorkflow = () => {
         }
       } catch (error) {
         console.error('Error streaming workflow:', error);
-        //silent error
+        toast.error((error as Error)?.message ?? 'Error streaming workflow');
       } finally {
         if (isMountedRef.current) {
           setIsStreaming(false);
@@ -243,6 +244,11 @@ export const useStreamWorkflow = () => {
           readerRef.current = null;
         }
       }
+    },
+    onError: error => {
+      console.log('Error streaming workflow:', error);
+      toast.error(error.message ?? 'Error streaming workflow');
+      setIsStreaming(false);
     },
   });
 
@@ -304,7 +310,7 @@ export const useStreamWorkflow = () => {
         }
       } catch (error) {
         console.error('Error streaming workflow:', error);
-        //silent error
+        toast.error((error as Error)?.message ?? 'Error streaming workflow');
       } finally {
         if (isMountedRef.current) {
           setIsStreaming(false);
@@ -314,6 +320,11 @@ export const useStreamWorkflow = () => {
           observerRef.current = null;
         }
       }
+    },
+    onError: error => {
+      console.log('Error observing workflow stream:', error);
+      toast.error(error.message ?? 'Error observing workflow stream');
+      setIsStreaming(false);
     },
   });
 
@@ -377,6 +388,7 @@ export const useStreamWorkflow = () => {
         }
       } catch (error) {
         console.error('Error resuming workflow stream:', error);
+        toast.error((error as Error)?.message ?? 'Error resuming workflow stream');
         //silent error
       } finally {
         if (isMountedRef.current) {
@@ -387,6 +399,11 @@ export const useStreamWorkflow = () => {
           resumeStreamRef.current = null;
         }
       }
+    },
+    onError: error => {
+      console.log('Error resuming workflow stream:', error);
+      toast.error(error.message ?? 'Error resuming workflow stream');
+      setIsStreaming(false);
     },
   });
 

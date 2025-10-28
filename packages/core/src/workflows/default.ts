@@ -419,18 +419,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     } else if (step.type === 'parallel' || step.type === 'conditional') {
       return step.steps.reduce(
         (acc, entry) => {
-          if (entry.type === 'step' || entry.type === 'waitForEvent') {
-            acc[entry.step.id] = stepResults[entry.step.id]?.output;
-          } else if (entry.type === 'parallel' || entry.type === 'conditional') {
-            const parallelResult = this.getStepOutput(stepResults, entry)?.output;
-            acc = { ...acc, ...parallelResult };
-          } else if (entry.type === 'loop') {
-            acc[entry.step.id] = stepResults[entry.step.id]?.output;
-          } else if (entry.type === 'foreach') {
-            acc[entry.step.id] = stepResults[entry.step.id]?.output;
-          } else if (entry.type === 'sleep' || entry.type === 'sleepUntil') {
-            acc[entry.id] = stepResults[entry.id]?.output;
-          }
+          acc[entry.step.id] = stepResults[entry.step.id]?.output;
           return acc;
         },
         {} as Record<string, any>,
@@ -1138,7 +1127,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowId: string;
     runId: string;
     resourceId?: string;
-    entry: { type: 'parallel'; steps: StepFlowEntry[] };
+    entry: {
+      type: 'parallel';
+      steps: {
+        type: 'step';
+        step: Step;
+      }[];
+    };
     serializedStepGraph: SerializedStepFlowEntry[];
     prevStep: StepFlowEntry;
     stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1183,14 +1178,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     let execResults: any;
-    const results: { result: StepResult<any, any, any, any> }[] = await Promise.all(
+    const results: StepResult<any, any, any, any>[] = await Promise.all(
       entry.steps.map((step, i) =>
-        this.executeEntry({
+        this.executeStep({
           workflowId,
           runId,
           resourceId,
-          entry: step,
-          prevStep,
+          step: step.step,
+          prevOutput,
           stepResults,
           serializedStepGraph,
           resume,
@@ -1214,23 +1209,23 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         }),
       ),
     );
-    const hasFailed = results.find(result => result.result.status === 'failed') as {
-      result: StepFailure<any, any, any>;
-    };
-    const hasSuspended = results.find(result => result.result.status === 'suspended');
+    console.log(`results===`, JSON.stringify(results, null, 2));
+    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any>;
+
+    const hasSuspended = results.find(result => result.status === 'suspended');
     if (hasFailed) {
-      execResults = { status: 'failed', error: hasFailed.result.error };
+      execResults = { status: 'failed', error: hasFailed.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', payload: hasSuspended.result.suspendPayload };
+      execResults = { status: 'suspended', payload: hasSuspended.suspendPayload };
     } else if (abortController?.signal?.aborted) {
       execResults = { status: 'canceled' };
     } else {
       execResults = {
         status: 'success',
         output: results.reduce((acc: Record<string, any>, result, index) => {
-          if (result.result.status === 'success') {
+          if (result.status === 'success') {
             // @ts-ignore
-            acc[entry.steps[index]!.step.id] = result.result.output;
+            acc[entry.steps[index]!.step.id] = result.output;
           }
 
           return acc;
@@ -2649,6 +2644,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     if (abortController?.signal?.aborted) {
       execResults = { ...execResults, status: 'canceled' };
     }
+
+    console.log(`execResults===`, JSON.stringify(execResults, null, 2));
 
     await this.persistStepUpdate({
       workflowId,
