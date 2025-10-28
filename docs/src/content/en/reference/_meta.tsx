@@ -22,7 +22,6 @@ const meta: Meta = {
   deployer: "Deployer",
   "client-js": "Client SDK",
   observability: "Observability",
-  evals: "Evals",
   scorers: <Tag text="experimental">Scorers</Tag>,
   processors: "Processors",
   auth: <Tag text="experimental">Auth</Tag>,
