@@ -51,6 +51,7 @@ const config = {
     gaId: process.env.GA_ID,
     posthogApiKey: process.env.POSTHOG_API_KEY,
     posthogHost: process.env.POSTHOG_HOST,
+    kapaIntegrationId: process.env.KAPA_INTEGRATION_ID,
   },
 
   // Preconnect to Google Fonts
@@ -105,7 +106,7 @@ const config = {
           sidebarPath: "./sidebars.js",
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
-          editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs/",
+          editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs-new",
         },
         blog: false,
         theme: {
