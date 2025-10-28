@@ -1,4 +1,5 @@
 import React from 'react';
+import { useGT, T } from 'gt-react';
 
 interface ShowcaseCardProps {
   title: string;
@@ -63,77 +64,78 @@ const ShowcaseCard = ({ title, description, image, link }: ShowcaseCardProps) =>
 );
 
 export const ShowcaseGrid = () => {
+  const t = useGT();
   const showcaseItems: ShowcaseCardProps[] = [
     {
       title: 'Olive',
-      description: 'Generate powerful tools and dashboards connected to your data sources in minutes',
+      description: t('Generate powerful tools and dashboards connected to your data sources in minutes'),
       image: 'from-olive.png',
       link: 'https://fromolive.com/',
     },
     {
       title: 'Artifact',
-      description: 'Design tool that lets you design at any level of fidelity - from concept to connector',
+      description: t('Design tool that lets you design at any level of fidelity - from concept to connector'),
       image: 'artifact-engineer.png',
       link: 'https://www.artifact.engineer/',
     },
     {
       title: 'Vetnio',
-      description: 'Automatic Medical Notes For Veterinary Professionals',
+      description: t('Automatic Medical Notes For Veterinary Professionals'),
       image: 'vetnio.png',
       link: 'https://vetnio.com/home/en',
     },
     {
       title: 'ChatHub',
-      description: 'Unlock the Power of Multiple AIs',
+      description: t('Unlock the Power of Multiple AIs'),
       image: 'chathub.png',
       link: 'https://chathub.gg',
     },
     {
       title: 'Dalus',
-      description: 'AI-Powered Systems Engineering for Mission-Critical Hardware',
+      description: t('AI-Powered Systems Engineering for Mission-Critical Hardware'),
       image: 'dalus-io.webp',
       link: 'https://www.dalus.io/',
     },
     {
       title: 'Demeter',
-      description: 'Instant portfolio insights across all your investments',
+      description: t('Instant portfolio insights across all your investments'),
       image: 'demeter.png',
       link: 'https://www.joindemeter.com/',
     },
 
     {
       title: 'NotebookLM-Mastra',
-      description: 'AI-powered assistant that creates podcasts from the sources you upload',
+      description: t('AI-powered assistant that creates podcasts from the sources you upload'),
       image: 'notebook-lm.png',
       link: 'https://notebooklm-mastra.vercel.app/',
     },
     {
       title: 'Repo Base',
-      description: 'Chat with any GitHub repository. Understand code faster',
+      description: t('Chat with any GitHub repository. Understand code faster'),
       image: 'repo-base.png',
       link: 'https://repo-base.vercel.app/',
     },
     {
       title: 'AI Beats Lab',
-      description: 'Generate musical beats and melodies using AI agents',
+      description: t('Generate musical beats and melodies using AI agents'),
       image: 'ai-beats-lab.png',
       link: 'https://ai-beat-lab.lovable.app/',
     },
     {
       title: 'Excalidraw app',
-      description: 'A tool that converts whiteboard images into editable Excalidraw diagrams',
+      description: t('A tool that converts whiteboard images into editable Excalidraw diagrams'),
       image: 'excalidraw-app.png',
       link: 'https://image2excalidraw.netlify.app/',
     },
     {
       title: 'Ecommerce RAG',
-      description: 'A RAG application for an ecommerce website',
+      description: t('A RAG application for an ecommerce website'),
       image: 'ecommerce-rag.jpg',
       link: 'https://nextjs-commerce-nu-eight-83.vercel.app/',
     },
     {
       title: 'Text-to-SQL',
-      description: 'Generate SQL queries from natural language',
+      description: t('Generate SQL queries from natural language'),
       image: 'text-to-sql.png',
       link: 'https://mastra-text-to-sql.vercel.app/',
     },
@@ -141,10 +143,12 @@ export const ShowcaseGrid = () => {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-      <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold tracking-tight mb-4 text-[var(--mastra-text-primary)]">Showcase</h1>
-        <p className="text-lg text-[var(--mastra-text-tertiary)]">Check out these applications built with Mastra.</p>
-      </div>
+      <T>
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold tracking-tight mb-4 text-[var(--mastra-text-primary)]">Showcase</h1>
+          <p className="text-lg text-[var(--mastra-text-tertiary)]">Check out these applications built with Mastra.</p>
+        </div>
+      </T>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {showcaseItems.map(item => (
           <ShowcaseCard key={item.title} {...item} />

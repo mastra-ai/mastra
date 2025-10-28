@@ -1,3 +1,4 @@
+import { msg } from "gt-react";
 export const referenceSections: Record<string, Array<{ title: string; href: string }>> = {
   Agents: [
     { title: 'Agent', href: '/docs/reference/agents/agent' },
@@ -21,7 +22,7 @@ export const referenceSections: Record<string, Array<{ title: string; href: stri
     { title: 'GetVoice', href: '/docs/reference/agents/getVoice' },
     { title: 'GetWorkflows', href: '/docs/reference/agents/getWorkflows' },
     { title: 'ListAgents', href: '/docs/reference/agents/listAgents' },
-    { title: 'Migration Guide', href: '/docs/reference/agents/migration-guide' },
+    { title: msg('Migration Guide'), href: '/docs/reference/agents/migration-guide' },
     { title: 'Network', href: '/docs/reference/agents/network' },
   ],
   Auth: [
@@ -388,24 +389,24 @@ export const referenceSections: Record<string, Array<{ title: string; href: stri
 };
 
 export const sectionTitles = [
-  'Agents',
-  'Auth',
-  'CLI',
-  'Client SDK',
-  'Core',
-  'Deployer',
-  'Evals',
-  'Legacy Workflows',
-  'Memory',
-  'Observability',
-  'Processors',
-  'RAG',
-  'Scorers',
-  'Storage',
-  'Streaming',
-  'Templates',
-  'Tools & MCP',
-  'Networks',
-  'Voice',
-  'Workflows',
+  msg('Agents'),
+  msg('Auth'),
+  msg('CLI'),
+  msg('Client SDK'),
+  msg('Core'),
+  msg('Deployer'),
+  msg('Evals'),
+  msg('Legacy Workflows'),
+  msg('Memory'),
+  msg('Observability'),
+  msg('Processors'),
+  msg('RAG'),
+  msg('Scorers'),
+  msg('Storage'),
+  msg('Streaming'),
+  msg('Templates'),
+  msg('Tools & MCP'),
+  msg('Networks'),
+  msg('Voice'),
+  msg('Workflows'),
 ];

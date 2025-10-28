@@ -4,6 +4,7 @@ import { useMarkdownContent } from '../hooks/useMarkdownContent';
 import { ChatGPTIcon, ChevronDownIcon, ClaudeIcon, CopyPageIcon, ExternalLinkIcon } from './copy-page-icons';
 import { Button } from './ui/button';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { useGT, T } from 'gt-react';
 
 function openInChatGpt(url: string, encodeURIComponent: typeof window.encodeURIComponent) {
   const query = encodeURIComponent(`Read from the ${url} so I can ask questions about it.`);
@@ -22,6 +23,7 @@ function openWindow(url: string) {
 }
 
 export const CopyPageButton = () => {
+  const t = useGT();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const { getMarkdownContent } = useMarkdownContent();
@@ -57,7 +59,7 @@ export const CopyPageButton = () => {
         )}
       >
         <CopyPageIcon className="w-4 h-4" />
-        <span>{copied ? 'Copied' : 'Copy page'}</span>
+        <span>{copied ? t('Copied') : t('Copy page')}</span>
       </Button>
 
       <DropdownMenu.Root open={open} onOpenChange={setOpen}>
@@ -76,82 +78,84 @@ export const CopyPageButton = () => {
         </DropdownMenu.Trigger>
 
         <DropdownMenu.Portal>
-          <DropdownMenu.Content
-            className={cn(
-              'min-w-[280px] bg-(--ifm-background-color) rounded-xl',
-              'border border-(--ifm-color-emphasis-200)',
-              'p-1 z-50',
-              'animate-in fade-in-0 zoom-in-95',
-            )}
-            sideOffset={5}
-            align="end"
-          >
-            <DropdownMenu.Item
+          <T>
+            <DropdownMenu.Content
               className={cn(
-                'flex items-center gap-3 px-2 py-2 text-sm',
-                'text-[var(--ifm-font-color-base)]',
-                'rounded-lg cursor-pointer outline-none',
-                'hover:bg-(--mastra-surface-2)',
-                'focus:bg-[var(--ifm-color-emphasis-100)]',
-                'transition-colors duration-150',
+                'min-w-[280px] bg-(--ifm-background-color) rounded-xl',
+                'border border-(--ifm-color-emphasis-200)',
+                'p-1 z-50',
+                'animate-in fade-in-0 zoom-in-95',
               )}
-              onClick={handleCopyPage}
+              sideOffset={5}
+              align="end"
             >
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-(--mastra-surface-2)">
-                <CopyPageIcon className="w-4 h-4" />
-              </div>
-              <div className="flex flex-col gap-0.5 flex-1">
-                <div className="font-medium">Copy page</div>
-                <div className="text-xs text-[var(--ifm-color-emphasis-700)]">Copy page as Markdown for LLMs</div>
-              </div>
-            </DropdownMenu.Item>
-
-            <DropdownMenu.Item
-              className={cn(
-                'flex items-center gap-3 p-2 text-sm',
-                'text-[var(--ifm-font-color-base)]',
-                'rounded-lg cursor-pointer outline-none',
-                'hover:bg-(--mastra-surface-2)',
-                'focus:bg-[var(--ifm-color-emphasis-100)]',
-                'transition-colors duration-150',
-              )}
-              onClick={handleOpenInChatGPT}
-            >
-              <div className="flex items-center justify-center w-8 h-8  rounded-lg bg-(--mastra-surface-2)">
-                <ChatGPTIcon className="w-4 h-4" />
-              </div>
-              <div className="flex flex-col gap-0.5 flex-1">
-                <div className="font-medium flex items-center gap-1.5">
-                  Open in ChatGPT
-                  <ExternalLinkIcon className="w-3 h-3" />
+              <DropdownMenu.Item
+                className={cn(
+                  'flex items-center gap-3 px-2 py-2 text-sm',
+                  'text-[var(--ifm-font-color-base)]',
+                  'rounded-lg cursor-pointer outline-none',
+                  'hover:bg-(--mastra-surface-2)',
+                  'focus:bg-[var(--ifm-color-emphasis-100)]',
+                  'transition-colors duration-150',
+                )}
+                onClick={handleCopyPage}
+              >
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-(--mastra-surface-2)">
+                  <CopyPageIcon className="w-4 h-4" />
                 </div>
-                <div className="text-xs text-[var(--ifm-color-emphasis-700)]">Ask questions about this page</div>
-              </div>
-            </DropdownMenu.Item>
-
-            <DropdownMenu.Item
-              className={cn(
-                'flex items-center gap-3 p-2 text-sm',
-                'text-[var(--ifm-font-color-base)]',
-                'rounded-lg cursor-pointer outline-none',
-                'hover:bg-(--mastra-surface-2)',
-                'focus:bg-[var(--ifm-color-emphasis-100)]',
-                'transition-colors duration-150',
-              )}
-              onClick={handleOpenInClaude}
-            >
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-(--mastra-surface-2)">
-                <ClaudeIcon className="w-4 h-4" />
-              </div>
-              <div className="flex flex-col gap-0.5 flex-1">
-                <div className="font-medium flex items-center gap-1.5">
-                  Open in Claude
-                  <ExternalLinkIcon className="w-3 h-3" />
+                <div className="flex flex-col gap-0.5 flex-1">
+                  <div className="font-medium">Copy page</div>
+                  <div className="text-xs text-[var(--ifm-color-emphasis-700)]">Copy page as Markdown for LLMs</div>
                 </div>
-                <div className="text-xs text-[var(--ifm-color-emphasis-700)]">Ask questions about this page</div>
-              </div>
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
+              </DropdownMenu.Item>
+
+              <DropdownMenu.Item
+                className={cn(
+                  'flex items-center gap-3 p-2 text-sm',
+                  'text-[var(--ifm-font-color-base)]',
+                  'rounded-lg cursor-pointer outline-none',
+                  'hover:bg-(--mastra-surface-2)',
+                  'focus:bg-[var(--ifm-color-emphasis-100)]',
+                  'transition-colors duration-150',
+                )}
+                onClick={handleOpenInChatGPT}
+              >
+                <div className="flex items-center justify-center w-8 h-8  rounded-lg bg-(--mastra-surface-2)">
+                  <ChatGPTIcon className="w-4 h-4" />
+                </div>
+                <div className="flex flex-col gap-0.5 flex-1">
+                  <div className="font-medium flex items-center gap-1.5">
+                    Open in ChatGPT
+                    <ExternalLinkIcon className="w-3 h-3" />
+                  </div>
+                  <div className="text-xs text-[var(--ifm-color-emphasis-700)]">Ask questions about this page</div>
+                </div>
+              </DropdownMenu.Item>
+
+              <DropdownMenu.Item
+                className={cn(
+                  'flex items-center gap-3 p-2 text-sm',
+                  'text-[var(--ifm-font-color-base)]',
+                  'rounded-lg cursor-pointer outline-none',
+                  'hover:bg-(--mastra-surface-2)',
+                  'focus:bg-[var(--ifm-color-emphasis-100)]',
+                  'transition-colors duration-150',
+                )}
+                onClick={handleOpenInClaude}
+              >
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-(--mastra-surface-2)">
+                  <ClaudeIcon className="w-4 h-4" />
+                </div>
+                <div className="flex flex-col gap-0.5 flex-1">
+                  <div className="font-medium flex items-center gap-1.5">
+                    Open in Claude
+                    <ExternalLinkIcon className="w-3 h-3" />
+                  </div>
+                  <div className="text-xs text-[var(--ifm-color-emphasis-700)]">Ask questions about this page</div>
+                </div>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </T>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
     </div>

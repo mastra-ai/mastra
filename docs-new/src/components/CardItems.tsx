@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from '@docusaurus/Link';
 import { cn } from '../css/utils';
+import { useMessages } from 'gt-react';
 
 const sluggify = (str: string) =>
   str
@@ -14,6 +15,7 @@ interface CardItemsProps {
 }
 
 export function CardItems({ titles, items }: CardItemsProps) {
+  const m = useMessages();
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window === 'undefined') return sluggify(titles[0]);
     const params = new URLSearchParams(window.location.search);
@@ -46,7 +48,7 @@ export function CardItems({ titles, items }: CardItemsProps) {
                 'dark:bg-gray-100 text-white bg-[var(--mastra-text-primary)] dark:text-black',
             )}
           >
-            {title}
+            {m(title)}
           </button>
         ))}
       </div>
@@ -60,7 +62,7 @@ export function CardItems({ titles, items }: CardItemsProps) {
             }}
             className="flex-1 flex text-center bg-(--mastra-surface-3) mb-0 border-[0.5px] rounded-[10px] dark:border-[#343434] border-(--border) items-center group justify-center p-2 px-4 text-sm hover:opacity-80 transition-opacity"
           >
-            {item.title}
+            {m(item.title)}
           </Link>
         ))}
       </div>

@@ -9,6 +9,7 @@ import { toast } from './custom-toast';
 import { z } from 'zod/v4';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import { Button } from './ui/button';
+import { useGT } from 'gt-react';
 
 export const formSchema = z.object({
   email: z.email(),
@@ -21,11 +22,14 @@ const buttonCopy = ({
   idleIcon?: React.ReactNode;
   successIcon?: React.ReactNode;
   isDark?: boolean;
-}) => ({
-  idle: idleIcon ? idleIcon : 'Subscribe',
-  loading: <Spinner className="w-4 h-4 duration-300! dark:text-white text-black" />,
-  success: successIcon ? successIcon : 'Subscribed!',
-});
+}) => {
+  const t = useGT();
+  return ({
+    idle: idleIcon ? idleIcon : t('Subscribe'),
+    loading: <Spinner className="w-4 h-4 duration-300! dark:text-white text-black" />,
+    success: successIcon ? successIcon : t('Subscribed!'),
+  });
+};
 
 const SubscribeForm = ({
   idleIcon,
@@ -46,6 +50,7 @@ const SubscribeForm = ({
   inputClassName?: string;
   buttonClassName?: string;
 }) => {
+  const t = useGT();
   const { siteConfig } = useDocusaurusContext();
   const { hsPortalId, hsFormGuid } = siteConfig.customFields as {
     hsPortalId?: string;
@@ -67,8 +72,8 @@ const SubscribeForm = ({
     const sanitizedEmail = values.email.trim();
     if (!sanitizedEmail) {
       return toast({
-        title: 'Error Validating Email',
-        description: 'Please enter an email',
+        title: t('Error Validating Email'),
+        description: t('Please enter an email'),
       });
     }
     setButtonState('loading');
@@ -105,8 +110,8 @@ const SubscribeForm = ({
     } catch (error) {
       console.error('Error submitting form:', error);
       toast({
-        title: 'Error Submitting Form',
-        description: 'Please try again',
+        title: t('Error Submitting Form'),
+        description: t('Please try again'),
       });
       setButtonState('idle');
     } finally {
@@ -133,13 +138,13 @@ const SubscribeForm = ({
             <FormItem className="flex-1 w-full">
               {showLabel ? (
                 <FormLabel className="text-[13px] mb-[0.69rem] block text-gray-500 dark:text-[#E6E6E6]">
-                  {label || 'Mastra Newsletter'}
+                  {label || t('Mastra Newsletter')}
                 </FormLabel>
               ) : null}
 
               <FormControl>
                 <input
-                  placeholder={placeholder || 'you@example.com'}
+                  placeholder={placeholder || t('you@example.com')}
                   {...field}
                   className={cn(
                     'bg-transparent dark:text-white focus-visible:border-green-500 placeholder:text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none h-[35px] focus:ring-2 focus:ring-(--mastra-green-accent)/50 w-full py-[0.56rem] px-4 dark:border-[#343434] border border-(--border) rounded-[10px]',

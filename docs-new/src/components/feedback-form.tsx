@@ -9,6 +9,7 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from './ui/forms'
 import { Label } from './ui/label';
 import { CancelIcon } from './copy-page-icons';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
+import { useGT, T } from 'gt-react';
 
 const feedbackSchema = z.object({
   feedback: z.string().min(5, 'Please enter your feedback'),
@@ -97,6 +98,7 @@ const ratings = [
 ];
 
 export const FeedbackForm = ({ isOpen, onClose, currentPage }: FeedbackFormProps) => {
+  const t = useGT();
   const { siteConfig } = useDocusaurusContext();
   const { mastraWebsite } = siteConfig.customFields as {
     mastraWebsite?: string;
@@ -166,14 +168,16 @@ export const FeedbackForm = ({ isOpen, onClose, currentPage }: FeedbackFormProps
     <div className="p-4 pt-2 px-0 border max-h-[400px] border-gray-200 dark:border-borders-1 rounded-[10px] bg-white dark:bg-[var(--primary-bg)]">
       {submitStatus === 'success' ? (
         <div className="text-center py-4">
-          <p className="text-sm text-black dark:text-white">Thank you! Your feedback has been submitted</p>
+          <p className="text-sm text-black dark:text-white">
+            <T>Thank you! Your feedback has been submitted</T>
+          </p>
         </div>
       ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <div className="flex items-center px-4 pb-2 border-b-[0.5px] border-(--border) justify-between ">
               <Label htmlFor="feedback" className="font-semibold">
-                Was this helpful?
+                <T>Was this helpful?</T>
               </Label>
               <Button
                 type="button"
@@ -212,7 +216,7 @@ export const FeedbackForm = ({ isOpen, onClose, currentPage }: FeedbackFormProps
                   <FormItem className="flex-1 w-full">
                     <FormControl>
                       <Textarea
-                        placeholder="Your feedback..."
+                        placeholder={t('Your feedback...')}
                         className="min-h-[60px] w-full text-black  dark:text-white resize-none text-sm"
                         {...field}
                       />
@@ -230,7 +234,7 @@ export const FeedbackForm = ({ isOpen, onClose, currentPage }: FeedbackFormProps
                 {isSubmitting ? (
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 ) : (
-                  'Send'
+                  t('Send')
                 )}
               </Button>
             </div>
@@ -238,7 +242,7 @@ export const FeedbackForm = ({ isOpen, onClose, currentPage }: FeedbackFormProps
             {errorMessage && (
               <div className="mt-3 p-2 rounded bg-red-50 dark:bg-red-900/20">
                 <p className="text-xs text-red-500 dark:text-red-400">
-                  Something went wrong. Please try again
+                  <T>Something went wrong. Please try again</T>
                   {errorMessage && <span className="block mt-1 opacity-75">{errorMessage}</span>}
                 </p>
               </div>

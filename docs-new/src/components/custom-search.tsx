@@ -9,6 +9,7 @@ import { BurgerIcon } from './search-icons';
 import { useHistory } from '@docusaurus/router';
 import { CancelIcon } from './copy-page-icons';
 import { Button } from './ui/button';
+import { useGT } from 'gt-react';
 
 // Custom hook for responsive design
 const useMediaQuery = (query: string): boolean => {
@@ -71,14 +72,19 @@ const getSectionIcon = (section?: string) => {
 
 export const CustomSearch: FC<SearchProps> = ({
   className,
-  placeholder = 'Search docs...',
+  placeholder,
   searchOptions,
   closeModal,
 }) => {
+  const t = useGT();
   const { isSearchLoading, results, search, setSearch, hasMore, loadMore, isLoadingMore } = useAlgoliaSearch(
     300,
     searchOptions,
   );
+
+  if (!placeholder) {
+    placeholder = t('Search docs...');
+  }
 
   const history = useHistory();
   const inputRef = useRef<HTMLInputElement>(null!);

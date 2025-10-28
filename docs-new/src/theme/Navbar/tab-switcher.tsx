@@ -1,47 +1,49 @@
 import { cn } from '@site/src/css/utils';
 import Link from '@docusaurus/Link';
 import { useLocation } from '@docusaurus/router';
+import { msg, useMessages } from 'gt-react';
 
 const docsTabs = [
   {
     id: 'Docs',
-    label: 'Docs',
+    label: msg('Docs'),
     href: '/docs',
     basePath: '/docs',
   },
   {
     id: 'Models',
-    label: 'Models',
+    label: msg('Models'),
     href: '/docs/models',
     basePath: '/docs/models',
   },
   {
     id: 'Examples',
-    label: 'Examples',
+    label: msg('Examples'),
     href: '/docs/examples',
     basePath: '/docs/examples',
   },
   {
     id: 'Guides',
-    label: 'Guides & Migrations',
+    label: msg('Guides & Migrations'),
     href: '/docs/guides',
     basePath: '/docs/guides',
   },
   {
     id: 'Reference',
-    label: 'Reference',
+    label: msg('Reference'),
     href: '/docs/reference',
     basePath: '/docs/reference',
   },
   {
     id: 'Showcase',
-    label: 'Showcase',
+    label: msg('Showcase'),
     href: '/showcase',
     basePath: '/showcase',
   },
 ];
 
 export const TabSwitcher = ({ className }: { className?: string }) => {
+  const m = useMessages();
   const location = useLocation();
   const pathname = location.pathname;
   return (
@@ -77,7 +79,7 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
                 className="flex min-w-fit relative gap-1.5 items-center px-0 py-1 text-sm font-medium transition-colors"
                 aria-current={isActive ? 'page' : undefined}
               >
-                {tab.label}
+                {m(tab.label)}
 
                 {isActive && (
                   <div

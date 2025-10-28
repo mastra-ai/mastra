@@ -1,29 +1,6 @@
 {
   "defaultLocale": "en",
   "files": {
-    "md": {
-      "include": [
-        "docs/**/*.md"
-      ],
-      "transform": {
-        "match": "^docs/(.*)\\.md$",
-        "replace": "i18n/{locale}/docusaurus-plugin-content-docs/current/$1.md"
-      }
-    },
-    "json": {
-      "include": [
-        "i18n/[locale]/**/*.json"
-      ]
-    },
-    "yaml": {
-      "include": [
-        "docs/**/*.yml"
-      ],
-      "transform": {
-        "match": "^docs/(.*)\\.yml$",
-        "replace": "i18n/{locale}/docusaurus-plugin-content-docs/current/$1.yml"
-      }
-    },
     "gt": {
       "output": "i18n/locales/[locale].json"
     }
@@ -35,5 +12,5 @@
     "experimentalClearLocaleDirs": true,
     "experimentalLocalizeStaticUrls": true
   },
-  "_versionId": "42ca7234d62dde5cea004339c70fea62acbd8546533d9c5e88991738abad3dde"
+  "_versionId": "b54673081e087e6cd578b4bfa71dbefe548798b37fcebcf9461fe842ef420fbc"
 }
