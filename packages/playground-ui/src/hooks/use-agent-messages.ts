@@ -15,7 +15,7 @@ export const useAgentMessages = ({
   const { runtimeContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['memory', 'messages', threadId, agentId],
+    queryKey: ['memory', 'messages', threadId, agentId, 'runtimeContext'],
     queryFn: () => client.getThreadMessages(threadId, { agentId, runtimeContext }),
     enabled: memory && Boolean(threadId),
     staleTime: 0,
