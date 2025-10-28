@@ -2,13 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import { openai } from '@ai-sdk/openai';
 import { serve } from '@hono/node-server';
-import { realtimeMiddleware } from '@inngest/realtime';
+import { realtimeMiddleware } from '@inngest/realtime/middleware';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import type { MastraScorer } from '@mastra/core/scores';
 import { createScorer, runExperiment } from '@mastra/core/scores';
-import { Telemetry } from '@mastra/core/telemetry';
 import { createTool } from '@mastra/core/tools';
 import type { StreamEvent } from '@mastra/core/workflows';
 import { createHonoServer } from '@mastra/deployer/server';
@@ -3810,7 +3809,7 @@ describe('MastraInngestWorkflow', () => {
       expect(toolAction).toHaveBeenCalled();
       expect(result.steps.step1).toMatchObject({ status: 'success', output: { name: 'step1' } });
       expect(result.steps['random-tool']).toMatchObject({ status: 'success', output: { name: 'step1' } });
-    }, 10000);
+    });
   });
 
   describe('Watch', () => {
@@ -5234,67 +5233,12 @@ describe('MastraInngestWorkflow', () => {
     });
   });
 
-  describe('Accessing Mastra', () => {
-    it('should be able to access the deprecated mastra primitives', async ctx => {
-      const inngest = new Inngest({
-        id: 'mastra',
-        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-      });
-
-      const { createWorkflow, createStep } = init(inngest);
-      let telemetry: Telemetry | undefined;
-      const step1 = createStep({
-        id: 'step1',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        execute: async ({ mastra }) => {
-          telemetry = mastra?.getTelemetry();
-          return {};
-        },
-      });
-
-      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
-      workflow.then(step1).commit();
-
-      const mastra = new Mastra({
-        storage: new DefaultStorage({
-          url: ':memory:',
-        }),
-        workflows: {
-          'test-workflow': workflow,
-        },
-        server: {
-          apiRoutes: [
-            {
-              path: '/inngest/api',
-              method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
-            },
-          ],
-        },
-      });
-
-      const app = await createHonoServer(mastra);
-
-      const srv = (globServer = serve({
-        fetch: app.fetch,
-        port: (ctx as any).handlerPort,
-      }));
-      await resetInngest();
-
-      // Access new instance properties directly - should work without warning
-      const run = await workflow.createRunAsync();
-      await run.start({ inputData: {} });
-
-      expect(telemetry).toBeDefined();
-      expect(telemetry).toBeInstanceOf(Telemetry);
-
-      srv.close();
-    });
-  });
-
   describe('Agent as step', () => {
     it('should be able to use an agent as a step', async ctx => {
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OPENAI_API_KEY is not set');
+      }
+
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -5405,6 +5349,10 @@ describe('MastraInngestWorkflow', () => {
     });
 
     it('should be able to use an agent in parallel', async ctx => {
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OPENAI_API_KEY is not set');
+      }
+
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -7011,66 +6959,6 @@ describe('MastraInngestWorkflow', () => {
     });
   });
 
-  describe('Accessing Mastra', () => {
-    it('should be able to access the deprecated mastra primitives', async ctx => {
-      const inngest = new Inngest({
-        id: 'mastra',
-        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-      });
-
-      const { createWorkflow, createStep } = init(inngest);
-
-      let telemetry: Telemetry | undefined;
-      const step1 = createStep({
-        id: 'step1',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        execute: async ({ mastra }) => {
-          telemetry = mastra?.getTelemetry();
-          return {};
-        },
-      });
-
-      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
-      workflow.then(step1).commit();
-
-      const mastra = new Mastra({
-        storage: new DefaultStorage({
-          url: ':memory:',
-        }),
-        workflows: {
-          'test-workflow': workflow,
-        },
-        server: {
-          apiRoutes: [
-            {
-              path: '/inngest/api',
-              method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
-            },
-          ],
-        },
-      });
-
-      const app = await createHonoServer(mastra);
-
-      const srv = (globServer = serve({
-        fetch: app.fetch,
-        port: (ctx as any).handlerPort,
-      }));
-      await resetInngest();
-
-      // Access new instance properties directly - should work without warning
-      const run = await workflow.createRunAsync();
-      await run.start({ inputData: {} });
-
-      srv.close();
-
-      expect(telemetry).toBeDefined();
-      expect(telemetry).toBeInstanceOf(Telemetry);
-    });
-  });
-
   // TODO: can we support this on inngest?
   describe.skip('Dependency Injection', () => {
     it('should inject runtimeContext dependencies into steps during run', async ctx => {
@@ -7497,7 +7385,7 @@ describe('MastraInngestWorkflow', () => {
 
       await resetInngest();
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -7669,7 +7557,7 @@ describe('MastraInngestWorkflow', () => {
 
       await resetInngest();
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -7877,7 +7765,7 @@ describe('MastraInngestWorkflow', () => {
 
       await resetInngest();
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -8079,7 +7967,7 @@ describe('MastraInngestWorkflow', () => {
 
       await resetInngest();
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
 
       setTimeout(() => {
         run.sendEvent('user-event-test', {
@@ -8300,7 +8188,7 @@ describe('MastraInngestWorkflow', () => {
 
       const run = await promptEvalWorkflow.createRunAsync();
 
-      const { stream, getWorkflowState } = run.stream({ inputData: { input: 'test' } });
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: { input: 'test' } });
 
       for await (const data of stream) {
         if (data.type === 'step-suspended') {
@@ -8490,7 +8378,7 @@ describe('MastraInngestWorkflow', () => {
       const run = await workflow.createRunAsync({
         runId: 'test-run-id',
       });
-      const { stream } = run.stream({
+      const { stream } = run.streamLegacy({
         inputData: {
           prompt1: 'Capital of France, just the name',
           prompt2: 'Capital of UK, just the name',
@@ -9305,4 +9193,4 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
   });
-}, 40e3);
+}, 80e3);

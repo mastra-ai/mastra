@@ -1,5 +1,5 @@
 ---
-title: 'DefaultExporter '
+title: "DefaultExporter "
 description: API reference for the DefaultExporter
 ---
 
@@ -50,14 +50,14 @@ interface BatchingConfig {
   retryDelayMs?: number;
 
   /** Tracing strategy or 'auto' for automatic selection. Default: 'auto' */
-  strategy?: TracingStrategy | 'auto';
+  strategy?: TracingStrategy | "auto";
 }
 ```
 
 ## TracingStrategy
 
 ```typescript
-type TracingStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
+type TracingStrategy = "realtime" | "batch-with-updates" | "insert-only";
 ```
 
 ### Strategy Behaviors
@@ -168,7 +168,7 @@ For `batch-with-updates` strategy:
 ## Usage
 
 ```typescript
-import { DefaultExporter } from '@mastra/core/ai-tracing';
+import { DefaultExporter } from "@mastra/core/ai-tracing";
 
 // Default configuration
 const exporter = new DefaultExporter();
@@ -177,7 +177,7 @@ const exporter = new DefaultExporter();
 const customExporter = new DefaultExporter({
   maxBatchSize: 500,
   maxBatchWaitMs: 2000,
-  strategy: 'batch-with-updates',
+  strategy: "batch-with-updates",
 });
 ```
 

@@ -1,6 +1,6 @@
 ---
-title: 'Templates Reference'
-description: 'Complete guide to creating, using, and contributing Mastra templates'
+title: "Templates Reference"
+description: "Complete guide to creating, using, and contributing Mastra templates"
 ---
 
 ## Overview
@@ -119,15 +119,15 @@ OTHER_SERVICE_API_KEY=your_api_key_here
 We recommend using OpenAI, Anthropic, or Google model providers for templates. Choose the provider that best fits your use case:
 
 ```typescript filename="src/mastra/agents/example-agent.ts"
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 // Or use: import { anthropic } from '@ai-sdk/anthropic';
 // Or use: import { google } from '@ai-sdk/google';
 
 const agent = new Agent({
-  name: 'example-agent',
-  model: openai('gpt-4'), // or anthropic('') or google('')
-  instructions: 'Your agent instructions here',
+  name: "example-agent",
+  model: openai("gpt-4"), // or anthropic('') or google('')
+  instructions: "Your agent instructions here",
   // ... other configuration
 });
 ```

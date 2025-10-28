@@ -1,10 +1,10 @@
-import React, { type ReactNode } from 'react';
+import React, { type ReactNode } from "react";
 
-import { useThemeConfig } from '@docusaurus/theme-common';
-import FooterLinks from '@theme/Footer/Links';
-import FooterLogo from '@theme/Footer/Logo';
-import FooterCopyright from '@theme/Footer/Copyright';
-import FooterLayout from '@theme/Footer/Layout';
+import { useThemeConfig } from "@docusaurus/theme-common";
+import FooterLinks from "@theme/Footer/Links";
+import FooterLogo from "@theme/Footer/Logo";
+import FooterCopyright from "@theme/Footer/Copyright";
+import FooterLayout from "@theme/Footer/Layout";
 
 function Footer(): ReactNode {
   const { footer } = useThemeConfig();

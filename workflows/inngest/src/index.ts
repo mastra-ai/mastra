@@ -7,7 +7,7 @@ import type { TracingContext, AnyAISpan } from '@mastra/core/ai-tracing';
 import { RuntimeContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
-import { WorkflowRunOutput } from '@mastra/core/stream';
+import { ChunkFrom, WorkflowRunOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, ToolStream } from '@mastra/core/tools';
 import {
@@ -41,7 +41,6 @@ import type {
   WorkflowStreamEvent,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
-import type { Span } from '@opentelemetry/api';
 import { NonRetriableError, RetryAfterError } from 'inngest';
 import type { Inngest, BaseContext, InngestFunction, RegisterOptions } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
@@ -1108,7 +1107,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }
 
   protected async fmtReturnValue<TOutput>(
-    executionSpan: Span | undefined,
     emitter: Emitter,
     stepResults: Record<string, StepResult<any, any, any, any>>,
     lastOutput: StepResult<any, any, any, any>,
@@ -1177,7 +1175,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       base.suspended = suspendedStepIds;
     }
 
-    executionSpan?.end();
     return base as TOutput;
   }
 
@@ -1780,13 +1777,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         suspendPayload?: any;
         suspendedAt?: number;
       };
-      executionContext: Omit<ExecutionContext, 'executionSpan'> & {
-        executionSpan: any;
-      };
       stepResults: Record<
         string,
         StepResult<any, any, any, any> | (Omit<StepFailure<any, any, any>, 'error'> & { error?: string })
       >;
+      executionContext: ExecutionContext;
     };
 
     try {
@@ -2227,7 +2222,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             resumeLabels: executionContext.resumeLabels,
             retryConfig: executionContext.retryConfig,
-            executionSpan: executionContext.executionSpan,
             state: executionContext.state,
           },
           emitter,

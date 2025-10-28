@@ -1,5 +1,5 @@
 ---
-title: 'Adjusting The Chunk Size '
+title: "Adjusting The Chunk Size "
 description: Adjust chunk size in Mastra to better match your content and memory requirements.
 ---
 
@@ -8,9 +8,9 @@ description: Adjust chunk size in Mastra to better match your content and memory
 When processing large documents, you might need to adjust how much text is included in each chunk. By default, chunks are 1024 characters long, but you can customize this size to better match your content and memory requirements. This example shows how to set a custom chunk size when splitting documents.
 
 ```tsx copy
-import { MDocument } from '@mastra/rag';
+import { MDocument } from "@mastra/rag";
 
-const doc = MDocument.fromText('Your plain text content...');
+const doc = MDocument.fromText("Your plain text content...");
 
 const chunks = await doc.chunk({
   size: 512,

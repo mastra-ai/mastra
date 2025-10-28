@@ -464,7 +464,6 @@ export type ProviderModelsMap = {
     'claude-opus-4-1',
     'claude-sonnet-4',
     'claude-sonnet-4-5',
-    'code-supernova',
     'glm-4.6',
     'gpt-5',
     'gpt-5-codex',
@@ -545,6 +544,7 @@ export type ProviderModelsMap = {
     'gpt-5-codex',
     'gpt-5-mini',
     'gpt-5-nano',
+    'gpt-5-pro',
     'o1',
     'o1-mini',
     'o1-preview',
@@ -629,6 +629,7 @@ export type ProviderModelsMap = {
     'openai/gpt-5-image',
     'openai/gpt-5-mini',
     'openai/gpt-5-nano',
+    'openai/gpt-5-pro',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-120b:exacto',
     'openai/gpt-oss-20b',
@@ -679,6 +680,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.6:exacto',
   ];
   readonly synthetic: readonly [
+    'hf:MiniMaxAI/MiniMax-M2',
     'hf:Qwen/Qwen2.5-Coder-32B-Instruct',
     'hf:Qwen/Qwen3-235B-A22B-Instruct-2507',
     'hf:Qwen/Qwen3-235B-A22B-Thinking-2507',
@@ -800,6 +802,7 @@ export type ProviderModelsMap = {
     'llama-4-scout-17b-16e-instruct-fp8',
   ];
   readonly scaleway: readonly [
+    'bge-multilingual-gemma2',
     'deepseek-r1-distill-llama-70b',
     'gemma-3-27b-it',
     'gpt-oss-120b',
@@ -811,6 +814,7 @@ export type ProviderModelsMap = {
     'qwen3-235b-a22b-instruct-2507',
     'qwen3-coder-30b-a3b-instruct',
     'voxtral-small-24b-2507',
+    'whisper-large-v3',
   ];
   readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'qwen-3-coder-480b'];
   readonly netlify: readonly [

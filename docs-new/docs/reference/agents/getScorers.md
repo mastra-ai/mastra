@@ -1,6 +1,6 @@
 ---
-title: 'Agent.getScorers() '
-description: 'Documentation for the `Agent.getScorers()` method in Mastra agents, which retrieves the scoring configuration.'
+title: "Agent.getScorers() "
+description: "Documentation for the `Agent.getScorers()` method in Mastra agents, which retrieves the scoring configuration."
 ---
 
 # Agent.getScorers()

@@ -344,60 +344,6 @@ export type GetLogsResponse = {
 
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
 
-type SpanStatus = {
-  code: number;
-};
-
-type SpanOther = {
-  droppedAttributesCount: number;
-  droppedEventsCount: number;
-  droppedLinksCount: number;
-};
-
-type SpanEventAttributes = {
-  key: string;
-  value: { [key: string]: string | number | boolean | null };
-};
-
-type SpanEvent = {
-  attributes: SpanEventAttributes[];
-  name: string;
-  timeUnixNano: string;
-  droppedAttributesCount: number;
-};
-
-type Span = {
-  id: string;
-  parentSpanId: string | null;
-  traceId: string;
-  name: string;
-  scope: string;
-  kind: number;
-  status: SpanStatus;
-  events: SpanEvent[];
-  links: any[];
-  attributes: Record<string, string | number | boolean | null>;
-  startTime: number;
-  endTime: number;
-  duration: number;
-  other: SpanOther;
-  createdAt: string;
-};
-
-export interface GetTelemetryResponse {
-  traces: Span[];
-}
-
-export interface GetTelemetryParams {
-  name?: string;
-  scope?: string;
-  page?: number;
-  perPage?: number;
-  attribute?: Record<string, string>;
-  fromDate?: Date;
-  toDate?: Date;
-}
-
 export interface GetVNextNetworkResponse {
   id: string;
   name: string;
@@ -572,4 +518,34 @@ export interface StreamVNextChunkType {
   payload: any;
   runId: string;
   from: 'AGENT' | 'WORKFLOW';
+}
+export interface MemorySearchResponse {
+  results: MemorySearchResult[];
+  count: number;
+  query: string;
+  searchType?: string;
+  searchScope?: 'thread' | 'resource';
+}
+
+export interface MemorySearchResult {
+  id: string;
+  role: string;
+  content: string;
+  createdAt: string;
+  threadId?: string;
+  threadTitle?: string;
+  context?: {
+    before?: Array<{
+      id: string;
+      role: string;
+      content: string;
+      createdAt: string;
+    }>;
+    after?: Array<{
+      id: string;
+      role: string;
+      content: string;
+      createdAt: string;
+    }>;
+  };
 }

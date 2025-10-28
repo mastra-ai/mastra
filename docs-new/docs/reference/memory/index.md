@@ -1,6 +1,6 @@
 ---
-title: 'Memory Class '
-description: 'Documentation for the `Memory` class in Mastra, which provides a robust system for managing conversation history and thread-based message storage.'
+title: "Memory Class"
+description: "Documentation for the `Memory` class in Mastra, which provides a robust system for managing conversation history and thread-based message storage."
 ---
 
 # Memory Class
@@ -10,14 +10,14 @@ The `Memory` class provides a robust system for managing conversation history an
 ## Usage example
 
 ```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 
 export const agent = new Agent({
-  name: 'test-agent',
-  instructions: 'You are an agent with memory.',
-  model: openai('gpt-4o'),
+  name: "test-agent",
+  instructions: "You are an agent with memory.",
+  model: openai("gpt-4o"),
   memory: new Memory({
     options: {
       workingMemory: {
@@ -28,7 +28,7 @@ export const agent = new Agent({
 });
 ```
 
-> To enable `workingMemory` on an agent, you’ll need a storage provider configured on your main Mastra instance. See [Mastra class](../core/mastra-class) for more information.
+> To enable `workingMemory` on an agent, you'll need a storage provider configured on your main Mastra instance. See [Mastra class](../core/mastra-class.md) for more information.
 
 ## Constructor parameters
 
@@ -81,7 +81,7 @@ defaultValue: "10",
 {
 name: "semanticRecall",
 type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
-description: "Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured.",
+description: "Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured. Default topK is 4, default messageRange is {before: 1, after: 1}.",
 isOptional: true,
 defaultValue: "false",
 },
@@ -117,28 +117,28 @@ description: "A new Memory instance with the specified configuration.",
 ## Extended usage example
 
 ```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 export const agent = new Agent({
-  name: 'test-agent',
-  instructions: 'You are an agent with memory.',
-  model: openai('gpt-4o'),
+  name: "test-agent",
+  instructions: "You are an agent with memory.",
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
-      url: 'file:./working-memory.db',
+      url: "file:./working-memory.db",
     }),
     vector: new LibSQLVector({
-      connectionUrl: 'file:./vector-memory.db',
+      connectionUrl: "file:./vector-memory.db",
     }),
     options: {
       lastMessages: 10,
       semanticRecall: {
         topK: 3,
         messageRange: 2,
-        scope: 'resource',
+        scope: "resource",
       },
       workingMemory: {
         enabled: true,
@@ -154,15 +154,15 @@ export const agent = new Agent({
 ## PostgreSQL with index configuration
 
 ```typescript filename="src/mastra/agents/pg-agent.ts" showLineNumbers copy
-import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { PgStore, PgVector } from '@mastra/pg';
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { PgStore, PgVector } from "@mastra/pg";
 
 export const agent = new Agent({
-  name: 'pg-agent',
-  instructions: 'You are an agent with optimized PostgreSQL memory.',
-  model: openai('gpt-4o'),
+  name: "pg-agent",
+  instructions: "You are an agent with optimized PostgreSQL memory.",
+  model: openai("gpt-4o"),
   memory: new Memory({
     storage: new PgStore({
       connectionString: process.env.DATABASE_URL,
@@ -170,16 +170,16 @@ export const agent = new Agent({
     vector: new PgVector({
       connectionString: process.env.DATABASE_URL,
     }),
-    embedder: openai.embedding('text-embedding-3-small'),
+    embedder: openai.embedding("text-embedding-3-small"),
     options: {
       lastMessages: 20,
       semanticRecall: {
         topK: 5,
         messageRange: 3,
-        scope: 'resource',
+        scope: "resource",
         indexConfig: {
-          type: 'hnsw', // Use HNSW for better performance
-          metric: 'dotproduct', // Optimal for OpenAI embeddings
+          type: "hnsw", // Use HNSW for better performance
+          metric: "dotproduct", // Optimal for OpenAI embeddings
           m: 16, // Number of bi-directional links
           efConstruction: 64, // Construction-time candidate list size
         },

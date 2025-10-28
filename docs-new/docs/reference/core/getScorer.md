@@ -1,6 +1,6 @@
 ---
-title: 'getScorer() '
-description: 'Documentation for the `getScorer()` method in Mastra, which retrieves a specific scorer by its registration key.'
+title: "getScorer() "
+description: "Documentation for the `getScorer()` method in Mastra, which retrieves a specific scorer by its registration key."
 ---
 
 # getScorer()
@@ -10,15 +10,15 @@ The `getScorer()` method retrieves a specific scorer that was registered with th
 ## Usage Example
 
 ```typescript
-import { mastra } from './mastra';
+import { mastra } from "./mastra";
 
 // Get a specific scorer by key
-const relevancyScorer = mastra.getScorer('relevancyScorer');
+const relevancyScorer = mastra.getScorer("relevancyScorer");
 
-const weatherAgent = mastra.getAgent('weatherAgent');
+const weatherAgent = mastra.getAgent("weatherAgent");
 
 // Use the scorer to evaluate an AI output
-await weatherAgent.generate('What is the weather in Rome', {
+await weatherAgent.generate("What is the weather in Rome", {
   scorers: {
     answerRelevancy: {
       scorer: relevancyScorer,
@@ -61,10 +61,10 @@ This method throws a `MastraError` if:
 
 ```typescript
 try {
-  const scorer = mastra.getScorer('nonExistentScorer');
+  const scorer = mastra.getScorer("nonExistentScorer");
 } catch (error) {
-  if (error.id === 'MASTRA_GET_SCORER_NOT_FOUND') {
-    console.log('Scorer not found, using default evaluation');
+  if (error.id === "MASTRA_GET_SCORER_NOT_FOUND") {
+    console.log("Scorer not found, using default evaluation");
   }
 }
 ```

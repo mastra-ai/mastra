@@ -24,8 +24,6 @@ import type {
   GetLogsResponse,
   GetMemoryThreadParams,
   GetMemoryThreadResponse,
-  GetTelemetryParams,
-  GetTelemetryResponse,
   GetToolResponse,
   GetWorkflowResponse,
   SaveMessageToMemoryParams,
@@ -47,6 +45,7 @@ import type {
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
   GetMemoryThreadMessagesResponse,
+  MemorySearchResponse,
 } from './types';
 import { base64RuntimeContext, parseClientRuntimeContext } from './utils';
 
@@ -398,51 +397,6 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * List of all traces (paged)
-   * @param params - Parameters for filtering traces
-   * @returns Promise containing telemetry data
-   */
-  public getTelemetry(params?: GetTelemetryParams): Promise<GetTelemetryResponse> {
-    const { name, scope, page, perPage, attribute, fromDate, toDate } = params || {};
-    const _attribute = attribute ? Object.entries(attribute).map(([key, value]) => `${key}:${value}`) : [];
-
-    const searchParams = new URLSearchParams();
-    if (name) {
-      searchParams.set('name', name);
-    }
-    if (scope) {
-      searchParams.set('scope', scope);
-    }
-    if (page) {
-      searchParams.set('page', String(page));
-    }
-    if (perPage) {
-      searchParams.set('perPage', String(perPage));
-    }
-    if (_attribute) {
-      if (Array.isArray(_attribute)) {
-        for (const attr of _attribute) {
-          searchParams.append('attribute', attr);
-        }
-      } else {
-        searchParams.set('attribute', _attribute);
-      }
-    }
-    if (fromDate) {
-      searchParams.set('fromDate', fromDate.toISOString());
-    }
-    if (toDate) {
-      searchParams.set('toDate', toDate.toISOString());
-    }
-
-    if (searchParams.size) {
-      return this.request(`/api/telemetry?${searchParams}`);
-    } else {
-      return this.request(`/api/telemetry`);
-    }
-  }
-
-  /**
    * Retrieves a list of available MCP servers.
    * @param params - Optional parameters for pagination (limit, offset).
    * @returns Promise containing the list of MCP servers and pagination info.
@@ -520,6 +474,36 @@ export class MastraClient extends BaseResource {
     resourceId?: string;
   }) {
     return this.request(`/api/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}`);
+  }
+
+  public searchMemory({
+    agentId,
+    resourceId,
+    threadId,
+    searchQuery,
+    memoryConfig,
+  }: {
+    agentId: string;
+    resourceId: string;
+    threadId?: string;
+    searchQuery: string;
+    memoryConfig?: any;
+  }): Promise<MemorySearchResponse> {
+    const params = new URLSearchParams({
+      searchQuery,
+      resourceId,
+      agentId,
+    });
+
+    if (threadId) {
+      params.append('threadId', threadId);
+    }
+
+    if (memoryConfig) {
+      params.append('memoryConfig', JSON.stringify(memoryConfig));
+    }
+
+    return this.request(`/api/memory/search?${params}`);
   }
 
   /**

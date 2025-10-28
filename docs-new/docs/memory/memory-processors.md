@@ -1,5 +1,5 @@
 ---
-title: 'Memory Processors '
+title: "Memory Processors "
 description: "Learn how to use memory processors in Mastra to filter, trim, and transform messages before they're sent to the language model to manage context window limits."
 ---
 
@@ -18,13 +18,13 @@ Mastra provides built-in processors:
 This processor is used to prevent errors caused by exceeding the LLM's context window limit. It counts the tokens in the retrieved memory messages and removes the oldest messages until the total count is below the specified `limit`.
 
 ```typescript copy showLineNumbers {9-12}
-import { Memory } from '@mastra/memory';
-import { TokenLimiter } from '@mastra/memory/processors';
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
+import { Memory } from "@mastra/memory";
+import { TokenLimiter } from "@mastra/memory/processors";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   memory: new Memory({
     processors: [
       // Ensure the total tokens from memory don't exceed ~127k
@@ -38,7 +38,7 @@ The `TokenLimiter` uses the `o200k_base` encoding by default (suitable for GPT-4
 
 ```typescript copy showLineNumbers {6-9}
 // Import the encoding you need (e.g., for older OpenAI models)
-import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
+import cl100k_base from "js-tiktoken/ranks/cl100k_base";
 
 const memoryForOlderModel = new Memory({
   processors: [
@@ -57,8 +57,8 @@ See the [OpenAI cookbook](https://cookbook.openai.com/examples/how_to_count_toke
 This processor removes tool calls from the memory messages sent to the LLM. It saves tokens by excluding potentially verbose tool interactions from the context, which is useful if the details aren't needed for future interactions. It's also useful if you always want your agent to call a specific tool again and not rely on previous tool results in memory.
 
 ```typescript copy showLineNumbers {5-14}
-import { Memory } from '@mastra/memory';
-import { ToolCallFilter, TokenLimiter } from '@mastra/memory/processors';
+import { Memory } from "@mastra/memory";
+import { ToolCallFilter, TokenLimiter } from "@mastra/memory/processors";
 
 const memoryFilteringTools = new Memory({
   processors: [
@@ -66,7 +66,7 @@ const memoryFilteringTools = new Memory({
     new ToolCallFilter(),
 
     // Example 2: Remove only noisy image generation tool calls/results
-    new ToolCallFilter({ exclude: ['generateImageTool'] }),
+    new ToolCallFilter({ exclude: ["generateImageTool"] }),
 
     // Always place TokenLimiter last
     new TokenLimiter(127000),
@@ -81,15 +81,15 @@ You can chain multiple processors. They execute in the order they appear in the 
 **Order matters!** It's generally best practice to place `TokenLimiter` **last** in the chain. This ensures it operates on the final set of messages after other filtering has occurred, providing the most accurate token limit enforcement.
 
 ```typescript copy showLineNumbers {7-14}
-import { Memory } from '@mastra/memory';
-import { ToolCallFilter, TokenLimiter } from '@mastra/memory/processors';
+import { Memory } from "@mastra/memory";
+import { ToolCallFilter, TokenLimiter } from "@mastra/memory/processors";
 // Assume a hypothetical 'PIIFilter' custom processor exists
 // import { PIIFilter } from './custom-processors';
 
 const memoryWithMultipleProcessors = new Memory({
   processors: [
     // 1. Filter specific tool calls first
-    new ToolCallFilter({ exclude: ['verboseDebugTool'] }),
+    new ToolCallFilter({ exclude: ["verboseDebugTool"] }),
     // 2. Apply custom filtering (e.g., remove hypothetical PII - use with caution)
     // new PIIFilter(),
     // 3. Apply token limiting as the final step
@@ -103,14 +103,14 @@ const memoryWithMultipleProcessors = new Memory({
 You can create custom logic by extending the base `MemoryProcessor` class.
 
 ```typescript copy showLineNumbers {5-20,24-27}
-import { Memory } from '@mastra/memory';
-import { CoreMessage, MemoryProcessorOpts } from '@mastra/core';
-import { MemoryProcessor } from '@mastra/core/memory';
+import { Memory } from "@mastra/memory";
+import { CoreMessage, MemoryProcessorOpts } from "@mastra/core";
+import { MemoryProcessor } from "@mastra/core/memory";
 
 class ConversationOnlyFilter extends MemoryProcessor {
   constructor() {
     // Provide a name for easier debugging if needed
-    super({ name: 'ConversationOnlyFilter' });
+    super({ name: "ConversationOnlyFilter" });
   }
 
   process(
@@ -118,7 +118,9 @@ class ConversationOnlyFilter extends MemoryProcessor {
     _opts: MemoryProcessorOpts = {}, // Options passed during memory retrieval, rarely needed here
   ): CoreMessage[] {
     // Filter messages based on role
-    return messages.filter(msg => msg.role === 'user' || msg.role === 'assistant');
+    return messages.filter(
+      (msg) => msg.role === "user" || msg.role === "assistant",
+    );
   }
 }
 

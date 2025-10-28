@@ -1,6 +1,6 @@
 ---
-title: 'Reference: voice.answer() '
-description: 'Documentation for the answer() method available in real-time voice providers, which triggers the voice provider to generate a response.'
+title: "voice.answer()"
+description: "Documentation for the answer() method available in real-time voice providers, which triggers the voice provider to generate a response."
 ---
 
 # voice.answer()
@@ -10,9 +10,9 @@ The `answer()` method is used in real-time voice providers to trigger the AI to 
 ## Usage Example
 
 ```typescript
-import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
-import { getMicrophoneStream } from '@mastra/node-audio';
-import Speaker from '@mastra/node-speaker';
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { getMicrophoneStream } from "@mastra/node-audio";
+import Speaker from "@mastra/node-speaker";
 
 const speaker = new Speaker({
   sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
@@ -23,15 +23,15 @@ const speaker = new Speaker({
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: 'gpt-4o',
+    model: "gpt-4o",
     apiKey: process.env.OPENAI_API_KEY,
   },
-  speaker: 'alloy', // Default voice
+  speaker: "alloy", // Default voice
 });
 // Connect to the real-time service
 await voice.connect();
 // Register event listener for responses
-voice.on('speaker', stream => {
+voice.on("speaker", (stream) => {
   // Handle audio response
   stream.pipe(speaker);
 });

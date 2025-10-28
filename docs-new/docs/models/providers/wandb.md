@@ -1,6 +1,6 @@
 ---
-title: 'Weights & Biases '
-description: 'Use Weights & Biases models with Mastra. 10 models available.'
+title: "Weights & Biases "
+description: "Use Weights & Biases models with Mastra. 10 models available."
 ---
 
 # <img src="https://models.dev/logos/wandb.svg" alt="Weights & Biases logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Weights & Biases
@@ -14,19 +14,19 @@ WANDB_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'wandb/Qwen/Qwen3-235B-A22B-Instruct-2507',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -171,13 +171,13 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    url: 'https://api.inference.wandb.ai/v1',
-    modelId: 'Qwen/Qwen3-235B-A22B-Instruct-2507',
+    url: "https://api.inference.wandb.ai/v1",
+    modelId: "Qwen/Qwen3-235B-A22B-Instruct-2507",
     apiKey: process.env.WANDB_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -187,10 +187,12 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'wandb/moonshotai/Kimi-K2-Instruct' : 'wandb/Qwen/Qwen3-235B-A22B-Instruct-2507';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "wandb/moonshotai/Kimi-K2-Instruct"
+      : "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507";
   },
 });
 ```

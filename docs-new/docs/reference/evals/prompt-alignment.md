@@ -1,5 +1,5 @@
 ---
-title: 'Reference: Prompt Alignment '
+title: "Prompt Alignment"
 description: Documentation for the Prompt Alignment Metric in Mastra, which evaluates how well LLM outputs adhere to given prompt instructions.
 ---
 
@@ -16,13 +16,17 @@ The `PromptAlignmentMetric` class evaluates how strictly an LLM's output follows
 ## Basic Usage
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
-import { PromptAlignmentMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { PromptAlignmentMetric } from "@mastra/evals/llm";
 
 // Configure the model for evaluation
-const model = openai('gpt-4o-mini');
+const model = openai("gpt-4o-mini");
 
-const instructions = ['Start sentences with capital letters', 'End each sentence with a period', 'Use present tense'];
+const instructions = [
+  "Start sentences with capital letters",
+  "End each sentence with a period",
+  "Use present tense",
+];
 
 const metric = new PromptAlignmentMetric(model, {
   instructions,
@@ -30,8 +34,8 @@ const metric = new PromptAlignmentMetric(model, {
 });
 
 const result = await metric.measure(
-  'describe the weather',
-  'The sun is shining. Clouds float in the sky. A gentle breeze blows.',
+  "describe the weather",
+  "The sun is shining. Clouds float in the sky. A gentle breeze blows.",
 );
 
 console.log(result.score); // Alignment score from 0-1

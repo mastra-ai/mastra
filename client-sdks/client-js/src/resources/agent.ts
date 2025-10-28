@@ -203,6 +203,13 @@ export class Agent extends BaseResource {
     return this.request(`/api/agents/${this.agentId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
+  enhanceInstructions(instructions: string, comment: string): Promise<{ explanation: string; new_prompt: string }> {
+    return this.request(`/api/agents/${this.agentId}/instructions/enhance`, {
+      method: 'POST',
+      body: { instructions, comment },
+    });
+  }
+
   /**
    * Generates a response from the agent
    * @param params - Generation parameters including prompt

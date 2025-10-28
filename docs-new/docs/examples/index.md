@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: 'Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini.'
+description: "Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini."
 sidebar_position: 1
 ---
 
@@ -22,7 +22,6 @@ items={{
       { title: "Supervisor Agent", href: "/docs/examples/agents/supervisor-agent" },
       { title: "Image Analysis Agent", href: "/docs/examples/agents/image-analysis" },
       { title: "Voice Agents", href: "/docs/examples/agents/adding-voice-capabilities" },
-      { title: "Dynamic Agents", href: "/docs/examples/agents/dynamic-agents" },
       { title: "Deploying an MCPServer", href: "/docs/examples/agents/deploying-mcp-server" },
       { title: "AI SDK v5 Integration", href: "/docs/examples/agents/ai-sdk-v5-integration" },
       { title: "WhatsApp Chat Bot", href: "/docs/examples/agents/whatsapp-chat-bot" }

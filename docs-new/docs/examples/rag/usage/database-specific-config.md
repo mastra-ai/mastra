@@ -1,5 +1,5 @@
 ---
-title: 'Database-Specific Configurations '
+title: "Database-Specific Configurations "
 description: Learn how to use database-specific configurations to optimize vector search performance and leverage unique features of different vector stores.
 ---
 
@@ -236,9 +236,9 @@ class MultiTenantSearchService {
 
   constructor() {
     this.searchTool = createVectorQueryTool({
-      vectorStoreName: 'pinecone',
-      indexName: 'shared-documents',
-      model: openai.embedding('text-embedding-3-small'),
+      vectorStoreName: "pinecone",
+      indexName: "shared-documents",
+      model: openai.embedding("text-embedding-3-small"),
     });
   }
 
@@ -246,7 +246,7 @@ class MultiTenantSearchService {
     const runtimeContext = new RuntimeContext();
 
     // Isolate search to tenant's namespace
-    runtimeContext.set('databaseConfig', {
+    runtimeContext.set("databaseConfig", {
       pinecone: {
         namespace: tenant.namespace,
       },
@@ -271,7 +271,9 @@ class MultiTenantSearchService {
   }
 
   async bulkSearchForTenants(tenants: Tenant[], query: string) {
-    const promises = tenants.map(tenant => this.searchForTenant(tenant, query));
+    const promises = tenants.map((tenant) =>
+      this.searchForTenant(tenant, query),
+    );
 
     return await Promise.all(promises);
   }
@@ -281,11 +283,14 @@ class MultiTenantSearchService {
 const searchService = new MultiTenantSearchService();
 
 const tenants = [
-  { id: '1', name: 'Company A', namespace: 'company-a' },
-  { id: '2', name: 'Company B', namespace: 'company-b' },
+  { id: "1", name: "Company A", namespace: "company-a" },
+  { id: "2", name: "Company B", namespace: "company-b" },
 ];
 
-const results = await searchService.searchForTenant(tenants[0], 'product documentation');
+const results = await searchService.searchForTenant(
+  tenants[0],
+  "product documentation",
+);
 ```
 
 ## Hybrid Search with Pinecone
@@ -294,12 +299,12 @@ Combine semantic and keyword search:
 
 ```typescript
 const hybridSearchTool = createVectorQueryTool({
-  vectorStoreName: 'pinecone',
-  indexName: 'documents',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pinecone",
+  indexName: "documents",
+  model: openai.embedding("text-embedding-3-small"),
   databaseConfig: {
     pinecone: {
-      namespace: 'production',
+      namespace: "production",
       sparseVector: {
         // Example sparse vector for keyword "API"
         indices: [1, 5, 10, 15],
@@ -317,7 +322,7 @@ const generateSparseVector = (keywords: string[]) => {
   const values: number[] = [];
 
   keywords.forEach((keyword, i) => {
-    const hash = keyword.split('').reduce((a, b) => {
+    const hash = keyword.split("").reduce((a, b) => {
       a = (a << 5) - a + b.charCodeAt(0);
       return a & a;
     }, 0);
@@ -334,9 +339,9 @@ const hybridSearch = async (query: string, keywords: string[]) => {
 
   if (keywords.length > 0) {
     const sparseVector = generateSparseVector(keywords);
-    runtimeContext.set('databaseConfig', {
+    runtimeContext.set("databaseConfig", {
       pinecone: {
-        namespace: 'production',
+        namespace: "production",
         sparseVector,
       },
     });
@@ -350,7 +355,11 @@ const hybridSearch = async (query: string, keywords: string[]) => {
 };
 
 // Usage
-const results = await hybridSearch('How to use the REST API', ['API', 'REST', 'documentation']);
+const results = await hybridSearch("How to use the REST API", [
+  "API",
+  "REST",
+  "documentation",
+]);
 ```
 
 ## Quality-Gated Search
@@ -360,9 +369,9 @@ Implement progressive search quality:
 ```typescript
 const createQualityGatedSearch = () => {
   const baseConfig = {
-    vectorStoreName: 'postgres',
-    indexName: 'embeddings',
-    model: openai.embedding('text-embedding-3-small'),
+    vectorStoreName: "postgres",
+    indexName: "embeddings",
+    model: openai.embedding("text-embedding-3-small"),
   };
 
   return {
@@ -414,7 +423,7 @@ const progressiveSearch = async (query: string, minResults: number = 3) => {
   });
 
   if (results.sources.length >= minResults) {
-    return { quality: 'high', ...results };
+    return { quality: "high", ...results };
   }
 
   // Fallback to medium quality
@@ -424,7 +433,7 @@ const progressiveSearch = async (query: string, minResults: number = 3) => {
   });
 
   if (results.sources.length >= minResults) {
-    return { quality: 'medium', ...results };
+    return { quality: "medium", ...results };
   }
 
   // Last resort: low quality
@@ -433,12 +442,14 @@ const progressiveSearch = async (query: string, minResults: number = 3) => {
     mastra,
   });
 
-  return { quality: 'low', ...results };
+  return { quality: "low", ...results };
 };
 
 // Usage
-const results = await progressiveSearch('complex technical query', 5);
-console.log(`Found ${results.sources.length} results with ${results.quality} quality`);
+const results = await progressiveSearch("complex technical query", 5);
+console.log(
+  `Found ${results.sources.length} results with ${results.quality} quality`,
+);
 ```
 
 ## Key Takeaways

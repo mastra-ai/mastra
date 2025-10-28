@@ -1,6 +1,6 @@
 ---
 title: Server Deployment
-description: 'Learn how to deploy a Mastra server with build settings and deployment options.'
+description: "Learn how to deploy a Mastra server with build settings and deployment options."
 sidebar_position: 2
 ---
 

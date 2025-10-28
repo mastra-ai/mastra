@@ -1,6 +1,6 @@
 ---
-title: 'Zhipu AI Coding Plan '
-description: 'Use Zhipu AI Coding Plan models with Mastra. 5 models available.'
+title: "Zhipu AI Coding Plan "
+description: "Use Zhipu AI Coding Plan models with Mastra. 5 models available."
 ---
 
 # <img src="https://models.dev/logos/zhipuai-coding-plan.svg" alt="Zhipu AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI Coding Plan
@@ -14,19 +14,19 @@ ZHIPU_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'zhipuai-coding-plan/glm-4.5',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "zhipuai-coding-plan/glm-4.5",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -111,13 +111,13 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    url: 'https://open.bigmodel.cn/api/coding/paas/v4',
-    modelId: 'glm-4.5',
+    url: "https://open.bigmodel.cn/api/coding/paas/v4",
+    modelId: "glm-4.5",
     apiKey: process.env.ZHIPU_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -127,10 +127,12 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'zhipuai-coding-plan/glm-4.6' : 'zhipuai-coding-plan/glm-4.5';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "zhipuai-coding-plan/glm-4.6"
+      : "zhipuai-coding-plan/glm-4.5";
   },
 });
 ```

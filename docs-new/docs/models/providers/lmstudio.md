@@ -1,6 +1,6 @@
 ---
-title: 'LMStudio '
-description: 'Use LMStudio models with Mastra. 3 models available.'
+title: "LMStudio "
+description: "Use LMStudio models with Mastra. 3 models available."
 ---
 
 # <img src="https://models.dev/logos/lmstudio.svg" alt="LMStudio logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LMStudio
@@ -14,19 +14,19 @@ LMSTUDIO_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant',
-  model: 'lmstudio/openai/gpt-oss-20b',
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "lmstudio/openai/gpt-oss-20b",
 });
 
 // Generate a response
-const response = await agent.generate('Hello!');
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story');
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
@@ -87,13 +87,13 @@ models={[
 
 ```typescript
 const agent = new Agent({
-  name: 'custom-agent',
+  name: "custom-agent",
   model: {
-    url: 'http://127.0.0.1:1234/v1',
-    modelId: 'openai/gpt-oss-20b',
+    url: "http://127.0.0.1:1234/v1",
+    modelId: "openai/gpt-oss-20b",
     apiKey: process.env.LMSTUDIO_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
+      "X-Custom-Header": "value",
     },
   },
 });
@@ -103,10 +103,12 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: 'dynamic-agent',
+  name: "dynamic-agent",
   model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === 'complex';
-    return useAdvanced ? 'lmstudio/qwen/qwen3-coder-30b' : 'lmstudio/openai/gpt-oss-20b';
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced
+      ? "lmstudio/qwen/qwen3-coder-30b"
+      : "lmstudio/openai/gpt-oss-20b";
   },
 });
 ```

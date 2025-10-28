@@ -1,8 +1,7 @@
 import { injectJsonInstructionIntoMessages, isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { Span } from '@opentelemetry/api';
 import { APICallError } from 'ai-v5';
-import type { TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
+import type { ToolChoice, ToolSet } from 'ai-v5';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import type { LoopOptions } from '../../../loop/types';
 import { getResponseFormat } from '../../base/schema';
@@ -30,8 +29,6 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
     activeTools?: string[];
     abortSignal?: AbortSignal;
   };
-  modelStreamSpan: Span;
-  telemetry_settings?: TelemetrySettings;
   includeRawChunks?: boolean;
   modelSettings?: LoopOptions['modelSettings'];
   onResult: OnResult;
@@ -53,8 +50,6 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   toolChoice,
   options,
   onResult,
-  modelStreamSpan,
-  telemetry_settings,
   includeRawChunks,
   modelSettings,
   structuredOutput,
@@ -71,12 +66,6 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
     toolChoice,
     activeTools: options?.activeTools,
   });
-
-  if (modelStreamSpan && toolsAndToolChoice?.tools?.length && telemetry_settings?.recordOutputs !== false) {
-    modelStreamSpan.setAttributes({
-      'stream.prompt.tools': toolsAndToolChoice?.tools?.map(tool => JSON.stringify(tool)),
-    });
-  }
 
   const structuredOutputMode = structuredOutput?.schema
     ? structuredOutput?.model
