@@ -33,7 +33,7 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       await storage.deleteMessages(['msg-1', 'msg-2', 'msg-4']);
 
       // Verify only messages 0 and 3 remain
-      const remainingMessages = await storage.getMessages({ threadId: thread.id });
+      const { messages: remainingMessages } = await storage.listMessages({ threadId: thread.id });
       expect(remainingMessages).toHaveLength(2);
       expect(remainingMessages.map(m => m.id).sort()).toEqual(['msg-0', 'msg-3']);
     });
@@ -112,12 +112,12 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       await storage.deleteMessages(['bulk-thread1-msg-0', 'bulk-thread2-msg-1']);
 
       // Verify thread 1 has one message remaining
-      const thread1Messages = await storage.getMessages({ threadId: 'bulk-thread-1' });
+      const { messages: thread1Messages } = await storage.listMessages({ threadId: 'bulk-thread-1' });
       expect(thread1Messages).toHaveLength(1);
       expect(thread1Messages[0]!.id).toBe('bulk-thread1-msg-1');
 
       // Verify thread 2 has one message remaining
-      const thread2Messages = await storage.getMessages({ threadId: 'bulk-thread-2' });
+      const { messages: thread2Messages } = await storage.listMessages({ threadId: 'bulk-thread-2' });
       expect(thread2Messages).toHaveLength(1);
       expect(thread2Messages[0]!.id).toBe('bulk-thread2-msg-0');
     });

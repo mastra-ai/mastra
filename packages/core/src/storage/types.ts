@@ -1,6 +1,6 @@
 import type { AISpanType } from '../ai-tracing';
 import type { MetricResult, TestInfo } from '../eval';
-import type { MemoryConfig } from '../memory/types';
+import type { MastraMessageV1, MastraMessageV2, MemoryConfig } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
 import type { LegacyWorkflowRunState } from '../workflows/legacy';
 
@@ -72,6 +72,23 @@ export type PaginationInfo = {
 };
 
 export type MastraMessageFormat = 'v1' | 'v2';
+
+export type StorageListMessagesInput = {
+  threadId: string;
+  resourceId?: string;
+  include?: {
+    id: string;
+    threadId?: string;
+    withPreviousMessages?: number;
+    withNextMessages?: number;
+  }[];
+  pagination?: PaginationArgs;
+  format?: MastraMessageFormat;
+}
+
+export type StorageListMessagesOutput = PaginationInfo & {
+  messages: MastraMessageV1[] | MastraMessageV2[];
+}
 
 export type StorageGetMessagesArg = {
   threadId: string;

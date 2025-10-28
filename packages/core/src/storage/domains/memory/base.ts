@@ -8,6 +8,8 @@ import type {
   ThreadOrderBy,
   ThreadSortDirection,
   ThreadSortOptions,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
 } from '../../types';
 
 export abstract class MemoryStorage extends MastraBase {
@@ -63,16 +65,16 @@ export abstract class MemoryStorage extends MastraBase {
 
   abstract updateMessages(args: {
     messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
-      {
-        id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-      }[];
+    {
+      id: string;
+      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+    }[];
   }): Promise<MastraMessageV2[]>;
 
   async deleteMessages(_messageIds: string[]): Promise<void> {
     throw new Error(
       `Message deletion is not supported by this storage adapter (${this.constructor.name}). ` +
-        `The deleteMessages method needs to be implemented in the storage adapter.`,
+      `The deleteMessages method needs to be implemented in the storage adapter.`,
     );
   }
 
@@ -88,19 +90,21 @@ export abstract class MemoryStorage extends MastraBase {
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }>;
 
+  abstract listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
+
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {
     throw new Error(
       `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +
-        `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
-        `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
+      `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
+      `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
     );
   }
 
   async saveResource(_: { resource: StorageResourceType }): Promise<StorageResourceType> {
     throw new Error(
       `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +
-        `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
-        `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
+      `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
+      `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
     );
   }
 
@@ -111,8 +115,8 @@ export abstract class MemoryStorage extends MastraBase {
   }): Promise<StorageResourceType> {
     throw new Error(
       `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +
-        `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
-        `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
+      `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
+      `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
     );
   }
 

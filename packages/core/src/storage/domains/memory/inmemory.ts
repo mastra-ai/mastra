@@ -3,12 +3,15 @@ import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../../
 import type {
   PaginationInfo,
   StorageGetMessagesArg,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
   StorageMessageType,
   StorageResourceType,
   ThreadOrderBy,
   ThreadSortDirection,
   ThreadSortOptions,
 } from '../../types';
+import { safelyParseJSON } from '../../utils';
 import type { StoreOperations } from '../operations';
 import { MemoryStorage } from './base';
 
@@ -123,7 +126,7 @@ export class InMemoryMemory extends MemoryStorage {
             id: targetMessage.id,
             threadId: targetMessage.thread_id,
             content:
-              typeof targetMessage.content === 'string' ? JSON.parse(targetMessage.content) : targetMessage.content,
+              safelyParseJSON(targetMessage.content),
             role: targetMessage.role as 'user' | 'assistant' | 'system' | 'tool',
             type: targetMessage.type,
             createdAt: targetMessage.createdAt,
@@ -147,7 +150,7 @@ export class InMemoryMemory extends MemoryStorage {
                   const convertedPrevMessage = {
                     id: message.id,
                     threadId: message.thread_id,
-                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
+                    content: safelyParseJSON(message.content),
                     role: message.role as 'user' | 'assistant' | 'system' | 'tool',
                     type: message.type,
                     createdAt: message.createdAt,
@@ -177,7 +180,7 @@ export class InMemoryMemory extends MemoryStorage {
                   const convertedNextMessage = {
                     id: message.id,
                     threadId: message.thread_id,
-                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
+                    content: safelyParseJSON(message.content),
                     role: message.role as 'user' | 'assistant' | 'system' | 'tool',
                     type: message.type,
                     createdAt: message.createdAt,
@@ -207,7 +210,7 @@ export class InMemoryMemory extends MemoryStorage {
           const convertedMessage = {
             id: msg.id,
             threadId: msg.thread_id,
-            content: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content,
+            content: safelyParseJSON(msg.content),
             role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
             type: msg.type,
             createdAt: msg.createdAt,
@@ -236,7 +239,7 @@ export class InMemoryMemory extends MemoryStorage {
       ...rest,
       threadId: thread_id,
       ...(message.resourceId && { resourceId: message.resourceId }),
-      content: typeof content === 'string' ? content : JSON.parse(content),
+      content: safelyParseJSON(content),
       role: role as MastraMessageV2['role'],
     } satisfies MastraMessageV2;
   }
@@ -321,7 +324,7 @@ export class InMemoryMemory extends MemoryStorage {
       if (update.resourceId !== undefined) storageMsg.resourceId = update.resourceId;
       // Deep merge content if present
       if (update.content !== undefined) {
-        let oldContent = typeof storageMsg.content === 'string' ? JSON.parse(storageMsg.content) : storageMsg.content;
+        let oldContent = safelyParseJSON(storageMsg.content);
         let newContent = update.content;
         if (typeof newContent === 'object' && typeof oldContent === 'object') {
           // Deep merge for metadata/content fields
@@ -369,7 +372,7 @@ export class InMemoryMemory extends MemoryStorage {
       updatedMessages.push({
         id: storageMsg.id,
         threadId: storageMsg.thread_id,
-        content: typeof storageMsg.content === 'string' ? JSON.parse(storageMsg.content) : storageMsg.content,
+        content: safelyParseJSON(storageMsg.content),
         role: storageMsg.role === 'user' || storageMsg.role === 'assistant' ? storageMsg.role : 'user',
         type: storageMsg.type,
         createdAt: storageMsg.createdAt,
@@ -437,6 +440,154 @@ export class InMemoryMemory extends MemoryStorage {
     };
   }
 
+  async listMessages({
+    threadId,
+    resourceId,
+    include,
+    format = 'v1',
+    pagination,
+  }: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    this.logger.debug(`MockStore: listMessages called for thread ${threadId}`);
+
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
+    const { page = 0, perPage = 40 } = pagination || {};
+
+    // Handle include messages with context
+    const messages: MastraMessageV2[] = [];
+
+    if (include && include.length > 0) {
+      for (const includeItem of include) {
+        const targetMessage = this.collection.messages.get(includeItem.id);
+        if (targetMessage) {
+          // Convert StorageMessageType to MastraMessageV2
+          const convertedMessage = {
+            id: targetMessage.id,
+            threadId: targetMessage.thread_id,
+            content:
+              safelyParseJSON(targetMessage.content),
+            role: targetMessage.role as 'user' | 'assistant' | 'system' | 'tool',
+            type: targetMessage.type,
+            createdAt: targetMessage.createdAt,
+            resourceId: targetMessage.resourceId,
+          } as MastraMessageV2;
+
+          // Only add if not already in messages array (deduplication)
+          if (!messages.some(m => m.id === convertedMessage.id)) {
+            messages.push(convertedMessage);
+          }
+
+          // Add previous messages if requested
+          if (includeItem.withPreviousMessages) {
+            const allThreadMessages = Array.from(this.collection.messages.values())
+              .filter((msg: any) => msg.thread_id === (includeItem.threadId || threadId))
+              .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+            const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);
+            if (targetIndex !== -1) {
+              const startIndex = Math.max(0, targetIndex - (includeItem.withPreviousMessages || 0));
+              for (let i = startIndex; i < targetIndex; i++) {
+                const message = allThreadMessages[i];
+                if (message && !messages.some(m => m.id === message.id)) {
+                  const convertedPrevMessage = {
+                    id: message.id,
+                    threadId: message.thread_id,
+                    content: safelyParseJSON(message.content),
+                    role: message.role as 'user' | 'assistant' | 'system' | 'tool',
+                    type: message.type,
+                    createdAt: message.createdAt,
+                    resourceId: message.resourceId,
+                  } as MastraMessageV2;
+                  messages.push(convertedPrevMessage);
+                }
+              }
+            }
+          }
+
+          // Add next messages if requested
+          if (includeItem.withNextMessages) {
+            const allThreadMessages = Array.from(this.collection.messages.values())
+              .filter((msg: any) => msg.thread_id === (includeItem.threadId || threadId))
+              .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+            const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);
+            if (targetIndex !== -1) {
+              const endIndex = Math.min(
+                allThreadMessages.length,
+                targetIndex + (includeItem.withNextMessages || 0) + 1,
+              );
+              for (let i = targetIndex + 1; i < endIndex; i++) {
+                const message = allThreadMessages[i];
+                if (message && !messages.some(m => m.id === message.id)) {
+                  const convertedNextMessage = {
+                    id: message.id,
+                    threadId: message.thread_id,
+                    content: safelyParseJSON(message.content),
+                    role: message.role as 'user' | 'assistant' | 'system' | 'tool',
+                    type: message.type,
+                    createdAt: message.createdAt,
+                    resourceId: message.resourceId,
+                  } as MastraMessageV2;
+                  messages.push(convertedNextMessage);
+                }
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // Get regular messages from the thread
+      let threadMessages = Array.from(this.collection.messages.values()).filter((msg: any) => {
+        if (msg.thread_id !== threadId) return false;
+        if (resourceId && msg.resourceId !== resourceId) return false;
+        return true;
+      });
+
+      // Apply date filtering
+      if (pagination?.dateRange) {
+        const { start: from, end: to } = pagination.dateRange;
+        threadMessages = threadMessages.filter((msg: any) => {
+          const msgDate = new Date(msg.createdAt);
+          const fromDate = from ? new Date(from) : null;
+          const toDate = to ? new Date(to) : null;
+
+          if (fromDate && msgDate < fromDate) return false;
+          if (toDate && msgDate > toDate) return false;
+          return true;
+        });
+      }
+
+      // Convert all thread messages
+      for (const msg of threadMessages) {
+        const convertedMessage = {
+          id: msg.id,
+          threadId: msg.thread_id,
+          content: safelyParseJSON(msg.content),
+          role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
+          type: msg.type,
+          createdAt: msg.createdAt,
+          resourceId: msg.resourceId,
+        } as MastraMessageV2;
+        messages.push(convertedMessage);
+      }
+    }
+
+    // Sort by createdAt
+    messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    const start = page * perPage;
+    const end = start + perPage;
+    const paginatedMessages = messages.slice(start, end);
+
+    return {
+      messages: format === 'v1' ? (paginatedMessages as any) : paginatedMessages,
+      total: messages.length,
+      page,
+      perPage,
+      hasMore: messages.length > end,
+    };
+  }
+
   async getMessagesPaginated({
     threadId,
     selectBy,
@@ -461,7 +612,7 @@ export class InMemoryMemory extends MemoryStorage {
             id: targetMessage.id,
             threadId: targetMessage.thread_id,
             content:
-              typeof targetMessage.content === 'string' ? JSON.parse(targetMessage.content) : targetMessage.content,
+              safelyParseJSON(targetMessage.content),
             role: targetMessage.role as 'user' | 'assistant' | 'system' | 'tool',
             type: targetMessage.type,
             createdAt: targetMessage.createdAt,
@@ -485,7 +636,7 @@ export class InMemoryMemory extends MemoryStorage {
                   const convertedPrevMessage = {
                     id: message.id,
                     threadId: message.thread_id,
-                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
+                    content: safelyParseJSON(message.content),
                     role: message.role as 'user' | 'assistant' | 'system' | 'tool',
                     type: message.type,
                     createdAt: message.createdAt,
@@ -515,7 +666,7 @@ export class InMemoryMemory extends MemoryStorage {
                   const convertedNextMessage = {
                     id: message.id,
                     threadId: message.thread_id,
-                    content: typeof message.content === 'string' ? JSON.parse(message.content) : message.content,
+                    content: safelyParseJSON(message.content),
                     role: message.role as 'user' | 'assistant' | 'system' | 'tool',
                     type: message.type,
                     createdAt: message.createdAt,
@@ -559,7 +710,7 @@ export class InMemoryMemory extends MemoryStorage {
           const convertedMessage = {
             id: msg.id,
             threadId: msg.thread_id,
-            content: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content,
+            content: safelyParseJSON(msg.content),
             role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
             type: msg.type,
             createdAt: msg.createdAt,
@@ -573,7 +724,7 @@ export class InMemoryMemory extends MemoryStorage {
           const convertedMessage = {
             id: msg.id,
             threadId: msg.thread_id,
-            content: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content,
+            content: safelyParseJSON(msg.content),
             role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
             type: msg.type,
             createdAt: msg.createdAt,

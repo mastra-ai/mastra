@@ -30,6 +30,8 @@ import type {
   ThreadSortOptions,
   WorkflowRun,
   WorkflowRuns,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
 } from './types';
 
 export class InMemoryStore extends MastraStorage {
@@ -304,6 +306,12 @@ export class InMemoryStore extends MastraStorage {
     PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }
   > {
     return this.stores.memory.getMessagesPaginated({ threadId, selectBy });
+  }
+
+  async listMessages(args: StorageListMessagesInput & { format?: undefined | 'v1' }): Promise<PaginationInfo & { messages: MastraMessageV1[] }>;
+  async listMessages(args: StorageListMessagesInput & { format: 'v2' }): Promise<PaginationInfo & { messages: MastraMessageV2[] }>;
+  async listMessages(args: StorageListMessagesInput): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    return this.stores.memory.listMessages(args);
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
