@@ -1,13 +1,24 @@
 ---
-title: "Inngest Workflows | Workflows | Mastra Docs"
-description: "Inngest workflow allows you to run Mastra workflows with Inngest"
+title: "Third-party Workflow Engines | Workflows | Mastra Docs"
+description: "Integrate Mastra workflows with third-party workflow engines like Inngest"
 ---
 
-# Inngest Workflow
+import { Tabs, Tab } from "@/components/tabs"
+import { Callout } from "nextra/components"
+
+# Third-party Workflow Engines
+
+Mastra workflows can be integrated with third-party workflow engines to leverage their infrastructure, monitoring, and execution capabilities. This allows you to run Mastra workflows using platforms like Inngest's hosted infrastructure.
+
+Currently supported workflow engines:
+
+- Inngest - Developer platform for building and running background workflows
+
+## Inngest Workflow
 
 [Inngest](https://www.inngest.com/docs) is a developer platform for building and running background workflows, without managing infrastructure.
 
-## How Inngest Works with Mastra
+### How Inngest Works with Mastra
 
 Inngest and Mastra integrate by aligning their workflow models: Inngest organizes logic into functions composed of steps, and Mastra workflows defined using `createWorkflow` and `createStep` map directly onto this paradigm. Each Mastra workflow becomes an Inngest function with a unique identifier, and each step within the workflow maps to an Inngest step.
 
@@ -17,17 +28,17 @@ When an event triggers a workflow, Inngest executes it step by step, memoizing e
 
 Real-time monitoring, suspend/resume, and step-level observability are enabled via Inngest’s publish-subscribe system and dashboard. As each step executes, its state and output are tracked using Mastra storage and can be resumed as needed.
 
-## Setup
+### Setup
 
 ```sh
 npm install @mastra/inngest @mastra/core @mastra/deployer
 ```
 
-## Building an Inngest Workflow
+### Building an Inngest Workflow
 
 This guide walks through creating a workflow with Inngest and Mastra, demonstrating a counter application that increments a value until it reaches 10.
 
-### Inngest Initialization
+#### Inngest Initialization
 
 Initialize the Inngest integration to obtain Mastra-compatible workflow helpers. The createWorkflow and createStep functions are used to create workflow and step objects that are compatible with Mastra and inngest.
 
@@ -57,7 +68,7 @@ export const inngest = new Inngest({
 });
 ```
 
-### Creating Steps
+#### Creating Steps
 
 Define the individual steps that will compose your workflow:
 
@@ -84,7 +95,7 @@ const incrementStep = createStep({
 });
 ```
 
-### Creating the Workflow
+#### Creating the Workflow
 
 Compose the steps into a workflow using the `dountil` loop pattern. The createWorkflow function creates a function on inngest server that is invocable.
 
@@ -105,7 +116,7 @@ workflow.commit();
 export { workflow as incrementWorkflow };
 ```
 
-### Configuring the Mastra Instance and Executing the Workflow
+#### Configuring the Mastra Instance and Executing the Workflow
 
 Register the workflow with Mastra and configure the Inngest API endpoint:
 
@@ -155,7 +166,7 @@ export const mastra = new Mastra({
 });
 ```
 
-### Running the Workflow locally
+#### Running the Workflow locally
 
 > **Prerequisites:**
 >
@@ -206,7 +217,7 @@ docker run --rm -p 8288:8288 \
 - Click on the latest run to see step-by-step execution progress.
   ![Inngest Function Run](/inngest-runs-dashboard.png)
 
-### Running the Workflow in Production
+#### Running the Workflow in Production
 
 > **Prerequisites:**
 >
@@ -277,17 +288,17 @@ vercel --prod
 
 ![Inngest Function Run](/inngest-function-dashboard-prod.png)
 
-6.  Monitor Execution
+6. Monitor Execution
 
 - Go to the **Runs** tab.
 - Click the latest run to see step-by-step execution progress.
   ![Inngest Function Run](/inngest-runs-dashboard-prod.png)
 
-## Advanced Usage: Adding Custom Inngest Functions
+### Advanced Usage: Adding Custom Inngest Functions
 
 You can serve additional Inngest functions alongside your Mastra workflows by using the optional `functions` parameter in `inngestServe`.
 
-### Creating Custom Functions
+#### Creating Custom Functions
 
 First, create your custom Inngest functions:
 
@@ -316,7 +327,7 @@ export const customWebhookFunction = inngest.createFunction(
 );
 ```
 
-### Serving Custom Functions with Workflows
+#### Serving Custom Functions with Workflows
 
 Update your Mastra configuration to include the custom functions:
 
@@ -348,7 +359,7 @@ export const mastra = new Mastra({
 });
 ```
 
-### Function Registration
+#### Function Registration
 
 When you include custom functions:
 
