@@ -335,15 +335,16 @@ export class Agent<
       agentId: this.id,
     });
 
-    // Create the agentic loop workflow once at instance level for v2 models
-    // This will be passed to MastraLLMVNext when needed
+    // Create agentic-loop workflow once at instance level
     this.#agenticLoopWorkflow = createAgenticLoopWorkflow({
       logger: this.logger,
       mastra: this.#mastra,
     });
 
-    // Register mastra on the loop workflow only
-    if (this.#mastra && this.#agenticLoopWorkflow) {
+    // Register workflows with mastra if available
+    if (this.#mastra) {
+      this.#prepareStreamWorkflow.__registerMastra(this.#mastra);
+      // Only register mastra on loop workflows (not other workflows)
       this.#agenticLoopWorkflow.__registerMastra(this.#mastra);
     }
   }
@@ -1228,6 +1229,13 @@ export class Agent<
    */
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
+    // Register workflows with mastra for snapshot persistence
+    if (this.#prepareStreamWorkflow) {
+      this.#prepareStreamWorkflow.__registerMastra(mastra);
+    }
+    if (this.#agenticLoopWorkflow) {
+      this.#agenticLoopWorkflow.__registerMastra(mastra);
+    }
     // Mastra will be passed to the LLM when it's created in getLLM()
   }
 

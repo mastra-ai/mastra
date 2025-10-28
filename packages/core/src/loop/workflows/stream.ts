@@ -160,6 +160,7 @@ export function workflowLoopStream<
         writer,
         modelStreamSpan,
         _internal,
+        messageList, // messageList needs to be fresh on resume as well
       };
 
       const executionResult = resumeContext
