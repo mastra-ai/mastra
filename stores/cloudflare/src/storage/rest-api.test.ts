@@ -370,7 +370,10 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Verify messages were also deleted with retry
       const retrievedMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => {
+          const { messages } = await store.listMessages({ threadId: thread.id });
+          return messages;
+        },
         messages => messages.length === 0,
       );
       expect(retrievedMessages).toHaveLength(0);
@@ -395,8 +398,8 @@ describe.skip('CloudflareStore REST API', () => {
       // Retrieve messages with retry
       const retrievedMessages = await retryUntil(
         async () => {
-          const msgs = await store.getMessages({ threadId: thread.id });
-          return msgs;
+          const { messages } = await store.listMessages({ threadId: thread.id });
+          return messages;
         },
         msgs => msgs.length === 2,
       );
@@ -422,7 +425,10 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveMessages({ messages });
 
       const retrievedMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => {
+          const { messages } = await store.listMessages({ threadId: thread.id });
+          return messages;
+        },
         messages => messages.length > 0,
       );
       expect(retrievedMessages).toHaveLength(3);
@@ -1565,7 +1571,10 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Verify messages are saved
       const initialMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => {
+          const { messages } = await store.listMessages({ threadId: thread.id });
+          return messages;
+        },
         messages => messages.length === testMessages.length,
       );
       expect(initialMessages).toHaveLength(testMessages.length);
@@ -1587,7 +1596,10 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Verify all data is cleaned up
       const remainingMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => {
+          const { messages } = await store.listMessages({ threadId: thread.id });
+          return messages;
+        },
         messages => messages.length === 0,
       );
       expect(remainingMessages).toHaveLength(0);
@@ -1732,7 +1744,10 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Should still be able to retrieve and handle the message
       const messages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => {
+          const { messages } = await store.listMessages({ threadId: thread.id });
+          return messages;
+        },
         messages => messages.length === 1,
       );
       expect(messages).toHaveLength(1);

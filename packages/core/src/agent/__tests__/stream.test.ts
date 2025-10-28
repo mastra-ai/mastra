@@ -16,6 +16,7 @@ import { Agent } from '../agent';
 import { MessageList } from '../message-list/index';
 import { assertNoDuplicateParts, MockMemory } from '../test-utils';
 import { getDummyResponseModel, getEmptyResponseModel, getErrorResponseModel } from './mock-model';
+import { InMemoryStore } from '../../storage';
 
 config();
 
@@ -34,7 +35,8 @@ function runStreamTest(version: 'v1' | 'v2') {
 
   describe(`${version} - stream`, () => {
     it('should rescue partial messages (including tool calls) if stream is aborted/interrupted', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       let saveCallCount = 0;
       let savedMessages: any[] = [];
       mockMemory.saveMessages = async function (...args) {
@@ -127,7 +129,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       expect(caught).toBe(true);
 
       // After interruption, check what was saved
-      let messages = await mockMemory.getMessages({
+      let { messages } = await storage.listMessages({
         threadId: 'thread-partial-rescue',
         resourceId: 'resource-partial-rescue',
         format: 'v2',
@@ -156,7 +158,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     }, 500000);
 
     it('should incrementally save messages across steps and tool calls', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       let saveCallCount = 0;
       mockMemory.saveMessages = async function (...args) {
         saveCallCount++;
@@ -198,7 +201,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       await stream.consumeStream();
 
       expect(saveCallCount).toBeGreaterThan(1);
-      const messages = await mockMemory.getMessages({
+      const { messages } = await storage.listMessages({
         threadId: 'thread-echo',
         resourceId: 'resource-echo',
         format: 'v2',
@@ -217,7 +220,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     }, 500000);
 
     it('should incrementally save messages with multiple tools and multi-step streaming', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       let saveCallCount = 0;
       mockMemory.saveMessages = async function (...args) {
         saveCallCount++;
@@ -277,7 +281,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       await stream.consumeStream();
 
       expect(saveCallCount).toBeGreaterThan(1);
-      const messages = await mockMemory.getMessages({
+      const { messages } = await storage.listMessages({
         threadId: 'thread-multi',
         resourceId: 'resource-multi',
         format: 'v2',
@@ -296,7 +300,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     }, 500000);
 
     it('should persist the full message after a successful run', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'test',
@@ -319,7 +324,7 @@ function runStreamTest(version: 'v1' | 'v2') {
 
       await stream.consumeStream();
 
-      const messages = await mockMemory.getMessages({ threadId: 'thread-1', resourceId: 'resource-1', format: 'v2' });
+      const { messages } = await storage.listMessages({ threadId: 'thread-1', resourceId: 'resource-1', format: 'v2' });
       // Check that the last message matches the expected final output
       expect(
         messages[messages.length - 1]?.content?.parts?.some(
@@ -443,7 +448,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     });
 
     it('should only call saveMessages for the user message when no assistant parts are generated', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       let saveCallCount = 0;
 
       mockMemory.saveMessages = async function (...args) {
@@ -475,14 +481,15 @@ function runStreamTest(version: 'v1' | 'v2') {
 
       expect(saveCallCount).toBe(1);
 
-      const messages = await mockMemory.getMessages({ threadId: 'thread-2', resourceId: 'resource-2', format: 'v2' });
+      const { messages } = await storage.listMessages({ threadId: 'thread-2', resourceId: 'resource-2', format: 'v2' });
       expect(messages.length).toBe(1);
       expect(messages[0].role).toBe('user');
       expect(messages[0].content.content).toBe('no progress');
     });
 
     it('should not save any message if interrupted before any part is emitted', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       let saveCallCount = 0;
 
       mockMemory.saveMessages = async function (...args) {
@@ -517,12 +524,13 @@ function runStreamTest(version: 'v1' | 'v2') {
       });
 
       expect(saveCallCount).toBe(0);
-      const messages = await mockMemory.getMessages({ threadId: 'thread-3', resourceId: 'resource-3' });
+      const { messages } = await storage.listMessages({ threadId: 'thread-3', resourceId: 'resource-3' });
       expect(messages.length).toBe(0);
     });
 
     it('should not save thread if error occurs after starting response but before completion', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
 
       let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
@@ -713,7 +721,8 @@ function runStreamTest(version: 'v1' | 'v2') {
     });
 
     it(`should show correct request input for multi-turn inputs with memory`, async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const threadId = '1';
       const resourceId = '2';
       // @ts-ignore

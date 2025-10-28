@@ -489,10 +489,10 @@ Messages are stored in a V2 format internally, which is roughly equivalent to th
 
 ```typescript copy
 // Get messages in the default V1 format (roughly equivalent to AI SDK's CoreMessage format)
-const messagesV1 = await mastra.getStorage().getMessages({ threadId: 'your-thread-id' });
+const messagesV1 = await mastra.getStorage().listMessages({ threadId: 'your-thread-id' });
 
 // Get messages in the V2 format (roughly equivalent to AI SDK's UIMessage format)
-const messagesV2 = await mastra.getStorage().getMessages({ threadId: 'your-thread-id', format: 'v2' });
+const messagesV2 = await mastra.getStorage().listMessages({ threadId: 'your-thread-id', format: 'v2' });
 ```
 
 You can also retrieve messages using an array of message IDs. Note that unlike `getMessages`, this defaults to the V2 format:

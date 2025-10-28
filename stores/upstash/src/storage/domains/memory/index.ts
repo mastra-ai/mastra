@@ -9,7 +9,13 @@ import {
   resolveMessageLimit,
   TABLE_MESSAGES,
 } from '@mastra/core/storage';
-import type { StorageGetMessagesArg, PaginationInfo, StorageResourceType } from '@mastra/core/storage';
+import type {
+  StorageGetMessagesArg,
+  PaginationInfo,
+  StorageResourceType,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+} from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
 import { ensureDate, getKey, processRecord } from '../utils';
@@ -725,6 +731,15 @@ export class StoreMemoryUpstash extends MemoryStorage {
         hasMore: false,
       };
     }
+  }
+
+  async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    throw new MastraError({
+      id: 'UPSTASH_STORAGE_LIST_MESSAGES_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing messages is not implemented by this storage adapter (${this.constructor.name})`,
+    });
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {

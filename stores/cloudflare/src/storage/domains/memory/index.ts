@@ -2,7 +2,13 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
-import type { PaginationInfo, StorageGetMessagesArg, StorageResourceType } from '@mastra/core/storage';
+import type {
+  PaginationInfo,
+  StorageGetMessagesArg,
+  StorageResourceType,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+} from '@mastra/core/storage';
 import {
   ensureDate,
   MemoryStorage,
@@ -928,6 +934,15 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       this.logger?.error?.(mastraError.toString());
       return { messages: [], total: 0, page, perPage: perPage || 40, hasMore: false };
     }
+  }
+
+  async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    throw new MastraError({
+      id: 'CLOUDFLARE_STORAGE_LIST_MESSAGES_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing messages is not implemented by this storage adapter (${this.constructor.name})`,
+    });
   }
 
   async updateMessages(args: {

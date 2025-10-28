@@ -8,6 +8,8 @@ import type {
   StorageGetMessagesArg,
   StorageResourceType,
   ThreadSortOptions,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
 } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
 
@@ -228,7 +230,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     try {
       // First, delete all messages associated with this thread
-      const messages = await this.getMessages({ threadId });
+      const { messages } = await this.listMessages({ threadId });
+
       if (messages.length > 0) {
         // Delete messages in batches
         const batchSize = 25; // DynamoDB batch limits
@@ -257,95 +260,6 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
-        },
-        error,
-      );
-    }
-  }
-
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    this.logger.debug('Getting messages', { threadId, selectBy });
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      const messages: MastraMessageV2[] = [];
-      const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
-
-      // Handle included messages first (like libsql)
-      if (selectBy?.include?.length) {
-        const includeMessages = await this._getIncludedMessages(threadId, selectBy);
-        if (includeMessages) {
-          messages.push(...includeMessages);
-        }
-      }
-
-      // Get remaining messages only if limit is not 0
-      if (limit !== 0) {
-        // Query messages by thread ID using the GSI
-        const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
-
-        // Get messages from the main thread
-        let results;
-        if (limit !== Number.MAX_SAFE_INTEGER && limit > 0) {
-          // Use limit in query to get only the last N messages
-          results = await query.go({ limit, order: 'desc' });
-          // Reverse the results since we want ascending order
-          results.data = results.data.reverse();
-        } else {
-          // Get all messages
-          results = await query.go();
-        }
-
-        let allThreadMessages = results.data
-          .map((data: any) => this.parseMessageData(data))
-          .filter((msg: any): msg is MastraMessageV2 => 'content' in msg);
-
-        // Sort by createdAt ASC to get proper order
-        allThreadMessages.sort((a: MastraMessageV2, b: MastraMessageV2) => {
-          const timeA = a.createdAt.getTime();
-          const timeB = b.createdAt.getTime();
-          if (timeA === timeB) {
-            return a.id.localeCompare(b.id);
-          }
-          return timeA - timeB;
-        });
-
-        messages.push(...allThreadMessages);
-      }
-
-      // Sort by createdAt ASC to match libsql behavior, with ID tiebreaker for stable ordering
-      messages.sort((a, b) => {
-        const timeA = a.createdAt.getTime();
-        const timeB = b.createdAt.getTime();
-        if (timeA === timeB) {
-          return a.id.localeCompare(b.id);
-        }
-        return timeA - timeB;
-      });
-
-      // Deduplicate messages by ID (like libsql)
-      const uniqueMessages = messages.filter(
-        (message, index, self) => index === self.findIndex(m => m.id === message.id),
-      );
-
-      const list = new MessageList({ threadId, resourceId }).add(uniqueMessages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'STORAGE_DYNAMODB_STORE_GET_MESSAGES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId, resourceId: resourceId ?? '' },
         },
         error,
       );
@@ -667,6 +581,15 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       this.logger?.error?.(mastraError.toString());
       return { messages: [], total: 0, page, perPage, hasMore: false };
     }
+  }
+
+  async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    throw new MastraError({
+      id: 'DYNAMODB_STORAGE_LIST_MESSAGES_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing messages is not implemented by this storage adapter (${this.constructor.name})`,
+    });
   }
 
   // Helper method to get included messages with context

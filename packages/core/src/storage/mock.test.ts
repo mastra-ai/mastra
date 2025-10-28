@@ -222,9 +222,11 @@ describe('InMemoryStore - Message Fetching', () => {
   });
 
   it('getMessages should throw when threadId is an empty string or whitespace only', async () => {
-    await expect(() => store.getMessages({ threadId: '' })).rejects.toThrowError('threadId must be a non-empty string');
+    await expect(() => store.listMessages({ threadId: '' })).rejects.toThrowError(
+      'threadId must be a non-empty string',
+    );
 
-    await expect(() => store.getMessages({ threadId: '   ' })).rejects.toThrowError(
+    await expect(() => store.listMessages({ threadId: '   ' })).rejects.toThrowError(
       'threadId must be a non-empty string',
     );
   });

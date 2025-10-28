@@ -413,7 +413,10 @@ describe.skip('D1Store REST API', () => {
 
       // Verify messages were also deleted with retry
       const retrievedMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => {
+          const { messages } = await store.listMessages({ threadId: thread.id });
+          return messages;
+        },
         messages => messages.length === 0,
       );
       expect(retrievedMessages).toHaveLength(0);
@@ -438,8 +441,8 @@ describe.skip('D1Store REST API', () => {
       // Retrieve messages with retry
       const retrievedMessages = await retryUntil(
         async () => {
-          const msgs = await store.getMessages({ threadId: thread.id });
-          return msgs;
+          const msgs = await store.listMessages({ threadId: thread.id });
+          return msgs.messages;
         },
         msgs => msgs.length === 2,
       );
@@ -468,7 +471,10 @@ describe.skip('D1Store REST API', () => {
       await store.saveMessages({ messages });
 
       const retrievedMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => {
+          const { messages } = await store.listMessages({ threadId: thread.id });
+          return messages;
+        },
         messages => messages.length > 0,
       );
       expect(retrievedMessages).toHaveLength(3);
@@ -478,132 +484,6 @@ describe.skip('D1Store REST API', () => {
         expect(msg.content).toEqual(messages[idx].content);
       });
     });
-
-    // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
-    //   const messages: MastraMessageV2[] = [
-    //     createSampleMessage({
-    //       threadId: 'thread-one',
-    //       content: 'First',
-    //       resourceId: 'cross-thread-resource',
-    //     }),
-    //     createSampleMessage({
-    //       threadId: 'thread-one',
-    //       content: 'Second',
-    //       resourceId: 'cross-thread-resource',
-    //     }),
-    //     createSampleMessage({
-    //       threadId: 'thread-one',
-    //       content: 'Third',
-    //       resourceId: 'cross-thread-resource',
-    //     }),
-
-    //     createSampleMessage({
-    //       threadId: 'thread-two',
-    //       content: 'Fourth',
-    //       resourceId: 'cross-thread-resource',
-    //     }),
-    //     createSampleMessage({
-    //       threadId: 'thread-two',
-    //       content: 'Fifth',
-    //       resourceId: 'cross-thread-resource',
-    //     }),
-    //     createSampleMessage({
-    //       threadId: 'thread-two',
-    //       content: 'Sixth',
-    //       resourceId: 'cross-thread-resource',
-    //     }),
-
-    //     createSampleMessage({
-    //       threadId: 'thread-three',
-    //       content: 'Seventh',
-    //       resourceId: 'other-resource',
-    //     }),
-    //     createSampleMessage({
-    //       threadId: 'thread-three',
-    //       content: 'Eighth',
-    //       resourceId: 'other-resource',
-    //     }),
-    //   ];
-
-    //   await store.saveMessages({ messages: messages, format: 'v2' });
-
-    //   const retrievedMessages = await store.getMessages({ threadId: 'thread-one', format: 'v2' });
-    //   expect(retrievedMessages).toHaveLength(3);
-    //   expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
-
-    //   const retrievedMessages2 = await store.getMessages({ threadId: 'thread-two', format: 'v2' });
-    //   expect(retrievedMessages2).toHaveLength(3);
-    //   expect(retrievedMessages2.map((m: any) => m.content.parts[0].text)).toEqual(['Fourth', 'Fifth', 'Sixth']);
-
-    //   const retrievedMessages3 = await store.getMessages({ threadId: 'thread-three', format: 'v2' });
-    //   expect(retrievedMessages3).toHaveLength(2);
-    //   expect(retrievedMessages3.map((m: any) => m.content.parts[0].text)).toEqual(['Seventh', 'Eighth']);
-
-    //   const crossThreadMessages = await store.getMessages({
-    //     threadId: 'thread-doesnt-exist',
-    //     resourceId: 'cross-thread-resource',
-    //     format: 'v2',
-    //     selectBy: {
-    //       last: 0,
-    //       include: [
-    //         {
-    //           id: messages[1].id,
-    //           withNextMessages: 2,
-    //           withPreviousMessages: 2,
-    //         },
-    //         {
-    //           id: messages[4].id,
-    //           withPreviousMessages: 2,
-    //           withNextMessages: 2,
-    //         },
-    //       ],
-    //     },
-    //   });
-
-    //   expect(crossThreadMessages).toHaveLength(6);
-    //   expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
-    //   expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
-
-    //   const crossThreadMessages2 = await store.getMessages({
-    //     threadId: 'thread-one',
-    //     resourceId: 'cross-thread-resource',
-    //     format: 'v2',
-    //     selectBy: {
-    //       last: 0,
-    //       include: [
-    //         {
-    //           id: messages[4].id,
-    //           withPreviousMessages: 1,
-    //           withNextMessages: 30,
-    //         },
-    //       ],
-    //     },
-    //   });
-
-    //   expect(crossThreadMessages2).toHaveLength(3);
-    //   expect(crossThreadMessages2.filter(m => m.threadId === `thread-one`)).toHaveLength(0);
-    //   expect(crossThreadMessages2.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
-
-    //   const crossThreadMessages3 = await store.getMessages({
-    //     threadId: 'thread-two',
-    //     resourceId: 'cross-thread-resource',
-    //     format: 'v2',
-    //     selectBy: {
-    //       last: 0,
-    //       include: [
-    //         {
-    //           id: messages[1].id,
-    //           withNextMessages: 1,
-    //           withPreviousMessages: 1,
-    //         },
-    //       ],
-    //     },
-    //   });
-
-    //   expect(crossThreadMessages3).toHaveLength(3);
-    //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
-    //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
-    // });
   });
 
   describe('Workflow Operations', () => {
@@ -1207,7 +1087,10 @@ describe.skip('D1Store REST API', () => {
 
       // Verify order is maintained based on insertion order
       const order = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => {
+          const { messages } = await store.listMessages({ threadId: thread.id });
+          return messages;
+        },
         order => order.length === messages.length,
       );
       const orderIds = order.map(m => m.id);
@@ -1234,7 +1117,10 @@ describe.skip('D1Store REST API', () => {
       }
       // Verify all messages are saved successfully
       const order = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => {
+          const { messages } = await store.listMessages({ threadId: thread.id });
+          return messages;
+        },
         order => order.length === messages.length,
       );
       const orderIds = order.map(m => m.id);
@@ -1262,7 +1148,10 @@ describe.skip('D1Store REST API', () => {
 
       // Get messages and verify order
       const order = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => {
+          const { messages } = await store.listMessages({ threadId: thread.id });
+          return messages;
+        },
         order => order.length > 0,
       );
       expect(order.length).toBe(3);
@@ -1296,7 +1185,10 @@ describe.skip('D1Store REST API', () => {
 
       // Should retrieve correctly
       const messages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => {
+          const { messages } = await store.listMessages({ threadId: thread.id });
+          return messages;
+        },
         messages => messages.length > 0,
       );
       expect(messages).toHaveLength(1);
@@ -1321,7 +1213,10 @@ describe.skip('D1Store REST API', () => {
       }
       // Verify all messages are saved
       const order = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => {
+          const { messages } = await store.listMessages({ threadId: thread.id });
+          return messages;
+        },
         order => order.length === messages.length,
       );
 
@@ -1342,7 +1237,10 @@ describe.skip('D1Store REST API', () => {
 
       // Verify messages exist
       const initialOrder = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => {
+          const { messages } = await store.listMessages({ threadId: thread.id });
+          return messages;
+        },
         messages => messages.length > 0,
       );
       expect(initialOrder).toHaveLength(messages.length);
@@ -1354,7 +1252,10 @@ describe.skip('D1Store REST API', () => {
 
       // Verify messages are cleaned up
       const finalOrder = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => {
+          const { messages } = await store.listMessages({ threadId: thread.id });
+          return messages;
+        },
         order => order.length === 0,
       );
       expect(finalOrder).toHaveLength(0);
@@ -1444,8 +1345,8 @@ describe.skip('D1Store REST API', () => {
 
       // Should still be able to retrieve and handle the message
       const messages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length === 1,
+        async () => await store.listMessages({ threadId: thread.id }),
+        ({ messages }) => messages.length === 1,
       );
       expect(messages).toHaveLength(1);
       expect(messages[0].id).toBe(malformedMessage.id);

@@ -48,7 +48,7 @@ await store.saveMessages([
 
 // Query threads and messages
 const savedThread = await store.getThreadById({ threadId: 'thread-123' });
-const messages = await store.getMessages({ threadId: 'thread-123' });
+const { messages } = await store.listMessages({ threadId: 'thread-123' });
 
 // Clean up
 await store.close();
@@ -97,7 +97,7 @@ The store uses different table engines for different types of data:
 ### Message Operations
 
 - `saveMessages(messages)`: Save multiple messages
-- `getMessages({ threadId, selectBy? })`: Get messages for a thread with optional filtering
+- `listMessages({ threadId, include?, format?, pagination?, filter? })`: Get messages for a thread with optional filtering
 - `deleteMessages(messageIds)`: Delete specific messages
 
 ### Workflow Operations

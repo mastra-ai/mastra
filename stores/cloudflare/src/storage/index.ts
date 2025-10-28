@@ -32,7 +32,7 @@ import { StoreOperationsCloudflare } from './domains/operations';
 import { ScoresStorageCloudflare } from './domains/scores';
 import { WorkflowsStorageCloudflare } from './domains/workflows';
 import { isWorkersConfig } from './types';
-import type { CloudflareStoreConfig, RecordTypes } from './types';
+import type { CloudflareStoreConfig, ListOptions, RecordTypes } from './types';
 
 export class CloudflareStore extends MastraStorage {
   stores: StorageDomains;
@@ -224,17 +224,6 @@ export class CloudflareStore extends MastraStorage {
     args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
   ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
     return this.stores.memory.saveMessages(args);
-  }
-
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessages({ threadId, resourceId, selectBy, format });
   }
 
   async updateWorkflowResults({
@@ -449,5 +438,9 @@ export class CloudflareStore extends MastraStorage {
 
   async close(): Promise<void> {
     // No explicit cleanup needed
+  }
+
+  async listNamespaceKeys(tableName: TABLE_NAMES, options?: ListOptions) {
+    return (this.stores.operations as StoreOperationsCloudflare).listNamespaceKeys(tableName, options);
   }
 }

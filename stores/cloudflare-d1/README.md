@@ -82,7 +82,7 @@ const store = new D1Store({
 ### Message Operations
 
 - `saveMessages({ messages })`: Save multiple messages in a batch operation (uses prepared statements).
-- `getMessages({ threadId, selectBy? })`: Retrieve messages for a thread, with optional filtering (e.g., last N, include surrounding messages).
+- `listMessages({ threadId, filter?, format?, pagination?, include? })`: Retrieve messages for a thread, with optional filtering (e.g., last N, include surrounding messages).
 
 ### Workflow Operations
 

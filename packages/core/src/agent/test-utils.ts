@@ -1,69 +1,21 @@
 import { expect } from 'vitest';
 import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig } from '../memory';
-import type { StorageGetMessagesArg } from '../storage';
+import { InMemoryStore } from '../storage';
 import { MessageList } from './message-list';
 
 export class MockMemory extends MastraMemory {
-  threads: Record<string, StorageThreadType> = {};
-  messages: Map<string, MastraMessageV1 | MastraMessageV2> = new Map();
-
-  constructor() {
-    super({ name: 'mock' });
-    Object.defineProperty(this, 'storage', {
-      get: () => ({
-        init: async () => {},
-        getThreadById: this.getThreadById.bind(this),
-        saveThread: async ({ thread }: { thread: StorageThreadType }) => {
-          return this.saveThread({ thread });
-        },
-        getMessages: this.getMessages.bind(this),
-        saveMessages: this.saveMessages.bind(this),
-      }),
-    });
+  constructor({ storage }: { storage?: InMemoryStore }) {
+    super({ name: 'mock', storage: storage || new InMemoryStore() });
     this._hasOwnStorage = true;
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.threads[threadId] || null;
+    return this.storage.getThreadById({ threadId });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
-    const newThread = { ...thread, updatedAt: new Date() };
-    if (!newThread.createdAt) {
-      newThread.createdAt = new Date();
-    }
-    this.threads[thread.id] = newThread;
-    return this.threads[thread.id] as StorageThreadType;
-  }
-
-  // Overloads for getMessages
-  async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessages(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<MastraMessageV1[] | MastraMessageV2[]>;
-
-  // Implementation for getMessages
-  async getMessages({
-    threadId,
-    resourceId,
-    format = 'v1',
-    selectBy,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    let results = Array.from(this.messages.values());
-    if (threadId) results = results.filter(m => m.threadId === threadId);
-    if (resourceId) results = results.filter(m => m.resourceId === resourceId);
-    if (selectBy) {
-      if (selectBy.include) {
-        results = results.filter(m => selectBy.include?.some(i => i.id === m.id));
-      }
-      if (selectBy.last) {
-        results = results.slice(-selectBy.last);
-      }
-    }
-    if (format === 'v2') return results as MastraMessageV2[];
-    return results as MastraMessageV1[];
+    return this.storage.saveThread({ thread });
   }
 
   // saveMessages for both v1 and v2
@@ -72,25 +24,12 @@ export class MockMemory extends MastraMemory {
   async saveMessages(
     args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
   ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
-    const { messages, format } = args as any;
-
-    for (const msg of messages) {
-      const existing = this.messages.get(msg.id);
-      if (existing) {
-        this.messages.set(msg.id, {
-          ...existing,
-          ...msg,
-          createdAt: existing.createdAt,
-        });
-      } else {
-        this.messages.set(msg.id, msg);
-      }
-    }
-    return this.getMessages({ threadId: messages[0].threadId, resourceId: messages[0].resourceId, format });
+    return this.storage.saveMessages(args);
   }
 
-  async rememberMessages() {
-    const list = new MessageList().add(Array.from(this.messages.values()), `memory`);
+  async rememberMessages({ threadId }: { threadId: string }) {
+    const { messages } = await this.storage.listMessages({ threadId, format: 'v2' });
+    const list = new MessageList().add(messages, `memory`);
     return { messages: list.get.remembered.v1(), messagesV2: list.get.remembered.v2() };
   }
 
@@ -120,14 +59,11 @@ export class MockMemory extends MastraMemory {
     return { messages: [], uiMessages: [], messagesV2: [] };
   }
   async deleteThread(threadId: string) {
-    delete this.threads[threadId];
+    return this.storage.deleteThread({ threadId });
   }
 
   async deleteMessages(messageIds: string[]): Promise<void> {
-    // Mock implementation - remove messages by ID
-    for (const messageId of messageIds) {
-      this.messages.delete(messageId);
-    }
+    return this.storage.deleteMessages(messageIds);
   }
 
   // Add missing method implementations

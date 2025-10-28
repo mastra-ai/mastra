@@ -19,7 +19,7 @@ import type { MastraMessageV2, StorageThreadType } from '../memory';
 import { RuntimeContext } from '../runtime-context';
 import { createScorer } from '../scores';
 import { runScorer } from '../scores/hooks';
-import { MockStore } from '../storage';
+import { InMemoryStore, MockStore } from '../storage';
 import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import { delay } from '../utils';
@@ -3464,7 +3464,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should create a new thread with metadata using generate', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
+
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'test',
@@ -3501,7 +3503,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should update metadata for an existing thread using generate', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const initialThread: StorageThreadType = {
         id: 'thread-1',
         resourceId: 'user-1',
@@ -3548,7 +3551,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should not update metadata if it is the same using generate', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const initialThread: StorageThreadType = {
         id: 'thread-1',
         resourceId: 'user-1',
@@ -3593,7 +3597,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should create a new thread with metadata using stream', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'test',
@@ -3633,7 +3638,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('generate - should still work with deprecated threadId and resourceId', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'test',
@@ -3660,7 +3666,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('stream - should still work with deprecated threadId and resourceId', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'test',
@@ -4473,7 +4480,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     describe('generate', () => {
       it('should rescue partial messages (including tool calls) if generate is aborted/interrupted', async () => {
-        const mockMemory = new MockMemory();
+        const storage = new InMemoryStore();
+        const mockMemory = new MockMemory({ storage });
         let saveCallCount = 0;
         let savedMessages: any[] = [];
         mockMemory.saveMessages = async function (...args) {
@@ -4556,7 +4564,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(caught).toBe(true);
 
         // After interruption, check what was saved
-        const messages = await mockMemory.getMessages({
+        const { messages } = await storage.listMessages({
           threadId: 'thread-partial-rescue-generate',
           resourceId: 'resource-partial-rescue-generate',
           format: 'v2',
@@ -4585,7 +4593,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       it('should incrementally save messages across steps and tool calls', async () => {
-        const mockMemory = new MockMemory();
+        const storage = new InMemoryStore();
+        const mockMemory = new MockMemory({ storage });
+
         let saveCallCount = 0;
         mockMemory.saveMessages = async function (...args) {
           saveCallCount++;
@@ -4623,7 +4633,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }
 
         expect(saveCallCount).toBeGreaterThan(1);
-        const messages = await mockMemory.getMessages({
+        const { messages } = await storage.listMessages({
           threadId: 'thread-echo-generate',
           resourceId: 'resource-echo-generate',
           format: 'v2',
@@ -4643,7 +4653,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }, 500000);
 
       it('should incrementally save messages with multiple tools and multi-step generation', async () => {
-        const mockMemory = new MockMemory();
+        const storage = new InMemoryStore();
+        const mockMemory = new MockMemory({ storage });
+
         let saveCallCount = 0;
         mockMemory.saveMessages = async function (...args) {
           saveCallCount++;
@@ -4699,7 +4711,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           );
         }
         expect(saveCallCount).toBeGreaterThan(1);
-        const messages = await mockMemory.getMessages({
+        const { messages } = await storage.listMessages({
           threadId: 'thread-multi-generate',
           resourceId: 'resource-multi-generate',
           format: 'v2',
@@ -4718,7 +4730,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }, 500000);
 
       it('should persist the full message after a successful run', async () => {
-        const mockMemory = new MockMemory();
+        const storage = new InMemoryStore();
+        const mockMemory = new MockMemory({ storage });
         const agent = new Agent({
           name: 'test-agent-generate',
           instructions: 'test',
@@ -4737,7 +4750,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         }
 
-        const messages = await mockMemory.getMessages({
+        const { messages } = await storage.listMessages({
           threadId: 'thread-1-generate',
           resourceId: 'resource-1-generate',
           format: 'v2',
@@ -4751,9 +4764,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       it('should only call saveMessages for the user message when no assistant parts are generated', async () => {
-        const mockMemory = new MockMemory();
+        const storage = new InMemoryStore();
+        const mockMemory = new MockMemory({ storage });
 
-        let messages = await mockMemory.getMessages({
+        let messagesResult = await storage.listMessages({
           threadId: `thread-2-${version}-generate`,
           resourceId: `resource-2-${version}-generate`,
           format: 'v2',
@@ -4787,20 +4801,21 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         expect(saveCallCount).toBe(1);
 
-        messages = await mockMemory.getMessages({
+        messagesResult = await storage.listMessages({
           threadId: `thread-2-${version}-generate`,
           resourceId: `resource-2-${version}-generate`,
           format: 'v2',
         });
 
-        expect(messages.length).toBe(1);
-        expect(messages[0].role).toBe('user');
-        expect(messages[0].content.content).toBe('no progress');
+        expect(messagesResult.messages.length).toBe(1);
+        expect(messagesResult.messages[0].role).toBe('user');
+        expect(messagesResult.messages[0].content.content).toBe('no progress');
       });
     }, 500000);
 
     it('should not save any message if interrupted before any part is emitted', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       let saveCallCount = 0;
 
       mockMemory.saveMessages = async function (...args) {
@@ -4831,7 +4846,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(err.message).toBe('Immediate interruption');
       }
 
-      const messages = await mockMemory.getMessages({
+      const { messages } = await storage.listMessages({
         threadId: 'thread-3-generate',
         resourceId: 'resource-3-generate',
       });
@@ -4842,7 +4857,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
 
     it('should not save thread if error occurs after starting response but before completion', async () => {
-      const mockMemory = new MockMemory();
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
       const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
 
       let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
@@ -7116,7 +7132,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
   describe(`${version} - UIMessageWithMetadata support`, () => {
     let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-    const mockMemory = new MockMemory();
+    const storage = new InMemoryStore();
+    const mockMemory = new MockMemory({ storage });
 
     beforeEach(() => {
       if (version === 'v1') {
@@ -7205,7 +7222,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       }
       // Verify messages were saved with metadata
-      const savedMessages = await mockMemory.getMessages({
+      const { messages } = await storage.listMessages({
         threadId: 'support-thread',
         resourceId: 'customer-12345',
         format: 'v2',
@@ -7286,7 +7303,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(finalText).toBe('Response acknowledging metadata');
 
       // Verify messages were saved with metadata
-      const savedMessages = await mockMemory.getMessages({
+      const { messages: savedMessages } = await storage.listMessages({
         threadId: 'mobile-thread',
         resourceId: 'user-mobile',
         format: 'v2',
@@ -7367,12 +7384,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       }
       // Verify messages were saved correctly
-      const savedMessages = await mockMemory.getMessages({
+      const { messages: savedMessages } = await storage.listMessages({
         threadId: 'mixed-thread',
         resourceId: 'mixed-user',
         format: 'v2',
-        selectBy: {
-          last: 10,
+        pagination: {
+          perPage: 10,
         },
       });
 

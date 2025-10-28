@@ -9,7 +9,7 @@ it('should augment the storage with init', async () => {
   } as unknown as MastraStorage;
 
   const augmentedStorage = augmentWithInit(mockStorage);
-  await augmentedStorage.getMessages({ threadId: '1' });
+  await augmentedStorage.listMessages({ threadId: '1' });
 
   expect(mockStorage.init).toHaveBeenCalled();
 });

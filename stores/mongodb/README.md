@@ -87,7 +87,7 @@ await store.saveMessages([
 
 // Query threads and messages
 const savedThread = await store.getThread('thread-123');
-const messages = await store.getMessages('thread-123');
+const messages = await store.listMessages({ threadId: 'thread-123' });
 ```
 
 ## Configuration
@@ -168,7 +168,7 @@ The following distance metrics are supported:
 - `getThread(threadId)`: Get a thread by ID
 - `deleteThread(threadId)`: Delete a thread and its messages
 - `saveMessages(messages)`: Save multiple messages in a transaction
-- `getMessages(threadId)`: Get all messages for a thread
+- `listMessages({ threadId })`: Get messages for a thread
 - `deleteMessages(messageIds)`: Delete specific messages
 
 ## Query Response Format

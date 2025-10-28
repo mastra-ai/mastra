@@ -114,7 +114,7 @@ const message = await storage.load({
 });
 
 // Load messages from a thread
-const messages = await storage.getMessages({
+const messages = await storage.listMessages({
   threadId: '123e4567-e89b-12d3-a456-426614174001',
 });
 ```
@@ -176,7 +176,7 @@ const messages: MessageType[] = [
 await storage.saveMessages({ messages });
 
 // Retrieve messages with context
-const retrievedMessages = await storage.getMessages({
+const retrievedMessages = await storage.listMessages({
   threadId: '123e4567-e89b-12d3-a456-426614174010',
   selectBy: [
     {

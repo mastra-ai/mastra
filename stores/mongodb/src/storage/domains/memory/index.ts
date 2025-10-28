@@ -10,7 +10,13 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StorageGetMessagesArg, StorageResourceType } from '@mastra/core/storage';
+import type {
+  PaginationInfo,
+  StorageGetMessagesArg,
+  StorageResourceType,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+} from '@mastra/core/storage';
 import type { StoreOperationsMongoDB } from '../operations';
 import { formatDateForMongoDB } from '../utils';
 
@@ -93,66 +99,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     });
 
     return dedupedMessages.map(row => this.parseRow(row));
-  }
-
-  /**
-   * @deprecated use getMessagesPaginated instead for paginated results.
-   */
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & {
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      const messages: MastraMessageV2[] = [];
-      const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-
-      if (selectBy?.include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
-        if (includeMessages) {
-          messages.push(...includeMessages);
-        }
-      }
-
-      const excludeIds = messages.map(m => m.id);
-      const collection = await this.operations.getCollection(TABLE_MESSAGES);
-
-      const query: any = { thread_id: threadId };
-      if (excludeIds.length > 0) {
-        query.id = { $nin: excludeIds };
-      }
-
-      // Only fetch remaining messages if limit > 0
-      if (limit > 0) {
-        const remainingMessages = await collection.find(query).sort({ createdAt: -1 }).limit(limit).toArray();
-
-        messages.push(...remainingMessages.map((row: any) => this.parseRow(row)));
-      }
-
-      // Sort all messages by creation date ascending
-      messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-
-      const list = new MessageList().add(messages, 'memory');
-      if (format === 'v2') return list.get.all.v2();
-      return list.get.all.v1();
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MONGODB_STORE_GET_MESSAGES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId, resourceId: resourceId ?? '' },
-        },
-        error,
-      );
-    }
   }
 
   public async getMessagesById({
@@ -300,6 +246,15 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       this.logger?.error?.(mastraError.toString());
       return { messages: [], total: 0, page, perPage, hasMore: false };
     }
+  }
+
+  async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    throw new MastraError({
+      id: 'MONGODB_STORAGE_LIST_MESSAGES_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing messages is not implemented by this storage adapter (${this.constructor.name})`,
+    });
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;

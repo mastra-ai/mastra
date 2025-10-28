@@ -477,18 +477,18 @@ Captures OpenTelemetry traces for monitoring and debugging.
 
 ### Querying Messages
 
-Messages are stored in a V2 format internally, which is roughly equivalent to the AI SDK's `UIMessage` format. When querying messages using `getMessages`, you can specify the desired output format, defaulting to `v1` for backwards compatibility:
+Messages are stored in a V2 format internally, which is roughly equivalent to the AI SDK's `UIMessage` format. When querying messages using `listMessages`, you can specify the desired output format, defaulting to `v1` for backwards compatibility:
 
 ```typescript copy
 // Get messages in the default V1 format (roughly equivalent to AI SDK's CoreMessage format)
 const messagesV1 = await mastra
   .getStorage()
-  .getMessages({ threadId: "your-thread-id" });
+  .listMessages({ threadId: "your-thread-id" });
 
 // Get messages in the V2 format (roughly equivalent to AI SDK's UIMessage format)
 const messagesV2 = await mastra
   .getStorage()
-  .getMessages({ threadId: "your-thread-id", format: "v2" });
+  .listMessages({ threadId: "your-thread-id", format: "v2" });
 ```
 
 You can also retrieve messages using an array of message IDs. Note that unlike `getMessages`, this defaults to the V2 format:

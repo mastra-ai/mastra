@@ -8,6 +8,8 @@ import type {
   StorageGetMessagesArg,
   StorageResourceType,
   ThreadSortOptions,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
 } from '@mastra/core/storage';
 import {
   MemoryStorage,
@@ -100,69 +102,6 @@ export class MemoryLibSQL extends MemoryStorage {
       return true;
     });
     return dedupedRows;
-  }
-
-  /**
-   * @deprecated use getMessagesPaginated instead for paginated results.
-   */
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & {
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      const messages: MastraMessageV2[] = [];
-      const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-      if (selectBy?.include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
-        if (includeMessages) {
-          messages.push(...includeMessages);
-        }
-      }
-
-      const excludeIds = messages.map(m => m.id);
-      const remainingSql = `
-        SELECT 
-          id, 
-          content, 
-          role, 
-          type,
-          "createdAt", 
-          thread_id,
-          "resourceId"
-        FROM "${TABLE_MESSAGES}"
-        WHERE thread_id = ?
-        ${excludeIds.length ? `AND id NOT IN (${excludeIds.map(() => '?').join(', ')})` : ''}
-        ORDER BY "createdAt" DESC
-        LIMIT ?
-      `;
-      const remainingArgs = [threadId, ...(excludeIds.length ? excludeIds : []), limit];
-      const remainingResult = await this.client.execute({ sql: remainingSql, args: remainingArgs });
-      if (remainingResult.rows) {
-        messages.push(...remainingResult.rows.map((row: any) => this.parseRow(row)));
-      }
-      messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-      const list = new MessageList().add(messages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'LIBSQL_STORE_GET_MESSAGES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId, resourceId: resourceId ?? '' },
-        },
-        error,
-      );
-    }
   }
 
   public async getMessagesById({
@@ -324,6 +263,15 @@ export class MemoryLibSQL extends MemoryStorage {
       this.logger?.error?.(mastraError.toString());
       return { messages: [], total: 0, page, perPage, hasMore: false };
     }
+  }
+
+  async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    throw new MastraError({
+      id: 'LIBSQL_STORAGE_LIST_MESSAGES_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing messages is not implemented by this storage adapter (${this.constructor.name})`,
+    });
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;

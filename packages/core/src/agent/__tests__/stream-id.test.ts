@@ -10,6 +10,7 @@ import type { StorageThreadType } from '../../memory';
 import { Agent } from '../agent';
 import type { MastraMessageV1 } from '../message-list';
 import { MockMemory } from '../test-utils';
+import { InMemoryStore } from '../../storage';
 
 describe('Stream ID Consistency', () => {
   /**
@@ -18,9 +19,11 @@ describe('Stream ID Consistency', () => {
 
   let memory: MockMemory;
   let mastra: Mastra;
+  let storage: InMemoryStore;
 
   beforeEach(() => {
-    memory = new MockMemory();
+    storage = new InMemoryStore();
+    memory = new MockMemory({ storage });
     mastra = new Mastra();
   });
 
@@ -76,7 +79,7 @@ describe('Stream ID Consistency', () => {
     console.log('DEBUG streamResponseId', streamResponseId);
     expect(streamResponseId).toBeDefined();
 
-    const savedMessages = await memory.getMessages({ threadId });
+    const { messages: savedMessages } = await storage.listMessages({ threadId });
 
     const messageById = savedMessages.find(m => m.id === streamResponseId);
 
@@ -137,7 +140,7 @@ describe('Stream ID Consistency', () => {
     const res = await stream.response;
     const messageId = res.messages[0].id;
 
-    const savedMessages = await memory.getMessages({ threadId, selectBy: { include: [{ id: messageId }] } });
+    const { messages: savedMessages } = await storage.listMessages({ threadId, include: [{ id: messageId }] });
 
     expect(savedMessages).toHaveLength(1);
     expect(savedMessages[0].id).toBe(messageId);
@@ -199,7 +202,7 @@ describe('Stream ID Consistency', () => {
 
     expect(streamResponseId).toBeDefined();
 
-    const savedMessages = await memory.getMessages({ threadId, selectBy: { include: [{ id: streamResponseId! }] } });
+    const { messages: savedMessages } = await storage.listMessages({ threadId, include: [{ id: streamResponseId! }] });
     const messageById = savedMessages.find(m => m.id === streamResponseId);
 
     expect(messageById).toBeDefined();
@@ -273,7 +276,7 @@ describe('Stream ID Consistency', () => {
     await stream.consumeStream();
     const res = await stream.response;
     const messageId = res?.uiMessages?.[0]?.id;
-    const savedMessages = await memory.getMessages({ threadId, selectBy: { include: [{ id: messageId! }] } });
+    const { messages: savedMessages } = await storage.listMessages({ threadId, include: [{ id: messageId! }] });
     expect(savedMessages).toHaveLength(1);
     expect(savedMessages[0].id).toBe(messageId!);
     expect(customIdGenerator).toHaveBeenCalled();
@@ -435,7 +438,8 @@ describe('Stream ID Consistency', () => {
   }, 10000); // Increase timeout to 10 seconds
 
   it('should have messageIds when using toUIMessageStream', async () => {
-    const mockMemory = new MockMemory();
+    const storage = new InMemoryStore();
+    const mockMemory = new MockMemory({ storage });
     const threadId = randomUUID();
     const resourceId = 'user-1';
     const initialThread: StorageThreadType = {
@@ -497,7 +501,7 @@ describe('Stream ID Consistency', () => {
       reader.releaseLock();
     }
 
-    const messages = await mockMemory.getMessages({ threadId });
+    const { messages } = await storage.listMessages({ threadId });
     console.log('messages', messages);
 
     const assistantMessage = messages.find((m: MastraMessageV1) => m.role === 'assistant');

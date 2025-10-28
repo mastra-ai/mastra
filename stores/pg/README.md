@@ -134,7 +134,7 @@ await store.saveMessages([
 
 // Query threads and messages
 const savedThread = await store.getThread('thread-123');
-const messages = await store.getMessages('thread-123');
+const messages = await store.listMessages({ threadId: 'thread-123' });
 ```
 
 ## Configuration
@@ -333,7 +333,7 @@ The system automatically detects configuration changes and only rebuilds indexes
 - `getThread(threadId)`: Get a thread by ID
 - `deleteThread(threadId)`: Delete a thread and its messages
 - `saveMessages(messages)`: Save multiple messages in a transaction
-- `getMessages(threadId)`: Get all messages for a thread
+- `listMessages({ threadId, include, pagination, format })`: Get messages for a thread
 - `deleteMessages(messageIds)`: Delete specific messages
 
 ## Index Management

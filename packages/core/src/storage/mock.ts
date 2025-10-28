@@ -1,3 +1,4 @@
+import { existsSync } from 'fs';
 import type { MastraMessageV2 } from '../agent';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource } from '../scores/types';
@@ -33,6 +34,7 @@ import type {
   StorageListMessagesInput,
   StorageListMessagesOutput,
 } from './types';
+import { readFile, writeFile } from 'fs/promises';
 
 export class InMemoryStore extends MastraStorage {
   stores: StorageDomains;
@@ -248,19 +250,6 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
   }
 
-  async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessages({ threadId, resourceId, selectBy, format }) as unknown as Promise<
-      MastraMessageV1[] | MastraMessageV2[]
-    >;
-  }
-
   async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
   async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
   async getMessagesById({
@@ -308,9 +297,15 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.getMessagesPaginated({ threadId, selectBy });
   }
 
-  async listMessages(args: StorageListMessagesInput & { format?: undefined | 'v1' }): Promise<PaginationInfo & { messages: MastraMessageV1[] }>;
-  async listMessages(args: StorageListMessagesInput & { format: 'v2' }): Promise<PaginationInfo & { messages: MastraMessageV2[] }>;
-  async listMessages(args: StorageListMessagesInput): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+  async listMessages(
+    args: StorageListMessagesInput & { format?: undefined | 'v1' },
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] }>;
+  async listMessages(
+    args: StorageListMessagesInput & { format: 'v2' },
+  ): Promise<PaginationInfo & { messages: MastraMessageV2[] }>;
+  async listMessages(
+    args: StorageListMessagesInput,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
     return this.stores.memory.listMessages(args);
   }
 
@@ -438,6 +433,56 @@ export class InMemoryStore extends MastraStorage {
 
   async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
     return this.stores.observability!.batchDeleteAITraces(args);
+  }
+
+  /**
+   * Hydrate storage state from a JSON file
+   */
+  async hydrate(filePath: string): Promise<void> {
+    if (!existsSync(filePath)) {
+      throw new Error(`Storage file not found: ${filePath}`);
+    }
+
+    const content = await readFile(filePath, 'utf-8');
+    let data;
+    try {
+      data = JSON.parse(content);
+    } catch (error) {
+      console.error(`Failed to parse JSON from ${filePath}. File size: ${content.length} bytes`);
+      if (error instanceof SyntaxError && error.message.includes('position')) {
+        // Try to find the problematic area
+        const match = error.message.match(/position (\d+)/);
+        if (match) {
+          const position = parseInt(match[1] || '0');
+          const start = Math.max(0, position - 100);
+          const end = Math.min(content.length, position + 100);
+          console.error(`Content around error position ${position}:`);
+          console.error(content.substring(start, end));
+        }
+      }
+      throw error;
+    }
+
+    // Convert arrays back to Maps
+    for (const [tableName, tableData] of Object.entries(data)) {
+      this.stores.operations.batchInsert({ tableName: tableName as TABLE_NAMES, records: tableData as any });
+    }
+  }
+
+  /**
+   * Persist the current storage state to a JSON file
+   */
+  async persist(filePath: string): Promise<void> {
+    const data: Record<string, any> = {};
+
+    const operationsDatabase = (this.stores.operations as StoreOperationsInMemory).getDatabase();
+
+    // Convert Maps to arrays for JSON serialization
+    for (const [tableName, tableData] of Object.entries(operationsDatabase)) {
+      data[tableName] = Array.from(tableData.entries());
+    }
+
+    await writeFile(filePath, JSON.stringify(data, null, 2));
   }
 }
 

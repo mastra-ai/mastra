@@ -159,7 +159,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve messages from storage directly
-    const savedMessages = await storage.getMessages({
+    const savedMessages = await storage.listMessages({
       threadId,
       format: 'v2',
     });
@@ -242,7 +242,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve messages from storage directly
-    const savedMessages = await storage.getMessages({
+    const savedMessages = await storage.listMessages({
       threadId,
       format: 'v2',
     });
@@ -418,7 +418,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve from storage
-    const savedMessages = await storage.getMessages({
+    const savedMessages = await storage.listMessages({
       threadId,
       format: 'v2',
     });
@@ -541,7 +541,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Simulate page refresh - retrieve messages from storage
-    const messagesAfterRefresh = await storage.getMessages({
+    const messagesAfterRefresh = await storage.listMessages({
       threadId,
       format: 'v2',
     });

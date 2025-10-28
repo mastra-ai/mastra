@@ -443,7 +443,7 @@ export function pgTests() {
         );
 
         // Test getMessages
-        const messages = await store.getMessages({ threadId: testThreadId, format: 'v2' });
+        const { messages } = await store.listMessages({ threadId: testThreadId, format: 'v2' });
         expect(messages.length).toBe(1);
         expect(messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
@@ -482,7 +482,7 @@ export function pgTests() {
         );
 
         // Test getMessages
-        const messages = await store.getMessages({ threadId: testThreadId, format: 'v2' });
+        const { messages } = await store.listMessages({ threadId: testThreadId, format: 'v2' });
         expect(messages.length).toBe(1);
         expect(messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
@@ -533,7 +533,7 @@ export function pgTests() {
         expect(retrievedThread?.createdAt.getTime()).toBe(threadCreatedAt.getTime());
 
         // Get messages
-        const messages = await store.getMessages({ threadId: testThreadId, format: 'v2' });
+        const { messages } = await store.listMessages({ threadId: testThreadId, format: 'v2' });
         expect(messages.length).toBe(1);
         expect(messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messages[0]?.createdAt.getTime()).toBe(messageCreatedAt.getTime());
@@ -577,18 +577,16 @@ export function pgTests() {
         );
 
         // Test getMessages with include
-        const messages = await store.getMessages({
+        const { messages } = await store.listMessages({
           threadId: testThreadId,
           format: 'v2',
-          selectBy: {
-            include: [
-              {
-                id: msg2Id,
-                withPreviousMessages: 1,
-                withNextMessages: 1,
-              },
-            ],
-          },
+          include: [
+            {
+              id: msg2Id,
+              withPreviousMessages: 1,
+              withNextMessages: 1,
+            },
+          ],
         });
 
         expect(messages.length).toBe(3);

@@ -114,7 +114,7 @@ await storage.saveMessages({
 });
 
 // Get thread messages
-const messages = await storage.getMessages({
+const messages = await storage.listMessages({
   threadId: thread.id,
 });
 ```

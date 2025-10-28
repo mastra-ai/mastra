@@ -15,6 +15,8 @@ import type {
   PaginationArgs,
   StorageResourceType,
   ThreadSortOptions,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
 } from '@mastra/core/storage';
 import sql from 'mssql';
 import type { StoreOperationsMSSQL } from '../operations';
@@ -447,76 +449,6 @@ export class MemoryMSSQL extends MemoryStorage {
     return dedupedRows;
   }
 
-  /**
-   * @deprecated use getMessagesPaginated instead
-   */
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages(
-    args: StorageGetMessagesArg & {
-      format?: 'v1' | 'v2';
-    },
-  ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    const { threadId, resourceId, format, selectBy } = args;
-
-    const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
-    const orderByStatement = `ORDER BY [seq_id] DESC`;
-    const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      let rows: any[] = [];
-      const include = selectBy?.include || [];
-      if (include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
-        if (includeMessages) {
-          rows.push(...includeMessages);
-        }
-      }
-      const excludeIds = rows.map(m => m.id).filter(Boolean);
-
-      let query = `${selectStatement} FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} WHERE [thread_id] = @threadId`;
-      const request = this.pool.request();
-      request.input('threadId', threadId);
-
-      if (excludeIds.length > 0) {
-        const excludeParams = excludeIds.map((_, idx) => `@id${idx}`);
-        query += ` AND id NOT IN (${excludeParams.join(', ')})`;
-        excludeIds.forEach((id, idx) => {
-          request.input(`id${idx}`, id);
-        });
-      }
-
-      query += ` ${orderByStatement} OFFSET 0 ROWS FETCH NEXT @limit ROWS ONLY`;
-      request.input('limit', limit);
-      const result = await request.query(query);
-      const remainingRows = result.recordset || [];
-      rows.push(...remainingRows);
-      rows.sort((a, b) => {
-        const timeDiff = a.seq_id - b.seq_id;
-        return timeDiff;
-      });
-      rows = rows.map(({ seq_id, ...rest }) => rest);
-      return this._parseAndFormatMessages(rows, format);
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_MESSAGES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            threadId,
-            resourceId: resourceId ?? '',
-          },
-        },
-        error,
-      );
-      this.logger?.error?.(mastraError.toString());
-      this.logger?.trackException?.(mastraError);
-      return [];
-    }
-  }
-
   public async getMessagesById({
     messageIds,
     format,
@@ -678,6 +610,15 @@ export class MemoryMSSQL extends MemoryStorage {
       this.logger?.trackException?.(mastraError);
       return { messages: [], total: 0, page, perPage: perPageInput || 40, hasMore: false };
     }
+  }
+
+  async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    throw new MastraError({
+      id: 'MSSQL_STORAGE_LIST_MESSAGES_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing messages is not implemented by this storage adapter (${this.constructor.name})`,
+    });
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;

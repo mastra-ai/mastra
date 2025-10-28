@@ -210,32 +210,29 @@ export class Memory extends MastraMemory {
       });
       rawMessages = paginatedResult.messages;
     } else {
-      // Fall back to regular getMessages for backward compatibility
-      rawMessages = await this.storage.getMessages({
+      const { messages } = await this.storage.listMessages({
         threadId,
         resourceId,
         format: 'v2',
-        selectBy: {
-          ...selectBy,
-          ...(vectorResults?.length
-            ? {
-                include: vectorResults.map(r => ({
-                  id: r.metadata?.message_id,
-                  threadId: r.metadata?.thread_id,
-                  withNextMessages:
-                    typeof vectorConfig.messageRange === 'number'
-                      ? vectorConfig.messageRange
-                      : vectorConfig.messageRange.after,
-                  withPreviousMessages:
-                    typeof vectorConfig.messageRange === 'number'
-                      ? vectorConfig.messageRange
-                      : vectorConfig.messageRange.before,
-                })),
-              }
-            : {}),
-        },
-        threadConfig: config,
+        ...(vectorResults?.length
+          ? {
+              include: vectorResults.map(r => ({
+                id: r.metadata?.message_id,
+                threadId: r.metadata?.thread_id,
+                withNextMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.after,
+                withPreviousMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.before,
+              })),
+            }
+          : {}),
       });
+
+      rawMessages = messages;
     }
 
     const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');

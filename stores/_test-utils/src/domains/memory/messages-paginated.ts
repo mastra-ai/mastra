@@ -133,7 +133,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
 
       await storage.saveMessages({ messages });
 
-      const retrievedMessages = await storage.getMessages({ threadId: thread.id, format: 'v1' });
+      const { messages: retrievedMessages } = await storage.listMessages({ threadId: thread.id, format: 'v1' });
 
       expect(retrievedMessages).toHaveLength(3);
 
@@ -225,87 +225,78 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
 
       await storage.saveMessages({ messages: messages, format: 'v2' });
 
-      const retrievedMessages = await storage.getMessages({ threadId: thread.id, format: 'v2' });
+      const { messages: retrievedMessages } = await storage.listMessages({ threadId: thread.id, format: 'v2' });
       expect(retrievedMessages).toHaveLength(3);
       const contentParts = retrievedMessages.map((m: any) =>
         m.content.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text),
       );
       expect(contentParts).toEqual([['First'], ['Second'], ['Third']]);
 
-      const retrievedMessages2 = await storage.getMessages({ threadId: thread2.id, format: 'v2' });
+      const { messages: retrievedMessages2 } = await storage.listMessages({ threadId: thread2.id, format: 'v2' });
       expect(retrievedMessages2).toHaveLength(3);
       const contentParts2 = retrievedMessages2.map((m: any) =>
         m.content.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text),
       );
       expect(contentParts2).toEqual([['Fourth'], ['Fifth'], ['Sixth']]);
 
-      const retrievedMessages3 = await storage.getMessages({ threadId: thread3.id, format: 'v2' });
+      const { messages: retrievedMessages3 } = await storage.listMessages({ threadId: thread3.id, format: 'v2' });
       expect(retrievedMessages3).toHaveLength(2);
       const contentParts3 = retrievedMessages3.map((m: any) =>
         m.content.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text),
       );
       expect(contentParts3).toEqual([['Seventh'], ['Eighth']]);
 
-      const crossThreadMessages: MastraMessageV2[] = await storage.getMessages({
+      const { messages: crossThreadMessages } = await storage.listMessages({
         threadId: thread.id,
         format: 'v2',
-        selectBy: {
-          last: 0,
-          include: [
-            {
-              id: messages[1]!.id,
-              threadId: thread.id,
-              withNextMessages: 2,
-              withPreviousMessages: 2,
-            },
-            {
-              id: messages[4]!.id,
-              threadId: thread2.id,
-              withPreviousMessages: 2,
-              withNextMessages: 2,
-            },
-          ],
-        },
+        include: [
+          {
+            id: messages[1]!.id,
+            threadId: thread.id,
+            withNextMessages: 2,
+            withPreviousMessages: 2,
+          },
+          {
+            id: messages[4]!.id,
+            threadId: thread2.id,
+            withPreviousMessages: 2,
+            withNextMessages: 2,
+          },
+        ],
       });
 
       expect(crossThreadMessages).toHaveLength(6);
       expect(crossThreadMessages.filter(m => m.threadId === thread.id)).toHaveLength(3);
       expect(crossThreadMessages.filter(m => m.threadId === thread2.id)).toHaveLength(3);
 
-      const crossThreadMessages2: MastraMessageV2[] = await storage.getMessages({
+      const { messages: crossThreadMessages2 } = await storage.listMessages({
         threadId: thread.id,
         format: 'v2',
-        selectBy: {
-          last: 0,
-          include: [
-            {
-              id: messages[4]!.id,
-              threadId: thread2.id,
-              withPreviousMessages: 1,
-              withNextMessages: 30,
-            },
-          ],
-        },
+        include: [
+          {
+            id: messages[4]!.id,
+            threadId: thread2.id,
+            withPreviousMessages: 1,
+            withNextMessages: 30,
+          },
+        ],
       });
 
       expect(crossThreadMessages2).toHaveLength(3);
       expect(crossThreadMessages2.filter(m => m.threadId === thread.id)).toHaveLength(0);
       expect(crossThreadMessages2.filter(m => m.threadId === thread2.id)).toHaveLength(3);
 
-      const crossThreadMessages3: MastraMessageV2[] = await storage.getMessages({
+      const { messages: crossThreadMessages3 } = await storage.listMessages({
         threadId: thread2.id,
         format: 'v2',
-        selectBy: {
-          last: 0,
-          include: [
-            {
-              id: messages[1]!.id,
-              threadId: thread.id,
-              withNextMessages: 1,
-              withPreviousMessages: 1,
-            },
-          ],
-        },
+        include: [
+          {
+            id: messages[1]!.id,
+            threadId: thread.id,
+            withNextMessages: 1,
+            withPreviousMessages: 1,
+          },
+        ],
       });
 
       expect(crossThreadMessages3).toHaveLength(3);
@@ -420,8 +411,8 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       await storage.saveMessages({ messages: [conflictingMessage], format: 'v2' });
 
       // Retrieve messages for both threads
-      const thread1Messages = await storage.getMessages({ threadId: thread1.id, format: 'v2' });
-      const thread2Messages = await storage.getMessages({ threadId: thread2.id, format: 'v2' });
+      const { messages: thread1Messages } = await storage.listMessages({ threadId: thread1.id, format: 'v2' });
+      const { messages: thread2Messages } = await storage.listMessages({ threadId: thread2.id, format: 'v2' });
 
       // Thread 1 should NOT have the message with that id
       expect(thread1Messages.find(m => m.id === message.id)).toBeUndefined();
@@ -477,7 +468,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Retrieve messages for the thread
-      const retrievedMessages = await storage.getMessages({ threadId: thread.id, format: 'v2' });
+      const { messages: retrievedMessages } = await storage.listMessages({ threadId: thread.id, format: 'v2' });
 
       // Only one message should exist for that id+threadId
       expect(retrievedMessages.filter(m => m.id === baseMessage.id)).toHaveLength(1);

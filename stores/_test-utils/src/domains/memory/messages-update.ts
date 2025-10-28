@@ -23,7 +23,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
       expect(updatedMessages).toHaveLength(1);
       expect(updatedMessages[0]!.role).toBe('assistant');
 
-      const fromDb = await storage.getMessages({ threadId: thread.id, format: 'v2' });
+      const { messages: fromDb } = await storage.listMessages({ threadId: thread.id, format: 'v2' });
       expect(fromDb[0]!.role).toBe('assistant');
     });
 
@@ -39,7 +39,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
         messages: [{ id: originalMessage.id, content: { metadata: newMetadata } as any }],
       });
 
-      const fromDb = await storage.getMessages({ threadId: thread.id, format: 'v2' });
+      const { messages: fromDb } = await storage.listMessages({ threadId: thread.id, format: 'v2' });
       expect(fromDb).toHaveLength(1);
       expect(fromDb[0]!.content.metadata).toEqual(newMetadata);
       expect(fromDb[0]!.content.content).toBe('hello world');
@@ -58,7 +58,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
         messages: [{ id: originalMessage.id, content: { content: newContentString } as any }],
       });
 
-      const fromDb = await storage.getMessages({ threadId: thread.id, format: 'v2' });
+      const { messages: fromDb } = await storage.listMessages({ threadId: thread.id, format: 'v2' });
       expect(fromDb[0]!.content.content).toBe(newContentString);
       expect(fromDb[0]!.content.metadata).toEqual({ initial: true });
     });
@@ -75,7 +75,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
         messages: [{ id: originalMessage.id, content: { metadata: newMetadata } as any }],
       });
 
-      const fromDb = await storage.getMessages({ threadId: thread.id, format: 'v2' });
+      const { messages: fromDb } = await storage.listMessages({ threadId: thread.id, format: 'v2' });
       expect(fromDb[0]!.content.content).toBe('old content');
       expect(fromDb[0]!.content.metadata).toEqual({ initial: true, updated: true });
     });
@@ -92,7 +92,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
         ],
       });
 
-      const fromDb = await storage.getMessages({ threadId: thread.id, format: 'v2' });
+      const { messages: fromDb } = await storage.listMessages({ threadId: thread.id, format: 'v2' });
       const updatedMsg1 = fromDb.find(m => m.id === msg1.id);
       const updatedMsg2 = fromDb.find(m => m.id === msg2.id);
 
@@ -141,8 +141,8 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
       );
 
       // Verify the message was moved
-      const thread1Messages = await storage.getMessages({ threadId: thread.id, format: 'v2' });
-      const thread2Messages = await storage.getMessages({ threadId: thread2.id, format: 'v2' });
+      const { messages: thread1Messages } = await storage.listMessages({ threadId: thread.id, format: 'v2' });
+      const { messages: thread2Messages } = await storage.listMessages({ threadId: thread2.id, format: 'v2' });
       expect(thread1Messages).toHaveLength(0);
       expect(thread2Messages).toHaveLength(1);
       expect(thread2Messages[0]!.id).toBe(message.id);
@@ -160,7 +160,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
         }),
       ).resolves.not.toThrow();
 
-      const fromDb = await storage.getMessages({ threadId: thread.id, format: 'v2' });
+      const { messages: fromDb } = await storage.listMessages({ threadId: thread.id, format: 'v2' });
       expect(fromDb[0]!.role).toBe(originalMessage.role);
     });
   });

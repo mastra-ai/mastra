@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { InMemoryStore } from '@mastra/core/storage';
 import { BenchmarkStore } from '../benchmark-store';
 import { rm } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -6,11 +7,11 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 
 describe('BenchmarkStore', () => {
-  let store: BenchmarkStore;
+  let store: InMemoryStore;
   let testFilePath: string;
 
   beforeEach(async () => {
-    store = new BenchmarkStore();
+    store = new InMemoryStore();
     await store.init();
     testFilePath = join(tmpdir(), `benchmark-store-test-${Date.now()}.json`);
   });
@@ -117,7 +118,7 @@ describe('BenchmarkStore', () => {
       expect(restoredThread).toBeTruthy();
       expect(restoredThread?.title).toBe('Test Thread');
 
-      const restoredMessages = await store2.getMessages({ threadId: 'test-thread-1' });
+      const { messages: restoredMessages } = await store2.listMessages({ threadId: 'test-thread-1' });
       expect(restoredMessages).toHaveLength(1);
       expect(restoredMessages[0].content).toBe('Hello');
     });
@@ -185,18 +186,16 @@ describe('BenchmarkStore', () => {
       });
 
       // Query using selectBy.include to get messages from different threads
-      const messages = await store.getMessages({
+      const { messages } = await store.listMessages({
         threadId: 'thread-1',
-        selectBy: {
-          include: [
-            {
-              id: 'msg-2',
-              threadId: 'thread-2', // Different thread!
-              withPreviousMessages: 0,
-              withNextMessages: 1,
-            },
-          ],
-        },
+        include: [
+          {
+            id: 'msg-2',
+            threadId: 'thread-2', // Different thread!
+            withPreviousMessages: 0,
+            withNextMessages: 1,
+          },
+        ],
       });
 
       expect(messages).toHaveLength(2);
@@ -250,7 +249,8 @@ describe('BenchmarkStore', () => {
       });
 
       // Clear
-      await store.clear();
+      await store.clearTable({ tableName: 'mastra_threads' });
+      await store.clearTable({ tableName: 'mastra_messages' });
 
       // Verify data is gone
       const thread = await store.getThreadById({ threadId: 'test-thread-1' });
@@ -260,7 +260,7 @@ describe('BenchmarkStore', () => {
 
   describe('getting messages', () => {
     it('should throw when threadId is an empty string or whitespace only', async () => {
-      await expect(() => store.getMessages({ threadId: '' })).rejects.toThrowError(
+      await expect(() => store.listMessages({ threadId: '' })).rejects.toThrowError(
         'threadId must be a non-empty string',
       );
 
@@ -268,7 +268,7 @@ describe('BenchmarkStore', () => {
         'threadId must be a non-empty string',
       );
 
-      await expect(() => store.getMessages({ threadId: '   ' })).rejects.toThrowError(
+      await expect(() => store.listMessages({ threadId: '   ' })).rejects.toThrowError(
         'threadId must be a non-empty string',
       );
 

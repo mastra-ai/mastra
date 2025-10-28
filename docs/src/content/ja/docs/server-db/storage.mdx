@@ -504,10 +504,10 @@ LLM CONTEXT: この Tabs コンポーネントは、Mastra が保存する各種
 
 ```typescript copy
 // デフォルトの V1 形式でメッセージを取得（概ね AI SDK の CoreMessage 形式に相当）
-const messagesV1 = await mastra.getStorage().getMessages({ threadId: 'your-thread-id' });
+const messagesV1 = await mastra.getStorage().listMessages({ threadId: 'your-thread-id' });
 
 // V2 形式でメッセージを取得（概ね AI SDK の UIMessage 形式に相当）
-const messagesV2 = await mastra.getStorage().getMessages({ threadId: 'your-thread-id', format: 'v2' });
+const messagesV2 = await mastra.getStorage().listMessages({ threadId: 'your-thread-id', format: 'v2' });
 ```
 
 メッセージ ID の配列を使ってメッセージを取得することも可能です。`getMessages` と異なり、こちらはデフォルトで V2 形式になります。

@@ -14,6 +14,8 @@ import type {
   PaginationInfo,
   StorageResourceType,
   ThreadSortOptions,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
 } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
@@ -432,89 +434,6 @@ export class MemoryPG extends MemoryStorage {
     } satisfies MastraMessageV2;
   }
 
-  /**
-   * @deprecated use getMessagesPaginated instead
-   */
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages(
-    args: StorageGetMessagesArg & {
-      format?: 'v1' | 'v2';
-    },
-  ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    const { threadId, resourceId, format, selectBy } = args;
-    const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
-    const orderByStatement = `ORDER BY "createdAt" DESC`;
-    const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      let rows: any[] = [];
-      const include = selectBy?.include || [];
-
-      if (include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
-        if (includeMessages) {
-          rows.push(...includeMessages);
-        }
-      }
-
-      const excludeIds = rows.map(m => m.id);
-      const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
-      const excludeIdsParam = excludeIds.map((_, idx) => `$${idx + 2}`).join(', ');
-      let query = `${selectStatement} FROM ${tableName} WHERE thread_id = $1 
-        ${excludeIds.length ? `AND id NOT IN (${excludeIdsParam})` : ''}
-        ${orderByStatement}
-        LIMIT $${excludeIds.length + 2}
-        `;
-      const queryParams: any[] = [threadId, ...excludeIds, limit];
-      const remainingRows = await this.client.manyOrNone(query, queryParams);
-      rows.push(...remainingRows);
-
-      const fetchedMessages = (rows || []).map((row: MessageRowFromDB) => {
-        const message = this.normalizeMessageRow(row);
-        if (typeof message.content === 'string') {
-          try {
-            message.content = JSON.parse(message.content);
-          } catch {
-            /* ignore */
-          }
-        }
-        if (message.type === 'v2') delete message.type;
-        return message as MastraMessageV1;
-      });
-
-      // Sort all messages by creation date
-      const sortedMessages = fetchedMessages.sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      );
-
-      return format === 'v2'
-        ? sortedMessages.map(
-            m =>
-              ({ ...m, content: m.content || { format: 2, parts: [{ type: 'text', text: '' }] } }) as MastraMessageV2,
-          )
-        : sortedMessages;
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_MESSAGES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            threadId,
-            resourceId: resourceId ?? '',
-          },
-        },
-        error,
-      );
-      this.logger?.error?.(mastraError.toString());
-      this.logger?.trackException(mastraError);
-      return [];
-    }
-  }
-
   public async getMessagesById({
     messageIds,
     format,
@@ -680,6 +599,15 @@ export class MemoryPG extends MemoryStorage {
       this.logger?.trackException(mastraError);
       return { messages: [], total: 0, page, perPage: perPageInput || 40, hasMore: false };
     }
+  }
+
+  async listMessages(_args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    throw new MastraError({
+      id: 'PG_STORAGE_LIST_MESSAGES_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing messages is not implemented by this storage adapter (${this.constructor.name})`,
+    });
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;

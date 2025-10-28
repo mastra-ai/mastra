@@ -459,7 +459,7 @@ export class PostgresPerformanceTest {
 
     // Test getMessages
     const threadId = 'thread_0';
-    results.push(await this.measureOperation('getMessages', () => this.store.getMessages({ threadId }), scenario));
+    results.push(await this.measureOperation('listMessages', () => this.store.listMessages({ threadId }), scenario));
 
     // Test getMessagesPaginated
     results.push(
