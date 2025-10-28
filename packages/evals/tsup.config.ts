@@ -2,7 +2,11 @@ import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/scorers/llm/index.ts', 'src/scorers/code/index.ts', 'src/scorers/utils.ts'],
+  entry: {
+    'scorers/llm/index': 'src/scorers/llm/index.ts',
+    'scorers/code/index': 'src/scorers/code/index.ts',
+    'scorers/utils': 'src/scorers/utils.ts',
+  },
   format: ['esm', 'cjs'],
   clean: true,
   dts: false,
