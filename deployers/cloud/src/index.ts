@@ -14,7 +14,7 @@ export class CloudDeployer extends Deployer {
     super({ name: 'cloud' });
   }
 
-  async deploy(_outputDirectory: string): Promise<void> { }
+  async deploy(_outputDirectory: string): Promise<void> {}
   async writeInstrumentationFile(outputDirectory: string) {
     const instrumentationFile = join(outputDirectory, 'instrumentation.mjs');
     const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -32,7 +32,7 @@ export class CloudDeployer extends Deployer {
     return super.writePackageJson(outputDirectory, dependencies);
   }
 
-  async lint() { }
+  async lint() {}
 
   protected async installDependencies(outputDirectory: string, _rootDir = process.cwd()) {
     await installDeps({ path: join(outputDirectory, 'output'), pm: 'npm' });
