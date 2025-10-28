@@ -549,3 +549,16 @@ export interface MemorySearchResult {
     }>;
   };
 }
+
+export interface GetAgentsModelProvidersResponse {
+  providers: Provider[];
+}
+
+export interface Provider {
+  id: string;
+  name: string;
+  envVar: string;
+  connected: boolean;
+  docUrl?: string;
+  models: string[];
+}
