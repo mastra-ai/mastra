@@ -69,7 +69,7 @@ const agent = new Agent({
 
 ### Storage configuration
 
-Semantic recall relies on a [storage and vector db](/reference/memory/Memory#parameters) to store messages and their embeddings.
+Semantic recall relies on a [storage and vector db](/reference/memory/memory-class) to store messages and their embeddings.
 
 ```ts {8-17}
 import { Memory } from "@mastra/memory";
@@ -92,14 +92,14 @@ const agent = new Agent({
 
 **Storage/vector code Examples**:
 
-- [LibSQL](/memory/storage/memory-with-libsql)
+- [LibSQL](/docs/memory/storage/memory-with-libsql)
 - [MongoDB](/examples/memory/memory-with-mongodb)
-- [Postgres](/memory/storage/memory-with-pg)
-- [Upstash](/memory/storage/memory-with-upstash)
+- [Postgres](/docs/memory/storage/memory-with-pg)
+- [Upstash](/docs/memory/storage/memory-with-upstash)
 
 ### Embedder configuration
 
-Semantic recall relies on an [embedding model](/reference/memory/Memory#embedder) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
+Semantic recall relies on an [embedding model](/reference/memory/memory-class) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
 
 #### Using the Model Router (Recommended)
 

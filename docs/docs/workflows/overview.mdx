@@ -153,13 +153,11 @@ const testWorkflow = mastra.getWorkflow("testWorkflow");
 ```
 :::info
 
-  <p>
-    `mastra.getWorkflow()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
-  </p>
+`mastra.getWorkflow()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
 
 :::
 
-> See [Running Workflows](/examples/workflows/running-workflows) for more information.
+> See [Running Workflows](/examples/workflows_legacy/creating-a-workflow) for more information.
 
 ## Running workflows
 
@@ -243,7 +241,7 @@ The workflow output includes the full execution lifecycle, showing the input and
 
 ## Using `RuntimeContext`
 
-Use [RuntimeContext](/server-db/runtime-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RuntimeContext](/docs/server-db/runtime-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers
 export type UserTier = {
@@ -264,20 +262,20 @@ const step1 = createStep({
 });
 ```
 
-> See [Runtime Context](/server-db/runtime-context) for more information.
+> See [Runtime Context](/docs/server-db/runtime-context) for more information.
 
 ## Testing with Mastra Playground
 
-Use the Mastra [Playground](/server-db/local-dev-playground) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
+Use the Mastra [Playground](/docs/getting-started/studio) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
 
 ## Related
 
 For a closer look at workflows, see our [Workflow Guide](/guides/guide/ai-recruiter), which walks through the core concepts with a practical example.
 
-- [Parallel Steps workflow example](/examples/workflows/parallel-steps)
-- [Conditional Branching workflow example](/examples/workflows/conditional-branching)
+- [Parallel Steps workflow example](/examples/workflows_legacy/parallel-steps)
+- [Conditional Branching workflow example](/examples/workflows_legacy/conditional-branching)
 - [Inngest workflow example](/examples/workflows/inngest-workflow)
-- [Suspend and Resume workflow example](/examples/workflows/human-in-the-loop)
+- [Suspend and Resume workflow example](/examples/workflows_legacy/human-in-the-loop)
 
 
 ## Workflows (Legacy)

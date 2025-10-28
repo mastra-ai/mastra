@@ -41,7 +41,7 @@ OPENAI_API_KEY=<your-api-key>
 
 :::note
 
-Each LLM provider uses a different env var. See [Model Capabilities](/getting-started/model-capability) for more information.
+Each LLM provider uses a different env var. See [Model Capabilities](https://sdk.vercel.ai/providers) for more information.
 
 :::
 
@@ -173,7 +173,7 @@ app.listen(port, () => {
 });
 ```
 
-By importing the `src/mastra/index.ts` file you can use methods like [`.getAgent()`](/reference/agents/getAgent) to get programmatic access. With [`.generate()`](/reference/agents/generate) you then can interact with the respective agent.
+By importing the `src/mastra/index.ts` file you can use methods like [`.getAgent()`](/reference/core/getAgent) to get programmatic access. With [`.generate()`](/reference/agents/generate) you then can interact with the respective agent.
 
 :::note
 
@@ -195,7 +195,7 @@ The weather in London is currently sunny. If you need more details like humidity
 
 ## Running the Agent Server
 
-In production it's not necessary to run Mastra alongside your Express server. But for development Mastra offers a [Local Development Environment](/server-db/studio) which you can use to improve and debug your agent.
+In production it's not necessary to run Mastra alongside your Express server. But for development Mastra offers a [Local Development Environment](/docs/getting-started/studio) which you can use to improve and debug your agent.
 
 Add a script to your `package.json`:
 

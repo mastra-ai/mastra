@@ -48,7 +48,7 @@ OPENAI_API_KEY=<your-api-key>
 
 :::note
 
-Mastra supports more than 600 models. Choose from the [full list](/models/index).
+Mastra supports more than 600 models. Choose from the [full list](/models).
 
 :::
 
@@ -252,7 +252,7 @@ for await (const chunk of stream.textStream) {
   </TabItem>
 </Tabs>
 
-> See [.generate()](/reference/agents/generate) or [.stream()](/reference/agents/stream) for more information.
+> See [.generate()](/reference/agents/generate) or [.stream()](/reference/streaming/agents/stream) for more information.
 
 ## Structured output
 
@@ -442,11 +442,11 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Runtime Context](/server-db/runtime-context) for more information.
+> See [Runtime Context](/docs/server-db/runtime-context) for more information.
 
 ## Testing with Mastra Playground
 
-Use the Mastra [Playground](/server-db/local-dev-playground) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
+Use the Mastra [Playground](/docs/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
 
 ## Related
 

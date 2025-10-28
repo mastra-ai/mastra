@@ -36,7 +36,7 @@ npm install @mastra/evals@latest
 
 ### Adding scorers to agents
 
-You can add built-in scorers to your agents to automatically evaluate their outputs. See the [full list of built-in scorers](/scorers/off-the-shelf-scorers) for all available options.
+You can add built-in scorers to your agents to automatically evaluate their outputs. See the [full list of built-in scorers](/docs/scorers/off-the-shelf-scorers) for all available options.
 
 ```typescript title="src/mastra/agents/evaluated-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
@@ -108,7 +108,7 @@ In addition to live evaluations, you can use scorers to evaluate historical trac
 
 **Observability Required**
 
-To score traces, you must first configure observability in your Mastra instance to collect trace data. See [AI Tracing documentation](../observability/ai-tracing) for setup instructions.
+To score traces, you must first configure observability in your Mastra instance to collect trace data. See [AI Tracing documentation](../observability/ai-tracing/overview) for setup instructions.
 
 :::
 
@@ -132,10 +132,10 @@ Once registered, you can score traces interactively within the Mastra playground
 
 Mastra provides a CLI command `mastra dev` to test your scorers. The playground includes a scorers section where you can run individual scorers against test inputs and view detailed results.
 
-For more details, see the [Local Dev Playground](/server-db/studio) docs.
+For more details, see the [Local Dev Playground](/docs/getting-started/studio) docs.
 
 ## Next steps
 
-- Learn how to create your own scorers in the [Creating Custom Scorers](/scorers/custom-scorers) guide
-- Explore built-in scorers in the [Off-the-shelf Scorers](/scorers/off-the-shelf-scorers) section
-- Test scorers with the [Local Dev Playground](/server-db/studio)
+- Learn how to create your own scorers in the [Creating Custom Scorers](/docs/scorers/custom-scorers) guide
+- Explore built-in scorers in the [Off-the-shelf Scorers](/docs/scorers/off-the-shelf-scorers) section
+- Test scorers with the [Local Dev Playground](/docs/getting-started/studio)
