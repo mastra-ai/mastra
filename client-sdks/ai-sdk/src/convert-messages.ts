@@ -1,5 +1,5 @@
-import { convertMessages } from '@mastra/core/agent';
-import type { MastraDBMessage } from '@mastra/core/agent';
+import { convertMessages } from '@mastra/core/agent/message-list';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { UIMessage } from 'ai';
 
 /**

@@ -1,6 +1,6 @@
-import { randomUUID } from 'crypto';
 import type { LanguageModelV1Message } from '@ai-sdk/provider';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import { v4 as randomUUID } from '@lukeed/uuid';
 import * as AIV4 from 'ai';
 import * as AIV5 from 'ai-v5';
 

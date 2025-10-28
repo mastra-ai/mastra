@@ -1,5 +1,5 @@
 import { MastraUIMessage, resolveToChildMessages } from '@mastra/react';
-import { toAISdkMessages } from '@mastra/ai-sdk';
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { AgentBadge, AgentMessage } from './agent-badge';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { ToolApprovalButtonsProps } from './tool-approval-buttons';
@@ -23,7 +23,7 @@ export const AgentBadgeWrapper = ({
     memory: true,
   });
   const convertedMessages = memoryMessages?.messages
-    ? (toAISdkMessages(memoryMessages.messages) as MastraUIMessage[])
+    ? (toAISdkV5Messages(memoryMessages.messages) as MastraUIMessage[])
     : [];
   const childMessages = result?.childMessages ?? resolveToChildMessages(convertedMessages);
 

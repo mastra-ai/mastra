@@ -8,7 +8,7 @@
  * const stream = toAISdkFormat(agentStream, { from: 'agent' });
  *
  * // New:
- * import { toAISdkStream } from '@mastra/ai-sdk/v5';
+ * import { toAISdkV5Stream } from '@mastra/ai-sdk';
  * const stream = toAISdkStream(agentStream, { from: 'agent' });
  * ```
  */
@@ -18,7 +18,7 @@ export function toAISdkFormat(): never {
       'Migration:\n' +
       '  import { toAISdkFormat } from "@mastra/ai-sdk";\n' +
       '  // Change to:\n' +
-      '  import { toAISdkStream } from "@mastra/ai-sdk/v5";\n\n' +
+      '  import { toAISdkV5Stream } from "@mastra/ai-sdk";\n\n' +
       'The function signature remains the same.',
   );
 }
