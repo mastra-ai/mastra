@@ -350,7 +350,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
 
         const rawError = chunk.payload.error;
         let e: Error | string;
-        
+
         if (typeof rawError === 'object' && rawError !== null) {
           const errorMessage = safeParseErrorObject(rawError);
           const originalCause = rawError instanceof Error ? rawError.cause : undefined;
