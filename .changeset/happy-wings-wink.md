@@ -1,5 +1,5 @@
 ---
-'@mastra/mssql': major
+'@mastra/mssql': minor
 ---
 
 Implemented AI tracing and observability features

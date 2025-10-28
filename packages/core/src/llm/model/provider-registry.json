@@ -636,6 +636,7 @@
         "gpt-5-codex",
         "grok-code",
         "kimi-k2",
+        "minimax-m2",
         "qwen3-coder"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
@@ -826,6 +827,9 @@
         "meta-llama/llama-3.3-70b-instruct:free",
         "meta-llama/llama-4-scout:free",
         "microsoft/mai-ds-r1:free",
+        "minimax/minimax-01",
+        "minimax/minimax-m1",
+        "minimax/minimax-m2:free",
         "mistralai/codestral-2508",
         "mistralai/devstral-medium-2507",
         "mistralai/devstral-small-2505",
@@ -1666,6 +1670,7 @@
       "gpt-5-codex",
       "grok-code",
       "kimi-k2",
+      "minimax-m2",
       "qwen3-coder"
     ],
     "fastrouter": [
@@ -1797,6 +1802,9 @@
       "meta-llama/llama-3.3-70b-instruct:free",
       "meta-llama/llama-4-scout:free",
       "microsoft/mai-ds-r1:free",
+      "minimax/minimax-01",
+      "minimax/minimax-m1",
+      "minimax/minimax-m2:free",
       "mistralai/codestral-2508",
       "mistralai/devstral-medium-2507",
       "mistralai/devstral-small-2505",
