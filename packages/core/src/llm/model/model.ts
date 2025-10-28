@@ -533,22 +533,25 @@ export class MastraLLMV1 extends MastraBase {
         }
       },
       onFinish: async props => {
+        // End the model generation span BEFORE calling the user's onFinish callback
+        // This ensures the model span ends before the agent span
+        llmSpan?.end({
+          output: {
+            text: props?.text,
+            reasoning: props?.reasoningDetails,
+            reasoningText: props?.reasoning,
+            files: props?.files,
+            sources: props?.sources,
+            warnings: props?.warnings,
+          },
+          attributes: {
+            finishReason: props?.finishReason,
+            usage: props?.usage,
+          },
+        });
+
         try {
           await onFinish?.({ ...props, runId: runId! });
-          llmSpan?.end({
-            output: {
-              text: props?.text,
-              reasoning: props?.reasoningDetails,
-              reasoningText: props?.reasoning,
-              files: props?.files,
-              sources: props?.sources,
-              warnings: props?.warnings,
-            },
-            attributes: {
-              finishReason: props?.finishReason,
-              usage: props?.usage,
-            },
-          });
         } catch (e: unknown) {
           const mastraError = new MastraError(
             {
@@ -679,23 +682,26 @@ export class MastraLLMV1 extends MastraBase {
         ...rest,
         model,
         onFinish: async (props: any) => {
+          // End the model generation span BEFORE calling the user's onFinish callback
+          // This ensures the model span ends before the agent span
+          llmSpan?.end({
+            output: {
+              text: props?.text,
+              object: props?.object,
+              reasoning: props?.reasoningDetails,
+              reasoningText: props?.reasoning,
+              files: props?.files,
+              sources: props?.sources,
+              warnings: props?.warnings,
+            },
+            attributes: {
+              finishReason: props?.finishReason,
+              usage: props?.usage,
+            },
+          });
+
           try {
             await onFinish?.({ ...props, runId: runId! });
-            llmSpan?.end({
-              output: {
-                text: props?.text,
-                object: props?.object,
-                reasoning: props?.reasoningDetails,
-                reasoningText: props?.reasoning,
-                files: props?.files,
-                sources: props?.sources,
-                warnings: props?.warnings,
-              },
-              attributes: {
-                finishReason: props?.finishReason,
-                usage: props?.usage,
-              },
-            });
           } catch (e: unknown) {
             const mastraError = new MastraError(
               {
