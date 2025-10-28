@@ -1,5 +1,14 @@
 # @mastra/ai-sdk
 
+## 0.2.5-alpha.0
+
+### Patch Changes
+
+- Fix usage tracking with agent network ([#9413](https://github.com/mastra-ai/mastra/pull/9413))
+
+- Updated dependencies [[`f57a81e`](https://github.com/mastra-ai/mastra/commit/f57a81e6ce644e45bf1c9618778cc54c50a84ad4), [`fc79af3`](https://github.com/mastra-ai/mastra/commit/fc79af3915d1c456729cbd753673b0c0564340d8), [`60bd45d`](https://github.com/mastra-ai/mastra/commit/60bd45de021f0dfbe6583928f6da5169cb5585ba), [`a30093d`](https://github.com/mastra-ai/mastra/commit/a30093de98c1836dcd5dfddf09649010712b8c95), [`e40d4d0`](https://github.com/mastra-ai/mastra/commit/e40d4d0a0971b4505e7c9de73c656066c7565653), [`ff16f9b`](https://github.com/mastra-ai/mastra/commit/ff16f9b9dbc701b26b6c4e9872f759f3880f9327), [`35e6cf7`](https://github.com/mastra-ai/mastra/commit/35e6cf722fef16ea0301eb9cf5a32fe9ccb12d22), [`30a2e36`](https://github.com/mastra-ai/mastra/commit/30a2e369485e0e59c4faa1d83c5635c2260b304c)]:
+  - @mastra/core@0.23.2-alpha.1
+
 ## 0.2.4
 
 ### Patch Changes

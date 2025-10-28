@@ -83,6 +83,7 @@
     "@observability/test-utils": "0.0.1"
   },
   "changesets": [
+    "bold-turtles-shine",
     "breezy-clocks-cross",
     "chatty-sites-notice",
     "cuddly-ways-send",
@@ -93,16 +94,25 @@
     "fix-span-lifecycle-ordering",
     "flat-walls-cross",
     "happy-wings-wink",
+    "light-crabs-spend",
     "little-knives-wonder",
+    "loud-pots-taste",
     "lovely-candles-sin",
+    "puny-islands-beam",
     "quiet-bananas-knock",
     "quiet-cups-play",
     "sharp-windows-glow",
     "six-keys-wink",
+    "small-mangos-enjoy",
     "smart-parks-find",
+    "soft-papers-sin",
+    "solid-lands-search",
     "sour-ants-bake",
     "sparkly-news-smell",
+    "tame-tigers-thank",
     "tasty-coats-sip",
-    "tiny-drinks-play"
+    "thick-times-carry",
+    "tiny-drinks-play",
+    "wacky-trains-enjoy"
   ]
 }
