@@ -1,6 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import type { MastraStorage } from '@mastra/core/storage';
-import type { StorageThreadType } from '@mastra/core/memory';
 import { createSampleThread, createSampleMessageV1 } from './data';
 
 export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStorage }) {
@@ -142,16 +141,13 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
 
       await storage.saveMessages({ messages });
 
-      // Verify all 100 messages were saved
-      const allMessages = await storage.getMessages({ threadId: thread.id, selectBy: { last: 100 } });
-
       // Delete the most recent 50 messages (indices 50-99)
       const messagesToDelete = messages.slice(50).map(msg => msg.id);
 
       await storage.deleteMessages(messagesToDelete);
 
       // Verify 50 messages remain - need to specify limit to get all remaining messages
-      const remainingMessages = await storage.getMessages({ threadId: thread.id, selectBy: { last: 100 } });
+      const { messages: remainingMessages } = await storage.listMessages({ threadId: thread.id, pagination: { perPage: 100 }, format: 'v1' });
       expect(remainingMessages).toHaveLength(50);
 
       // Verify the correct messages remain (first 50 messages, indices 0-49)
@@ -187,7 +183,7 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       await storage.deleteMessages(['mixed-msg-0', 'invalid-id-1', 'mixed-msg-2', 'invalid-id-2']);
 
       // Verify only the valid messages were deleted
-      const remainingMessages = await storage.getMessages({ threadId: thread.id });
+      const { messages: remainingMessages } = await storage.listMessages({ threadId: thread.id, format: 'v1' });
       expect(remainingMessages).toHaveLength(1);
       expect(remainingMessages[0]!.id).toBe('mixed-msg-1');
     });
