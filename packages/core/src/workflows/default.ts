@@ -1167,9 +1167,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       tracingPolicy: this.options?.tracingPolicy,
     });
 
+    const prevOutput = this.getStepOutput(stepResults, prevStep);
     for (const step of entry.steps) {
       if (step.type === 'step') {
-        const prevOutput = this.getStepOutput(stepResults, prevStep);
         const startTime = resume?.steps[0] === step.step.id ? undefined : Date.now();
         const resumeTime = resume?.steps[0] === step.step.id ? Date.now() : undefined;
         stepResults[step.step.id] = {
