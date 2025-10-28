@@ -89,7 +89,7 @@ describe('FastEmbed AI SDK v2 Compatibility', () => {
       } catch (error) {
         expect(error).toBeDefined();
         const errorMessage = error instanceof Error ? error.message : String(error);
-        expect(errorMessage.toLowerCase()).toMatch(/version|specification|unsupported/i);
+        expect(errorMessage.toLowerCase()).toMatch(/unsupported.*model.*version/i);
       }
     }, 30000);
   });
