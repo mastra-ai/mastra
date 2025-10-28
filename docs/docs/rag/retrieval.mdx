@@ -5,8 +5,10 @@ sidebar_label: "Retrieval"
 description: Guide on retrieval processes in Mastra's RAG systems, including semantic search, filtering, and re-ranking.
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
-## Retrieval in RAG Systems
+# Retrieval in RAG Systems
 
 After storing embeddings, you need to retrieve relevant chunks to answer user queries.
 
@@ -265,194 +267,215 @@ For detailed configuration options and advanced usage, see the [Vector Query Too
 Vector store prompts define query patterns and filtering capabilities for each vector database implementation.
 When implementing filtering, these prompts are required in the agent's instructions to specify valid operators and syntax for each vector store implementation.
 
-
 <Tabs>
-  <Tabs.Tab>
-```ts showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { PGVECTOR_PROMPT } from "@mastra/pg";
+  <TabItem value="pgvector" label="pgVector">
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${PGVECTOR_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
+  ```ts showLineNumbers copy
+  import { openai } from '@ai-sdk/openai';
+  import { PGVECTOR_PROMPT } from "@mastra/pg";
 
-<Tabs.Tab>
-```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { PINECONE_PROMPT } from "@mastra/pinecone";
+  export const ragAgent = new Agent({
+    name: 'RAG Agent',
+    model: openai('gpt-4o-mini'),
+    instructions: `
+    Process queries using the provided context. Structure responses to be concise and relevant.
+    ${PGVECTOR_PROMPT}
+    `,
+    tools: { vectorQueryTool },
+  });
+  ```
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${PINECONE_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
+  </TabItem>
 
-<Tabs.Tab>
-```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { QDRANT_PROMPT } from "@mastra/qdrant";
+  <TabItem value="pinecone" label="Pinecone">
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${QDRANT_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { openai } from '@ai-sdk/openai';
+  import { PINECONE_PROMPT } from "@mastra/pinecone";
 
-<Tabs.Tab>
-```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { CHROMA_PROMPT } from "@mastra/chroma";
+  export const ragAgent = new Agent({
+    name: 'RAG Agent',
+    model: openai('gpt-4o-mini'),
+    instructions: `
+    Process queries using the provided context. Structure responses to be concise and relevant.
+    ${PINECONE_PROMPT}
+    `,
+    tools: { vectorQueryTool },
+  });
+  ```
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${CHROMA_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
+  </TabItem>
 
-<Tabs.Tab>
-```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { ASTRA_PROMPT } from "@mastra/astra";
+  <TabItem value="qdrant" label="Qdrant">
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${ASTRA_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { openai } from '@ai-sdk/openai';
+  import { QDRANT_PROMPT } from "@mastra/qdrant";
 
-<Tabs.Tab>
-```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { LIBSQL_PROMPT } from "@mastra/libsql";
+  export const ragAgent = new Agent({
+    name: 'RAG Agent',
+    model: openai('gpt-4o-mini'),
+    instructions: `
+    Process queries using the provided context. Structure responses to be concise and relevant.
+    ${QDRANT_PROMPT}
+    `,
+    tools: { vectorQueryTool },
+  });
+  ```
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${LIBSQL_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
+  </TabItem>
 
-<Tabs.Tab>
-```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { UPSTASH_PROMPT } from "@mastra/upstash";
+  <TabItem value="chroma" label="Chroma">
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${UPSTASH_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { openai } from '@ai-sdk/openai';
+  import { CHROMA_PROMPT } from "@mastra/chroma";
 
-<Tabs.Tab>
-```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { VECTORIZE_PROMPT } from "@mastra/vectorize";
+  export const ragAgent = new Agent({
+    name: 'RAG Agent',
+    model: openai('gpt-4o-mini'),
+    instructions: `
+    Process queries using the provided context. Structure responses to be concise and relevant.
+    ${CHROMA_PROMPT}
+    `,
+    tools: { vectorQueryTool },
+  });
+  ```
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${VECTORIZE_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
+  </TabItem>
 
-<Tabs.Tab>
-```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { MONGODB_PROMPT } from "@mastra/mongodb";
+  <TabItem value="astra" label="Astra">
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${MONGODB_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { openai } from '@ai-sdk/openai';
+  import { ASTRA_PROMPT } from "@mastra/astra";
 
-<Tabs.Tab>
-```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { OPENSEARCH_PROMPT } from "@mastra/opensearch";
+  export const ragAgent = new Agent({
+    name: 'RAG Agent',
+    model: openai('gpt-4o-mini'),
+    instructions: `
+    Process queries using the provided context. Structure responses to be concise and relevant.
+    ${ASTRA_PROMPT}
+    `,
+    tools: { vectorQueryTool },
+  });
+  ```
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${OPENSEARCH_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
+  </TabItem>
 
-<Tabs.Tab>
-```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { S3VECTORS_PROMPT } from "@mastra/s3vectors";
+  <TabItem value="libsql" label="LibSQL">
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  Process queries using the provided context. Structure responses to be concise and relevant.
-  ${S3VECTORS_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { openai } from '@ai-sdk/openai';
+  import { LIBSQL_PROMPT } from "@mastra/libsql";
+
+  export const ragAgent = new Agent({
+    name: 'RAG Agent',
+    model: openai('gpt-4o-mini'),
+    instructions: `
+    Process queries using the provided context. Structure responses to be concise and relevant.
+    ${LIBSQL_PROMPT}
+    `,
+    tools: { vectorQueryTool },
+  });
+  ```
+
+  </TabItem>
+
+  <TabItem value="upstash" label="Upstash">
+
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { openai } from '@ai-sdk/openai';
+  import { UPSTASH_PROMPT } from "@mastra/upstash";
+
+  export const ragAgent = new Agent({
+    name: 'RAG Agent',
+    model: openai('gpt-4o-mini'),
+    instructions: `
+    Process queries using the provided context. Structure responses to be concise and relevant.
+    ${UPSTASH_PROMPT}
+    `,
+    tools: { vectorQueryTool },
+  });
+  ```
+
+  </TabItem>
+
+  <TabItem value="vectorize" label="Vectorize">
+  
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { openai } from '@ai-sdk/openai';
+  import { VECTORIZE_PROMPT } from "@mastra/vectorize";
+
+  export const ragAgent = new Agent({
+    name: 'RAG Agent',
+    model: openai('gpt-4o-mini'),
+    instructions: `
+    Process queries using the provided context. Structure responses to be concise and relevant.
+    ${VECTORIZE_PROMPT}
+    `,
+    tools: { vectorQueryTool },
+  });
+  ```
+
+  </TabItem>
+
+  <TabItem value="mongodb" label="MongoDB">
+
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { openai } from '@ai-sdk/openai';
+  import { MONGODB_PROMPT } from "@mastra/mongodb";
+
+  export const ragAgent = new Agent({
+    name: 'RAG Agent',
+    model: openai('gpt-4o-mini'),
+    instructions: `
+    Process queries using the provided context. Structure responses to be concise and relevant.
+    ${MONGODB_PROMPT}
+    `,
+    tools: { vectorQueryTool },
+  });
+  ```
+
+  </TabItem>
+
+  <TabItem value="opensearch" label="OpenSearch">
+
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { openai } from '@ai-sdk/openai';
+  import { OPENSEARCH_PROMPT } from "@mastra/opensearch";
+
+  export const ragAgent = new Agent({
+    name: 'RAG Agent',
+    model: openai('gpt-4o-mini'),
+    instructions: `
+    Process queries using the provided context. Structure responses to be concise and relevant.
+    ${OPENSEARCH_PROMPT}
+    `,
+    tools: { vectorQueryTool },
+  });
+  ```
+
+  </TabItem>
+
+  <TabItem value="s3vectors" label="S3Vectors">
+
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { openai } from '@ai-sdk/openai';
+  import { S3VECTORS_PROMPT } from "@mastra/s3vectors";
+
+  export const ragAgent = new Agent({
+    name: 'RAG Agent',
+    model: openai('gpt-4o-mini'),
+    instructions: `
+    Process queries using the provided context. Structure responses to be concise and relevant.
+    ${S3VECTORS_PROMPT}
+    `,
+    tools: { vectorQueryTool },
+  });
+  ```
+
+  </TabItem>
 
 </Tabs>
 

@@ -6,6 +6,8 @@ description: "Workflows in Mastra help you orchestrate complex sequences of task
 ---
 
 import Steps from '@site/src/components/Steps';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # Workflows overview
 
@@ -16,8 +18,6 @@ Workflows let you define complex sequences of tasks using clear, structured step
 ## When to use workflows
 
 Use workflows for tasks that are clearly defined upfront and involve multiple steps with a specific execution order. They give you fine-grained control over how data flows and transforms between steps, and which primitives are called at each stage.
-
-
 
 > **📹 Watch**:  → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
 
@@ -167,38 +167,42 @@ const testWorkflow = mastra.getWorkflow("testWorkflow");
 Workflows can be run in two modes: start waits for all steps to complete before returning, and stream emits events during execution. Choose the approach that fits your use case: start when you only need the final result, and stream when you want to monitor progress or trigger actions as steps complete.
 
 <Tabs>
-  <Tabs.Tab>
-Create a workflow run instance using `createRunAsync()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. The workflow executes all steps and returns the final result.
+  <TabItem value="start" label="Start">
 
-```typescript showLineNumbers copy
-const run = await testWorkflow.createRunAsync();
+  Create a workflow run instance using `createRunAsync()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. The workflow executes all steps and returns the final result.
 
-const result = await run.start({
-  inputData: {
-    message: "Hello world"
+  ```typescript showLineNumbers copy
+  const run = await testWorkflow.createRunAsync();
+
+  const result = await run.start({
+    inputData: {
+      message: "Hello world"
+    }
+  });
+
+  console.log(result);
+  ```
+
+  </TabItem>
+  <TabItem value="stream" label="Stream">
+
+  Create a workflow run instance using `.createRunAsync()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
+
+  ```typescript showLineNumbers copy
+  const run = await testWorkflow.createRunAsync();
+
+  const result = await run.stream({
+    inputData: {
+      message: "Hello world"
+    }
+  });
+
+  for await (const chunk of result.stream) {
+    console.log(chunk);
   }
-});
+  ```
 
-console.log(result);
-```
-  </Tabs.Tab>
-  <Tabs.Tab>
-Create a workflow run instance using `.createRunAsync()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
-
-```typescript showLineNumbers copy
-const run = await testWorkflow.createRunAsync();
-
-const result = await run.stream({
-  inputData: {
-    message: "Hello world"
-  }
-});
-
-for await (const chunk of result.stream) {
-  console.log(chunk);
-}
-```
-  </Tabs.Tab>
+  </TabItem>
 </Tabs>
 
 ## Workflow output

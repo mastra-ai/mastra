@@ -5,6 +5,8 @@ sidebar_label: "MCP Overview"
 description: Learn about the Model Context Protocol (MCP), how to use third-party tools via MCPClient, connect to registries, and share your own tools using MCPServer.
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # MCP Overview
 
@@ -178,17 +180,12 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
 
 > See [getToolsets()](/reference/tools/mcp-client#gettoolsets) for more information.
 
-
-
 ## Connecting to an MCP registry
 
 MCP servers can be discovered through registries. Here's how to connect to some popular ones using `MCPClient`:
 
-
-
-
 <Tabs>
-  <Tabs.Tab>
+  <TabItem value="klavis" label="Klavis AI">
     [Klavis AI](https://klavis.ai) provides hosted, enterprise-authenticated, high-quality MCP servers.
 
     ```typescript
@@ -210,8 +207,8 @@ MCP servers can be discovered through registries. Here's how to connect to some 
 
     For more details on how to integrate Mastra with Klavis, check out their [documentation](https://docs.klavis.ai/documentation/ai-platform-integration/mastra).
 
-  </Tabs.Tab>
-  <Tabs.Tab>
+  </TabItem>
+  <TabItem value="mcp-run" label="mcp.run">
     [mcp.run](https://www.mcp.run/) provides pre-authenticated, managed MCP servers. Tools are grouped into Profiles, each with a unique, signed URL.
 
     ```typescript
@@ -231,8 +228,8 @@ MCP servers can be discovered through registries. Here's how to connect to some 
     > MCP_RUN_SSE_URL=https://www.mcp.run/api/mcp/sse?nonce=...
     > ```
 
-  </Tabs.Tab>
-  <Tabs.Tab>
+  </TabItem>
+  <TabItem value="composio" label="Composio.dev">
     [Composio.dev](https://composio.dev) offers a registry of [SSE-based MCP servers](https://mcp.composio.dev). You can use the SSE URL generated for tools like Cursor directly.
 
     ```typescript
@@ -254,8 +251,8 @@ MCP servers can be discovered through registries. Here's how to connect to some 
 
     *Note: Composio URLs are typically tied to a single user account, making them best suited for personal automation rather than multi-tenant applications.*
 
-  </Tabs.Tab>
-  <Tabs.Tab>
+  </TabItem>
+  <TabItem value="smithery" label="Smithery.ai">
     [Smithery.ai](https://smithery.ai) provides a registry accessible via their CLI.
 
     ```typescript
@@ -300,63 +297,59 @@ MCP servers can be discovered through registries. Here's how to connect to some 
     });
     ```
 
-  </Tabs.Tab>
-    <Tabs.Tab>
+  </TabItem>
+  <TabItem value="ampersand" label="Ampersand">
 
-    [Ampersand](https://withampersand.com?utm_source=mastra-docs) offers an [MCP Server](https://docs.withampersand.com/mcp) that allows you to connect your agent to 150+ integrations with SaaS products like Salesforce, Hubspot, and Zendesk.
+  [Ampersand](https://withampersand.com?utm_source=mastra-docs) offers an [MCP Server](https://docs.withampersand.com/mcp) that allows you to connect your agent to 150+ integrations with SaaS products like Salesforce, Hubspot, and Zendesk.
 
-
-    ```typescript
-
-    // MCPClient with Ampersand MCP Server using SSE
-    export const mcp = new MCPClient({
-        servers: {
-        "@amp-labs/mcp-server": {
-          "url": `https://mcp.withampersand.com/v1/sse?${new URLSearchParams({
-            apiKey: process.env.AMPERSAND_API_KEY,
-            project: process.env.AMPERSAND_PROJECT_ID,
-            integrationName: process.env.AMPERSAND_INTEGRATION_NAME,
-            groupRef: process.env.AMPERSAND_GROUP_REF
-          })}`
-        }
+  ```typescript
+  // MCPClient with Ampersand MCP Server using SSE
+  export const mcp = new MCPClient({
+      servers: {
+      "@amp-labs/mcp-server": {
+        "url": `https://mcp.withampersand.com/v1/sse?${new URLSearchParams({
+          apiKey: process.env.AMPERSAND_API_KEY,
+          project: process.env.AMPERSAND_PROJECT_ID,
+          integrationName: process.env.AMPERSAND_INTEGRATION_NAME,
+          groupRef: process.env.AMPERSAND_GROUP_REF
+        })}`
       }
-    });
+    }
+  });
+  ```
 
-    ```
+  ```typescript
+  // If you prefer to run the MCP server locally:
+  import { MCPClient } from "@mastra/mcp";
 
-    ```typescript
-    // If you prefer to run the MCP server locally:
-
-    import { MCPClient } from "@mastra/mcp";
-
-    // MCPClient with Ampersand MCP Server using stdio transport
-    export const mcp = new MCPClient({
-        servers: {
-          "@amp-labs/mcp-server": {
-            command: "npx",
-            args: [
-              "-y",
-              "@amp-labs/mcp-server@latest",
-              "--transport",
-              "stdio",
-              "--project",
-              process.env.AMPERSAND_PROJECT_ID,
-              "--integrationName",
-              process.env.AMPERSAND_INTEGRATION_NAME,
-              "--groupRef",
-              process.env.AMPERSAND_GROUP_REF, // optional
-            ],
-            env: {
-              AMPERSAND_API_KEY: process.env.AMPERSAND_API_KEY,
-            },
+  // MCPClient with Ampersand MCP Server using stdio transport
+  export const mcp = new MCPClient({
+      servers: {
+        "@amp-labs/mcp-server": {
+          command: "npx",
+          args: [
+            "-y",
+            "@amp-labs/mcp-server@latest",
+            "--transport",
+            "stdio",
+            "--project",
+            process.env.AMPERSAND_PROJECT_ID,
+            "--integrationName",
+            process.env.AMPERSAND_INTEGRATION_NAME,
+            "--groupRef",
+            process.env.AMPERSAND_GROUP_REF, // optional
+          ],
+          env: {
+            AMPERSAND_API_KEY: process.env.AMPERSAND_API_KEY,
           },
         },
-    });
-    ```
+      },
+  });
+  ```
 
-    As an alternative to MCP, Ampersand's AI SDK also has an adapter for Mastra, so you can [directly import Ampersand tools](https://docs.withampersand.com/ai-sdk#use-with-mastra) for your agent to access.
+  As an alternative to MCP, Ampersand's AI SDK also has an adapter for Mastra, so you can [directly import Ampersand tools](https://docs.withampersand.com/ai-sdk#use-with-mastra) for your agent to access.
 
-  </Tabs.Tab>
+  </TabItem>
 </Tabs>
 
 ## Related

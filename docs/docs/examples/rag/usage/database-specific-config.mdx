@@ -5,6 +5,8 @@ sidebar_label: "Database-Specific Configurations"
 description: Learn how to use database-specific configurations to optimize vector search performance and leverage unique features of different vector stores.
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # Database-Specific Configurations
 
@@ -15,102 +17,106 @@ This example demonstrates how to use database-specific configurations with vecto
 Use different configurations for different environments:
 
 <Tabs>
-  <Tabs.Tab>
-    ```typescript
-    import { openai } from "@ai-sdk/openai";
-    import { createVectorQueryTool } from "@mastra/rag";
-    import { RuntimeContext } from "@mastra/core/runtime-context";
+  <TabItem value="typescript" label="TypeScript">
 
-    // Base configuration
-    const createSearchTool = (environment: 'dev' | 'staging' | 'prod') => {
-      return createVectorQueryTool({
-        vectorStoreName: "pinecone",
-        indexName: "documents",
-        model: openai.embedding("text-embedding-3-small"),
-        databaseConfig: {
-          pinecone: {
-            namespace: environment
-          }
-        }
-      });
-    };
+  ```typescript
+  import { openai } from "@ai-sdk/openai";
+  import { createVectorQueryTool } from "@mastra/rag";
+  import { RuntimeContext } from "@mastra/core/runtime-context";
 
-    // Create environment-specific tools
-    const devSearchTool = createSearchTool('dev');
-    const prodSearchTool = createSearchTool('prod');
-
-    // Or use runtime override
-    const dynamicSearchTool = createVectorQueryTool({
-      vectorStoreName: "pinecone", 
-      indexName: "documents",
-      model: openai.embedding("text-embedding-3-small")
-    });
-
-    // Switch environment at runtime
-    const switchEnvironment = async (environment: string, query: string) => {
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('databaseConfig', {
-        pinecone: {
-          namespace: environment
-        }
-      });
-
-      return await dynamicSearchTool.execute({
-        context: { queryText: query },
-        mastra,
-        runtimeContext
-      });
-    };
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```javascript
-    import { openai } from "@ai-sdk/openai";
-    import { createVectorQueryTool } from "@mastra/rag";
-    import { RuntimeContext } from "@mastra/core/runtime-context";
-
-    // Base configuration
-    const createSearchTool = (environment) => {
-      return createVectorQueryTool({
-        vectorStoreName: "pinecone",
-        indexName: "documents", 
-        model: openai.embedding("text-embedding-3-small"),
-        databaseConfig: {
-          pinecone: {
-            namespace: environment
-          }
-        }
-      });
-    };
-
-    // Create environment-specific tools
-    const devSearchTool = createSearchTool('dev');
-    const prodSearchTool = createSearchTool('prod');
-
-    // Or use runtime override
-    const dynamicSearchTool = createVectorQueryTool({
+  // Base configuration
+  const createSearchTool = (environment: 'dev' | 'staging' | 'prod') => {
+    return createVectorQueryTool({
       vectorStoreName: "pinecone",
       indexName: "documents",
-      model: openai.embedding("text-embedding-3-small")
-    });
-
-    // Switch environment at runtime
-    const switchEnvironment = async (environment, query) => {
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('databaseConfig', {
+      model: openai.embedding("text-embedding-3-small"),
+      databaseConfig: {
         pinecone: {
           namespace: environment
         }
-      });
+      }
+    });
+  };
 
-      return await dynamicSearchTool.execute({
-        context: { queryText: query },
-        mastra,
-        runtimeContext
-      });
-    };
-    ```
-  </Tabs.Tab>
+  // Create environment-specific tools
+  const devSearchTool = createSearchTool('dev');
+  const prodSearchTool = createSearchTool('prod');
+
+  // Or use runtime override
+  const dynamicSearchTool = createVectorQueryTool({
+    vectorStoreName: "pinecone", 
+    indexName: "documents",
+    model: openai.embedding("text-embedding-3-small")
+  });
+
+  // Switch environment at runtime
+  const switchEnvironment = async (environment: string, query: string) => {
+    const runtimeContext = new RuntimeContext();
+    runtimeContext.set('databaseConfig', {
+      pinecone: {
+        namespace: environment
+      }
+    });
+
+    return await dynamicSearchTool.execute({
+      context: { queryText: query },
+      mastra,
+      runtimeContext
+    });
+  };
+  ```
+
+  </TabItem>
+  <TabItem value="javascript" label="JavaScript">
+
+  ```javascript
+  import { openai } from "@ai-sdk/openai";
+  import { createVectorQueryTool } from "@mastra/rag";
+  import { RuntimeContext } from "@mastra/core/runtime-context";
+
+  // Base configuration
+  const createSearchTool = (environment) => {
+    return createVectorQueryTool({
+      vectorStoreName: "pinecone",
+      indexName: "documents", 
+      model: openai.embedding("text-embedding-3-small"),
+      databaseConfig: {
+        pinecone: {
+          namespace: environment
+        }
+      }
+    });
+  };
+
+  // Create environment-specific tools
+  const devSearchTool = createSearchTool('dev');
+  const prodSearchTool = createSearchTool('prod');
+
+  // Or use runtime override
+  const dynamicSearchTool = createVectorQueryTool({
+    vectorStoreName: "pinecone",
+    indexName: "documents",
+    model: openai.embedding("text-embedding-3-small")
+  });
+
+  // Switch environment at runtime
+  const switchEnvironment = async (environment, query) => {
+    const runtimeContext = new RuntimeContext();
+    runtimeContext.set('databaseConfig', {
+      pinecone: {
+        namespace: environment
+      }
+    });
+
+    return await dynamicSearchTool.execute({
+      context: { queryText: query },
+      mastra,
+      runtimeContext
+    });
+  };
+  ```
+
+  </TabItem>
 </Tabs>
 
 ## Performance Optimization with pgVector
@@ -118,101 +124,107 @@ Use different configurations for different environments:
 Optimize search performance for different use cases:
 
 <Tabs>
-  <Tabs.Tab>
-    ```typescript
-    // High accuracy configuration - slower but more precise
-    const highAccuracyTool = createVectorQueryTool({
-      vectorStoreName: "postgres",
-      indexName: "embeddings",
-      model: openai.embedding("text-embedding-3-small"),
-      databaseConfig: {
-        pgvector: {
-          ef: 400,          // High accuracy for HNSW
-          probes: 20,       // High recall for IVFFlat
-          minScore: 0.85    // High quality threshold
-        }
+  <TabItem value="high-accuracy" label="High Accuracy">
+
+  ```typescript
+  // High accuracy configuration - slower but more precise
+  const highAccuracyTool = createVectorQueryTool({
+    vectorStoreName: "postgres",
+    indexName: "embeddings",
+    model: openai.embedding("text-embedding-3-small"),
+    databaseConfig: {
+      pgvector: {
+        ef: 400,          // High accuracy for HNSW
+        probes: 20,       // High recall for IVFFlat
+        minScore: 0.85    // High quality threshold
       }
+    }
+  });
+
+  // Use for critical searches where accuracy is paramount
+  const criticalSearch = async (query: string) => {
+    return await highAccuracyTool.execute({
+      context: { 
+        queryText: query,
+        topK: 5  // Fewer, higher quality results
+      },
+      mastra
     });
+  };
+  ```
 
-    // Use for critical searches where accuracy is paramount
-    const criticalSearch = async (query: string) => {
-      return await highAccuracyTool.execute({
-        context: { 
-          queryText: query,
-          topK: 5  // Fewer, higher quality results
-        },
-        mastra
-      });
-    };
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```typescript
-    // High speed configuration - faster but less precise
-    const highSpeedTool = createVectorQueryTool({
-      vectorStoreName: "postgres", 
-      indexName: "embeddings",
-      model: openai.embedding("text-embedding-3-small"),
-      databaseConfig: {
-        pgvector: {
-          ef: 50,           // Lower accuracy for speed
-          probes: 3,        // Lower recall for speed
-          minScore: 0.6     // Lower quality threshold
-        }
+  </TabItem>
+  <TabItem value="high-speed" label="High Speed">
+
+  ```typescript
+  // High speed configuration - faster but less precise
+  const highSpeedTool = createVectorQueryTool({
+    vectorStoreName: "postgres", 
+    indexName: "embeddings",
+    model: openai.embedding("text-embedding-3-small"),
+    databaseConfig: {
+      pgvector: {
+        ef: 50,           // Lower accuracy for speed
+        probes: 3,        // Lower recall for speed
+        minScore: 0.6     // Lower quality threshold
       }
+    }
+  });
+
+  // Use for real-time applications
+  const realtimeSearch = async (query: string) => {
+    return await highSpeedTool.execute({
+      context: { 
+        queryText: query,
+        topK: 10  // More results to compensate for lower precision
+      },
+      mastra
     });
+  };
+  ```
 
-    // Use for real-time applications
-    const realtimeSearch = async (query: string) => {
-      return await highSpeedTool.execute({
-        context: { 
-          queryText: query,
-          topK: 10  // More results to compensate for lower precision
-        },
-        mastra
-      });
-    };
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```typescript
-    // Balanced configuration - good compromise
-    const balancedTool = createVectorQueryTool({
-      vectorStoreName: "postgres",
-      indexName: "embeddings", 
-      model: openai.embedding("text-embedding-3-small"),
-      databaseConfig: {
+  </TabItem>
+  <TabItem value="balanced" label="Balanced">
+
+  ```typescript
+  // Balanced configuration - good compromise
+  const balancedTool = createVectorQueryTool({
+    vectorStoreName: "postgres",
+    indexName: "embeddings", 
+    model: openai.embedding("text-embedding-3-small"),
+    databaseConfig: {
+      pgvector: {
+        ef: 150,          // Moderate accuracy
+        probes: 8,        // Moderate recall
+        minScore: 0.7     // Moderate quality threshold
+      }
+    }
+  });
+
+  // Adjust parameters based on load
+  const adaptiveSearch = async (query: string, isHighLoad: boolean) => {
+    const runtimeContext = new RuntimeContext();
+    
+    if (isHighLoad) {
+      // Reduce quality for speed during high load
+      runtimeContext.set('databaseConfig', {
         pgvector: {
-          ef: 150,          // Moderate accuracy
-          probes: 8,        // Moderate recall
-          minScore: 0.7     // Moderate quality threshold
+          ef: 75,
+          probes: 5,
+          minScore: 0.65
         }
-      }
-    });
-
-    // Adjust parameters based on load
-    const adaptiveSearch = async (query: string, isHighLoad: boolean) => {
-      const runtimeContext = new RuntimeContext();
-      
-      if (isHighLoad) {
-        // Reduce quality for speed during high load
-        runtimeContext.set('databaseConfig', {
-          pgvector: {
-            ef: 75,
-            probes: 5,
-            minScore: 0.65
-          }
-        });
-      }
-
-      return await balancedTool.execute({
-        context: { queryText: query },
-        mastra,
-        runtimeContext
       });
-    };
-    ```
-  </Tabs.Tab>
+    }
+
+    return await balancedTool.execute({
+      context: { queryText: query },
+      mastra,
+      runtimeContext
+    });
+  };
+  ```
+  
+  </TabItem>
 </Tabs>
 
 ## Multi-Tenant Application with Pinecone

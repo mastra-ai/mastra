@@ -6,6 +6,8 @@ description: Overview of voice capabilities in Mastra, including text-to-speech,
 ---
 
 import { AudioPlayback } from "@site/src/components/AudioPlayback";
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # Voice in Mastra
 
@@ -40,280 +42,288 @@ Choose from multiple providers like OpenAI, ElevenLabs, and more.
 
 For detailed configuration options and advanced features, check out our [Text-to-Speech guide](./text-to-speech).
 
-
-
 <Tabs>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { OpenAIVoice } from "@mastra/voice-openai";
-import { playAudio } from "@mastra/node-audio";
+  <TabItem value="openai" label="OpenAI">
 
-const voiceAgent = new Agent({
-name: "Voice Agent",
-instructions: "You are a voice assistant that can help users with their tasks.",
-model: openai("gpt-4o"),
-voice: new OpenAIVoice(),
-});
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { OpenAIVoice } from "@mastra/voice-openai";
+  import { playAudio } from "@mastra/node-audio";
 
-const { text } = await voiceAgent.generate('What color is the sky?');
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new OpenAIVoice(),
+  });
 
-// Convert text to speech to an Audio Stream
-const audioStream = await voiceAgent.voice.speak(text, {
-speaker: "default", // Optional: specify a speaker
-responseFormat: "wav", // Optional: specify a response format
-});
+  const { text } = await voiceAgent.generate('What color is the sky?');
 
-playAudio(audioStream);
+  // Convert text to speech to an Audio Stream
+  const audioStream = await voiceAgent.voice.speak(text, {
+    speaker: "default", // Optional: specify a speaker
+    responseFormat: "wav", // Optional: specify a response format
+  });
 
-````
+  playAudio(audioStream);
+  ```
 
-Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { AzureVoice } from "@mastra/voice-azure";
-import { playAudio } from "@mastra/node-audio";
+  Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
 
-const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new AzureVoice(),
-});
+  </TabItem>
+  <TabItem value="azure" label="Azure">
 
-const { text } = await voiceAgent.generate('What color is the sky?');
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { AzureVoice } from "@mastra/voice-azure";
+  import { playAudio } from "@mastra/node-audio";
 
-// Convert text to speech to an Audio Stream
-const audioStream = await voiceAgent.voice.speak(text, {
-  speaker: "en-US-JennyNeural", // Optional: specify a speaker
-});
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new AzureVoice(),
+  });
 
-playAudio(audioStream);
-````
+  const { text } = await voiceAgent.generate('What color is the sky?');
 
-Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
+  // Convert text to speech to an Audio Stream
+  const audioStream = await voiceAgent.voice.speak(text, {
+    speaker: "en-US-JennyNeural", // Optional: specify a speaker
+  });
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
-import { playAudio } from "@mastra/node-audio";
+  playAudio(audioStream);
+  ```
 
-const voiceAgent = new Agent({
-name: "Voice Agent",
-instructions: "You are a voice assistant that can help users with their tasks.",
-model: openai("gpt-4o"),
-voice: new ElevenLabsVoice(),
-});
+  Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
 
-const { text } = await voiceAgent.generate('What color is the sky?');
+  </TabItem>
+  <TabItem value="elevenlabs" label="ElevenLabs">
 
-// Convert text to speech to an Audio Stream
-const audioStream = await voiceAgent.voice.speak(text, {
-speaker: "default", // Optional: specify a speaker
-});
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+  import { playAudio } from "@mastra/node-audio";
 
-playAudio(audioStream);
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new ElevenLabsVoice(),
+  });
 
-````
+  const { text } = await voiceAgent.generate('What color is the sky?');
 
-Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { PlayAIVoice } from "@mastra/voice-playai";
-import { playAudio } from "@mastra/node-audio";
+  // Convert text to speech to an Audio Stream
+  const audioStream = await voiceAgent.voice.speak(text, {
+    speaker: "default", // Optional: specify a speaker
+  });
 
-const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new PlayAIVoice(),
-});
+  playAudio(audioStream);
+  ```
 
-const { text } = await voiceAgent.generate('What color is the sky?');
+  Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
 
-// Convert text to speech to an Audio Stream
-const audioStream = await voiceAgent.voice.speak(text, {
-  speaker: "default", // Optional: specify a speaker
-});
+  </TabItem>
+  <TabItem value="playai" label="PlayAI">
 
-playAudio(audioStream);
-````
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { PlayAIVoice } from "@mastra/voice-playai";
+  import { playAudio } from "@mastra/node-audio";
 
-Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new PlayAIVoice(),
+  });
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { GoogleVoice } from "@mastra/voice-google";
-import { playAudio } from "@mastra/node-audio";
+  const { text } = await voiceAgent.generate('What color is the sky?');
 
-const voiceAgent = new Agent({
-name: "Voice Agent",
-instructions: "You are a voice assistant that can help users with their tasks.",
-model: openai("gpt-4o"),
-voice: new GoogleVoice(),
-});
+  // Convert text to speech to an Audio Stream
+  const audioStream = await voiceAgent.voice.speak(text, {
+    speaker: "default", // Optional: specify a speaker
+  });
 
-const { text } = await voiceAgent.generate('What color is the sky?');
+  playAudio(audioStream);
+  ```
 
-// Convert text to speech to an Audio Stream
-const audioStream = await voiceAgent.voice.speak(text, {
-speaker: "en-US-Studio-O", // Optional: specify a speaker
-});
+  Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
 
-playAudio(audioStream);
+  </TabItem>
+  <TabItem value="google" label="Google">
 
-````
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { GoogleVoice } from "@mastra/voice-google";
+  import { playAudio } from "@mastra/node-audio";
 
-Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { CloudflareVoice } from "@mastra/voice-cloudflare";
-import { playAudio } from "@mastra/node-audio";
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new GoogleVoice(),
+  });
 
-const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new CloudflareVoice(),
-});
+  const { text } = await voiceAgent.generate('What color is the sky?');
 
-const { text } = await voiceAgent.generate('What color is the sky?');
+  // Convert text to speech to an Audio Stream
+  const audioStream = await voiceAgent.voice.speak(text, {
+    speaker: "en-US-Studio-O", // Optional: specify a speaker
+  });
 
-// Convert text to speech to an Audio Stream
-const audioStream = await voiceAgent.voice.speak(text, {
-  speaker: "default", // Optional: specify a speaker
-});
+  playAudio(audioStream);
+  ```
 
-playAudio(audioStream);
-````
+  Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
 
-Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
+  </TabItem>
+  <TabItem value="cloudflare" label="Cloudflare">
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { DeepgramVoice } from "@mastra/voice-deepgram";
-import { playAudio } from "@mastra/node-audio";
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { CloudflareVoice } from "@mastra/voice-cloudflare";
+  import { playAudio } from "@mastra/node-audio";
 
-const voiceAgent = new Agent({
-name: "Voice Agent",
-instructions: "You are a voice assistant that can help users with their tasks.",
-model: openai("gpt-4o"),
-voice: new DeepgramVoice(),
-});
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new CloudflareVoice(),
+  });
 
-const { text } = await voiceAgent.generate('What color is the sky?');
+  const { text } = await voiceAgent.generate('What color is the sky?');
 
-// Convert text to speech to an Audio Stream
-const audioStream = await voiceAgent.voice.speak(text, {
-speaker: "aura-english-us", // Optional: specify a speaker
-});
+  // Convert text to speech to an Audio Stream
+  const audioStream = await voiceAgent.voice.speak(text, {
+    speaker: "default", // Optional: specify a speaker
+  });
 
-playAudio(audioStream);
+  playAudio(audioStream);
+  ```
 
-````
+  Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
 
-Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { SpeechifyVoice } from "@mastra/voice-speechify";
-import { playAudio } from "@mastra/node-audio";
+  </TabItem>
+  <TabItem value="deepgram" label="Deepgram">
 
-const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new SpeechifyVoice(),
-});
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { DeepgramVoice } from "@mastra/voice-deepgram";
+  import { playAudio } from "@mastra/node-audio";
 
-const { text } = await voiceAgent.generate('What color is the sky?');
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new DeepgramVoice(),
+  });
 
-// Convert text to speech to an Audio Stream
-const audioStream = await voiceAgent.voice.speak(text, {
-  speaker: "matthew", // Optional: specify a speaker
-});
+  const { text } = await voiceAgent.generate('What color is the sky?');
 
-playAudio(audioStream);
-````
+  // Convert text to speech to an Audio Stream
+  const audioStream = await voiceAgent.voice.speak(text, {
+    speaker: "aura-english-us", // Optional: specify a speaker
+  });
 
-Visit the [Speechify Voice Reference](/reference/voice/speechify) for more information on the Speechify voice provider.
+  playAudio(audioStream);
+  ```
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { SarvamVoice } from "@mastra/voice-sarvam";
-import { playAudio } from "@mastra/node-audio";
+  Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
 
-const voiceAgent = new Agent({
-name: "Voice Agent",
-instructions: "You are a voice assistant that can help users with their tasks.",
-model: openai("gpt-4o"),
-voice: new SarvamVoice(),
-});
+  </TabItem>
+  <TabItem value="speechify" label="Speechify">
 
-const { text } = await voiceAgent.generate('What color is the sky?');
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { SpeechifyVoice } from "@mastra/voice-speechify";
+  import { playAudio } from "@mastra/node-audio";
 
-// Convert text to speech to an Audio Stream
-const audioStream = await voiceAgent.voice.speak(text, {
-speaker: "default", // Optional: specify a speaker
-});
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new SpeechifyVoice(),
+  });
 
-playAudio(audioStream);
+  const { text } = await voiceAgent.generate('What color is the sky?');
 
-````
+  // Convert text to speech to an Audio Stream
+  const audioStream = await voiceAgent.voice.speak(text, {
+    speaker: "matthew", // Optional: specify a speaker
+  });
 
-Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { MurfVoice } from "@mastra/voice-murf";
-import { playAudio } from "@mastra/node-audio";
+  playAudio(audioStream);
+  ```
 
-const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new MurfVoice(),
-});
+  Visit the [Speechify Voice Reference](/reference/voice/speechify) for more information on the Speechify voice provider.
 
-const { text } = await voiceAgent.generate('What color is the sky?');
+  </TabItem>
+  <TabItem value="sarvam" label="Sarvam">
 
-// Convert text to speech to an Audio Stream
-const audioStream = await voiceAgent.voice.speak(text, {
-  speaker: "default", // Optional: specify a speaker
-});
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { SarvamVoice } from "@mastra/voice-sarvam";
+  import { playAudio } from "@mastra/node-audio";
 
-playAudio(audioStream);
-````
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new SarvamVoice(),
+  });
 
-Visit the [Murf Voice Reference](/reference/voice/murf) for more information on the Murf voice provider.
+  const { text } = await voiceAgent.generate('What color is the sky?');
 
-  </Tabs.Tab>
+  // Convert text to speech to an Audio Stream
+  const audioStream = await voiceAgent.voice.speak(text, {
+    speaker: "default", // Optional: specify a speaker
+  });
+
+  playAudio(audioStream);
+  ```
+
+  Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+
+  </TabItem>
+  <TabItem value="murf" label="Murf">
+
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { MurfVoice } from "@mastra/voice-murf";
+  import { playAudio } from "@mastra/node-audio";
+
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new MurfVoice(),
+  });
+
+  const { text } = await voiceAgent.generate('What color is the sky?');
+
+  // Convert text to speech to an Audio Stream
+  const audioStream = await voiceAgent.voice.speak(text, {
+    speaker: "default", // Optional: specify a speaker
+  });
+
+  playAudio(audioStream);
+  ```
+
+  Visit the [Murf Voice Reference](/reference/voice/murf) for more information on the Murf voice provider.
+
+  </TabItem>
 </Tabs>
 
 ### Speech to Text (STT)
@@ -325,206 +335,211 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
 <br />
 <AudioPlayback audio="https://github.com/mastra-ai/realtime-voice-demo/raw/refs/heads/main/how_can_i_help_you.mp3" />
 
-
-
 <Tabs>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { OpenAIVoice } from "@mastra/voice-openai";
-import { createReadStream } from 'fs';
+  <TabItem value="openai" label="OpenAI">
 
-const voiceAgent = new Agent({
-name: "Voice Agent",
-instructions: "You are a voice assistant that can help users with their tasks.",
-model: openai("gpt-4o"),
-voice: new OpenAIVoice(),
-});
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { OpenAIVoice } from "@mastra/voice-openai";
+  import { createReadStream } from 'fs';
 
-// Use an audio file from a URL
-const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new OpenAIVoice(),
+  });
 
-// Convert audio to text
-const transcript = await voiceAgent.voice.listen(audioStream);
-console.log(`User said: ${transcript}`);
+  // Use an audio file from a URL
+  const audioStream = await createReadStream("./how_can_i_help_you.mp3");
 
-// Generate a response based on the transcript
-const { text } = await voiceAgent.generate(transcript);
+  // Convert audio to text
+  const transcript = await voiceAgent.voice.listen(audioStream);
+  console.log(`User said: ${transcript}`);
 
-````
+  // Generate a response based on the transcript
+  const { text } = await voiceAgent.generate(transcript);
+  ```
 
-Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { createReadStream } from 'fs';
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { AzureVoice } from "@mastra/voice-azure";
-import { createReadStream } from 'fs';
+  Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
 
-const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new AzureVoice(),
-});
+  </TabItem>
+  <TabItem value="azure" label="Azure">
 
-// Use an audio file from a URL
-const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+  ```typescript
+  import { createReadStream } from 'fs';
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { AzureVoice } from "@mastra/voice-azure";
+  import { createReadStream } from 'fs';
 
-// Convert audio to text
-const transcript = await voiceAgent.voice.listen(audioStream);
-console.log(`User said: ${transcript}`);
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new AzureVoice(),
+  });
 
-// Generate a response based on the transcript
-const { text } = await voiceAgent.generate(transcript);
-````
+  // Use an audio file from a URL
+  const audioStream = await createReadStream("./how_can_i_help_you.mp3");
 
-Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
+  // Convert audio to text
+  const transcript = await voiceAgent.voice.listen(audioStream);
+  console.log(`User said: ${transcript}`);
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
-import { createReadStream } from 'fs';
+  // Generate a response based on the transcript
+  const { text } = await voiceAgent.generate(transcript);
+  ```
 
-const voiceAgent = new Agent({
-name: "Voice Agent",
-instructions: "You are a voice assistant that can help users with their tasks.",
-model: openai("gpt-4o"),
-voice: new ElevenLabsVoice(),
-});
+  Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
 
-// Use an audio file from a URL
-const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+  </TabItem>
+  <TabItem value="elevenlabs" label="ElevenLabs">
 
-// Convert audio to text
-const transcript = await voiceAgent.voice.listen(audioStream);
-console.log(`User said: ${transcript}`);
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+  import { createReadStream } from 'fs';
 
-// Generate a response based on the transcript
-const { text } = await voiceAgent.generate(transcript);
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new ElevenLabsVoice(),
+  });
 
-````
+  // Use an audio file from a URL
+  const audioStream = await createReadStream("./how_can_i_help_you.mp3");
 
-Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { GoogleVoice } from "@mastra/voice-google";
-import { createReadStream } from 'fs';
+  // Convert audio to text
+  const transcript = await voiceAgent.voice.listen(audioStream);
+  console.log(`User said: ${transcript}`);
 
-const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new GoogleVoice(),
-});
+  // Generate a response based on the transcript
+  const { text } = await voiceAgent.generate(transcript);
+  ```
 
-// Use an audio file from a URL
-const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+  Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
 
-// Convert audio to text
-const transcript = await voiceAgent.voice.listen(audioStream);
-console.log(`User said: ${transcript}`);
+  </TabItem>
+  <TabItem value="google" label="Google">
 
-// Generate a response based on the transcript
-const { text } = await voiceAgent.generate(transcript);
-````
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { GoogleVoice } from "@mastra/voice-google";
+  import { createReadStream } from 'fs';
 
-Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new GoogleVoice(),
+  });
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { CloudflareVoice } from "@mastra/voice-cloudflare";
-import { createReadStream } from 'fs';
+  // Use an audio file from a URL
+  const audioStream = await createReadStream("./how_can_i_help_you.mp3");
 
-const voiceAgent = new Agent({
-name: "Voice Agent",
-instructions: "You are a voice assistant that can help users with their tasks.",
-model: openai("gpt-4o"),
-voice: new CloudflareVoice(),
-});
+  // Convert audio to text
+  const transcript = await voiceAgent.voice.listen(audioStream);
+  console.log(`User said: ${transcript}`);
 
-// Use an audio file from a URL
-const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+  // Generate a response based on the transcript
+  const { text } = await voiceAgent.generate(transcript);
+  ```
 
-// Convert audio to text
-const transcript = await voiceAgent.voice.listen(audioStream);
-console.log(`User said: ${transcript}`);
+  Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
 
-// Generate a response based on the transcript
-const { text } = await voiceAgent.generate(transcript);
+  </TabItem>
+  <TabItem value="cloudflare" label="Cloudflare">
 
-````
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { CloudflareVoice } from "@mastra/voice-cloudflare";
+  import { createReadStream } from 'fs';
 
-Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { DeepgramVoice } from "@mastra/voice-deepgram";
-import { createReadStream } from 'fs';
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new CloudflareVoice(),
+  });
 
-const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new DeepgramVoice(),
-});
+  // Use an audio file from a URL
+  const audioStream = await createReadStream("./how_can_i_help_you.mp3");
 
-// Use an audio file from a URL
-const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+  // Convert audio to text
+  const transcript = await voiceAgent.voice.listen(audioStream);
+  console.log(`User said: ${transcript}`);
 
-// Convert audio to text
-const transcript = await voiceAgent.voice.listen(audioStream);
-console.log(`User said: ${transcript}`);
+  // Generate a response based on the transcript
+  const { text } = await voiceAgent.generate(transcript);
+  ```
 
-// Generate a response based on the transcript
-const { text } = await voiceAgent.generate(transcript);
-````
+  Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
 
-Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
+  </TabItem>
+  <TabItem value="deepgram" label="Deepgram">
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { SarvamVoice } from "@mastra/voice-sarvam";
-import { createReadStream } from 'fs';
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { DeepgramVoice } from "@mastra/voice-deepgram";
+  import { createReadStream } from 'fs';
 
-const voiceAgent = new Agent({
-name: "Voice Agent",
-instructions: "You are a voice assistant that can help users with their tasks.",
-model: openai("gpt-4o"),
-voice: new SarvamVoice(),
-});
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new DeepgramVoice(),
+  });
 
-// Use an audio file from a URL
-const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+  // Use an audio file from a URL
+  const audioStream = await createReadStream("./how_can_i_help_you.mp3");
 
-// Convert audio to text
-const transcript = await voiceAgent.voice.listen(audioStream);
-console.log(`User said: ${transcript}`);
+  // Convert audio to text
+  const transcript = await voiceAgent.voice.listen(audioStream);
+  console.log(`User said: ${transcript}`);
 
-// Generate a response based on the transcript
-const { text } = await voiceAgent.generate(transcript);
+  // Generate a response based on the transcript
+  const { text } = await voiceAgent.generate(transcript);
+  ```
 
-````
+  Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
 
-Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
-  </Tabs.Tab>
+  </TabItem>
+  <TabItem value="sarvam" label="Sarvam">
+
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { SarvamVoice } from "@mastra/voice-sarvam";
+  import { createReadStream } from 'fs';
+
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new SarvamVoice(),
+  });
+
+  // Use an audio file from a URL
+  const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+  // Convert audio to text
+  const transcript = await voiceAgent.voice.listen(audioStream);
+  console.log(`User said: ${transcript}`);
+
+  // Generate a response based on the transcript
+  const { text } = await voiceAgent.generate(transcript);
+  ```
+
+  Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+
+  </TabItem>
 </Tabs>
 
 ### Speech to Speech (STS)
@@ -532,329 +547,340 @@ Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information
 Create conversational experiences with speech-to-speech capabilities. The unified API enables real-time voice interactions between users and AI agents.
 For detailed configuration options and advanced features, check out [Speech to Speech](./speech-to-speech).
 
-
 <Tabs>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+  <TabItem value="openai" label="OpenAI">
 
-const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new OpenAIRealtimeVoice(),
-});
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
+  import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 
-// Listen for agent audio responses
-voiceAgent.voice.on('speaker', ({ audio }) => {
-  playAudio(audio);
-});
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new OpenAIRealtimeVoice(),
+  });
 
-// Initiate the conversation
-await voiceAgent.voice.speak('How can I help you today?');
+  // Listen for agent audio responses
+  voiceAgent.voice.on('speaker', ({ audio }) => {
+    playAudio(audio);
+  });
 
-// Send continuous audio from the microphone
-const micStream = getMicrophoneStream();
-await voiceAgent.voice.send(micStream);
-````
+  // Initiate the conversation
+  await voiceAgent.voice.speak('How can I help you today?');
 
-Visit the [OpenAI Voice Reference](/reference/voice/openai-realtime) for more information on the OpenAI voice provider.
+  // Send continuous audio from the microphone
+  const micStream = getMicrophoneStream();
+  await voiceAgent.voice.send(micStream);
+  ```
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
-import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
+  Visit the [OpenAI Voice Reference](/reference/voice/openai-realtime) for more information on the OpenAI voice provider.
 
-const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new GeminiLiveVoice({
-    // Live API mode
-    apiKey: process.env.GOOGLE_API_KEY,
-    model: 'gemini-2.0-flash-exp',
-    speaker: 'Puck',
-    debug: true,
-    // Vertex AI alternative:
-    // vertexAI: true,
-    // project: 'your-gcp-project',
-    // location: 'us-central1',
-    // serviceAccountKeyFile: '/path/to/service-account.json',
-  }),
-});
+  </TabItem>
+  <TabItem value="google" label="Google">
 
-// Connect before using speak/send
-await voiceAgent.voice.connect();
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai';
+  import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
+  import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
 
-// Listen for agent audio responses
-voiceAgent.voice.on('speaker', ({ audio }) => {
-  playAudio(audio);
-});
+  const voiceAgent = new Agent({
+    name: "Voice Agent",
+    instructions: "You are a voice assistant that can help users with their tasks.",
+    model: openai("gpt-4o"),
+    voice: new GeminiLiveVoice({
+      // Live API mode
+      apiKey: process.env.GOOGLE_API_KEY,
+      model: 'gemini-2.0-flash-exp',
+      speaker: 'Puck',
+      debug: true,
+      // Vertex AI alternative:
+      // vertexAI: true,
+      // project: 'your-gcp-project',
+      // location: 'us-central1',
+      // serviceAccountKeyFile: '/path/to/service-account.json',
+    }),
+  });
 
-// Listen for text responses and transcriptions
-voiceAgent.voice.on('writing', ({ text, role }) => {
-  console.log(`${role}: ${text}`);
-});
+  // Connect before using speak/send
+  await voiceAgent.voice.connect();
 
-// Initiate the conversation
-await voiceAgent.voice.speak('How can I help you today?');
+  // Listen for agent audio responses
+  voiceAgent.voice.on('speaker', ({ audio }) => {
+    playAudio(audio);
+  });
 
-// Send continuous audio from the microphone
-const micStream = getMicrophoneStream();
-await voiceAgent.voice.send(micStream);
-```
+  // Listen for text responses and transcriptions
+  voiceAgent.voice.on('writing', ({ text, role }) => {
+    console.log(`${role}: ${text}`);
+  });
 
-Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
+  // Initiate the conversation
+  await voiceAgent.voice.speak('How can I help you today?');
 
-  </Tabs.Tab>
+  // Send continuous audio from the microphone
+  const micStream = getMicrophoneStream();
+  await voiceAgent.voice.send(micStream);
+  ```
+
+  Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
+
+  </TabItem>
 </Tabs>
 
 ## Voice Configuration
 
 Each voice provider can be configured with different models and options. Below are the detailed configuration options for all supported providers:
 
-
-
 <Tabs>
-  <Tabs.Tab>
-```typescript
-// OpenAI Voice Configuration
-const voice = new OpenAIVoice({
-  speechModel: {
-    name: "gpt-3.5-turbo", // Example model name
-    apiKey: process.env.OPENAI_API_KEY,
-    language: "en-US", // Language code
-    voiceType: "neural", // Type of voice model
-  },
-  listeningModel: {
-    name: "whisper-1", // Example model name
-    apiKey: process.env.OPENAI_API_KEY,
-    language: "en-US", // Language code
-    format: "wav", // Audio format
-  },
-  speaker: "alloy", // Example speaker name
-});
-```
+  <TabItem value="openai" label="OpenAI">
 
-Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
+  ```typescript
+  // OpenAI Voice Configuration
+  const voice = new OpenAIVoice({
+    speechModel: {
+      name: "gpt-3.5-turbo", // Example model name
+      apiKey: process.env.OPENAI_API_KEY,
+      language: "en-US", // Language code
+      voiceType: "neural", // Type of voice model
+    },
+    listeningModel: {
+      name: "whisper-1", // Example model name
+      apiKey: process.env.OPENAI_API_KEY,
+      language: "en-US", // Language code
+      format: "wav", // Audio format
+    },
+    speaker: "alloy", // Example speaker name
+  });
+  ```
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-// Azure Voice Configuration
-const voice = new AzureVoice({
-  speechModel: {
-    name: "en-US-JennyNeural", // Example model name
-    apiKey: process.env.AZURE_SPEECH_KEY,
-    region: process.env.AZURE_SPEECH_REGION,
-    language: "en-US", // Language code
-    style: "cheerful", // Voice style
-    pitch: "+0Hz", // Pitch adjustment
-    rate: "1.0", // Speech rate
-  },
-  listeningModel: {
-    name: "en-US", // Example model name
-    apiKey: process.env.AZURE_SPEECH_KEY,
-    region: process.env.AZURE_SPEECH_REGION,
-    format: "simple", // Output format
-  },
-});
-```
+  Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
 
-Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
+  </TabItem>
+  <TabItem value="azure" label="Azure">
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-// ElevenLabs Voice Configuration
-const voice = new ElevenLabsVoice({
-  speechModel: {
-    voiceId: "your-voice-id", // Example voice ID
-    model: "eleven_multilingual_v2", // Example model name
-    apiKey: process.env.ELEVENLABS_API_KEY,
-    language: "en", // Language code
-    emotion: "neutral", // Emotion setting
-  },
-  // ElevenLabs may not have a separate listening model
-});
-```
+  ```typescript
+  // Azure Voice Configuration
+  const voice = new AzureVoice({
+    speechModel: {
+      name: "en-US-JennyNeural", // Example model name
+      apiKey: process.env.AZURE_SPEECH_KEY,
+      region: process.env.AZURE_SPEECH_REGION,
+      language: "en-US", // Language code
+      style: "cheerful", // Voice style
+      pitch: "+0Hz", // Pitch adjustment
+      rate: "1.0", // Speech rate
+    },
+    listeningModel: {
+      name: "en-US", // Example model name
+      apiKey: process.env.AZURE_SPEECH_KEY,
+      region: process.env.AZURE_SPEECH_REGION,
+      format: "simple", // Output format
+    },
+  });
+  ```
 
-Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
+  Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-// PlayAI Voice Configuration
-const voice = new PlayAIVoice({
-  speechModel: {
-    name: "playai-voice", // Example model name
-    speaker: "emma", // Example speaker name
-    apiKey: process.env.PLAYAI_API_KEY,
-    language: "en-US", // Language code
-    speed: 1.0, // Speech speed
-  },
-  // PlayAI may not have a separate listening model
-});
-```
+  </TabItem>
+  <TabItem value="elevenlabs" label="ElevenLabs">
 
-Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
+  ```typescript
+  // ElevenLabs Voice Configuration
+  const voice = new ElevenLabsVoice({
+    speechModel: {
+      voiceId: "your-voice-id", // Example voice ID
+      model: "eleven_multilingual_v2", // Example model name
+      apiKey: process.env.ELEVENLABS_API_KEY,
+      language: "en", // Language code
+      emotion: "neutral", // Emotion setting
+    },
+    // ElevenLabs may not have a separate listening model
+  });
+  ```
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-// Google Voice Configuration
-const voice = new GoogleVoice({
-  speechModel: {
-    name: "en-US-Studio-O", // Example model name
-    apiKey: process.env.GOOGLE_API_KEY,
-    languageCode: "en-US", // Language code
-    gender: "FEMALE", // Voice gender
-    speakingRate: 1.0, // Speaking rate
-  },
-  listeningModel: {
-    name: "en-US", // Example model name
-    sampleRateHertz: 16000, // Sample rate
-  },
-});
-```
+  Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
 
-Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
+  </TabItem>
+  <TabItem value="playai" label="PlayAI">
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-// Cloudflare Voice Configuration
-const voice = new CloudflareVoice({
-  speechModel: {
-    name: "cloudflare-voice", // Example model name
-    accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
-    apiToken: process.env.CLOUDFLARE_API_TOKEN,
-    language: "en-US", // Language code
-    format: "mp3", // Audio format
-  },
-  // Cloudflare may not have a separate listening model
-});
-```
+  ```typescript
+  // PlayAI Voice Configuration
+  const voice = new PlayAIVoice({
+    speechModel: {
+      name: "playai-voice", // Example model name
+      speaker: "emma", // Example speaker name
+      apiKey: process.env.PLAYAI_API_KEY,
+      language: "en-US", // Language code
+      speed: 1.0, // Speech speed
+    },
+    // PlayAI may not have a separate listening model
+  });
+  ```
 
-Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
+  Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-// Deepgram Voice Configuration
-const voice = new DeepgramVoice({
-  speechModel: {
-    name: "nova-2", // Example model name
-    speaker: "aura-english-us", // Example speaker name
-    apiKey: process.env.DEEPGRAM_API_KEY,
-    language: "en-US", // Language code
-    tone: "formal", // Tone setting
-  },
-  listeningModel: {
-    name: "nova-2", // Example model name
-    format: "flac", // Audio format
-  },
-});
-```
+  </TabItem>
+  <TabItem value="google" label="Google">
 
-Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
+  ```typescript
+  // Google Voice Configuration
+  const voice = new GoogleVoice({
+    speechModel: {
+      name: "en-US-Studio-O", // Example model name
+      apiKey: process.env.GOOGLE_API_KEY,
+      languageCode: "en-US", // Language code
+      gender: "FEMALE", // Voice gender
+      speakingRate: 1.0, // Speaking rate
+    },
+    listeningModel: {
+      name: "en-US", // Example model name
+      sampleRateHertz: 16000, // Sample rate
+    },
+  });
+  ```
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-// Speechify Voice Configuration
-const voice = new SpeechifyVoice({
-  speechModel: {
-    name: "speechify-voice", // Example model name
-    speaker: "matthew", // Example speaker name
-    apiKey: process.env.SPEECHIFY_API_KEY,
-    language: "en-US", // Language code
-    speed: 1.0, // Speech speed
-  },
-  // Speechify may not have a separate listening model
-});
-```
+  Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
 
-Visit the [Speechify Voice Reference](/reference/voice/speechify) for more information on the Speechify voice provider.
+  </TabItem>
+  <TabItem value="cloudflare" label="Cloudflare">
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-// Sarvam Voice Configuration
-const voice = new SarvamVoice({
-  speechModel: {
-    name: "sarvam-voice", // Example model name
-    apiKey: process.env.SARVAM_API_KEY,
-    language: "en-IN", // Language code
-    style: "conversational", // Style setting
-  },
-  // Sarvam may not have a separate listening model
-});
-```
+  ```typescript
+  // Cloudflare Voice Configuration
+  const voice = new CloudflareVoice({
+    speechModel: {
+      name: "cloudflare-voice", // Example model name
+      accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+      apiToken: process.env.CLOUDFLARE_API_TOKEN,
+      language: "en-US", // Language code
+      format: "mp3", // Audio format
+    },
+    // Cloudflare may not have a separate listening model
+  });
+  ```
 
-Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+  Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-// Murf Voice Configuration
-const voice = new MurfVoice({
-  speechModel: {
-    name: "murf-voice", // Example model name
-    apiKey: process.env.MURF_API_KEY,
-    language: "en-US", // Language code
-    emotion: "happy", // Emotion setting
-  },
-  // Murf may not have a separate listening model
-});
-```
+  </TabItem>
+  <TabItem value="deepgram" label="Deepgram">
 
-Visit the [Murf Voice Reference](/reference/voice/murf) for more information on the Murf voice provider.
+  ```typescript
+  // Deepgram Voice Configuration
+  const voice = new DeepgramVoice({
+    speechModel: {
+      name: "nova-2", // Example model name
+      speaker: "aura-english-us", // Example speaker name
+      apiKey: process.env.DEEPGRAM_API_KEY,
+      language: "en-US", // Language code
+      tone: "formal", // Tone setting
+    },
+    listeningModel: {
+      name: "nova-2", // Example model name
+      format: "flac", // Audio format
+    },
+  });
+  ```
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-// OpenAI Realtime Voice Configuration
-const voice = new OpenAIRealtimeVoice({
-  speechModel: {
-    name: "gpt-3.5-turbo", // Example model name
-    apiKey: process.env.OPENAI_API_KEY,
-    language: "en-US", // Language code
-  },
-  listeningModel: {
-    name: "whisper-1", // Example model name
-    apiKey: process.env.OPENAI_API_KEY,
-    format: "ogg", // Audio format
-  },
-  speaker: "alloy", // Example speaker name
-});
-```
+  Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
 
-For more information on the OpenAI Realtime voice provider, refer to the [OpenAI Realtime Voice Reference](/reference/voice/openai-realtime).
+  </TabItem>
+  <TabItem value="speechify" label="Speechify">
 
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-// Google Gemini Live Voice Configuration
-const voice = new GeminiLiveVoice({
-  speechModel: {
-    name: "gemini-2.0-flash-exp", // Example model name
-    apiKey: process.env.GOOGLE_API_KEY,
-  },
-  speaker: "Puck", // Example speaker name
-  // Google Gemini Live is a realtime bidirectional API without separate speech and listening models
-});
-```
+  ```typescript
+  // Speechify Voice Configuration
+  const voice = new SpeechifyVoice({
+    speechModel: {
+      name: "speechify-voice", // Example model name
+      speaker: "matthew", // Example speaker name
+      apiKey: process.env.SPEECHIFY_API_KEY,
+      language: "en-US", // Language code
+      speed: 1.0, // Speech speed
+    },
+    // Speechify may not have a separate listening model
+  });
+  ```
 
-Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
+  Visit the [Speechify Voice Reference](/reference/voice/speechify) for more information on the Speechify voice provider.
 
-  </Tabs.Tab>
+  </TabItem>
+  <TabItem value="sarvam" label="Sarvam">
+
+  ```typescript
+  // Sarvam Voice Configuration
+  const voice = new SarvamVoice({
+    speechModel: {
+      name: "sarvam-voice", // Example model name
+      apiKey: process.env.SARVAM_API_KEY,
+      language: "en-IN", // Language code
+      style: "conversational", // Style setting
+    },
+    // Sarvam may not have a separate listening model
+  });
+  ```
+
+  Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+
+  </TabItem>
+  <TabItem value="murf" label="Murf">
+
+  ```typescript
+  // Murf Voice Configuration
+  const voice = new MurfVoice({
+    speechModel: {
+      name: "murf-voice", // Example model name
+      apiKey: process.env.MURF_API_KEY,
+      language: "en-US", // Language code
+      emotion: "happy", // Emotion setting
+    },
+    // Murf may not have a separate listening model
+  });
+  ```
+
+  Visit the [Murf Voice Reference](/reference/voice/murf) for more information on the Murf voice provider.
+
+  </TabItem>
+  <TabItem value="openai-realtime" label="OpenAI Realtime">
+
+  ```typescript
+  // OpenAI Realtime Voice Configuration
+  const voice = new OpenAIRealtimeVoice({
+    speechModel: {
+      name: "gpt-3.5-turbo", // Example model name
+      apiKey: process.env.OPENAI_API_KEY,
+      language: "en-US", // Language code
+    },
+    listeningModel: {
+      name: "whisper-1", // Example model name
+      apiKey: process.env.OPENAI_API_KEY,
+      format: "ogg", // Audio format
+    },
+    speaker: "alloy", // Example speaker name
+  });
+  ```
+
+  For more information on the OpenAI Realtime voice provider, refer to the [OpenAI Realtime Voice Reference](/reference/voice/openai-realtime).
+
+  </TabItem>
+  <TabItem value="google-gemini-live" label="Google Gemini Live">
+
+  ```typescript
+  // Google Gemini Live Voice Configuration
+  const voice = new GeminiLiveVoice({
+    speechModel: {
+      name: "gemini-2.0-flash-exp", // Example model name
+      apiKey: process.env.GOOGLE_API_KEY,
+    },
+    speaker: "Puck", // Example speaker name
+    // Google Gemini Live is a realtime bidirectional API without separate speech and listening models
+  });
+  ```
+
+  Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
+
+  </TabItem>
 </Tabs>
 
 ### Using Multiple Voice Providers
