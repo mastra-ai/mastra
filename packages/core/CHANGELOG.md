@@ -1,5 +1,28 @@
 # @mastra/core
 
+## 0.23.2-alpha.1
+
+### Patch Changes
+
+- Fix agent onChunk callback receiving wrapped chunk instead of direct chunk ([#9402](https://github.com/mastra-ai/mastra/pull/9402))
+
+- Fix OpenAI schema validation errors in processors ([#9400](https://github.com/mastra-ai/mastra/pull/9400))
+
+- Detect thenable objects returned by AI model providers ([#9414](https://github.com/mastra-ai/mastra/pull/9414))
+
+- Bug fix: Use input processors that are passed in generate or stream agent options rather than always defaulting to the processors set on the Agent class. ([#9422](https://github.com/mastra-ai/mastra/pull/9422))
+
+- Save correct status in snapshot for all workflow parallel steps. ([#9398](https://github.com/mastra-ai/mastra/pull/9398))
+  This ensures when you poll workflow run result using `getWorkflowRunExecutionResult(runId)`, you get the right status for all parallel steps
+
+- Fix network loop iteration counter and usage promise handling: ([#9415](https://github.com/mastra-ai/mastra/pull/9415))
+  - Fixed iteration counter in network loop that was stuck at 0 due to falsy check. Properly handled zero values to ensure maxSteps is correctly enforced.
+  - Fixed usage promise resolution in RunOutput stream by properly resolving or rejecting the promise on stream close, preventing hanging promises when streams complete.
+
+- Workflow validation zod v4 support ([#9363](https://github.com/mastra-ai/mastra/pull/9363))
+
+- Fix usage tracking with agent network ([#9413](https://github.com/mastra-ai/mastra/pull/9413))
+
 ## 0.23.2-alpha.0
 
 ### Patch Changes
