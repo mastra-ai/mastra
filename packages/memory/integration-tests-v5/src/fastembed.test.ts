@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
 import type { EmbeddingModelV2 } from '@ai-sdk/provider';
-import { embed as embedV2 } from 'ai';
 import { fastembed } from '@mastra/fastembed';
+import { embed as embedV2 } from 'ai';
+import { describe, it, expect } from 'vitest';
 
 describe('FastEmbed AI SDK v2 Compatibility', () => {
   describe('v2 specification', () => {
@@ -76,7 +76,7 @@ describe('FastEmbed AI SDK v2 Compatibility', () => {
 
     it('should not be assignable to EmbeddingModelV2 type', () => {
       // @ts-expect-error - legacy models are v1, cannot assign to v2 type
-      const model: EmbeddingModelV2<string> = fastembed.smallLegacy;
+      const _model: EmbeddingModelV2<string> = fastembed.smallLegacy;
     });
 
     it('should fail when used with AI SDK v5 embed function', async () => {
