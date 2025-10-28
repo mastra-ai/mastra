@@ -141,7 +141,7 @@ export default function ChatbotSidebar({
         <div className={styles.chatbotContent} ref={scrollRef}>
           <div
             className={cn(
-              "sticky top-0 backdrop-blur-md bg-(--mastra-surface-1)/50 z-10 flex items-center gap-2 px-3 py-2 -mx-[10px]",
+              "sticky top-0 backdrop-blur-md bg-(--mastra-surface-1)/50 z-10 flex items-center gap-2 px-3  py-2 pt-1 -mx-[10px]",
               !hiddenChatbotSidebar && "border-b border-(--border)",
             )}
           >
