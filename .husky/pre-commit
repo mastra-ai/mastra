@@ -6,9 +6,6 @@ pnpm --version || {
 # Run TS typecheck
 pnpm typecheck
 
-# Run lint checks
-pnpm lint -- --fix
-
 # Formatting on staged files
 pnpm lint-staged
 
