@@ -26,6 +26,8 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
 
   #streamFinished = false;
 
+  #streamError: Error | undefined;
+
   #delayedPromises = {
     usage: new DelayedPromise<LanguageModelUsage>(),
     result: new DelayedPromise<TResult>(),
@@ -99,7 +101,10 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
               from: ChunkFrom.WORKFLOW,
               payload: {
                 workflowStatus: self.#status,
-                metadata: {},
+                metadata: {
+                  error: self.#streamError,
+                  errorMessage: self.#streamError?.message,
+                },
                 output: {
                   // @ts-ignore
                   usage: self.#usageCount,
@@ -176,6 +181,8 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
    */
   rejectResults(error: Error) {
     this.#delayedPromises.result.reject(error);
+    this.#status = 'failed';
+    this.#streamError = error;
   }
 
   /**
@@ -237,7 +244,10 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
               from: ChunkFrom.WORKFLOW,
               payload: {
                 workflowStatus: self.#status,
-                metadata: {},
+                metadata: {
+                  error: self.#streamError,
+                  errorMessage: self.#streamError?.message,
+                },
                 output: {
                   // @ts-ignore
                   usage: self.#usageCount,

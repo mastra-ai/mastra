@@ -230,10 +230,17 @@ export const useStreamWorkflow = () => {
             if (value.type === 'workflow-step-suspended') {
               setIsStreaming(false);
             }
+
+            if (value.type === 'workflow-finish') {
+              const streamStatus = value.payload.workflowStatus;
+              const metadata = value.payload.metadata;
+              if (streamStatus === 'failed' && metadata?.errorMessage) {
+                throw new Error(metadata.errorMessage);
+              }
+            }
           }
         }
       } catch (error) {
-        console.error('Error streaming workflow:', error);
         toast.error((error as Error)?.message ?? 'Error streaming workflow');
       } finally {
         if (isMountedRef.current) {
@@ -246,7 +253,6 @@ export const useStreamWorkflow = () => {
       }
     },
     onError: error => {
-      console.log('Error streaming workflow:', error);
       toast.error(error.message ?? 'Error streaming workflow');
       setIsStreaming(false);
     },
@@ -306,10 +312,17 @@ export const useStreamWorkflow = () => {
             if (value.type === 'workflow-step-suspended') {
               setIsStreaming(false);
             }
+
+            if (value.type === 'workflow-finish') {
+              const streamStatus = value.payload.workflowStatus;
+              const metadata = value.payload.metadata;
+              if (streamStatus === 'failed' && metadata?.errorMessage) {
+                throw new Error(metadata.errorMessage);
+              }
+            }
           }
         }
       } catch (error) {
-        console.error('Error streaming workflow:', error);
         toast.error((error as Error)?.message ?? 'Error streaming workflow');
       } finally {
         if (isMountedRef.current) {
@@ -322,7 +335,6 @@ export const useStreamWorkflow = () => {
       }
     },
     onError: error => {
-      console.log('Error observing workflow stream:', error);
       toast.error(error.message ?? 'Error observing workflow stream');
       setIsStreaming(false);
     },
@@ -384,10 +396,17 @@ export const useStreamWorkflow = () => {
             if (value.type === 'workflow-step-suspended') {
               setIsStreaming(false);
             }
+
+            if (value.type === 'workflow-finish') {
+              const streamStatus = value.payload.workflowStatus;
+              const metadata = value.payload.metadata;
+              if (streamStatus === 'failed' && metadata?.errorMessage) {
+                throw new Error(metadata.errorMessage);
+              }
+            }
           }
         }
       } catch (error) {
-        console.error('Error resuming workflow stream:', error);
         toast.error((error as Error)?.message ?? 'Error resuming workflow stream');
         //silent error
       } finally {
@@ -401,7 +420,6 @@ export const useStreamWorkflow = () => {
       }
     },
     onError: error => {
-      console.log('Error resuming workflow stream:', error);
       toast.error(error.message ?? 'Error resuming workflow stream');
       setIsStreaming(false);
     },

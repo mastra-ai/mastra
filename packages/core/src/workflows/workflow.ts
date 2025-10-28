@@ -2067,6 +2067,7 @@ export class Run<
     this.closeStreamAction = async () => {};
 
     const self = this;
+    let error: Error | undefined;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         // TODO: fix this, watch-v2 doesn't have a type
@@ -2110,11 +2111,20 @@ export class Run<
 
         self.executionResults = executionResultsPromise;
 
-        const executionResults = await executionResultsPromise;
-        self.closeStreamAction?.().catch(() => {});
+        let executionResults;
+        try {
+          executionResults = await executionResultsPromise;
+          self.closeStreamAction?.().catch(() => {});
 
-        if (self.#streamOutput) {
-          self.#streamOutput.updateResults(executionResults);
+          if (self.#streamOutput) {
+            self.#streamOutput.updateResults(executionResults);
+          }
+        } catch (err) {
+          console.log('Catches error in core resumeStreamVNext', err);
+          self.#streamOutput?.rejectResults(err as unknown as Error);
+          self.closeStreamAction?.().catch(() => {});
+          error = err as unknown as Error;
+          throw err;
         }
       },
     });
@@ -2124,6 +2134,10 @@ export class Run<
       workflowId: this.workflowId,
       stream,
     });
+
+    if (error) {
+      throw error;
+    }
 
     return this.#streamOutput;
   }
