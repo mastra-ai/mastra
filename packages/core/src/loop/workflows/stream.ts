@@ -168,29 +168,8 @@ export function workflowLoopStream<
         models, // models contain provider functions that can't be serialized
       };
 
-      console.log('[DEBUG] Created freshExecutionObjects:', {
-        hasController: !!controller,
-        hasWriter: !!writer,
-        hasModelStreamSpan: !!modelStreamSpan,
-        hasMessageList: !!messageList,
-        hasStreamState: !!streamState,
-        hasTools: !!rest.tools,
-        toolsCount: rest.tools ? Object.keys(rest.tools).length : 0,
-        hasTelemetrySettings: !!telemetry_settings,
-        hasModelSpanTracker: !!rest.modelSpanTracker,
-        hasModels: !!models,
-        modelCount: models ? models.length : 0,
-        streamStateFns: streamState ? Object.keys(streamState) : [],
-      });
-
       const executionResult = resumeContext
         ? await (async () => {
-            console.log('[DEBUG] Resuming workflow with freshExecutionObjects:', {
-              hasResumeData: !!resumeContext.resumeData,
-              resumeData: resumeContext.resumeData,
-              label: toolCallId,
-              hasStateOverride: !!freshExecutionObjects,
-            });
             return run.resume({
               resumeData: resumeContext.resumeData,
               tracingContext: { currentSpan: llmAISpan },
@@ -206,31 +185,16 @@ export function workflowLoopStream<
             runtimeContext,
           });
 
-      console.log('[DEBUG] stream.ts: Workflow execution completed:', {
-        status: executionResult.status,
-        reason: executionResult.result?.stepResult?.reason,
-        isContinued: executionResult.result?.stepResult?.isContinued,
-        hasResult: !!executionResult.result,
-        isResume: !!resumeContext,
-        error: executionResult.status === 'failed' ? executionResult.error : undefined,
-      });
-
       if (executionResult.status !== 'success') {
-        console.log('[DEBUG] stream.ts: Closing controller - execution not successful');
-        if (executionResult.status === 'failed') {
-          console.error('[DEBUG] stream.ts: Workflow failed with error:', executionResult.error);
-        }
         controller.close();
         return;
       }
 
       if (executionResult.result.stepResult?.reason === 'abort') {
-        console.log('[DEBUG] stream.ts: Closing controller - abort reason');
         controller.close();
         return;
       }
 
-      console.log('[DEBUG] stream.ts: Enqueueing finish chunk');
       controller.enqueue({
         type: 'finish',
         runId,

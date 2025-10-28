@@ -437,7 +437,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               name: z.string(),
             }),
             execute: async ({ context }) => {
-              console.log('executing tool', context);
               return mockFindUser(context) as Promise<Record<string, any>>;
             },
           });

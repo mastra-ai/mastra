@@ -16,18 +16,6 @@ export function createToolCallStep<
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
     execute: async ({ inputData, suspend, resumeData, runtimeContext, state }) => {
-      console.log('[DEBUG] Tool-call-step executing:', {
-        toolName: inputData.toolName,
-        toolCallId: inputData.toolCallId,
-        hasResumeData: !!resumeData,
-        resumeData,
-        inputData,
-        hasController: !!state.controller,
-        hasWriter: !!state.writer,
-        hasStreamState: !!state.streamState,
-        stateKeys: Object.keys(state).slice(0, 10), // Limit to first 10 keys
-      });
-
       // Access dynamic data from workflow state (shared across nested workflows)
       const {
         telemetry_settings,
@@ -95,7 +83,6 @@ export function createToolCallStep<
         }
       }
 
-      console.log('tool.execute', tool.execute, tool);
       if (!tool.execute) {
         return inputData;
       }
@@ -115,18 +102,10 @@ export function createToolCallStep<
         'stream.toolCall.args': JSON.stringify(inputData.args),
       });
 
-      console.log('try');
       try {
         const requireToolApproval = runtimeContext.get('__mastra_requireToolApproval');
-        console.log('[DEBUG] Tool approval check:', {
-          requireToolApproval,
-          toolRequiresApproval: (tool as any).requireApproval,
-          hasResumeData: !!resumeData,
-          willEnterApprovalBlock: !!(requireToolApproval || (tool as any).requireApproval),
-        });
         if (requireToolApproval || (tool as any).requireApproval) {
           if (!resumeData) {
-            console.log('[DEBUG] Entering suspension for tool approval');
             controller.enqueue({
               type: 'tool-call-approval',
               runId,
@@ -151,12 +130,6 @@ export function createToolCallStep<
               },
             );
           } else {
-            console.log('[DEBUG] Tool approval resume:', {
-              approved: resumeData.approved,
-              hasController: !!controller,
-              hasWriter: !!writer,
-              hasStreamState: !!streamState,
-            });
             if (!resumeData.approved) {
               span.end();
               span.setAttributes({
@@ -167,7 +140,6 @@ export function createToolCallStep<
                 ...inputData,
               };
             }
-            console.log('[DEBUG] Tool approved, proceeding to execute');
           }
         }
         const toolOptions: MastraToolInvocationOptions = {
@@ -198,14 +170,7 @@ export function createToolCallStep<
           resumeData,
         };
 
-        console.log('[DEBUG] About to execute tool:', inputData.toolName);
         const result = await tool.execute(inputData.args, toolOptions);
-        console.log('[DEBUG] Tool execution completed:', {
-          toolName: inputData.toolName,
-          hasResult: !!result,
-          resultType: typeof result,
-          result: result,
-        });
 
         span.setAttributes({
           'stream.toolCall.result': JSON.stringify(result),
@@ -213,15 +178,8 @@ export function createToolCallStep<
 
         span.end();
 
-        const returnValue = { result, ...inputData };
-        console.log('[DEBUG] Returning from tool-call-step:', {
-          toolName: returnValue.toolName,
-          toolCallId: returnValue.toolCallId,
-          hasResult: !!returnValue.result,
-        });
-        return returnValue;
+        return { result, ...inputData };
       } catch (error) {
-        console.error('[DEBUG] Tool execution error:', error);
         span.setStatus({
           code: 2,
           message: (error as Error)?.message ?? error,
