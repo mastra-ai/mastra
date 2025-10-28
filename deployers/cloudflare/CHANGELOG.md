@@ -1,5 +1,13 @@
 # @mastra/deployer-cloudflare
 
+## 0.14.15-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`17e5a4e`](https://github.com/mastra-ai/mastra/commit/17e5a4e828a8ebc6148c76b42a139c0f9bf7e25f), [`2afd345`](https://github.com/mastra-ai/mastra/commit/2afd3450825b76e41f7973baddf13867ea042e40), [`eefc89e`](https://github.com/mastra-ai/mastra/commit/eefc89ee69f05bb71661473a807fc7dc03d56f17), [`0fe7adb`](https://github.com/mastra-ai/mastra/commit/0fe7adb0f20f59a6bb41f235d01f8b7a880ea6e7), [`a42e496`](https://github.com/mastra-ai/mastra/commit/a42e49686a7486e2e9e9397fa98e5ff7a71dc1b0), [`3670db7`](https://github.com/mastra-ai/mastra/commit/3670db7e8e798f9d65fac5bfb732134a1f26ba7b), [`fc843ff`](https://github.com/mastra-ai/mastra/commit/fc843ff4d1d149317b6324553ce5ad7972062a78), [`30f92b5`](https://github.com/mastra-ai/mastra/commit/30f92b5b3aa224289f2f0eff56babcfa7a87b772)]:
+  - @mastra/deployer@0.23.2-alpha.0
+  - @mastra/core@0.23.2-alpha.0
+
 ## 0.14.14
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.17.6-alpha.0
+
+### Patch Changes
+
+- Update MainSidebar component to fit required changes in Cloud CTA link ([#9364](https://github.com/mastra-ai/mastra/pull/9364))
+
 ## 0.17.5
 
 ### Patch Changes

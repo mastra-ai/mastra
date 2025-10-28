@@ -1,5 +1,14 @@
 # @mastra/lance
 
+## 0.3.9-alpha.0
+
+### Patch Changes
+
+- Fix eval filtering to use NULL checks instead of length function for compatibility with LanceDB 0.22.x ([#9340](https://github.com/mastra-ai/mastra/pull/9340))
+
+- Updated dependencies [[`2afd345`](https://github.com/mastra-ai/mastra/commit/2afd3450825b76e41f7973baddf13867ea042e40), [`eefc89e`](https://github.com/mastra-ai/mastra/commit/eefc89ee69f05bb71661473a807fc7dc03d56f17), [`0fe7adb`](https://github.com/mastra-ai/mastra/commit/0fe7adb0f20f59a6bb41f235d01f8b7a880ea6e7), [`a42e496`](https://github.com/mastra-ai/mastra/commit/a42e49686a7486e2e9e9397fa98e5ff7a71dc1b0), [`3670db7`](https://github.com/mastra-ai/mastra/commit/3670db7e8e798f9d65fac5bfb732134a1f26ba7b), [`fc843ff`](https://github.com/mastra-ai/mastra/commit/fc843ff4d1d149317b6324553ce5ad7972062a78)]:
+  - @mastra/core@0.23.2-alpha.0
+
 ## 0.3.8
 
 ### Patch Changes

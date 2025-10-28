@@ -1,5 +1,35 @@
 # @mastra/mssql
 
+## 0.5.0-alpha.0
+
+### Minor Changes
+
+- Implemented AI tracing and observability features ([#9368](https://github.com/mastra-ai/mastra/pull/9368))
+  - Added createAISpan, updateAISpan, getAITrace, getAITracesPaginated
+  - Added batchCreateAISpans, batchUpdateAISpans, batchDeleteAITraces
+  - Automatic performance indexes for AI spans
+
+  Implemented workflow update methods
+  - Added updateWorkflowResults with row-level locking (UPDLOCK, HOLDLOCK)
+  - Added updateWorkflowState with row-level locking
+  - Concurrent update protection for parallel workflow execution
+
+  Added index management API
+  - Added createIndex, listIndexes, describeIndex, dropIndex methods
+  - Exposed index management methods directly on store instance
+  - Support for composite indexes, unique constraints, and filtered indexes
+
+  Documentation improvements
+  - Comprehensive README with complete API reference (58 methods)
+  - Detailed feature descriptions for all storage capabilities
+  - Index management examples and best practices
+  - Updated to reflect all atomic transaction usage
+
+### Patch Changes
+
+- Updated dependencies [[`2afd345`](https://github.com/mastra-ai/mastra/commit/2afd3450825b76e41f7973baddf13867ea042e40), [`eefc89e`](https://github.com/mastra-ai/mastra/commit/eefc89ee69f05bb71661473a807fc7dc03d56f17), [`0fe7adb`](https://github.com/mastra-ai/mastra/commit/0fe7adb0f20f59a6bb41f235d01f8b7a880ea6e7), [`a42e496`](https://github.com/mastra-ai/mastra/commit/a42e49686a7486e2e9e9397fa98e5ff7a71dc1b0), [`3670db7`](https://github.com/mastra-ai/mastra/commit/3670db7e8e798f9d65fac5bfb732134a1f26ba7b), [`fc843ff`](https://github.com/mastra-ai/mastra/commit/fc843ff4d1d149317b6324553ce5ad7972062a78)]:
+  - @mastra/core@0.23.2-alpha.0
+
 ## 0.4.7
 
 ### Patch Changes

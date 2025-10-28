@@ -1,5 +1,33 @@
 # @mastra/core
 
+## 0.23.2-alpha.0
+
+### Patch Changes
+
+- Ensure model_generation spans end before agent_run spans. ([#9393](https://github.com/mastra-ai/mastra/pull/9393))
+
+- Don't call `os.homedir()` at top level (but lazy invoke it) to accommodate sandboxed environments ([#9357](https://github.com/mastra-ai/mastra/pull/9357))
+
+- Fix tool input validation to use schema-compat transformed schemas ([#9360](https://github.com/mastra-ai/mastra/pull/9360))
+
+  Previously, tool input validation used the original Zod schema while the LLM received a schema-compat transformed version. This caused validation failures when LLMs (like OpenAI o3 or Claude 3.5 Haiku) sent arguments matching the transformed schema but not the original.
+
+  For example:
+  - OpenAI o3 reasoning models convert `.optional()` to `.nullable()`, sending `null` values
+  - Claude 3.5 Haiku strips `min`/`max` string constraints, sending shorter strings
+  - Validation would reject these valid responses because it checked against the original schema
+
+  The fix ensures validation uses the same schema-compat processed schema that was sent to the LLM, eliminating this mismatch.
+
+- Add import for WritableStream in execution-engine and dedupe llm.getModel in agent.ts ([#9341](https://github.com/mastra-ai/mastra/pull/9341))
+
+- pass writableStream parameter to workflow execution ([#9339](https://github.com/mastra-ai/mastra/pull/9339))
+
+- Add ability to pass agent options when wrapping an agent with createStep. This allows configuring agent execution settings when using agents as workflow steps. ([#9359](https://github.com/mastra-ai/mastra/pull/9359))
+
+- Updated dependencies [[`6bb26c4`](https://github.com/mastra-ai/mastra/commit/6bb26c4e82795d70515577a7cbd1e186c07ccf24), [`8d8f674`](https://github.com/mastra-ai/mastra/commit/8d8f67428ad1bcc944e2666179c886bae80120f5)]:
+  - @mastra/schema-compat@0.11.6-alpha.0
+
 ## 0.23.1
 
 ### Patch Changes

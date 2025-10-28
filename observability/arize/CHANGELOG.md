@@ -1,5 +1,21 @@
 # @mastra/arize
 
+## 0.1.0-alpha.0
+
+### Minor Changes
+
+- fix(@mastra/arize): Auto-detect arize endpoint when endpoint field is not provided ([#9250](https://github.com/mastra-ai/mastra/pull/9250))
+
+  When spaceId is provided to ArizeExporter constructor, and endpoint is not, pre-populate endpoint with default ArizeAX endpoint.
+
+### Patch Changes
+
+- Fixed import isssues in exporters. ([#9331](https://github.com/mastra-ai/mastra/pull/9331))
+
+- Updated dependencies [[`58bbda8`](https://github.com/mastra-ai/mastra/commit/58bbda8eafa72947c0cf0bd73fa436596b8a0d20), [`2afd345`](https://github.com/mastra-ai/mastra/commit/2afd3450825b76e41f7973baddf13867ea042e40), [`eefc89e`](https://github.com/mastra-ai/mastra/commit/eefc89ee69f05bb71661473a807fc7dc03d56f17), [`0fe7adb`](https://github.com/mastra-ai/mastra/commit/0fe7adb0f20f59a6bb41f235d01f8b7a880ea6e7), [`a42e496`](https://github.com/mastra-ai/mastra/commit/a42e49686a7486e2e9e9397fa98e5ff7a71dc1b0), [`3670db7`](https://github.com/mastra-ai/mastra/commit/3670db7e8e798f9d65fac5bfb732134a1f26ba7b), [`fc843ff`](https://github.com/mastra-ai/mastra/commit/fc843ff4d1d149317b6324553ce5ad7972062a78)]:
+  - @mastra/otel-exporter@0.3.2-alpha.0
+  - @mastra/core@0.23.2-alpha.0
+
 ## 0.0.2
 
 ### Patch Changes

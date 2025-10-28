@@ -79,7 +79,30 @@
     "@mastra/voice-playai": "0.11.11",
     "@mastra/voice-sarvam": "0.11.11",
     "@mastra/voice-speechify": "0.11.11",
-    "@mastra/inngest": "0.18.1"
+    "@mastra/inngest": "0.18.1",
+    "@observability/test-utils": "0.0.1"
   },
-  "changesets": []
+  "changesets": [
+    "breezy-clocks-cross",
+    "chatty-sites-notice",
+    "cuddly-ways-send",
+    "cute-trees-sit",
+    "cyan-flies-repeat",
+    "dirty-things-hammer",
+    "dry-ghosts-slide",
+    "fix-span-lifecycle-ordering",
+    "flat-walls-cross",
+    "happy-wings-wink",
+    "little-knives-wonder",
+    "lovely-candles-sin",
+    "quiet-bananas-knock",
+    "quiet-cups-play",
+    "sharp-windows-glow",
+    "six-keys-wink",
+    "smart-parks-find",
+    "sour-ants-bake",
+    "sparkly-news-smell",
+    "tasty-coats-sip",
+    "tiny-drinks-play"
+  ]
 }
