@@ -987,3 +987,49 @@ describe('Tool Input Validation', () => {
     expect(result.message).toContain('"tags": []');
   });
 });
+
+describe('CoreToolBuilder Output Schema', () => {
+  it('should allow ZodTuple in outputSchema', () => {
+    const mockModel = {
+      modelId: 'openai/gpt-4.1-mini',
+      provider: 'openrouter',
+      specificationVersion: 'v1',
+      supportsStructuredOutputs: false,
+    } as any;
+
+    const toolWithTupleOutput = createTool({
+      id: 'weather-tool',
+      description: 'Get weather information',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      outputSchema: z.object({
+        temperature: z.number(),
+        conditions: z.string(),
+        test: z.tuple([z.string(), z.string()]),
+      }),
+      execute: async ({ context }) => ({
+        temperature: 72,
+        conditions: 'sunny',
+        test: ['value1', 'value2'] as [string, string],
+      }),
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: toolWithTupleOutput,
+      options: {
+        name: 'weather-tool',
+        logger: console as any,
+        description: 'Get weather information',
+        runtimeContext: new RuntimeContext(),
+        tracingContext: {},
+        model: mockModel,
+      },
+    });
+
+    expect(() => builder.build()).not.toThrow();
+
+    const builtTool = builder.build();
+    expect(builtTool.outputSchema).toBeDefined();
+  });
+});
