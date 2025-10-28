@@ -66,39 +66,6 @@ describe('Agent.stream', () => {
     expect(agent.lastProcessedParams?.structuredOutput).toEqual({ schema: jsonSchema });
   });
 
-  it('should transform params.output using zodToJsonSchema when provided', async () => {
-    // Arrange: Create a sample Zod schema and params
-    const outputSchema = z.object({
-      name: z.string(),
-      age: z.number(),
-    });
-
-    const params: StreamParams<typeof outputSchema> = {
-      messages: [] as any,
-      output: outputSchema,
-    };
-
-    // Act: Call stream with the params
-    await agent.stream(params);
-
-    // Assert: Verify output schema transformation
-    const expectedSchema = zodToJsonSchema(outputSchema);
-    expect(agent.lastProcessedParams?.output).toEqual(expectedSchema);
-  });
-
-  it('should set processedParams.output to undefined when params.output is not provided', async () => {
-    // Arrange: Create params without output schema
-    const params: StreamParams<undefined> = {
-      messages: [] as any,
-    };
-
-    // Act: Call stream with the params
-    await agent.stream(params);
-
-    // Assert: Verify output is undefined
-    expect(agent.lastProcessedParams?.output).toBeUndefined();
-  });
-
   it('should process runtimeContext through parseClientRuntimeContext', async () => {
     // Arrange: Create a RuntimeContext-like instance with test data
     const contextData = new Map([

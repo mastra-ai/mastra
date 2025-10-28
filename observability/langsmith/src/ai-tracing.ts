@@ -7,21 +7,18 @@
  */
 
 import type {
-  AITracingExporter,
   AITracingEvent,
   AnyExportedAISpan,
-  LLMGenerationAttributes,
+  ModelGenerationAttributes,
+  BaseExporterConfig,
 } from '@mastra/core/ai-tracing';
-import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
-import { ConsoleLogger } from '@mastra/core/logger';
+import { AISpanType, omitKeys, BaseExporter } from '@mastra/core/ai-tracing';
 import type { ClientConfig, RunTreeConfig } from 'langsmith';
 import { Client, RunTree } from 'langsmith';
 import type { KVMap } from 'langsmith/schemas';
 import { normalizeUsageMetrics } from './metrics';
 
-export interface LangSmithExporterConfig extends ClientConfig {
-  /** Logger level for diagnostic messages (default: 'warn') */
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+export interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
   /** LangSmith client instance */
   client?: Client;
 }
@@ -36,8 +33,8 @@ const DEFAULT_SPAN_TYPE = 'chain';
 
 // Exceptions to the default mapping
 const SPAN_TYPE_EXCEPTIONS: Partial<Record<AISpanType, 'llm' | 'tool' | 'chain'>> = {
-  [AISpanType.LLM_GENERATION]: 'llm',
-  [AISpanType.LLM_CHUNK]: 'llm',
+  [AISpanType.MODEL_GENERATION]: 'llm',
+  [AISpanType.MODEL_CHUNK]: 'llm',
   [AISpanType.TOOL_CALL]: 'tool',
   [AISpanType.MCP_TOOL_CALL]: 'tool',
   [AISpanType.WORKFLOW_CONDITIONAL_EVAL]: 'chain',
@@ -53,22 +50,19 @@ function isKVMap(value: unknown): value is KVMap {
   return value != null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date);
 }
 
-export class LangSmithExporter implements AITracingExporter {
+export class LangSmithExporter extends BaseExporter {
   name = 'langsmith';
   private traceMap = new Map<string, SpanData>();
-  private logger: ConsoleLogger;
   private config: LangSmithExporterConfig;
   private client: Client;
 
   constructor(config: LangSmithExporterConfig) {
-    this.logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
+    super(config);
 
     config.apiKey = config.apiKey ?? process.env.LANGSMITH_API_KEY;
 
     if (!config.apiKey) {
-      this.logger.error('LangSmithExporter: Missing required credentials, exporter will be disabled', {
-        hasApiKey: !!config.apiKey,
-      });
+      this.setDisabled(`Missing required credentials (apiKey: ${!!config.apiKey})`);
       this.config = null as any;
       this.client = null as any;
       return;
@@ -78,11 +72,7 @@ export class LangSmithExporter implements AITracingExporter {
     this.config = config;
   }
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
-    if (!this.config) {
-      return;
-    }
-
+  protected async _exportEvent(event: AITracingEvent): Promise<void> {
     if (event.exportedSpan.isEvent) {
       await this.handleEventSpan(event.exportedSpan);
       return;
@@ -308,29 +298,29 @@ export class LangSmithExporter implements AITracingExporter {
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
 
-    if (span.type === AISpanType.LLM_GENERATION) {
-      const llmAttr = attributes as LLMGenerationAttributes;
+    if (span.type === AISpanType.MODEL_GENERATION) {
+      const modelAttr = attributes as ModelGenerationAttributes;
 
       // See: https://docs.langchain.com/langsmith/log-llm-trace
-      if (llmAttr.model !== undefined) {
+      if (modelAttr.model !== undefined) {
         // Note - this should map to a model name recognized by LangSmith
         // eg “gpt-4o-mini”, “claude-3-opus-20240307”, etc.
-        payload.metadata.ls_model_name = llmAttr.model;
+        payload.metadata.ls_model_name = modelAttr.model;
       }
 
       // Provider goes to metadata (if provided by attributes)
-      if (llmAttr.provider !== undefined) {
+      if (modelAttr.provider !== undefined) {
         // Note - this should map to a provider name recognized by
         // LangSmith eg “openai”, “anthropic”, etc.
-        payload.metadata.ls_provider = llmAttr.provider;
+        payload.metadata.ls_provider = modelAttr.provider;
       }
 
       // Usage/token info goes to metrics
-      payload.metadata.usage_metadata = normalizeUsageMetrics(llmAttr);
+      payload.metadata.usage_metadata = normalizeUsageMetrics(modelAttr);
 
       // Model parameters go to metadata
-      if (llmAttr.parameters !== undefined) {
-        payload.metadata.modelParameters = llmAttr.parameters;
+      if (modelAttr.parameters !== undefined) {
+        payload.metadata.modelParameters = modelAttr.parameters;
       }
 
       // Other LLM attributes go to metadata
@@ -369,5 +359,6 @@ export class LangSmithExporter implements AITracingExporter {
       }
     }
     this.traceMap.clear();
+    await super.shutdown();
   }
 }

@@ -43,8 +43,9 @@ Mapping of span types to their corresponding attribute interfaces.
 interface AISpanTypeMap {
   AGENT_RUN: AgentRunAttributes;
   WORKFLOW_RUN: WorkflowRunAttributes;
-  LLM_GENERATION: LLMGenerationAttributes;
-  LLM_CHUNK: LLMChunkAttributes;
+  MODEL_GENERATION: ModelGenerationAttributes;
+  MODEL_STEP: ModelStepAttributes;
+  MODEL_CHUNK: ModelChunkAttributes;
   TOOL_CALL: ToolCallAttributes;
   MCP_TOOL_CALL: MCPToolCallAttributes;
   WORKFLOW_STEP: WorkflowStepAttributes;
@@ -160,16 +161,19 @@ AI-specific span types with their associated metadata.
 enum AISpanType {
   /** Agent run - root span for agent processes */
   AGENT_RUN = 'agent_run',
-  
+
   /** Generic span for custom operations */
   GENERIC = 'generic',
-  
-  /** LLM generation with model calls, token usage, prompts, completions */
-  LLM_GENERATION = 'llm_generation',
-  
-  /** Individual LLM streaming chunk/event */
-  LLM_CHUNK = 'llm_chunk',
-  
+
+  /** Model generation with model calls, token usage, prompts, completions */
+  MODEL_GENERATION = 'model_generation',
+
+  /** Single model execution step within a generation (one API call) */
+  MODEL_STEP = 'model_step',
+
+  /** Individual model streaming chunk/event */
+  MODEL_CHUNK = 'model_chunk',
+
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
   
@@ -235,19 +239,19 @@ interface AgentRunAttributes {
 }
 ```
 
-### LLMGenerationAttributes
+### ModelGenerationAttributes
 
-LLM Generation attributes.
+Model Generation attributes.
 
 ```typescript
-interface LLMGenerationAttributes {
+interface ModelGenerationAttributes {
   /** Model name (e.g., 'gpt-4', 'claude-3') */
   model?: string;
   
   /** Model provider (e.g., 'openai', 'anthropic') */
   provider?: string;
   
-  /** Type of result/output this LLM call produced */
+  /** Type of result/output this model call produced */
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
   
   /** Token usage statistics */
@@ -280,12 +284,35 @@ interface LLMGenerationAttributes {
 }
 ```
 
-### LLMChunkAttributes
+### ModelStepAttributes
 
-LLM Chunk attributes - for individual streaming chunks/events.
+Model Step attributes - for a single model execution within a generation.
 
 ```typescript
-interface LLMChunkAttributes {
+interface ModelStepAttributes {
+  /** Index of this step in the generation (0, 1, 2, ...) */
+  stepIndex?: number;
+
+  /** Token usage statistics */
+  usage?: UsageStats;
+
+  /** Reason this step finished (stop, tool-calls, length, etc.) */
+  finishReason?: string;
+
+  /** Should execution continue */
+  isContinued?: boolean;
+
+  /** Result warnings */
+  warnings?: Record<string, any>;
+}
+```
+
+### ModelChunkAttributes
+
+Model Chunk attributes - for individual streaming chunks/events.
+
+```typescript
+interface ModelChunkAttributes {
   /** Type of chunk (text-delta, reasoning-delta, tool-call, etc.) */
   chunkType?: string;
   
@@ -626,10 +653,10 @@ enum InternalSpans {
   
   /** Tool spans are marked internal */
   TOOL = 1 << 2,
-  
-  /** LLM spans are marked internal */
-  LLM = 1 << 3,
-  
+
+  /** Model spans are marked internal */
+  MODEL = 1 << 3,
+
   /** All spans are marked internal */
   ALL = (1 << 4) - 1,
 }

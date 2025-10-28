@@ -127,6 +127,7 @@ describe('Handlers', () => {
         json: vi.fn().mockResolvedValue({
           messages: [{ role: 'user', content: 'test message' }],
           runId: 'test-run-id',
+          toolCallId: 'test-tool-call-id',
         }),
         raw: {
           signal: new AbortController().signal,
@@ -361,6 +362,7 @@ describe('Handlers', () => {
   });
 
   describe('approveToolCallHandler', () => {
+    beforeEach(async () => {});
     it('should return HTTP 429 when rate limit error occurs before streaming', async () => {
       const rateLimitError = createAI_APICallError({
         message: 'Rate limit exceeded',

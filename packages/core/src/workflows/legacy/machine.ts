@@ -1,5 +1,4 @@
 import EventEmitter from 'node:events';
-import type { Span } from '@opentelemetry/api';
 import { get } from 'radash';
 import sift from 'sift';
 import type { MachineContext, Snapshot } from 'xstate';
@@ -51,7 +50,6 @@ export class Machine<
   #mastra?: Mastra;
   #runtimeContext: RuntimeContext;
   #workflowInstance: WorkflowInstance;
-  #executionSpan?: Span | undefined;
 
   #stepGraph: StepGraph;
   #machine!: ReturnType<typeof this.initializeMachine>;
@@ -68,7 +66,6 @@ export class Machine<
     mastra,
     runtimeContext,
     workflowInstance,
-    executionSpan,
     name,
     runId,
     steps,
@@ -80,7 +77,6 @@ export class Machine<
     mastra?: Mastra;
     runtimeContext: RuntimeContext;
     workflowInstance: WorkflowInstance;
-    executionSpan?: Span;
     name: string;
     runId: string;
     steps: Record<string, StepNode>;
@@ -93,7 +89,6 @@ export class Machine<
     this.#mastra = mastra;
     this.#workflowInstance = workflowInstance;
     this.#runtimeContext = runtimeContext;
-    this.#executionSpan = executionSpan;
     this.logger = logger;
 
     this.#runId = runId;
@@ -186,8 +181,6 @@ export class Machine<
       if (!this.#actor) {
         this.logger.error('Actor not initialized', { runId: this.#runId });
         const e = new Error('Actor not initialized');
-        this.#executionSpan?.recordException(e);
-        this.#executionSpan?.end();
         reject(e);
         return;
       }
@@ -231,7 +224,6 @@ export class Machine<
           this.logger.debug('All states complete', { runId: this.#runId });
           await this.#workflowInstance.persistWorkflowSnapshot();
           this.#cleanup();
-          this.#executionSpan?.end();
           resolve({
             runId: this.#runId,
             results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,
@@ -246,7 +238,6 @@ export class Machine<
           this.logger.debug('Failed to persist final snapshot', { error });
 
           this.#cleanup();
-          this.#executionSpan?.end();
           resolve({
             runId: this.#runId,
             results: isResumedInitialStep ? { ...origSteps, ...state.context.steps } : state.context.steps,

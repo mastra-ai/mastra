@@ -44,9 +44,7 @@ beforeEach(async () => {
     options: {
       lastMessages: 10,
       semanticRecall: false,
-      threads: {
-        generateTitle: false,
-      },
+      generateTitle: false,
     },
   });
 });

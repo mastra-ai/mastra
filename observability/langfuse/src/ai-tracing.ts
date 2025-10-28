@@ -3,7 +3,7 @@
  *
  * This exporter sends tracing data to Langfuse for AI observability.
  * Root spans start traces in Langfuse.
- * LLM_GENERATION spans become Langfuse generations, all others become spans.
+ * MODEL_GENERATION spans become Langfuse generations, all others become spans.
  *
  * Compatible with both AI SDK v4 and v5:
  * - Handles both legacy token usage format (promptTokens/completionTokens)
@@ -13,17 +13,16 @@
  */
 
 import type {
-  AITracingExporter,
   AITracingEvent,
   AnyExportedAISpan,
-  LLMGenerationAttributes,
+  ModelGenerationAttributes,
+  BaseExporterConfig,
 } from '@mastra/core/ai-tracing';
-import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
-import { ConsoleLogger } from '@mastra/core/logger';
+import { AISpanType, omitKeys, BaseExporter } from '@mastra/core/ai-tracing';
 import { Langfuse } from 'langfuse';
 import type { LangfuseTraceClient, LangfuseSpanClient, LangfuseGenerationClient, LangfuseEventClient } from 'langfuse';
 
-export interface LangfuseExporterConfig {
+export interface LangfuseExporterConfig extends BaseExporterConfig {
   /** Langfuse API key */
   publicKey?: string;
   /** Langfuse secret key */
@@ -32,8 +31,6 @@ export interface LangfuseExporterConfig {
   baseUrl?: string;
   /** Enable realtime mode - flushes after each event for immediate visibility */
   realtime?: boolean;
-  /** Logger level for diagnostic messages (default: 'warn') */
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Additional options to pass to the Langfuse client */
   options?: any;
 }
@@ -111,22 +108,21 @@ interface NormalizedUsage {
   promptCacheMiss?: number;
 }
 
-export class LangfuseExporter implements AITracingExporter {
+export class LangfuseExporter extends BaseExporter {
   name = 'langfuse';
   private client: Langfuse;
   private realtime: boolean;
   private traceMap = new Map<string, TraceData>();
-  private logger: ConsoleLogger;
 
   constructor(config: LangfuseExporterConfig) {
+    super(config);
+
     this.realtime = config.realtime ?? false;
-    this.logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
 
     if (!config.publicKey || !config.secretKey) {
-      this.logger.error('LangfuseExporter: Missing required credentials, exporter will be disabled', {
-        hasPublicKey: !!config.publicKey,
-        hasSecretKey: !!config.secretKey,
-      });
+      this.setDisabled(
+        `Missing required credentials (publicKey: ${!!config.publicKey}, secretKey: ${!!config.secretKey})`,
+      );
       // Create a no-op client to prevent runtime errors
       this.client = null as any;
       return;
@@ -140,12 +136,7 @@ export class LangfuseExporter implements AITracingExporter {
     });
   }
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
-    if (!this.client) {
-      // Exporter is disabled due to missing credentials
-      return;
-    }
-
+  protected async _exportEvent(event: AITracingEvent): Promise<void> {
     if (event.exportedSpan.isEvent) {
       await this.handleEventSpan(event.exportedSpan);
       return;
@@ -188,7 +179,7 @@ export class LangfuseExporter implements AITracingExporter {
     const payload = this.buildSpanPayload(span, true);
 
     const langfuseSpan =
-      span.type === AISpanType.LLM_GENERATION ? langfuseParent.generation(payload) : langfuseParent.span(payload);
+      span.type === AISpanType.MODEL_GENERATION ? langfuseParent.generation(payload) : langfuseParent.span(payload);
 
     traceData.spans.set(span.id, langfuseSpan);
     traceData.activeSpans.add(span.id); // Track as active
@@ -369,7 +360,7 @@ export class LangfuseExporter implements AITracingExporter {
    * @param usage - Token usage data from AI SDK (v4 or v5 format)
    * @returns Normalized usage object, or undefined if no usage data available
    */
-  private normalizeUsage(usage: LLMGenerationAttributes['usage']): NormalizedUsage | undefined {
+  private normalizeUsage(usage: ModelGenerationAttributes['usage']): NormalizedUsage | undefined {
     if (!usage) return undefined;
 
     const normalized: NormalizedUsage = {};
@@ -433,25 +424,25 @@ export class LangfuseExporter implements AITracingExporter {
     // Strip special fields from metadata if used in top-level keys
     const attributesToOmit: string[] = [];
 
-    if (span.type === AISpanType.LLM_GENERATION) {
-      const llmAttr = attributes as LLMGenerationAttributes;
+    if (span.type === AISpanType.MODEL_GENERATION) {
+      const modelAttr = attributes as ModelGenerationAttributes;
 
-      if (llmAttr.model !== undefined) {
-        payload.model = llmAttr.model;
+      if (modelAttr.model !== undefined) {
+        payload.model = modelAttr.model;
         attributesToOmit.push('model');
       }
 
-      if (llmAttr.usage !== undefined) {
+      if (modelAttr.usage !== undefined) {
         // Normalize usage to handle both v4 and v5 formats
-        const normalizedUsage = this.normalizeUsage(llmAttr.usage);
+        const normalizedUsage = this.normalizeUsage(modelAttr.usage);
         if (normalizedUsage) {
           payload.usage = normalizedUsage;
         }
         attributesToOmit.push('usage');
       }
 
-      if (llmAttr.parameters !== undefined) {
-        payload.modelParameters = llmAttr.parameters;
+      if (modelAttr.parameters !== undefined) {
+        payload.modelParameters = modelAttr.parameters;
         attributesToOmit.push('parameters');
       }
     }
@@ -513,5 +504,6 @@ export class LangfuseExporter implements AITracingExporter {
       await this.client.shutdownAsync();
     }
     this.traceMap.clear();
+    await super.shutdown();
   }
 }

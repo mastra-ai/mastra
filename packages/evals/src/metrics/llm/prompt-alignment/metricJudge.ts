@@ -17,15 +17,20 @@ export class PromptAlignmentJudge extends MastraAgentJudge {
   ): Promise<{ verdict: string; reason: string }[]> {
     const prompt = generateEvaluatePrompt({ input, output: actualOutput, instructions });
     const result = await this.agent.generate(prompt, {
-      output: z.object({
-        verdicts: z.array(
-          z.object({
-            verdict: z.string(),
-            reason: z.string(),
-          }),
-        ),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          verdicts: z.array(
+            z.object({
+              verdict: z.string(),
+              reason: z.string(),
+            }),
+          ),
+        }),
+      },
     });
+    if (!result.object) {
+      throw new Error('Failed to generate result');
+    }
     return result.object.verdicts;
   }
 
@@ -37,7 +42,14 @@ export class PromptAlignmentJudge extends MastraAgentJudge {
     scale: number;
   }): Promise<string> {
     const prompt = generateReasonPrompt(args);
-    const result = await this.agent.generate(prompt, { output: z.object({ reason: z.string() }) });
+    const result = await this.agent.generate(prompt, {
+      structuredOutput: {
+        schema: z.object({ reason: z.string() }),
+      },
+    });
+    if (!result.object) {
+      throw new Error('Failed to generate result');
+    }
     return result.object.reason;
   }
 }

@@ -44,8 +44,8 @@ const DEFAULT_SPAN_TYPE = 'task';
 
 // Exceptions to the default mapping
 const SPAN_TYPE_EXCEPTIONS: Partial<Record<AISpanType, string>> = {
-  [AISpanType.LLM_GENERATION]: 'llm',
-  [AISpanType.LLM_CHUNK]: 'llm',
+  [AISpanType.MODEL_GENERATION]: 'llm',
+  [AISpanType.MODEL_CHUNK]: 'llm',
   [AISpanType.TOOL_CALL]: 'tool',
   [AISpanType.MCP_TOOL_CALL]: 'tool',
   [AISpanType.WORKFLOW_CONDITIONAL_EVAL]: 'function',

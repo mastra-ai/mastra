@@ -112,7 +112,7 @@ export const watchAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
 );
 
 export const streamAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
-  workflows.streamWorkflowHandler,
+  workflows.streamLegacyWorkflowHandler,
   'Streaming agent builder action',
 );
 

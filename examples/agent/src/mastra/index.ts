@@ -4,8 +4,8 @@ import { LibSQLStore } from '@mastra/libsql';
 
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
-import { myWorkflow } from './workflows';
-import { chefModelV2Agent, networkAgent } from './agents/model-v2-agent';
+import { lessComplexWorkflow, myWorkflow } from './workflows';
+import { chefModelV2Agent, errorAgent, networkAgent } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/scores';
 import { myWorkflowX } from './workflows/other';
 
@@ -22,6 +22,7 @@ const testScorer = createScorer({
 
 export const mastra = new Mastra({
   agents: {
+    errorAgent,
     chefAgent,
     chefAgentResponses,
     dynamicAgent,
@@ -36,7 +37,7 @@ export const mastra = new Mastra({
     myMcpServer,
     myMcpServerTwo,
   },
-  workflows: { myWorkflow, myWorkflowX },
+  workflows: { myWorkflow, myWorkflowX, lessComplexWorkflow },
   bundler: {
     sourcemap: true,
   },
@@ -50,9 +51,6 @@ export const mastra = new Mastra({
   ],
   scorers: {
     testScorer,
-  },
-  telemetry: {
-    enabled: false,
   },
   observability: {
     default: {

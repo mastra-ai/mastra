@@ -1,0 +1,236 @@
+---
+title: "Configuration "
+description: AI Tracing configuration types and registry functions
+---
+
+# Configuration
+
+## ObservabilityRegistryConfig
+
+```typescript
+interface ObservabilityRegistryConfig {
+  default?: { enabled?: boolean };
+  configs?: Record<string, TracingConfig | AITracing>;
+  configSelector?: ConfigSelector;
+}
+```
+
+<PropertiesTable
+props={[
+{
+name: "default",
+type: "{ enabled?: boolean }",
+description: "Enable default configuration",
+required: false,
+},
+{
+name: "configs",
+type: "Record<string, TracingConfig | AITracing>",
+description: "Named tracing configurations",
+required: false,
+},
+{
+name: "configSelector",
+type: "ConfigSelector",
+description: "Runtime configuration selector",
+required: false,
+},
+]}
+/>
+
+## TracingConfig
+
+```typescript
+interface TracingConfig {
+  name: string;
+  serviceName: string;
+  sampling?: SamplingStrategy;
+  exporters?: AITracingExporter[];
+  processors?: AISpanProcessor[];
+}
+```
+
+<PropertiesTable
+props={[
+{
+name: "name",
+type: "string",
+description: "Configuration identifier",
+required: true,
+},
+{
+name: "serviceName",
+type: "string",
+description: "Service name in traces",
+required: true,
+},
+{
+name: "sampling",
+type: "SamplingStrategy",
+description: "Sampling configuration",
+required: false,
+},
+{
+name: "exporters",
+type: "AITracingExporter[]",
+description: "Trace data exporters",
+required: false,
+},
+{
+name: "processors",
+type: "AISpanProcessor[]",
+description: "Span processors",
+required: false,
+},
+]}
+/>
+
+## SamplingStrategy
+
+```typescript
+type SamplingStrategy =
+  | { type: "always" }
+  | { type: "never" }
+  | { type: "ratio"; probability: number }
+  | { type: "custom"; sampler: (options?: TracingOptions) => boolean };
+```
+
+## ConfigSelector
+
+```typescript
+type ConfigSelector = (
+  options: ConfigSelectorOptions,
+  availableConfigs: Map<string, AITracing>,
+) => string | undefined;
+```
+
+## ConfigSelectorOptions
+
+```typescript
+interface ConfigSelectorOptions {
+  metadata?: Record<string, any>;
+  runtimeContext?: Map<string, any>;
+}
+```
+
+# Registry Functions
+
+## setupAITracing
+
+```typescript
+function setupAITracing(config: ObservabilityRegistryConfig): void;
+```
+
+Initializes AI tracing from configuration. Called automatically by Mastra constructor.
+
+## registerAITracing
+
+```typescript
+function registerAITracing(
+  name: string,
+  instance: AITracing,
+  isDefault?: boolean,
+): void;
+```
+
+Registers a tracing config in the global registry.
+
+## getAITracing
+
+```typescript
+function getAITracing(name: string): AITracing | undefined;
+```
+
+Retrieves a tracing config by name.
+
+## getDefaultAITracing
+
+```typescript
+function getDefaultAITracing(): AITracing | undefined;
+```
+
+Returns the default tracing config.
+
+## getSelectedAITracing
+
+```typescript
+function getSelectedAITracing(
+  options: ConfigSelectorOptions,
+): AITracing | undefined;
+```
+
+Returns the tracing config selected by the config selector or default.
+
+## setSelector
+
+```typescript
+function setSelector(selector: ConfigSelector): void;
+```
+
+Sets the global config selector function.
+
+## unregisterAITracing
+
+```typescript
+function unregisterAITracing(name: string): boolean;
+```
+
+Removes a tracing config from the registry.
+
+## shutdownAITracingRegistry
+
+```typescript
+async function shutdownAITracingRegistry(): Promise<void>;
+```
+
+Shuts down all tracing configs and clears the registry.
+
+## clearAITracingRegistry
+
+```typescript
+function clearAITracingRegistry(): void;
+```
+
+Clears all configs without shutdown.
+
+## getAllAITracing
+
+```typescript
+function getAllAITracing(): ReadonlyMap<string, AITracing>;
+```
+
+Returns all registered tracing configs.
+
+## hasAITracing
+
+```typescript
+function hasAITracing(name: string): boolean;
+```
+
+Checks if a tracing instance exists and is enabled.
+
+## See Also
+
+### Documentation
+
+- [AI Tracing Overview](/docs/observability/ai-tracing/overview) - Concepts and usage guide
+- [Sampling Strategies](/docs/observability/ai-tracing/overview#sampling-strategies) - Sampling configuration details
+- [Multi-Config Setup](/docs/observability/ai-tracing/overview#multi-config-setup) - Using multiple configurations
+
+### Reference
+
+- [AITracing Classes](/docs/reference/observability/ai-tracing) - Core tracing classes
+- [Interfaces](/docs/reference/observability/ai-tracing/interfaces) - Type definitions
+- [Span Reference](/docs/reference/observability/ai-tracing/span) - Span lifecycle
+
+### Examples
+
+- [Basic AI Tracing](/docs/examples/observability/basic-ai-tracing) - Getting started
+
+### Exporters
+
+- [DefaultExporter](/docs/reference/observability/ai-tracing/exporters/default-exporter) - Storage configuration
+- [CloudExporter](/docs/reference/observability/ai-tracing/exporters/cloud-exporter) - Cloud setup
+- [Braintrust](/docs/reference/observability/ai-tracing/exporters/braintrust) - Braintrust integration
+- [Langfuse](/docs/reference/observability/ai-tracing/exporters/langfuse) - Langfuse integration
+- [LangSmith](/docs/reference/observability/ai-tracing/exporters/langsmith) - LangSmith integration

@@ -1,0 +1,61 @@
+{
+  "name": "@internal/external-types",
+  "version": "0.0.3",
+  "description": "",
+  "type": "module",
+  "private": true,
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "scripts": {
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build": "api-extractor run --local",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@ai-sdk/provider-utils": "^3.0.12",
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@microsoft/api-extractor": "^7.53.1",
+    "@types/node": "^20.19.0",
+    "ai": "^4.3.19",
+    "eslint": "^9.36.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/auth"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "dependencies": {
+    "@ai-sdk/provider": "^1.1.3"
+  }
+}

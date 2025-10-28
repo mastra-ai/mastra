@@ -12,7 +12,7 @@
 import type {
   AITracingEvent,
   AnyExportedAISpan,
-  LLMGenerationAttributes,
+  ModelGenerationAttributes,
   ToolCallAttributes,
 } from '@mastra/core/ai-tracing';
 import { AISpanType, AITracingEventType } from '@mastra/core/ai-tracing';
@@ -80,8 +80,6 @@ describe('LangSmithExporter', () => {
     });
 
     it('should disable exporter when apiKey is missing', async () => {
-      const mockConsole = vi.spyOn(console, 'error').mockImplementation(() => {});
-
       const invalidConfig = {
         // Missing apiKey
         apiUrl: 'https://test.com',
@@ -89,13 +87,8 @@ describe('LangSmithExporter', () => {
 
       const disabledExporter = new LangSmithExporter(invalidConfig);
 
-      // Should log error about missing credentials
-      expect(mockConsole).toHaveBeenCalledWith(
-        expect.stringContaining('LangSmithExporter: Missing required credentials, exporter will be disabled'),
-        expect.objectContaining({
-          hasApiKey: false,
-        }),
-      );
+      // Should be disabled when apiKey is missing
+      expect(disabledExporter['isDisabled']).toBe(true);
 
       // Should not create spans when disabled
       const rootSpan = createMockSpan({
@@ -112,8 +105,6 @@ describe('LangSmithExporter', () => {
       });
 
       expect(MockRunTreeClass).not.toHaveBeenCalled();
-
-      mockConsole.mockRestore();
     });
   });
 
@@ -210,11 +201,11 @@ describe('LangSmithExporter', () => {
   });
 
   describe('Span Type Mappings', () => {
-    it('should map LLM_GENERATION to "llm" type', async () => {
+    it('should map MODEL_GENERATION to "llm" type', async () => {
       const llmSpan = createMockSpan({
         id: 'llm-span',
         name: 'gpt-4-call',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         isRoot: true,
         attributes: { model: 'gpt-4' },
       });
@@ -231,11 +222,11 @@ describe('LangSmithExporter', () => {
       );
     });
 
-    it('should map LLM_CHUNK to "llm" type', async () => {
+    it('should map MODEL_CHUNK to "llm" type', async () => {
       const chunkSpan = createMockSpan({
         id: 'chunk-span',
         name: 'llm-chunk',
-        type: AISpanType.LLM_CHUNK,
+        type: AISpanType.MODEL_CHUNK,
         isRoot: true,
         attributes: { chunkType: 'text-delta' },
       });
@@ -384,7 +375,7 @@ describe('LangSmithExporter', () => {
       const llmSpan = createMockSpan({
         id: 'llm-span',
         name: 'gpt-4-call',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         isRoot: true,
         input: { messages: [{ role: 'user', content: 'Hello' }] },
         output: { content: 'Hi there!' },
@@ -417,7 +408,7 @@ describe('LangSmithExporter', () => {
         inputs: { messages: [{ role: 'user', content: 'Hello' }] },
         outputs: { content: 'Hi there!' },
         metadata: {
-          mastra_span_type: 'llm_generation',
+          mastra_span_type: 'model_generation',
           ls_model_name: 'gpt-4',
           ls_provider: 'openai',
           provider: 'openai',
@@ -440,7 +431,7 @@ describe('LangSmithExporter', () => {
       const llmSpan = createMockSpan({
         id: 'minimal-llm',
         name: 'simple-llm',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         isRoot: true,
         attributes: {
           model: 'gpt-3.5-turbo',
@@ -457,7 +448,7 @@ describe('LangSmithExporter', () => {
         run_type: 'llm',
         client: mockClient,
         metadata: {
-          mastra_span_type: 'llm_generation',
+          mastra_span_type: 'model_generation',
           ls_model_name: 'gpt-3.5-turbo',
           usage_metadata: {},
         },
@@ -508,7 +499,7 @@ describe('LangSmithExporter', () => {
       const llmSpan = createMockSpan({
         id: 'llm-span',
         name: 'gpt-4-call',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         isRoot: true,
         attributes: { model: 'gpt-4' },
       });
@@ -522,7 +513,7 @@ describe('LangSmithExporter', () => {
       llmSpan.attributes = {
         ...llmSpan.attributes,
         usage: { totalTokens: 150 },
-      } as LLMGenerationAttributes;
+      } as ModelGenerationAttributes;
       llmSpan.output = { content: 'Updated response' };
 
       await exporter.exportEvent({
@@ -534,7 +525,7 @@ describe('LangSmithExporter', () => {
       expect(mockRunTree.outputs).toEqual({ content: 'Updated response' });
       expect(mockRunTree.metadata).toEqual(
         expect.objectContaining({
-          mastra_span_type: 'llm_generation',
+          mastra_span_type: 'model_generation',
           ls_model_name: 'gpt-4',
           usage_metadata: {
             total_tokens: 150,

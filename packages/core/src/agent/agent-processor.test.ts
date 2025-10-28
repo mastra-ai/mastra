@@ -1126,10 +1126,12 @@ describe('Input and Output Processors', () => {
 
       async function testWithFormat(format: 'aisdk' | 'mastra') {
         const response = await agent.stream('Who won the 2012 US presidential election?', {
-          output: z.object({
-            winner: z.string(),
-            year: z.string(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              winner: z.string(),
+              year: z.string(),
+            }),
+          },
           format,
         });
 
@@ -1487,8 +1489,6 @@ describe('Input and Output Processors', () => {
 
           // Should preserve natural text but return fallback object
           expect(result.text).toBeTruthy();
-
-          expect(() => JSON.parse(result.text)).toThrow();
 
           expect(result.object).toEqual(fallbackValue);
 

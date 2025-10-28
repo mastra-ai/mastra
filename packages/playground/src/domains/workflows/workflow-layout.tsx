@@ -9,12 +9,12 @@ import {
   useWorkflow,
   useWorkflowRuns,
   WorkflowRunList,
+  WorkflowInformation,
 } from '@mastra/playground-ui';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { WorkflowHeader } from './workflow-header';
-import { WorkflowInformation } from './workflow-information';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
@@ -44,7 +44,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
 
           {children}
 
-          <WorkflowInformation workflowId={workflowId!} />
+          <WorkflowInformation workflowId={workflowId!} initialRunId={runId} />
         </MainContentContent>
       </MainContentLayout>
     </WorkflowRunProvider>

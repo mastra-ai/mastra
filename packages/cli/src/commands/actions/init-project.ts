@@ -3,14 +3,14 @@ import type { CLI_ORIGIN } from '../../analytics';
 import { init } from '../init/init';
 import type { Editor } from '../init/mcp-docs-server-install';
 import { checkAndInstallCoreDeps, checkForPkgJson, interactivePrompt } from '../init/utils';
-import type { Components, LLMProvider } from '../init/utils';
+import type { Component, LLMProvider } from '../init/utils';
 
 const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
 
 interface InitArgs {
   default?: boolean;
   dir?: string;
-  components?: Components[];
+  components?: Component[];
   llm?: LLMProvider;
   llmApiKey?: string;
   example?: boolean;
@@ -20,8 +20,7 @@ interface InitArgs {
 export const initProject = async (args: InitArgs) => {
   await analytics.trackCommandExecution({
     command: 'init',
-    // @ts-expect-error: TODO - Fix this
-    args,
+    args: { ...args },
     execution: async () => {
       await checkForPkgJson();
       await checkAndInstallCoreDeps(Boolean(args?.example || args?.default));
@@ -48,10 +47,9 @@ export const initProject = async (args: InitArgs) => {
         return;
       }
 
-      const componentsArr = args.components ? args.components : [];
       await init({
         directory: args.dir,
-        components: componentsArr,
+        components: args.components ? args.components : [],
         llmProvider: args.llm,
         addExample: args.example,
         llmApiKey: args.llmApiKey,

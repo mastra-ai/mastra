@@ -12,7 +12,7 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { memoryProcessorAgent, weatherAgent } from './mastra/agents/weather';
+import { memoryProcessorAgent } from './mastra/agents/weather';
 import { weatherTool, weatherToolCity } from './mastra/tools/weather';
 
 describe('Agent Memory Tests', () => {
@@ -295,9 +295,11 @@ describe('Agent Memory Tests', () => {
       await agent.generate([{ role: 'user', content: 'Give me JSON' }], {
         threadId,
         resourceId,
-        output: z.object({
-          result: z.string(),
-        }),
+        structuredOutput: {
+          schema: z.object({
+            result: z.string(),
+          }),
+        },
         modelSettings: {
           temperature: 0,
         },
@@ -439,13 +441,61 @@ describe('Agent Memory Tests', () => {
         userId: 'user-123',
       });
     });
+
+    it('should consolidate reasoning into single part when saving to memory', async () => {
+      const reasoningAgent = new Agent({
+        name: 'reasoning-test-agent',
+        instructions: 'You are a helpful assistant that thinks through problems.',
+        model: 'openrouter/openai/gpt-oss-20b',
+        memory,
+      });
+
+      const threadId = randomUUID();
+      const resourceId = 'test-resource-reasoning';
+
+      const result = await reasoningAgent.generate('What is 2+2? Think through this carefully.', {
+        threadId,
+        resourceId,
+      });
+
+      expect(result.reasoning.length).toBeGreaterThan(0);
+      expect(result.reasoningText).toBeDefined();
+      expect(result.reasoningText!.length).toBeGreaterThan(0);
+
+      const originalReasoningText = result.reasoningText;
+
+      const agentMemory = (await reasoningAgent.getMemory())!;
+      const { messages } = await agentMemory.query({ threadId });
+
+      const assistantMessage = messages.find(
+        (m: any) =>
+          m.role === 'assistant' && Array.isArray(m.content) && m.content.some((p: any) => p?.type === 'reasoning'),
+      );
+
+      expect(assistantMessage).toBeDefined();
+
+      const retrievedReasoningParts = Array.isArray((assistantMessage as any).content)
+        ? (assistantMessage as any).content.filter((p: any) => p?.type === 'reasoning')
+        : [];
+
+      expect(retrievedReasoningParts).toBeDefined();
+      expect(retrievedReasoningParts.length).toBeGreaterThan(0);
+
+      const retrievedReasoningText = retrievedReasoningParts.map((p: any) => p.text || '').join('');
+
+      expect(retrievedReasoningText.length).toBeGreaterThan(0);
+      expect(retrievedReasoningText).toBe(originalReasoningText);
+
+      // This is the key fix for issue #8073 - before the fix, reasoning was split into many parts
+      expect(retrievedReasoningParts.length).toBe(1);
+    }, 30000);
   });
 
   describe('Agent thread metadata with generateTitle', () => {
     // Agent with generateTitle: true
     const memoryWithTitle = new Memory({
       options: {
-        threads: { generateTitle: true },
+        generateTitle: true,
         semanticRecall: true,
         lastMessages: 10,
       },
@@ -472,7 +522,7 @@ describe('Agent Memory Tests', () => {
     // Agent with generateTitle: false
     const memoryNoTitle = new Memory({
       options: {
-        threads: { generateTitle: false },
+        generateTitle: false,
         semanticRecall: true,
         lastMessages: 10,
       },
@@ -607,74 +657,11 @@ describe('Agent with message processors', () => {
   }, 3000_000);
 });
 
-describe('Agent.fetchMemory', () => {
-  it('should return messages from memory', async () => {
-    const threadId = randomUUID();
-    const resourceId = 'fetch-memory-test';
-
-    const response = await weatherAgent.generate('Just a simple greeting to populate memory.', {
-      threadId,
-      resourceId,
-    });
-
-    const { messages } = await weatherAgent.fetchMemory({ threadId, resourceId });
-
-    expect(messages).toBeDefined();
-    if (!messages) return;
-
-    expect(messages.length).toBe(2); // user message + assistant response
-
-    const userMessage = messages.find(m => m.role === 'user');
-    expect(userMessage).toBeDefined();
-    if (!userMessage) return;
-    expect(userMessage.content[0]).toEqual({ type: 'text', text: 'Just a simple greeting to populate memory.' });
-
-    const assistantMessage = messages.find(m => m.role === 'assistant');
-    expect(assistantMessage).toBeDefined();
-    if (!assistantMessage) return;
-    expect(assistantMessage.content).toEqual([{ type: 'text', text: response.text }]);
-  }, 30_000);
-
-  it('should apply processors when fetching memory', async () => {
-    const threadId = randomUUID();
-    const resourceId = 'fetch-memory-processor-test';
-
-    await memoryProcessorAgent.generate('What is the weather in London?', { threadId, resourceId });
-
-    const { messages } = await memoryProcessorAgent.fetchMemory({ threadId, resourceId });
-
-    expect(messages).toBeDefined();
-    if (!messages) return;
-
-    const hasToolRelatedMessage = messages.some(
-      m => m.role === 'tool' || (Array.isArray(m.content) && m.content.some(c => c.type === 'tool-call')),
-    );
-    expect(hasToolRelatedMessage).toBe(false);
-
-    const userMessage = messages.find(m => m.role === 'user');
-    expect(userMessage).toBeDefined();
-    if (!userMessage) return;
-    expect(userMessage.content[0]).toEqual({ type: 'text', text: 'What is the weather in London?' });
-  }, 30_000);
-
-  it('should return nothing if thread does not exist', async () => {
-    const threadId = randomUUID();
-    const resourceId = 'fetch-memory-no-thread';
-
-    const result = await weatherAgent.fetchMemory({ threadId, resourceId });
-
-    expect(result.messages).toEqual([]);
-    expect(result.threadId).toBe(threadId);
-  });
-});
-
 describe('Agent memory test gemini', () => {
   const memory = new Memory({
     storage: new MockStore(),
     options: {
-      threads: {
-        generateTitle: false,
-      },
+      generateTitle: false,
       lastMessages: 2,
     },
   });

@@ -1,4 +1,3 @@
-// import DocsChat from "@/chatbot/components/chat-widget";
 import {
   Dialog,
   DialogBackdrop,
@@ -6,18 +5,15 @@ import {
   DialogTitle,
 } from "@headlessui/react";
 import { useEffect, useState } from "react";
-// import { CustomSearch } from "./custom-search";
-// import { getSearchPlaceholder } from "./search-placeholder";
+import { CustomSearch } from "./custom-search";
+import { getSearchPlaceholder } from "./search-placeholder";
 import { Shortcut } from "./shortcut";
 import { Button } from "./ui/button";
-import { CustomSearchWithoutAI } from "./custom-search-without-ai";
 
 const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
 
 export const SearchWrapper = ({ locale }: { locale: string }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [isAgentMode, setIsAgentMode] = useState(false);
-  // const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -53,22 +49,32 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
 
   function close() {
     setIsOpen(false);
-    setIsAgentMode(false);
   }
-
-  // function handleUseAgent({ searchQuery }: { searchQuery: string }) {
-  //   setIsAgentMode(true);
-  //   setSearchQuery(searchQuery);
-  // }
 
   // Configure Algolia search options
   const searchOptions = {
-    indexName: "crawler_mastra crawler",
+    indexName: "docs_crawler",
     hitsPerPage: 20,
-    attributesToRetrieve: ["title", "content", "url", "hierarchy"],
-    attributesToHighlight: ["title", "content"],
-    attributesToSnippet: ["content:15"],
-    filters: `locale:${locale}`,
+    attributesToRetrieve: [
+      "hierarchy",
+      "content",
+      "anchor",
+      "url",
+      "url_without_anchor",
+      "type",
+      "section",
+      "lang",
+      "priority",
+      "depth",
+    ],
+    attributesToHighlight: [
+      "hierarchy.lvl1",
+      "hierarchy.lvl2",
+      "hierarchy.lvl3",
+      "content",
+    ],
+    attributesToSnippet: ["content:30"],
+    filters: `lang:${locale}`,
     snippetEllipsisText: "…",
   };
 
@@ -81,50 +87,32 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
           variant="ghost"
           className="flex items-center pr-[0.38rem] text-sm font-normal justify-between w-full gap-6 cursor-pointer border-[0.5px] bg-[var(--light-color-surface-4)] dark:bg-[var(--light-color-text-5)] border-[var(--light-border-muted)] dark:border-borders-1 text-icons-3"
         >
-          <span className="text-sm">Search or ask AI..</span>
+          <span className="text-sm">Search docs...</span>
           <Shortcut />
         </Button>
       </div>
       <Dialog
         open={isOpen}
         as="div"
-        className="relative hidden md:block z-1000 focus:outline-none"
+        className="hidden relative md:block z-1000 focus:outline-none"
         onClose={close}
       >
-        <DialogBackdrop className="fixed inset-0 transition duration-150 ease-out data-closed:opacity-0 bg-black/70" />
-        <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
-          <div className="flex items-start pt-[200px] justify-center min-h-full p-4">
+        <DialogBackdrop className="fixed inset-0 data-closed:opacity-0 bg-black/40 dark:bg-black/70" />
+        <div className="overflow-y-auto fixed inset-0 z-10 w-screen">
+          <div className="flex items-start pt-[100px] justify-center min-h-full p-4">
             <DialogPanel
               transition
-              className="w-full border-[0.5px] border-[var(--light-border-code)] dark:border-borders-2 h-fit max-w-[660px] mx-auto rounded-xl bg-[var(--light-color-surface-15)] dark:bg-surface-4 transition duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
+              className="w-full shadow-2xl overflow-hidden ring ring-neutral-200 dark:ring-neutral-800 h-fit max-w-[600px] mx-auto rounded-xl bg-[var(--light-color-surface-15)] dark:bg-surface-4 transition duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
             >
               <DialogTitle as="h3" className="sr-only">
-                Search
+                Search docs...
               </DialogTitle>
               <div className="w-full">
-                {isAgentMode ? (
-                  // TODO; uncomment when re-enabling AI search
-                  // <DocsChat
-                  //   setIsAgentMode={setIsAgentMode}
-                  //   searchQuery={searchQuery}
-                  // />
-                  <></>
-                ) : (
-                  <div className="p-[10px]">
-                    <CustomSearchWithoutAI
-                      searchOptions={searchOptions}
-                      closeModal={close}
-                    />
-                    {/* 
-                      disabling AI search for now
-                    <CustomSearch
-                      placeholder={getSearchPlaceholder(locale)}
-                      searchOptions={searchOptions}
-                      onUseAgent={handleUseAgent}
-                      closeModal={close}
-                    /> */}
-                  </div>
-                )}
+                <CustomSearch
+                  placeholder={getSearchPlaceholder(locale)}
+                  searchOptions={searchOptions}
+                  closeModal={close}
+                />
               </div>
             </DialogPanel>
           </div>

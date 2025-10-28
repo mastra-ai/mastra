@@ -18,22 +18,32 @@ export class AnswerRelevancyJudge extends MastraAgentJudge {
   async evaluate(input: string, actualOutput: string): Promise<{ verdict: string; reason: string }[]> {
     const statementPrompt = generateEvaluationStatementsPrompt({ output: actualOutput });
     const statements = await this.agent.generate(statementPrompt, {
-      output: z.object({
-        statements: z.array(z.string()),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          statements: z.array(z.string()),
+        }),
+      },
     });
+    if (!statements.object) {
+      throw new Error('Failed to generate evaluation statements');
+    }
     const prompt = generateEvaluatePrompt({ input, statements: statements.object.statements });
     const result = await this.agent.generate(prompt, {
-      output: z.object({
-        verdicts: z.array(
-          z.object({
-            verdict: z.string(),
-            reason: z.string(),
-          }),
-        ),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          verdicts: z.array(
+            z.object({
+              verdict: z.string(),
+              reason: z.string(),
+            }),
+          ),
+        }),
+      },
     });
 
+    if (!result.object) {
+      throw new Error('Failed to generate verdicts');
+    }
     return result.object.verdicts;
   }
 
@@ -46,11 +56,16 @@ export class AnswerRelevancyJudge extends MastraAgentJudge {
   }): Promise<string> {
     const prompt = generateReasonPrompt(args);
     const result = await this.agent.generate(prompt, {
-      output: z.object({
-        reason: z.string(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          reason: z.string(),
+        }),
+      },
     });
 
+    if (!result.object) {
+      throw new Error('Failed to generate reason');
+    }
     return result.object.reason;
   }
 }

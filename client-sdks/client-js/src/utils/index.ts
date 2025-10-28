@@ -17,11 +17,20 @@ export function base64RuntimeContext(runtimeContext?: Record<string, any>): stri
   return undefined;
 }
 
-export function runtimeContextQueryString(runtimeContext?: RuntimeContext | Record<string, any>): string {
+/**
+ * Converts a runtime context to a query string
+ * @param runtimeContext - The runtime context to convert
+ * @param delimiter - The delimiter to use in the query string
+ * @returns The query string
+ */
+export function runtimeContextQueryString(
+  runtimeContext?: RuntimeContext | Record<string, any>,
+  delimiter: string = '?',
+): string {
   const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
   if (!runtimeContextParam) return '';
   const searchParams = new URLSearchParams();
   searchParams.set('runtimeContext', runtimeContextParam);
   const queryString = searchParams.toString();
-  return queryString ? `?${queryString}` : '';
+  return queryString ? `${delimiter}${queryString}` : '';
 }

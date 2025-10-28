@@ -1,4 +1,6 @@
 import { createTool } from '@mastra/core';
+import { getErrorFromUnknown } from '@mastra/core/error';
+import { APICallError } from 'ai-v5';
 import { describe, it, beforeEach, expect, vi } from 'vitest';
 import z from 'zod';
 import { MastraClient } from '../client';
@@ -314,5 +316,49 @@ describe('Agent vNext', () => {
     );
     // Verify no model is included in structuredOutput (should fallback to agent's model)
     expect(requestBody.structuredOutput).not.toHaveProperty('model');
+  });
+
+  it('stream: should receive error chunks with serialized error properties', async () => {
+    const testAPICallError = new APICallError({
+      message: 'API Error',
+      statusCode: 401,
+      url: 'https://api.example.com',
+      requestBodyValues: { test: 'test' },
+      responseBody: 'Test API error response',
+      isRetryable: false,
+    });
+    // Simulate server sending an error chunk
+    // This test verifies that error properties are properly serialized over the wire
+    const errorChunks = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      { type: 'error', payload: { error: getErrorFromUnknown(testAPICallError) } },
+    ];
+
+    (global.fetch as any).mockResolvedValueOnce(sseResponse(errorChunks));
+
+    const resp = await agent.stream({ messages: 'hi' });
+
+    // Capture error chunks
+    let errorChunk: any = null;
+    await resp.processDataStream({
+      onChunk: async chunk => {
+        if (chunk.type === 'error') {
+          errorChunk = chunk;
+        }
+      },
+    });
+
+    // Verify error chunk was received
+    expect(errorChunk).toBeDefined();
+    expect(errorChunk.type).toBe('error');
+
+    // Verify error properties are preserved in serialization
+    expect(errorChunk.payload.error).toBeDefined();
+    expect(errorChunk.payload.error.message).toEqual(testAPICallError.message);
+    expect(errorChunk.payload.error.statusCode).toEqual(testAPICallError.statusCode);
+    expect(errorChunk.payload.error.requestBodyValues).toEqual(testAPICallError.requestBodyValues);
+    expect(errorChunk.payload.error.responseBody).toEqual(testAPICallError.responseBody);
+    expect(errorChunk.payload.error.isRetryable).toEqual(testAPICallError.isRetryable);
+    expect(errorChunk.payload.error.url).toEqual(testAPICallError.url);
   });
 });

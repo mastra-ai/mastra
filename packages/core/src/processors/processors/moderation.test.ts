@@ -38,31 +38,18 @@ function createTestMessageWithContent(
 }
 
 function createMockModerationResult(flagged: boolean, categories: string[] = []): ModerationResult {
-  const allCategories = [
-    'hate',
-    'hate/threatening',
-    'harassment',
-    'harassment/threatening',
-    'self-harm',
-    'self-harm/intent',
-    'self-harm/instructions',
-    'sexual',
-    'sexual/minors',
-    'violence',
-    'violence/graphic',
-  ];
-
-  const categoryScores = allCategories.reduce(
-    (scores, category) => {
-      scores[category] = categories.includes(category) ? 0.8 : 0.1;
-      return scores;
-    },
-    {} as Record<string, number>,
-  );
+  // Only return scores for flagged categories (matching new array-based structure)
+  const categoryScores =
+    categories.length > 0
+      ? categories.map(category => ({
+          category,
+          score: 0.8, // Above default threshold (0.5)
+        }))
+      : null;
 
   return {
     category_scores: categoryScores,
-    reason: flagged ? `Content flagged for: ${categories.join(', ')}` : undefined,
+    reason: flagged && categories.length > 0 ? `Content flagged for: ${categories.join(', ')}` : null,
   };
 }
 
@@ -277,10 +264,10 @@ describe('ModerationProcessor', () => {
 
   describe('threshold handling', () => {
     it('should flag content when any score exceeds threshold', async () => {
-      const mockResult = createMockModerationResult(false, []);
-      // Override with high violence score to exceed threshold
-      mockResult.category_scores!.violence = 0.7; // Above threshold (0.6)
-      mockResult.reason = 'High violence score';
+      const mockResult: ModerationResult = {
+        category_scores: [{ category: 'violence', score: 0.7 }], // Above threshold (0.6)
+        reason: 'High violence score',
+      };
       const model = setupMockModel({ object: mockResult });
       const moderator = new ModerationProcessor({
         model,
@@ -302,9 +289,10 @@ describe('ModerationProcessor', () => {
     });
 
     it('should not flag content when scores are below threshold', async () => {
-      const mockResult = createMockModerationResult(false, []);
-      // Set violence score below threshold
-      mockResult.category_scores!.violence = 0.7; // Below threshold (0.8)
+      const mockResult: ModerationResult = {
+        category_scores: [{ category: 'violence', score: 0.7 }], // Below threshold (0.8)
+        reason: null,
+      };
       const model = setupMockModel({ object: mockResult });
       const moderator = new ModerationProcessor({
         model,
@@ -324,10 +312,8 @@ describe('ModerationProcessor', () => {
 
   describe('custom categories', () => {
     it('should work with custom moderation categories', async () => {
-      const mockResult = {
-        flagged: true,
-        categories: { spam: true, advertising: false, 'off-topic': false },
-        category_scores: { spam: 0.9, advertising: 0.1, 'off-topic': 0.2 },
+      const mockResult: ModerationResult = {
+        category_scores: [{ category: 'spam', score: 0.9 }],
         reason: 'Detected spam content',
       };
       const model = setupMockModel({ object: mockResult });

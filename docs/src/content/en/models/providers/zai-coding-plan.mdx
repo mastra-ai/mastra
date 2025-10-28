@@ -48,43 +48,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
-    "model": "zai-coding-plan/glm-4.5v",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 64000,
-    "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "zai-coding-plan/glm-4.5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 98304,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "zai-coding-plan/glm-4.6",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "zai-coding-plan/glm-4.5-flash",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -106,6 +70,42 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 98304,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "zai-coding-plan/glm-4.5-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zai-coding-plan/glm-4.5v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 64000,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "zai-coding-plan/glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -119,7 +119,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.z.ai/api/coding/paas/v4",
-    modelId: "glm-4.5",
+    id: "zai-coding-plan/glm-4.5",
     apiKey: process.env.ZHIPU_API_KEY,
     headers: {
       "X-Custom-Header": "value"

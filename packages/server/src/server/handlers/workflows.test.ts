@@ -700,7 +700,8 @@ describe('vNext Workflow Handlers', () => {
         runId: 'test-run-observe-resource',
         resourceId,
       });
-      await run.start({ inputData: {} });
+      const x = await run.start({ inputData: {} });
+      console.log(x);
 
       const runBefore = await mockWorkflow.getWorkflowRunById('test-run-observe-resource');
       expect(runBefore?.resourceId).toBe(resourceId);
@@ -718,6 +719,10 @@ describe('vNext Workflow Handlers', () => {
         workflowId: 'test-workflow',
         runId: 'test-run-observe-resource',
       });
+
+      for await (const chunk of stream) {
+        console.log({ chunk });
+      }
       expect(stream).toBeDefined();
 
       // Verify resourceId is preserved

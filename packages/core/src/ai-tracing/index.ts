@@ -11,3 +11,4 @@ export * from './utils';
 export * from './context';
 export * from './exporters';
 export * from './span_processors';
+export * from './model-tracing';

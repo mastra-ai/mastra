@@ -1,5 +1,5 @@
 import type { Mastra, ProviderConfig } from '@mastra/core';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import { getProviderConfig, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { ChunkType } from '@mastra/core/stream';
@@ -20,6 +20,7 @@ import {
   streamNetworkHandler as getOriginalStreamNetworkHandler,
   approveToolCallHandler as getOriginalApproveToolCallHandler,
   declineToolCallHandler as getOriginalDeclineToolCallHandler,
+  getAgentFromSystem as getOriginalGetAgentFromSystem,
 } from '@mastra/server/handlers/agents';
 import type { Context } from 'hono';
 
@@ -287,14 +288,7 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
           from: ChunkFrom.AGENT,
           runId: body.runId || 'unknown',
           payload: {
-            error:
-              err instanceof Error
-                ? {
-                    message: err.message,
-                    name: err.name,
-                    stack: err.stack,
-                  }
-                : String(err),
+            error: getErrorFromUnknown(err, { fallbackMessage: 'Unknown error in stream generate' }),
           },
         };
 
@@ -453,18 +447,7 @@ export async function streamNetworkHandler(c: Context) {
   const logger = mastra.getLogger();
 
   // Validate agent exists and has memory before starting stream
-  const agent = mastra.getAgent(agentId);
-  if (!agent) {
-    return handleError(
-      new MastraError({
-        id: 'AGENT_NOT_FOUND',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'Agent not found',
-      }),
-      'Agent not found',
-    );
-  }
+  const agent = await getOriginalGetAgentFromSystem({ mastra, agentId });
 
   // Check if agent has memory configured before starting the stream
   const memory = await agent.getMemory({ runtimeContext });
@@ -582,10 +565,7 @@ export async function setAgentInstructionsHandler(c: Context) {
     }
 
     const mastra: Mastra = c.get('mastra');
-    const agent = mastra.getAgent(agentId);
-    if (!agent) {
-      return c.json({ error: 'Agent not found' }, 404);
-    }
+    const agent = await getOriginalGetAgentFromSystem({ mastra, agentId });
 
     agent.__updateInstructions(instructions);
 

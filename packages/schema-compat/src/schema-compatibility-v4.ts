@@ -118,38 +118,7 @@ export type ShapeKey<T extends z.ZodObject<any, any>> = keyof ZodShape<T>;
  */
 export type ShapeValue<T extends z.ZodObject<any, any>> = ZodShape<T>[ShapeKey<T>];
 
-// Add constraint types at the top
-
-type StringConstraints = {
-  minLength?: number;
-  maxLength?: number;
-  email?: boolean;
-  url?: boolean;
-  uuid?: boolean;
-  cuid?: boolean;
-  emoji?: boolean;
-  regex?: { pattern: string; flags?: string };
-};
-
-type NumberConstraints = {
-  gt?: number;
-  gte?: number;
-  lt?: number;
-  lte?: number;
-  multipleOf?: number;
-};
-
-type ArrayConstraints = {
-  minLength?: number;
-  maxLength?: number;
-  exactLength?: number;
-};
-
-type DateConstraints = {
-  minDate?: string;
-  maxDate?: string;
-  dateFormat?: string;
-};
+type ConstraintHelperText = string[];
 
 /**
  * Abstract base class for creating schema compatibility layers for different AI model providers.
@@ -357,15 +326,10 @@ export class SchemaCompatLayer {
    */
   public mergeParameterDescription(
     description: string | undefined,
-    constraints:
-      | NumberConstraints
-      | StringConstraints
-      | ArrayConstraints
-      | DateConstraints
-      | { defaultValue?: unknown },
+    constraints: ConstraintHelperText,
   ): string | undefined {
-    if (Object.keys(constraints).length > 0) {
-      return (description ? description + '\n' : '') + JSON.stringify(constraints);
+    if (constraints.length > 0) {
+      return (description ? description + '\n' : '') + `constraints: ${constraints.join(`, `)}`;
     } else {
       return description;
     }
@@ -405,13 +369,13 @@ export class SchemaCompatLayer {
 
     let result = z.array(processedType);
 
-    const constraints: ArrayConstraints = {};
+    const constraints: ConstraintHelperText = [];
     if (zodArrayDef.checks) {
       for (const check of zodArrayDef.checks) {
         if (check._zod.def.check === 'min_length') {
           if (handleChecks.includes('min')) {
             // @ts-expect-error - fix later
-            constraints.minLength = check._zod.def.minimum;
+            constraints.push(`minimum length ${check._zod.def.minimum}`);
           } else {
             // @ts-expect-error - fix later
             result = result.min(check._zod.def.minimum);
@@ -420,7 +384,7 @@ export class SchemaCompatLayer {
         if (check._zod.def.check === 'max_length') {
           if (handleChecks.includes('max')) {
             // @ts-expect-error - fix later
-            constraints.maxLength = check._zod.def.maximum;
+            constraints.push(`maximum length ${check._zod.def.maximum}`);
           } else {
             // @ts-expect-error - fix later
             result = result.max(check._zod.def.maximum);
@@ -429,7 +393,7 @@ export class SchemaCompatLayer {
         if (check._zod.def.check === 'length_equals') {
           if (handleChecks.includes('length')) {
             // @ts-expect-error - fix later
-            constraints.exactLength = check._zod.def.length;
+            constraints.push(`exact length ${check._zod.def.length}`);
           } else {
             // @ts-expect-error - fix later
             result = result.length(check._zod.def.length);
@@ -477,7 +441,7 @@ export class SchemaCompatLayer {
     value: ZodString,
     handleChecks: readonly StringCheckType[] = ALL_STRING_CHECKS,
   ): ZodString {
-    const constraints: StringConstraints = {};
+    const constraints: ConstraintHelperText = [];
     const checks = value._zod.def.checks || [];
     type ZodStringCheck = (typeof checks)[number];
     const newChecks: ZodStringCheck[] = [];
@@ -488,38 +452,27 @@ export class SchemaCompatLayer {
           switch (check._zod.def.check) {
             case 'min_length':
               // @ts-expect-error - fix later
-              constraints.minLength = check._zod.def.minimum;
+              constraints.push(`minimum length ${check._zod.def.minimum}`);
               break;
             case 'max_length':
               // @ts-expect-error - fix later
-              constraints.maxLength = check._zod.def.maximum;
+              constraints.push(`maximum length ${check._zod.def.maximum}`);
               break;
             case 'string_format':
               {
                 // @ts-expect-error - fix later
                 switch (check._zod.def.format) {
                   case 'email':
-                    constraints.email = true;
-                    break;
                   case 'url':
-                    constraints.url = true;
-                    break;
                   case 'emoji':
-                    constraints.emoji = true;
-                    break;
                   case 'uuid':
-                    constraints.uuid = true;
-                    break;
                   case 'cuid':
-                    constraints.cuid = true;
+                    // @ts-expect-error - fix later
+                    constraints.push(`a valid ${check._zod.def.format}`);
                     break;
                   case 'regex':
-                    constraints.regex = {
-                      // @ts-expect-error - fix later
-                      pattern: check._zod.def.pattern,
-                      // @ts-expect-error - fix later
-                      flags: check._zod.def.flags,
-                    };
+                    // @ts-expect-error - fix later
+                    constraints.push(`input must match this regex ${check._zod.def.pattern}`);
                     break;
                 }
               }
@@ -557,7 +510,7 @@ export class SchemaCompatLayer {
     value: ZodNumber,
     handleChecks: readonly NumberCheckType[] = ALL_NUMBER_CHECKS,
   ): ZodNumber {
-    const constraints: NumberConstraints = {};
+    const constraints: ConstraintHelperText = [];
     const checks = value._zod.def.checks || [];
     type ZodNumberCheck = (typeof checks)[number];
     const newChecks: ZodNumberCheck[] = [];
@@ -570,25 +523,25 @@ export class SchemaCompatLayer {
               // @ts-expect-error - fix later
               if (check._zod.def.inclusive) {
                 // @ts-expect-error - fix later
-                constraints.gte = check._zod.def.value;
+                constraints.push(`greater than or equal to ${check._zod.def.value}`);
               } else {
                 // @ts-expect-error - fix later
-                constraints.gt = check._zod.def.value;
+                constraints.push(`greater than ${check._zod.def.value}`);
               }
               break;
             case 'less_than':
               // @ts-expect-error - fix later
               if (check._zod.def.inclusive) {
                 // @ts-expect-error - fix later
-                constraints.lte = check._zod.def.value;
+                constraints.push(`lower than or equal to ${check._zod.def.value}`);
               } else {
                 // @ts-expect-error - fix later
-                constraints.lt = check._zod.def.value;
+                constraints.push(`lower than ${check._zod.def.value}`);
               }
               break;
             case 'multiple_of': {
               // @ts-expect-error - fix later
-              constraints.multipleOf = check._zod.def.value;
+              constraints.push(`multiple of ${check._zod.def.value}`);
               break;
             }
           }
@@ -629,7 +582,7 @@ export class SchemaCompatLayer {
    * @returns A Zod string schema representing the date in ISO format
    */
   public defaultZodDateHandler(value: ZodDate): ZodString {
-    const constraints: DateConstraints = {};
+    const constraints: ConstraintHelperText = [];
     const checks = value._zod.def.checks || [];
     type ZodDateCheck = (typeof checks)[number];
     const newChecks: ZodDateCheck[] = [];
@@ -640,14 +593,14 @@ export class SchemaCompatLayer {
             // @ts-expect-error - fix later
             const minDate = new Date(check._zod.def.value);
             if (!isNaN(minDate.getTime())) {
-              constraints.minDate = minDate.toISOString();
+              constraints.push(`Date must be newer than ${minDate.toISOString()} (ISO)`);
             }
             break;
           case 'greater_than':
             // @ts-expect-error - fix later
             const maxDate = new Date(check._zod.def.value);
             if (!isNaN(maxDate.getTime())) {
-              constraints.maxDate = maxDate.toISOString();
+              constraints.push(`Date must be older than ${maxDate.toISOString()} (ISO)`);
             }
             break;
           default:
@@ -655,7 +608,7 @@ export class SchemaCompatLayer {
         }
       }
     }
-    constraints.dateFormat = 'date-time';
+    constraints.push(`Date format is date-time`);
     let result = z.string().describe('date-time');
     const description = this.mergeParameterDescription(value.description, constraints);
     if (description) {

@@ -4,6 +4,7 @@ const meta = {
   "ai-recruiter": "Workflows: AI Recruiter",
   "research-assistant": "RAG: Research Assistant",
   "notes-mcp-server": "MCP Server: Notes MCP Server",
+  "web-search": "Tools: Web Search",
 };
 
 export default meta;

@@ -1,3 +1,4 @@
+import type { WritableStream } from 'node:stream/web';
 import type { Mastra, SerializedStepFlowEntry } from '..';
 import type { AISpan, AISpanType, TracingPolicy } from '../ai-tracing';
 import { MastraBase } from '../base';
@@ -61,6 +62,8 @@ export abstract class ExecutionEngine extends MastraBase {
       stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
+      forEachIndex?: number;
+      label?: string;
     };
     emitter: Emitter;
     runtimeContext: RuntimeContext;
@@ -74,6 +77,7 @@ export abstract class ExecutionEngine extends MastraBase {
     format?: 'legacy' | 'vnext' | undefined;
     outputOptions?: {
       includeState?: boolean;
+      includeResumeLabels?: boolean;
     };
   }): Promise<TOutput>;
 }

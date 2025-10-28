@@ -1,22 +1,16 @@
-import { ConsoleLogger, LogLevel } from '../../logger';
-import type { IMastraLogger } from '../../logger';
 import { AITracingEventType } from '../types';
-import type { AITracingEvent, AITracingExporter } from '../types';
+import type { AITracingEvent } from '../types';
+import { BaseExporter } from './base';
+import type { BaseExporterConfig } from './base';
 
-export class ConsoleExporter implements AITracingExporter {
+export class ConsoleExporter extends BaseExporter {
   name = 'tracing-console-exporter';
-  private logger: IMastraLogger;
 
-  constructor(logger?: IMastraLogger) {
-    if (logger) {
-      this.logger = logger;
-    } else {
-      // Fallback: create a direct ConsoleLogger instance if none provided
-      this.logger = new ConsoleLogger({ level: LogLevel.INFO });
-    }
+  constructor(config: BaseExporterConfig = {}) {
+    super(config);
   }
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
+  protected async _exportEvent(event: AITracingEvent): Promise<void> {
     const span = event.exportedSpan;
 
     // Helper to safely stringify attributes (filtering already done by processor)

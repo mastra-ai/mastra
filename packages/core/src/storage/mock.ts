@@ -1,7 +1,6 @@
 import type { MastraMessageV2 } from '../agent';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource } from '../scores/types';
-import type { Trace } from '../telemetry';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
@@ -15,8 +14,6 @@ import type { InMemoryObservability } from './domains/observability/inmemory';
 import { StoreOperationsInMemory } from './domains/operations/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
 import type { InMemoryScores } from './domains/scores/inmemory';
-import { TracesInMemory } from './domains/traces/inmemory';
-import type { InMemoryTraces } from './domains/traces/inmemory';
 import { WorkflowsInMemory } from './domains/workflows';
 import type { InMemoryWorkflows } from './domains/workflows/inmemory';
 
@@ -28,7 +25,6 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
-  StorageGetTracesPaginatedArg,
   StoragePagination,
   StorageResourceType,
   ThreadSortOptions,
@@ -57,11 +53,6 @@ export class InMemoryStore extends MastraStorage {
       operations: operationsStorage,
     });
 
-    const tracesStorage = new TracesInMemory({
-      collection: database.mastra_traces as InMemoryTraces,
-      operations: operationsStorage,
-    });
-
     const memoryStorage = new InMemoryMemory({
       collection: {
         threads: database.mastra_threads as InMemoryThreads,
@@ -84,7 +75,6 @@ export class InMemoryStore extends MastraStorage {
       legacyEvals: legacyEvalsStorage,
       operations: operationsStorage,
       workflows: workflowsStorage,
-      traces: tracesStorage,
       scores: scoresStorage,
       memory: memoryStorage,
       observability: observabilityStorage,
@@ -314,36 +304,6 @@ export class InMemoryStore extends MastraStorage {
     PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }
   > {
     return this.stores.memory.getMessagesPaginated({ threadId, selectBy });
-  }
-
-  async getTraces({
-    name,
-    scope,
-    page,
-    perPage,
-    attributes,
-    filters,
-    fromDate,
-    toDate,
-  }: {
-    name?: string;
-    scope?: string;
-    page: number;
-    perPage: number;
-    attributes?: Record<string, string>;
-    filters?: Record<string, any>;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<any[]> {
-    return this.stores.traces.getTraces({ name, scope, page, perPage, attributes, filters, fromDate, toDate });
-  }
-
-  async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
-    return this.stores.traces.getTracesPaginated(args);
-  }
-
-  async batchTraceInsert(args: { records: Record<string, any>[] }): Promise<void> {
-    return this.stores.traces.batchTraceInsert(args);
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {

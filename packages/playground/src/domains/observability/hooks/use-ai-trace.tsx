@@ -1,7 +1,8 @@
 import { useQuery } from '@mastra/playground-ui';
-import { client } from '@/lib/client';
+import { useMastraClient } from '@mastra/react';
 
 export const useAITrace = (traceId: string | null | undefined, options?: { enabled: boolean }) => {
+  const client = useMastraClient();
   const query = useQuery({
     queryKey: ['ai-trace', traceId],
     queryFn: async () => {

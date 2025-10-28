@@ -19,23 +19,35 @@ export class BiasJudge extends MastraAgentJudge {
     const opinionsPrompt = generateOpinionsPrompt({ input, output: actualOutput });
 
     const opinions = await this.agent.generate(opinionsPrompt, {
-      output: z.object({
-        opinions: z.array(z.string()),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          opinions: z.array(z.string()),
+        }),
+      },
     });
+
+    if (!opinions.object) {
+      throw new Error('Failed to generate opinions');
+    }
 
     const prompt = generateEvaluatePrompt({ output: actualOutput, opinions: opinions.object.opinions });
 
     const result = await this.agent.generate(prompt, {
-      output: z.object({
-        verdicts: z.array(
-          z.object({
-            verdict: z.string(),
-            reason: z.string(),
-          }),
-        ),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          verdicts: z.array(
+            z.object({
+              verdict: z.string(),
+              reason: z.string(),
+            }),
+          ),
+        }),
+      },
     });
+
+    if (!result.object) {
+      throw new Error('Failed to generate verdicts');
+    }
 
     return result.object.verdicts;
   }
@@ -43,10 +55,16 @@ export class BiasJudge extends MastraAgentJudge {
   async getReason(args: { score: number; biases: string[] }): Promise<string> {
     const prompt = generateReasonPrompt(args);
     const result = await this.agent.generate(prompt, {
-      output: z.object({
-        reason: z.string(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          reason: z.string(),
+        }),
+      },
     });
+
+    if (!result.object) {
+      throw new Error('Failed to generate reason');
+    }
 
     return result.object.reason;
   }

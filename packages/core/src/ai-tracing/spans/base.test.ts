@@ -36,7 +36,7 @@ describe('AISpan', () => {
         exporters: [testExporter],
       });
 
-      // Create a hierarchy: AGENT_RUN -> WORKFLOW_RUN -> WORKFLOW_STEP -> LLM_GENERATION
+      // Create a hierarchy: AGENT_RUN -> WORKFLOW_RUN -> WORKFLOW_STEP -> MODEL_GENERATION
       const agentSpan = tracing.startSpan({
         type: AISpanType.AGENT_RUN,
         name: 'test-agent',
@@ -62,7 +62,7 @@ describe('AISpan', () => {
       });
 
       const llmSpan = stepSpan.createChildSpan({
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         name: 'llm-call',
         attributes: {
           model: 'gpt-4',
@@ -112,7 +112,7 @@ describe('AISpan', () => {
       });
 
       const llmSpan = agentSpan.createChildSpan({
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         name: 'llm-call',
         attributes: {
           model: 'gpt-4',
@@ -180,7 +180,7 @@ describe('AISpan', () => {
       });
 
       const llmSpan = toolSpan.createChildSpan({
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         name: 'llm-call',
         attributes: {
           model: 'gpt-4',

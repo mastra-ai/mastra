@@ -41,7 +41,7 @@ const agentSpan = tracing.startSpan({
 
 // Create child spans for nested operations
 const llmSpan = agentSpan.createChildSpan({
-  type: AISpanType.LLM_GENERATION,
+  type: AISpanType.MODEL_GENERATION,
   name: 'gpt-4-response',
   attributes: {
     model: 'gpt-4',
@@ -63,7 +63,7 @@ agentSpan.end();
 - **`WORKFLOW_RUN`**: Root span for entire workflow execution
 - **`WORKFLOW_STEP`**: Individual step execution within a workflow
 - **`AGENT_RUN`**: Agent processing (supports tools, memory, multi-step)
-- **`LLM_GENERATION`**: Individual LLM API calls with token usage
+- **`MODEL_GENERATION`**: Individual model API calls with token usage
 - **`TOOL_CALL`**: Function/tool execution
 - **`MCP_TOOL_CALL`**: Model Context Protocol tool execution
 - **`GENERIC`**: Custom spans for other operations

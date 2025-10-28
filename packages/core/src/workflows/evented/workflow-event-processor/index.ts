@@ -30,7 +30,7 @@ export type ProcessorArgs = {
     workflowId: string;
     input: any;
   };
-  runCount?: number;
+  retryCount?: number;
 };
 
 export type ParentWorkflow = {
@@ -335,7 +335,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     resumeData,
     parentWorkflow,
     runtimeContext,
-    runCount = 0,
+    retryCount = 0,
   }: ProcessorArgs) {
     let stepGraph: StepFlowEntry[] = workflow.stepGraph;
 
@@ -710,7 +710,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         step.type === 'waitForEvent' || (resumeSteps?.length === 1 && resumeSteps?.[0] === step.step.id)
           ? resumeData
           : undefined,
-      runCount,
+      retryCount,
       foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
       validateInputs: workflow.options.validateInputs,
     });
@@ -741,7 +741,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (stepResult.status === 'failed') {
-      if (runCount >= (workflow.retryConfig.attempts ?? 0)) {
+      if (retryCount >= (workflow.retryConfig.attempts ?? 0)) {
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.step.end',
           runId,
@@ -771,7 +771,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             prevResult,
             activeSteps,
             runtimeContext,
-            runCount: runCount + 1,
+            retryCount: retryCount + 1,
           },
         });
       }
@@ -791,7 +791,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           runtimeContext,
-          runCount: runCount + 1,
+          retryCount: retryCount + 1,
         },
         {
           pubsub: this.mastra.pubsub,

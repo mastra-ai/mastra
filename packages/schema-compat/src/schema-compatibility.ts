@@ -30,39 +30,10 @@ import type {
   AllZodType as AllZodTypeV4,
 } from './schema-compatibility-v4';
 
-// Define constraint types locally since they're not exported from v3/v4 files
-type StringConstraints = {
-  minLength?: number;
-  maxLength?: number;
-  email?: boolean;
-  url?: boolean;
-  uuid?: boolean;
-  cuid?: boolean;
-  emoji?: boolean;
-  regex?: { pattern: string; flags?: string };
-};
-
-type NumberConstraints = {
-  gt?: number;
-  gte?: number;
-  lt?: number;
-  lte?: number;
-  multipleOf?: number;
-};
-
-type ArrayConstraints = {
-  minLength?: number;
-  maxLength?: number;
-  exactLength?: number;
-};
-
-type DateConstraints = {
-  minDate?: string;
-  maxDate?: string;
-  dateFormat?: string;
-};
 import type { ModelInformation } from './types';
 import { convertZodSchemaToAISDKSchema } from './utils';
+
+type ConstraintHelperText = string[];
 
 export abstract class SchemaCompatLayer {
   private model: ModelInformation;
@@ -287,12 +258,7 @@ export abstract class SchemaCompatLayer {
    */
   public mergeParameterDescription(
     description: string | undefined,
-    constraints:
-      | NumberConstraints
-      | StringConstraints
-      | ArrayConstraints
-      | DateConstraints
-      | { defaultValue?: unknown },
+    constraints: ConstraintHelperText,
   ): string | undefined {
     // This method doesn't depend on Zod version, so we can use either layer
     return this.v3Layer.mergeParameterDescription(description, constraints);

@@ -2,6 +2,7 @@ import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 import { ChevronUpIcon } from 'lucide-react';
+import { useEffect } from 'react';
 import { useState } from 'react';
 
 export interface BadgeWrapperProps {
@@ -24,6 +25,10 @@ export const BadgeWrapper = ({
   'data-testid': dataTestId,
 }: BadgeWrapperProps) => {
   const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
+
+  useEffect(() => {
+    setIsCollapsed(initialCollapsed);
+  }, [initialCollapsed]);
 
   return (
     <div className="mb-4" data-testid={dataTestId}>

@@ -12,6 +12,7 @@ import { Nav } from "./navbar";
 import { SearchWrapper } from "./search-wrapper";
 import { SubscribeForm } from "./subscribe-form";
 import { TabSwitcher } from "./tab-switcher";
+
 const footer = <Footer />;
 
 export const NextraLayout = ({

@@ -48,6 +48,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
+    "model": "inference/google/gemma-3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 125000,
+    "maxOutput": 4096,
+    "inputCost": 0.15,
+    "outputCost": 0.3
+  },
+  {
     "model": "inference/meta/llama-3.1-8b-instruct",
     "imageInput": false,
     "audioInput": false,
@@ -96,40 +108,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.02
   },
   {
-    "model": "inference/qwen/qwen3-embedding-4b",
+    "model": "inference/mistral/mistral-nemo-12b-instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 32000,
-    "maxOutput": 2048,
-    "inputCost": 0.01,
-    "outputCost": null
-  },
-  {
-    "model": "inference/qwen/qwen-2.5-7b-vision-instruct",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 125000,
+    "contextWindow": 16000,
     "maxOutput": 4096,
-    "inputCost": 0.2,
-    "outputCost": 0.2
-  },
-  {
-    "model": "inference/google/gemma-3",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 125000,
-    "maxOutput": 4096,
-    "inputCost": 0.15,
-    "outputCost": 0.3
+    "inputCost": 0.038,
+    "outputCost": 0.1
   },
   {
     "model": "inference/osmosis/osmosis-structure-0.6b",
@@ -144,16 +132,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.5
   },
   {
-    "model": "inference/mistral/mistral-nemo-12b-instruct",
-    "imageInput": false,
+    "model": "inference/qwen/qwen-2.5-7b-vision-instruct",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 16000,
+    "contextWindow": 125000,
     "maxOutput": 4096,
-    "inputCost": 0.038,
-    "outputCost": 0.1
+    "inputCost": 0.2,
+    "outputCost": 0.2
+  },
+  {
+    "model": "inference/qwen/qwen3-embedding-4b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 2048,
+    "inputCost": 0.01,
+    "outputCost": null
   }
 ]}
 />
@@ -167,7 +167,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://inference.net/v1",
-    modelId: "google/gemma-3",
+    id: "inference/google/gemma-3",
     apiKey: process.env.INFERENCE_API_KEY,
     headers: {
       "X-Custom-Header": "value"

@@ -1,0 +1,69 @@
+name: 'Dane App Auth'
+description: 'Create GitHub App installation token, expose outputs, set .netrc'
+inputs:
+  app-id:
+    description: 'GitHub App ID'
+    required: true
+  private-key:
+    description: 'GitHub App private key'
+    required: true
+  owner:
+    description: 'Owner for the installation scope (optional)'
+    required: false
+  repositories:
+    description: 'Optional list of repos to scope the token to'
+    required: false
+  skip-token-revoke:
+    description: 'Do not revoke token at job end (optional)'
+    required: false
+    default: 'false'
+
+outputs:
+  token:
+    description: 'Installation access token'
+    value: ${{ steps.app-token.outputs.token }}
+  app-slug:
+    description: 'App slug'
+    value: ${{ steps.app-token.outputs.app-slug }}
+  user-id:
+    description: 'Bot user ID'
+    value: ${{ steps.get-user-id.outputs.user-id }}
+
+runs:
+  using: 'composite'
+  steps:
+    - id: app-token
+      uses: actions/create-github-app-token@v2
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: ${{ inputs.owner }}
+        repositories: ${{ inputs.repositories }}
+        skip-token-revoke: ${{ inputs['skip-token-revoke'] }}
+
+    - name: Get GitHub App User ID
+      id: get-user-id
+      shell: bash
+      run: |
+        echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+      env:
+        GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+    - name: Write .netrc for git and API
+      shell: bash
+      run: |
+        cat <<'EOF' > "$HOME/.netrc"
+        machine github.com
+          login x-access-token
+          password ${{ steps.app-token.outputs.token }}
+        machine api.github.com
+          login x-access-token
+          password ${{ steps.app-token.outputs.token }}
+        EOF
+        chmod 600 "$HOME/.netrc"
+
+    - name: Configure git
+      shell: bash
+      run: |
+        git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+        git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'

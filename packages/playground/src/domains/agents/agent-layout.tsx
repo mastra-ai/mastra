@@ -2,10 +2,8 @@ import { useParams } from 'react-router';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { useAgent } from '@/hooks/use-agents';
-
 import { AgentHeader } from './agent-header';
-import { HeaderTitle, Header, MainContentLayout } from '@mastra/playground-ui';
+import { HeaderTitle, Header, MainContentLayout, useAgent } from '@mastra/playground-ui';
 
 export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const { agentId } = useParams();

@@ -117,7 +117,7 @@ export class MockMemory extends MastraMemory {
     };
   }
   async query() {
-    return { messages: [], uiMessages: [] };
+    return { messages: [], uiMessages: [], messagesV2: [] };
   }
   async deleteThread(threadId: string) {
     delete this.threads[threadId];

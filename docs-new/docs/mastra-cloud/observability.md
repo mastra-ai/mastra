@@ -1,0 +1,53 @@
+---
+title: Observability
+description: Monitoring and debugging tools for Mastra Cloud deployments
+---
+
+# Understanding Tracing and Logs
+
+Mastra Cloud captures execution data to help you monitor your application's behavior in the production environment.
+
+:::tip Mastra Cloud
+
+Deploy your Mastra application to [Mastra Cloud](https://mastra.ai/cloud) for automated deployment, monitoring, and management.
+
+:::
+
+## Logs
+
+You can view detailed logs for debugging and monitoring your application's behavior on the [Logs](/docs/mastra-cloud/dashboard#logs) page of the Dashboard.
+
+![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
+
+Key features:
+
+Each log entry includes its severity level and a detailed message showing agent, workflow, or storage activity.
+
+## Traces
+
+More detailed traces are available for both agents and workflows by using a [logger](/docs/observability/logging) or enabling [telemetry](/docs/observability/ai-tracing/overview) using one of our [supported providers](/docs/reference/observability/otel-tracing/providers).
+
+### Agents
+
+With a [logger](/docs/observability/logging) enabled, you can view detailed outputs from your agents in the **Traces** section of the Agents Playground.
+
+![observability agents](/img/mastra-cloud/mastra-cloud-observability-agents.jpg)
+
+Key features:
+
+Tools passed to the agent during generation are standardized using `convertTools`. This includes retrieving client-side tools, memory tools, and tools exposed from workflows.
+
+### Workflows
+
+With a [logger](/docs/observability/logging) enabled, you can view detailed outputs from your workflows in the **Traces** section of the Workflows Playground.
+
+![observability workflows](/img/mastra-cloud/mastra-cloud-observability-workflows.jpg)
+
+Key features:
+
+Workflows are created using `createWorkflow`, which sets up steps, metadata, and tools. You can run them with `runWorkflow` by passing input and options.
+
+## Next steps
+
+- [Logging](/docs/observability/logging)
+- [AI Tracing](/docs/observability/ai-tracing/overview)

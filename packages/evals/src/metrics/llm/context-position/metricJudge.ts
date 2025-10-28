@@ -21,15 +21,21 @@ export class ContextPositionJudge extends MastraAgentJudge {
       context: retrievalContext,
     });
     const result = await this.agent.generate(prompt, {
-      output: z.object({
-        verdicts: z.array(
-          z.object({
-            verdict: z.string(),
-            reason: z.string(),
-          }),
-        ),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          verdicts: z.array(
+            z.object({
+              verdict: z.string(),
+              reason: z.string(),
+            }),
+          ),
+        }),
+      },
     });
+
+    if (!result.object) {
+      throw new Error('Failed to generate verdicts');
+    }
 
     return result.object.verdicts;
   }
@@ -46,10 +52,17 @@ export class ContextPositionJudge extends MastraAgentJudge {
   }): Promise<string> {
     const prompt = generateReasonPrompt(args);
     const result = await this.agent.generate(prompt, {
-      output: z.object({
-        reason: z.string(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          reason: z.string(),
+        }),
+      },
     });
+
+    if (!result.object) {
+      throw new Error('Failed to generate reason');
+    }
+
     return result.object.reason;
   }
 }

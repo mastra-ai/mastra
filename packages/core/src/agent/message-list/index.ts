@@ -163,6 +163,64 @@ export class MessageList {
     return this;
   }
 
+  private serializeSet(set: Set<MastraMessageV2>) {
+    return Array.from(set).map(value => value.id);
+  }
+
+  private deserializeSet(ids: string[]) {
+    return new Set(ids.map(id => this.messages.find(m => m.id === id)).filter(Boolean) as MastraMessageV2[]);
+  }
+
+  private serializeMessage(message: MastraMessageV2) {
+    return {
+      ...message,
+      createdAt: message.createdAt.toUTCString(),
+    };
+  }
+
+  private deserializeMessage(state: ReturnType<typeof this.serializeMessage>) {
+    return {
+      ...state,
+      createdAt: new Date(state.createdAt),
+    } as MastraMessageV2;
+  }
+
+  public serialize() {
+    return {
+      messages: this.messages.map(this.serializeMessage),
+      systemMessages: this.systemMessages,
+      taggedSystemMessages: this.taggedSystemMessages,
+      memoryInfo: this.memoryInfo,
+      _agentNetworkAppend: this._agentNetworkAppend,
+      memoryMessages: this.serializeSet(this.memoryMessages),
+      newUserMessages: this.serializeSet(this.newUserMessages),
+      newResponseMessages: this.serializeSet(this.newResponseMessages),
+      userContextMessages: this.serializeSet(this.userContextMessages),
+      memoryMessagesPersisted: this.serializeSet(this.memoryMessagesPersisted),
+      newUserMessagesPersisted: this.serializeSet(this.newUserMessagesPersisted),
+      newResponseMessagesPersisted: this.serializeSet(this.newResponseMessagesPersisted),
+      userContextMessagesPersisted: this.serializeSet(this.userContextMessagesPersisted),
+    };
+  }
+
+  public deserialize(state: ReturnType<typeof this.serialize>) {
+    this.messages = state.messages.map(this.deserializeMessage);
+    this.systemMessages = state.systemMessages;
+    this.taggedSystemMessages = state.taggedSystemMessages;
+    this.memoryInfo = state.memoryInfo;
+    this._agentNetworkAppend = state._agentNetworkAppend;
+    this.memoryMessages = this.deserializeSet(state.memoryMessages);
+    this.newUserMessages = this.deserializeSet(state.newUserMessages);
+    this.newResponseMessages = this.deserializeSet(state.newResponseMessages);
+    this.userContextMessages = this.deserializeSet(state.userContextMessages);
+    this.memoryMessagesPersisted = this.deserializeSet(state.memoryMessagesPersisted);
+    this.newUserMessagesPersisted = this.deserializeSet(state.newUserMessagesPersisted);
+    this.newResponseMessagesPersisted = this.deserializeSet(state.newResponseMessagesPersisted);
+    this.userContextMessagesPersisted = this.deserializeSet(state.userContextMessagesPersisted);
+
+    return this;
+  }
+
   public getLatestUserContent(): string | null {
     const currentUserMessages = this.all.core().filter(m => m.role === 'user');
     const content = currentUserMessages.at(-1)?.content;

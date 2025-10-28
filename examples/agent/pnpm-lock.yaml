@@ -28,6 +28,9 @@ importers:
       '@ai-sdk/openai-v5':
         specifier: npm:@ai-sdk/openai@2.0.15
         version: '@ai-sdk/openai@2.0.15(zod@3.25.76)'
+      '@ai-sdk/provider':
+        specifier: ^2.0.0
+        version: 2.0.0
       '@mastra/client-js':
         specifier: link:../../client-sdks/client-js
         version: link:../../client-sdks/client-js
@@ -197,7 +200,7 @@ packages:
     hasBin: true
 
   react@19.1.1:
-    resolution: {integrity: sha512-w8nqGImo45dmMIfljjMwOGtbmC/mk4CMYhWIicdSflH91J9TyCyczcPFXJzrZ/ZXcgGRFeP6BU0BEJTw6tZdfQ==, tarball: https://registry.npmjs.org/react/-/react-19.1.1.tgz}
+    resolution: {integrity: sha512-w8nqGImo45dmMIfljjMwOGtbmC/mk4CMYhWIicdSflH91J9TyCyczcPFXJzrZ/ZXcgGRFeP6BU0BEJTw6tZdfQ==}
     engines: {node: '>=0.10.0'}
 
   secure-json-parse@2.7.0:
@@ -228,7 +231,7 @@ packages:
       zod: ^3.24.1
 
   zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==, tarball: https://registry.npmjs.org/zod/-/zod-3.25.76.tgz}
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
 snapshots:
 

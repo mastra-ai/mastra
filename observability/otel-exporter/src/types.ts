@@ -2,8 +2,9 @@
  * OtelExporter Types
  */
 
-import type { AnyExportedAISpan } from '@mastra/core/ai-tracing';
+import type { AnyExportedAISpan, BaseExporterConfig } from '@mastra/core/ai-tracing';
 import type { DetectedResourceAttributes } from '@opentelemetry/resources';
+import type { SpanExporter } from '@opentelemetry/sdk-trace-base';
 
 export type ExportProtocol = 'http/json' | 'http/protobuf' | 'grpc' | 'zipkin';
 
@@ -55,7 +56,7 @@ export type ProviderConfig =
   | { laminar: LaminarConfig }
   | { custom: CustomConfig };
 
-export interface OtelExporterConfig {
+export interface OtelExporterConfig extends BaseExporterConfig {
   // Provider configuration
   provider?: ProviderConfig;
 
@@ -68,6 +69,9 @@ export interface OtelExporterConfig {
 
   // Override or provide additional resource attributes
   resourceAttributes?: DetectedResourceAttributes;
+
+  // Override or provide a custom span exporter
+  exporter?: SpanExporter;
 }
 
 export interface SpanData {

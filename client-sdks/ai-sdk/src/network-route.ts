@@ -46,7 +46,6 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
                 threadId: { type: 'string' },
                 resourceId: { type: 'string' },
                 modelSettings: { type: 'object', additionalProperties: true },
-                telemetry: { type: 'object', additionalProperties: true },
                 tools: { type: 'array', items: { type: 'object' } },
               },
               required: ['messages'],

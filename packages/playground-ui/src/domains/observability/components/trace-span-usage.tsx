@@ -38,7 +38,7 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
     return null;
   }
 
-  const generationSpans = traceSpans.filter(span => span.spanType === 'llm_generation');
+  const generationSpans = traceSpans.filter(span => span.spanType === 'model_generation');
 
   // Determine if we're using v5 format (inputTokens/outputTokens) or legacy format (promptTokens/completionTokens)
   const hasV5Format = generationSpans.some(

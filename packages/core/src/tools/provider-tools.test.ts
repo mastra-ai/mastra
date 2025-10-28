@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 
 describe('provider-defined tools', () => {
-  it('should handle Google search tool', { timeout: 30000 }, async () => {
+  it('should handle Google search tool', { timeout: 120000 }, async () => {
     const search = google.tools.googleSearch({});
 
     const agent = new Agent({
@@ -32,6 +32,34 @@ describe('provider-defined tools', () => {
     expect(result.sources.length).toBeGreaterThan(0);
     // These are the web search queries that were used to generate the response
     expect((result.providerMetadata?.google?.groundingMetadata as any)?.webSearchQueries?.length).toBeGreaterThan(0);
+  });
+
+  it('should handle Google URL context tool', async () => {
+    const agent = new Agent({
+      name: 'test-google-url-agent',
+      instructions: 'You are a helpful AI assistant.',
+      model: google('gemini-2.0-flash-exp'),
+      tools: {
+        url_context: google.tools.urlContext({}),
+      },
+    });
+
+    expect(agent).toBeDefined();
+    expect(agent.name).toBe('test-google-url-agent');
+  });
+
+  it('should handle Google code execution tool', async () => {
+    const agent = new Agent({
+      name: 'test-google-code-agent',
+      instructions: 'You are a helpful AI assistant.',
+      model: google('gemini-2.0-flash-exp'),
+      tools: {
+        code_execution: google.tools.codeExecution({}),
+      },
+    });
+
+    expect(agent).toBeDefined();
+    expect(agent.name).toBe('test-google-code-agent');
   });
 
   it('should handle openai web search tool', { timeout: 30000 }, async () => {

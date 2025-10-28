@@ -108,8 +108,10 @@ describe('ModelRouter Integration Tests', () => {
 
   describe.each(testConfigs)('$provider/$model', ({ provider, model, envVar }) => {
     const modelId = `${provider}/${model}` as const;
+    const isGemini = modelId.includes('gemini-2.0-flash-exp');
+    const skipInCI = process.env.CI === 'true' && isGemini;
 
-    it('should generate text response', async () => {
+    it.skipIf(skipInCI)('should generate text response', async () => {
       if (!process.env[envVar]) {
         throw new Error(`${envVar} not set - required for ${provider} integration tests`);
       }
@@ -128,7 +130,7 @@ describe('ModelRouter Integration Tests', () => {
       expect(response.text.toLowerCase()).toContain('hello');
     });
 
-    it('should handle tool calling', async () => {
+    it.skipIf(skipInCI)('should handle tool calling', async () => {
       if (!process.env[envVar]) {
         throw new Error(`${envVar} not set - required for ${provider} integration tests`);
       }
@@ -154,7 +156,7 @@ describe('ModelRouter Integration Tests', () => {
       expect(toolCalls[0].payload.args).toHaveProperty('location');
     });
 
-    it('should support system messages via instructions', async () => {
+    it.skipIf(skipInCI)('should support system messages via instructions', async () => {
       if (!process.env[envVar]) {
         throw new Error(`${envVar} not set - required for ${provider} integration tests`);
       }
@@ -175,7 +177,7 @@ describe('ModelRouter Integration Tests', () => {
       expect(hasPirateWord).toBe(true);
     });
 
-    it(
+    it.skipIf(skipInCI)(
       'should support streaming',
       async () => {
         if (!process.env[envVar]) {

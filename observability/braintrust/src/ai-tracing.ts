@@ -7,26 +7,23 @@
  */
 
 import type {
-  AITracingExporter,
   AITracingEvent,
   AnyExportedAISpan,
-  LLMGenerationAttributes,
+  ModelGenerationAttributes,
+  BaseExporterConfig,
 } from '@mastra/core/ai-tracing';
-import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
-import { ConsoleLogger } from '@mastra/core/logger';
+import { AISpanType, omitKeys, BaseExporter } from '@mastra/core/ai-tracing';
 import { initLogger } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
 import { normalizeUsageMetrics } from './metrics';
 
-export interface BraintrustExporterConfig {
+export interface BraintrustExporterConfig extends BaseExporterConfig {
   /** Braintrust API key */
   apiKey?: string;
   /** Optional custom endpoint */
   endpoint?: string;
   /** Braintrust project name (default: 'mastra-tracing') */
   projectName?: string;
-  /** Logger level for diagnostic messages (default: 'warn') */
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Support tuning parameters */
   tuningParameters?: Record<string, any>;
 }
@@ -42,8 +39,8 @@ const DEFAULT_SPAN_TYPE = 'task';
 
 // Exceptions to the default mapping
 const SPAN_TYPE_EXCEPTIONS: Partial<Record<AISpanType, string>> = {
-  [AISpanType.LLM_GENERATION]: 'llm',
-  [AISpanType.LLM_CHUNK]: 'llm',
+  [AISpanType.MODEL_GENERATION]: 'llm',
+  [AISpanType.MODEL_CHUNK]: 'llm',
   [AISpanType.TOOL_CALL]: 'tool',
   [AISpanType.MCP_TOOL_CALL]: 'tool',
   [AISpanType.WORKFLOW_CONDITIONAL_EVAL]: 'function',
@@ -55,19 +52,16 @@ function mapSpanType(spanType: AISpanType): 'llm' | 'score' | 'function' | 'eval
   return (SPAN_TYPE_EXCEPTIONS[spanType] as any) ?? DEFAULT_SPAN_TYPE;
 }
 
-export class BraintrustExporter implements AITracingExporter {
+export class BraintrustExporter extends BaseExporter {
   name = 'braintrust';
   private traceMap = new Map<string, SpanData>();
-  private logger: ConsoleLogger;
   private config: BraintrustExporterConfig;
 
   constructor(config: BraintrustExporterConfig) {
-    this.logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
+    super(config);
 
     if (!config.apiKey) {
-      this.logger.error('BraintrustExporter: Missing required credentials, exporter will be disabled', {
-        hasApiKey: !!config.apiKey,
-      });
+      this.setDisabled(`Missing required credentials (apiKey: ${!!config.apiKey})`);
       this.config = null as any;
       return;
     }
@@ -75,11 +69,7 @@ export class BraintrustExporter implements AITracingExporter {
     this.config = config;
   }
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
-    if (!this.config) {
-      return;
-    }
-
+  protected async _exportEvent(event: AITracingEvent): Promise<void> {
     if (event.exportedSpan.isEvent) {
       await this.handleEventSpan(event.exportedSpan);
       return;
@@ -303,25 +293,25 @@ export class BraintrustExporter implements AITracingExporter {
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
 
-    if (span.type === AISpanType.LLM_GENERATION) {
-      const llmAttr = attributes as LLMGenerationAttributes;
+    if (span.type === AISpanType.MODEL_GENERATION) {
+      const modelAttr = attributes as ModelGenerationAttributes;
 
       // Model goes to metadata
-      if (llmAttr.model !== undefined) {
-        payload.metadata.model = llmAttr.model;
+      if (modelAttr.model !== undefined) {
+        payload.metadata.model = modelAttr.model;
       }
 
       // Provider goes to metadata (if provided by attributes)
-      if (llmAttr.provider !== undefined) {
-        payload.metadata.provider = llmAttr.provider;
+      if (modelAttr.provider !== undefined) {
+        payload.metadata.provider = modelAttr.provider;
       }
 
       // Usage/token info goes to metrics
-      payload.metrics = normalizeUsageMetrics(llmAttr);
+      payload.metrics = normalizeUsageMetrics(modelAttr);
 
       // Model parameters go to metadata
-      if (llmAttr.parameters !== undefined) {
-        payload.metadata.modelParameters = llmAttr.parameters;
+      if (modelAttr.parameters !== undefined) {
+        payload.metadata.modelParameters = modelAttr.parameters;
       }
 
       // Other LLM attributes go to metadata
@@ -365,5 +355,6 @@ export class BraintrustExporter implements AITracingExporter {
       // Loggers don't have an explicit shutdown method
     }
     this.traceMap.clear();
+    await super.shutdown();
   }
 }

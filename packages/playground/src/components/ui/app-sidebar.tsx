@@ -226,7 +226,7 @@ export function AppSidebar() {
         ) : (
           <span className="flex items-center gap-0.5 pl-1">
             <LogoWithoutText className="h-[2.5rem] w-[2.5rem] shrink-0" />
-            <span className="font-serif text-sm">Mastra</span>
+            <span className="font-serif text-sm">Mastra Studio</span>
           </span>
         )}
       </div>
@@ -265,10 +265,11 @@ export function AppSidebar() {
               {!hideCloudCta && (
                 <MainSidebar.NavLink
                   link={{
-                    name: 'Deploy to Mastra Cloud',
+                    name: 'Share',
                     url: 'https://mastra.ai/cloud',
                     icon: <CloudUploadIcon />,
                     variant: 'featured',
+                    tooltipMsg: 'You’re running Mastra Studio locally. Want your team to collaborate?',
                   }}
                   state={state}
                 />

@@ -11,6 +11,7 @@ let allPackages = await globby(
     '**/package.json',
     '!./examples/**',
     '!./docs/**',
+    '!./docs-new/**',
     '!**/node_modules/**',
     '!**/integration-tests/**',
     '!**/integration-tests-v5/**',

@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { TemplateInstallationRequest } from '@mastra/client-js';
 import { RuntimeContext } from '@mastra/core/runtime-context';
-import { client } from '@/lib/client';
+import { useMastraClient } from '@mastra/react';
 import { useState } from 'react';
 
 export interface Template {
@@ -160,29 +160,29 @@ export const useTemplateRepoEnvVars = ({ repo, owner, branch }: { repo: string; 
 };
 
 export const useAgentBuilderWorkflow = () => {
+  const client = useMastraClient();
   return useQuery({
     queryKey: ['agent-builder-workflow'],
     queryFn: async () => {
-      const template = client.getAgentBuilderAction('merge-template');
-      return await template.details();
+      return await client.getAgentBuilderAction('merge-template').details();
     },
   });
 };
 
 export const useCreateTemplateInstallRun = () => {
+  const client = useMastraClient();
   return useMutation({
     mutationFn: async ({ runId }: { runId?: string }) => {
-      const template = client.getAgentBuilderAction('merge-template');
-      return await template.createRunAsync({ runId });
+      return await client.getAgentBuilderAction('merge-template').createRunAsync({ runId });
     },
   });
 };
 
 export const useGetTemplateInstallRun = () => {
+  const client = useMastraClient();
   return useMutation({
     mutationFn: async ({ runId }: { runId: string }) => {
-      const template = client.getAgentBuilderAction('merge-template');
-      return await template.runById(runId);
+      return await client.getAgentBuilderAction('merge-template').runById(runId);
     },
   });
 };
@@ -423,6 +423,7 @@ const restoreTemplateStateFromLocalStorage = (runId: string) => {
 };
 
 export const useWatchTemplateInstall = (workflowInfo?: any) => {
+  const client = useMastraClient();
   const [streamResult, setStreamResult] = useState<any>({});
 
   // Use debouncing like workflows (prevents excessive re-renders)
@@ -599,6 +600,7 @@ const useTemplateStreamProcessor = (workflowInfo?: any, runId?: string) => {
 };
 
 export const useStreamTemplateInstall = (workflowInfo?: any) => {
+  const client = useMastraClient();
   const { streamResult, isStreaming, processStream } = useTemplateStreamProcessor(workflowInfo);
 
   const streamInstall = useMutation({

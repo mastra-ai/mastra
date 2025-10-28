@@ -1361,7 +1361,7 @@ exports[`Loop Tests > AISDK v5 > result.pipeUIMessageStreamToResponse > should s
   "data: {"type":"start-step"}
 
 ",
-  "data: {"type":"error","errorText":"custom error message: error"}
+  "data: {"type":"error","errorText":"custom error message: Error: error"}
 
 ",
   "data: {"type":"finish-step"}
@@ -1538,7 +1538,7 @@ exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should support custo
     "type": "start-step",
   },
   {
-    "errorText": "custom error message: error",
+    "errorText": "custom error message: Error: error",
     "type": "error",
   },
   {
@@ -1581,7 +1581,7 @@ exports[`Loop Tests > AISDK v5 > result.toUIMessageStreamResponse > should suppo
   "data: {"type":"start-step"}
 
 ",
-  "data: {"type":"error","errorText":"custom error message: error"}
+  "data: {"type":"error","errorText":"custom error message: Error: error"}
 
 ",
   "data: {"type":"finish-step"}

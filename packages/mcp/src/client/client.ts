@@ -727,8 +727,13 @@ export class InternalMastraMCPClient extends MastraBase {
 export class MastraMCPClient extends InternalMastraMCPClient {
   constructor(args: InternalMastraMCPClientOptions) {
     super(args);
-    this.logger.warn(
-      '[DEPRECATION] MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.',
+    throw new MastraError(
+      {
+        id: 'MASTRA_MCP_CLIENT_DEPRECATED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        text: '[DEPRECATION] MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.',
+      },
     );
   }
 }

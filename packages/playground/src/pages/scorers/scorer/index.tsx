@@ -19,20 +19,16 @@ import {
   EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
+  useAgents,
+  useWorkflows,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams } from 'react-router';
 import { Skeleton } from '@/components/ui/skeleton';
 import { GaugeIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useAgents } from '@/hooks/use-agents';
 import { cn } from '@/lib/utils';
-import { useWorkflows } from '@/hooks/use-workflows';
 
-export interface ScorerProps {
-  computeTraceLink: (traceId: string) => string;
-}
-
-export default function Scorer({ computeTraceLink }: ScorerProps) {
+export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>();
@@ -46,7 +42,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
   });
 
   const { scorer, isLoading: isScorerLoading } = useScorer(scorerId!);
-  const { data: agents, isLoading: isLoadingAgents } = useAgents();
+  const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
   const {
     data: scoresData,

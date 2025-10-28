@@ -23,13 +23,13 @@ export const weatherAgent = new Agent({
 });
 ```
 
-> See [Model Providers](/models) and [Model Capabilities](/models) for more information.
+> See [Using AI SDK with Mastra](/models#use-ai-sdk-with-mastra) for more information.
 
 ## Streaming
 
 The recommended way of using Mastra and AI SDK together is by installing the `@mastra/ai-sdk` package. `@mastra/ai-sdk` provides custom API routes and utilities for streaming Mastra agents in AI SDK-compatible formats. Including chat, workflow, and network route handlers, along with utilities and exported types for UI integrations.
 
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
   <Tabs.Tab>
     ```bash copy
     npm install @mastra/ai-sdk
@@ -37,12 +37,12 @@ The recommended way of using Mastra and AI SDK together is by installing the `@m
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash copy
-    yarn add @mastra/ai-sdk
+    pnpm add @mastra/ai-sdk
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash copy
-    pnpm add @mastra/ai-sdk
+    yarn add @mastra/ai-sdk
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -197,6 +197,7 @@ Here's an example: For a [nested agent stream within a tool](/docs/streaming/too
 
 import { useChat } from "@ai-sdk/react";
 import { AgentTool } from '../ui/agent-tool';
+import { DefaultChatTransport } from 'ai';
 import type { AgentDataPart } from "@mastra/ai-sdk";
 
 export default function Page() {
@@ -349,7 +350,7 @@ Mastra supports AI SDK UI hooks for connecting frontend components directly to a
 
 Install the required AI SDK React package:
 
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
   <Tabs.Tab>
     ```bash copy
     npm install @ai-sdk/react
@@ -357,12 +358,12 @@ Install the required AI SDK React package:
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash copy
-    yarn add @ai-sdk/react
+    pnpm add @ai-sdk/react
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash copy
-    pnpm add @ai-sdk/react
+    yarn add @ai-sdk/react
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -382,6 +383,7 @@ The `useChat()` hook handles real-time chat interactions between your frontend a
 
 import { useChat } from "@ai-sdk/react";
 import { useState } from "react";
+import { DefaultChatTransport } from 'ai';
 
 export function Chat() {
   const [inputValue, setInputValue] = useState('')
@@ -471,6 +473,7 @@ export async function POST(req: Request) {
 
 import { useChat } from "@ai-sdk/react";
 import { useState } from "react";
+import { DefaultChatTransport } from 'ai';
 
 export function ChatExtra() {
   const [inputValue, setInputValue] = useState('')

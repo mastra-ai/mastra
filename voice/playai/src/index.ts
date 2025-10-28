@@ -197,40 +197,38 @@ export class PlayAIVoice extends MastraVoice {
   async speak(input: string | NodeJS.ReadableStream, options?: { speaker?: string }): Promise<NodeJS.ReadableStream> {
     const text = typeof input === 'string' ? input : await this.streamToString(input);
 
-    return this.traced(async () => {
-      const payload = {
-        text,
-        voice: options?.speaker || this.speaker,
-        model: this.speechModel?.name,
-      };
+    const payload = {
+      text,
+      voice: options?.speaker || this.speaker,
+      model: this.speechModel?.name,
+    };
 
-      const response = await this.makeRequest('/tts/stream', payload);
-      if (!response.body) {
-        throw new Error('No response body received');
-      }
+    const response = await this.makeRequest('/tts/stream', payload);
+    if (!response.body) {
+      throw new Error('No response body received');
+    }
 
-      // Create a PassThrough stream for the audio
-      const stream = new PassThrough();
+    // Create a PassThrough stream for the audio
+    const stream = new PassThrough();
 
-      // Process the stream
-      const reader = response.body.getReader();
-      void (async () => {
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-              stream.end();
-              break;
-            }
-            stream.write(value);
+    // Process the stream
+    const reader = response.body.getReader();
+    void (async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            stream.end();
+            break;
           }
-        } catch (error) {
-          stream.destroy(error as Error);
+          stream.write(value);
         }
-      })();
+      } catch (error) {
+        stream.destroy(error as Error);
+      }
+    })();
 
-      return stream;
-    }, 'voice.playai.speak')();
+    return stream;
   }
 
   /**
@@ -250,19 +248,15 @@ export class PlayAIVoice extends MastraVoice {
   }
 
   async getSpeakers() {
-    return this.traced(
-      () =>
-        Promise.resolve(
-          PLAYAI_VOICES.map(voice => ({
-            voiceId: voice.id,
-            name: voice.name,
-            accent: voice.accent,
-            gender: voice.gender,
-            age: voice.age,
-            style: voice.style,
-          })),
-        ),
-      'voice.playai.voices',
-    )();
+    return Promise.resolve(
+      PLAYAI_VOICES.map(voice => ({
+        voiceId: voice.id,
+        name: voice.name,
+        accent: voice.accent,
+        gender: voice.gender,
+        age: voice.age,
+        style: voice.style,
+      })),
+    );
   }
 }

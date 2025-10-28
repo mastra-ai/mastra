@@ -60,7 +60,7 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
             return (
               <ThreadItem isActive={isActive} key={thread.id}>
                 <ThreadLink as={Link} to={threadLink}>
-                  <ThreadTitle title={thread.title} />
+                  <ThreadTitle title={thread.title} id={thread.id} />
                   <span>{formatDay(thread.createdAt)}</span>
                 </ThreadLink>
 
@@ -126,13 +126,13 @@ function isDefaultThreadName(name: string): boolean {
   return defaultPattern.test(name);
 }
 
-function ThreadTitle({ title }: { title?: string }) {
+function ThreadTitle({ title, id }: { title?: string; id?: string }) {
   if (!title) {
     return null;
   }
 
   if (isDefaultThreadName(title)) {
-    return <span className="text-muted-foreground">Chat from</span>;
+    return <span className="text-muted-foreground">Thread {id ? id.substring(id.length - 5) : null}</span>;
   }
 
   return <span className="truncate max-w-[14rem] text-muted-foreground">{title}</span>;

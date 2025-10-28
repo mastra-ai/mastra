@@ -11,7 +11,7 @@
 import type {
   AITracingEvent,
   AnyExportedAISpan,
-  LLMGenerationAttributes,
+  ModelGenerationAttributes,
   ToolCallAttributes,
 } from '@mastra/core/ai-tracing';
 import { AISpanType, AITracingEventType } from '@mastra/core/ai-tracing';
@@ -216,11 +216,11 @@ describe('LangfuseExporter', () => {
   });
 
   describe('LLM Generation Mapping', () => {
-    it('should create Langfuse generation for LLM_GENERATION spans', async () => {
+    it('should create Langfuse generation for MODEL_GENERATION spans', async () => {
       const llmSpan = createMockSpan({
         id: 'llm-span-id',
         name: 'gpt-4-call',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         isRoot: true,
         input: { messages: [{ role: 'user', content: 'Hello' }] },
         output: { content: 'Hi there!' },
@@ -271,7 +271,7 @@ describe('LangfuseExporter', () => {
         metadata: {
           provider: 'openai',
           resultType: 'response_generation',
-          spanType: 'llm_generation',
+          spanType: 'model_generation',
           streaming: false,
         },
       });
@@ -281,7 +281,7 @@ describe('LangfuseExporter', () => {
       const minimalLlmSpan = createMockSpan({
         id: 'minimal-llm',
         name: 'simple-llm',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         isRoot: true,
         attributes: {
           model: 'gpt-3.5-turbo',
@@ -302,7 +302,7 @@ describe('LangfuseExporter', () => {
         startTime: minimalLlmSpan.startTime,
         model: 'gpt-3.5-turbo',
         metadata: {
-          spanType: 'llm_generation',
+          spanType: 'model_generation',
         },
       });
     });
@@ -452,7 +452,7 @@ describe('LangfuseExporter', () => {
       const llmSpan = createMockSpan({
         id: 'llm-span',
         name: 'gpt-4-call',
-        type: AISpanType.LLM_GENERATION,
+        type: AISpanType.MODEL_GENERATION,
         isRoot: true,
         attributes: { model: 'gpt-4' },
       });
@@ -466,7 +466,7 @@ describe('LangfuseExporter', () => {
       llmSpan.attributes = {
         ...llmSpan.attributes,
         usage: { totalTokens: 150 },
-      } as LLMGenerationAttributes;
+      } as ModelGenerationAttributes;
       llmSpan.output = { content: 'Updated response' };
 
       await exporter.exportEvent({
@@ -476,7 +476,7 @@ describe('LangfuseExporter', () => {
 
       expect(mockGeneration.update).toHaveBeenCalledWith({
         metadata: expect.objectContaining({
-          spanType: 'llm_generation',
+          spanType: 'model_generation',
         }),
         model: 'gpt-4',
         output: { content: 'Updated response' },
@@ -1173,7 +1173,7 @@ describe('LangfuseExporter', () => {
         const llmSpan = createMockSpan({
           id: 'llm-v4-span',
           name: 'llm-generation-v4',
-          type: AISpanType.LLM_GENERATION,
+          type: AISpanType.MODEL_GENERATION,
           isRoot: true,
           attributes: {
             model: 'gpt-4',
@@ -1207,7 +1207,7 @@ describe('LangfuseExporter', () => {
         const llmSpan = createMockSpan({
           id: 'llm-v5-span',
           name: 'llm-generation-v5',
-          type: AISpanType.LLM_GENERATION,
+          type: AISpanType.MODEL_GENERATION,
           isRoot: true,
           attributes: {
             model: 'gpt-4o',
@@ -1241,7 +1241,7 @@ describe('LangfuseExporter', () => {
         const llmSpan = createMockSpan({
           id: 'llm-v5-reasoning-span',
           name: 'llm-generation-reasoning',
-          type: AISpanType.LLM_GENERATION,
+          type: AISpanType.MODEL_GENERATION,
           isRoot: true,
           attributes: {
             model: 'o1-preview',
@@ -1277,7 +1277,7 @@ describe('LangfuseExporter', () => {
         const llmSpan = createMockSpan({
           id: 'llm-v5-cached-span',
           name: 'llm-generation-cached',
-          type: AISpanType.LLM_GENERATION,
+          type: AISpanType.MODEL_GENERATION,
           isRoot: true,
           attributes: {
             model: 'claude-3-5-sonnet',
@@ -1313,7 +1313,7 @@ describe('LangfuseExporter', () => {
         const llmSpan = createMockSpan({
           id: 'llm-cache-legacy-span',
           name: 'llm-generation-cache-legacy',
-          type: AISpanType.LLM_GENERATION,
+          type: AISpanType.MODEL_GENERATION,
           isRoot: true,
           attributes: {
             model: 'gpt-4',
@@ -1351,7 +1351,7 @@ describe('LangfuseExporter', () => {
         const llmSpan = createMockSpan({
           id: 'llm-calculated-total',
           name: 'llm-generation-calc',
-          type: AISpanType.LLM_GENERATION,
+          type: AISpanType.MODEL_GENERATION,
           isRoot: true,
           attributes: {
             model: 'gpt-4',
@@ -1385,7 +1385,7 @@ describe('LangfuseExporter', () => {
         const llmSpan = createMockSpan({
           id: 'llm-mixed-span',
           name: 'llm-generation-mixed',
-          type: AISpanType.LLM_GENERATION,
+          type: AISpanType.MODEL_GENERATION,
           isRoot: true,
           attributes: {
             model: 'gpt-4',

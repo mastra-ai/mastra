@@ -17,6 +17,8 @@ import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
 
 import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
+import { ToolCallProvider } from './tool-call-provider';
+import { useAgentPromptExperiment } from '@/domains/agents/context';
 
 const handleFinishReason = (finishReason: string) => {
   switch (finishReason) {
@@ -154,6 +156,7 @@ export function MastraRuntimeProvider({
   children: ReactNode;
 }> &
   ChatProps) {
+  const { prompt: instructions } = useAgentPromptExperiment();
   const [isLegacyRunning, setIsLegacyRunning] = useState(false);
   const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(() =>
     memory ? initializeMessageState(initialLegacyMessages || []) : [],
@@ -165,6 +168,9 @@ export function MastraRuntimeProvider({
     cancelRun,
     isRunning: isRunningStream,
     setMessages,
+    approveToolCall,
+    declineToolCall,
+    toolCallApprovals,
   } = useChat({
     agentId,
     initializeMessages: () => initialMessages || [],
@@ -182,11 +188,11 @@ export function MastraRuntimeProvider({
     temperature,
     topK,
     topP,
-    instructions,
     chatWithGenerateLegacy,
     chatWithGenerate,
     chatWithNetwork,
     providerOptions,
+    requireToolApproval,
   } = settings?.modelSettings ?? {};
   const toolCallIdToName = useRef<Record<string, string>>({});
 
@@ -206,6 +212,7 @@ export function MastraRuntimeProvider({
     instructions,
     providerOptions,
     maxSteps,
+    requireToolApproval,
   };
 
   const baseClient = useMastraClient();
@@ -693,9 +700,24 @@ export function MastraRuntimeProvider({
     onNew,
     onCancel,
     adapters: isReady ? adapters : undefined,
+    extras: {
+      approveToolCall,
+      declineToolCall,
+    },
   });
 
   if (!isReady) return null;
 
-  return <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>;
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <ToolCallProvider
+        approveToolcall={approveToolCall}
+        declineToolcall={declineToolCall}
+        isRunning={isRunningStream}
+        toolCallApprovals={toolCallApprovals}
+      >
+        {children}
+      </ToolCallProvider>
+    </AssistantRuntimeProvider>
+  );
 }

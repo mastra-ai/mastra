@@ -23,38 +23,29 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/create-github-app-token@v2
-        id: app-token
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          # Use default GITHUB_TOKEN for initial checkout
+          # This is needed to access the .github/actions/app-auth action
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
         with:
           app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
 
-      - name: Get GitHub App User ID
-        id: get-user-id
-        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-
-      - run: |
-          cat <<- EOF > $HOME/.netrc
-            machine github.com
-            login ${{ steps.app-token.outputs.app-slug }}
-            password ${{ steps.app-token.outputs.token }}
-            machine api.github.com
-            login ${{ steps.app-token.outputs.app-slug }}
-            password ${{ steps.app-token.outputs.token }}
-          EOF
-          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
-          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
-
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - name: Re-checkout with app token
+        uses: actions/checkout@v5
         with:
-          token: ${{ steps.app-token.outputs.token }}
-          # Fetch entire git history so  Changesets can generate changelogs
+          token: ${{ steps.app-auth.outputs.token }}
+          # Fetch entire git history so Changesets can generate changelogs
           # with the correct commits
           fetch-depth: 0
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Check for pre.json file existence
         id: check_files
@@ -68,7 +59,7 @@ jobs:
           run_install: false
 
       - name: Setup Node.js 20.x
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20.19.5
           cache: 'pnpm'
@@ -91,6 +82,7 @@ jobs:
         run: |
           pnpm changeset-cli pre exit
           pnpm changeset-cli version
+          git pull
           git add -A
           git commit -m 'chore: version - exit prerelease mode' --no-verify
           git push
@@ -98,7 +90,7 @@ jobs:
           pnpm install
           pnpm build
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
 
       - name: Push version changes
         if: ${{ !inputs.dry_run }}
@@ -106,7 +98,7 @@ jobs:
           git push
           pnpm install
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
 
       - name: Publish packages
         if: ${{ !inputs.dry_run }}
@@ -132,35 +124,27 @@ jobs:
     if: ${{ github.repository == 'mastra-ai/mastra' && needs.release.outputs.exited_prerelease == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/create-github-app-token@v2
-        id: app-token
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          # Use default GITHUB_TOKEN for initial checkout
+          # This is needed to access the .github/actions/app-auth action
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
         with:
           app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
 
-      - name: Get GitHub App User ID
-        id: get-user-id
-        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-
-      - run: |
-          cat <<- EOF > $HOME/.netrc
-            machine github.com
-            login ${{ steps.app-token.outputs.app-slug }}
-            password ${{ steps.app-token.outputs.token }}
-            machine api.github.com
-            login ${{ steps.app-token.outputs.app-slug }}
-            password ${{ steps.app-token.outputs.token }}
-          EOF
-          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
-          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
-
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - name: Re-checkout with app token
+        uses: actions/checkout@v5
         with:
+          token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
-          persist-credentials: false
+          persist-credentials: true
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
@@ -168,7 +152,7 @@ jobs:
           run_install: false
 
       - name: Setup Node.js 20.x
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20.19.5
           cache: 'pnpm'
@@ -188,4 +172,4 @@ jobs:
         run: |
           git push --follow-tags
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}

@@ -113,36 +113,7 @@ export type ShapeValue<T extends z.AnyZodObject> = ZodShape<T>[ShapeKey<T>];
 
 // Add constraint types at the top
 
-type StringConstraints = {
-  minLength?: number;
-  maxLength?: number;
-  email?: boolean;
-  url?: boolean;
-  uuid?: boolean;
-  cuid?: boolean;
-  emoji?: boolean;
-  regex?: { pattern: string; flags?: string };
-};
-
-type NumberConstraints = {
-  gt?: number;
-  gte?: number;
-  lt?: number;
-  lte?: number;
-  multipleOf?: number;
-};
-
-type ArrayConstraints = {
-  minLength?: number;
-  maxLength?: number;
-  exactLength?: number;
-};
-
-type DateConstraints = {
-  minDate?: string;
-  maxDate?: string;
-  dateFormat?: string;
-};
+type ConstraintHelperText = string[];
 
 /**
  * Abstract base class for creating schema compatibility layers for different AI model providers.
@@ -350,15 +321,10 @@ export class SchemaCompatLayer {
    */
   public mergeParameterDescription(
     description: string | undefined,
-    constraints:
-      | NumberConstraints
-      | StringConstraints
-      | ArrayConstraints
-      | DateConstraints
-      | { defaultValue?: unknown },
+    constraints: ConstraintHelperText,
   ): string | undefined {
-    if (Object.keys(constraints).length > 0) {
-      return (description ? description + '\n' : '') + JSON.stringify(constraints);
+    if (constraints.length > 0) {
+      return (description ? description + '\n' : '') + `constraints: ${constraints.join(`, `)}`;
     } else {
       return description;
     }
@@ -398,11 +364,11 @@ export class SchemaCompatLayer {
 
     let result = z.array(processedType);
 
-    const constraints: ArrayConstraints = {};
+    const constraints: ConstraintHelperText = [];
 
     if (zodArrayDef.minLength?.value !== undefined) {
       if (handleChecks.includes('min')) {
-        constraints.minLength = zodArrayDef.minLength.value;
+        constraints.push(`minimum length ${zodArrayDef.minLength.value}`);
       } else {
         result = result.min(zodArrayDef.minLength.value);
       }
@@ -410,7 +376,7 @@ export class SchemaCompatLayer {
 
     if (zodArrayDef.maxLength?.value !== undefined) {
       if (handleChecks.includes('max')) {
-        constraints.maxLength = zodArrayDef.maxLength.value;
+        constraints.push(`maximum length ${zodArrayDef.maxLength.value}`);
       } else {
         result = result.max(zodArrayDef.maxLength.value);
       }
@@ -418,7 +384,7 @@ export class SchemaCompatLayer {
 
     if (zodArrayDef.exactLength?.value !== undefined) {
       if (handleChecks.includes('length')) {
-        constraints.exactLength = zodArrayDef.exactLength.value;
+        constraints.push(`exact length ${zodArrayDef.exactLength.value}`);
       } else {
         result = result.length(zodArrayDef.exactLength.value);
       }
@@ -459,7 +425,7 @@ export class SchemaCompatLayer {
     value: ZodString,
     handleChecks: readonly StringCheckType[] = ALL_STRING_CHECKS,
   ): ZodString {
-    const constraints: StringConstraints = {};
+    const constraints: ConstraintHelperText = [];
     const checks = value._def.checks || [];
     type ZodStringCheck = (typeof checks)[number];
     const newChecks: ZodStringCheck[] = [];
@@ -468,38 +434,20 @@ export class SchemaCompatLayer {
         if (handleChecks.includes(check.kind as StringCheckType)) {
           switch (check.kind) {
             case 'regex': {
-              constraints.regex = {
-                pattern: check.regex.source,
-                flags: check.regex.flags,
-              };
+              constraints.push(`input must match this regex ${check.regex.source}`);
               break;
             }
-            case 'emoji': {
-              constraints.emoji = true;
-              break;
-            }
-            case 'email': {
-              constraints.email = true;
-              break;
-            }
-            case 'url': {
-              constraints.url = true;
-              break;
-            }
-            case 'uuid': {
-              constraints.uuid = true;
-              break;
-            }
+            case 'emoji':
+            case 'email':
+            case 'url':
+            case 'uuid':
             case 'cuid': {
-              constraints.cuid = true;
+              constraints.push(`a valid ${check.kind}`);
               break;
             }
-            case 'min': {
-              constraints.minLength = check.value;
-              break;
-            }
+            case 'min':
             case 'max': {
-              constraints.maxLength = check.value;
+              constraints.push(`${check.kind}imum length ${check.value}`);
               break;
             }
           }
@@ -530,7 +478,7 @@ export class SchemaCompatLayer {
     value: ZodNumber,
     handleChecks: readonly NumberCheckType[] = ALL_NUMBER_CHECKS,
   ): ZodNumber {
-    const constraints: NumberConstraints = {};
+    const constraints: ConstraintHelperText = [];
     const checks = value._def.checks || [];
     type ZodNumberCheck = (typeof checks)[number];
     const newChecks: ZodNumberCheck[] = [];
@@ -540,20 +488,20 @@ export class SchemaCompatLayer {
           switch (check.kind) {
             case 'min':
               if (check.inclusive) {
-                constraints.gte = check.value;
+                constraints.push(`greater than or equal to ${check.value}`);
               } else {
-                constraints.gt = check.value;
+                constraints.push(`greater than ${check.value}`);
               }
               break;
             case 'max':
               if (check.inclusive) {
-                constraints.lte = check.value;
+                constraints.push(`lower than or equal to ${check.value}`);
               } else {
-                constraints.lt = check.value;
+                constraints.push(`lower than ${check.value}`);
               }
               break;
             case 'multipleOf': {
-              constraints.multipleOf = check.value;
+              constraints.push(`multiple of ${check.value}`);
               break;
             }
           }
@@ -589,7 +537,7 @@ export class SchemaCompatLayer {
    * @returns A Zod string schema representing the date in ISO format
    */
   public defaultZodDateHandler(value: ZodDate): ZodString {
-    const constraints: DateConstraints = {};
+    const constraints: ConstraintHelperText = [];
     const checks = value._def.checks || [];
     type ZodDateCheck = (typeof checks)[number];
     const newChecks: ZodDateCheck[] = [];
@@ -599,13 +547,13 @@ export class SchemaCompatLayer {
           case 'min':
             const minDate = new Date(check.value);
             if (!isNaN(minDate.getTime())) {
-              constraints.minDate = minDate.toISOString();
+              constraints.push(`Date must be newer than ${minDate.toISOString()} (ISO)`);
             }
             break;
           case 'max':
             const maxDate = new Date(check.value);
             if (!isNaN(maxDate.getTime())) {
-              constraints.maxDate = maxDate.toISOString();
+              constraints.push(`Date must be older than ${maxDate.toISOString()} (ISO)`);
             }
             break;
           default:
@@ -613,7 +561,7 @@ export class SchemaCompatLayer {
         }
       }
     }
-    constraints.dateFormat = 'date-time';
+    constraints.push(`Date format is date-time`);
     let result = z.string().describe('date-time');
     const description = this.mergeParameterDescription(value.description, constraints);
     if (description) {

@@ -11,6 +11,7 @@ import type {
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
@@ -202,6 +203,13 @@ export class Agent extends BaseResource {
     return this.request(`/api/agents/${this.agentId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
+  enhanceInstructions(instructions: string, comment: string): Promise<{ explanation: string; new_prompt: string }> {
+    return this.request(`/api/agents/${this.agentId}/instructions/enhance`, {
+      method: 'POST',
+      body: { instructions, comment },
+    });
+  }
+
   /**
    * Generates a response from the agent
    * @param params - Generation parameters including prompt
@@ -324,7 +332,6 @@ export class Agent extends BaseResource {
     }
     const processedParams = {
       ...params,
-      output: params.output ? zodToJsonSchema(params.output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
@@ -1069,7 +1076,10 @@ export class Agent extends BaseResource {
           }
 
           case 'error': {
-            throw new Error(chunk.payload.error);
+            throw getErrorFromUnknown(chunk.payload.error, {
+              fallbackMessage: 'Unknown error in stream',
+              supportSerialization: false,
+            });
           }
 
           case 'data': {
@@ -1105,8 +1115,8 @@ export class Agent extends BaseResource {
     onFinish?.({ message, finishReason, usage });
   }
 
-  async processStreamResponse(processedParams: any, writable: any) {
-    const response: Response = await this.request(`/api/agents/${this.agentId}/stream`, {
+  async processStreamResponse(processedParams: any, writable: any, route: string = 'stream') {
+    const response: Response = await this.request(`/api/agents/${this.agentId}/${route}`, {
       method: 'POST',
       body: processedParams,
       stream: true,
@@ -1358,7 +1368,6 @@ export class Agent extends BaseResource {
     }
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
-      output: params.output ? zodToJsonSchema(params.output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
@@ -1374,6 +1383,92 @@ export class Agent extends BaseResource {
 
     // Start processing the response in the background
     const response = await this.processStreamResponse(processedParams, writable);
+
+    // Create a new response with the readable stream
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    // Add the processDataStream method to the response
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  async approveToolCall(params: { runId: string; toolCallId: string }): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    // Create a readable stream that will handle the response processing
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+
+    // Start processing the response in the background
+    const response = await this.processStreamResponse(params, writable, 'approve-tool-call');
+
+    // Create a new response with the readable stream
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    // Add the processDataStream method to the response
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  async declineToolCall(params: { runId: string; toolCallId: string }): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    // Create a readable stream that will handle the response processing
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+
+    // Start processing the response in the background
+    const response = await this.processStreamResponse(params, writable, 'decline-tool-call');
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {

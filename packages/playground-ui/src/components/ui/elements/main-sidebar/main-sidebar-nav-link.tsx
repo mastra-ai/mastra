@@ -13,6 +13,7 @@ export type NavLink = {
   icon?: React.ReactNode;
   isActive?: boolean;
   variant?: 'default' | 'featured';
+  tooltipMsg?: string;
 };
 
 type MainSidebarNavLinkProps = {
@@ -30,7 +31,7 @@ export function MainSidebarNavLink({
   className,
 }: MainSidebarNavLinkProps) {
   const { Link } = useLinkComponent();
-  const isDefaultState = state === 'default';
+  const isCollapsed = state === 'collapsed';
   const isFeatured = link?.variant === 'featured';
   const linkParams = link?.url?.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {};
 
@@ -44,16 +45,53 @@ export function MainSidebarNavLink({
         {
           '[&>a]:text-icon5 [&>a]:bg-surface3': isActive,
           '[&_svg]:text-icon5': isActive,
-          '[&>a]:justify-start ': isDefaultState,
-          '[&_svg]:text-icon3': !isDefaultState,
+          '[&>a]:justify-start ': !isCollapsed,
+          '[&_svg]:text-icon3': isCollapsed,
           '[&>a]:rounded-md [&>a]:my-[0.5rem] [&>a]:bg-accent1/75 [&>a:hover]:bg-accent1/85 [&>a]:text-black [&>a:hover]:text-black':
             isFeatured,
-          '[&_svg]:text-black/75': isFeatured,
+          '[&_svg]:text-black/75 [&>a:hover_svg]:text-black': isFeatured,
         },
         className,
       )}
     >
       {link ? (
+        <>
+          {isCollapsed || link.tooltipMsg ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link href={link.url} {...linkParams}>
+                  {link.icon && link.icon}
+                  {isCollapsed ? <VisuallyHidden>{link.name}</VisuallyHidden> : link.name} {children}
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="right" align="center" className="bg-border1 text-icon6 ml-[1rem]">
+                {link.tooltipMsg ? (
+                  <>
+                    {isCollapsed && `${link.name} | `} {link.tooltipMsg}
+                  </>
+                ) : (
+                  link.name
+                )}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <Link href={link.url} {...linkParams}>
+              {link.icon && link.icon}
+              {isCollapsed ? <VisuallyHidden>{link.name}</VisuallyHidden> : link.name} {children}
+            </Link>
+          )}
+        </>
+      ) : (
+        children
+      )}
+    </li>
+  );
+}
+
+/*
+
+
+{link ? (
         <Link href={link.url} {...linkParams}>
           {isDefaultState ? (
             <>{link.icon && link.icon}</>
@@ -70,6 +108,6 @@ export function MainSidebarNavLink({
       ) : (
         children
       )}
-    </li>
-  );
-}
+
+
+      */

@@ -225,6 +225,7 @@ export interface ToolOptions {
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   runtimeContext: RuntimeContext;
+  /** Build-time tracing context (fallback for Legacy methods that can't pass runtime context) */
   tracingContext?: TracingContext;
   tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;
@@ -362,11 +363,6 @@ export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: 
       if (prop === 'logger') {
         logger.warn(`Please use 'getLogger' instead, logger is deprecated`);
         return Reflect.apply(target.getLogger, target, []);
-      }
-
-      if (prop === 'telemetry') {
-        logger.warn(`Please use 'getTelemetry' instead, telemetry is deprecated`);
-        return Reflect.apply(target.getTelemetry, target, []);
       }
 
       if (prop === 'storage') {

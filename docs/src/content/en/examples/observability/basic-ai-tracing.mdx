@@ -109,13 +109,13 @@ main().catch(console.error);
 When you run this example, Mastra automatically creates spans for:
 
 1. **AGENT_RUN** - The complete agent execution
-2. **LLM_GENERATION** - The model execution inside the agent
+2. **MODEL_GENERATION** - The model execution inside the agent
 3. **TOOL_CALL** - Tool executions
 
 Example trace hierarchy:
 ```
 AGENT_RUN (example-agent)
-├── LLM_GENERATION (gpt-4) - Model input & output
+├── MODEL_GENERATION (gpt-4) - Model input & output
 ├── TOOL_CALL (getCurrentTime) - Tool execution
 ```
 

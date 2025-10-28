@@ -1,11 +1,12 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
-import { ConsoleLogger, LogLevel } from '../../logger';
-import type { IMastraLogger } from '../../logger';
+import { LogLevel } from '../../logger';
 import { fetchWithRetry } from '../../utils';
 import { AITracingEventType } from '../types';
-import type { AITracingEvent, AITracingExporter, AnyExportedAISpan } from '../types';
+import type { AITracingEvent, AnyExportedAISpan } from '../types';
+import { BaseExporter } from './base';
+import type { BaseExporterConfig } from './base';
 
-export interface CloudExporterConfig {
+export interface CloudExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
   maxRetries?: number; // Default: 3
@@ -13,7 +14,6 @@ export interface CloudExporterConfig {
   // Cloud-specific configuration
   accessToken?: string; // Cloud access token (from env or config)
   endpoint?: string; // Cloud AI tracing endpoint
-  logger?: IMastraLogger; // Optional logger
 }
 
 interface MastraCloudBuffer {
@@ -40,37 +40,35 @@ interface MastraCloudSpanRecord {
   updatedAt: Date | null;
 }
 
-export class CloudExporter implements AITracingExporter {
+export class CloudExporter extends BaseExporter {
   name = 'mastra-cloud-ai-tracing-exporter';
 
   private config: Required<CloudExporterConfig>;
   private buffer: MastraCloudBuffer;
   private flushTimer: NodeJS.Timeout | null = null;
-  private logger: IMastraLogger;
-  private isDisabled: boolean = false;
 
   constructor(config: CloudExporterConfig = {}) {
-    this.logger = config.logger ?? new ConsoleLogger({ level: LogLevel.INFO });
+    super(config);
 
     const accessToken = config.accessToken ?? process.env.MASTRA_CLOUD_ACCESS_TOKEN;
     if (!accessToken) {
-      this.logger.debug(
-        'CloudExporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set. ' +
+      this.setDisabled(
+        'MASTRA_CLOUD_ACCESS_TOKEN environment variable not set. ' +
           '🚀 Sign up for Mastra Cloud at https://cloud.mastra.ai to see your AI traces online and obtain your access token.',
       );
-      this.isDisabled = true;
     }
 
     const endpoint =
       config.endpoint ?? process.env.MASTRA_CLOUD_AI_TRACES_ENDPOINT ?? 'https://api.mastra.ai/ai/spans/publish';
 
     this.config = {
+      logger: this.logger,
+      logLevel: config.logLevel ?? LogLevel.INFO,
       maxBatchSize: config.maxBatchSize ?? 1000,
       maxBatchWaitMs: config.maxBatchWaitMs ?? 5000,
       maxRetries: config.maxRetries ?? 3,
-      accessToken: accessToken || '', // Empty string if no token
+      accessToken: accessToken || '',
       endpoint,
-      logger: this.logger,
     };
 
     this.buffer = {
@@ -79,12 +77,7 @@ export class CloudExporter implements AITracingExporter {
     };
   }
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
-    // Skip if disabled due to missing token
-    if (this.isDisabled) {
-      return;
-    }
-
+  protected async _exportEvent(event: AITracingEvent): Promise<void> {
     // Cloud AI Observability only process SPAN_ENDED events
     if (event.type !== AITracingEventType.SPAN_ENDED) {
       return;
@@ -110,7 +103,6 @@ export class CloudExporter implements AITracingExporter {
     }
 
     const spanRecord = this.formatSpan(event.exportedSpan);
-
     this.buffer.spans.push(spanRecord);
     this.buffer.totalSize++;
   }
@@ -224,8 +216,6 @@ export class CloudExporter implements AITracingExporter {
    * Uploads spans to cloud API using fetchWithRetry for all retry logic
    */
   private async batchUpload(spans: MastraCloudSpanRecord[]): Promise<void> {
-    const url = `${this.config.endpoint}`;
-
     const headers = {
       Authorization: `Bearer ${this.config.accessToken}`,
       'Content-Type': 'application/json',
@@ -237,7 +227,7 @@ export class CloudExporter implements AITracingExporter {
       body: JSON.stringify({ spans }),
     };
 
-    await fetchWithRetry(url, options, this.config.maxRetries);
+    await fetchWithRetry(this.config.endpoint, options, this.config.maxRetries);
   }
 
   private resetBuffer(): void {

@@ -12,29 +12,23 @@ import { createToolCallStep } from './tool-call-step';
 export function createAgenticExecutionWorkflow<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema = undefined,
->({ models, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>) {
+>({ models, _internal, ...rest }: OuterLLMRun<Tools, OUTPUT>) {
   const llmExecutionStep = createLLMExecutionStep({
     models,
     _internal,
-    modelStreamSpan,
-    telemetry_settings,
     ...rest,
   });
 
   const toolCallStep = createToolCallStep({
     models,
-    telemetry_settings,
     _internal,
-    modelStreamSpan,
     ...rest,
   });
 
   const llmMappingStep = createLLMMappingStep(
     {
       models,
-      telemetry_settings,
       _internal,
-      modelStreamSpan,
       ...rest,
     },
     llmExecutionStep,
@@ -57,21 +51,6 @@ export function createAgenticExecutionWorkflow<
     .map(
       async ({ inputData }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
-        if (modelStreamSpan && telemetry_settings?.recordOutputs !== false && typedInputData.output.toolCalls?.length) {
-          modelStreamSpan.setAttribute(
-            'stream.response.toolCalls',
-            JSON.stringify(
-              typedInputData.output.toolCalls?.map(toolCall => {
-                return {
-                  toolCallId: toolCall.toolCallId,
-                  // @ts-ignore TODO: look into the type here
-                  args: toolCall.args,
-                  toolName: toolCall.toolName,
-                };
-              }),
-            ),
-          );
-        }
         return typedInputData.output.toolCalls || [];
       },
       { id: 'map-tool-calls' },

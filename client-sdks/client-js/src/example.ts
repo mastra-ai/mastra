@@ -14,15 +14,17 @@ import { MastraClient } from './client';
     const agent = client.getAgent('weatherAgent');
     const response = await agent.stream({
       messages: 'what is the weather in new york?',
-      output: z.object({
-        weather: z.string(),
-        temperature: z.number(),
-        humidity: z.number(),
-        windSpeed: z.number(),
-        windDirection: z.string(),
-        windGust: z.number(),
-        windChill: z.number(),
-      }),
+      structuredOutput: {
+        schema: z.object({
+          weather: z.string(),
+          temperature: z.number(),
+          humidity: z.number(),
+          windSpeed: z.number(),
+          windDirection: z.string(),
+          windGust: z.number(),
+          windChill: z.number(),
+        }),
+      },
     });
 
     // Process data stream

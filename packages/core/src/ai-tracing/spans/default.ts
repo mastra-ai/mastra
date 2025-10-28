@@ -17,13 +17,34 @@ export class DefaultAISpan<TType extends AISpanType> extends BaseAISpan<TType> {
     super(options, aiTracing);
     this.id = generateSpanId();
 
-    // Set trace ID: generate new for root spans, inherit for child spans
-    if (!options.parent) {
-      // This is a root span, so it becomes its own trace with a new trace ID
-      this.traceId = generateTraceId();
-    } else {
-      // Child span inherits trace ID from root span
+    // Set trace ID based on context:
+    if (options.parent) {
+      // Child span inherits trace ID from parent span
       this.traceId = options.parent.traceId;
+    } else if (options.traceId) {
+      // Root span with provided trace ID
+      if (isValidTraceId(options.traceId)) {
+        this.traceId = options.traceId;
+      } else {
+        console.error(
+          `[Mastra Tracing] Invalid traceId: must be 1-32 hexadecimal characters, got "${options.traceId}". Generating new trace ID.`,
+        );
+        this.traceId = generateTraceId();
+      }
+    } else {
+      // Root span without provided trace ID - generate new
+      this.traceId = generateTraceId();
+    }
+
+    // Set parent span ID if provided
+    if (!options.parent && options.parentSpanId) {
+      if (isValidSpanId(options.parentSpanId)) {
+        this.parentSpanId = options.parentSpanId;
+      } else {
+        console.error(
+          `[Mastra Tracing] Invalid parentSpanId: must be 1-16 hexadecimal characters, got "${options.parentSpanId}". Ignoring parent span ID.`,
+        );
+      }
     }
   }
 
@@ -148,4 +169,18 @@ function generateTraceId(): string {
     }
   }
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Validate OpenTelemetry-compatible trace ID (1-32 hex characters)
+ */
+function isValidTraceId(traceId: string): boolean {
+  return /^[0-9a-f]{1,32}$/i.test(traceId);
+}
+
+/**
+ * Validate OpenTelemetry-compatible span ID (1-16 hex characters)
+ */
+function isValidSpanId(spanId: string): boolean {
+  return /^[0-9a-f]{1,16}$/i.test(spanId);
 }

@@ -127,7 +127,6 @@ program
   .description('Start your built Mastra application')
   .option('-d, --dir <path>', 'Path to your built Mastra output directory (default: .mastra/output)')
   .option('-e, --env <env>', 'Custom env file to include in the start')
-  .option('-nt, --no-telemetry', 'Disable telemetry on start')
   .action(startProject);
 
 const scorersCommand = program.command('scorers').description('Manage scorers for evaluating AI outputs');

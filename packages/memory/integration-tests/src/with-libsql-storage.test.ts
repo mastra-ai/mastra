@@ -23,9 +23,7 @@ describe('Memory with LibSQL Integration', () => {
       topK: 3,
       messageRange: 2,
     },
-    threads: {
-      generateTitle: false,
-    },
+    generateTitle: false,
   };
   const memory = new Memory({
     storage: new LibSQLStore({

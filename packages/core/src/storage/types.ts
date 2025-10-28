@@ -117,24 +117,6 @@ export type EvalRow = {
   testInfo?: TestInfo;
 };
 
-export type StorageGetTracesArg = {
-  name?: string;
-  scope?: string;
-  page: number;
-  perPage: number;
-  attributes?: Record<string, string>;
-  filters?: Record<string, any>;
-  fromDate?: Date;
-  toDate?: Date;
-};
-
-export type StorageGetTracesPaginatedArg = {
-  name?: string;
-  scope?: string;
-  attributes?: Record<string, string>;
-  filters?: Record<string, any>;
-} & PaginationArgs;
-
 export type StorageResourceType = {
   id: string;
   workingMemory?: string;

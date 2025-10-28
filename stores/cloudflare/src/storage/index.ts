@@ -10,7 +10,6 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
   TABLE_SCORERS,
-  TABLE_TRACES,
 } from '@mastra/core/storage';
 import type {
   TABLE_NAMES,
@@ -19,22 +18,18 @@ import type {
   EvalRow,
   WorkflowRuns,
   WorkflowRun,
-  StorageGetTracesArg as _StorageGetTracesArg,
-  StorageGetTracesPaginatedArg,
   PaginationInfo,
   StoragePagination,
   PaginationArgs,
   StorageDomains,
   StorageResourceType,
 } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { LegacyEvalsStorageCloudflare } from './domains/legacy-evals';
 import { MemoryStorageCloudflare } from './domains/memory';
 import { StoreOperationsCloudflare } from './domains/operations';
 import { ScoresStorageCloudflare } from './domains/scores';
-import { TracesStorageCloudflare } from './domains/traces';
 import { WorkflowsStorageCloudflare } from './domains/workflows';
 import { isWorkersConfig } from './types';
 import type { CloudflareStoreConfig, RecordTypes } from './types';
@@ -63,7 +58,6 @@ export class CloudflareStore extends MastraStorage {
       TABLE_WORKFLOW_SNAPSHOT,
       TABLE_EVALS,
       TABLE_SCORERS,
-      TABLE_TRACES,
     ] as const;
 
     for (const table of requiredTables) {
@@ -90,6 +84,8 @@ export class CloudflareStore extends MastraStorage {
   public get supports() {
     const supports = super.supports;
     supports.getScoresBySpan = true;
+    supports.resourceWorkingMemory = true;
+    supports.selectByIncludeResourceScope = true;
     return supports;
   }
 
@@ -127,10 +123,6 @@ export class CloudflareStore extends MastraStorage {
         operations,
       });
 
-      const traces = new TracesStorageCloudflare({
-        operations,
-      });
-
       const memory = new MemoryStorageCloudflare({
         operations,
       });
@@ -143,7 +135,6 @@ export class CloudflareStore extends MastraStorage {
         operations,
         legacyEvals,
         workflows,
-        traces,
         memory,
         scores,
       };
@@ -309,34 +300,6 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.operations.batchInsert(input);
   }
 
-  async getTraces({
-    name,
-    scope,
-    page = 0,
-    perPage = 100,
-    attributes,
-    fromDate,
-    toDate,
-  }: {
-    name?: string;
-    scope?: string;
-    page: number;
-    perPage: number;
-    attributes?: Record<string, string>;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<any[]> {
-    return this.stores.traces.getTraces({
-      name,
-      scope,
-      page,
-      perPage,
-      attributes,
-      fromDate,
-      toDate,
-    });
-  }
-
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
   }
@@ -380,10 +343,6 @@ export class CloudflareStore extends MastraStorage {
     workflowName: string;
   }): Promise<WorkflowRun | null> {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
-  }
-
-  async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
-    return this.stores.traces.getTracesPaginated(args);
   }
 
   async getThreadsByResourceIdPaginated(args: {

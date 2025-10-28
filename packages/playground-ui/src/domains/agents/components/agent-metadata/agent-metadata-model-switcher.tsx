@@ -11,6 +11,8 @@ import { cn } from '@/lib/utils';
 import { cleanProviderId } from './utils';
 import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
 import { Button } from '@/ds/components/Button';
+import { useAgentsModelProviders } from '../../hooks/use-agents-model-providers';
+import { Provider } from '@mastra/client-js';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -18,25 +20,14 @@ export interface AgentMetadataModelSwitcherProps {
   updateModel: (newModel: UpdateModelParams) => Promise<{ message: string }>;
   closeEditor?: () => void;
   modelProviders: string[];
-  apiUrl?: string;
   autoSave?: boolean;
   selectProviderPlaceholder?: string;
-}
-
-interface Provider {
-  id: string;
-  name: string;
-  envVar: string;
-  connected: boolean;
-  docUrl?: string;
-  models: string[];
 }
 
 export const AgentMetadataModelSwitcher = ({
   defaultProvider,
   defaultModel,
   updateModel,
-  apiUrl = '/api/agents/providers',
 }: AgentMetadataModelSwitcherProps) => {
   // Store the original values on first mount - these never change
   const [originalProvider] = useState(defaultProvider);
@@ -51,43 +42,16 @@ export const AgentMetadataModelSwitcher = ({
   const [isSearchingModel, setIsSearchingModel] = useState(false);
   const [showProviderSuggestions, setShowProviderSuggestions] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [providersLoading, setProvidersLoading] = useState(true);
+  const { data: dataProviders, isLoading: providersLoading } = useAgentsModelProviders();
   const [highlightedProviderIndex, setHighlightedProviderIndex] = useState(-1);
   const [highlightedModelIndex, setHighlightedModelIndex] = useState(-1);
 
   // Ref for the model input to focus it
   const modelInputRef = useRef<HTMLInputElement>(null);
   const providerInputRef = useRef<HTMLInputElement>(null);
+  const providers = dataProviders?.providers || [];
 
   // Fetch providers from the server or use mock data for now
-  useEffect(() => {
-    const fetchProviders = async () => {
-      try {
-        setProvidersLoading(true);
-
-        // Fetch from API
-        const response = await fetch(apiUrl);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch providers: ${response.status}`);
-        }
-        const data = await response.json();
-        if (data.providers && Array.isArray(data.providers)) {
-          setProviders(data.providers);
-        } else {
-          console.error('Invalid providers response format');
-          setProviders([]);
-        }
-      } catch (error) {
-        console.error('Error setting up providers:', error);
-        setProviders([]);
-      } finally {
-        setProvidersLoading(false);
-      }
-    };
-
-    fetchProviders();
-  }, [apiUrl]);
 
   const currentModelProvider = cleanProviderId(selectedProvider);
 

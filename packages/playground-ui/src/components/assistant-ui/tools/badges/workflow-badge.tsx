@@ -13,16 +13,27 @@ import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
 import { MastraUIMessage } from '@mastra/react';
+import { LoadingBadge } from './loading-badge';
+import { useWorkflow } from '@/hooks';
+import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
 
-export interface WorkflowBadgeProps {
-  workflow: GetWorkflowResponse;
+export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   workflowId: string;
-  runId?: string;
+  result?: any;
   isStreaming?: boolean;
   metadata?: MastraUIMessage['metadata'];
 }
 
-export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming, metadata }: WorkflowBadgeProps) => {
+export const WorkflowBadge = ({
+  result,
+  workflowId,
+  isStreaming,
+  metadata,
+  toolCallId,
+  toolApprovalMetadata,
+}: WorkflowBadgeProps) => {
+  const { runId, status } = result || {};
+  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
   const { data: runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, {
     enabled: Boolean(runId) && !isStreaming,
   });
@@ -33,6 +44,8 @@ export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming, metada
 
   const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
+
+  if (isWorkflowLoading || !workflow) return <LoadingBadge />;
 
   return (
     <BadgeWrapper
@@ -56,6 +69,8 @@ export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming, metada
       )}
 
       {isStreaming && <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />}
+
+      <ToolApprovalButtons toolCalled={!!status} toolCallId={toolCallId} toolApprovalMetadata={toolApprovalMetadata} />
     </BadgeWrapper>
   );
 };
@@ -75,9 +90,11 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
         <Button as={Link} href={`/workflows/${workflowId}/graph`}>
           Go to workflow
         </Button>
-        <Button as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
-          See run
-        </Button>
+        {runId && (
+          <Button as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
+            See run
+          </Button>
+        )}
       </div>
 
       <div className="rounded-md overflow-hidden h-[60vh] w-full">

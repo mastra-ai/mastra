@@ -9,15 +9,13 @@ import {
   MCPTable,
   HeaderTitle,
   McpServerIcon,
+  useMCPServers,
 } from '@mastra/playground-ui';
 
-import { useMCPServers } from '@/hooks/use-mcp-servers';
 import { Link } from 'react-router';
 
 const MCPs = () => {
-  const { servers, isLoading } = useMCPServers();
-
-  const mcpServers = servers ?? [];
+  const { data: mcpServers = [], isLoading } = useMCPServers();
 
   const isEmpty = !isLoading && mcpServers.length === 0;
 

@@ -1,0 +1,293 @@
+---
+title: "Overview"
+description: "Access 47+ AI providers and 814+ models through Mastra's model router."
+sidebar_position: 1
+---
+
+import { CardGrid, CardGridItem } from '@site/src/components/CardGrid';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Model Providers
+
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 814 models from 47 providers through a single API.
+
+## Features
+
+- **One API for any model** - Access any model without having to install and manage additional provider dependencies.
+
+- **Access the newest AI** - Use new models the moment they're released, no matter which provider they come from. Avoid vendor lock-in with Mastra's provider-agnostic interface.
+
+- [**Mix and match models**](#mix-and-match-models) - Use different models for different tasks. For example, run GPT-4o-mini for large-context processing, then switch to Claude Opus 4.1 for reasoning tasks.
+
+- [**Model fallbacks**](#model-fallbacks) - If a provider experiences an outage, Mastra can automatically switch to another provider at the application level, minimizing latency compared to API gateways.
+
+## Basic usage
+
+Whether you're using OpenAI, Anthropic, Google, or a gateway like OpenRouter, specify the model as `"provider/model-name"` and Mastra handles the rest.
+
+Mastra reads the relevant environment variable (e.g. `ANTHROPIC_API_KEY`) and routes requests to the provider. If an API key is missing, you'll get a clear runtime error showing exactly which variable to set.
+
+<Tabs>
+  <TabItem value="openai" label="OpenAI" default>
+    ```typescript copy showLineNumbers
+    import { Agent } from "@mastra/core";
+
+    const agent = new Agent({
+      name: "my-agent",
+      instructions: "You are a helpful assistant",
+      model: "openai/gpt-5"
+    })
+    ```
+
+  </TabItem>
+  <TabItem value="anthropic" label="Anthropic">
+    ```typescript copy showLineNumbers
+    import { Agent } from "@mastra/core";
+
+    const agent = new Agent({
+      name: "my-agent",
+      instructions: "You are a helpful assistant",
+      model: "anthropic/claude-4-5-sonnet"
+    })
+    ```
+
+  </TabItem>
+  <TabItem value="google" label="Google Gemini">
+    ```typescript copy showLineNumbers
+    import { Agent } from "@mastra/core";
+
+    const agent = new Agent({
+      name: "my-agent",
+      instructions: "You are a helpful assistant",
+      model: "google/gemini-2.5-flash"
+    })
+    ```
+
+  </TabItem>
+  <TabItem value="xai" label="xAI">
+    ```typescript copy showLineNumbers
+    import { Agent } from "@mastra/core";
+
+    const agent = new Agent({
+      name: "my-agent",
+      instructions: "You are a helpful assistant",
+      model: "xai/grok-4"
+    })
+    ```
+
+  </TabItem>
+  <TabItem value="openrouter" label="OpenRouter">
+    ```typescript copy showLineNumbers
+    import { Agent } from "@mastra/core";
+
+    const agent = new Agent({
+      name: "my-agent",
+      instructions: "You are a helpful assistant",
+      model: "openrouter/anthropic/claude-haiku-4-5"
+    })
+    ```
+
+  </TabItem>
+</Tabs>
+
+## Model directory
+
+Browse the directory of available models using the navigation on the left, or explore below.
+
+<CardGrid>
+    <CardGridItem
+      title="Gateways"
+      href="/docs/models/gateways"
+    >
+      <div className="space-y-3">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>OpenRouter</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/fireworks-ai.svg" alt="Fireworks AI" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>Fireworks AI</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/togetherai.svg" alt="Together AI" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>Together AI</span>
+          </div>
+        </div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 0 more</div>
+      </div>
+    </CardGridItem>
+    <CardGridItem
+      title="Providers"
+      href="/docs/models/providers"
+    >
+      <div className="space-y-3">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/openai.svg" alt="OpenAI" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>OpenAI</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/anthropic.svg" alt="Anthropic" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>Anthropic</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/google.svg" alt="Google" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>Google</span>
+          </div>
+        </div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 41 more</div>
+      </div>
+    </CardGridItem>
+</CardGrid>
+
+You can also discover models directly in your editor. Mastra provides full autocomplete for the `model` field - just start typing, and your IDE will show available options.
+
+Alternatively, browse and test models in the [Playground](/docs/getting-started/studio) UI.
+
+:::note Development Behavior
+In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Playground stay up-to-date with the latest models. To disable, set `MASTRA_AUTO_REFRESH_PROVIDERS=false`. Auto-refresh is disabled by default in production.
+:::
+
+## Mix and match models
+
+Some models are faster but less capable, while others offer larger context windows or stronger reasoning skills. Use different models from the same provider, or mix and match across providers to fit each task.
+
+```typescript showLineNumbers
+import { Agent } from "@mastra/core";
+
+// Use a cost-effective model for document processing
+const documentProcessor = new Agent({
+  name: "document-processor",
+  instructions: "Extract and summarize key information from documents",
+  model: "openai/gpt-4o-mini",
+});
+
+// Use a powerful reasoning model for complex analysis
+const reasoningAgent = new Agent({
+  name: "reasoning-agent",
+  instructions: "Analyze data and provide strategic recommendations",
+  model: "anthropic/claude-opus-4-1",
+});
+```
+
+## Dynamic model selection
+
+Since models are just strings, you can select them dynamically based on [runtime context](/docs/server-db/runtime-context), variables, or any other logic.
+
+```typescript showLineNumbers
+const agent = new Agent({
+  name: "dynamic-assistant",
+  model: ({ runtimeContext }) => {
+    const provider = runtimeContext.get("provider-id");
+    const model = runtimeContext.get("model-id");
+    return `${provider}/${model}`;
+  },
+});
+```
+
+This enables powerful patterns:
+
+- A/B testing - Compare model performance in production.
+- User-selectable models - Let users choose their preferred model in your app.
+- Multi-tenant applications - Each customer can bring their own API keys and model preferences.
+
+## Provider-specific options
+
+Different model providers expose their own configuration options. With OpenAI, you might adjust the `reasoningEffort`. With Anthropic, you might tune `cacheControl`. Mastra lets you set these specific `providerOptions` either at the agent level or per message.
+
+```typescript showLineNumbers
+// Agent level (apply to all future messages)
+const planner = new Agent({
+  instructions: {
+    role: "system",
+    content: "You are a helpful assistant.",
+    providerOptions: {
+      openai: { reasoningEffort: "low" },
+    },
+  },
+  model: "openai/o3-pro",
+});
+
+const lowEffort = await planner.generate("Plan a simple 3 item dinner menu");
+
+// Message level (apply only to this message)
+const highEffort = await planner.generate([
+  {
+    role: "user",
+    content: "Plan a simple 3 item dinner menu for a celiac",
+    providerOptions: {
+      openai: { reasoningEffort: "high" },
+    },
+  },
+]);
+```
+
+## Custom headers
+
+If you need to specify custom headers, such as an organization ID or other provider-specific fields, use this syntax.
+
+```typescript showLineNumbers
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    id: "openai/gpt-4-turbo",
+    apiKey: process.env.OPENAI_API_KEY,
+    headers: {
+      "OpenAI-Organization": "org-abc123",
+    },
+  },
+});
+```
+
+:::note
+Configuration differs by provider. See the provider pages in the left navigation for details on custom headers.
+:::
+
+## Model fallbacks
+
+Relying on a single model creates a single point of failure for your application. Model fallbacks provide automatic failover between models and providers. If the primary model becomes unavailable, requests are retried against the next configured fallback until one succeeds.
+
+```typescript showLineNumbers
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "resilient-assistant",
+  instructions: "You are a helpful assistant.",
+  model: [
+    {
+      model: "openai/gpt-5",
+      maxRetries: 3,
+    },
+    {
+      model: "anthropic/claude-4-5-sonnet",
+      maxRetries: 2,
+    },
+    {
+      model: "google/gemini-2.5-pro",
+      maxRetries: 2,
+    },
+  ],
+});
+```
+
+Mastra tries your primary model first. If it encounters a 500 error, rate limit, or timeout, it automatically switches to your first fallback. If that fails too, it moves to the next. Each model gets its own retry count before moving on.
+
+Your users never experience the disruption - the response comes back with the same format, just from a different model. The error context is preserved as the system moves through your fallback chain, ensuring clean error propagation while maintaining streaming compatibility.
+
+## Use AI SDK with Mastra
+
+Mastra supports AI SDK provider modules, should you need to use them directly.
+
+```typescript showLineNumbers
+import { groq } from "@ai-sdk/groq";
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  model: groq("gemma2-9b-it"),
+});
+```
+
+You can use an AI SDK model (e.g. `groq('gemma2-9b-it')`) anywhere that accepts a `"provider/model"` string, including within model router fallbacks and [scorers](/docs/scorers/overview).

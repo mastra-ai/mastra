@@ -196,7 +196,9 @@ const workflowResearchStep = createStep({
       });
 
       const result = await researchAgent.generate(researchPrompt, {
-        output: WorkflowResearchResultSchema,
+        structuredOutput: {
+          schema: WorkflowResearchResultSchema,
+        },
         // stopWhen: stepCountIs(10),
       });
 
@@ -321,17 +323,11 @@ ${workflowBuilderPrompts.validation.instructions}`,
       });
 
       const originalInstructions = await executionAgent.getInstructions({ runtimeContext: runtimeContext });
-      const additionalInstructions = executionAgent.instructions;
-
-      let enhancedInstructions = originalInstructions as string;
-      if (additionalInstructions) {
-        enhancedInstructions = `${originalInstructions}\n\n${additionalInstructions}`;
-      }
 
       const enhancedOptions = {
         stopWhen: stepCountIs(100),
         temperature: 0.3,
-        instructions: enhancedInstructions,
+        instructions: originalInstructions,
       };
 
       // Loop until all tasks are completed

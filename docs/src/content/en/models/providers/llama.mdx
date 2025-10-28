@@ -48,31 +48,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable 
   models={[
   {
-    "model": "llama/llama-4-scout-17b-16e-instruct-fp8",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "llama/llama-3.3-70b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "llama/groq-llama-4-maverick-17b-128e-instruct",
+    "model": "llama/cerebras-llama-4-maverick-17b-128e-instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -96,6 +72,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "llama/groq-llama-4-maverick-17b-128e-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "llama/llama-3.3-70b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "llama/llama-3.3-8b-instruct",
     "imageInput": false,
     "audioInput": false,
@@ -108,8 +108,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "llama/cerebras-llama-4-maverick-17b-128e-instruct",
-    "imageInput": false,
+    "model": "llama/llama-4-maverick-17b-128e-instruct-fp8",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
@@ -120,7 +120,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "llama/llama-4-maverick-17b-128e-instruct-fp8",
+    "model": "llama/llama-4-scout-17b-16e-instruct-fp8",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -143,7 +143,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.llama.com/compat/v1/",
-    modelId: "cerebras-llama-4-maverick-17b-128e-instruct",
+    id: "llama/cerebras-llama-4-maverick-17b-128e-instruct",
     apiKey: process.env.LLAMA_API_KEY,
     headers: {
       "X-Custom-Header": "value"

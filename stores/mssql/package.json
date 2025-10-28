@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mssql",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "MSSQL provider for Mastra - db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -46,7 +46,7 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.22.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "files": [
     "dist",

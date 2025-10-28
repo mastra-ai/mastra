@@ -1,4 +1,3 @@
-import type { TelemetrySettings } from 'ai';
 import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { TracingContext, TracingOptions } from '../ai-tracing';
 import type { SystemMessage } from '../llm';
@@ -31,8 +30,6 @@ export type MultiPrimitiveExecutionOptions = {
 
   /** Model-specific settings like temperature, maxTokens, topP, etc. */
   modelSettings?: LoopOptions['modelSettings'];
-
-  telemetry?: TelemetrySettings;
 };
 
 export type AgentExecutionOptions<
@@ -70,9 +67,6 @@ export type AgentExecutionOptions<
   resourceId?: string;
   /** @deprecated Use memory.thread instead. Thread identifier for conversation continuity */
   threadId?: string;
-
-  /** Telemetry collection settings for observability */
-  telemetry?: TelemetrySettings;
 
   /** Maximum number of steps to run */
   maxSteps?: number;
@@ -135,13 +129,6 @@ export type AgentExecutionOptions<
   structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
 };
 
-export type DeprecatedOutputOptions<OUTPUT extends OutputSchema = undefined> = {
-  /** Schema for structured output generation (Zod schema or JSON Schema)
-   * @deprecated Use `structuredOutput.schema` instead. The `output` property will be removed in a future version.
-   */
-  output?: OUTPUT;
-};
-
 export type InnerAgentExecutionOptions<
   OUTPUT extends OutputSchema = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
@@ -152,5 +139,9 @@ export type InnerAgentExecutionOptions<
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
   model?: MastraLanguageModel;
   /** Internal: Whether the execution is a resume */
-  resumeContext?: any;
+  resumeContext?: {
+    resumeData: any;
+    snapshot: any;
+  };
+  toolCallId?: string;
 };

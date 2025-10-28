@@ -4,13 +4,12 @@ import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { InternalCoreTool, MCPToolType } from '../tools';
 import type {
-  ConvertedTool,
   MCPServerConfig,
   MCPServerHonoSSEOptions,
   MCPServerHTTPOptions,
   MCPServerSSEOptions,
-  MCPToolType,
   PackageInfo,
   RemoteInfo,
   Repository,
@@ -18,6 +17,7 @@ import type {
   ServerInfo,
 } from './types';
 export * from './types';
+export type { MCPToolType } from '../tools';
 
 /**
  * Abstract base class for MCP server implementations.
@@ -48,7 +48,7 @@ export abstract class MCPServerBase extends MastraBase {
   /** Information about remote access points for this server. */
   public readonly remotes?: RemoteInfo[];
   /** The tools registered with and converted by this MCP server. */
-  public convertedTools: Record<string, ConvertedTool>;
+  public convertedTools: Record<string, InternalCoreTool>;
   /** Reference to the Mastra instance if this server is registered with one. */
   public mastra: Mastra | undefined;
   /** Agents to be exposed as tools. */
@@ -70,7 +70,7 @@ export abstract class MCPServerBase extends MastraBase {
    * Gets a read-only view of the registered tools.
    * @returns A readonly record of converted tools.
    */
-  tools(): Readonly<Record<string, ConvertedTool>> {
+  tools(): Readonly<Record<string, InternalCoreTool>> {
     return this.convertedTools;
   }
 
@@ -101,7 +101,7 @@ export abstract class MCPServerBase extends MastraBase {
     tools: ToolsInput,
     agents?: MCPServerConfig['agents'],
     workflows?: MCPServerConfig['workflows'],
-  ): Record<string, ConvertedTool>;
+  ): Record<string, InternalCoreTool>;
 
   /**
    * Internal method used by Mastra to register itself with the server.

@@ -18,7 +18,7 @@ export async function processWorkflowLoop(
     resumeData,
     parentWorkflow,
     runtimeContext,
-    runCount = 0,
+    retryCount = 0,
   }: ProcessorArgs,
   {
     pubsub,
@@ -44,7 +44,7 @@ export async function processWorkflowLoop(
     inputData: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
     abortController: new AbortController(),
-    runCount,
+    retryCount,
     iterationCount: 0, //TODO: implement
   });
 
@@ -81,7 +81,7 @@ export async function processWorkflowLoop(
           resumeData,
           activeSteps,
           runtimeContext,
-          runCount,
+          retryCount,
         },
       });
     }
@@ -101,7 +101,7 @@ export async function processWorkflowLoop(
           resumeData,
           activeSteps,
           runtimeContext,
-          runCount,
+          retryCount,
         },
       });
     } else {

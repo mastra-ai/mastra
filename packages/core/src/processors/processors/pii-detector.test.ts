@@ -23,30 +23,17 @@ function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id
 function createMockPIIResult(
   piiTypes: string[] = [],
   detections: PIIDetection[] = [],
-  redactedContent?: string,
+  redactedContent?: string | null,
 ): PIIDetectionResult {
-  const result: PIIDetectionResult = {};
-
-  // Only include categories if there are detected PII types
-  if (piiTypes.length > 0) {
-    result.categories = piiTypes.reduce(
-      (scores, type) => {
-        scores[type] = 0.8; // High confidence score for detected types
-        return scores;
-      },
-      {} as Record<string, number>,
-    );
-  }
-
-  // Only include detections if provided
-  if (detections.length > 0) {
-    result.detections = detections;
-  }
-
-  // Only include redacted content if provided
-  if (redactedContent) {
-    result.redacted_content = redactedContent;
-  }
+  const result: PIIDetectionResult = {
+    categories:
+      piiTypes.length > 0
+        ? piiTypes.map(type => ({ type, score: 0.8 })) // High confidence score for detected types
+        : null,
+    detections: detections.length > 0 ? detections : null,
+    // Always include redacted_content for default 'redact' strategy (null if not provided)
+    redacted_content: redactedContent !== undefined ? redactedContent : null,
+  };
 
   return result;
 }
@@ -129,16 +116,17 @@ describe('PIIDetector', () => {
 
   describe('PII detection with default strategy (redact)', () => {
     it('should detect and redact email addresses', async () => {
-      const detections = [
+      const detections: PIIDetection[] = [
         {
           type: 'email',
           value: 'test@example.com',
           confidence: 0.9,
           start: 12,
           end: 28,
+          redacted_value: null,
         },
       ];
-      const model = setupMockModel(createMockPIIResult(['email'], detections));
+      const model = setupMockModel(createMockPIIResult(['email'], detections, 'My email is t**t@*******.com'));
       const detector = new PIIDetector({ model });
       const messages = [createTestMessage('My email is test@example.com')];
 
@@ -152,16 +140,17 @@ describe('PIIDetector', () => {
     });
 
     it('should detect and redact phone numbers', async () => {
-      const detections = [
+      const detections: PIIDetection[] = [
         {
           type: 'phone',
           value: '(555) 123-4567',
           confidence: 0.85,
           start: 19,
           end: 33,
+          redacted_value: null,
         },
       ];
-      const model = setupMockModel(createMockPIIResult(['phone'], detections));
+      const model = setupMockModel(createMockPIIResult(['phone'], detections, 'My phone number is (XXX) XXX-4567'));
       const detector = new PIIDetector({ model });
       const messages = [createTestMessage('My phone number is (555) 123-4567')];
 
@@ -175,16 +164,17 @@ describe('PIIDetector', () => {
     });
 
     it('should detect and redact credit card numbers', async () => {
-      const detections = [
+      const detections: PIIDetection[] = [
         {
           type: 'credit-card',
           value: '4111-1111-1111-1111',
           confidence: 0.95,
           start: 8,
           end: 27,
+          redacted_value: null,
         },
       ];
-      const model = setupMockModel(createMockPIIResult(['credit-card'], detections));
+      const model = setupMockModel(createMockPIIResult(['credit-card'], detections, 'Card: 41****-****-****-1111'));
       const detector = new PIIDetector({ model });
       const messages = [createTestMessage('Card: 4111-1111-1111-1111')];
 
@@ -209,13 +199,14 @@ describe('PIIDetector', () => {
     });
 
     it('should detect multiple PII types', async () => {
-      const detections = [
+      const detections: PIIDetection[] = [
         {
           type: 'email',
           value: 'test@example.com',
           confidence: 0.9,
           start: 12,
           end: 28,
+          redacted_value: null,
         },
         {
           type: 'api-key',
@@ -223,9 +214,16 @@ describe('PIIDetector', () => {
           confidence: 0.95,
           start: 36,
           end: 51,
+          redacted_value: null,
         },
       ];
-      const model = setupMockModel(createMockPIIResult(['email', 'api-key'], detections));
+      const model = setupMockModel(
+        createMockPIIResult(
+          ['email', 'api-key'],
+          detections,
+          'My email is t**t@*******.com and keys***************9789',
+        ),
+      );
       const detector = new PIIDetector({ model });
       const messages = [createTestMessage('My email is test@example.com and key sk_test_123456789')];
 
@@ -239,18 +237,19 @@ describe('PIIDetector', () => {
     });
 
     it('should handle multiple messages', async () => {
-      const detections = [
+      const detections: PIIDetection[] = [
         {
           type: 'phone',
           value: '555-1234',
           confidence: 0.8,
           start: 19,
           end: 27,
+          redacted_value: null,
         },
       ];
       const model = setupMockModel([
         createMockPIIResult(), // No PII for first message
-        createMockPIIResult(['phone'], detections), // PII for second message
+        createMockPIIResult(['phone'], detections, 'My phone number is XXX-1234'), // PII for second message with redacted content
       ]);
       const detector = new PIIDetector({ model });
       const messages = [createTestMessage('Hello world'), createTestMessage('My phone number is 555-1234')];
@@ -372,13 +371,14 @@ describe('PIIDetector', () => {
 
   describe('strategy: redact', () => {
     it('should use provided redacted content when available', async () => {
-      const detections = [
+      const detections: PIIDetection[] = [
         {
           type: 'email',
           value: 'test@example.com',
           confidence: 0.9,
           start: 12,
           end: 28,
+          redacted_value: null,
         },
       ];
       const redactedContent = 'My email is [EMAIL]';
@@ -472,8 +472,9 @@ describe('PIIDetector', () => {
         },
       ];
       const mockResult = createMockPIIResult(['email'], detections);
+      // Set score to 0.7 (above threshold of 0.6)
       if (mockResult.categories) {
-        mockResult.categories.email = 0.7; // Above threshold (0.6)
+        mockResult.categories[0].score = 0.7;
       }
 
       const model = setupMockModel(mockResult);
@@ -489,8 +490,9 @@ describe('PIIDetector', () => {
 
     it('should not trigger when below threshold', async () => {
       const mockResult = createMockPIIResult(['email']);
+      // Set score to 0.3 (below threshold of 0.6)
       if (mockResult.categories) {
-        mockResult.categories.email = 0.3; // Below threshold (0.6)
+        mockResult.categories[0].score = 0.3;
       }
 
       const model = setupMockModel(mockResult);
@@ -506,8 +508,8 @@ describe('PIIDetector', () => {
 
   describe('custom detection types', () => {
     it('should work with custom PII types', async () => {
-      const mockResult = {
-        categories: { 'employee-id': 0.9, 'customer-id': 0.1 },
+      const mockResult: PIIDetectionResult = {
+        categories: [{ type: 'employee-id', score: 0.9 }],
         detections: [
           {
             type: 'employee-id',
@@ -517,7 +519,7 @@ describe('PIIDetector', () => {
             end: 9,
           },
         ],
-        reason: 'Detected employee ID',
+        redacted_content: null,
       };
       const model = setupMockModel(mockResult);
       const detector = new PIIDetector({
@@ -861,13 +863,14 @@ describe('PIIDetector', () => {
     });
 
     it('should detect and redact PII in text chunks', async () => {
-      const detections = [
+      const detections: PIIDetection[] = [
         {
           type: 'email',
           value: 'test@example.com',
           confidence: 0.9,
           start: 12,
           end: 28,
+          redacted_value: null,
         },
       ];
       const model = setupMockModel(createMockPIIResult(['email'], detections, 'My email is j***.d**@e******.com'));
@@ -1039,13 +1042,14 @@ describe('PIIDetector', () => {
     });
 
     it('should detect and redact PII in output messages', async () => {
-      const detections = [
+      const detections: PIIDetection[] = [
         {
           type: 'email',
           value: 'test@example.com',
           confidence: 0.9,
           start: 12,
           end: 28,
+          redacted_value: null,
         },
       ];
       const model = setupMockModel(createMockPIIResult(['email'], detections, 'My email is j***.d**@e******.com'));

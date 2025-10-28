@@ -8,7 +8,6 @@ export * from './llm';
 export * from './mastra';
 export * from './memory/index.warning';
 export * from './relevance';
-export * from './telemetry';
 export * from './tools/index.warning';
 export * from './tools/types';
 export * from './tts/index.warning';
