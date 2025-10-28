@@ -2407,11 +2407,6 @@ export class MessageList {
     if (textParts.length > 0) {
       content = textParts.map(p => p.text).join('');
     }
-
-    // Add __originalContent to metadata (stringified version of UI message parts)
-    // This is required for proper round-trip conversion and test expectations
-    cleanMetadata.__originalContent = JSON.stringify(uiMsg.parts);
-
     // Build V2-compatible parts array
     const v2Parts = parts
       .map(p => {
@@ -2759,9 +2754,7 @@ export class MessageList {
     }
 
     // Store original content in metadata for round-trip
-    const metadata: Record<string, unknown> = {
-      __originalContent: JSON.stringify(content),
-    };
+    const metadata: Record<string, unknown> = {};
 
     // Generate ID from modelMsg if available, otherwise create a new one
     const id =
