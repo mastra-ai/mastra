@@ -1,6 +1,7 @@
 import { prefersReducedMotion } from "@docusaurus/theme-common";
 import clsx from "clsx";
 import React, { type ReactNode, useCallback, useEffect, useState } from "react";
+import { motion } from "motion/react";
 
 import { Markdown } from "@copilotkit/react-ui";
 import { useChat } from "@kapaai/react-sdk";
@@ -93,18 +94,22 @@ export default function ChatbotSidebar({
   }, [hiddenChatbotSidebar]);
 
   return (
-    <aside
+    <motion.aside
       className={clsx(
         styles.chatbotSidebarContainer,
         hiddenChatbotSidebar && styles.chatbotSidebarContainerHidden,
       )}
-      onTransitionEnd={(e) => {
-        if (
-          !e.currentTarget.classList.contains(styles.chatbotSidebarContainer!)
-        ) {
-          return;
-        }
-
+      initial={false}
+      animate={{
+        width: hiddenChatbotSidebar
+          ? "var(--chatbot-sidebar-hidden-width)"
+          : "var(--chatbot-sidebar-width)",
+      }}
+      transition={{
+        duration: 0.3,
+        ease: [0.4, 0, 0.2, 1],
+      }}
+      onAnimationComplete={() => {
         if (hiddenChatbotSidebar) {
           setHiddenSidebar(true);
         }
@@ -231,7 +236,7 @@ export default function ChatbotSidebar({
 
               <div className="sticky bottom-0 space-y-2.5 z-10 pt-2 bg-(--mastra-surface-1)">
                 <form
-                  className="flex p-3 flex-col bg-(--mastra-surface-5) rounded-xl border border-(--border) focus-within:ring-(--mastra-green-accent)/30 focus-within:ring-1"
+                  className="flex p-3 flex-col bg-(--ifm-background-color) rounded-xl border border-(--border) focus-within:border-green-500 focus-within:ring-2 focus-within:ring-(--mastra-green-accent)/50"
                   onSubmit={handleSubmit}
                 >
                   <Textarea
@@ -284,6 +289,6 @@ export default function ChatbotSidebar({
           )}
         </div>
       </div>
-    </aside>
+    </motion.aside>
   );
 }
