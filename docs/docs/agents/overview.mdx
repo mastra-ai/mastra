@@ -22,7 +22,7 @@ Agents use LLMs and tools to solve open-ended tasks. They reason about goals, de
 <Tabs>
   <TabItem value="mastra-model-router" label="Mastra model router">
     <Steps>
-### Install dependencies [#install-dependencies-mastra-router]
+### Install dependencies
 
 Add the Mastra core package to your project:
 
@@ -30,7 +30,7 @@ Add the Mastra core package to your project:
 npm install @mastra/core
 ```
 
-### Set your API key [#set-api-key-mastra-router]
+### Set your API key
 
 Mastra's model router auto-detects environment variables for your chosen provider. For OpenAI, set `OPENAI_API_KEY`:
 
@@ -40,7 +40,7 @@ OPENAI_API_KEY=<your-api-key>
 
 > Mastra supports more than 600 models. Choose from the full list [here](/models).
 
-### Creating an agent [#creating-an-agent-mastra-router]
+### Creating an agent
 
 Create an agent by instantiating the `Agent` class with system `instructions` and a `model`:
 
@@ -58,7 +58,7 @@ export const testAgent = new Agent({
   <TabItem value="vercel-ai-sdk" label="Vercel AI SDK">
     <Steps>
 
-### Install dependencies [#install-dependencies-ai-sdk]
+### Install dependencies
 
 Include the Mastra core package alongside the Vercel AI SDK provider you want to use:
 
@@ -66,7 +66,7 @@ Include the Mastra core package alongside the Vercel AI SDK provider you want to
 npm install @mastra/core @ai-sdk/openai
 ```
 
-### Set your API key [#set-api-key-ai-sdk]
+### Set your API key
 
 Set the corresponding environment variable for your provider. For OpenAI via the AI SDK:
 
@@ -76,7 +76,7 @@ OPENAI_API_KEY=<your-api-key>
 
 > See the [AI SDK Providers](https://ai-sdk.dev/providers/ai-sdk-providers) in the Vercel AI SDK docs for additional configuration options.
 
-### Creating an agent [#creating-an-agent-ai-sdk]
+### Creating an agent
 
 To create an agent in Mastra, use the `Agent` class. Every agent must include `instructions` to define its behavior, and a `model` parameter to specify the LLM provider and model. When using the Vercel AI SDK, provide the client to your agent's `model` field:
 

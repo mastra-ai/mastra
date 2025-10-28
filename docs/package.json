@@ -10,8 +10,7 @@
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",
-    "write-translations": "docusaurus write-translations",
-    "write-heading-ids": "docusaurus write-heading-ids"
+    "write-translations": "docusaurus write-translations"
   },
   "dependencies": {
     "@copilotkit/react-ui": "1.8.10",
