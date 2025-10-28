@@ -11,6 +11,7 @@ type StepResult = {
   status: WorkflowStepStatus;
   input: Record<string, unknown> | null;
   output: unknown | null;
+  suspendPayload: Record<string, unknown> | null;
 };
 
 export type WorkflowDataPart = {
@@ -338,6 +339,7 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
         status: payload.payload.status,
         input: payload.payload.payload ?? null,
         output: null,
+        suspendPayload: null,
       } satisfies StepResult;
       bufferedWorkflows.set(payload.runId!, current);
       return {
@@ -365,6 +367,26 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
         data: {
           name: current.name,
           status: 'running',
+          steps: current.steps,
+          output: null,
+        },
+      } as const;
+    }
+    case 'workflow-step-suspended': {
+      const current = bufferedWorkflows.get(payload.runId!);
+      if (!current) return null;
+      current.steps[payload.payload.id] = {
+        ...current.steps[payload.payload.id]!,
+        status: payload.payload.status,
+        suspendPayload: payload.payload.suspendPayload ?? null,
+        output: null,
+      } satisfies StepResult;
+      return {
+        type: isNested ? 'data-tool-workflow' : 'data-workflow',
+        id: payload.runId,
+        data: {
+          name: current.name,
+          status: 'suspended',
           steps: current.steps,
           output: null,
         },
@@ -447,6 +469,7 @@ export function transformNetwork(
         status: 'running',
         input: payload.payload.args || null,
         output: null,
+        suspendPayload: null,
       } satisfies StepResult);
       bufferedNetworks.set(payload.payload.runId, current);
       return {
@@ -467,6 +490,7 @@ export function transformNetwork(
         status: 'running',
         input: payload.payload.args || null,
         output: null,
+        suspendPayload: null,
       } satisfies StepResult);
       bufferedNetworks.set(payload.payload.runId, current);
       return {
@@ -487,6 +511,7 @@ export function transformNetwork(
         status: 'running',
         input: payload.payload.args?.args || null,
         output: null,
+        suspendPayload: null,
       } satisfies StepResult);
       bufferedNetworks.set(payload.payload.runId, current);
       return {
@@ -508,6 +533,7 @@ export function transformNetwork(
         status: 'success',
         input: null,
         output: payload.payload.result,
+        suspendPayload: null,
       } satisfies StepResult);
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
@@ -528,6 +554,7 @@ export function transformNetwork(
         status: 'success',
         input: null,
         output: payload.payload.result,
+        suspendPayload: null,
       } satisfies StepResult);
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
@@ -548,6 +575,7 @@ export function transformNetwork(
         status: 'success',
         input: null,
         output: payload.payload.result,
+        suspendPayload: null,
       } satisfies StepResult);
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
