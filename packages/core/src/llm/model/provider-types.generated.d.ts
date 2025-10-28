@@ -464,7 +464,6 @@ export type ProviderModelsMap = {
     'claude-opus-4-1',
     'claude-sonnet-4',
     'claude-sonnet-4-5',
-    'code-supernova',
     'glm-4.6',
     'gpt-5',
     'gpt-5-codex',
