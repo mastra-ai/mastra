@@ -97,7 +97,7 @@ The store uses different table engines for different types of data:
 ### Message Operations
 
 - `saveMessages(messages)`: Save multiple messages
-- `listMessages({ threadId, include?, format?, pagination?, filter? })`: Get messages for a thread with optional filtering
+- `listMessages({ threadId, include?, format?, limit?, offset?, filter? })`: Get messages for a thread with optional filtering
 - `deleteMessages(messageIds)`: Delete specific messages
 
 ### Workflow Operations

@@ -87,8 +87,51 @@ export class MemoryThread extends BaseResource {
 
   /**
    * Lists messages with advanced filtering and context inclusion options
-   * @param params - Parameters including resourceId, include array for message context, pagination options, format, and runtime context
+   *
+   * @param params - Parameters for listing messages
+   * @param params.limit - Number of messages to return. Use `false` to retrieve ALL messages (⚠️ use with caution).
+   *                       Defaults to 40 if not specified.
+   * @param params.offset - Number of messages to skip. Use with `limit` for pagination. Defaults to 0.
+   * @param params.filter - Filtering options
+   * @param params.filter.dateRange - Filter messages by creation date range
+   * @param params.include - Array of message IDs with context (previous/next messages) to include
+   * @param params.format - Message format version ('v1' or 'v2')
+   * @param params.resourceId - Optional resource ID for filtering
+   * @param params.runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing list of messages with pagination metadata (total, page, perPage, hasMore)
+   *
+   * @example
+   * // Get first 50 messages
+   * await thread.listMessages({ limit: 50 });
+   *
+   * @example
+   * // Get messages 20-39 (page 2, with 20 per page)
+   * await thread.listMessages({ limit: 20, offset: 20 });
+   *
+   * @example
+   * // Get ALL messages (use with caution)
+   * await thread.listMessages({ limit: false });
+   *
+   * @example
+   * // Get 10 messages created after yesterday
+   * await thread.listMessages({
+   *   limit: 10,
+   *   filter: {
+   *     dateRange: { start: new Date('2024-01-01') }
+   *   }
+   * });
+   *
+   * @example
+   * // Get messages between two dates
+   * await thread.listMessages({
+   *   limit: 100,
+   *   filter: {
+   *     dateRange: {
+   *       start: new Date('2024-01-01'),
+   *       end: new Date('2024-01-31')
+   *     }
+   *   }
+   * });
    */
   listMessages({
     runtimeContext,

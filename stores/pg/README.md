@@ -333,7 +333,7 @@ The system automatically detects configuration changes and only rebuilds indexes
 - `getThread(threadId)`: Get a thread by ID
 - `deleteThread(threadId)`: Delete a thread and its messages
 - `saveMessages(messages)`: Save multiple messages in a transaction
-- `listMessages({ threadId, include, pagination, format })`: Get messages for a thread
+- `listMessages({ threadId, include?, limit?, offset?, filter?, format? })`: Get messages for a thread
 - `deleteMessages(messageIds)`: Delete specific messages
 
 ## Index Management

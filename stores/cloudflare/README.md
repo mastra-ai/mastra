@@ -104,7 +104,7 @@ const messages = await store.listMessages({ threadId: 'thread-123' });
 ### Message Operations
 
 - `saveMessages({ messages })`: Save multiple messages
-- `listMessages({ threadId, include?, filter?, pagination?, format? })`: Get messages for a thread with optional filtering (last N, includes, etc)
+- `listMessages({ threadId, include?, filter?, limit?, offset?, format? })`: Get messages for a thread with optional filtering (last N, includes, etc)
 
 ### Workflow Operations
 

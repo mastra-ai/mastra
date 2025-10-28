@@ -83,7 +83,13 @@ export type StorageListMessagesInput = {
     withNextMessages?: number;
   }[];
   limit?: number | false;
-  pagination?: PaginationArgs;
+  offset?: number;
+  filter?: {
+    dateRange?: {
+      start?: Date;
+      end?: Date;
+    };
+  };
   format?: MastraMessageFormat;
 };
 

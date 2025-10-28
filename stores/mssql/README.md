@@ -214,7 +214,7 @@ MSSQLStore supports multiple connection methods:
 ### Messages
 
 - `saveMessages({ messages, format? })`: Save multiple messages with atomic transaction (supports v1 and v2 formats)
-- `listMessages({ threadId, resourceId?, include?, pagination?, format? })`: Get messages for a thread
+- `listMessages({ threadId, resourceId?, include?, limit?, offset?, filter?, format? })`: Get messages for a thread
 - `getMessagesById({ messageIds, format? })`: Get messages by their IDs
 - `getMessagesPaginated({ threadId, format?, page?, perPage? })`: Get paginated messages for a thread
 - `updateMessages({ messages })`: Update existing messages with atomic transaction

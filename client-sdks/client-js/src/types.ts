@@ -320,6 +320,21 @@ export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
   messages: MastraMessageV1[] | MastraMessageV2[];
 };
 
+/**
+ * Parameters for listing messages with advanced filtering options.
+ *
+ * @property limit - Number of messages to retrieve. Use `false` to retrieve ALL messages (⚠️ use with caution for large datasets).
+ *                   Defaults to 40 if not specified.
+ * @property offset - Number of messages to skip before starting to return results. Defaults to 0.
+ *                    Use with `limit` for pagination: page 2 with limit 20 = offset 20.
+ * @property filter - Filtering options for messages
+ * @property filter.dateRange - Filter messages by creation date range
+ * @property filter.dateRange.start - Include only messages created on or after this date
+ * @property filter.dateRange.end - Include only messages created on or before this date
+ * @property include - Array of message IDs with context (previous/next messages) to include in results
+ * @property format - Message format version ('v1' or 'v2')
+ * @property resourceId - Optional resource ID for filtering messages
+ */
 export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;
 
 export type ListMemoryThreadMessagesResponse = StorageListMessagesOutput;

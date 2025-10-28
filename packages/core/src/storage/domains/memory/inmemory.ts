@@ -321,13 +321,30 @@ export class InMemoryMemory extends MemoryStorage {
     resourceId,
     include,
     format = 'v1',
-    pagination,
+    filter,
+    limit,
+    offset = 0,
   }: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     this.logger.debug(`MockStore: listMessages called for thread ${threadId}`);
 
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
-    const { page = 0, perPage = 40 } = pagination || {};
+    // Determine how many results to return
+    // Priority: explicit limit > default (40)
+    let perPage = 40;
+
+    if (limit !== undefined) {
+      if (limit === false) {
+        // limit: false means get ALL messages
+        perPage = Number.MAX_SAFE_INTEGER;
+      } else if (typeof limit === 'number' && limit > 0) {
+        // limit: number means get that many messages
+        perPage = limit;
+      }
+    }
+
+    // Calculate page from offset
+    const page = Math.floor(offset / perPage);
 
     // Handle include messages with context
     const messages: MastraMessageV2[] = [];
@@ -419,8 +436,8 @@ export class InMemoryMemory extends MemoryStorage {
       });
 
       // Apply date filtering
-      if (pagination?.dateRange) {
-        const { start: from, end: to } = pagination.dateRange;
+      if (filter?.dateRange) {
+        const { start: from, end: to } = filter.dateRange;
         threadMessages = threadMessages.filter((msg: any) => {
           const msgDate = new Date(msg.createdAt);
           const fromDate = from ? new Date(from) : null;
@@ -450,15 +467,15 @@ export class InMemoryMemory extends MemoryStorage {
     // Sort by createdAt
     messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-    const start = page * perPage;
+    const start = offset;
     const end = start + perPage;
     const paginatedMessages = messages.slice(start, end);
 
     return {
       messages: format === 'v1' ? (paginatedMessages as any) : paginatedMessages,
       total: messages.length,
-      page,
-      perPage,
+      page, // Keep for backwards compatibility
+      perPage, // Keep for backwards compatibility
       hasMore: messages.length > end,
     };
   }
