@@ -1226,11 +1226,12 @@ export class MessageList {
 
     if (MessageList.isAIV5CoreMessage(message)) {
       const v2Msg = MessageList.aiV5ModelMessageToMastraMessageV2(message, messageSource);
-      return {
+      const result = {
         ...v2Msg,
         threadId: this.memoryInfo?.threadId,
         resourceId: this.memoryInfo?.resourceId,
       };
+      return result;
     }
     if (MessageList.isAIV5UIMessage(message)) {
       const v2Msg = MessageList.aiV5UIMessageToMastraMessageV2(message);
@@ -2022,14 +2023,14 @@ export class MessageList {
             state: 'output-available',
             input: invocation.args,
             output: invocation.result,
-          } satisfies AIV5Type.UIMessagePart<any, any>);
+          } satisfies AIV5Type.UIMessagePart<unknown, unknown>);
         } else {
           parts.push({
             type: `tool-${invocation.toolName}` as const,
             toolCallId: invocation.toolCallId,
             state: invocation.state === 'call' ? 'input-available' : 'input-streaming',
             input: invocation.args,
-          } satisfies AIV5Type.UIMessagePart<any, any>);
+          } satisfies AIV5Type.UIMessagePart<unknown, unknown>);
         }
       }
     }
@@ -2347,6 +2348,11 @@ export class MessageList {
     let content: MastraMessageV2['content']['content'] = undefined;
     if (textParts.length > 0) {
       content = textParts.map(p => p.text).join('');
+    }
+
+    // Preserve __originalContent if it exists in the incoming metadata
+    if (metadata.__originalContent && !cleanMetadata.__originalContent) {
+      cleanMetadata.__originalContent = metadata.__originalContent;
     }
 
     // Build V2-compatible parts array
