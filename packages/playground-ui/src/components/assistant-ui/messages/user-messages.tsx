@@ -63,7 +63,6 @@ export const UserMessage = () => {
               );
             },
             Image: p => {
-              console.log('loool', p);
               return <InMessageAttachment type="image" nameSlot="Unknown filename" src={p.image} />;
             },
             Text: p => {
