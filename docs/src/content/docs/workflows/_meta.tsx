@@ -1,5 +1,3 @@
-import { Tag } from "@/components/tag";
-
 const meta = {
   overview: "Overview",
   "control-flow": "Control Flow",
@@ -9,7 +7,7 @@ const meta = {
   "input-data-mapping": "Input Data Mapping",
   "human-in-the-loop": "Human-in-the-loop",
   snapshots: "Snapshots",
-  "inngest-workflow": <Tag text="experimental">Inngest Workflow</Tag>,
+  "inngest-workflow": "Inngest Workflow",
 };
 
 export default meta;

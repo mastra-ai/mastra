@@ -1,10 +1,8 @@
-import { Tag } from "@/components/tag";
-
 const meta = {
   agent: "Agent",
   generate: ".generate()",
   generateLegacy: ".generateLegacy() (Legacy)",
-  network: <Tag text="experimental">.network()</Tag>,
+  network: ".network()",
   listAgents: ".listAgents()",
   getWorkflows: ".getWorkflows()",
   getTools: ".getTools()",

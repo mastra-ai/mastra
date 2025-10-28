@@ -1,6 +1,4 @@
-import { Meta } from "nextra";
-
-const meta: Meta = {
+const meta = {
   "contributing-templates": {
     title: "Contributing Templates",
   },

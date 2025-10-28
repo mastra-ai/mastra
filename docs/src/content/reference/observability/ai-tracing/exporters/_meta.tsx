@@ -1,14 +1,12 @@
-import { Tag } from "@/components/tag";
-
 const meta = {
   "default-exporter": "DefaultExporter",
   "cloud-exporter": "CloudExporter",
   "console-exporter": "ConsoleExporter",
-  arize: <Tag text="experimental">Arize</Tag>,
+  arize: "Arize",
   braintrust: "Braintrust",
   langfuse: "Langfuse",
-  langsmith: <Tag text="experimental">LangSmith</Tag>,
-  otel: <Tag text="experimental">OpenTelemetry</Tag>,
+  langsmith: "LangSmith",
+  otel: "OpenTelemetry",
 };
 
 export default meta;

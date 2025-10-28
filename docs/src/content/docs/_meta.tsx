@@ -1,5 +1,3 @@
-import { Tag } from "@/components/tag";
-
 const meta = {
   index: "Introduction",
   "getting-started": { title: "Getting Started", theme: { collapsed: false } },
@@ -20,8 +18,8 @@ const meta = {
   deployment: { title: "Deployment" },
   "mastra-cloud": { title: "Mastra Cloud" },
   observability: { title: "Observability" },
-  scorers: <Tag text="experimental">Scorers</Tag>,
-  auth: <Tag text="experimental">Auth</Tag>,
+  scorers: "Scorers",
+  auth: "Auth",
   voice: { title: "Voice" },
   frameworks: { title: "Frameworks" },
   community: "Community",
