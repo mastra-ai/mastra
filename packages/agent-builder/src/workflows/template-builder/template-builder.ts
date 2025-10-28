@@ -171,6 +171,7 @@ const discoverUnitsStep = createStep({
 
     try {
       const agent = new Agent({
+        id: 'mastra-project-discoverer',
         model,
         instructions: `You are an expert at analyzing Mastra projects.
 
@@ -1297,6 +1298,7 @@ const validationAndFixStep = createStep({
       const allTools = await AgentBuilderDefaults.getToolsForMode(targetPath, 'template');
 
       const validationAgent = new Agent({
+        id: 'code-validator-fixer',
         name: 'code-validator-fixer',
         description: 'Specialized agent for validating and fixing template integration issues',
         instructions: `You are a code validation and fixing specialist. Your job is to:

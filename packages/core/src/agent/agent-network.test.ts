@@ -11,6 +11,7 @@ describe('Agent - network', () => {
   const memory = new MockMemory();
 
   const agent1 = new Agent({
+    id: 'agent1',
     name: 'agent1',
     instructions:
       'This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.',
@@ -20,6 +21,7 @@ describe('Agent - network', () => {
   });
 
   const agent2 = new Agent({
+    id: 'agent2',
     name: 'agent2',
     description:
       'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report. You write articles.',

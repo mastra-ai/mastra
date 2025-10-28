@@ -77,6 +77,7 @@ export class SystemPromptScrubber implements Processor {
     this.model = options.model;
 
     this.detectionAgent = new Agent({
+      id: 'system-prompt-detector',
       name: 'system-prompt-detector',
       model: this.model,
       instructions: this.instructions,

@@ -59,6 +59,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     this.jsonPromptInjection = options.jsonPromptInjection;
     // Create internal structuring agent
     this.structuringAgent = new Agent({
+      id: 'structured-output-structurer',
       name: 'structured-output-structurer',
       instructions: options.instructions || this.generateInstructions(),
       model: options.model,

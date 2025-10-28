@@ -124,6 +124,7 @@ export class ModerationProcessor implements Processor {
 
     // Create internal moderation agent
     this.moderationAgent = new Agent({
+      id: 'content-moderator',
       name: 'content-moderator',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,

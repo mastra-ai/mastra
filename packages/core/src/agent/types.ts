@@ -114,9 +114,8 @@ export interface AgentConfig<
 > {
   /**
    * Identifier for the agent.
-   * @defaultValue Uses `name` if not provided.
    */
-  id?: TAgentId;
+  id: TAgentId;
   /**
    * Unique identifier for the agent.
    */

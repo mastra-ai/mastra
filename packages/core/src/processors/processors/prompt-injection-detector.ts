@@ -102,6 +102,7 @@ export class PromptInjectionDetector implements Processor {
     this.includeScores = options.includeScores ?? false;
 
     this.detectionAgent = new Agent({
+      id: 'prompt-injection-detector',
       name: 'prompt-injection-detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
