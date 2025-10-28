@@ -1213,7 +1213,7 @@ p {
 
 @media (min-width: 997px) {
 
-.menu__link--active:not(.menu__link--sublist) {
+.theme-doc-sidebar-item-link.theme-doc-sidebar-item-link-level-1 > a {
  padding-inline-start: 0.5rem;
 }
 

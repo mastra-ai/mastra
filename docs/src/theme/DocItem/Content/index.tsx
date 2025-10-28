@@ -34,9 +34,11 @@ export default function DocItemContent({ children }: Props): ReactNode {
   const shouldShowCopyButton = !frontMatter.hide_table_of_contents;
 
   return (
-    <div className={cn(ThemeClassNames.docs.docMarkdown, "markdown")}>
+    <div
+      className={cn(ThemeClassNames.docs.docMarkdown, "markdown @container")}
+    >
       {shouldShowCopyButton && (
-        <div className="relative hidden md:block">
+        <div className="relative hidden @[600px]:block">
           <div className="absolute top-0 right-0">
             <BrowserOnly fallback={<div />}>
               {() => <CopyPageButton />}

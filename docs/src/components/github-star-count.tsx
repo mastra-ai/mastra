@@ -1,11 +1,55 @@
 import { useQuery } from "@tanstack/react-query";
 
+const STORAGE_KEY = "github-stars-cache";
+const CACHE_DURATION = 1000 * 60 * 60; // 1 hour
+
+interface CachedData {
+  stars: number;
+  timestamp: number;
+}
+
 function formatToK(number: number) {
   if (number >= 1000) {
     return (number / 1000).toFixed(number % 1000 === 0 ? 0 : 1) + "k";
   }
   return number?.toString();
 }
+
+const getFromLocalStorage = (): number | undefined => {
+  if (typeof window === "undefined") return undefined;
+
+  try {
+    const cached = localStorage.getItem(STORAGE_KEY);
+    if (!cached) return undefined;
+
+    const { stars, timestamp }: CachedData = JSON.parse(cached);
+    const isExpired = Date.now() - timestamp > CACHE_DURATION;
+
+    if (isExpired) {
+      localStorage.removeItem(STORAGE_KEY);
+      return undefined;
+    }
+
+    return stars;
+  } catch (error) {
+    console.error("Error reading from localStorage:", error);
+    return undefined;
+  }
+};
+
+const saveToLocalStorage = (stars: number) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    const cacheData: CachedData = {
+      stars,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cacheData));
+  } catch (error) {
+    console.error("Error saving to localStorage:", error);
+  }
+};
 
 const fetchGitHubStars = async (): Promise<number> => {
   try {
@@ -14,7 +58,9 @@ const fetchGitHubStars = async (): Promise<number> => {
       throw new Error("Failed to fetch GitHub stars");
     }
     const data = await res.json();
-    return data.stargazers_count || 0;
+    const stars = data.stargazers_count || 0;
+    saveToLocalStorage(stars);
+    return stars;
   } catch (error) {
     console.error("Error fetching GitHub stars:", error);
     return 0;
@@ -25,7 +71,8 @@ export const GithubStarCount = () => {
   const { data: stars = 0, isLoading } = useQuery({
     queryKey: ["github-stars"],
     queryFn: fetchGitHubStars,
-    staleTime: 1000 * 60 * 60, // 1 hour
+    initialData: getFromLocalStorage,
+    staleTime: CACHE_DURATION,
     refetchOnWindowFocus: false,
   });
 
