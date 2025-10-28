@@ -11,7 +11,13 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
       // Save thread
       const savedThread = await storage.saveThread({ thread });
-      expect(savedThread).toEqual(thread);
+      // Compare timestamps within 5ms tolerance to avoid flakiness from precision differences
+      expect(Math.abs(savedThread.updatedAt.getTime() - thread.updatedAt.getTime())).toBeLessThan(5);
+      expect(Math.abs(savedThread.createdAt.getTime() - thread.createdAt.getTime())).toBeLessThan(5);
+
+      const savedThreadWithoutDates = { ...savedThread, createdAt: undefined, updatedAt: undefined };
+      const sampleThreadWithoutDates = { ...thread, createdAt: undefined, updatedAt: undefined };
+      expect(savedThreadWithoutDates).toEqual(sampleThreadWithoutDates);
 
       // Retrieve thread
       const retrievedThread = await storage.getThreadById({ threadId: thread.id });
@@ -28,7 +34,13 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
       // Save thread
       const savedThread = await storage.saveThread({ thread });
-      expect(savedThread).toEqual(thread);
+      // Compare timestamps within 5ms tolerance to avoid flakiness from precision differences
+      expect(Math.abs(savedThread.updatedAt.getTime() - thread.updatedAt.getTime())).toBeLessThan(5);
+      expect(Math.abs(savedThread.createdAt.getTime() - thread.createdAt.getTime())).toBeLessThan(5);
+
+      const savedThreadWithoutDates = { ...savedThread, createdAt: undefined, updatedAt: undefined };
+      const sampleThreadWithoutDates = { ...thread, createdAt: undefined, updatedAt: undefined };
+      expect(savedThreadWithoutDates).toEqual(sampleThreadWithoutDates);
 
       // Retrieve thread
       const retrievedThread = await storage.getThreadById({ threadId: thread.id });
