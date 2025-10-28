@@ -76,8 +76,8 @@ async function github({ pull_number }: { pull_number: number }) {
     childProcess.execSync(`git cherry-pick -x ${commitSha}`, {
       stdio: `inherit`,
     });
-  } catch {
-    console.log('[ERROR]: cherry-pick failed');
+  } catch (err) {
+    console.error('[ERROR]: cherry-pick failed', err);
 
     await octokit.rest.issues.createComment({
       owner,
@@ -149,6 +149,7 @@ const main = defineCommand({
       await github({ pull_number: Number(pr) });
     } catch (err) {
       console.error(err);
+      process.exit(1);
     } finally {
       console.log('Backport script completed.');
     }
