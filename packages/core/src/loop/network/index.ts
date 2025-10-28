@@ -282,6 +282,7 @@ export async function createNetworkLoop({
             iteration: iterationCount,
           },
         },
+        runId,
         from: ChunkFrom.NETWORK,
       });
 
@@ -366,8 +367,12 @@ export async function createNetworkLoop({
 
           await writer.write({
             type: 'routing-agent-end',
-            payload: endPayload,
+            payload: {
+              ...endPayload,
+              usage: await completionStream.usage,
+            },
             from: ChunkFrom.NETWORK,
+            runId,
           });
 
           const memory = await agent.getMemory({ runtimeContext: runtimeContext });
@@ -471,8 +476,12 @@ export async function createNetworkLoop({
 
       await writer.write({
         type: 'routing-agent-end',
-        payload: endPayload,
+        payload: {
+          ...endPayload,
+          usage: result.usage,
+        },
         from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return endPayload;
@@ -519,8 +528,6 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      const runId = generateId();
-
       await writer.write({
         type: 'agent-execution-start',
         payload: {
@@ -529,6 +536,7 @@ export async function createNetworkLoop({
           runId,
         },
         from: ChunkFrom.NETWORK,
+        runId,
       });
 
       const result = await agentForStep.stream(inputData.prompt, {
@@ -592,7 +600,10 @@ export async function createNetworkLoop({
 
       await writer.write({
         type: 'agent-execution-end',
-        payload: endPayload,
+        payload: {
+          ...endPayload,
+          usage: await result.usage,
+        },
         from: ChunkFrom.NETWORK,
         runId,
       });
@@ -677,6 +688,7 @@ export async function createNetworkLoop({
         type: 'workflow-execution-start',
         payload: toolData,
         from: ChunkFrom.NETWORK,
+        runId,
       });
 
       // await emitter.emit('watch-v2', {
@@ -753,7 +765,10 @@ export async function createNetworkLoop({
 
       await writer?.write({
         type: 'workflow-execution-end',
-        payload: endPayload,
+        payload: {
+          ...endPayload,
+          usage: await stream.usage,
+        },
         from: ChunkFrom.NETWORK,
         runId,
       });
@@ -850,6 +865,7 @@ export async function createNetworkLoop({
           runId,
         },
         from: ChunkFrom.NETWORK,
+        runId,
       });
 
       const finalResult = await tool.execute(
@@ -957,6 +973,7 @@ export async function createNetworkLoop({
         type: 'network-execution-event-step-finish',
         payload: endPayload,
         from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return endPayload;
