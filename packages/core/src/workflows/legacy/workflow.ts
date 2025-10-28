@@ -115,7 +115,7 @@ export class LegacyWorkflow<
     Steps extends StepAction<any, any, any, any>[] = TSteps,
   >(
     next: TAgent,
-    config?: StepConfig<ReturnType<TAgent['toStep']>, CondStep, VarStep, TTriggerSchema, Steps>,
+    config?: StepConfig<StepAction<string, any, any, any>, CondStep, VarStep, TTriggerSchema, Steps>,
   ): WorkflowBuilder<this>;
   step<
     TStep extends StepAction<any, any, any, any>,
@@ -140,7 +140,7 @@ export class LegacyWorkflow<
         : TStepLike extends LegacyWorkflow<TSteps, any, any, any>
           ? ReturnType<TStepLike['toStep']>
           : TStepLike extends Agent<any, any, any>
-            ? ReturnType<TStepLike['toStep']>
+            ? StepAction<string, any, any, any>
             : never,
       CondStep,
       VarStep,

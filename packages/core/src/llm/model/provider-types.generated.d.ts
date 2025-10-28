@@ -464,7 +464,6 @@ export type ProviderModelsMap = {
     'claude-opus-4-1',
     'claude-sonnet-4',
     'claude-sonnet-4-5',
-    'code-supernova',
     'glm-4.6',
     'gpt-5',
     'gpt-5-codex',
@@ -681,6 +680,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.6:exacto',
   ];
   readonly synthetic: readonly [
+    'hf:MiniMaxAI/MiniMax-M2',
     'hf:Qwen/Qwen2.5-Coder-32B-Instruct',
     'hf:Qwen/Qwen3-235B-A22B-Instruct-2507',
     'hf:Qwen/Qwen3-235B-A22B-Thinking-2507',
