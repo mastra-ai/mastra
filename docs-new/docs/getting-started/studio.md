@@ -1,5 +1,5 @@
 ---
-title: 'Inspecting agents and workflows with mastra dev '
+title: "Inspecting agents and workflows with mastra dev "
 description: Documentation for the Mastra local development environment for Mastra applications.
 ---
 
