@@ -115,6 +115,26 @@ const config = {
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
     ],
+    [
+      "@docusaurus/plugin-content-docs",
+      {
+        id: "examples",
+        path: "examples",
+        routeBasePath: "examples",
+        sidebarPath: "./sidebarsExamples.js",
+        editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
+      },
+    ],
+    [
+      "@docusaurus/plugin-content-docs",
+      {
+        id: "reference",
+        path: "reference",
+        routeBasePath: "reference",
+        sidebarPath: "./sidebarsReference.js",
+        editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
+      },
+    ],
   ],
 
   presets: [
