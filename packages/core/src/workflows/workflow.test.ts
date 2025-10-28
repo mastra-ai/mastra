@@ -3772,6 +3772,243 @@ describe('Workflow', () => {
       });
     });
 
+    it('should properly update snapshot when executing multiple steps in parallel', async () => {
+      // Create step actions with delays to simulate real execution
+      const initialStepAction = vi.fn().mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return { result: 'initial step done' };
+      });
+
+      const parallelStep1Action = vi.fn().mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return { result: 'parallelStep1 done' };
+      });
+
+      const parallelStep2Action = vi.fn().mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return { result: 'parallelStep2 done' };
+      });
+
+      const parallelStep3Action = vi.fn().mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return { result: 'parallelStep3 done' };
+      });
+
+      const finalStepAction = vi.fn().mockImplementation(async () => {
+        return { result: 'All done!' };
+      });
+
+      // Create steps
+      const initialStep = createStep({
+        id: 'initialStep',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: initialStepAction,
+      });
+
+      const parallelStep1 = createStep({
+        id: 'parallelStep1',
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: parallelStep1Action,
+      });
+
+      const parallelStep2 = createStep({
+        id: 'parallelStep2',
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: parallelStep2Action,
+      });
+
+      const parallelStep3 = createStep({
+        id: 'parallelStep3',
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: parallelStep3Action,
+      });
+
+      const finalStep = createStep({
+        id: 'finalStep',
+        inputSchema: z.object({
+          parallelStep1: z.object({ result: z.string() }),
+          parallelStep2: z.object({ result: z.string() }),
+          parallelStep3: z.object({ result: z.string() }),
+        }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: finalStepAction,
+      });
+
+      // Create workflow
+      const testParallelWorkflow = createWorkflow({
+        id: 'test-parallel-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [initialStep, parallelStep1, parallelStep2, parallelStep3, finalStep],
+      })
+        .then(initialStep)
+        .parallel([parallelStep1, parallelStep2, parallelStep3])
+        .then(finalStep)
+        .commit();
+
+      // Initialize Mastra with testStorage
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-parallel-workflow': testParallelWorkflow },
+      });
+
+      // Create and start workflow run (fire and forget)
+      const run = await testParallelWorkflow.createRunAsync();
+
+      // Start workflow without awaiting
+      const workflowPromise = run.start({ inputData: { input: 'test' } });
+
+      // Poll to verify parallel steps go through "running" state
+      let foundAllRunning = false;
+      let allStepsPresentThroughout = true;
+      const seenSteps = new Set<string>();
+      const pollResults: any[] = [];
+
+      // Wait a bit for the workflow to start
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Poll until workflow completes
+      while (true) {
+        const currentResult = await testParallelWorkflow.getWorkflowRunExecutionResult(run.runId);
+
+        if (!currentResult) {
+          allStepsPresentThroughout = false;
+          break;
+        }
+
+        pollResults.push({
+          status: currentResult.status,
+          stepStatuses: {
+            initialStep: currentResult.steps?.['initialStep']?.status,
+            parallelStep1: currentResult.steps?.['parallelStep1']?.status,
+            parallelStep2: currentResult.steps?.['parallelStep2']?.status,
+            parallelStep3: currentResult.steps?.['parallelStep3']?.status,
+            finalStep: currentResult.steps?.['finalStep']?.status,
+          },
+        });
+
+        // Track which steps we've seen
+        if (currentResult.steps) {
+          Object.keys(currentResult.steps).forEach(stepName => {
+            if (stepName !== 'input' && stepName !== 'metadata') {
+              seenSteps.add(stepName);
+            }
+          });
+        }
+
+        // Check if all three parallel steps are running simultaneously
+        const parallelStep1Status = currentResult.steps?.['parallelStep1']?.status;
+        const parallelStep2Status = currentResult.steps?.['parallelStep2']?.status;
+        const parallelStep3Status = currentResult.steps?.['parallelStep3']?.status;
+
+        if (
+          parallelStep1Status === 'running' &&
+          parallelStep2Status === 'running' &&
+          parallelStep3Status === 'running'
+        ) {
+          foundAllRunning = true;
+        }
+
+        // Verify no step disappears once it has appeared
+        if (seenSteps.has('parallelStep1') && !currentResult.steps?.['parallelStep1']) {
+          allStepsPresentThroughout = false;
+        }
+        if (seenSteps.has('parallelStep2') && !currentResult.steps?.['parallelStep2']) {
+          allStepsPresentThroughout = false;
+        }
+        if (seenSteps.has('parallelStep3') && !currentResult.steps?.['parallelStep3']) {
+          allStepsPresentThroughout = false;
+        }
+
+        // Break if workflow is complete
+        if (currentResult.status === 'success' || currentResult.status === 'failed') {
+          break;
+        }
+
+        // Poll every 50ms
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+
+      // Wait for workflow to complete
+      await workflowPromise;
+
+      // Get final workflow execution result
+      const result = await testParallelWorkflow.getWorkflowRunExecutionResult(run.runId);
+
+      // Verify all parallel steps went through running state
+      expect(foundAllRunning).toBe(true);
+
+      // Verify no step information disappeared during polling
+      expect(allStepsPresentThroughout).toBe(true);
+
+      // Verify all step actions were called
+      expect(initialStepAction).toHaveBeenCalled();
+      expect(parallelStep1Action).toHaveBeenCalled();
+      expect(parallelStep2Action).toHaveBeenCalled();
+      expect(parallelStep3Action).toHaveBeenCalled();
+      expect(finalStepAction).toHaveBeenCalled();
+
+      // Verify workflow status
+      expect(result?.status).toBe('success');
+
+      // Verify all steps have correct status and output
+      expect(result?.steps).toMatchObject({
+        initialStep: {
+          status: 'success',
+          output: { result: 'initial step done' },
+          payload: {},
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        parallelStep1: {
+          status: 'success',
+          output: { result: 'parallelStep1 done' },
+          payload: {},
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        parallelStep2: {
+          status: 'success',
+          output: { result: 'parallelStep2 done' },
+          payload: {},
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        parallelStep3: {
+          status: 'success',
+          output: { result: 'parallelStep3 done' },
+          payload: {},
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        finalStep: {
+          status: 'success',
+          output: { result: 'All done!' },
+          payload: {},
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      // Verify that parallel steps started after initial step
+      expect(result?.steps['parallelStep1']?.startedAt).toBeGreaterThanOrEqual(result?.steps['initialStep']?.endedAt!);
+      expect(result?.steps['parallelStep2']?.startedAt).toBeGreaterThanOrEqual(result?.steps['initialStep']?.endedAt!);
+      expect(result?.steps['parallelStep3']?.startedAt).toBeGreaterThanOrEqual(result?.steps['initialStep']?.endedAt!);
+
+      // Verify that final step started after all parallel steps completed
+      const maxParallelEndTime = Math.max(
+        result?.steps['parallelStep1']?.endedAt!,
+        result?.steps['parallelStep2']?.endedAt!,
+        result?.steps['parallelStep3']?.endedAt!,
+      );
+      expect(result?.steps['finalStep']?.startedAt).toBeGreaterThanOrEqual(maxParallelEndTime);
+    });
+
     it('should execute multiple steps in parallel with state', async () => {
       const step1Action = vi.fn().mockImplementation(async ({ state }) => {
         return { value: 'step1', value2: state.value };

@@ -1192,6 +1192,21 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       tracingPolicy: this.options?.tracingPolicy,
     });
 
+    const prevOutput = this.getStepOutput(stepResults, prevStep);
+    for (const step of entry.steps) {
+      if (step.type === 'step') {
+        const startTime = resume?.steps[0] === step.step.id ? undefined : Date.now();
+        const resumeTime = resume?.steps[0] === step.step.id ? Date.now() : undefined;
+        stepResults[step.step.id] = {
+          ...stepResults[step.step.id],
+          status: 'running',
+          ...(resumeTime ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
+          ...(startTime ? { startedAt: startTime } : {}),
+          ...(resumeTime ? { resumedAt: resumeTime } : {}),
+        } as StepResult<any, any, any, any>;
+      }
+    }
+
     let execResults: any;
     const results: { result: StepResult<any, any, any, any> }[] = await Promise.all(
       entry.steps.map((step, i) =>
