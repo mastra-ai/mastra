@@ -58,8 +58,8 @@ describe('Gemini Model Compatibility Tests', () => {
         instructions: 'You provide structured responses',
         model: 'google/gemini-2.0-flash-lite',
         tools: {
-          execerciseResearch: createTool({
-            id: 'execerciseResearch',
+          exerciseResearch: createTool({
+            id: 'exerciseResearch',
             description: 'Research the benefits of exercise',
             inputSchema: z.object({
               topic: z.string(),
