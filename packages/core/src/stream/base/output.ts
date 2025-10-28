@@ -697,6 +697,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#error = error;
               self.#status = 'failed';
               self.#streamFinished = true; // Mark stream as finished for EventEmitter
+              self.#emitter.emit('finish');
 
               Object.values(self.#delayedPromises).forEach(promise => {
                 if (promise.status.type === 'pending') {
