@@ -1,9 +1,9 @@
 const meta = {
   stream: ".stream()",
-  streamVNext: ".streamVNext()",
-  resumeStreamVNext: ".resumeStreamVNext()",
+  streamLegacy: ".streamLegacy()",
+  resumeStream: ".resumeStream()",
   observeStream: ".observeStream()",
-  observeStreamVNext: ".observeStreamVNext()",
+  observeStreamLegacy: ".observeStreamLegacy()",
 };
 
 export default meta;
