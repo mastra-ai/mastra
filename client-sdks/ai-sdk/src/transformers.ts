@@ -12,6 +12,7 @@ type StepResult = {
   input: Record<string, unknown> | null;
   output: unknown | null;
   suspendPayload: Record<string, unknown> | null;
+  resumePayload: Record<string, unknown> | null;
 };
 
 export type WorkflowDataPart = {
@@ -340,6 +341,7 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
         input: payload.payload.payload ?? null,
         output: null,
         suspendPayload: null,
+        resumePayload: null,
       } satisfies StepResult;
       bufferedWorkflows.set(payload.runId!, current);
       return {
@@ -379,6 +381,7 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
         ...current.steps[payload.payload.id]!,
         status: payload.payload.status,
         suspendPayload: payload.payload.suspendPayload ?? null,
+        resumePayload: payload.payload.resumePayload ?? null,
         output: null,
       } satisfies StepResult;
       return {
@@ -470,6 +473,7 @@ export function transformNetwork(
         input: payload.payload.args || null,
         output: null,
         suspendPayload: null,
+        resumePayload: null,
       } satisfies StepResult);
       bufferedNetworks.set(payload.payload.runId, current);
       return {
@@ -491,6 +495,7 @@ export function transformNetwork(
         input: payload.payload.args || null,
         output: null,
         suspendPayload: null,
+        resumePayload: null,
       } satisfies StepResult);
       bufferedNetworks.set(payload.payload.runId, current);
       return {
@@ -512,6 +517,7 @@ export function transformNetwork(
         input: payload.payload.args?.args || null,
         output: null,
         suspendPayload: null,
+        resumePayload: null,
       } satisfies StepResult);
       bufferedNetworks.set(payload.payload.runId, current);
       return {
@@ -534,6 +540,7 @@ export function transformNetwork(
         input: null,
         output: payload.payload.result,
         suspendPayload: null,
+        resumePayload: null,
       } satisfies StepResult);
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
@@ -555,6 +562,7 @@ export function transformNetwork(
         input: null,
         output: payload.payload.result,
         suspendPayload: null,
+        resumePayload: null,
       } satisfies StepResult);
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
@@ -576,6 +584,7 @@ export function transformNetwork(
         input: null,
         output: payload.payload.result,
         suspendPayload: null,
+        resumePayload: null,
       } satisfies StepResult);
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
