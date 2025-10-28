@@ -8843,6 +8843,192 @@ describe('MastraInngestWorkflow', () => {
       });
     });
 
+    it('should generate a stream with custom events', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ writer }) => {
+          await writer.write({
+            type: 'custom-event',
+            payload: {
+              hello: 'world',
+            },
+          });
+
+          return { value: 'success1' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ writer }) => {
+          await writer.write({
+            type: 'custom-event',
+            payload: {
+              hello: 'world 2',
+            },
+          });
+          return { value: 'success2' };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+      });
+      workflow.then(step1).then(step2).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const runId = 'test-run-id';
+      let watchData: StreamEvent[] = [];
+      const run = await workflow.createRunAsync({
+        runId,
+      });
+
+      const streamOutput = run.stream({ inputData: {} });
+
+      // Start watching the workflow
+      const collectedStreamData: StreamEvent[] = [];
+      for await (const data of streamOutput.fullStream) {
+        console.log('got data', JSON.stringify(data, null, 2));
+        collectedStreamData.push(JSON.parse(JSON.stringify(data)));
+      }
+      watchData = collectedStreamData;
+
+      console.log('waiting for result');
+      const executionResult = await streamOutput.result;
+      console.log('got result', executionResult);
+
+      srv.close();
+
+      // TODO: update this to new stream format
+      expect(watchData.length).toBe(8);
+      expect(watchData).toMatchObject([
+        {
+          payload: {
+            runId: 'test-run-id',
+          },
+          type: 'start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            status: 'running',
+          },
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            endedAt: expect.any(Number),
+            startedAt: expect.any(Number),
+            payload: {},
+            output: {
+              result: 'success1',
+            },
+            status: 'success',
+          },
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step1',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'step2',
+            status: 'running',
+          },
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step2',
+            endedAt: expect.any(Number),
+            startedAt: expect.any(Number),
+            payload: {
+              result: 'success1',
+            },
+            output: {
+              result: 'success2',
+            },
+            status: 'success',
+          },
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step2',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            runId: 'test-run-id',
+          },
+          type: 'finish',
+        },
+      ]);
+      // Verify execution completed successfully
+      expect(executionResult.steps.step1).toMatchObject({
+        status: 'success',
+        output: { result: 'success1' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(executionResult.steps.step2).toMatchObject({
+        status: 'success',
+        output: { result: 'success2' },
+        payload: {
+          result: 'success1',
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
     it('should handle basic sleep waiting flow', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
