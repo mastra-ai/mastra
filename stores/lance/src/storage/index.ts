@@ -8,7 +8,6 @@ import { MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_NAMES,
   PaginationInfo,
-  StorageGetMessagesArg,
   StorageColumn,
   EvalRow,
   WorkflowRuns,
