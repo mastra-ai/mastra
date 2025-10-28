@@ -19,6 +19,18 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
       // Access dynamic data from workflow state (shared across nested workflows)
       const { messageList, options, runId, experimental_generateMessageId, controller, _internal } = state;
 
+      console.log('[DEBUG] llm-mapping-step received inputData:', {
+        hasInputData: !!inputData,
+        length: inputData?.length,
+        toolCalls: inputData?.map(tc => ({
+          toolName: tc.toolName,
+          toolCallId: tc.toolCallId,
+          hasResult: !!tc.result,
+          hasError: !!tc.error,
+          providerExecuted: tc.providerExecuted,
+        })),
+      });
+
       const initialResult = getStepResult(llmExecutionStep);
 
       if (inputData?.every(toolCall => toolCall?.result === undefined)) {
@@ -68,6 +80,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
       }
 
       if (inputData?.length) {
+        console.log('[DEBUG] llm-mapping-step: Processing tool results, count:', inputData.length);
         for (const toolCall of inputData) {
           const chunk: ChunkType = {
             type: 'tool-result',
@@ -83,6 +96,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
             },
           };
 
+          console.log('[DEBUG] llm-mapping-step: Enqueueing tool-result chunk:', {
+            toolName: toolCall.toolName,
+            hasResult: !!toolCall.result,
+            hasController: !!controller,
+          });
           controller.enqueue(chunk);
 
           if (initialResult?.metadata?.modelVersion === 'v2') {
@@ -113,6 +131,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
           );
         }
 
+        console.log('[DEBUG] llm-mapping-step: Returning with tool results, isContinued:', initialResult.stepResult?.isContinued);
         return {
           ...initialResult,
           messages: {

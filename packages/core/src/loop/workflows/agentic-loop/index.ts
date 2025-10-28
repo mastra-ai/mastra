@@ -24,7 +24,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     mastra,
   });
 
-  return createWorkflow({
+  const workflow = createWorkflow({
     id: 'agentic-loop',
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
@@ -152,11 +152,31 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
       const reason = typedInputData.stepResult?.reason;
 
+      console.log('[DEBUG] agentic-loop dowhile condition:', {
+        reason,
+        isContinued: typedInputData.stepResult?.isContinued,
+        hasStepResult: !!typedInputData.stepResult,
+        stepCount: newAccumulatedSteps.length,
+        maxSteps,
+        hasFinishedSteps,
+        willContinue: typedInputData.stepResult?.isContinued ?? false,
+      });
+
       if (reason === undefined) {
+        console.log('[DEBUG] agentic-loop: Stopping because reason is undefined');
         return false;
       }
 
-      return typedInputData.stepResult?.isContinued ?? false;
+      const willContinue = typedInputData.stepResult?.isContinued ?? false;
+      console.log('[DEBUG] agentic-loop: Returning willContinue =', willContinue);
+      return willContinue;
     })
     .commit();
+
+  // Register mastra with the workflow if provided
+  if (mastra) {
+    workflow.__registerMastra(mastra);
+  }
+
+  return workflow;
 }

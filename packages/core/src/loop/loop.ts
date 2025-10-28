@@ -98,12 +98,15 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
 
   const messageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
 
-  let modelOutput: MastraModelOutput<OUTPUT> | undefined;
+  // Use a ref object so streamState functions can always access the current modelOutput
+  const modelOutputRef = { current: undefined as MastraModelOutput<OUTPUT> | undefined };
+
   const serializeStreamState = () => {
-    return modelOutput?.serializeState();
+    return modelOutputRef.current?.serializeState();
   };
-  const deserializeStreamState = (state: any) => {
-    modelOutput?.deserializeState(state);
+  const deserializeStreamState = (_state: any) => {
+    // No-op - state is restored via initialState in MastraModelOutput constructor
+    // This prevents overwriting the properly initialized state
   };
 
   // Create processor states map that will be shared across all LLM execution steps
@@ -153,7 +156,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   // Apply chunk tracing transform to track MODEL_STEP and MODEL_CHUNK spans
   const stream = rest.modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
 
-  modelOutput = new MastraModelOutput({
+  modelOutputRef.current = new MastraModelOutput({
     model: {
       modelId: firstModel.model.modelId,
       provider: firstModel.model.provider,
@@ -178,5 +181,5 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     initialState: initialStreamState,
   });
 
-  return createDestructurableOutput(modelOutput);
+  return createDestructurableOutput(modelOutputRef.current!);
 }

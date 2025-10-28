@@ -1172,14 +1172,26 @@ export class Workflow<
     }
 
     const res = isResume
-      ? await run.resume({
-          resumeData,
-          step: resume.steps as any,
-          runtimeContext,
-          tracingContext,
-          outputOptions: { includeState: true, includeResumeLabels: true },
-          label: resume.label,
-        })
+      ? await (async () => {
+          console.log('[DEBUG] Nested workflow resume - passing state as stateOverride:', {
+            workflowId: this.id,
+            hasController: !!state.controller,
+            hasWriter: !!state.writer,
+            hasStreamState: !!state.streamState,
+            stateKeys: Object.keys(state),
+            resumeLabel: resume.label,
+          });
+          return run.resume({
+            resumeData,
+            step: resume.steps as any,
+            runtimeContext,
+            tracingContext,
+            outputOptions: { includeState: true, includeResumeLabels: true },
+            label: resume.label,
+            // Pass the current state as stateOverride to ensure nested workflows get fresh execution objects
+            stateOverride: state,
+          });
+        })()
       : await run.start({
           inputData,
           runtimeContext,
@@ -2235,6 +2247,13 @@ export class Run<
 
     // Merge stateOverride with snapshot value (workflow state) to allow refreshing execution-specific objects
     if (params.stateOverride) {
+      console.log('[DEBUG] Applying stateOverride to snapshot.value:', {
+        workflowId: this.workflowId,
+        hasController: !!params.stateOverride.controller,
+        hasWriter: !!params.stateOverride.writer,
+        hasStreamState: !!params.stateOverride.streamState,
+        stateOverrideKeys: Object.keys(params.stateOverride),
+      });
       snapshot.value = {
         ...snapshot.value,
         ...params.stateOverride,

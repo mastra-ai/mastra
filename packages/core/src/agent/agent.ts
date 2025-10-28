@@ -343,7 +343,9 @@ export class Agent<
 
     // Register workflows with mastra if available
     if (this.#mastra) {
-      this.#prepareStreamWorkflow.__registerMastra(this.#mastra);
+      // This shouldn't be registered, because we manually choose to resume the inner workflow
+      // and don't need storage on the main workflow
+      // this.#prepareStreamWorkflow.__registerMastra(this.#mastra);
       // Only register mastra on loop workflows (not other workflows)
       this.#agenticLoopWorkflow.__registerMastra(this.#mastra);
     }

@@ -24,7 +24,7 @@ export function createAgenticExecutionWorkflow<
 
   const llmMappingStep = createLLMMappingStep(llmExecutionStep);
 
-  return createWorkflow({
+  const workflow = createWorkflow({
     id: 'executionWorkflow',
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
@@ -42,6 +42,11 @@ export function createAgenticExecutionWorkflow<
       async ({ inputData, state }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
         const { telemetry_settings, modelStreamSpan } = state;
+        console.log('[DEBUG] Map step - tool calls:', {
+          hasToolCalls: !!typedInputData.output.toolCalls,
+          count: typedInputData.output.toolCalls?.length,
+          toolNames: typedInputData.output.toolCalls?.map(tc => tc.toolName),
+        });
         if (modelStreamSpan && telemetry_settings?.recordOutputs !== false && typedInputData.output.toolCalls?.length) {
           modelStreamSpan.setAttribute(
             'stream.response.toolCalls',
@@ -61,7 +66,17 @@ export function createAgenticExecutionWorkflow<
       },
       { id: 'map-tool-calls' },
     )
-    .foreach(toolCallStep, { concurrency: 10 })
+    .foreach(toolCallStep, {
+      concurrency: 10,
+      id: 'toolCallStep',
+    })
     .then(llmMappingStep)
     .commit();
+
+  // Register mastra with the workflow if provided
+  if (mastra) {
+    workflow.__registerMastra(mastra);
+  }
+
+  return workflow;
 }
