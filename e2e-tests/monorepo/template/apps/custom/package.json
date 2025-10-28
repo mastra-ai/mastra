@@ -20,6 +20,7 @@
     "date-fns": "^4.1.0",
     "lodash": "^4.17.21",
     "hono": "^4.9.10",
+    "unicorn-magic": "0.3.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
