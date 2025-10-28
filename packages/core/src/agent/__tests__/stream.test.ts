@@ -132,7 +132,6 @@ function runStreamTest(version: 'v1' | 'v2') {
       let { messages } = await storage.listMessages({
         threadId: 'thread-partial-rescue',
         resourceId: 'resource-partial-rescue',
-        format: 'v2',
       });
 
       // User message should be saved
@@ -204,7 +203,6 @@ function runStreamTest(version: 'v1' | 'v2') {
       const { messages } = await storage.listMessages({
         threadId: 'thread-echo',
         resourceId: 'resource-echo',
-        format: 'v2',
       });
       expect(messages.length).toBeGreaterThan(0);
       const assistantMsg = messages.find(m => m.role === 'assistant');
@@ -284,7 +282,6 @@ function runStreamTest(version: 'v1' | 'v2') {
       const { messages } = await storage.listMessages({
         threadId: 'thread-multi',
         resourceId: 'resource-multi',
-        format: 'v2',
       });
       expect(messages.length).toBeGreaterThan(0);
       const assistantMsg = messages.find(m => m.role === 'assistant');

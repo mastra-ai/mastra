@@ -150,7 +150,6 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       const { messages: remainingMessages } = await storage.listMessages({
         threadId: thread.id,
         limit: 100,
-        format: 'v1',
       });
       expect(remainingMessages).toHaveLength(50);
 
@@ -187,7 +186,7 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       await storage.deleteMessages(['mixed-msg-0', 'invalid-id-1', 'mixed-msg-2', 'invalid-id-2']);
 
       // Verify only the valid messages were deleted
-      const { messages: remainingMessages } = await storage.listMessages({ threadId: thread.id, format: 'v1' });
+      const { messages: remainingMessages } = await storage.listMessages({ threadId: thread.id });
       expect(remainingMessages).toHaveLength(1);
       expect(remainingMessages[0]!.id).toBe('mixed-msg-1');
     });

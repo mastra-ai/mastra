@@ -5,13 +5,7 @@ import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-li
 import { MastraBase } from '../base';
 import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
-import type {
-  MastraStorage,
-  PaginationInfo,
-  StorageGetMessagesArg,
-  StorageListMessagesInput,
-  ThreadSortOptions,
-} from '../storage';
+import type { MastraStorage, PaginationInfo, StorageListMessagesInput, ThreadSortOptions } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import { deepMerge } from '../utils';

@@ -86,7 +86,8 @@ export class MemoryThread extends BaseResource {
   }
 
   /**
-   * Lists messages with advanced filtering and context inclusion options
+   * Lists messages with advanced filtering and context inclusion options.
+   * Always returns messages in v2 format.
    *
    * @param params - Parameters for listing messages
    * @param params.limit - Number of messages to return. Use `false` to retrieve ALL messages (⚠️ use with caution).
@@ -95,10 +96,9 @@ export class MemoryThread extends BaseResource {
    * @param params.filter - Filtering options
    * @param params.filter.dateRange - Filter messages by creation date range
    * @param params.include - Array of message IDs with context (previous/next messages) to include
-   * @param params.format - Message format version ('v1' or 'v2')
    * @param params.resourceId - Optional resource ID for filtering
    * @param params.runtimeContext - Optional runtime context to pass as query parameter
-   * @returns Promise containing list of messages with pagination metadata (total, page, perPage, hasMore)
+   * @returns Promise containing list of messages (v2 format) with pagination metadata (total, page, perPage, hasMore)
    *
    * @example
    * // Get first 50 messages

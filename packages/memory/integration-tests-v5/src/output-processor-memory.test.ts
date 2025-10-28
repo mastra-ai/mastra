@@ -159,9 +159,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve messages from storage directly
-    const savedMessages = await storage.listMessages({
+    const { messages: savedMessages } = await storage.listMessages({
       threadId,
-      format: 'v2',
     });
 
     // Find the assistant message
@@ -244,7 +243,6 @@ describe('Output Processor Memory Persistence Integration', () => {
     // Retrieve messages from storage directly
     const savedMessages = await storage.listMessages({
       threadId,
-      format: 'v2',
     });
 
     // Find the assistant message
@@ -420,7 +418,6 @@ describe('Output Processor Memory Persistence Integration', () => {
     // Retrieve from storage
     const savedMessages = await storage.listMessages({
       threadId,
-      format: 'v2',
     });
 
     const assistantMessage = savedMessages.find((m: any) => m.role === 'assistant');
@@ -543,7 +540,6 @@ describe('Output Processor Memory Persistence Integration', () => {
     // Simulate page refresh - retrieve messages from storage
     const messagesAfterRefresh = await storage.listMessages({
       threadId,
-      format: 'v2',
     });
 
     // Find the assistant message

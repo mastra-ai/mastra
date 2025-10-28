@@ -320,7 +320,6 @@ export class InMemoryMemory extends MemoryStorage {
     threadId,
     resourceId,
     include,
-    format = 'v1',
     filter,
     limit,
     offset = 0,
@@ -330,10 +329,11 @@ export class InMemoryMemory extends MemoryStorage {
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     // Determine how many results to return
-    // Priority: explicit limit > default (40)
+    // Default pagination is always 40 unless explicitly specified
     let perPage = 40;
 
     if (limit !== undefined) {
+      // Explicit limit provided
       if (limit === false) {
         // limit: false means get ALL messages
         perPage = Number.MAX_SAFE_INTEGER;
@@ -346,9 +346,57 @@ export class InMemoryMemory extends MemoryStorage {
     // Calculate page from offset
     const page = Math.floor(offset / perPage);
 
-    // Handle include messages with context
-    const messages: MastraMessageV2[] = [];
+    // Step 1: Get regular paginated messages from the thread first
+    let threadMessages = Array.from(this.collection.messages.values()).filter((msg: any) => {
+      if (msg.thread_id !== threadId) return false;
+      if (resourceId && msg.resourceId !== resourceId) return false;
+      return true;
+    });
 
+    // Apply date filtering
+    if (filter?.dateRange) {
+      const { start: from, end: to } = filter.dateRange;
+      threadMessages = threadMessages.filter((msg: any) => {
+        const msgDate = new Date(msg.createdAt);
+        const fromDate = from ? new Date(from) : null;
+        const toDate = to ? new Date(to) : null;
+
+        if (fromDate && msgDate < fromDate) return false;
+        if (toDate && msgDate > toDate) return false;
+        return true;
+      });
+    }
+
+    // Sort thread messages by createdAt before pagination
+    threadMessages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    // Get total count of thread messages (for pagination metadata)
+    const totalThreadMessages = threadMessages.length;
+
+    // Apply pagination to thread messages
+    const start = offset;
+    const end = start + perPage;
+    const paginatedThreadMessages = threadMessages.slice(start, end);
+
+    // Convert paginated thread messages to MastraMessageV2
+    const messages: MastraMessageV2[] = [];
+    const messageIds = new Set<string>();
+
+    for (const msg of paginatedThreadMessages) {
+      const convertedMessage = {
+        id: msg.id,
+        threadId: msg.thread_id,
+        content: safelyParseJSON(msg.content),
+        role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
+        type: msg.type,
+        createdAt: msg.createdAt,
+        resourceId: msg.resourceId,
+      } as MastraMessageV2;
+      messages.push(convertedMessage);
+      messageIds.add(msg.id);
+    }
+
+    // Step 2: Add included messages with context (if any), excluding duplicates
     if (include && include.length > 0) {
       for (const includeItem of include) {
         const targetMessage = this.collection.messages.get(includeItem.id);
@@ -365,8 +413,9 @@ export class InMemoryMemory extends MemoryStorage {
           } as MastraMessageV2;
 
           // Only add if not already in messages array (deduplication)
-          if (!messages.some(m => m.id === convertedMessage.id)) {
+          if (!messageIds.has(convertedMessage.id)) {
             messages.push(convertedMessage);
+            messageIds.add(convertedMessage.id);
           }
 
           // Add previous messages if requested
@@ -380,7 +429,7 @@ export class InMemoryMemory extends MemoryStorage {
               const startIndex = Math.max(0, targetIndex - (includeItem.withPreviousMessages || 0));
               for (let i = startIndex; i < targetIndex; i++) {
                 const message = allThreadMessages[i];
-                if (message && !messages.some(m => m.id === message.id)) {
+                if (message && !messageIds.has(message.id)) {
                   const convertedPrevMessage = {
                     id: message.id,
                     threadId: message.thread_id,
@@ -391,6 +440,7 @@ export class InMemoryMemory extends MemoryStorage {
                     resourceId: message.resourceId,
                   } as MastraMessageV2;
                   messages.push(convertedPrevMessage);
+                  messageIds.add(message.id);
                 }
               }
             }
@@ -410,7 +460,7 @@ export class InMemoryMemory extends MemoryStorage {
               );
               for (let i = targetIndex + 1; i < endIndex; i++) {
                 const message = allThreadMessages[i];
-                if (message && !messages.some(m => m.id === message.id)) {
+                if (message && !messageIds.has(message.id)) {
                   const convertedNextMessage = {
                     id: message.id,
                     threadId: message.thread_id,
@@ -421,62 +471,36 @@ export class InMemoryMemory extends MemoryStorage {
                     resourceId: message.resourceId,
                   } as MastraMessageV2;
                   messages.push(convertedNextMessage);
+                  messageIds.add(message.id);
                 }
               }
             }
           }
         }
       }
-    } else {
-      // Get regular messages from the thread
-      let threadMessages = Array.from(this.collection.messages.values()).filter((msg: any) => {
-        if (msg.thread_id !== threadId) return false;
-        if (resourceId && msg.resourceId !== resourceId) return false;
-        return true;
-      });
-
-      // Apply date filtering
-      if (filter?.dateRange) {
-        const { start: from, end: to } = filter.dateRange;
-        threadMessages = threadMessages.filter((msg: any) => {
-          const msgDate = new Date(msg.createdAt);
-          const fromDate = from ? new Date(from) : null;
-          const toDate = to ? new Date(to) : null;
-
-          if (fromDate && msgDate < fromDate) return false;
-          if (toDate && msgDate > toDate) return false;
-          return true;
-        });
-      }
-
-      // Convert all thread messages
-      for (const msg of threadMessages) {
-        const convertedMessage = {
-          id: msg.id,
-          threadId: msg.thread_id,
-          content: safelyParseJSON(msg.content),
-          role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
-          type: msg.type,
-          createdAt: msg.createdAt,
-          resourceId: msg.resourceId,
-        } as MastraMessageV2;
-        messages.push(convertedMessage);
-      }
     }
 
-    // Sort by createdAt
+    // Sort all messages (paginated + included) by createdAt for final output
     messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-    const start = offset;
-    const end = start + perPage;
-    const paginatedMessages = messages.slice(start, end);
+    // Calculate hasMore
+    let hasMore;
+    if (include && include.length > 0) {
+      // When using include, check if we've returned all messages from the thread
+      // because include might bring in messages beyond the pagination window
+      const returnedThreadMessageIds = new Set(messages.filter(m => m.threadId === threadId).map(m => m.id));
+      hasMore = returnedThreadMessageIds.size < totalThreadMessages;
+    } else {
+      // Standard pagination: check if there are more pages
+      hasMore = end < totalThreadMessages;
+    }
 
     return {
-      messages: format === 'v1' ? (paginatedMessages as any) : paginatedMessages,
-      total: messages.length,
-      page, // Keep for backwards compatibility
-      perPage, // Keep for backwards compatibility
-      hasMore: messages.length > end,
+      messages,
+      total: totalThreadMessages,
+      page,
+      perPage,
+      hasMore,
     };
   }
 

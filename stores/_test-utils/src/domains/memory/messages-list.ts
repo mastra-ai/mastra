@@ -175,8 +175,12 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         ],
       });
 
-      expect(result.messages).toHaveLength(3);
-      expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 1', 'Message 2', 'Message 3']);
+      // Default pagination applies (limit: 40), so we get all 5 messages from thread
+      // No duplicates since Message 1, 2, 3 are already in the paginated set
+      expect(result.messages).toHaveLength(5);
+      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 1');
+      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 2');
+      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 3');
     });
 
     it('should include specific messages with next context', async () => {
@@ -190,8 +194,12 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         ],
       });
 
-      expect(result.messages).toHaveLength(3);
-      expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 2', 'Message 3', 'Message 4']);
+      // Default pagination applies (limit: 40), so we get all 5 messages from thread
+      // No duplicates since Message 2, 3, 4 are already in the paginated set
+      expect(result.messages).toHaveLength(5);
+      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 2');
+      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 3');
+      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 4');
     });
 
     it('should include specific messages with both previous and next context', async () => {
@@ -206,8 +214,12 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         ],
       });
 
-      expect(result.messages).toHaveLength(3);
-      expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 2', 'Message 3', 'Message 4']);
+      // Default pagination applies (limit: 40), so we get all 5 messages from thread
+      // No duplicates since Message 2, 3, 4 are already in the paginated set
+      expect(result.messages).toHaveLength(5);
+      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 2');
+      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 3');
+      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 4');
     });
 
     it('should include multiple messages from different threads', async () => {
@@ -226,8 +238,9 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         ],
       });
 
-      expect(result.messages).toHaveLength(3);
-      expect(result.messages.some(m => m.threadId === thread.id)).toBe(true);
+      // Default pagination gets all 5 from thread.id + 1 from thread2.id
+      expect(result.messages).toHaveLength(6);
+      expect(result.messages.filter(m => m.threadId === thread.id)).toHaveLength(5);
       expect(result.messages.some(m => m.threadId === thread2.id)).toBe(true);
     });
 
@@ -246,10 +259,12 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         ],
       });
 
-      // Should have Messages 2, 3, 4 (deduplicated)
-      expect(result.messages).toHaveLength(3);
+      // Default pagination gets all 5 messages, include overlaps are deduplicated
+      expect(result.messages).toHaveLength(5);
       const contents = result.messages.map((m: any) => m.content.content);
-      expect(contents).toEqual(['Message 2', 'Message 3', 'Message 4']);
+      expect(contents).toContain('Message 2');
+      expect(contents).toContain('Message 3');
+      expect(contents).toContain('Message 4');
     });
 
     it('should sort messages by createdAt', async () => {
@@ -287,8 +302,8 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         ],
       });
 
-      // Should return empty if the included message doesn't exist
-      expect(result.messages).toHaveLength(0);
+      // Should still return paginated messages even if the included message doesn't exist
+      expect(result.messages).toHaveLength(5);
     });
 
     it('should throw when threadId is empty or whitespace', async () => {
@@ -314,9 +329,10 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         offset: 0,
       });
 
-      expect(result.messages).toHaveLength(3);
+      // Pagination gets first 3 (1,2,3) + include adds remaining (4,5)
+      expect(result.messages).toHaveLength(5);
       expect(result.total).toBe(5);
-      expect(result.hasMore).toBe(true);
+      expect(result.hasMore).toBe(false);
     });
 
     it('should default to format v2', async () => {
@@ -339,8 +355,10 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         ],
       });
 
-      expect(result.messages).toHaveLength(1);
-      expect(result.messages[0]?.threadId).toBe(thread2.id);
+      // Should get paginated messages from thread.id (5) + included from thread2 (1)
+      expect(result.messages).toHaveLength(6);
+      expect(result.messages.some(m => m.threadId === thread2.id)).toBe(true);
+      expect(result.messages.filter(m => m.threadId === thread.id)).toHaveLength(5);
     });
 
     it('should handle pagination with date range', async () => {
@@ -452,9 +470,9 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           ],
         });
 
-        // Should get Message 2 and 3 from include
-        expect(result.messages).toHaveLength(2);
-        expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 2', 'Message 3']);
+        // Should get first 2 from pagination (Message 1, 2) + included Message 3 (Message 2 already in paginated set)
+        expect(result.messages).toHaveLength(3);
+        expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 1', 'Message 2', 'Message 3']);
       });
 
       it('should work with limit and date range', async () => {
@@ -524,29 +542,6 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         });
         // Should fall back to default behavior
         expect(resultNeg.messages).toHaveLength(5);
-      });
-
-      it('should work with limit and v1 format', async () => {
-        const result = await storage.listMessages({
-          threadId: thread.id,
-          limit: 3,
-          format: 'v1',
-        });
-
-        expect(result.messages).toHaveLength(3);
-        expect(result.total).toBe(5);
-      });
-
-      it('should work with limit and v2 format', async () => {
-        const result = await storage.listMessages({
-          threadId: thread.id,
-          limit: 3,
-          format: 'v2',
-        });
-
-        expect(result.messages).toHaveLength(3);
-        expect(result.total).toBe(5);
-        expect(result.messages.every(MessageList.isMastraMessageV2)).toBe(true);
       });
     });
   });

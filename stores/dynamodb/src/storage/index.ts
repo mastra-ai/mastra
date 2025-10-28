@@ -8,7 +8,6 @@ import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
   EvalRow,
-  StorageGetMessagesArg,
   WorkflowRun,
   WorkflowRuns,
   TABLE_NAMES,
@@ -302,12 +301,6 @@ export class DynamoDBStore extends MastraStorage {
     } & ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     return this.stores.memory.getThreadsByResourceIdPaginated(args);
-  }
-
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
   }
 
   async updateMessages(_args: {

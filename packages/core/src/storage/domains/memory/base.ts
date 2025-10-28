@@ -78,10 +78,6 @@ export abstract class MemoryStorage extends MastraBase {
     } & ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
 
-  abstract getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }>;
-
   abstract listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
 
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {

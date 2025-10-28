@@ -90,11 +90,10 @@ export type StorageListMessagesInput = {
       end?: Date;
     };
   };
-  format?: MastraMessageFormat;
 };
 
 export type StorageListMessagesOutput = PaginationInfo & {
-  messages: MastraMessageV1[] | MastraMessageV2[];
+  messages: MastraMessageV2[];
 };
 
 export type StorageGetMessagesArg = {

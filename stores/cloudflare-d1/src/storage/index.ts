@@ -280,16 +280,6 @@ export class D1Store extends MastraStorage {
     return this.stores.memory.getMessagesById({ messageIds, format });
   }
 
-  public async getMessagesPaginated({
-    threadId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<
-    PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }
-  > {
-    return this.stores.memory.getMessagesPaginated({ threadId, selectBy, format });
-  }
-
   async updateWorkflowResults({
     workflowName,
     runId,

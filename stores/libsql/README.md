@@ -136,7 +136,7 @@ Example filter:
 - `getThread(threadId)`: Get a thread by ID
 - `deleteThread(threadId)`: Delete a thread and its messages
 - `saveMessages(messages)`: Save multiple messages in a transaction
-- `listMessages({ threadId, include?, limit?, offset?, filter?, format? })`: Get messages for a thread
+- `listMessages({ threadId, include?, limit?, offset?, filter? })`: Get messages for a thread (always returns v2 format)
 - `deleteMessages(messageIds)`: Delete specific messages
 
 ## Related Links

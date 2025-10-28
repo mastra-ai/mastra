@@ -193,7 +193,6 @@ export class Memory extends MastraMemory {
     const result = await this.storage.listMessages({
       threadId,
       resourceId,
-      format: 'v2',
       limit,
       offset,
       filter,

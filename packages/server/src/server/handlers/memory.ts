@@ -344,35 +344,6 @@ export async function deleteThreadHandler({
   }
 }
 
-export async function getMessagesPaginatedHandler({
-  mastra,
-  threadId,
-  resourceId,
-  selectBy,
-  format,
-}: StorageGetMessagesArg & Pick<MemoryContext, 'mastra'>) {
-  try {
-    validateBody({ threadId });
-
-    const storage = mastra.getStorage();
-
-    if (!storage) {
-      throw new HTTPException(400, { message: 'Storage is not initialized' });
-    }
-
-    const thread = await storage.getThreadById({ threadId: threadId! });
-
-    if (!thread) {
-      throw new HTTPException(404, { message: 'Thread not found' });
-    }
-
-    const result = await storage.getMessagesPaginated({ threadId: threadId!, resourceId, selectBy, format });
-    return result;
-  } catch (error) {
-    return handleError(error, 'Error getting messages');
-  }
-}
-
 export async function getMessagesHandler({
   mastra,
   agentId,
@@ -380,7 +351,7 @@ export async function getMessagesHandler({
   runtimeContext,
   ...listMessagesParams
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'runtimeContext'> &
-  Omit<StorageListMessagesInput, 'threadId' | 'include'>) {
+  Omit<StorageListMessagesInput, 'threadId'>) {
   try {
     validateBody({ threadId });
 
@@ -408,25 +379,31 @@ export async function getMessagesHandler({
     }
 
     const thread = await memory.getThreadById({ threadId: threadId! });
-
     if (!thread) {
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
-    const result = await memory.query({
+    // Use listMessages API - always returns v2 format
+    const result = await memory.storage.listMessages({
       threadId: threadId!,
       resourceId: listMessagesParams.resourceId,
       limit: listMessagesParams.limit,
       offset: listMessagesParams.offset,
       filter: listMessagesParams.filter,
+      include: listMessagesParams.include,
     });
 
     const uiMessages = convertMessages(result.messages).to('AIV5.UI');
+    const legacyMessages = convertMessages(result.messages).to('AIV4.UI');
 
     return {
       messages: result.messages,
       uiMessages,
-      legacyMessages: result.uiMessages,
+      legacyMessages,
+      total: result.total,
+      page: result.page,
+      perPage: result.perPage,
+      hasMore: result.hasMore,
     };
   } catch (error) {
     return handleError(error, 'Error listing messages');

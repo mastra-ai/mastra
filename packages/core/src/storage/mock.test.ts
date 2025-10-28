@@ -221,22 +221,12 @@ describe('InMemoryStore - Message Fetching', () => {
     store = new InMemoryStore();
   });
 
-  it('getMessages should throw when threadId is an empty string or whitespace only', async () => {
+  it('listMessages should throw when threadId is an empty string or whitespace only', async () => {
     await expect(() => store.listMessages({ threadId: '' })).rejects.toThrowError(
       'threadId must be a non-empty string',
     );
 
     await expect(() => store.listMessages({ threadId: '   ' })).rejects.toThrowError(
-      'threadId must be a non-empty string',
-    );
-  });
-
-  it('getMessagesPaginated should throw when threadId is an empty string or whitespace only', async () => {
-    await expect(() => store.getMessagesPaginated({ threadId: '' })).rejects.toThrowError(
-      'threadId must be a non-empty string',
-    );
-
-    await expect(() => store.getMessagesPaginated({ threadId: '   ' })).rejects.toThrowError(
       'threadId must be a non-empty string',
     );
   });
@@ -410,16 +400,6 @@ describe('InMemoryStore - listMessages with limit parameter', () => {
     // Negative limit is not valid, so it falls back to default
     expect(result.messages).toHaveLength(10);
     expect(result.perPage).toBe(40); // Falls back to default
-  });
-
-  it('should work with format parameter and limit', async () => {
-    const resultV1 = await store.listMessages({ threadId, limit: 3, format: 'v1' });
-    expect(resultV1.messages).toHaveLength(3);
-
-    const resultV2 = await store.listMessages({ threadId, limit: 3, format: 'v2' });
-    expect(resultV2.messages).toHaveLength(3);
-    // V2 messages should have proper structure
-    expect(resultV2.messages[0]).toHaveProperty('content');
   });
 });
 

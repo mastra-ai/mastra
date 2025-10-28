@@ -8,7 +8,6 @@ import {
   getMemoryStatusHandler,
   getMemoryConfigHandler,
   getMessagesHandler,
-  getMessagesPaginatedHandler,
   getThreadByIdHandler,
   getThreadsHandler,
   getThreadsPaginatedHandler,
@@ -678,7 +677,8 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
   router.post(
     '/threads/:threadId/messages',
     describeRoute({
-      description: 'List messages for a thread with advanced filtering and pagination',
+      description:
+        'List messages for a thread with advanced filtering and pagination. Always returns v2 format messages.',
       tags: ['memory'],
       parameters: [
         {
@@ -767,11 +767,6 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
                   },
                   description: 'Array of message IDs with context (previous/next messages) to include in results',
                 },
-                format: {
-                  type: 'string',
-                  enum: ['v1', 'v2'],
-                  description: 'Message format version (default: v1)',
-                },
                 resourceId: {
                   type: 'string',
                   description: 'Optional resource ID for filtering messages',
@@ -818,63 +813,6 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getMessagesHandler,
-  );
-
-  // @TODO: Temporary api as we inform users that we are deprecating the original /api/memory/threads/:threadId/messages api.
-  router.get(
-    '/threads/:threadId/messages/paginated',
-    describeRoute({
-      description: 'Get paginated messages for a thread',
-      tags: ['memory'],
-      parameters: [
-        {
-          name: 'threadId',
-          in: 'path',
-          required: true,
-          description: 'The unique identifier of the thread',
-          schema: {
-            type: 'string',
-          },
-        },
-        {
-          name: 'resourceId',
-          in: 'query',
-          required: false,
-          description: 'Filter messages by resource ID',
-          schema: {
-            type: 'string',
-          },
-        },
-        {
-          name: 'format',
-          in: 'query',
-          required: false,
-          description: 'Message format to return',
-          schema: {
-            type: 'string',
-            enum: ['v1', 'v2'],
-            default: 'v1',
-          },
-        },
-        {
-          name: 'selectBy',
-          in: 'query',
-          required: false,
-          description: 'JSON string containing selection criteria for messages',
-          schema: {
-            type: 'string',
-            example:
-              '{"pagination":{"page":0,"perPage":20,"dateRange":{"start":"2024-01-01T00:00:00Z","end":"2024-12-31T23:59:59Z"}},"include":[{"id":"msg-123","withPreviousMessages":5,"withNextMessages":3}]}',
-          },
-        },
-      ],
-      responses: {
-        200: {
-          description: 'List of messages',
-        },
-      },
-    }),
-    getMessagesPaginatedHandler,
   );
 
   router.get(

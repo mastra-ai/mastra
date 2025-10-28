@@ -204,7 +204,7 @@
     "/api/memory/threads/{threadId}/messages": {
       "post": {
         "operationId": "postApiMemoryThreadsByThreadIdMessages",
-        "description": "List messages for a thread with advanced filtering and pagination",
+        "description": "List messages for a thread with advanced filtering and pagination. Always returns v2 format messages.",
         "tags": ["memory"],
         "parameters": [
           {

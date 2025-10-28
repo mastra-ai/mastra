@@ -30,7 +30,6 @@ import type {
   EvalRow,
   PaginationInfo,
   StorageColumn,
-  StorageGetMessagesArg,
   StorageResourceType,
   StoragePagination,
   ThreadSortOptions,
@@ -521,19 +520,7 @@ export abstract class MastraStorage extends MastraBase {
     } & ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
 
-  abstract getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }>;
-
-  async listMessages(
-    args: StorageListMessagesInput & { format?: undefined | 'v1' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] }>;
-  async listMessages(
-    args: StorageListMessagesInput & { format?: 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV2[] }>;
-  async listMessages(
-    args: StorageListMessagesInput,
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+  async listMessages(args: StorageListMessagesInput): Promise<PaginationInfo & { messages: MastraMessageV2[] }> {
     if (this.stores?.memory) {
       return this.stores.memory.listMessages(args);
     }

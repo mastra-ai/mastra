@@ -322,6 +322,7 @@ export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
 
 /**
  * Parameters for listing messages with advanced filtering options.
+ * Always returns messages in v2 format.
  *
  * @property limit - Number of messages to retrieve. Use `false` to retrieve ALL messages (⚠️ use with caution for large datasets).
  *                   Defaults to 40 if not specified.
@@ -332,7 +333,6 @@ export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
  * @property filter.dateRange.start - Include only messages created on or after this date
  * @property filter.dateRange.end - Include only messages created on or before this date
  * @property include - Array of message IDs with context (previous/next messages) to include in results
- * @property format - Message format version ('v1' or 'v2')
  * @property resourceId - Optional resource ID for filtering messages
  */
 export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;

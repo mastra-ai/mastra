@@ -190,14 +190,6 @@ export class UpstashStore extends MastraStorage {
     return this.stores.memory.getMessagesById({ messageIds, format });
   }
 
-  public async getMessagesPaginated(
-    args: StorageGetMessagesArg & {
-      format?: 'v1' | 'v2';
-    },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
-  }
-
   async updateWorkflowResults({
     workflowName,
     runId,

@@ -4567,7 +4567,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         const { messages } = await storage.listMessages({
           threadId: 'thread-partial-rescue-generate',
           resourceId: 'resource-partial-rescue-generate',
-          format: 'v2',
         });
 
         // User message should be saved
@@ -4636,7 +4635,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         const { messages } = await storage.listMessages({
           threadId: 'thread-echo-generate',
           resourceId: 'resource-echo-generate',
-          format: 'v2',
         });
         expect(messages.length).toBeGreaterThan(0);
 
@@ -4714,7 +4712,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         const { messages } = await storage.listMessages({
           threadId: 'thread-multi-generate',
           resourceId: 'resource-multi-generate',
-          format: 'v2',
         });
         expect(messages.length).toBeGreaterThan(0);
         const assistantMsg = messages.find(m => m.role === 'assistant');
@@ -4753,7 +4750,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         const { messages } = await storage.listMessages({
           threadId: 'thread-1-generate',
           resourceId: 'resource-1-generate',
-          format: 'v2',
         });
         // Check that the last message matches the expected final output
         expect(
@@ -4770,7 +4766,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let messagesResult = await storage.listMessages({
           threadId: `thread-2-${version}-generate`,
           resourceId: `resource-2-${version}-generate`,
-          format: 'v2',
         });
 
         let saveCallCount = 0;
@@ -4804,7 +4799,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         messagesResult = await storage.listMessages({
           threadId: `thread-2-${version}-generate`,
           resourceId: `resource-2-${version}-generate`,
-          format: 'v2',
         });
 
         expect(messagesResult.messages.length).toBe(1);
@@ -7222,13 +7216,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       }
       // Verify messages were saved with metadata
-      const { messages } = await storage.listMessages({
+      const { messages: savedMessages } = await storage.listMessages({
         threadId: 'support-thread',
         resourceId: 'customer-12345',
-        format: 'v2',
-        selectBy: {
-          last: 10,
-        },
+        limit: 10,
       });
 
       expect(savedMessages.length).toBeGreaterThan(0);
@@ -7306,10 +7297,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       const { messages: savedMessages } = await storage.listMessages({
         threadId: 'mobile-thread',
         resourceId: 'user-mobile',
-        format: 'v2',
-        selectBy: {
-          last: 10,
-        },
+        limit: 10,
       });
 
       expect(savedMessages.length).toBeGreaterThan(0);
@@ -7387,16 +7375,14 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       const { messages: savedMessages } = await storage.listMessages({
         threadId: 'mixed-thread',
         resourceId: 'mixed-user',
-        format: 'v2',
-        pagination: {
-          perPage: 10,
-        },
+        limit: 10,
       });
 
       expect(savedMessages.length).toBeGreaterThan(0);
 
       // Find messages and check metadata
-      const messagesAsV2 = savedMessages as MastraMessageV2[];
+      const messagesAsV2 = savedMessages;
+
       const firstUserMessage = messagesAsV2.find(
         m =>
           m.role === 'user' &&
