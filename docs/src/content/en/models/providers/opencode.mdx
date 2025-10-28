@@ -93,7 +93,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 200000,
     "maxOutput": 64000,
     "inputCost": 1,
-    "outputCost": 1.25
+    "outputCost": 5
   },
   {
     "model": "opencode/claude-opus-4-1",
@@ -130,18 +130,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 64000,
     "inputCost": 3,
     "outputCost": 15
-  },
-  {
-    "model": "opencode/code-supernova",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 1000000,
-    "inputCost": null,
-    "outputCost": null
   },
   {
     "model": "opencode/glm-4.6",
@@ -204,6 +192,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.5
   },
   {
+    "model": "opencode/minimax-m2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 128000,
+    "inputCost": 1.2,
+    "outputCost": 1.2
+  },
+  {
     "model": "opencode/qwen3-coder",
     "imageInput": false,
     "audioInput": false,
@@ -227,7 +227,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://opencode.ai/zen/v1",
-    modelId: "an-gbt",
+    id: "opencode/an-gbt",
     apiKey: process.env.OPENCODE_API_KEY,
     headers: {
       "X-Custom-Header": "value"

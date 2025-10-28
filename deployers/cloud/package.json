@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloud",
-  "version": "0.21.2-alpha.0",
+  "version": "0.22.2",
   "description": "",
   "type": "module",
   "files": [
@@ -44,6 +44,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@manypkg/get-packages": "^3.1.0",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.19.0",
@@ -53,7 +54,7 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.20.1-0 <0.23.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "repository": {
     "type": "git",

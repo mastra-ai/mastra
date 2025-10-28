@@ -1,19 +1,9 @@
 import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { Span } from '@opentelemetry/api';
-import type {
-  CallSettings,
-  IdGenerator,
-  StopCondition,
-  TelemetrySettings,
-  ToolChoice,
-  ToolSet,
-  StepResult,
-  ModelMessage,
-} from 'ai-v5';
+import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet, StepResult, ModelMessage } from 'ai-v5';
 import z from 'zod';
 import type { MessageList } from '../agent/message-list';
 import type { StructuredOutputOptions } from '../agent/types';
-import type { AISpan, AISpanType, ModelSpanTracker } from '../ai-tracing';
+import type { ModelSpanTracker } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { OutputProcessor, ProcessorState } from '../processors';
@@ -61,17 +51,20 @@ export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
 
 export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
   mastra?: Mastra;
-  resumeContext?: any;
+  resumeContext?: {
+    resumeData: any;
+    snapshot: any;
+  };
+  toolCallId?: string;
   models: ModelManagerModelConfig[];
   logger?: IMastraLogger;
   mode?: 'generate' | 'stream';
   runId?: string;
   idGenerator?: MastraIdGenerator;
   toolCallStreaming?: boolean;
-  telemetry_settings?: TelemetrySettings;
   messageList: MessageList;
   includeRawChunks?: boolean;
-  modelSettings?: CallSettings;
+  modelSettings?: Omit<CallSettings, 'abortSignal'>;
   headers?: Record<string, string>;
   toolChoice?: ToolChoice<any>;
   options?: LoopConfig<OUTPUT>;
@@ -86,7 +79,6 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   returnScorerData?: boolean;
   downloadRetries?: number;
   downloadConcurrency?: number;
-  llmAISpan?: AISpan<AISpanType.LLM_GENERATION>;
   modelSpanTracker?: ModelSpanTracker;
   requireToolApproval?: boolean;
   agentId: string;
@@ -99,7 +91,6 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
   messageId: string;
   runId: string;
   startTimestamp: number;
-  modelStreamSpan: Span;
   _internal: StreamInternal;
   streamState: {
     serialize: () => any;
@@ -112,7 +103,6 @@ export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   messageId: string;
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
   writer: WritableStream<ChunkType<OUTPUT>>;
-  requireToolApproval?: boolean;
 } & LoopRun<Tools, OUTPUT>;
 
 export const PRIMITIVE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool']);

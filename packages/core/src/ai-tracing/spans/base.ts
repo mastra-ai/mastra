@@ -45,11 +45,11 @@ function isSpanInternal(spanType: AISpanType, flags?: InternalSpans): boolean {
     case AISpanType.MCP_TOOL_CALL:
       return (flags & InternalSpans.TOOL) !== 0;
 
-    // LLM-related spans
-    case AISpanType.LLM_GENERATION:
-    case AISpanType.LLM_STEP:
-    case AISpanType.LLM_CHUNK:
-      return (flags & InternalSpans.LLM) !== 0;
+    // Model-related spans
+    case AISpanType.MODEL_GENERATION:
+    case AISpanType.MODEL_STEP:
+    case AISpanType.MODEL_CHUNK:
+      return (flags & InternalSpans.MODEL) !== 0;
 
     // Default: never internal
     default:

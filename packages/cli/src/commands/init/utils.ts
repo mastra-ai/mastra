@@ -334,7 +334,8 @@ export async function writeToolSample(destPath: string) {
   await fileService.copyStarterFile('tools.ts', destPath);
 }
 
-export async function writeScorersSample(destPath: string) {
+export async function writeScorersSample(llmProvider: LLMProvider, destPath: string) {
+  const modelString = getModelIdentifier(llmProvider);
   const content = `import { z } from 'zod';
 import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
 import { createCompletenessScorer } from '@mastra/evals/scorers/code';
@@ -353,7 +354,7 @@ export const translationScorer = createScorer({
   description: 'Checks that non-English location names are translated and used correctly',
   type: 'agent',
   judge: {
-    model: 'openai/gpt-4o-mini',
+    model: ${modelString},
     instructions:
       'You are an expert evaluator of translation quality for geographic locations. ' +
       'Determine whether the user text mentions a non-English location and whether the assistant correctly uses an English translation of that location. ' +
@@ -441,7 +442,7 @@ export async function writeCodeSampleForComponents(
     case 'workflows':
       return writeWorkflowSample(destPath);
     case 'scorers':
-      return writeScorersSample(destPath);
+      return writeScorersSample(llmprovider, destPath);
     default:
       return '';
   }
@@ -507,13 +508,9 @@ export const mastra = new Mastra({
     name: 'Mastra',
     level: 'info',
   }),
-  telemetry: {
-    // Telemetry is deprecated and will be removed in the Nov 4th release
-    enabled: false, 
-  },
   observability: {
     // Enables DefaultExporter and CloudExporter for AI tracing
-    default: { enabled: true }, 
+    default: { enabled: true },
   },
 });
 `,
@@ -533,55 +530,42 @@ export const checkInitialization = async (dirPath: string) => {
 };
 
 export const checkAndInstallCoreDeps = async (addExample: boolean) => {
-  const depService = new DepsService();
-  const needsCore = (await depService.checkDependencies(['@mastra/core'])) !== `ok`;
-  const needsZod = (await depService.checkDependencies(['zod'])) !== `ok`;
+  const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies' });
+  let packages: Array<{ name: string; version: string }> = [];
 
-  if (needsCore) {
-    await installCoreDeps('@mastra/core');
-  }
-
-  if (needsZod) {
-    await installCoreDeps('zod', '^4');
-  }
-
-  if (addExample) {
-    const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
-
-    if (needsLibsql) {
-      await installCoreDeps('@mastra/libsql');
-    }
-  }
-};
-
-const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies\n' });
-export async function installCoreDeps(pkg: string, version = 'latest') {
   try {
-    const confirm = await p.confirm({
-      message: `You do not have the ${pkg} package installed. Would you like to install it?`,
-      initialValue: false,
-    });
-
-    if (p.isCancel(confirm)) {
-      p.cancel('Installation Cancelled');
-      process.exit(0);
-    }
-
-    if (!confirm) {
-      p.cancel('Installation Cancelled');
-      process.exit(0);
-    }
+    const depService = new DepsService();
 
     spinner.start();
 
-    const depsService = new DepsService();
+    const needsCore = (await depService.checkDependencies(['@mastra/core'])) !== `ok`;
+    const needsZod = (await depService.checkDependencies(['zod'])) !== `ok`;
 
-    await depsService.installPackages([`${pkg}@${version}`]);
-    spinner.success(`${pkg} installed successfully`);
+    if (needsCore) {
+      packages.push({ name: '@mastra/core', version: 'latest' });
+    }
+
+    if (needsZod) {
+      packages.push({ name: 'zod', version: '^4' });
+    }
+
+    if (addExample) {
+      const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
+
+      if (needsLibsql) {
+        packages.push({ name: '@mastra/libsql', version: 'latest' });
+      }
+    }
+
+    if (packages.length > 0) {
+      await depService.installPackages(packages.map(pkg => `${pkg.name}@${pkg.version}`));
+    }
+
+    spinner.success('Successfully installed Mastra core dependencies');
   } catch (err) {
-    console.error(err);
+    spinner.error(`Failed to install core dependencies: ${err instanceof Error ? err.message : 'Unknown error'}`);
   }
-}
+};
 
 export const getAPIKey = async (provider: LLMProvider) => {
   let key = 'OPENAI_API_KEY';

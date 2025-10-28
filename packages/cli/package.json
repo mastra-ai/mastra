@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.17.1-alpha.0",
+  "version": "0.17.3",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -54,15 +54,6 @@
     "@expo/devcert": "^1.2.0",
     "@mastra/deployer": "workspace:^",
     "@mastra/loggers": "workspace:^",
-    "@opentelemetry/auto-instrumentations-node": "^0.62.1",
-    "@opentelemetry/core": "^2.0.1",
-    "@opentelemetry/exporter-trace-otlp-grpc": "^0.203.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.203.0",
-    "@opentelemetry/instrumentation": "^0.203.0",
-    "@opentelemetry/resources": "^2.0.1",
-    "@opentelemetry/sdk-node": "^0.203.0",
-    "@opentelemetry/sdk-trace-base": "^2.0.1",
-    "@opentelemetry/semantic-conventions": "^1.36.0",
     "@webcontainer/env": "^1.1.1",
     "commander": "^12.1.0",
     "dotenv": "^16.6.1",
@@ -98,7 +89,7 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.21.0-0 <0.23.0-0",
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",

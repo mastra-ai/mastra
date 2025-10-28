@@ -49,75 +49,73 @@ export class GladiaVoice extends MastraVoice {
   }
 
   async listen(input: Readable, { mimeType, fileName, options }: GladiaListenCallParams): Promise<string> {
-    return this.traced(async () => {
-      if (!fileName) {
-        throw new Error('fileName is required for audio processing');
-      }
-      if (!mimeType) {
-        throw new Error('mimeType is required for audio processing');
-      }
-      const chunks: Buffer[] = [];
-      for await (const chunk of input) {
-        chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-      }
+    if (!fileName) {
+      throw new Error('fileName is required for audio processing');
+    }
+    if (!mimeType) {
+      throw new Error('mimeType is required for audio processing');
+    }
+    const chunks: Buffer[] = [];
+    for await (const chunk of input) {
+      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+    }
 
-      const audioBuffer = Buffer.concat(chunks);
-      const form = new FormData();
-      form.append('audio', new Blob([audioBuffer], { type: mimeType }), fileName);
+    const audioBuffer = Buffer.concat(chunks);
+    const form = new FormData();
+    form.append('audio', new Blob([audioBuffer], { type: mimeType }), fileName);
 
-      const uploadRes: any = await fetch(`${this.baseUrl}/upload/`, {
-        method: 'POST',
-        headers: { 'x-gladia-key': this.apiKey },
-        body: form,
-      });
-      if (!uploadRes.ok) {
-        throw new Error(`Upload failed: ${uploadRes.status} ${await uploadRes.text()}`);
-      }
-      const { audio_url } = await uploadRes.json();
-      const opts: GladiaListenOptions = {
-        diarization: true, // <-- default
-        ...options,
-      };
+    const uploadRes: any = await fetch(`${this.baseUrl}/upload/`, {
+      method: 'POST',
+      headers: { 'x-gladia-key': this.apiKey },
+      body: form,
+    });
+    if (!uploadRes.ok) {
+      throw new Error(`Upload failed: ${uploadRes.status} ${await uploadRes.text()}`);
+    }
+    const { audio_url } = await uploadRes.json();
+    const opts: GladiaListenOptions = {
+      diarization: true, // <-- default
+      ...options,
+    };
 
-      const transcribeRes: any = await fetch(`${this.baseUrl}/pre-recorded/`, {
-        method: 'POST',
+    const transcribeRes: any = await fetch(`${this.baseUrl}/pre-recorded/`, {
+      method: 'POST',
+      headers: {
+        'x-gladia-key': this.apiKey,
+        'Content-Type': 'application/json',
+      },
+
+      body: JSON.stringify({ audio_url, ...opts }),
+    });
+
+    const { id } = await transcribeRes.json();
+
+    while (true) {
+      const pollRes: any = await fetch(`${this.baseUrl}/pre-recorded/${id}`, {
+        method: 'GET',
         headers: {
           'x-gladia-key': this.apiKey,
           'Content-Type': 'application/json',
         },
-
-        body: JSON.stringify({ audio_url, ...opts }),
       });
 
-      const { id } = await transcribeRes.json();
-
-      while (true) {
-        const pollRes: any = await fetch(`${this.baseUrl}/pre-recorded/${id}`, {
-          method: 'GET',
-          headers: {
-            'x-gladia-key': this.apiKey,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!pollRes.ok) {
-          throw new Error(`Polling failed: ${pollRes.status} ${await pollRes.text()}`);
-        }
-
-        const pollJson = await pollRes.json();
-        if (pollJson.status === 'done') {
-          const transcript = pollJson.result?.transcription?.full_transcript;
-          if (!transcript) throw new Error('No transcript found');
-          return transcript;
-        }
-
-        if (pollJson.status === 'error') {
-          throw new Error(`Gladia error: ${pollJson.error || 'Unknown'}`);
-        }
-
-        await new Promise(res => setTimeout(res, 1000));
+      if (!pollRes.ok) {
+        throw new Error(`Polling failed: ${pollRes.status} ${await pollRes.text()}`);
       }
-    }, 'voice.gladia.listen')();
+
+      const pollJson = await pollRes.json();
+      if (pollJson.status === 'done') {
+        const transcript = pollJson.result?.transcription?.full_transcript;
+        if (!transcript) throw new Error('No transcript found');
+        return transcript;
+      }
+
+      if (pollJson.status === 'error') {
+        throw new Error(`Gladia error: ${pollJson.error || 'Unknown'}`);
+      }
+
+      await new Promise(res => setTimeout(res, 1000));
+    }
   }
 }
 

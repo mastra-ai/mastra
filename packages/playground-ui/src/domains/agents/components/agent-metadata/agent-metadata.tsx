@@ -6,7 +6,6 @@ import { GetAgentResponse, GetToolResponse, GetWorkflowResponse } from '@mastra/
 import { AgentMetadataSection } from './agent-metadata-section';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { AgentMetadataWrapper } from './agent-metadata-wrapper';
-import { ReactNode } from 'react';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { useScorers } from '@/domains/scores';
 import { AgentIcon } from '@/ds/icons';
@@ -15,11 +14,11 @@ import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './a
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
 import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
+import { PromptEnhancer } from '../agent-information/agent-instructions-enhancer';
 
 export interface AgentMetadataProps {
   agentId: string;
   agent: GetAgentResponse;
-  promptSlot: ReactNode;
   hasMemoryEnabled: boolean;
   modelProviders: string[];
   modelVersion: string;
@@ -57,7 +56,6 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
 export const AgentMetadata = ({
   agentId,
   agent,
-  promptSlot,
   hasMemoryEnabled,
   updateModel,
   modelProviders,
@@ -66,7 +64,7 @@ export const AgentMetadata = ({
   modelVersion,
 }: AgentMetadataProps) => {
   const networkAgentsMap = agent.agents ?? {};
-  const networkAgents = Object.values(networkAgentsMap);
+  const networkAgents = Object.keys(networkAgentsMap).map(key => ({ ...networkAgentsMap[key], id: key }));
 
   const agentTools = agent.tools ?? {};
   const tools = Object.keys(agentTools).map(key => agentTools[key]);
@@ -173,7 +171,9 @@ export const AgentMetadata = ({
       <AgentMetadataSection title="Scorers">
         <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
       </AgentMetadataSection>
-      <AgentMetadataSection title="System Prompt">{promptSlot}</AgentMetadataSection>
+      <AgentMetadataSection title="System Prompt">
+        <PromptEnhancer agentId={agentId} />
+      </AgentMetadataSection>
     </AgentMetadataWrapper>
   );
 };

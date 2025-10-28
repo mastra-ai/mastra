@@ -1,6 +1,6 @@
 {
   "name": "@mastra/lance",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Lance provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -26,7 +26,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@lancedb/lancedb": "^0.21.2",
+    "@lancedb/lancedb": "^0.22.2",
     "apache-arrow": "^18.1.0"
   },
   "devDependencies": {
@@ -42,7 +42,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.23.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "files": [
     "dist",

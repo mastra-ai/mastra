@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agent-builder",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -59,7 +59,7 @@
     "zod": "^3.25.76"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.21.0-0 <0.23.0-0",
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "typescript": ">=5.7.0",
     "zod": "^3.25.0 || ^4.0.0"
   },

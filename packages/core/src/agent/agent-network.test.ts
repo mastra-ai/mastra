@@ -39,9 +39,11 @@ describe('Agent - network', () => {
     }),
     execute: async ({ inputData }) => {
       const resp = await agent1.generate(inputData.city, {
-        output: z.object({
-          text: z.string(),
-        }),
+        structuredOutput: {
+          schema: z.object({
+            text: z.string(),
+          }),
+        },
       });
 
       return { text: resp.object.text };
@@ -59,9 +61,11 @@ describe('Agent - network', () => {
     }),
     execute: async ({ inputData }) => {
       const resp = await agent2.generate(inputData.text, {
-        output: z.object({
-          text: z.string(),
-        }),
+        structuredOutput: {
+          schema: z.object({
+            text: z.string(),
+          }),
+        },
       });
 
       return { text: resp.object.text };
@@ -171,6 +175,24 @@ describe('Agent - network', () => {
     console.log('SUH', anStream);
   });
 
+  it('LOOP - should track usage data from agent.network()', async () => {
+    const anStream = await network.network('Research dolphins', {
+      runtimeContext,
+    });
+
+    // Consume the stream to trigger usage collection
+    for await (const _chunk of anStream) {
+      // Just consume the stream
+    }
+
+    // Check that usage data is available
+    const usage = await anStream.usage;
+    expect(usage).toBeDefined();
+    expect(usage.inputTokens).toBeGreaterThan(0);
+    expect(usage.outputTokens).toBeGreaterThan(0);
+    expect(usage.totalTokens).toBeGreaterThan(0);
+  });
+
   it('Should throw if memory is not configured', async () => {
     const calculatorAgent = new Agent({
       id: 'calculator-agent',
@@ -212,9 +234,7 @@ describe('Agent - network', () => {
     const memoryWithTitleGen = new MockMemory();
     memoryWithTitleGen.getMergedThreadConfig = () => {
       return {
-        threads: {
-          generateTitle: true,
-        },
+        generateTitle: true,
       };
     };
 
@@ -308,9 +328,7 @@ describe('Agent - network', () => {
         thread: 'test-network-with-title',
         resource: 'test-network-with-title',
         options: {
-          threads: {
-            generateTitle: true,
-          },
+          generateTitle: true,
         },
       },
     });

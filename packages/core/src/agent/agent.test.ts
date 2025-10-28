@@ -5,7 +5,7 @@ import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import type { CoreMessage, LanguageModelV1, CoreSystemMessage } from 'ai';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
-import { stepCountIs } from 'ai-v5';
+import { APICallError, stepCountIs } from 'ai-v5';
 import type { SystemModelMessage } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { config } from 'dotenv';
@@ -19,6 +19,7 @@ import type { MastraMessageV2, StorageThreadType } from '../memory';
 import { RuntimeContext } from '../runtime-context';
 import { createScorer } from '../scores';
 import { runScorer } from '../scores/hooks';
+import { MockStore } from '../storage';
 import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import { delay } from '../utils';
@@ -27,6 +28,8 @@ import { assertNoDuplicateParts, MockMemory } from './test-utils';
 import { Agent } from './index';
 
 config();
+
+const mockStorage = new MockStore();
 
 const mockFindUser = vi.fn().mockImplementation(async data => {
   const list = [
@@ -314,9 +317,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       } else {
         response = await agentOne.generate('Who won the 2012 US presidential election?', {
-          output: z.object({
-            winner: z.string(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              winner: z.string(),
+            }),
+          },
         });
       }
 
@@ -359,9 +364,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(previousPartialObject['winner']).toBe('Barack Obama');
       } else {
         response = await agentOne.stream('Who won the 2012 US presidential election?', {
-          output: z.object({
-            winner: z.string(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              winner: z.string(),
+            }),
+          },
         });
         const { objectStream } = response;
 
@@ -373,6 +380,454 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         expect(previousPartialObject['winner']).toBe('Barack Obama');
       }
+    });
+
+    describe('tool approval and suspension', () => {
+      describe.skipIf(version === 'v1')('requireToolApproval', () => {
+        it('should call findUserTool with requireToolApproval on tool and be able to reject the tool call', async () => {
+          const findUserTool = createTool({
+            id: 'Find user tool',
+            description: 'This is a test tool that returns the name and email',
+            inputSchema: z.object({
+              name: z.string(),
+            }),
+            // requireApproval: true,
+            execute: async ({ context }) => {
+              return mockFindUser(context) as Promise<Record<string, any>>;
+            },
+          });
+
+          const userAgent = new Agent({
+            name: 'User agent',
+            instructions: 'You are an agent that can get list of users using findUserTool.',
+            model: openaiModel,
+            tools: { findUserTool },
+          });
+
+          const mastra = new Mastra({
+            agents: { userAgent },
+            logger: false,
+            storage: mockStorage,
+          });
+
+          const agentOne = mastra.getAgent('userAgent');
+
+          const stream = await agentOne.stream('Find the user with name - Dero Israel', { requireToolApproval: true });
+          let toolCallId = '';
+          for await (const _chunk of stream.fullStream) {
+            if (_chunk.type === 'tool-call-approval') {
+              toolCallId = _chunk.payload.toolCallId;
+            }
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const resumeStream = await agentOne.declineToolCall({ runId: stream.runId, toolCallId });
+          for await (const _chunk of resumeStream.fullStream) {
+            console.log(_chunk);
+          }
+
+          const toolResults = await resumeStream.toolResults;
+
+          expect((await resumeStream.toolCalls).length).toBe(1);
+          expect(toolResults.length).toBe(1);
+          expect(toolResults[0].payload?.result).toBe('Tool call was not approved by the user');
+          expect(mockFindUser).toHaveBeenCalledTimes(0);
+        }, 500000);
+
+        it('should call findUserTool with requireToolApproval on agent', async () => {
+          const findUserTool = createTool({
+            id: 'Find user tool',
+            description: 'This is a test tool that returns the name and email',
+            inputSchema: z.object({
+              name: z.string(),
+            }),
+            execute: async ({ context }) => {
+              return mockFindUser(context) as Promise<Record<string, any>>;
+            },
+          });
+
+          const userAgent = new Agent({
+            name: 'User agent',
+            instructions: 'You are an agent that can get list of users using findUserTool.',
+            model: openaiModel,
+            tools: { findUserTool },
+          });
+
+          const mastra = new Mastra({
+            agents: { userAgent },
+            logger: false,
+            storage: mockStorage,
+          });
+
+          const agentOne = mastra.getAgent('userAgent');
+
+          let toolCall;
+          let response;
+          if (version === 'v1') {
+            response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
+              maxSteps: 2,
+              toolChoice: 'required',
+            });
+            toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
+          } else {
+            const stream = await agentOne.stream('Find the user with name - Dero Israel', {
+              requireToolApproval: true,
+            });
+            let toolCallId = '';
+            for await (const _chunk of stream.fullStream) {
+              if (_chunk.type === 'tool-call-approval') {
+                toolCallId = _chunk.payload.toolCallId;
+              }
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
+            for await (const _chunk of resumeStream.fullStream) {
+            }
+
+            toolCall = (await resumeStream.toolResults).find(
+              (result: any) => result.payload.toolName === 'findUserTool',
+            ).payload;
+          }
+
+          const name = toolCall?.result?.name;
+
+          expect(mockFindUser).toHaveBeenCalled();
+          expect(name).toBe('Dero Israel');
+        }, 500000);
+
+        it('should call findUserTool with requireToolApproval on tool', async () => {
+          const findUserTool = createTool({
+            id: 'Find user tool',
+            description: 'This is a test tool that returns the name and email',
+            inputSchema: z.object({
+              name: z.string(),
+            }),
+            requireApproval: true,
+            execute: async ({ context }) => {
+              return mockFindUser(context) as Promise<Record<string, any>>;
+            },
+          });
+
+          const userAgent = new Agent({
+            name: 'User agent',
+            instructions: 'You are an agent that can get list of users using findUserTool.',
+            model: openaiModel,
+            tools: { findUserTool },
+          });
+
+          const mastra = new Mastra({
+            agents: { userAgent },
+            logger: false,
+            storage: mockStorage,
+          });
+
+          const agentOne = mastra.getAgent('userAgent');
+
+          let toolCall;
+          let response;
+          if (version === 'v1') {
+            response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
+              maxSteps: 2,
+              toolChoice: 'required',
+            });
+            toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
+          } else {
+            const stream = await agentOne.stream('Find the user with name - Dero Israel');
+            let toolCallId = '';
+            for await (const _chunk of stream.fullStream) {
+              if (_chunk.type === 'tool-call-approval') {
+                toolCallId = _chunk.payload.toolCallId;
+              }
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
+            for await (const _chunk of resumeStream.fullStream) {
+            }
+
+            toolCall = (await resumeStream.toolResults).find(
+              (result: any) => result.payload.toolName === 'findUserTool',
+            ).payload;
+          }
+
+          const name = toolCall?.result?.name;
+
+          expect(mockFindUser).toHaveBeenCalled();
+          expect(name).toBe('Dero Israel');
+        }, 500000);
+      });
+
+      describe.skipIf(version === 'v1')('suspension', () => {
+        it('should call findUserTool with suspend and resume', async () => {
+          const findUserTool = createTool({
+            id: 'Find user tool',
+            description: 'This is a test tool that returns the name and email',
+            inputSchema: z.object({
+              name: z.string(),
+            }),
+            suspendSchema: z.object({
+              message: z.string(),
+            }),
+            resumeSchema: z.object({
+              name: z.string(),
+            }),
+            execute: async ({ suspend, resumeData }) => {
+              if (!resumeData) {
+                return await suspend({ message: 'Please provide the name of the user' });
+              }
+
+              return {
+                name: resumeData?.name,
+                email: 'test@test.com',
+              };
+            },
+          });
+
+          const userAgent = new Agent({
+            name: 'User agent',
+            instructions: 'You are an agent that can get list of users using findUserTool.',
+            model: openaiModel,
+            tools: { findUserTool },
+          });
+
+          const mastra = new Mastra({
+            agents: { userAgent },
+            logger: false,
+            storage: mockStorage,
+          });
+
+          const agentOne = mastra.getAgent('userAgent');
+
+          let toolCall;
+          const stream = await agentOne.stream('Find the user with name - Dero Israel');
+          for await (const _chunk of stream.fullStream) {
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const resumeStream = await agentOne.resumeStream({ name: 'Dero Israel' }, { runId: stream.runId });
+          for await (const _chunk of resumeStream.fullStream) {
+          }
+
+          toolCall = (await resumeStream.toolResults).find(
+            (result: any) => result.payload.toolName === 'findUserTool',
+          ).payload;
+
+          const name = toolCall?.result?.name;
+          const email = toolCall?.result?.email;
+
+          expect(name).toBe('Dero Israel');
+          expect(email).toBe('test@test.com');
+        }, 500000);
+      });
+
+      describe.skipIf(version === 'v1')('persist model output stream state', () => {
+        it('should persist text stream state', async () => {
+          const findUserTool = createTool({
+            id: 'Find user tool',
+            description: 'This is a test tool that returns the name and email',
+            inputSchema: z.object({
+              name: z.string(),
+            }),
+            execute: async ({ context }) => {
+              return mockFindUser(context) as Promise<Record<string, any>>;
+            },
+          });
+
+          const userAgent = new Agent({
+            name: 'User agent',
+            instructions: 'You are an agent that can get list of users using findUserTool.',
+            model: openaiModel,
+            tools: { findUserTool },
+          });
+
+          const mastra = new Mastra({
+            agents: { userAgent },
+            logger: false,
+            storage: mockStorage,
+          });
+
+          const agentOne = mastra.getAgent('userAgent');
+
+          let toolCall;
+          let response;
+          if (version === 'v1') {
+            response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
+              maxSteps: 2,
+              toolChoice: 'required',
+            });
+            toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
+          } else {
+            const stream = await agentOne.stream(
+              'First tell me about what tools you have. Then call the user tool to find the user with name - Dero Israel. Then tell me about what format you received the data and tell me what it would look like in human readable form.',
+              {
+                requireToolApproval: true,
+              },
+            );
+            let firstText = '';
+            let toolCallId = '';
+            for await (const chunk of stream.fullStream) {
+              if (chunk.type === 'text-delta') {
+                firstText += chunk.payload.text;
+              }
+              if (chunk.type === 'tool-call-approval') {
+                toolCallId = chunk.payload.toolCallId;
+              }
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const resumeStream = await agentOne.resumeStream({ approved: true }, { runId: stream.runId, toolCallId });
+            let secondText = '';
+            for await (const chunk of resumeStream.fullStream) {
+              if (chunk.type === 'text-delta') {
+                secondText += chunk.payload.text;
+              }
+            }
+
+            const finalText = await resumeStream.text;
+
+            const steps = await resumeStream.steps;
+            const textBySteps = steps.map(step => step.text);
+
+            expect(finalText).toBe(firstText + secondText);
+            expect(steps.length).toBe(2);
+            expect(textBySteps.join('')).toBe(firstText + secondText);
+            toolCall = (await resumeStream.toolResults).find(
+              (result: any) => result.payload.toolName === 'findUserTool',
+            ).payload;
+          }
+
+          const name = toolCall?.result?.name;
+
+          expect(mockFindUser).toHaveBeenCalled();
+          expect(name).toBe('Dero Israel');
+        }, 500000);
+      });
+    });
+
+    it('should call findUserTool', async () => {
+      const findUserTool = createTool({
+        id: 'Find user tool',
+        description: 'This is a test tool that returns the name and email',
+        inputSchema: z.object({
+          name: z.string(),
+        }),
+        execute: ({ context }) => {
+          return mockFindUser(context) as Promise<Record<string, any>>;
+        },
+      });
+
+      const userAgent = new Agent({
+        name: 'User agent',
+        instructions: 'You are an agent that can get list of users using findUserTool.',
+        model: openaiModel,
+        tools: { findUserTool },
+      });
+
+      const mastra = new Mastra({
+        agents: { userAgent },
+        logger: false,
+      });
+
+      const agentOne = mastra.getAgent('userAgent');
+
+      let toolCall;
+      let response;
+      if (version === 'v1') {
+        response = await agentOne.generateLegacy('Find the user with name - Dero Israel', {
+          maxSteps: 2,
+          toolChoice: 'required',
+        });
+        toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
+      } else {
+        response = await agentOne.generate('Find the user with name - Dero Israel');
+        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
+      }
+
+      const name = toolCall?.result?.name;
+
+      expect(mockFindUser).toHaveBeenCalled();
+      expect(name).toBe('Dero Israel');
+    }, 500000);
+
+    it('generate - should pass and call client side tools', async () => {
+      const userAgent = new Agent({
+        name: 'User agent',
+        instructions: 'You are an agent that can get list of users using client side tools.',
+        model: openaiModel,
+      });
+
+      let result;
+      if (version === 'v1') {
+        result = await userAgent.generateLegacy('Make it green', {
+          clientTools: {
+            changeColor: {
+              id: 'changeColor',
+              description: 'This is a test tool that returns the name and email',
+              inputSchema: z.object({
+                color: z.string(),
+              }),
+              execute: async () => {},
+            },
+          },
+        });
+      } else {
+        result = await userAgent.generate('Make it green', {
+          clientTools: {
+            changeColor: {
+              id: 'changeColor',
+              description: 'This is a test tool that returns the name and email',
+              inputSchema: z.object({
+                color: z.string(),
+              }),
+              execute: async () => {},
+            },
+          },
+        });
+      }
+
+      expect(result.toolCalls.length).toBeGreaterThan(0);
+    }, 500000);
+
+    it('stream - should pass and call client side tools', async () => {
+      const userAgent = new Agent({
+        name: 'User agent',
+        instructions: 'You are an agent that can get list of users using client side tools.',
+        model: openaiModel,
+      });
+
+      let result;
+
+      if (version === 'v1') {
+        result = await userAgent.streamLegacy('Make it green', {
+          clientTools: {
+            changeColor: {
+              id: 'changeColor',
+              description: 'This is a test tool that returns the name and email',
+              inputSchema: z.object({
+                color: z.string(),
+              }),
+              execute: async () => {},
+            },
+          },
+          onFinish: props => {
+            expect(props.toolCalls.length).toBeGreaterThan(0);
+          },
+        });
+      } else {
+        result = await userAgent.stream('Make it green', {
+          clientTools: {
+            changeColor: {
+              id: 'changeColor',
+              description: 'This is a test tool that returns the name and email',
+              inputSchema: z.object({
+                color: z.string(),
+              }),
+              execute: async () => {},
+            },
+          },
+        });
+      }
+
+      for await (const _ of result.fullStream) {
+      }
+
+      expect(await result.finishReason).toBe('tool-calls');
     });
 
     it('should generate with default max steps', { timeout: 10000 }, async () => {
@@ -686,10 +1141,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Override getMergedThreadConfig to return our test config
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel,
-            },
+          generateTitle: {
+            model: titleModel,
           },
         };
       };
@@ -870,12 +1323,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Override getMergedThreadConfig to return dynamic model selection
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-                const userTier = runtimeContext.get('userTier');
-                return userTier === 'premium' ? premiumModel : standardModel;
-              },
+          generateTitle: {
+            model: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
+              const userTier = runtimeContext.get('userTier');
+              return userTier === 'premium' ? premiumModel : standardModel;
             },
           },
         };
@@ -1114,9 +1565,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Test with generateTitle: true
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: true,
-          },
+          generateTitle: true,
         };
       };
 
@@ -1286,9 +1735,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       agentCallCount = 0;
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: false,
-          },
+          generateTitle: false,
         };
       };
 
@@ -1355,10 +1802,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: errorModel,
-            },
+          generateTitle: {
+            model: errorModel,
           },
         };
       };
@@ -1729,15 +2174,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Override getMergedThreadConfig to return dynamic instructions selection
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel,
-              instructions: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
-                const language = runtimeContext.get('language');
-                return language === 'ja'
-                  ? '会話内容に基づいて簡潔なタイトルを生成してください'
-                  : 'Generate a concise title based on the conversation';
-              },
+          generateTitle: {
+            model: titleModel,
+            instructions: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
+              const language = runtimeContext.get('language');
+              return language === 'ja'
+                ? '会話内容に基づいて簡潔なタイトルを生成してください'
+                : 'Generate a concise title based on the conversation';
             },
           },
         };
@@ -1912,11 +2355,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Override getMergedThreadConfig to return our test config with custom instructions
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel,
-              instructions: customInstructions,
-            },
+          generateTitle: {
+            model: titleModel,
+            instructions: customInstructions,
           },
         };
       };
@@ -2053,11 +2494,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel,
-              // instructions field is intentionally omitted
-            },
+          generateTitle: {
+            model: titleModel,
+            // instructions field is intentionally omitted
           },
         };
       };
@@ -2178,12 +2617,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel,
-              instructions: () => {
-                throw new Error('Instructions selection failed');
-              },
+          generateTitle: {
+            model: titleModel,
+            instructions: () => {
+              throw new Error('Instructions selection failed');
             },
           },
         };
@@ -2400,11 +2837,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Test with empty string instructions
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel1,
-              instructions: '', // Empty string
-            },
+          generateTitle: {
+            model: titleModel1,
+            instructions: '', // Empty string
           },
         };
       };
@@ -2449,11 +2884,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       capturedPrompt = '';
       mockMemory.getMergedThreadConfig = () => {
         return {
-          threads: {
-            generateTitle: {
-              model: titleModel2,
-              instructions: () => '', // Function returning empty string
-            },
+          generateTitle: {
+            model: titleModel2,
+            instructions: () => '', // Function returning empty string
           },
         };
       };
@@ -3392,9 +3825,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toBe('You are a helpful assistant.');
-
-      // Deprecated getter should work for strings
-      expect(agent.instructions).toBe('You are a helpful assistant.');
     });
 
     it('should support CoreSystemMessage instructions', async () => {
@@ -3411,11 +3841,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toEqual(systemMessage);
-
-      // Deprecated getter should throw for non-string
-      expect(() => agent.instructions).toThrow(
-        'The instructions getter is deprecated and only supports string instructions',
-      );
     });
 
     it('should support SystemModelMessage instructions', async () => {
@@ -3432,11 +3857,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toEqual(systemMessage);
-
-      // Deprecated getter should throw for non-string
-      expect(() => agent.instructions).toThrow(
-        'The instructions getter is deprecated and only supports string instructions',
-      );
     });
 
     it('should support array of string instructions', async () => {
@@ -3450,11 +3870,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toEqual(instructionsArray);
-
-      // Deprecated getter should throw for arrays
-      expect(() => agent.instructions).toThrow(
-        'The instructions getter is deprecated and only supports string instructions',
-      );
     });
 
     it('should support array of CoreSystemMessage instructions', async () => {
@@ -3471,11 +3886,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toEqual(instructionsArray);
-
-      // Deprecated getter should throw
-      expect(() => agent.instructions).toThrow(
-        'The instructions getter is deprecated and only supports string instructions',
-      );
     });
 
     it('should support array of CoreSystemMessage with provider metadata', async () => {
@@ -3518,9 +3928,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions({ runtimeContext });
       expect(instructions).toBe('You are a helpful teacher.');
-
-      // Deprecated getter should throw for function
-      expect(() => agent.instructions).toThrow('Instructions are not compatible when instructions are a function');
     });
 
     it('should support dynamic instructions returning CoreSystemMessage', async () => {
@@ -3688,28 +4095,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const instructions = await agent.getInstructions();
       expect(instructions).toEqual([]);
-    });
-
-    it('should throw error for function instructions in deprecated getter', async () => {
-      const agent = new Agent({
-        name: 'test-agent',
-        instructions: () => 'Dynamic instructions',
-        model: dummyModel,
-      });
-
-      expect(() => agent.instructions).toThrow('Instructions are not compatible when instructions are a function');
-    });
-
-    it('should throw error for non-string static instructions in deprecated getter', async () => {
-      const agent = new Agent({
-        name: 'test-agent',
-        instructions: { role: 'system', content: 'Instructions' },
-        model: dummyModel,
-      });
-
-      expect(() => agent.instructions).toThrow(
-        'The instructions getter is deprecated and only supports string instructions',
-      );
     });
 
     it('should allow override instructions in generate options', async () => {
@@ -4519,6 +4904,212 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   });
 
   if (version === 'v2') {
+    describe('error handling consistency', () => {
+      it('should preserve full APICallError in fullStream chunk, onError callback, and result.error', async () => {
+        let onErrorCallbackError: any = null;
+        let fullStreamError: any = null;
+
+        const testAPICallError = new APICallError({
+          message: 'Test API error',
+          url: 'https://test.api.com',
+          requestBodyValues: { test: 'test' },
+          statusCode: 401,
+          isRetryable: false,
+          responseBody: 'Test API error response',
+        });
+
+        const errorModel = new MockLanguageModelV2({
+          doStream: async () => {
+            throw testAPICallError;
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-apicall-error-consistency',
+          name: 'Test APICallError Consistency',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        const result = await agent.stream('Hello', {
+          onError: ({ error }) => {
+            onErrorCallbackError = error;
+          },
+          modelSettings: {
+            maxRetries: 0,
+          },
+        });
+
+        // Consume fullStream to capture error chunk
+        for await (const chunk of result.fullStream) {
+          if (chunk.type === 'error') {
+            fullStreamError = chunk.payload.error;
+          }
+        }
+
+        const resultError = result.error;
+
+        // All three should be the exact same APICallError instance (reference equality)
+        expect(onErrorCallbackError).toBe(testAPICallError);
+        expect(fullStreamError).toBe(testAPICallError);
+        expect(resultError).toBe(testAPICallError);
+
+        // Verify it's an APICallError instance
+        expect(onErrorCallbackError).toBeInstanceOf(APICallError);
+      });
+
+      it('should preserve the error.cause in fullStream error chunks, onError callback, and result.error', async () => {
+        const testErrorCauseMessage = 'Test error cause message';
+        const testErrorCause = new Error(testErrorCauseMessage);
+
+        const testErrorMessage = 'Test API error';
+        const testErrorStatusCode = 401;
+        const testErrorRequestId = 'req_123';
+        const testError = new Error(testErrorMessage, { cause: testErrorCause });
+        // Add some custom properties to verify they're preserved
+        (testError as any).statusCode = testErrorStatusCode;
+        (testError as any).requestId = testErrorRequestId;
+
+        const errorModel = new MockLanguageModelV2({
+          doStream: async () => {
+            throw testError;
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-error-consistency',
+          name: 'Test Error Consistency',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let onErrorCallbackError: any = null;
+        let fullStreamError: any = null;
+
+        const result = await agent.stream('Hello', {
+          onError: ({ error }) => {
+            onErrorCallbackError = error;
+          },
+          modelSettings: {
+            maxRetries: 0,
+          },
+        });
+
+        // Consume fullStream to capture error chunk
+        for await (const chunk of result.fullStream) {
+          if (chunk.type === 'error') {
+            fullStreamError = chunk.payload.error;
+          }
+        }
+
+        // Get result.error
+        const resultError = result.error;
+
+        // All three should be defined
+        expect(onErrorCallbackError).toBeDefined();
+        expect(fullStreamError).toBeDefined();
+        expect(resultError).toBeDefined();
+
+        // All three should be Error instances
+        expect(onErrorCallbackError instanceof Error).toBe(true);
+        expect(fullStreamError instanceof Error).toBe(true);
+        expect(resultError instanceof Error).toBe(true);
+
+        expect(onErrorCallbackError).toBe(testError);
+        expect(fullStreamError).toBe(testError);
+        expect(resultError).toBe(testError);
+
+        expect(onErrorCallbackError.message).toBe(testErrorMessage);
+        expect(fullStreamError.message).toBe(testErrorMessage);
+        expect((resultError as Error).message).toBe(testErrorMessage);
+
+        // should preserve custom properties
+        expect(onErrorCallbackError.statusCode).toBe(testErrorStatusCode);
+        expect(onErrorCallbackError.requestId).toBe(testErrorRequestId);
+        expect(fullStreamError.statusCode).toBe(testErrorStatusCode);
+        expect(fullStreamError.requestId).toBe(testErrorRequestId);
+        expect((resultError as any).statusCode).toBe(testErrorStatusCode);
+        expect((resultError as any).requestId).toBe(testErrorRequestId);
+
+        // should preserve the error cause
+        expect(onErrorCallbackError.cause).toBe(testErrorCause);
+        expect(fullStreamError.cause).toBe(testErrorCause);
+        expect((resultError as Error).cause).toBe(testErrorCause);
+      });
+
+      it('should expose the same error in fullStream error chunks, onError callback, and result.error', async () => {
+        const testErrorMessage = 'Test API error';
+        const testErrorStatusCode = 401;
+        const testErrorRequestId = 'req_123';
+        const testError = new Error(testErrorMessage);
+        // Add some custom properties to verify they're preserved
+        (testError as any).statusCode = testErrorStatusCode;
+        (testError as any).requestId = testErrorRequestId;
+
+        const errorModel = new MockLanguageModelV2({
+          doStream: async () => {
+            throw testError;
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-error-consistency',
+          name: 'Test Error Consistency',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let onErrorCallbackError: any = null;
+        let fullStreamError: any = null;
+
+        const result = await agent.stream('Hello', {
+          onError: ({ error }) => {
+            onErrorCallbackError = error;
+          },
+          modelSettings: {
+            maxRetries: 0,
+          },
+        });
+
+        // Consume fullStream to capture error chunk
+        for await (const chunk of result.fullStream) {
+          if (chunk.type === 'error') {
+            fullStreamError = chunk.payload.error;
+          }
+        }
+
+        // Get result.error
+        const resultError = result.error;
+
+        // should be defined
+        expect(onErrorCallbackError).toBeDefined();
+        expect(fullStreamError).toBeDefined();
+        expect(resultError).toBeDefined();
+
+        // should be Error instances
+        expect(onErrorCallbackError instanceof Error).toBe(true);
+        expect(fullStreamError instanceof Error).toBe(true);
+        expect(resultError instanceof Error).toBe(true);
+
+        expect(onErrorCallbackError).toBe(testError);
+        expect(fullStreamError).toBe(testError);
+        expect(resultError).toBe(testError);
+
+        // should have the same message
+        expect(onErrorCallbackError.message).toBe(testErrorMessage);
+        expect(fullStreamError.message).toBe(testErrorMessage);
+        expect((resultError as Error).message).toBe(testErrorMessage);
+
+        // should preserve custom properties
+        expect(onErrorCallbackError.statusCode).toBe(testErrorStatusCode);
+        expect(onErrorCallbackError.requestId).toBe(testErrorRequestId);
+        expect(fullStreamError.statusCode).toBe(testErrorStatusCode);
+        expect(fullStreamError.requestId).toBe(testErrorRequestId);
+        expect((resultError as any).statusCode).toBe(testErrorStatusCode);
+        expect((resultError as any).requestId).toBe(testErrorRequestId);
+      });
+    });
+
     describe('stream options', () => {
       it('should call options.onError when stream error occurs in stream', async () => {
         const errorModel = new MockLanguageModelV2({
@@ -6853,9 +7444,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         onFinish: props => {
           expect(props.toolCalls.length).toBeGreaterThan(0);
         },
-        output: z.object({
-          color: z.string(),
-        }),
+        structuredOutput: {
+          schema: z.object({
+            color: z.string(),
+          }),
+        },
       });
 
       await result.consumeStream();
@@ -6900,9 +7493,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               }),
             },
           },
-          output: z.object({
-            color: z.string(),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              color: z.string(),
+            }),
+          },
         });
 
         expect(result.toolCalls.length).toBeGreaterThan(0);

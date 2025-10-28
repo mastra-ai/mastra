@@ -85,7 +85,7 @@ describe('AI Tracing', () => {
         const mockSpan = {
           id: 'test-span-1',
           name: 'test-span',
-          type: AISpanType.LLM_GENERATION,
+          type: AISpanType.MODEL_GENERATION,
           startTime: new Date(),
           traceId: 'trace-123',
           trace: { traceId: 'trace-123' } as any,
@@ -183,7 +183,7 @@ describe('AI Tracing', () => {
         const mockSpan = {
           id: 'test-span-1',
           name: 'test-span',
-          type: AISpanType.LLM_GENERATION,
+          type: AISpanType.MODEL_GENERATION,
           startTime: new Date(),
           traceId: 'trace-123',
           trace: { traceId: 'trace-123' } as any,

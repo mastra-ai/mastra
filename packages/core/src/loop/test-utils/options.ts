@@ -15,9 +15,7 @@ import {
 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
-import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
-import { MockTracer } from './mockTracer';
 import {
   createTestModels,
   testUsage,
@@ -27,6 +25,7 @@ import {
   testUsage2,
   createMessageListWithUserMessage,
 } from './utils';
+import { ModelSpanTracker } from '../../ai-tracing';
 
 export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('options.abortSignal', () => {
@@ -35,6 +34,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       const abortController = new AbortController();
       const toolExecuteMock = vi.fn().mockResolvedValue('tool result');
+      const modelSpanTracker = new ModelSpanTracker();
 
       const result = loopFn({
         runId,
@@ -64,6 +64,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           abortSignal: abortController.signal,
         },
         agentId: 'agent-id',
+        modelSpanTracker,
       });
 
       await convertAsyncIterableToArray(result.aisdk.v5.fullStream as any);
@@ -256,7 +257,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     let stepInputs: Array<any>;
 
     beforeEach(() => {
-      tracer = new MockTracer();
       stepInputs = [];
     });
 
@@ -353,7 +353,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               onStepFinishResults.push(event);
             },
           },
-          telemetry_settings: { isEnabled: true, tracer },
           stopWhen: stepCountIs(3),
           _internal: {
             now: mockValues(0, 100, 500, 600, 1000),
@@ -1299,11 +1298,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         });
       });
 
-      it('should record telemetry data for each step', async () => {
-        await result.aisdk.v5.consumeStream();
-        expect(tracer.jsonSpans).toMatchSnapshot();
-      });
-
       it('should have correct ui message stream', async () => {
         expect(await convertReadableStreamToArray(result.aisdk.v5.toUIMessageStream())).toMatchInlineSnapshot(`
           [
@@ -1955,7 +1949,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     //       onStepFinish: async event => {
     //         onStepFinishResults.push(event);
     //       },
-    //       experimental_telemetry: { isEnabled: true, tracer },
     //       stopWhen: stepCountIs(3),
     //       _internal: {
     //         now: mockValues(0, 100, 500, 600, 1000),
@@ -2775,142 +2768,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     //     });
     //   });
 
-    //   it('should record telemetry data for each step', async () => {
-    //     await result.consumeStream();
-    //     expect(tracer.jsonSpans).toMatchInlineSnapshot(`
-    //       [
-    //         {
-    //           "attributes": {
-    //             "ai.model.id": "mock-model-id",
-    //             "ai.model.provider": "mock-provider",
-    //             "ai.operationId": "ai.streamText",
-    //             "ai.prompt": "{"prompt":"test-input"}",
-    //             "ai.response.finishReason": "stop",
-    //             "ai.response.text": "Hello, world!",
-    //             "ai.settings.maxRetries": 2,
-    //             "ai.usage.cachedInputTokens": 3,
-    //             "ai.usage.inputTokens": 6,
-    //             "ai.usage.outputTokens": 20,
-    //             "ai.usage.reasoningTokens": 10,
-    //             "ai.usage.totalTokens": 36,
-    //             "operation.name": "ai.streamText",
-    //           },
-    //           "events": [],
-    //           "name": "ai.streamText",
-    //         },
-    //         {
-    //           "attributes": {
-    //             "ai.model.id": "mock-model-id",
-    //             "ai.model.provider": "mock-provider",
-    //             "ai.operationId": "ai.streamText.doStream",
-    //             "ai.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
-    //             "ai.prompt.toolChoice": "{"type":"auto"}",
-    //             "ai.prompt.tools": [
-    //               "{"type":"function","name":"tool1","inputSchema":{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}}",
-    //             ],
-    //             "ai.response.avgOutputTokensPerSecond": 20,
-    //             "ai.response.finishReason": "tool-calls",
-    //             "ai.response.id": "id-0",
-    //             "ai.response.model": "mock-model-id",
-    //             "ai.response.msToFinish": 500,
-    //             "ai.response.msToFirstChunk": 100,
-    //             "ai.response.text": "",
-    //             "ai.response.timestamp": "1970-01-01T00:00:00.000Z",
-    //             "ai.response.toolCalls": "[{"type":"tool-call","toolCallId":"call-1","toolName":"tool1","input":{"value":"value"}}]",
-    //             "ai.settings.maxRetries": 2,
-    //             "ai.usage.inputTokens": 3,
-    //             "ai.usage.outputTokens": 10,
-    //             "ai.usage.totalTokens": 13,
-    //             "gen_ai.request.model": "mock-model-id",
-    //             "gen_ai.response.finish_reasons": [
-    //               "tool-calls",
-    //             ],
-    //             "gen_ai.response.id": "id-0",
-    //             "gen_ai.response.model": "mock-model-id",
-    //             "gen_ai.system": "mock-provider",
-    //             "gen_ai.usage.input_tokens": 3,
-    //             "gen_ai.usage.output_tokens": 10,
-    //             "operation.name": "ai.streamText.doStream",
-    //           },
-    //           "events": [
-    //             {
-    //               "attributes": {
-    //                 "ai.response.msToFirstChunk": 100,
-    //               },
-    //               "name": "ai.stream.firstChunk",
-    //             },
-    //             {
-    //               "attributes": undefined,
-    //               "name": "ai.stream.finish",
-    //             },
-    //           ],
-    //           "name": "ai.streamText.doStream",
-    //         },
-    //         {
-    //           "attributes": {
-    //             "ai.operationId": "ai.toolCall",
-    //             "ai.toolCall.args": "{"value":"value"}",
-    //             "ai.toolCall.id": "call-1",
-    //             "ai.toolCall.name": "tool1",
-    //             "ai.toolCall.result": ""result1"",
-    //             "operation.name": "ai.toolCall",
-    //           },
-    //           "events": [],
-    //           "name": "ai.toolCall",
-    //         },
-    //         {
-    //           "attributes": {
-    //             "ai.model.id": "mock-model-id",
-    //             "ai.model.provider": "mock-provider",
-    //             "ai.operationId": "ai.streamText.doStream",
-    //             "ai.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]},{"role":"assistant","content":[{"type":"reasoning","text":"thinking"},{"type":"tool-call","toolCallId":"call-1","toolName":"tool1","input":{"value":"value"}}]},{"role":"tool","content":[{"type":"tool-result","toolCallId":"call-1","toolName":"tool1","output":{"type":"text","value":"RESULT1"}}]}]",
-    //             "ai.prompt.toolChoice": "{"type":"auto"}",
-    //             "ai.prompt.tools": [
-    //               "{"type":"function","name":"tool1","inputSchema":{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}}",
-    //             ],
-    //             "ai.response.avgOutputTokensPerSecond": 25,
-    //             "ai.response.finishReason": "stop",
-    //             "ai.response.id": "id-1",
-    //             "ai.response.model": "mock-model-id",
-    //             "ai.response.msToFinish": 400,
-    //             "ai.response.msToFirstChunk": 400,
-    //             "ai.response.text": "Hello, world!",
-    //             "ai.response.timestamp": "1970-01-01T00:00:01.000Z",
-    //             "ai.settings.maxRetries": 2,
-    //             "ai.usage.cachedInputTokens": 3,
-    //             "ai.usage.inputTokens": 3,
-    //             "ai.usage.outputTokens": 10,
-    //             "ai.usage.reasoningTokens": 10,
-    //             "ai.usage.totalTokens": 23,
-    //             "gen_ai.request.model": "mock-model-id",
-    //             "gen_ai.response.finish_reasons": [
-    //               "stop",
-    //             ],
-    //             "gen_ai.response.id": "id-1",
-    //             "gen_ai.response.model": "mock-model-id",
-    //             "gen_ai.system": "mock-provider",
-    //             "gen_ai.usage.input_tokens": 3,
-    //             "gen_ai.usage.output_tokens": 10,
-    //             "operation.name": "ai.streamText.doStream",
-    //           },
-    //           "events": [
-    //             {
-    //               "attributes": {
-    //                 "ai.response.msToFirstChunk": 400,
-    //               },
-    //               "name": "ai.stream.firstChunk",
-    //             },
-    //             {
-    //               "attributes": undefined,
-    //               "name": "ai.stream.finish",
-    //             },
-    //           ],
-    //           "name": "ai.streamText.doStream",
-    //         },
-    //       ]
-    //     `);
-    //   });
-
     //   it('should have correct ui message stream', async () => {
     //     expect(await convertReadableStreamToArray(result.toUIMessageStream())).toMatchInlineSnapshot(`
     //         [
@@ -3055,7 +2912,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
           },
           messageList,
-          telemetry_settings: { isEnabled: true, tracer },
           stopWhen: [
             ({ steps }) => {
               stopConditionCalls.push({ number: 0, steps });
@@ -5013,56 +4869,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //             "warnings": [],
   //           }
   //         `);
-  //       });
-
-  //       it('telemetry should record transformed data when enabled', async () => {
-  //         const tracer = new MockTracer();
-
-  //         const result = streamText({
-  //           models: createTestModels({
-  //             stream: convertArrayToReadableStream([
-  //               {
-  //                 type: 'response-metadata',
-  //                 id: 'id-0',
-  //                 modelId: 'mock-model-id',
-  //                 timestamp: new Date(0),
-  //               },
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: 'Hello' },
-  //               { type: 'text-delta', id: '1', delta: ', ' },
-  //               {
-  //                 type: 'tool-call',
-  //                 toolCallId: 'call-1',
-  //                 toolName: 'tool1',
-  //                 input: `{ "value": "value" }`,
-  //               },
-  //               { type: 'text-delta', id: '1', delta: 'world!' },
-  //               { type: 'text-end', id: '1' },
-  //               {
-  //                 type: 'finish',
-  //                 finishReason: 'stop',
-  //                 usage: testUsage,
-  //                 providerMetadata: {
-  //                   testProvider: { testKey: 'testValue' },
-  //                 },
-  //               },
-  //             ]),
-  //           }),
-  //           tools: {
-  //             tool1: tool({
-  //               inputSchema: z.object({ value: z.string() }),
-  //               execute: async ({ value }) => `${value}-result`,
-  //             }),
-  //           },
-  //           prompt: 'test-input',
-  //           experimental_transform: upperCaseTransform,
-  //           experimental_telemetry: { isEnabled: true, tracer },
-  //           _internal: { now: mockValues(0, 100, 500) },
-  //         });
-
-  //         await result.consumeStream();
-
-  //         expect(tracer.jsonSpans).toMatchSnapshot();
   //       });
 
   //       it('it should send transformed chunks to onChunk', async () => {

@@ -6,10 +6,13 @@
  * Events are handled as zero-duration RunTrees with matching start/end times.
  */
 
-import type { AITracingEvent, AnyExportedAISpan, LLMGenerationAttributes } from '@mastra/core/ai-tracing';
-import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
-import { BaseExporter } from '@mastra/core/ai-tracing/exporters';
-import type { BaseExporterConfig } from '@mastra/core/ai-tracing/exporters';
+import type {
+  AITracingEvent,
+  AnyExportedAISpan,
+  ModelGenerationAttributes,
+  BaseExporterConfig,
+} from '@mastra/core/ai-tracing';
+import { AISpanType, omitKeys, BaseExporter } from '@mastra/core/ai-tracing';
 import type { ClientConfig, RunTreeConfig } from 'langsmith';
 import { Client, RunTree } from 'langsmith';
 import type { KVMap } from 'langsmith/schemas';
@@ -30,8 +33,8 @@ const DEFAULT_SPAN_TYPE = 'chain';
 
 // Exceptions to the default mapping
 const SPAN_TYPE_EXCEPTIONS: Partial<Record<AISpanType, 'llm' | 'tool' | 'chain'>> = {
-  [AISpanType.LLM_GENERATION]: 'llm',
-  [AISpanType.LLM_CHUNK]: 'llm',
+  [AISpanType.MODEL_GENERATION]: 'llm',
+  [AISpanType.MODEL_CHUNK]: 'llm',
   [AISpanType.TOOL_CALL]: 'tool',
   [AISpanType.MCP_TOOL_CALL]: 'tool',
   [AISpanType.WORKFLOW_CONDITIONAL_EVAL]: 'chain',
@@ -295,29 +298,29 @@ export class LangSmithExporter extends BaseExporter {
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
 
-    if (span.type === AISpanType.LLM_GENERATION) {
-      const llmAttr = attributes as LLMGenerationAttributes;
+    if (span.type === AISpanType.MODEL_GENERATION) {
+      const modelAttr = attributes as ModelGenerationAttributes;
 
       // See: https://docs.langchain.com/langsmith/log-llm-trace
-      if (llmAttr.model !== undefined) {
+      if (modelAttr.model !== undefined) {
         // Note - this should map to a model name recognized by LangSmith
         // eg “gpt-4o-mini”, “claude-3-opus-20240307”, etc.
-        payload.metadata.ls_model_name = llmAttr.model;
+        payload.metadata.ls_model_name = modelAttr.model;
       }
 
       // Provider goes to metadata (if provided by attributes)
-      if (llmAttr.provider !== undefined) {
+      if (modelAttr.provider !== undefined) {
         // Note - this should map to a provider name recognized by
         // LangSmith eg “openai”, “anthropic”, etc.
-        payload.metadata.ls_provider = llmAttr.provider;
+        payload.metadata.ls_provider = modelAttr.provider;
       }
 
       // Usage/token info goes to metrics
-      payload.metadata.usage_metadata = normalizeUsageMetrics(llmAttr);
+      payload.metadata.usage_metadata = normalizeUsageMetrics(modelAttr);
 
       // Model parameters go to metadata
-      if (llmAttr.parameters !== undefined) {
-        payload.metadata.modelParameters = llmAttr.parameters;
+      if (modelAttr.parameters !== undefined) {
+        payload.metadata.modelParameters = modelAttr.parameters;
       }
 
       // Other LLM attributes go to metadata

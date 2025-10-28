@@ -1,6 +1,6 @@
 {
   "name": "@mastra/couchbase",
-  "version": "0.11.13",
+  "version": "0.11.14",
   "description": "Couchbase vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -45,7 +45,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.23.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "files": [
     "dist",

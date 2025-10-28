@@ -40,11 +40,11 @@ export interface ModelSettings {
   temperature?: number;
   topK?: number;
   topP?: number;
-  instructions?: string;
   providerOptions?: LLMStepResult['providerMetadata'];
   chatWithGenerateLegacy?: boolean;
   chatWithGenerate?: boolean;
   chatWithNetwork?: boolean;
+  requireToolApproval?: boolean;
 }
 
 export interface AgentSettingsType {
@@ -117,5 +117,3 @@ export type StreamChunk = {
   runId: string;
   from: 'AGENT' | 'WORKFLOW';
 };
-
-export * from './domains/traces/types';

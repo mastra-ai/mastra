@@ -197,7 +197,12 @@ async function getInputPlugins(
       transformMixedEsModules: true,
       ignoreTryCatch: false,
     }),
-    bundlerOptions.isDev ? null : nodeResolve(),
+    bundlerOptions.isDev
+      ? null
+      : nodeResolve({
+          preferBuiltins: true,
+          exportConditions: ['node'],
+        }),
     bundlerOptions.isDev ? esmShim() : null,
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),

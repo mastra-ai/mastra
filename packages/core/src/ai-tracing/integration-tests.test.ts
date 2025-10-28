@@ -674,17 +674,15 @@ const mockModelV2 = new MockLanguageModelV2({
  * Creates base Mastra configuration for tests with AI tracing enabled.
  *
  * @param testExporter - The TestExporter instance to capture tracing events
- * @returns Base configuration object with telemetry disabled and AI tracing configured
+ * @returns Base configuration object with AI tracing configured
  *
  * Features:
- * - Telemetry disabled for faster test execution
  * - Mock storage for isolation
  * - AI tracing with TestExporter for span validation
  * - Integration tests configuration
  */
 function getBaseMastraConfig(testExporter: TestExporter, options = {}) {
   return {
-    telemetry: { enabled: false },
     storage: new MockStore(),
     observability: {
       configs: {
@@ -1132,9 +1130,9 @@ describe('AI Tracing Integration Tests', () => {
         expect(result.traceId).toBeDefined();
 
         const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
-        const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
-        const llmStepSpans = testExporter.getSpansByType(AISpanType.LLM_STEP);
-        const llmChunkSpans = testExporter.getSpansByType(AISpanType.LLM_CHUNK);
+        const llmGenerationSpans = testExporter.getSpansByType(AISpanType.MODEL_GENERATION);
+        const llmStepSpans = testExporter.getSpansByType(AISpanType.MODEL_STEP);
+        const llmChunkSpans = testExporter.getSpansByType(AISpanType.MODEL_CHUNK);
         const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
         const workflowSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
         const workflowSteps = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
@@ -1201,6 +1199,10 @@ describe('AI Tracing Integration Tests', () => {
         }
         expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
 
+        expect(llmGenerationSpan?.endTime).toBeDefined();
+        expect(agentRunSpan?.endTime).toBeDefined();
+        expect(llmGenerationSpan?.endTime!.getTime()).toBeLessThanOrEqual(agentRunSpan?.endTime!.getTime());
+
         testExporter.finalExpectations();
       });
     },
@@ -1232,8 +1234,8 @@ describe('AI Tracing Integration Tests', () => {
         expect(result.traceId).toBeDefined();
 
         const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
-        const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
-        const llmChunkSpans = testExporter.getSpansByType(AISpanType.LLM_CHUNK);
+        const llmGenerationSpans = testExporter.getSpansByType(AISpanType.MODEL_GENERATION);
+        const llmChunkSpans = testExporter.getSpansByType(AISpanType.MODEL_CHUNK);
         const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
         const workflowSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
         const workflowSteps = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
@@ -1329,8 +1331,8 @@ describe('AI Tracing Integration Tests', () => {
         expect(result.traceId).toBeDefined();
 
         const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
-        const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
-        const llmStepSpans = testExporter.getSpansByType(AISpanType.LLM_STEP);
+        const llmGenerationSpans = testExporter.getSpansByType(AISpanType.MODEL_GENERATION);
+        const llmStepSpans = testExporter.getSpansByType(AISpanType.MODEL_STEP);
         const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
         const workflowSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
         const workflowSteps = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
@@ -1375,6 +1377,10 @@ describe('AI Tracing Integration Tests', () => {
         }
         expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
 
+        expect(llmGenerationSpan?.endTime).toBeDefined();
+        expect(agentRunSpan?.endTime).toBeDefined();
+        expect(llmGenerationSpan?.endTime!.getTime()).toBeLessThanOrEqual(agentRunSpan?.endTime!.getTime());
+
         testExporter.finalExpectations();
       });
     },
@@ -1410,8 +1416,8 @@ describe('AI Tracing Integration Tests', () => {
         expect(result.traceId).toBeDefined();
 
         const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
-        const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
-        const llmChunkSpans = testExporter.getSpansByType(AISpanType.LLM_CHUNK);
+        const llmGenerationSpans = testExporter.getSpansByType(AISpanType.MODEL_GENERATION);
+        const llmChunkSpans = testExporter.getSpansByType(AISpanType.MODEL_CHUNK);
         const processorRunSpans = testExporter.getSpansByType(AISpanType.PROCESSOR_RUN);
         const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
         const workflowSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
@@ -1419,10 +1425,10 @@ describe('AI Tracing Integration Tests', () => {
 
         // Expected span structure:
         // - Test Agent AGENT_RUN (root)
-        //   - Test Agent LLM_GENERATION (initial model call)
+        //   - Test Agent MODEL_GENERATION (initial model call)
         //   - PROCESSOR_RUN (structuredOutputProcessor)
         //     - Internal processor agent AGENT_RUN
-        //       - Internal processor agent LLM_GENERATION
+        //       - Internal processor agent MODEL_GENERATION
 
         expect(agentRunSpans.length).toBe(2); // Test Agent + internal processor agent
         expect(llmGenerationSpans.length).toBe(2); // Test Agent LLM + processor agent LLM
@@ -1477,6 +1483,15 @@ describe('AI Tracing Integration Tests', () => {
 
         expect(testAgentLlmSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
         expect(processorAgentLlmSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
+
+        expect(testAgentLlmSpan?.endTime).toBeDefined();
+        expect(testAgentSpan?.endTime).toBeDefined();
+        expect(testAgentLlmSpan?.endTime!.getTime()).toBeLessThanOrEqual(testAgentSpan?.endTime!.getTime());
+
+        expect(processorAgentLlmSpan?.endTime).toBeDefined();
+        expect(processorAgentSpan?.endTime).toBeDefined();
+        expect(processorAgentLlmSpan?.endTime!.getTime()).toBeLessThanOrEqual(processorAgentSpan?.endTime!.getTime());
+
         testExporter.finalExpectations();
       });
     },
@@ -1572,18 +1587,18 @@ describe('AI Tracing Integration Tests', () => {
 
         // Get all spans
         const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
-        const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+        const llmGenerationSpans = testExporter.getSpansByType(AISpanType.MODEL_GENERATION);
         const processorRunSpans = testExporter.getSpansByType(AISpanType.PROCESSOR_RUN);
 
         // Expected span structure:
         // - Test Agent AGENT_RUN (root)
         //   - PROCESSOR_RUN (input processor: validator) - has internal agent
         //     - validator-agent AGENT_RUN
-        //       - validator-agent LLM_GENERATION
-        //   - Test Agent LLM_GENERATION (initial model call)
+        //       - validator-agent MODEL_GENERATION
+        //   - Test Agent MODEL_GENERATION (initial model call)
         //   - PROCESSOR_RUN (output processor: summarizer) - has internal agent
         //     - summarizer-agent AGENT_RUN
-        //       - summarizer-agent LLM_GENERATION
+        //       - summarizer-agent MODEL_GENERATION
 
         expect(agentRunSpans.length).toBe(3); // Test Agent + validator agent + summarizer agent
         expect(llmGenerationSpans.length).toBe(3); // Test Agent LLM + validator LLM + summarizer LLM
@@ -1659,7 +1674,7 @@ describe('AI Tracing Integration Tests', () => {
       const workflowRunSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
       const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
       const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
-      const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+      const llmGenerationSpans = testExporter.getSpansByType(AISpanType.MODEL_GENERATION);
 
       expect(workflowRunSpans.length).toBe(1); // One workflow run
       expect(workflowRunSpans[0]?.traceId).toBe(result.traceId);
@@ -1701,7 +1716,7 @@ describe('AI Tracing Integration Tests', () => {
       expect(result.traceId).toBeDefined();
 
       const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
-      const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+      const llmGenerationSpans = testExporter.getSpansByType(AISpanType.MODEL_GENERATION);
       const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
       const workflowRunSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
       const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
@@ -1750,7 +1765,7 @@ describe('AI Tracing Integration Tests', () => {
       expect(result.traceId).toBeDefined();
 
       const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
-      const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+      const llmGenerationSpans = testExporter.getSpansByType(AISpanType.MODEL_GENERATION);
       const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
       const workflowRunSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
       const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
@@ -1947,7 +1962,7 @@ describe('AI Tracing Integration Tests', () => {
     expect(result.traceId).toBeDefined();
 
     const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
-    const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+    const llmGenerationSpans = testExporter.getSpansByType(AISpanType.MODEL_GENERATION);
 
     expect(agentRunSpans.length).toBe(1); // One agent run
     expect(llmGenerationSpans.length).toBe(1); // One LLM generation
@@ -2009,7 +2024,7 @@ describe('AI Tracing Integration Tests', () => {
     const workflowRunSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
     const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
     const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
-    const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+    const llmGenerationSpans = testExporter.getSpansByType(AISpanType.MODEL_GENERATION);
 
     // Should have one workflow run
     expect(workflowRunSpans.length).toBe(1);
